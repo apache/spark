@@ -104,7 +104,14 @@ org.apache.spark.sql.AnalysisException
     "hint" : "",
     "operator" : "IntersectAll",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 51,
+    "fragment" : "SELECT * FROM tab1\nINTERSECT ALL\nSELECT array(1), 2"
+  } ]
 }
 
 
@@ -117,13 +124,20 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2429",
+  "errorClass" : "NUM_COLUMNS_MISMATCH",
   "messageParameters" : {
-    "firstColNum" : "1",
-    "nColNum" : "2",
-    "nTab" : "second",
-    "operator" : "IntersectAll"
-  }
+    "invalidNumColumns" : "2",
+    "invalidOrdinalNum" : "second",
+    "operator" : "INTERSECTALL",
+    "refNumColumns" : "1"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 54,
+    "fragment" : "SELECT k FROM tab1\nINTERSECT ALL\nSELECT k, v FROM tab2"
+  } ]
 }
 
 

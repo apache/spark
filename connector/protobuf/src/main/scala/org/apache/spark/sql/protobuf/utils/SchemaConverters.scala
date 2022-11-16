@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 import com.google.protobuf.Descriptors.{Descriptor, FieldDescriptor}
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.protobuf.ScalaReflectionLock
 import org.apache.spark.sql.types._
 
@@ -62,14 +63,18 @@ object SchemaConverters {
       case STRING => Some(StringType)
       case BYTE_STRING => Some(BinaryType)
       case ENUM => Some(StringType)
-      case MESSAGE if fd.getMessageType.getName == "Duration" =>
+      case MESSAGE
+        if (fd.getMessageType.getName == "Duration" &&
+          fd.getMessageType.getFields.size() == 2 &&
+          fd.getMessageType.getFields.get(0).getName.equals("seconds") &&
+          fd.getMessageType.getFields.get(1).getName.equals("nanos")) =>
         Some(DayTimeIntervalType.defaultConcreteType)
-      case MESSAGE if fd.getMessageType.getName == "Timestamp" =>
-        Some(TimestampType)
-        // FIXME: Is the above accurate? Users can have protos named "Timestamp" but are not
-        //        expected to be TimestampType in Spark. How about verifying fields?
-        //        Same for "Duration". Only the Timestamp & Duration protos defined in
-        //        google.protobuf package should default to corresponding Catalylist types.
+      case MESSAGE
+        if (fd.getMessageType.getName == "Timestamp" &&
+          fd.getMessageType.getFields.size() == 2 &&
+          fd.getMessageType.getFields.get(0).getName.equals("seconds") &&
+          fd.getMessageType.getFields.get(1).getName.equals("nanos")) =>
+          Some(TimestampType)
       case MESSAGE if fd.isRepeated && fd.getMessageType.getOptions.hasMapEntry =>
         var keyType: DataType = NullType
         var valueType: DataType = NullType
@@ -88,9 +93,7 @@ object SchemaConverters {
             nullable = false))
       case MESSAGE =>
         if (existingRecordNames.contains(fd.getFullName)) {
-          throw new IncompatibleSchemaException(s"""
-               |Found recursive reference in Protobuf schema, which can not be processed by Spark:
-               |${fd.toString()}""".stripMargin)
+          throw QueryCompilationErrors.foundRecursionInProtobufSchema(fd.toString())
         }
         val newRecordNames = existingRecordNames + fd.getFullName
 
@@ -100,10 +103,8 @@ object SchemaConverters {
             .toSeq)
           .filter(_.nonEmpty)
           .map(StructType.apply)
-      case _ =>
-        throw new IncompatibleSchemaException(
-          s"Cannot convert Protobuf type" +
-            s" ${fd.getJavaType}")
+      case other =>
+        throw QueryCompilationErrors.protobufTypeUnsupportedYetError(other.toString)
     }
     dataType.map(dt =>
       StructField(
@@ -111,7 +112,4 @@ object SchemaConverters {
         if (fd.isRepeated) ArrayType(dt, containsNull = false) else dt,
         nullable = !fd.isRequired && !fd.isRepeated))
   }
-
-  private[protobuf] class IncompatibleSchemaException(msg: String, ex: Throwable = null)
-      extends Exception(msg, ex)
 }

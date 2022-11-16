@@ -20,7 +20,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "aggExprs" : "(count(testdata.b) AS `count(b)`)",
     "sqlExpr" : "testdata.a"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 8,
+    "fragment" : "a"
+  } ]
 }
 
 
@@ -206,10 +213,17 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2424",
+  "errorClass" : "GROUP_BY_AGGREGATE",
   "messageParameters" : {
     "sqlExpr" : "count(testdata.b)"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 15,
+    "fragment" : "COUNT(b)"
+  } ]
 }
 
 
@@ -342,7 +356,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "aggExprs" : "()",
     "sqlExpr" : "id"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 16,
+    "stopIndex" : 24,
+    "fragment" : "range(10)"
+  } ]
 }
 
 
@@ -378,11 +399,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2440",
+  "errorClass" : "INVALID_WHERE_CONDITION",
   "messageParameters" : {
-    "condition" : "(max(id) > CAST(0 AS BIGINT))",
-    "invalidExprSqls" : "max(id)"
-  }
+    "condition" : "\"(max(id) > 0)\"",
+    "expressionList" : "max(id)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 42,
+    "fragment" : "SELECT 1 FROM range(10) HAVING MAX(id) > 0"
+  } ]
 }
 
 
@@ -775,11 +803,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2440",
+  "errorClass" : "INVALID_WHERE_CONDITION",
   "messageParameters" : {
-    "condition" : "(count(1) > 1L)",
-    "invalidExprSqls" : "count(1)"
-  }
+    "condition" : "\"(count(1) > 1)\"",
+    "expressionList" : "count(1)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 49,
+    "fragment" : "SELECT count(*) FROM test_agg WHERE count(*) > 1L"
+  } ]
 }
 
 
@@ -790,11 +825,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2440",
+  "errorClass" : "INVALID_WHERE_CONDITION",
   "messageParameters" : {
-    "condition" : "((count(1) + 1L) > 1L)",
-    "invalidExprSqls" : "count(1)"
-  }
+    "condition" : "\"((count(1) + 1) > 1)\"",
+    "expressionList" : "count(1)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 54,
+    "fragment" : "SELECT count(*) FROM test_agg WHERE count(*) + 1L > 1L"
+  } ]
 }
 
 
@@ -805,11 +847,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2440",
+  "errorClass" : "INVALID_WHERE_CONDITION",
   "messageParameters" : {
-    "condition" : "(((test_agg.k = 1) OR (test_agg.k = 2)) OR (((count(1) + 1L) > 1L) OR (max(test_agg.k) > 1)))",
-    "invalidExprSqls" : "count(1), max(test_agg.k)"
-  }
+    "condition" : "\"(((k = 1) OR (k = 2)) OR (((count(1) + 1) > 1) OR (max(k) > 1)))\"",
+    "expressionList" : "count(1), max(test_agg.k)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 86,
+    "fragment" : "SELECT count(*) FROM test_agg WHERE k = 1 or k = 2 or count(*) + 1L > 1L or max(k) > 1"
+  } ]
 }
 
 

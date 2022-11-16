@@ -1441,31 +1441,35 @@ class PlanResolutionSuite extends AnalysisTest {
   }
 
   test("MERGE INTO TABLE - primary") {
-    def checkResolution(
+    def getAttributes(plan: LogicalPlan): (AttributeReference, AttributeReference) =
+      (plan.output.find(_.name == "i").get.asInstanceOf[AttributeReference],
+        plan.output.find(_.name == "s").get.asInstanceOf[AttributeReference])
+
+    def checkMergeConditionResolution(
         target: LogicalPlan,
         source: LogicalPlan,
-        mergeCondition: Expression,
-        deleteCondAttr: Option[AttributeReference],
-        updateCondAttr: Option[AttributeReference],
-        insertCondAttr: Option[AttributeReference],
-        updateAssigns: Seq[Assignment],
-        insertAssigns: Seq[Assignment],
-        starInUpdate: Boolean = false): Unit = {
-      val ti = target.output.find(_.name == "i").get.asInstanceOf[AttributeReference]
-      val ts = target.output.find(_.name == "s").get.asInstanceOf[AttributeReference]
-      val si = source.output.find(_.name == "i").get.asInstanceOf[AttributeReference]
-      val ss = source.output.find(_.name == "s").get.asInstanceOf[AttributeReference]
-
+        mergeCondition: Expression): Unit = {
+      val (si, _) = getAttributes(source)
+      val (ti, _) = getAttributes(target)
       mergeCondition match {
         case EqualTo(l: AttributeReference, r: AttributeReference) =>
           assert(l.sameRef(ti) && r.sameRef(si))
         case Literal(_, BooleanType) => // this is acceptable as a merge condition
         case other => fail("unexpected merge condition " + other)
       }
+    }
 
+    def checkMatchedClausesResolution(
+        target: LogicalPlan,
+        source: LogicalPlan,
+        deleteCondAttr: Option[AttributeReference],
+        updateCondAttr: Option[AttributeReference],
+        updateAssigns: Seq[Assignment],
+        starInUpdate: Boolean = false): Unit = {
+      val (si, ss) = getAttributes(source)
+      val (ti, ts) = getAttributes(target)
       deleteCondAttr.foreach(a => assert(a.sameRef(ts)))
       updateCondAttr.foreach(a => assert(a.sameRef(ts)))
-      insertCondAttr.foreach(a => assert(a.sameRef(ss)))
 
       if (starInUpdate) {
         assert(updateAssigns.size == 2)
@@ -1478,11 +1482,33 @@ class PlanResolutionSuite extends AnalysisTest {
         assert(updateAssigns.head.key.asInstanceOf[AttributeReference].sameRef(ts))
         assert(updateAssigns.head.value.asInstanceOf[AttributeReference].sameRef(ss))
       }
+    }
+
+    def checkNotMatchedClausesResolution(
+        target: LogicalPlan,
+        source: LogicalPlan,
+        insertCondAttr: Option[AttributeReference],
+        insertAssigns: Seq[Assignment]): Unit = {
+      val (si, ss) = getAttributes(source)
+      val (ti, ts) = getAttributes(target)
+      insertCondAttr.foreach(a => assert(a.sameRef(ss)))
       assert(insertAssigns.size == 2)
       assert(insertAssigns(0).key.asInstanceOf[AttributeReference].sameRef(ti))
       assert(insertAssigns(0).value.asInstanceOf[AttributeReference].sameRef(si))
       assert(insertAssigns(1).key.asInstanceOf[AttributeReference].sameRef(ts))
       assert(insertAssigns(1).value.asInstanceOf[AttributeReference].sameRef(ss))
+    }
+
+    def checkNotMatchedBySourceClausesResolution(
+        target: LogicalPlan,
+        deleteCondAttr: Option[AttributeReference],
+        updateCondAttr: Option[AttributeReference],
+        updateAssigns: Seq[Assignment]): Unit = {
+      val (_, ts) = getAttributes(target)
+      deleteCondAttr.foreach(a => assert(a.sameRef(ts)))
+      updateCondAttr.foreach(a => assert(a.sameRef(ts)))
+      assert(updateAssigns.size == 1)
+      assert(updateAssigns.head.key.asInstanceOf[AttributeReference].sameRef(ts))
     }
 
     Seq(("v2Table", "v2Table1"), ("testcat.tab", "testcat.tab1")).foreach {
@@ -1497,6 +1523,8 @@ class PlanResolutionSuite extends AnalysisTest {
              |WHEN MATCHED AND (target.s='update') THEN UPDATE SET target.s = source.s
              |WHEN NOT MATCHED AND (source.s='insert')
              |  THEN INSERT (target.i, target.s) values (source.i, source.s)
+             |WHEN NOT MATCHED BY SOURCE AND (target.s='delete') THEN DELETE
+             |WHEN NOT MATCHED BY SOURCE AND (target.s='update') THEN UPDATE SET target.s = 'delete'
            """.stripMargin
         parseAndResolve(sql1) match {
           case MergeIntoTable(
@@ -1507,9 +1535,15 @@ class PlanResolutionSuite extends AnalysisTest {
                 UpdateAction(Some(EqualTo(ul: AttributeReference, StringLiteral("update"))),
                   updateAssigns)),
               Seq(InsertAction(Some(EqualTo(il: AttributeReference, StringLiteral("insert"))),
-                insertAssigns))) =>
-            checkResolution(target, source, mergeCondition, Some(dl), Some(ul), Some(il),
-              updateAssigns, insertAssigns)
+                  insertAssigns)),
+              Seq(DeleteAction(Some(EqualTo(ndl: AttributeReference, StringLiteral("delete")))),
+                UpdateAction(Some(EqualTo(nul: AttributeReference, StringLiteral("update"))),
+                  notMatchedBySourceUpdateAssigns))) =>
+            checkMergeConditionResolution(target, source, mergeCondition)
+            checkMatchedClausesResolution(target, source, Some(dl), Some(ul), updateAssigns)
+            checkNotMatchedClausesResolution(target, source, Some(il), insertAssigns)
+            checkNotMatchedBySourceClausesResolution(target, Some(ndl), Some(nul),
+              notMatchedBySourceUpdateAssigns)
 
           case other => fail("Expect MergeIntoTable, but got:\n" + other.treeString)
         }
@@ -1533,16 +1567,20 @@ class PlanResolutionSuite extends AnalysisTest {
                 UpdateAction(Some(EqualTo(ul: AttributeReference,
                   StringLiteral("update"))), updateAssigns)),
               Seq(InsertAction(Some(EqualTo(il: AttributeReference, StringLiteral("insert"))),
-                insertAssigns))) =>
-            checkResolution(target, source, mergeCondition, Some(dl), Some(ul), Some(il),
-              updateAssigns, insertAssigns, starInUpdate = true)
+                  insertAssigns)),
+              Seq()) =>
+            checkMergeConditionResolution(target, source, mergeCondition)
+            checkMatchedClausesResolution(target, source, Some(dl), Some(ul), updateAssigns,
+              starInUpdate = true)
+            checkNotMatchedClausesResolution(target, source, Some(il), insertAssigns)
 
           case other => fail("Expect MergeIntoTable, but got:\n" + other.treeString)
         }
 
         // merge with star should get resolved into specific actions even if there
         // is no other unresolved expression in the merge
-        parseAndResolve(s"""
+        parseAndResolve(
+          s"""
              |MERGE INTO $target AS target
              |USING $source AS source
              |ON true
@@ -1554,10 +1592,12 @@ class PlanResolutionSuite extends AnalysisTest {
               SubqueryAlias(AliasIdentifier("source", Seq()), AsDataSourceV2Relation(source)),
               mergeCondition,
               Seq(UpdateAction(None, updateAssigns)),
-              Seq(InsertAction(None, insertAssigns))) =>
-
-            checkResolution(target, source, mergeCondition, None, None, None,
-              updateAssigns, insertAssigns, starInUpdate = true)
+              Seq(InsertAction(None, insertAssigns)),
+              Seq()) =>
+            checkMergeConditionResolution(target, source, mergeCondition)
+            checkMatchedClausesResolution(target, source, None, None, updateAssigns,
+              starInUpdate = true)
+            checkNotMatchedClausesResolution(target, source, None, insertAssigns)
 
           case other => fail("Expect MergeIntoTable, but got:\n" + other.treeString)
         }
@@ -1571,6 +1611,8 @@ class PlanResolutionSuite extends AnalysisTest {
              |WHEN MATCHED AND (target.s='delete') THEN DELETE
              |WHEN MATCHED THEN UPDATE SET target.s = source.s
              |WHEN NOT MATCHED THEN INSERT (target.i, target.s) values (source.i, source.s)
+             |WHEN NOT MATCHED BY SOURCE AND (target.s='delete') THEN DELETE
+             |WHEN NOT MATCHED BY SOURCE THEN UPDATE SET target.s = 'delete'
            """.stripMargin
         parseAndResolve(sql3) match {
           case MergeIntoTable(
@@ -1578,9 +1620,14 @@ class PlanResolutionSuite extends AnalysisTest {
               SubqueryAlias(AliasIdentifier("source", Seq()), AsDataSourceV2Relation(source)),
               mergeCondition,
               Seq(DeleteAction(Some(_)), UpdateAction(None, updateAssigns)),
-              Seq(InsertAction(None, insertAssigns))) =>
-            checkResolution(target, source, mergeCondition, None, None, None,
-              updateAssigns, insertAssigns)
+              Seq(InsertAction(None, insertAssigns)),
+              Seq(DeleteAction(Some(EqualTo(_: AttributeReference, StringLiteral("delete")))),
+                UpdateAction(None, notMatchedBySourceUpdateAssigns))) =>
+            checkMergeConditionResolution(target, source, mergeCondition)
+            checkMatchedClausesResolution(target, source, None, None, updateAssigns)
+            checkNotMatchedClausesResolution(target, source, None, insertAssigns)
+            checkNotMatchedBySourceClausesResolution(target, None, None,
+              notMatchedBySourceUpdateAssigns)
 
           case other => fail("Expect MergeIntoTable, but got:\n" + other.treeString)
         }
@@ -1595,6 +1642,8 @@ class PlanResolutionSuite extends AnalysisTest {
              |WHEN MATCHED AND (target.s='update') THEN UPDATE SET target.s = source.s
              |WHEN NOT MATCHED AND (source.s='insert')
              |  THEN INSERT (target.i, target.s) values (source.i, source.s)
+             |WHEN NOT MATCHED BY SOURCE AND (target.s='delete') THEN DELETE
+             |WHEN NOT MATCHED BY SOURCE AND (target.s='update') THEN UPDATE SET target.s = 'delete'
            """.stripMargin
         parseAndResolve(sql4) match {
           case MergeIntoTable(
@@ -1605,9 +1654,15 @@ class PlanResolutionSuite extends AnalysisTest {
                 UpdateAction(Some(EqualTo(ul: AttributeReference, StringLiteral("update"))),
                   updateAssigns)),
               Seq(InsertAction(Some(EqualTo(il: AttributeReference, StringLiteral("insert"))),
-                insertAssigns))) =>
-            checkResolution(target, source, mergeCondition, Some(dl), Some(ul), Some(il),
-              updateAssigns, insertAssigns)
+                  insertAssigns)),
+              Seq(DeleteAction(Some(EqualTo(ndl: AttributeReference, StringLiteral("delete")))),
+                UpdateAction(Some(EqualTo(nul: AttributeReference, StringLiteral("update"))),
+                  notMatchedBySourceUpdateAssigns))) =>
+            checkMergeConditionResolution(target, source, mergeCondition)
+            checkMatchedClausesResolution(target, source, Some(dl), Some(ul), updateAssigns)
+            checkNotMatchedClausesResolution(target, source, Some(il), insertAssigns)
+            checkNotMatchedBySourceClausesResolution(target, Some(ndl), Some(nul),
+              notMatchedBySourceUpdateAssigns)
 
           case other => fail("Expect MergeIntoTable, but got:\n" + other.treeString)
         }
@@ -1624,6 +1679,8 @@ class PlanResolutionSuite extends AnalysisTest {
              |WHEN MATCHED AND (target.s='update') THEN UPDATE SET target.s = source.s
              |WHEN NOT MATCHED AND (source.s='insert')
              |THEN INSERT (target.i, target.s) values (source.i, source.s)
+             |WHEN NOT MATCHED BY SOURCE AND (target.s='delete') THEN DELETE
+             |WHEN NOT MATCHED BY SOURCE AND (target.s='update') THEN UPDATE SET target.s = 'delete'
            """.stripMargin
         parseAndResolve(sql5) match {
           case MergeIntoTable(
@@ -1634,11 +1691,15 @@ class PlanResolutionSuite extends AnalysisTest {
                 UpdateAction(Some(EqualTo(ul: AttributeReference, StringLiteral("update"))),
                   updateAssigns)),
               Seq(InsertAction(Some(EqualTo(il: AttributeReference, StringLiteral("insert"))),
-                insertAssigns))) =>
-            assert(source.output.map(_.name) == Seq("s", "i"))
-            checkResolution(target, source, mergeCondition, Some(dl), Some(ul), Some(il),
-              updateAssigns, insertAssigns)
-
+                  insertAssigns)),
+              Seq(DeleteAction(Some(EqualTo(ndl: AttributeReference, StringLiteral("delete")))),
+                UpdateAction(Some(EqualTo(nul: AttributeReference, StringLiteral("update"))),
+                  notMatchedBySourceUpdateAssigns))) =>
+            checkMergeConditionResolution(target, source, mergeCondition)
+            checkMatchedClausesResolution(target, source, Some(dl), Some(ul), updateAssigns)
+            checkNotMatchedClausesResolution(target, source, Some(il), insertAssigns)
+            checkNotMatchedBySourceClausesResolution(target, Some(ndl), Some(nul),
+              notMatchedBySourceUpdateAssigns)
           case other => fail("Expect MergeIntoTable, but got:\n" + other.treeString)
         }
 
@@ -1656,6 +1717,8 @@ class PlanResolutionSuite extends AnalysisTest {
              |THEN UPDATE SET target.s = DEFAULT, target.i = target.i
              |WHEN NOT MATCHED AND (source.s='insert')
              |  THEN INSERT (target.i, target.s) values (DEFAULT, DEFAULT)
+             |WHEN NOT MATCHED BY SOURCE AND (target.s='delete') THEN DELETE
+             |WHEN NOT MATCHED BY SOURCE AND (target.s='update') THEN UPDATE SET target.s = DEFAULT
            """.stripMargin
         parseAndResolve(sql6) match {
           case m: MergeIntoTable =>
@@ -1699,6 +1762,19 @@ class PlanResolutionSuite extends AnalysisTest {
                 assert(s.name == "s")
               case other => fail("unexpected not matched action " + other)
             }
+            assert(m.notMatchedBySourceActions.length == 2)
+            m.notMatchedBySourceActions(0) match {
+              case DeleteAction(Some(EqualTo(_: AttributeReference, StringLiteral("delete")))) =>
+              case other => fail("unexpected first not matched by source action " + other)
+            }
+            m.notMatchedBySourceActions(1) match {
+              case UpdateAction(Some(EqualTo(_: AttributeReference, StringLiteral("update"))),
+                Seq(Assignment(_: AttributeReference,
+                  cast @ Cast(Literal(null, _), StringType, _, EvalMode.ANSI))))
+                if cast.getTagValue(Cast.BY_TABLE_INSERTION).isDefined =>
+              case other =>
+                fail("unexpected second not matched by source action " + other)
+            }
 
           case other =>
             fail("Expect MergeIntoTable, but got:\n" + other.treeString)
@@ -1715,7 +1791,10 @@ class PlanResolutionSuite extends AnalysisTest {
              |WHEN MATCHED AND (target.s = 31)
              |  THEN UPDATE SET target.s = DEFAULT
              |WHEN NOT MATCHED AND (source.s='insert')
-             |  THEN INSERT (target.i, target.s) values (DEFAULT, DEFAULT)""".stripMargin
+             |  THEN INSERT (target.i, target.s) values (DEFAULT, DEFAULT)
+             |WHEN NOT MATCHED BY SOURCE AND (target.s = 31) THEN DELETE
+             |WHEN NOT MATCHED BY SOURCE AND (target.s = 31)
+             |  THEN UPDATE SET target.s = DEFAULT""".stripMargin
         checkError(
           exception = intercept[AnalysisException] {
             parseAndResolve(mergeWithDefaultReferenceInMergeCondition)
@@ -1734,7 +1813,10 @@ class PlanResolutionSuite extends AnalysisTest {
              |WHEN MATCHED AND (target.s = 31)
              |  THEN UPDATE SET target.s = DEFAULT + 1
              |WHEN NOT MATCHED AND (source.s='insert')
-             |  THEN INSERT (target.i, target.s) values (DEFAULT, DEFAULT)""".stripMargin
+             |  THEN INSERT (target.i, target.s) values (DEFAULT, DEFAULT)
+             |WHEN NOT MATCHED BY SOURCE AND (target.s = 31) THEN DELETE
+             |WHEN NOT MATCHED BY SOURCE AND (target.s = 31)
+             |  THEN UPDATE SET target.s = DEFAULT + 1""".stripMargin
         checkError(
           exception = intercept[AnalysisException] {
             parseAndResolve(mergeWithDefaultReferenceAsPartOfComplexExpression)
@@ -1754,6 +1836,9 @@ class PlanResolutionSuite extends AnalysisTest {
            |  THEN UPDATE SET target.s = DEFAULT
            |WHEN NOT MATCHED AND (source.s='insert')
            |  THEN INSERT (target.s) values (DEFAULT)
+           |WHEN NOT MATCHED BY SOURCE AND (target.s = 32) THEN DELETE
+           |WHEN NOT MATCHED BY SOURCE AND (target.s = 32)
+           |  THEN UPDATE SET target.s = DEFAULT
              """.stripMargin
         parseAndResolve(mergeIntoTableWithColumnNamedDefault, withDefault = true) match {
           case m: MergeIntoTable =>
@@ -1768,6 +1853,7 @@ class PlanResolutionSuite extends AnalysisTest {
             }
             assert(m.matchedActions.length == 2)
             assert(m.notMatchedActions.length == 1)
+            assert(m.notMatchedBySourceActions.length == 2)
 
           case other =>
             fail("Expect MergeIntoTable, but got:\n" + other.treeString)
@@ -1788,6 +1874,9 @@ class PlanResolutionSuite extends AnalysisTest {
          |  THEN UPDATE SET target.s = DEFAULT
          |WHEN NOT MATCHED AND (source.s='insert')
          |  THEN INSERT (target.i, target.s) values (DEFAULT, DEFAULT)
+         |WHEN NOT MATCHED BY SOURCE AND (target.s = 31) THEN DELETE
+         |WHEN NOT MATCHED BY SOURCE AND (target.s = 31)
+         |  THEN UPDATE SET target.s = DEFAULT
            """.stripMargin
     parseAndResolve(mergeDefaultWithExplicitDefaultColumns, true) match {
       case m: MergeIntoTable =>
@@ -1823,6 +1912,16 @@ class PlanResolutionSuite extends AnalysisTest {
           Assignment(_: AttributeReference, Literal(42, IntegerType)))) =>
           case other => fail("unexpected not matched action " + other)
         }
+        assert(m.notMatchedBySourceActions.length == 2)
+        m.notMatchedBySourceActions(0) match {
+          case DeleteAction(Some(EqualTo(_: AttributeReference, Literal(31, IntegerType)))) =>
+          case other => fail("unexpected first not matched by source action " + other)
+        }
+        m.notMatchedBySourceActions(1) match {
+          case UpdateAction(Some(EqualTo(_: AttributeReference, Literal(31, IntegerType))),
+          Seq(Assignment(_: AttributeReference, Literal(42, IntegerType)))) =>
+          case other => fail("unexpected second not matched by source action " + other)
+        }
 
       case other =>
         fail("Expect MergeIntoTable, but got:\n" + other.treeString)
@@ -1842,6 +1941,8 @@ class PlanResolutionSuite extends AnalysisTest {
            |WHEN MATCHED AND (${target}.s='delete') THEN DELETE
            |WHEN MATCHED THEN UPDATE SET s = 1
            |WHEN NOT MATCHED AND (s = 'a') THEN INSERT (i) values (i)
+           |WHEN NOT MATCHED BY SOURCE AND (${target}.s='delete') THEN DELETE
+           |WHEN NOT MATCHED BY SOURCE THEN UPDATE SET s = 1
          """.stripMargin
 
       parseAndResolve(sql1) match {
@@ -1849,10 +1950,11 @@ class PlanResolutionSuite extends AnalysisTest {
             AsDataSourceV2Relation(target),
             AsDataSourceV2Relation(source),
             _,
-            Seq(DeleteAction(Some(_)), UpdateAction(None, updateAssigns)),
+            Seq(DeleteAction(Some(_)), UpdateAction(None, firstUpdateAssigns)),
             Seq(InsertAction(
               Some(EqualTo(il: AttributeReference, StringLiteral("a"))),
-              insertAssigns))) =>
+            insertAssigns)),
+            Seq(DeleteAction(Some(_)), UpdateAction(None, secondUpdateAssigns))) =>
           val ti = target.output.find(_.name == "i").get
           val ts = target.output.find(_.name == "s").get
           val si = source.output.find(_.name == "i").get
@@ -1860,14 +1962,17 @@ class PlanResolutionSuite extends AnalysisTest {
 
           // INSERT condition is resolved with source table only, so column `s` is not ambiguous.
           assert(il.sameRef(ss))
-          assert(updateAssigns.size == 1)
+          assert(firstUpdateAssigns.size == 1)
           // UPDATE key is resolved with target table only, so column `s` is not ambiguous.
-          assert(updateAssigns.head.key.asInstanceOf[AttributeReference].sameRef(ts))
+          assert(firstUpdateAssigns.head.key.asInstanceOf[AttributeReference].sameRef(ts))
           assert(insertAssigns.size == 1)
           // INSERT key is resolved with target table only, so column `i` is not ambiguous.
           assert(insertAssigns.head.key.asInstanceOf[AttributeReference].sameRef(ti))
           // INSERT value is resolved with source table only, so column `i` is not ambiguous.
           assert(insertAssigns.head.value.asInstanceOf[AttributeReference].sameRef(si))
+          assert(secondUpdateAssigns.size == 1)
+          // UPDATE key is resolved with target table only, so column `s` is not ambiguous.
+          assert(secondUpdateAssigns.head.key.asInstanceOf[AttributeReference].sameRef(ts))
 
         case p => fail("Expect MergeIntoTable, but got:\n" + p.treeString)
       }
@@ -1935,6 +2040,58 @@ class PlanResolutionSuite extends AnalysisTest {
           fragment = "s",
           start = 61 + target.length + source.length,
           stop = 61 + target.length + source.length))
+
+      val sql6 =
+        s"""
+           |MERGE INTO $target
+           |USING $source
+           |ON target.i = source.i
+           |WHEN NOT MATCHED BY SOURCE AND (s = 'b') THEN DELETE
+           |WHEN NOT MATCHED BY SOURCE AND (s = 'a') THEN UPDATE SET i = 1
+         """.stripMargin
+      // not matched by source clauses are resolved using the target table only, resolving columns
+      // is not ambiguous.
+      val parsed = parseAndResolve(sql6)
+      parsed match {
+        case MergeIntoTable(
+            AsDataSourceV2Relation(target),
+            _,
+            _,
+            Seq(),
+            Seq(),
+            notMatchedBySourceActions) =>
+          assert(notMatchedBySourceActions.length == 2)
+          notMatchedBySourceActions(0) match {
+            case DeleteAction(Some(EqualTo(dl: AttributeReference, StringLiteral("b")))) =>
+              // DELETE condition is resolved with target table only, so column `s` is not
+              // ambiguous.
+              val ts = target.output.find(_.name == "s").get
+              assert(dl.sameRef(ts))
+            case other => fail("unexpected first not matched by source action " + other)
+          }
+          notMatchedBySourceActions(1) match {
+            case UpdateAction(Some(EqualTo(ul: AttributeReference, StringLiteral("a"))),
+                Seq(Assignment(us: AttributeReference, IntegerLiteral(1)))) =>
+              // UPDATE condition and assignment are resolved with target table only, so column `s`
+              // and `i` are not ambiguous.
+              val ts = target.output.find(_.name == "s").get
+              val ti = target.output.find(_.name == "i").get
+              assert(ul.sameRef(ts))
+              assert(us.sameRef(ti))
+            case other => fail("unexpected second not matched by source action " + other)
+          }
+      }
+
+      val sql7 =
+        s"""
+           |MERGE INTO $target
+           |USING $source
+           |ON 1 = 1
+           |WHEN NOT MATCHED BY SOURCE THEN UPDATE SET $target.s = $source.s
+         """.stripMargin
+      // update value in not matched by source clause can only reference the target table.
+      val e7 = intercept[AnalysisException](parseAndResolve(sql7))
+      assert(e7.message.contains(s"cannot resolve $source.s in MERGE command"))
     }
 
     val sql1 =
@@ -1985,6 +2142,7 @@ class PlanResolutionSuite extends AnalysisTest {
         |ON 1 = 1
         |WHEN MATCHED THEN UPDATE SET c1='a', c2=1
         |WHEN NOT MATCHED THEN INSERT (c1, c2) VALUES ('b', 2)
+        |WHEN NOT MATCHED BY SOURCE THEN UPDATE SET c1='a', c2=1
         |""".stripMargin
     val parsed4 = parseAndResolve(sql4)
     parsed4 match {
@@ -2015,6 +2173,19 @@ class PlanResolutionSuite extends AnalysisTest {
             assert(s2.functionName == "varcharTypeWriteSideCheck")
           case other => fail("Expect UpdateAction, but got: " + other)
         }
+        assert(m.notMatchedBySourceActions.length == 1)
+        m.notMatchedBySourceActions.head match {
+          case UpdateAction(_, Seq(
+          Assignment(_, s1: StaticInvoke), Assignment(_, s2: StaticInvoke))) =>
+            assert(s1.arguments.length == 2)
+            assert(s1.functionName == "charTypeWriteSideCheck")
+            assert(s2.arguments.length == 2)
+            assert(s2.arguments.head.isInstanceOf[Cast])
+            val cast = s2.arguments.head.asInstanceOf[Cast]
+            assert(cast.getTagValue(Cast.BY_TABLE_INSERTION).isDefined)
+            assert(s2.functionName == "varcharTypeWriteSideCheck")
+          case other => fail("Expect UpdateAction, but got: " + other)
+        }
       case other => fail("Expect MergeIntoTable, but got:\n" + other.treeString)
     }
   }
@@ -2029,6 +2200,8 @@ class PlanResolutionSuite extends AnalysisTest {
          |WHEN MATCHED AND (target.s='update') THEN UPDATE SET target.s = source.s
          |WHEN NOT MATCHED AND (target.s=DEFAULT)
          |  THEN INSERT (target.i, target.s) values (source.i, source.s)
+         |WHEN NOT MATCHED BY SOURCE AND (target.s='delete') THEN DELETE
+         |WHEN NOT MATCHED BY SOURCE AND (target.s='update') THEN UPDATE SET target.s = target.i
        """.stripMargin
 
     parseAndResolve(sql) match {
@@ -2040,21 +2213,31 @@ class PlanResolutionSuite extends AnalysisTest {
             DeleteAction(Some(EqualTo(dl: UnresolvedAttribute, StringLiteral("delete")))),
             UpdateAction(
               Some(EqualTo(ul: UnresolvedAttribute, StringLiteral("update"))),
-              updateAssigns)),
+              firstUpdateAssigns)),
           Seq(
             InsertAction(
               Some(EqualTo(il: UnresolvedAttribute, UnresolvedAttribute(Seq("DEFAULT")))),
-              insertAssigns))) =>
+              insertAssigns)),
+          Seq(
+            DeleteAction(Some(EqualTo(ndl: UnresolvedAttribute, StringLiteral("delete")))),
+            UpdateAction(
+              Some(EqualTo(nul: UnresolvedAttribute, StringLiteral("update"))),
+              secondUpdateAssigns))) =>
         assert(l.name == "target.i" && r.name == "source.i")
         assert(dl.name == "target.s")
         assert(ul.name == "target.s")
         assert(il.name == "target.s")
-        assert(updateAssigns.size == 1)
-        assert(updateAssigns.head.key.asInstanceOf[UnresolvedAttribute].name == "target.s")
-        assert(updateAssigns.head.value.asInstanceOf[UnresolvedAttribute].name == "source.s")
+        assert(ndl.name == "target.s")
+        assert(nul.name == "target.s")
+        assert(firstUpdateAssigns.size == 1)
+        assert(firstUpdateAssigns.head.key.asInstanceOf[UnresolvedAttribute].name == "target.s")
+        assert(firstUpdateAssigns.head.value.asInstanceOf[UnresolvedAttribute].name == "source.s")
         assert(insertAssigns.size == 2)
         assert(insertAssigns.head.key.asInstanceOf[UnresolvedAttribute].name == "target.i")
         assert(insertAssigns.head.value.asInstanceOf[UnresolvedAttribute].name == "source.i")
+        assert(secondUpdateAssigns.size == 1)
+        assert(secondUpdateAssigns.head.key.asInstanceOf[UnresolvedAttribute].name == "target.s")
+        assert(secondUpdateAssigns.head.value.asInstanceOf[UnresolvedAttribute].name == "target.i")
 
       case l => fail("Expected unresolved MergeIntoTable, but got:\n" + l.treeString)
     }

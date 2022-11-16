@@ -1,6 +1,3 @@
-from __future__ import absolute_import
-
-
 from pyspark.cloudpickle.cloudpickle import *  # noqa
 from pyspark.cloudpickle.cloudpickle_fast import CloudPickler, dumps, dump  # noqa
 
@@ -8,4 +5,4 @@ from pyspark.cloudpickle.cloudpickle_fast import CloudPickler, dumps, dump  # no
 # expose their Pickler subclass at top-level under the  "Pickler" name.
 Pickler = CloudPickler
 
-__version__ = '2.0.0'
+__version__ = '2.2.0'

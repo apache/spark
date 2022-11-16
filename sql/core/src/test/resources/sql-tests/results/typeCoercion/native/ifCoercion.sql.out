@@ -78,11 +78,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS TINYINT), CAST('2' AS BINARY)))' (tinyint and binary).",
-    "sqlExpr" : "(IF(true, CAST(1 AS TINYINT), CAST('2' AS BINARY)))"
+    "dataType" : "[\"TINYINT\", \"BINARY\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS TINYINT), CAST(2 AS BINARY)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -101,11 +101,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS TINYINT), CAST(2 AS BOOLEAN)))' (tinyint and boolean).",
-    "sqlExpr" : "(IF(true, CAST(1 AS TINYINT), CAST(2 AS BOOLEAN)))"
+    "dataType" : "[\"TINYINT\", \"BOOLEAN\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS TINYINT), CAST(2 AS BOOLEAN)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -124,11 +124,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS TINYINT), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' (tinyint and timestamp).",
-    "sqlExpr" : "(IF(true, CAST(1 AS TINYINT), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))"
+    "dataType" : "[\"TINYINT\", \"TIMESTAMP\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS TINYINT), CAST(2017-12-11 09:30:00.0 AS TIMESTAMP)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -147,11 +147,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS TINYINT), CAST('2017-12-11 09:30:00' AS DATE)))' (tinyint and date).",
-    "sqlExpr" : "(IF(true, CAST(1 AS TINYINT), CAST('2017-12-11 09:30:00' AS DATE)))"
+    "dataType" : "[\"TINYINT\", \"DATE\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS TINYINT), CAST(2017-12-11 09:30:00 AS DATE)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -234,11 +234,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS SMALLINT), CAST('2' AS BINARY)))' (smallint and binary).",
-    "sqlExpr" : "(IF(true, CAST(1 AS SMALLINT), CAST('2' AS BINARY)))"
+    "dataType" : "[\"SMALLINT\", \"BINARY\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS SMALLINT), CAST(2 AS BINARY)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -257,11 +257,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS SMALLINT), CAST(2 AS BOOLEAN)))' (smallint and boolean).",
-    "sqlExpr" : "(IF(true, CAST(1 AS SMALLINT), CAST(2 AS BOOLEAN)))"
+    "dataType" : "[\"SMALLINT\", \"BOOLEAN\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS SMALLINT), CAST(2 AS BOOLEAN)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -280,11 +280,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS SMALLINT), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' (smallint and timestamp).",
-    "sqlExpr" : "(IF(true, CAST(1 AS SMALLINT), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))"
+    "dataType" : "[\"SMALLINT\", \"TIMESTAMP\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS SMALLINT), CAST(2017-12-11 09:30:00.0 AS TIMESTAMP)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -303,11 +303,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS SMALLINT), CAST('2017-12-11 09:30:00' AS DATE)))' (smallint and date).",
-    "sqlExpr" : "(IF(true, CAST(1 AS SMALLINT), CAST('2017-12-11 09:30:00' AS DATE)))"
+    "dataType" : "[\"SMALLINT\", \"DATE\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS SMALLINT), CAST(2017-12-11 09:30:00 AS DATE)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -390,11 +390,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS INT), CAST('2' AS BINARY)))' (int and binary).",
-    "sqlExpr" : "(IF(true, CAST(1 AS INT), CAST('2' AS BINARY)))"
+    "dataType" : "[\"INT\", \"BINARY\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS INT), CAST(2 AS BINARY)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -413,11 +413,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS INT), CAST(2 AS BOOLEAN)))' (int and boolean).",
-    "sqlExpr" : "(IF(true, CAST(1 AS INT), CAST(2 AS BOOLEAN)))"
+    "dataType" : "[\"INT\", \"BOOLEAN\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS INT), CAST(2 AS BOOLEAN)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -436,11 +436,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS INT), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' (int and timestamp).",
-    "sqlExpr" : "(IF(true, CAST(1 AS INT), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))"
+    "dataType" : "[\"INT\", \"TIMESTAMP\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS INT), CAST(2017-12-11 09:30:00.0 AS TIMESTAMP)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -459,11 +459,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS INT), CAST('2017-12-11 09:30:00' AS DATE)))' (int and date).",
-    "sqlExpr" : "(IF(true, CAST(1 AS INT), CAST('2017-12-11 09:30:00' AS DATE)))"
+    "dataType" : "[\"INT\", \"DATE\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS INT), CAST(2017-12-11 09:30:00 AS DATE)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -546,11 +546,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS BIGINT), CAST('2' AS BINARY)))' (bigint and binary).",
-    "sqlExpr" : "(IF(true, CAST(1 AS BIGINT), CAST('2' AS BINARY)))"
+    "dataType" : "[\"BIGINT\", \"BINARY\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BIGINT), CAST(2 AS BINARY)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -569,11 +569,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS BIGINT), CAST(2 AS BOOLEAN)))' (bigint and boolean).",
-    "sqlExpr" : "(IF(true, CAST(1 AS BIGINT), CAST(2 AS BOOLEAN)))"
+    "dataType" : "[\"BIGINT\", \"BOOLEAN\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BIGINT), CAST(2 AS BOOLEAN)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -592,11 +592,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS BIGINT), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' (bigint and timestamp).",
-    "sqlExpr" : "(IF(true, CAST(1 AS BIGINT), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))"
+    "dataType" : "[\"BIGINT\", \"TIMESTAMP\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BIGINT), CAST(2017-12-11 09:30:00.0 AS TIMESTAMP)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -615,11 +615,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS BIGINT), CAST('2017-12-11 09:30:00' AS DATE)))' (bigint and date).",
-    "sqlExpr" : "(IF(true, CAST(1 AS BIGINT), CAST('2017-12-11 09:30:00' AS DATE)))"
+    "dataType" : "[\"BIGINT\", \"DATE\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BIGINT), CAST(2017-12-11 09:30:00 AS DATE)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -702,11 +702,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS FLOAT), CAST('2' AS BINARY)))' (float and binary).",
-    "sqlExpr" : "(IF(true, CAST(1 AS FLOAT), CAST('2' AS BINARY)))"
+    "dataType" : "[\"FLOAT\", \"BINARY\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS FLOAT), CAST(2 AS BINARY)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -725,11 +725,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS FLOAT), CAST(2 AS BOOLEAN)))' (float and boolean).",
-    "sqlExpr" : "(IF(true, CAST(1 AS FLOAT), CAST(2 AS BOOLEAN)))"
+    "dataType" : "[\"FLOAT\", \"BOOLEAN\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS FLOAT), CAST(2 AS BOOLEAN)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -748,11 +748,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS FLOAT), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' (float and timestamp).",
-    "sqlExpr" : "(IF(true, CAST(1 AS FLOAT), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))"
+    "dataType" : "[\"FLOAT\", \"TIMESTAMP\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS FLOAT), CAST(2017-12-11 09:30:00.0 AS TIMESTAMP)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -771,11 +771,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS FLOAT), CAST('2017-12-11 09:30:00' AS DATE)))' (float and date).",
-    "sqlExpr" : "(IF(true, CAST(1 AS FLOAT), CAST('2017-12-11 09:30:00' AS DATE)))"
+    "dataType" : "[\"FLOAT\", \"DATE\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS FLOAT), CAST(2017-12-11 09:30:00 AS DATE)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -858,11 +858,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS DOUBLE), CAST('2' AS BINARY)))' (double and binary).",
-    "sqlExpr" : "(IF(true, CAST(1 AS DOUBLE), CAST('2' AS BINARY)))"
+    "dataType" : "[\"DOUBLE\", \"BINARY\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS DOUBLE), CAST(2 AS BINARY)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -881,11 +881,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS DOUBLE), CAST(2 AS BOOLEAN)))' (double and boolean).",
-    "sqlExpr" : "(IF(true, CAST(1 AS DOUBLE), CAST(2 AS BOOLEAN)))"
+    "dataType" : "[\"DOUBLE\", \"BOOLEAN\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS DOUBLE), CAST(2 AS BOOLEAN)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -904,11 +904,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS DOUBLE), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' (double and timestamp).",
-    "sqlExpr" : "(IF(true, CAST(1 AS DOUBLE), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))"
+    "dataType" : "[\"DOUBLE\", \"TIMESTAMP\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS DOUBLE), CAST(2017-12-11 09:30:00.0 AS TIMESTAMP)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -927,11 +927,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS DOUBLE), CAST('2017-12-11 09:30:00' AS DATE)))' (double and date).",
-    "sqlExpr" : "(IF(true, CAST(1 AS DOUBLE), CAST('2017-12-11 09:30:00' AS DATE)))"
+    "dataType" : "[\"DOUBLE\", \"DATE\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS DOUBLE), CAST(2017-12-11 09:30:00 AS DATE)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1014,11 +1014,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS DECIMAL(10,0)), CAST('2' AS BINARY)))' (decimal(10,0) and binary).",
-    "sqlExpr" : "(IF(true, CAST(1 AS DECIMAL(10,0)), CAST('2' AS BINARY)))"
+    "dataType" : "[\"DECIMAL(10,0)\", \"BINARY\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS DECIMAL(10,0)), CAST(2 AS BINARY)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1037,11 +1037,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS DECIMAL(10,0)), CAST(2 AS BOOLEAN)))' (decimal(10,0) and boolean).",
-    "sqlExpr" : "(IF(true, CAST(1 AS DECIMAL(10,0)), CAST(2 AS BOOLEAN)))"
+    "dataType" : "[\"DECIMAL(10,0)\", \"BOOLEAN\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS DECIMAL(10,0)), CAST(2 AS BOOLEAN)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1060,11 +1060,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS DECIMAL(10,0)), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' (decimal(10,0) and timestamp).",
-    "sqlExpr" : "(IF(true, CAST(1 AS DECIMAL(10,0)), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))"
+    "dataType" : "[\"DECIMAL(10,0)\", \"TIMESTAMP\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS DECIMAL(10,0)), CAST(2017-12-11 09:30:00.0 AS TIMESTAMP)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1083,11 +1083,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS DECIMAL(10,0)), CAST('2017-12-11 09:30:00' AS DATE)))' (decimal(10,0) and date).",
-    "sqlExpr" : "(IF(true, CAST(1 AS DECIMAL(10,0)), CAST('2017-12-11 09:30:00' AS DATE)))"
+    "dataType" : "[\"DECIMAL(10,0)\", \"DATE\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS DECIMAL(10,0)), CAST(2017-12-11 09:30:00 AS DATE)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1170,11 +1170,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS STRING), CAST('2' AS BINARY)))' (string and binary).",
-    "sqlExpr" : "(IF(true, CAST(1 AS STRING), CAST('2' AS BINARY)))"
+    "dataType" : "[\"STRING\", \"BINARY\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS STRING), CAST(2 AS BINARY)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1193,11 +1193,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS STRING), CAST(2 AS BOOLEAN)))' (string and boolean).",
-    "sqlExpr" : "(IF(true, CAST(1 AS STRING), CAST(2 AS BOOLEAN)))"
+    "dataType" : "[\"STRING\", \"BOOLEAN\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS STRING), CAST(2 AS BOOLEAN)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1232,11 +1232,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST('1' AS BINARY), CAST(2 AS TINYINT)))' (binary and tinyint).",
-    "sqlExpr" : "(IF(true, CAST('1' AS BINARY), CAST(2 AS TINYINT)))"
+    "dataType" : "[\"BINARY\", \"TINYINT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BINARY), CAST(2 AS TINYINT)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1255,11 +1255,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST('1' AS BINARY), CAST(2 AS SMALLINT)))' (binary and smallint).",
-    "sqlExpr" : "(IF(true, CAST('1' AS BINARY), CAST(2 AS SMALLINT)))"
+    "dataType" : "[\"BINARY\", \"SMALLINT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BINARY), CAST(2 AS SMALLINT)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1278,11 +1278,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST('1' AS BINARY), CAST(2 AS INT)))' (binary and int).",
-    "sqlExpr" : "(IF(true, CAST('1' AS BINARY), CAST(2 AS INT)))"
+    "dataType" : "[\"BINARY\", \"INT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BINARY), CAST(2 AS INT)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1301,11 +1301,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST('1' AS BINARY), CAST(2 AS BIGINT)))' (binary and bigint).",
-    "sqlExpr" : "(IF(true, CAST('1' AS BINARY), CAST(2 AS BIGINT)))"
+    "dataType" : "[\"BINARY\", \"BIGINT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BINARY), CAST(2 AS BIGINT)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1324,11 +1324,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST('1' AS BINARY), CAST(2 AS FLOAT)))' (binary and float).",
-    "sqlExpr" : "(IF(true, CAST('1' AS BINARY), CAST(2 AS FLOAT)))"
+    "dataType" : "[\"BINARY\", \"FLOAT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BINARY), CAST(2 AS FLOAT)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1347,11 +1347,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST('1' AS BINARY), CAST(2 AS DOUBLE)))' (binary and double).",
-    "sqlExpr" : "(IF(true, CAST('1' AS BINARY), CAST(2 AS DOUBLE)))"
+    "dataType" : "[\"BINARY\", \"DOUBLE\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BINARY), CAST(2 AS DOUBLE)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1370,11 +1370,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST('1' AS BINARY), CAST(2 AS DECIMAL(10,0))))' (binary and decimal(10,0)).",
-    "sqlExpr" : "(IF(true, CAST('1' AS BINARY), CAST(2 AS DECIMAL(10,0))))"
+    "dataType" : "[\"BINARY\", \"DECIMAL(10,0)\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BINARY), CAST(2 AS DECIMAL(10,0))))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1393,11 +1393,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST('1' AS BINARY), CAST(2 AS STRING)))' (binary and string).",
-    "sqlExpr" : "(IF(true, CAST('1' AS BINARY), CAST(2 AS STRING)))"
+    "dataType" : "[\"BINARY\", \"STRING\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BINARY), CAST(2 AS STRING)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1424,11 +1424,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST('1' AS BINARY), CAST(2 AS BOOLEAN)))' (binary and boolean).",
-    "sqlExpr" : "(IF(true, CAST('1' AS BINARY), CAST(2 AS BOOLEAN)))"
+    "dataType" : "[\"BINARY\", \"BOOLEAN\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BINARY), CAST(2 AS BOOLEAN)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1447,11 +1447,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST('1' AS BINARY), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' (binary and timestamp).",
-    "sqlExpr" : "(IF(true, CAST('1' AS BINARY), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))"
+    "dataType" : "[\"BINARY\", \"TIMESTAMP\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BINARY), CAST(2017-12-11 09:30:00.0 AS TIMESTAMP)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1470,11 +1470,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST('1' AS BINARY), CAST('2017-12-11 09:30:00' AS DATE)))' (binary and date).",
-    "sqlExpr" : "(IF(true, CAST('1' AS BINARY), CAST('2017-12-11 09:30:00' AS DATE)))"
+    "dataType" : "[\"BINARY\", \"DATE\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BINARY), CAST(2017-12-11 09:30:00 AS DATE)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1493,11 +1493,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS TINYINT)))' (boolean and tinyint).",
-    "sqlExpr" : "(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS TINYINT)))"
+    "dataType" : "[\"BOOLEAN\", \"TINYINT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS TINYINT)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1516,11 +1516,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS SMALLINT)))' (boolean and smallint).",
-    "sqlExpr" : "(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS SMALLINT)))"
+    "dataType" : "[\"BOOLEAN\", \"SMALLINT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS SMALLINT)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1539,11 +1539,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS INT)))' (boolean and int).",
-    "sqlExpr" : "(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS INT)))"
+    "dataType" : "[\"BOOLEAN\", \"INT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS INT)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1562,11 +1562,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS BIGINT)))' (boolean and bigint).",
-    "sqlExpr" : "(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS BIGINT)))"
+    "dataType" : "[\"BOOLEAN\", \"BIGINT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS BIGINT)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1585,11 +1585,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS FLOAT)))' (boolean and float).",
-    "sqlExpr" : "(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS FLOAT)))"
+    "dataType" : "[\"BOOLEAN\", \"FLOAT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS FLOAT)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1608,11 +1608,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS DOUBLE)))' (boolean and double).",
-    "sqlExpr" : "(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS DOUBLE)))"
+    "dataType" : "[\"BOOLEAN\", \"DOUBLE\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS DOUBLE)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1631,11 +1631,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS DECIMAL(10,0))))' (boolean and decimal(10,0)).",
-    "sqlExpr" : "(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS DECIMAL(10,0))))"
+    "dataType" : "[\"BOOLEAN\", \"DECIMAL(10,0)\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS DECIMAL(10,0))))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1654,11 +1654,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS STRING)))' (boolean and string).",
-    "sqlExpr" : "(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS STRING)))"
+    "dataType" : "[\"BOOLEAN\", \"STRING\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS STRING)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1677,11 +1677,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS BOOLEAN), CAST('2' AS BINARY)))' (boolean and binary).",
-    "sqlExpr" : "(IF(true, CAST(1 AS BOOLEAN), CAST('2' AS BINARY)))"
+    "dataType" : "[\"BOOLEAN\", \"BINARY\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS BINARY)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1708,11 +1708,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS BOOLEAN), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' (boolean and timestamp).",
-    "sqlExpr" : "(IF(true, CAST(1 AS BOOLEAN), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))"
+    "dataType" : "[\"BOOLEAN\", \"TIMESTAMP\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BOOLEAN), CAST(2017-12-11 09:30:00.0 AS TIMESTAMP)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1731,11 +1731,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST(1 AS BOOLEAN), CAST('2017-12-11 09:30:00' AS DATE)))' (boolean and date).",
-    "sqlExpr" : "(IF(true, CAST(1 AS BOOLEAN), CAST('2017-12-11 09:30:00' AS DATE)))"
+    "dataType" : "[\"BOOLEAN\", \"DATE\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BOOLEAN), CAST(2017-12-11 09:30:00 AS DATE)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1754,11 +1754,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(2 AS TINYINT)))' (timestamp and tinyint).",
-    "sqlExpr" : "(IF(true, CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(2 AS TINYINT)))"
+    "dataType" : "[\"TIMESTAMP\", \"TINYINT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(2017-12-12 09:30:00.0 AS TIMESTAMP), CAST(2 AS TINYINT)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1777,11 +1777,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(2 AS SMALLINT)))' (timestamp and smallint).",
-    "sqlExpr" : "(IF(true, CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(2 AS SMALLINT)))"
+    "dataType" : "[\"TIMESTAMP\", \"SMALLINT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(2017-12-12 09:30:00.0 AS TIMESTAMP), CAST(2 AS SMALLINT)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1800,11 +1800,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(2 AS INT)))' (timestamp and int).",
-    "sqlExpr" : "(IF(true, CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(2 AS INT)))"
+    "dataType" : "[\"TIMESTAMP\", \"INT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(2017-12-12 09:30:00.0 AS TIMESTAMP), CAST(2 AS INT)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1823,11 +1823,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(2 AS BIGINT)))' (timestamp and bigint).",
-    "sqlExpr" : "(IF(true, CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(2 AS BIGINT)))"
+    "dataType" : "[\"TIMESTAMP\", \"BIGINT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(2017-12-12 09:30:00.0 AS TIMESTAMP), CAST(2 AS BIGINT)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1846,11 +1846,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(2 AS FLOAT)))' (timestamp and float).",
-    "sqlExpr" : "(IF(true, CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(2 AS FLOAT)))"
+    "dataType" : "[\"TIMESTAMP\", \"FLOAT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(2017-12-12 09:30:00.0 AS TIMESTAMP), CAST(2 AS FLOAT)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1869,11 +1869,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(2 AS DOUBLE)))' (timestamp and double).",
-    "sqlExpr" : "(IF(true, CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(2 AS DOUBLE)))"
+    "dataType" : "[\"TIMESTAMP\", \"DOUBLE\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(2017-12-12 09:30:00.0 AS TIMESTAMP), CAST(2 AS DOUBLE)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1892,11 +1892,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(2 AS DECIMAL(10,0))))' (timestamp and decimal(10,0)).",
-    "sqlExpr" : "(IF(true, CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(2 AS DECIMAL(10,0))))"
+    "dataType" : "[\"TIMESTAMP\", \"DECIMAL(10,0)\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(2017-12-12 09:30:00.0 AS TIMESTAMP), CAST(2 AS DECIMAL(10,0))))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1923,11 +1923,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST('2' AS BINARY)))' (timestamp and binary).",
-    "sqlExpr" : "(IF(true, CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST('2' AS BINARY)))"
+    "dataType" : "[\"TIMESTAMP\", \"BINARY\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(2017-12-12 09:30:00.0 AS TIMESTAMP), CAST(2 AS BINARY)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1946,11 +1946,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(2 AS BOOLEAN)))' (timestamp and boolean).",
-    "sqlExpr" : "(IF(true, CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(2 AS BOOLEAN)))"
+    "dataType" : "[\"TIMESTAMP\", \"BOOLEAN\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(2017-12-12 09:30:00.0 AS TIMESTAMP), CAST(2 AS BOOLEAN)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1985,11 +1985,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST('2017-12-12 09:30:00' AS DATE), CAST(2 AS TINYINT)))' (date and tinyint).",
-    "sqlExpr" : "(IF(true, CAST('2017-12-12 09:30:00' AS DATE), CAST(2 AS TINYINT)))"
+    "dataType" : "[\"DATE\", \"TINYINT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(2017-12-12 09:30:00 AS DATE), CAST(2 AS TINYINT)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2008,11 +2008,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST('2017-12-12 09:30:00' AS DATE), CAST(2 AS SMALLINT)))' (date and smallint).",
-    "sqlExpr" : "(IF(true, CAST('2017-12-12 09:30:00' AS DATE), CAST(2 AS SMALLINT)))"
+    "dataType" : "[\"DATE\", \"SMALLINT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(2017-12-12 09:30:00 AS DATE), CAST(2 AS SMALLINT)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2031,11 +2031,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST('2017-12-12 09:30:00' AS DATE), CAST(2 AS INT)))' (date and int).",
-    "sqlExpr" : "(IF(true, CAST('2017-12-12 09:30:00' AS DATE), CAST(2 AS INT)))"
+    "dataType" : "[\"DATE\", \"INT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(2017-12-12 09:30:00 AS DATE), CAST(2 AS INT)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2054,11 +2054,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST('2017-12-12 09:30:00' AS DATE), CAST(2 AS BIGINT)))' (date and bigint).",
-    "sqlExpr" : "(IF(true, CAST('2017-12-12 09:30:00' AS DATE), CAST(2 AS BIGINT)))"
+    "dataType" : "[\"DATE\", \"BIGINT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(2017-12-12 09:30:00 AS DATE), CAST(2 AS BIGINT)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2077,11 +2077,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST('2017-12-12 09:30:00' AS DATE), CAST(2 AS FLOAT)))' (date and float).",
-    "sqlExpr" : "(IF(true, CAST('2017-12-12 09:30:00' AS DATE), CAST(2 AS FLOAT)))"
+    "dataType" : "[\"DATE\", \"FLOAT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(2017-12-12 09:30:00 AS DATE), CAST(2 AS FLOAT)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2100,11 +2100,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST('2017-12-12 09:30:00' AS DATE), CAST(2 AS DOUBLE)))' (date and double).",
-    "sqlExpr" : "(IF(true, CAST('2017-12-12 09:30:00' AS DATE), CAST(2 AS DOUBLE)))"
+    "dataType" : "[\"DATE\", \"DOUBLE\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(2017-12-12 09:30:00 AS DATE), CAST(2 AS DOUBLE)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2123,11 +2123,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST('2017-12-12 09:30:00' AS DATE), CAST(2 AS DECIMAL(10,0))))' (date and decimal(10,0)).",
-    "sqlExpr" : "(IF(true, CAST('2017-12-12 09:30:00' AS DATE), CAST(2 AS DECIMAL(10,0))))"
+    "dataType" : "[\"DATE\", \"DECIMAL(10,0)\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(2017-12-12 09:30:00 AS DATE), CAST(2 AS DECIMAL(10,0))))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2154,11 +2154,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST('2017-12-12 09:30:00' AS DATE), CAST('2' AS BINARY)))' (date and binary).",
-    "sqlExpr" : "(IF(true, CAST('2017-12-12 09:30:00' AS DATE), CAST('2' AS BINARY)))"
+    "dataType" : "[\"DATE\", \"BINARY\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(2017-12-12 09:30:00 AS DATE), CAST(2 AS BINARY)))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2177,11 +2177,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2315",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "differing types in '(IF(true, CAST('2017-12-12 09:30:00' AS DATE), CAST(2 AS BOOLEAN)))' (date and boolean).",
-    "sqlExpr" : "(IF(true, CAST('2017-12-12 09:30:00' AS DATE), CAST(2 AS BOOLEAN)))"
+    "dataType" : "[\"DATE\", \"BOOLEAN\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(2017-12-12 09:30:00 AS DATE), CAST(2 AS BOOLEAN)))\""
   },
   "queryContext" : [ {
     "objectType" : "",

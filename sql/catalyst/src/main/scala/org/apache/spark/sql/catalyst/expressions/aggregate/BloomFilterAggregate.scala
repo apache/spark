@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLId, toSQLType, toSQLValue}
 import org.apache.spark.sql.catalyst.trees.TernaryLike
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.{RUNTIME_BLOOM_FILTER_MAX_NUM_BITS, RUNTIME_BLOOM_FILTER_MAX_NUM_ITEMS}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.sketch.BloomFilter
 
@@ -54,6 +55,13 @@ case class BloomFilterAggregate(
     this(child, estimatedNumItemsExpression,
       // 1 byte per item.
       Multiply(estimatedNumItemsExpression, Literal(8L)))
+  }
+
+  def this(child: Expression, estimatedNumItems: Long) = {
+    this(child, Literal(estimatedNumItems),
+      Literal(BloomFilter.optimalNumOfBits(estimatedNumItems,
+        SQLConf.get.getConf(RUNTIME_BLOOM_FILTER_MAX_NUM_ITEMS),
+        SQLConf.get.getConf(RUNTIME_BLOOM_FILTER_MAX_NUM_BITS))))
   }
 
   def this(child: Expression) = {
@@ -109,8 +117,8 @@ case class BloomFilterAggregate(
           )
         } else {
           require(estimatedNumItems <=
-            SQLConf.get.getConf(SQLConf.RUNTIME_BLOOM_FILTER_MAX_NUM_ITEMS))
-          require(numBits <= SQLConf.get.getConf(SQLConf.RUNTIME_BLOOM_FILTER_MAX_NUM_BITS))
+            SQLConf.get.getConf(RUNTIME_BLOOM_FILTER_MAX_NUM_ITEMS))
+          require(numBits <= SQLConf.get.getConf(RUNTIME_BLOOM_FILTER_MAX_NUM_BITS))
           TypeCheckSuccess
         }
       case _ =>
@@ -135,12 +143,12 @@ case class BloomFilterAggregate(
   // Mark as lazy so that `estimatedNumItems` is not evaluated during tree transformation.
   private lazy val estimatedNumItems: Long =
     Math.min(estimatedNumItemsExpression.eval().asInstanceOf[Number].longValue,
-      SQLConf.get.getConf(SQLConf.RUNTIME_BLOOM_FILTER_MAX_NUM_ITEMS))
+      SQLConf.get.getConf(RUNTIME_BLOOM_FILTER_MAX_NUM_ITEMS))
 
   // Mark as lazy so that `numBits` is not evaluated during tree transformation.
   private lazy val numBits: Long =
     Math.min(numBitsExpression.eval().asInstanceOf[Number].longValue,
-      SQLConf.get.getConf(SQLConf.RUNTIME_BLOOM_FILTER_MAX_NUM_BITS))
+      SQLConf.get.getConf(RUNTIME_BLOOM_FILTER_MAX_NUM_BITS))
 
   override def first: Expression = child
 

@@ -49,22 +49,8 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0004", ctx.source)
   }
 
-  def unrecognizedMatchedActionError(ctx: MatchedClauseContext): Throwable = {
-    new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0005",
-      messageParameters = Map("matchedAction" -> ctx.matchedAction().getText),
-      ctx.matchedAction())
-  }
-
   def insertedValueNumberNotMatchFieldNumberError(ctx: NotMatchedClauseContext): Throwable = {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0006", ctx.notMatchedAction())
-  }
-
-  def unrecognizedNotMatchedActionError(ctx: NotMatchedClauseContext): Throwable = {
-    new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0007",
-      messageParameters = Map("matchedAction" -> ctx.notMatchedAction().getText),
-      ctx.notMatchedAction())
   }
 
   def mergeStatementWithoutWhenClauseError(ctx: MergeIntoTableContext): Throwable = {
@@ -72,11 +58,15 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def nonLastMatchedClauseOmitConditionError(ctx: MergeIntoTableContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0009", ctx)
+    new ParseException(errorClass = "NON_LAST_MATCHED_CLAUSE_OMIT_CONDITION", ctx)
   }
 
   def nonLastNotMatchedClauseOmitConditionError(ctx: MergeIntoTableContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0010", ctx)
+    new ParseException(errorClass = "NON_LAST_NOT_MATCHED_BY_TARGET_CLAUSE_OMIT_CONDITION", ctx)
+  }
+
+  def nonLastNotMatchedBySourceClauseOmitConditionError(ctx: MergeIntoTableContext): Throwable = {
+    new ParseException(errorClass = "NON_LAST_NOT_MATCHED_BY_SOURCE_CLAUSE_OMIT_CONDITION", ctx)
   }
 
   def emptyPartitionKeyError(key: String, ctx: PartitionSpecContext): Throwable = {
@@ -137,7 +127,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
 
   def unsupportedLateralJoinTypeError(ctx: ParserRuleContext, joinType: String): Throwable = {
     new ParseException(
-      errorClass = "UNSUPPORTED_FEATURE.LATERAL_JOIN_OF_TYPE",
+      errorClass = "INVALID_LATERAL_JOIN_TYPE",
       messageParameters = Map("joinType" -> toSQLStmt(joinType)),
       ctx)
   }
@@ -309,7 +299,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
 
   def charTypeMissingLengthError(dataType: String, ctx: PrimitiveDataTypeContext): Throwable = {
     new ParseException(
-      errorClass = "PARSE_CHAR_MISSING_LENGTH",
+      errorClass = "DATATYPE_MISSING_SIZE",
       messageParameters = Map("type" -> toSQLType(dataType)),
       ctx)
   }
@@ -458,9 +448,9 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
       Some("_LEGACY_ERROR_TEMP_0039"))
   }
 
-  def unquotedIdentifierError(ident: String, ctx: ErrorIdentContext): Throwable = {
+  def invalidIdentifierError(ident: String, ctx: ErrorIdentContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0040",
+      errorClass = "INVALID_IDENTIFIER",
       messageParameters = Map("ident" -> ident),
       ctx)
   }
@@ -611,9 +601,13 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
       ctx)
   }
 
-  def unclosedBracketedCommentError(command: String, position: Origin): Throwable = {
-    new ParseException(Some(command), "Unclosed bracketed comment", position, position,
-      Some("_LEGACY_ERROR_TEMP_0055"))
+  def unclosedBracketedCommentError(command: String, start: Origin, stop: Origin): Throwable = {
+    new ParseException(
+      command = Some(command),
+      start = start,
+      stop = stop,
+      errorClass = "UNCLOSED_BRACKETED_COMMENT",
+      messageParameters = Map.empty)
   }
 
   def invalidTimeTravelSpec(reason: String, ctx: ParserRuleContext): Throwable = {

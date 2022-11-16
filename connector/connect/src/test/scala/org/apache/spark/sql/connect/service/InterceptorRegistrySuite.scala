@@ -114,9 +114,13 @@ class InterceptorRegistrySuite extends SharedSparkSession {
       Connect.CONNECT_GRPC_INTERCEPTOR_CLASSES.key ->
         "org.apache.spark.sql.connect.service.TestingInterceptorNoTrivialCtor") {
       val sb = NettyServerBuilder.forPort(9999)
-      assertThrows[SparkException] {
-        SparkConnectInterceptorRegistry.chainInterceptors(sb)
-      }
+      checkError(
+        exception = intercept[SparkException] {
+          SparkConnectInterceptorRegistry.chainInterceptors(sb)
+        },
+        errorClass = "CONNECT.INTERCEPTOR_CTOR_MISSING",
+        parameters =
+          Map("cls" -> "org.apache.spark.sql.connect.service.TestingInterceptorNoTrivialCtor"))
     }
   }
 
@@ -124,17 +128,24 @@ class InterceptorRegistrySuite extends SharedSparkSession {
     withSparkConf(
       Connect.CONNECT_GRPC_INTERCEPTOR_CLASSES.key ->
         "org.apache.spark.sql.connect.service.TestingInterceptorNoTrivialCtor") {
-      assertThrows[SparkException] {
-        SparkConnectInterceptorRegistry.createConfiguredInterceptors
-      }
+      checkError(
+        exception = intercept[SparkException] {
+          SparkConnectInterceptorRegistry.createConfiguredInterceptors
+        },
+        errorClass = "CONNECT.INTERCEPTOR_CTOR_MISSING",
+        parameters =
+          Map("cls" -> "org.apache.spark.sql.connect.service.TestingInterceptorNoTrivialCtor"))
     }
 
     withSparkConf(
       Connect.CONNECT_GRPC_INTERCEPTOR_CLASSES.key ->
         "org.apache.spark.sql.connect.service.TestingInterceptorInstantiationError") {
-      assertThrows[SparkException] {
-        SparkConnectInterceptorRegistry.createConfiguredInterceptors
-      }
+      checkError(
+        exception = intercept[SparkException] {
+          SparkConnectInterceptorRegistry.createConfiguredInterceptors
+        },
+        errorClass = "CONNECT.INTERCEPTOR_RUNTIME_ERROR",
+        parameters = Map("msg" -> "Bad Error"))
     }
   }
 
