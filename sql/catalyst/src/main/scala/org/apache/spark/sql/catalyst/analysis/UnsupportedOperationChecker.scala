@@ -73,14 +73,14 @@ object UnsupportedOperationChecker extends Logging {
   }
 
   /**
-   * This method, combined with isStatefulOperationPossiblyEmitLateRows, determines all disallowed
+   * This method, combined with isStatefulOperation, determines all disallowed
    * behaviors in multiple stateful operators.
    * Concretely, All conditions defined below cannot be followed by any streaming stateful
-   * operator as defined in isStatefulOperationPossiblyEmitLateRows.
+   * operator as defined in isStatefulOperation.
    * @param p logical plan to be checked
    * @param outputMode query output mode
    * @return true if it is not allowed when followed by any streaming stateful
-   * operator as defined in isStatefulOperationPossiblyEmitLateRows.
+   * operator as defined in isStatefulOperation.
    */
   private def ifCannotBeFollowedByStatefulOperation(
       p: LogicalPlan, outputMode: OutputMode): Boolean = p match {
@@ -103,14 +103,12 @@ object UnsupportedOperationChecker extends Logging {
 
   /**
    * This method is only used with ifCannotBeFollowedByStatefulOperation.
-   * As can tell from the name, it doesn't contain ALL streaming stateful operations,
-   * only the stateful operations that are possible to emit late rows.
-   * for example, a Deduplicate without a event time column is still a stateful operation
-   * but of less interested because it won't emit late records because of watermark.
+   * Here we list up stateful operators but there is an exception for Deduplicate:
+   * it is only counted here when it has an event time column.
    * @param p the logical plan to be checked
    * @return true if there is a streaming stateful operation
    */
-  private def isStatefulOperationPossiblyEmitLateRows(p: LogicalPlan): Boolean = p match {
+  private def isStatefulOperation(p: LogicalPlan): Boolean = p match {
     case s: Aggregate if s.isStreaming => true
     // Since the Distinct node will be replaced to Aggregate in the optimizer rule
     // [[ReplaceDistinctWithAggregate]], here we also need to check all Distinct node by
@@ -119,12 +117,10 @@ object UnsupportedOperationChecker extends Logging {
     case _ @ Join(left, right, _, _, _) if left.isStreaming && right.isStreaming => true
     case f: FlatMapGroupsWithState if f.isStreaming => true
     case f: FlatMapGroupsInPandasWithState if f.isStreaming => true
-    // Deduplicate also works without event time column even in streaming,
-    // in such cases, although Dedup is still a stateful operation in a streaming
-    // query, it could be ignored in all checks below, so let it return false.
     case d: Deduplicate if d.isStreaming && d.keys.exists(hasEventTimeCol) => true
     case _ => false
   }
+
   /**
    * Checks for possible correctness issue in chained stateful operators. The behavior is
    * controlled by SQL config `spark.sql.streaming.statefulOperator.checkCorrectness.enabled`.
@@ -135,7 +131,7 @@ object UnsupportedOperationChecker extends Logging {
     val failWhenDetected = SQLConf.get.statefulOperatorCorrectnessCheckEnabled
     try {
       plan.foreach { subPlan =>
-        if (isStatefulOperationPossiblyEmitLateRows(subPlan)) {
+        if (isStatefulOperation(subPlan)) {
           subPlan.find { p =>
             (p ne subPlan) && ifCannotBeFollowedByStatefulOperation(p, outputMode)
           }.foreach { _ =>

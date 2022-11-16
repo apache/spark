@@ -298,17 +298,6 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     // future.
     expectedMsgs = Seq("Complete"))
 
-  for (outputMode <- Seq(Append, Complete)) {
-    assertNotSupportedInStreamingPlan(
-      "mapGroupsWithState - mapGroupsWithState on streaming relation " +
-        s"with aggregation in $outputMode mode",
-      TestFlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Update,
-        isMapGroupsWithState = true, null,
-        Aggregate(Seq(attributeWithWatermark), aggExprs("c"), streamRelation)),
-      outputMode = outputMode,
-      expectedMsgs = Seq("mapGroupsWithState", "output mode"))
-  }
-
   // multiple mapGroupsWithStates
   assertNotSupportedInStreamingPlan(
     "mapGroupsWithState - multiple mapGroupsWithStates on streaming relation and all are " +
