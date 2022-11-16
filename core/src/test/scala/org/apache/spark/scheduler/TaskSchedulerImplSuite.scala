@@ -2019,7 +2019,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     assert(manager.copiesRunning.take(2) === Array(1, 1))
   }
 
-  test("[SPARK-40979] Test keep removed executor info due to decommissio") {
+  test("SPARK-40979: Test keep removed executor info due to decommissio") {
     val clock = new ManualClock(10000L)
     val scheduler = setupSchedulerForDecommissionTests(clock, 2,
       Map(config.SCHEDULER_MAX_RETAINED_REMOVED_EXECUTORS.key -> "1"))
