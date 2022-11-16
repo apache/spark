@@ -413,7 +413,7 @@ object Cast extends QueryErrorsBase {
     }
   }
 
-  def typeCheckFailureMessage(
+  private def dataTypeMismatchError(
       from: DataType,
       to: DataType,
       fallbackConf: Option[(String, String)]): DataTypeMismatch = {
@@ -515,18 +515,18 @@ case class Cast(
     evalMode == EvalMode.TRY
   }
 
-  private def typeCheckFailureInCast: DataTypeMismatch = evalMode match {
+  private def dataTypeMismatchInCast: DataTypeMismatch = evalMode match {
     case EvalMode.ANSI =>
       if (getTagValue(Cast.BY_TABLE_INSERTION).isDefined) {
-        Cast.typeCheckFailureMessage(child.dataType, dataType,
+        Cast.dataTypeMismatchError(child.dataType, dataType,
           Some(SQLConf.STORE_ASSIGNMENT_POLICY.key ->
             SQLConf.StoreAssignmentPolicy.LEGACY.toString))
       } else {
-        Cast.typeCheckFailureMessage(child.dataType, dataType,
+        Cast.dataTypeMismatchError(child.dataType, dataType,
           Some(SQLConf.ANSI_ENABLED.key -> "false"))
       }
     case EvalMode.TRY =>
-      Cast.typeCheckFailureMessage(child.dataType, dataType, None)
+      Cast.dataTypeMismatchError(child.dataType, dataType, None)
     case _ =>
       DataTypeMismatch(
         errorSubClass = "CAST_WITHOUT_SUGGESTION",
@@ -545,7 +545,7 @@ case class Cast(
     if (canCast) {
       TypeCheckResult.TypeCheckSuccess
     } else {
-      typeCheckFailureInCast
+      dataTypeMismatchInCast
     }
   }
 
