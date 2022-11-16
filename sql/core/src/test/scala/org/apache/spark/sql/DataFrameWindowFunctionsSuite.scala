@@ -1266,7 +1266,6 @@ class DataFrameWindowFunctionsSuite extends QueryTest
     )
   }
 
-
   test("SPARK-37099: Insert Rank Limit for Window") {
     import org.apache.spark.sql.catalyst.plans.logical
 
