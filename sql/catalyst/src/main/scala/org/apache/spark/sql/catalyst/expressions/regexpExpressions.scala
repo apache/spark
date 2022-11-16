@@ -261,7 +261,7 @@ case class MatchMultiHelper(
     patternBufs += UTF8String.fromString(pattern)
   }
 
-  protected lazy val cache: Seq[UTF8String => Boolean] = patternBufs.filterNot(_ == null)
+  protected lazy val cache: Seq[UTF8String => Boolean] = patternBufs.toSeq.filterNot(_ == null)
     .map(s => {
       val escapeChar = '\\'
       val func =
