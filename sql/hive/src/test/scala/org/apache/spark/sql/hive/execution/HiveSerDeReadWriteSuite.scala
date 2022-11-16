@@ -293,6 +293,12 @@ class HiveSerDeReadWriteSuite extends QueryTest with SQLTestUtils with TestHiveS
           (0 until 10).map(Row(_))
         )
 
+        // Verify limit since we bypass ExecMapper.getDone().
+        checkAnswer(
+          sql("SELECT id FROM t ORDER BY id ASC LIMIT 2"),
+          (0 until 2).map(Row(_))
+        )
+
         // Verify that with the flag disabled, we use the original SymlinkTextInputFormat
         // which has the empty splits issue and therefore the result should be empty.
         withSQLConf(

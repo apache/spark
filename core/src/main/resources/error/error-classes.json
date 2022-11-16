@@ -17,23 +17,52 @@
     ],
     "sqlState" : "22005"
   },
+  "CANNOT_CONSTRUCT_PROTOBUF_DESCRIPTOR" : {
+    "message" : [
+      "Error constructing FileDescriptor for <descFilePath>"
+    ]
+  },
+  "CANNOT_CONVERT_PROTOBUF_FIELD_TYPE_TO_SQL_TYPE" : {
+    "message" : [
+      "Cannot convert Protobuf <protobufColumn> to SQL <sqlColumn> because schema is incompatible (protobufType = <protobufType>, sqlType = <sqlType>)."
+    ]
+  },
+  "CANNOT_CONVERT_PROTOBUF_MESSAGE_TYPE_TO_SQL_TYPE" : {
+    "message" : [
+      "Unable to convert <protobufType> of Protobuf to SQL type <toType>."
+    ]
+  },
+  "CANNOT_CONVERT_SQL_TYPE_TO_PROTOBUF_ENUM_TYPE" : {
+    "message" : [
+      "Cannot convert SQL <sqlColumn> to Protobuf <protobufColumn> because <data> cannot be written since it's not defined in ENUM <enumString>"
+    ]
+  },
+  "CANNOT_CONVERT_SQL_TYPE_TO_PROTOBUF_FIELD_TYPE" : {
+    "message" : [
+      "Cannot convert SQL <sqlColumn> to Protobuf <protobufColumn> because schema is incompatible (protobufType = <protobufType>, sqlType = <sqlType>)."
+    ]
+  },
   "CANNOT_DECODE_URL" : {
     "message" : [
       "Cannot decode url : <url>."
     ],
     "sqlState" : "42000"
   },
-  "CANNOT_INFER_DATE" : {
+  "CANNOT_LOAD_PROTOBUF_CLASS" : {
     "message" : [
-      "Cannot infer date in schema inference when LegacyTimeParserPolicy is \"LEGACY\". Legacy Date formatter does not support strict date format matching which is required to avoid inferring timestamps and other non-date entries to date."
-    ],
-    "sqlState" : "22007"
+      "Could not load Protobuf class with name <protobufClassName>. Ensure the class name includes package prefix."
+    ]
   },
   "CANNOT_PARSE_DECIMAL" : {
     "message" : [
       "Cannot parse decimal"
     ],
     "sqlState" : "42000"
+  },
+  "CANNOT_PARSE_PROTOBUF_DESCRIPTOR" : {
+    "message" : [
+      "Error parsing file <descFilePath> descriptor byte[] into Descriptor object"
+    ]
   },
   "CANNOT_PARSE_TIMESTAMP" : {
     "message" : [
@@ -108,6 +137,11 @@
       "Cannot resolve <sqlExpr> due to data type mismatch:"
     ],
     "subClass" : {
+      "ARRAY_FUNCTION_DIFF_TYPES" : {
+        "message" : [
+          "Input to <functionName> should have been <dataType> followed by a value with same element type, but it's [<leftType>, <rightType>]."
+        ]
+      },
       "BINARY_ARRAY_DIFF_TYPES" : {
         "message" : [
           "Input to function <functionName> should have been two <arrayType> with same element type, but it's [<leftType>, <rightType>]."
@@ -180,9 +214,44 @@
           "Input to <functionName> should all be the same type, but it's <dataType>."
         ]
       },
-      "FRAME_LESS_OFFSET_WITHOUT_FOLDABLE" : {
+      "FORMAT_CONT_THOUSANDS_SEPS" : {
         "message" : [
-          "Offset expression <offset> must be a literal."
+          "Thousands separators (, or G) must have digits in between them in the number format: <format>."
+        ]
+      },
+      "FORMAT_CUR_MUST_BEFORE_DEC" : {
+        "message" : [
+          "Currency characters must appear before any decimal point in the number format: <format>."
+        ]
+      },
+      "FORMAT_CUR_MUST_BEFORE_DIGIT" : {
+        "message" : [
+          "Currency characters must appear before digits in the number format: <format>."
+        ]
+      },
+      "FORMAT_EMPTY" : {
+        "message" : [
+          "The number format string cannot be empty."
+        ]
+      },
+      "FORMAT_THOUSANDS_SEPS_MUST_BEFORE_DEC" : {
+        "message" : [
+          "Thousands separators (, or G) may not appear after the decimal point in the number format: <format>."
+        ]
+      },
+      "FORMAT_UNEXPECTED_TOKEN" : {
+        "message" : [
+          "Unexpected <token> found in the format string <format>; the structure of the format string must match: [MI|S] [$] [0|9|G|,]* [.|D] [0|9]* [$] [PR|MI|S]."
+        ]
+      },
+      "FORMAT_WRONG_NUM_DIGIT" : {
+        "message" : [
+          "The format string requires at least one number digit."
+        ]
+      },
+      "FORMAT_WRONG_NUM_TOKEN" : {
+        "message" : [
+          "At most one <token> is allowed in the number format: <format>."
         ]
       },
       "HASH_MAP_TYPE" : {
@@ -225,14 +294,9 @@
           "The <functionName> should all be of type map, but it's <dataType>."
         ]
       },
-      "MAP_CONTAINS_KEY_DIFF_TYPES" : {
+      "MAP_FUNCTION_DIFF_TYPES" : {
         "message" : [
           "Input to <functionName> should have been <dataType> followed by a value with same key type, but it's [<leftType>, <rightType>]."
-        ]
-      },
-      "MAP_FROM_ENTRIES_WRONG_TYPE" : {
-        "message" : [
-          "The <functionName> accepts only arrays of pair structs, but <childExpr> is of <childType>."
         ]
       },
       "MAP_ZIP_WITH_DIFF_TYPES" : {
@@ -275,6 +339,14 @@
           "A range window frame cannot be used in an unordered window specification."
         ]
       },
+      "SEQUENCE_WRONG_INPUT_TYPES" : {
+        "message" : [
+          "<functionName> uses the wrong parameter type. The parameter type must conform to:",
+          "1. The start and stop expressions must resolve to the same type.",
+          "2. If start and stop expressions resolve to the <startType> type, then the step expression must resolve to the <stepType> type",
+          "3. Otherwise, if start and stop expressions resolve to the <otherStartType> type, then the step expression must resolve to the same type."
+        ]
+      },
       "SPECIFIED_WINDOW_FRAME_DIFF_TYPES" : {
         "message" : [
           "Window frame bounds <lower> and <upper> do not have the same type: <lowerType> <> <upperType>."
@@ -298,6 +370,11 @@
       "SPECIFIED_WINDOW_FRAME_WRONG_COMPARISON" : {
         "message" : [
           "The lower bound of a window frame must be <comparison> to the upper bound."
+        ]
+      },
+      "STACK_COLUMN_DIFF_TYPES" : {
+        "message" : [
+          "The data type of the column (<columnIndex>) do not have the same type: <leftType> (<leftParamIndex>) <> <rightType> (<rightParamIndex>)."
         ]
       },
       "UNEXPECTED_CLASS_TYPE" : {
@@ -325,9 +402,9 @@
           "cannot find a static method <methodName> that matches the argument types in <className>"
         ]
       },
-      "UNSPECIFIED_FRAME" : {
+      "UNSUPPORTED_INPUT_TYPE" : {
         "message" : [
-          "Cannot use an UnspecifiedFrame. This should have been converted during analysis."
+          "The input of <functionName> can't be <dataType> type data."
         ]
       },
       "VALUE_OUT_OF_RANGE" : {
@@ -340,12 +417,24 @@
           "The <functionName> requires <expectedNum> parameters but the actual number is <actualNum>."
         ]
       },
+      "WRONG_NUM_ARGS_WITH_SUGGESTION" : {
+        "message" : [
+          "The <functionName> requires <expectedNum> parameters but the actual number is <actualNum>.",
+          "If you have to call this function with <legacyNum> parameters, set the legacy configuration <legacyConfKey> to <legacyConfValue>."
+        ]
+      },
       "WRONG_NUM_ENDPOINTS" : {
         "message" : [
           "The number of endpoints must be >= 2 to construct intervals but the actual number is <actualNumber>."
         ]
       }
     }
+  },
+  "DATATYPE_MISSING_SIZE" : {
+    "message" : [
+      "DataType <type> requires a length parameter, for example <type>(10). Please specify the length."
+    ],
+    "sqlState" : "42000"
   },
   "DATETIME_OVERFLOW" : {
     "message" : [
@@ -428,15 +517,20 @@
       "Grouping sets size cannot be greater than <maxSize>"
     ]
   },
-  "GROUP_BY_POS_OUT_OF_RANGE" : {
+  "GROUP_BY_AGGREGATE" : {
     "message" : [
-      "GROUP BY position <index> is not in select list (valid range is [1, <size>])."
+      "Aggregate functions are not allowed in GROUP BY, but found <sqlExpr>."
+    ]
+  },
+  "GROUP_BY_POS_AGGREGATE" : {
+    "message" : [
+      "GROUP BY <index> refers to an expression <aggExpr> that contains an aggregate function. Aggregate functions are not allowed in GROUP BY."
     ],
     "sqlState" : "42000"
   },
-  "GROUP_BY_POS_REFERS_AGG_EXPR" : {
+  "GROUP_BY_POS_OUT_OF_RANGE" : {
     "message" : [
-      "GROUP BY <index> refers to an expression <aggExpr> that contains an aggregate function. Aggregate functions are not allowed in GROUP BY."
+      "GROUP BY position <index> is not in select list (valid range is [1, <size>])."
     ],
     "sqlState" : "42000"
   },
@@ -551,6 +645,11 @@
       "Invalid bucket file: <path>"
     ]
   },
+  "INVALID_BYTE_STRING" : {
+    "message" : [
+      "The expected format is ByteString, but was <unsupported> (<class>)."
+    ]
+  },
   "INVALID_COLUMN_OR_FIELD_DATA_TYPE" : {
     "message" : [
       "Column or field <name> is of type <type> while it's required to be <expectedType>."
@@ -579,6 +678,28 @@
       "Input schema <jsonSchema> can only contain STRING as a key type for a MAP."
     ]
   },
+  "INVALID_LATERAL_JOIN_TYPE" : {
+    "message" : [
+      "The <joinType> JOIN with LATERAL correlation is not allowed because an OUTER subquery cannot correlate to its join partner. Remove the LATERAL correlation or use an INNER JOIN, or LEFT OUTER JOIN instead."
+    ]
+  },
+  "INVALID_LIKE_PATTERN" : {
+    "message" : [
+      "The pattern <pattern> is invalid."
+    ],
+    "subClass" : {
+      "ESC_AT_THE_END" : {
+        "message" : [
+          "the escape character is not allowed to end with."
+        ]
+      },
+      "ESC_IN_THE_MIDDLE" : {
+        "message" : [
+          "the escape character is not allowed to precede <char>."
+        ]
+      }
+    }
+  },
   "INVALID_PANDAS_UDF_PLACEMENT" : {
     "message" : [
       "The group aggregate pandas UDF <functionList> cannot be invoked together with as other, non-pandas aggregate functions."
@@ -600,6 +721,11 @@
       "<value> is an invalid property value, please use quotes, e.g. SET <key>=<value>"
     ]
   },
+  "INVALID_PROTOBUF_MESSAGE_TYPE" : {
+    "message" : [
+      "<protobufClassName> is not a Protobuf message type"
+    ]
+  },
   "INVALID_SQL_SYNTAX" : {
     "message" : [
       "Invalid SQL syntax: <inputString>"
@@ -618,6 +744,22 @@
       }
     }
   },
+  "INVALID_WHERE_CONDITION" : {
+    "message" : [
+      "The WHERE condition <condition> contains invalid expressions: <expressionList>.",
+      "Rewrite the query to avoid window functions, aggregate functions, and generator functions in the WHERE clause."
+    ]
+  },
+  "LOCATION_ALREADY_EXISTS" : {
+    "message" : [
+      "Cannot name the managed table as <identifier>, as its associated location <location> already exists. Please pick a different table name, or remove the existing location first."
+    ]
+  },
+  "MALFORMED_PROTOBUF_MESSAGE" : {
+    "message" : [
+      "Malformed Protobuf messages are detected in message deserialization. Parse Mode: <failFastMode>. To process malformed protobuf message as null result, try setting the option 'mode' as 'PERMISSIVE'."
+    ]
+  },
   "MISSING_STATIC_PARTITION_COLUMN" : {
     "message" : [
       "Unknown static partition column: <columnName>"
@@ -629,9 +771,9 @@
       "Not allowed to implement multiple UDF interfaces, UDF class <className>"
     ]
   },
-  "MULTI_VALUE_SUBQUERY_ERROR" : {
+  "NESTED_AGGREGATE_FUNCTION" : {
     "message" : [
-      "More than one row returned by a subquery used as an expression."
+      "It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query."
     ]
   },
   "NON_LAST_MATCHED_CLAUSE_OMIT_CONDITION" : {
@@ -669,7 +811,12 @@
       "No handler for UDAF '<functionName>'. Use sparkSession.udf.register(...) instead."
     ]
   },
-  "NO_UDF_INTERFACE_ERROR" : {
+  "NO_SQL_TYPE_IN_PROTOBUF_SCHEMA" : {
+    "message" : [
+      "Cannot find <catalystFieldPath> in Protobuf schema"
+    ]
+  },
+  "NO_UDF_INTERFACE" : {
     "message" : [
       "UDF class <className> doesn't implement any UDF interface"
     ]
@@ -697,16 +844,21 @@
     ],
     "sqlState" : "22005"
   },
+  "NUM_COLUMNS_MISMATCH" : {
+    "message" : [
+      "<operator> can only be performed on tables with the same number of columns, but the first table has <refNumColumns> columns and the <invalidOrdinalNum> table has <invalidNumColumns> columns."
+    ]
+  },
+  "ORDER_BY_POS_OUT_OF_RANGE" : {
+    "message" : [
+      "ORDER BY position <index> is not in select list (valid range is [1, <size>])."
+    ],
+    "sqlState" : "42000"
+  },
   "OUT_OF_DECIMAL_TYPE_RANGE" : {
     "message" : [
       "Out of decimal type range: <value>."
     ]
-  },
-  "PARSE_CHAR_MISSING_LENGTH" : {
-    "message" : [
-      "DataType <type> requires a length parameter, for example <type>(10). Please specify the length."
-    ],
-    "sqlState" : "42000"
   },
   "PARSE_EMPTY_STATEMENT" : {
     "message" : [
@@ -741,6 +893,46 @@
     ],
     "sqlState" : "42000"
   },
+  "PROTOBUF_DEPENDENCY_NOT_FOUND" : {
+    "message" : [
+      "Could not find dependency: <dependencyName>"
+    ]
+  },
+  "PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND" : {
+    "message" : [
+      "Error reading Protobuf descriptor file at path: <filePath>"
+    ]
+  },
+  "PROTOBUF_FIELD_MISSING" : {
+    "message" : [
+      "Searching for <field> in Protobuf schema at <protobufSchema> gave <matchSize> matches. Candidates: <matches>"
+    ]
+  },
+  "PROTOBUF_FIELD_MISSING_IN_SQL_SCHEMA" : {
+    "message" : [
+      "Found <field> in Protobuf schema but there is no match in the SQL schema"
+    ]
+  },
+  "PROTOBUF_FIELD_TYPE_MISMATCH" : {
+    "message" : [
+      "Type mismatch encountered for field: <field>"
+    ]
+  },
+  "PROTOBUF_MESSAGE_NOT_FOUND" : {
+    "message" : [
+      "Unable to locate Message <messageName> in Descriptor"
+    ]
+  },
+  "PROTOBUF_TYPE_NOT_SUPPORT" : {
+    "message" : [
+      "Protobuf type not yet supported: <protobufType>."
+    ]
+  },
+  "RECURSIVE_PROTOBUF_SCHEMA" : {
+    "message" : [
+      "Found recursive reference in Protobuf schema, which can not be processed by Spark: <fieldDescriptor>"
+    ]
+  },
   "RENAME_SRC_PATH_NOT_FOUND" : {
     "message" : [
       "Failed to rename as <sourcePath> was not found"
@@ -766,6 +958,11 @@
       "To tolerate the error on drop use DROP FUNCTION IF EXISTS."
     ],
     "sqlState" : "42000"
+  },
+  "SCALAR_SUBQUERY_TOO_MANY_ROWS" : {
+    "message" : [
+      "More than one row returned by a subquery used as an expression."
+    ]
   },
   "SCHEMA_ALREADY_EXISTS" : {
     "message" : [
@@ -794,6 +991,16 @@
       "The second argument of <functionName> function needs to be an integer."
     ],
     "sqlState" : "22023"
+  },
+  "STAR_GROUP_BY_POS" : {
+    "message" : [
+      "Star (*) is not allowed in a select list when GROUP BY an ordinal position is used."
+    ]
+  },
+  "STREAM_FAILED" : {
+    "message" : [
+      "Query [id = <id>, runId = <runId>] terminated with exception: <message>"
+    ]
   },
   "TABLE_OR_VIEW_ALREADY_EXISTS" : {
     "message" : [
@@ -825,6 +1032,21 @@
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [
       "Unable to acquire <requestedBytes> bytes of memory, got <receivedBytes>"
+    ]
+  },
+  "UNABLE_TO_CONVERT_TO_PROTOBUF_MESSAGE_TYPE" : {
+    "message" : [
+      "Unable to convert SQL type <toType> to Protobuf type <protobufType>."
+    ]
+  },
+  "UNCLOSED_BRACKETED_COMMENT" : {
+    "message" : [
+      "Found an unclosed bracketed comment. Please, append */ at the end of the comment."
+    ]
+  },
+  "UNKNOWN_PROTOBUF_MESSAGE_TYPE" : {
+    "message" : [
+      "Attempting to treat <descriptorName> as a Message, but it was <containingType>"
     ]
   },
   "UNPIVOT_REQUIRES_ATTRIBUTES" : {
@@ -977,11 +1199,6 @@
       "JDBC_TRANSACTION" : {
         "message" : [
           "The target JDBC server does not support transactions and can only support ALTER TABLE with a single action."
-        ]
-      },
-      "LATERAL_JOIN_OF_TYPE" : {
-        "message" : [
-          "<joinType> JOIN with LATERAL correlation."
         ]
       },
       "LATERAL_JOIN_USING" : {
@@ -1451,11 +1668,6 @@
       "It is not allowed to add database prefix `<database>` for the TEMPORARY view name."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0055" : {
-    "message" : [
-      "Unclosed bracketed comment"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0056" : {
     "message" : [
       "Invalid time travel spec: <reason>."
@@ -1597,11 +1809,6 @@
       "<quoted> is a permanent view, which is not supported by streaming reading API such as `DataStreamReader.table` yet."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1019" : {
-    "message" : [
-      "Star (*) is not allowed in select list when GROUP BY ordinal position is used"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1020" : {
     "message" : [
       "Invalid usage of <elem> in <prettyName>."
@@ -1610,11 +1817,6 @@
   "_LEGACY_ERROR_TEMP_1021" : {
     "message" : [
       "count(<targetString>.*) is not allowed. Please use count(*) or expand the columns manually, e.g. count(col1, col2)."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1022" : {
-    "message" : [
-      "ORDER BY position <index> is not in select list (valid range is [1, <size>])."
     ]
   },
   "_LEGACY_ERROR_TEMP_1023" : {
@@ -1836,11 +2038,6 @@
   "_LEGACY_ERROR_TEMP_1069" : {
     "message" : [
       "CREATE EXTERNAL TABLE must be accompanied by LOCATION."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1070" : {
-    "message" : [
-      "Can not <methodName> the managed table('<tableIdentifier>'). The associated location('<tableLocation>') already exists."
     ]
   },
   "_LEGACY_ERROR_TEMP_1071" : {
@@ -2560,11 +2757,6 @@
       "char/varchar type can only be used in the table schema. You can set <config> to true, so that Spark treat them as string type as same as Spark 3.0 and earlier."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1216" : {
-    "message" : [
-      "The pattern '<pattern>' is invalid, <message>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1218" : {
     "message" : [
       "<tableIdentifier> should be converted to HadoopFsRelation."
@@ -2859,11 +3051,6 @@
   "_LEGACY_ERROR_TEMP_1278" : {
     "message" : [
       "<name> is not a view."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1279" : {
-    "message" : [
-      "View <name> already exists. If you want to update the view definition, please use ALTER VIEW AS or CREATE OR REPLACE VIEW AS."
     ]
   },
   "_LEGACY_ERROR_TEMP_1280" : {
@@ -3806,7 +3993,7 @@
   },
   "_LEGACY_ERROR_TEMP_2125" : {
     "message" : [
-      "Failed to merge incompatible data types ${leftCatalogString} and ${rightCatalogString}"
+      "Failed to merge incompatible data types <leftCatalogString> and <rightCatalogString>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2126" : {
@@ -4205,6 +4392,121 @@
       "incorrect directory, and then restart this query. If you believe you are receiving",
       "this message in error, you can disable it with the SQL conf",
       "<StreamingCheckpointEscaptedPathCheckEnabled>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2201" : {
+    "message" : [
+      "Partition column <col> not found in schema <schema>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2203" : {
+    "message" : [
+      "Cannot set timeout duration without enabling processing time timeout in [map|flatMap]GroupsWithState"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2204" : {
+    "message" : [
+      "Cannot get event time watermark timestamp without setting watermark before [map|flatMap]GroupsWithState"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2205" : {
+    "message" : [
+      "Cannot set timeout timestamp without enabling event time timeout in [map|flatMapGroupsWithState"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2206" : {
+    "message" : [
+      "Unable to find batch <batchMetadataFile>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2207" : {
+    "message" : [
+      "Multiple streaming queries are concurrently using <path>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2208" : {
+    "message" : [
+      "<commitProtocol> does not support adding files with an absolute path"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2209" : {
+    "message" : [
+      "Data source <srcName> does not support microbatch processing.",
+      "",
+      "Either the data source is disabled at",
+      "SQLConf.get.DISABLED_V2_STREAMING_MICROBATCH_READERS.key (The disabled sources",
+      "are [<disabledSources>]) or the table <table> does not have MICRO_BATCH_READ",
+      "capability. Meanwhile, the fallback, data source v1, is not available.\""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2210" : {
+    "message" : [
+      "StreamingRelationExec cannot be executed"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2211" : {
+    "message" : [
+      "Invalid output mode: <outputMode>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2212" : {
+    "message" : [
+      "Invalid catalog name: <name>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2214" : {
+    "message" : [
+      "Plugin class for catalog '<name>' does not implement CatalogPlugin: <pluginClassName>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2215" : {
+    "message" : [
+      "Cannot find catalog plugin class for catalog '<name>': <pluginClassName>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2216" : {
+    "message" : [
+      "Failed to find public no-arg constructor for catalog '<name>': <pluginClassName>)"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2217" : {
+    "message" : [
+      "Failed to call public no-arg constructor for catalog '<name>': <pluginClassName>)"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2218" : {
+    "message" : [
+      "Cannot instantiate abstract catalog plugin class for catalog '<name>': <pluginClassName>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2219" : {
+    "message" : [
+      "Failed during instantiating constructor for catalog '<name>': <pluginClassName>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2220" : {
+    "message" : [
+      ""
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2222" : {
+    "message" : [
+      "Cannot mutate ReadOnlySQLConf."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2223" : {
+    "message" : [
+      "Cannot clone/copy ReadOnlySQLConf."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2224" : {
+    "message" : [
+      "Cannot get SQLConf inside scheduler event loop thread."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2225" : {
+    "message" : [
+      ""
     ]
   },
   "_LEGACY_ERROR_TEMP_2226" : {
@@ -4767,11 +5069,6 @@
       "Input argument tolerance must be non-negative."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2420" : {
-    "message" : [
-      "It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2421" : {
     "message" : [
       "nondeterministic expression <sqlExpr> should not appear in the arguments of an aggregate function."
@@ -4785,11 +5082,6 @@
   "_LEGACY_ERROR_TEMP_2423" : {
     "message" : [
       "Correlated scalar subquery '<sqlExpr>' is neither present in the group by, nor in an aggregate function. Add it to group by using ordinal position or wrap it in first() (or first_value) if you don't care which value you get."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2424" : {
-    "message" : [
-      "aggregate functions are not allowed in GROUP BY, but found <sqlExpr>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2425" : {
@@ -4810,11 +5102,6 @@
   "_LEGACY_ERROR_TEMP_2428" : {
     "message" : [
       "The sum of the LIMIT clause and the OFFSET clause must not be greater than the maximum 32-bit integer value (2,147,483,647) but found limit = <limit>, offset = <offset>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2429" : {
-    "message" : [
-      "<operator> can only be performed on tables with the same number of columns, but the first table has <firstColNum> columns and the <nTab> table has <nColNum> columns."
     ]
   },
   "_LEGACY_ERROR_TEMP_2430" : {
@@ -4878,22 +5165,10 @@
       "in operator <operator>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_2440" : {
-    "message" : [
-      "Aggregate/Window/Generate expressions are not valid in where clause of the query.",
-      "Expression in where clause: [<condition>]",
-      "Invalid expressions: [<invalidExprSqls>]"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2441" : {
     "message" : [
       "The query operator `<operator>` contains one or more unsupported expression types Aggregate, Window or Generate.",
       "Invalid expressions: [<invalidExprSqls>]"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2442" : {
-    "message" : [
-      "unresolved operator <operator>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2443" : {

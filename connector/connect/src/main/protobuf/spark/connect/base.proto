@@ -69,7 +69,7 @@ message Response {
 
   // Result type
   oneof result_type {
-    ArrowBatch batch = 2;
+    ArrowBatch arrow_batch = 2;
     JSONBatch json_batch = 3;
   }
 
@@ -80,10 +80,7 @@ message Response {
   // Batch results of metrics.
   message ArrowBatch {
     int64 row_count = 1;
-    int64 uncompressed_bytes = 2;
-    int64 compressed_bytes = 3;
-    bytes data = 4;
-    bytes schema = 5;
+    bytes data = 2;
   }
 
   // Message type when the result is returned as JSON. This is essentially a bulk wrapper

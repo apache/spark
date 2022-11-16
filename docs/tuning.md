@@ -217,7 +217,7 @@ The goal of GC tuning in Spark is to ensure that only long-lived RDDs are stored
 the Young generation is sufficiently sized to store short-lived objects. This will help avoid full GCs to collect
 temporary objects created during task execution. Some steps which may be useful are:
 
-* Check if there are too many garbage collections by collecting GC stats. If a full GC is invoked multiple times for
+* Check if there are too many garbage collections by collecting GC stats. If a full GC is invoked multiple times
   before a task completes, it means that there isn't enough memory available for executing tasks.
 
 * If there are too many minor collections but not many major GCs, allocating more memory for Eden would help. You
@@ -235,12 +235,12 @@ temporary objects created during task execution. Some steps which may be useful 
 * Try the G1GC garbage collector with `-XX:+UseG1GC`. It can improve performance in some situations where
   garbage collection is a bottleneck. Note that with large executor heap sizes, it may be important to
   increase the [G1 region size](http://www.oracle.com/technetwork/articles/java/g1gc-1984535.html) 
-  with `-XX:G1HeapRegionSize`
+  with `-XX:G1HeapRegionSize`.
 
 * As an example, if your task is reading data from HDFS, the amount of memory used by the task can be estimated using
   the size of the data block read from HDFS. Note that the size of a decompressed block is often 2 or 3 times the
   size of the block. So if we wish to have 3 or 4 tasks' worth of working space, and the HDFS block size is 128 MiB,
-  we can estimate size of Eden to be `4*3*128MiB`.
+  we can estimate the size of Eden to be `4*3*128MiB`.
 
 * Monitor how the frequency and time taken by garbage collection changes with the new settings.
 
@@ -293,14 +293,14 @@ available in `SparkContext` can greatly reduce the size of each serialized task,
 of launching a job over a cluster. If your tasks use any large object from the driver program
 inside of them (e.g. a static lookup table), consider turning it into a broadcast variable.
 Spark prints the serialized size of each task on the master, so you can look at that to
-decide whether your tasks are too large; in general tasks larger than about 20 KiB are probably
+decide whether your tasks are too large; in general, tasks larger than about 20 KiB are probably
 worth optimizing.
 
 ## Data Locality
 
 Data locality can have a major impact on the performance of Spark jobs.  If data and the code that
-operates on it are together then computation tends to be fast.  But if code and data are separated,
-one must move to the other.  Typically it is faster to ship serialized code from place to place than
+operates on it are together, then computation tends to be fast.  But if code and data are separated,
+one must move to the other.  Typically, it is faster to ship serialized code from place to place than
 a chunk of data because code size is much smaller than data.  Spark builds its scheduling around
 this general principle of data locality.
 
@@ -308,14 +308,14 @@ Data locality is how close data is to the code processing it.  There are several
 locality based on the data's current location.  In order from closest to farthest:
 
 - `PROCESS_LOCAL` data is in the same JVM as the running code.  This is the best locality
-  possible
+  possible.
 - `NODE_LOCAL` data is on the same node.  Examples might be in HDFS on the same node, or in
   another executor on the same node.  This is a little slower than `PROCESS_LOCAL` because the data
-  has to travel between processes
-- `NO_PREF` data is accessed equally quickly from anywhere and has no locality preference
+  has to travel between processes.
+- `NO_PREF` data is accessed equally quickly from anywhere and has no locality preference.
 - `RACK_LOCAL` data is on the same rack of servers.  Data is on a different server on the same rack
-  so needs to be sent over the network, typically through a single switch
-- `ANY` data is elsewhere on the network and not in the same rack
+  so needs to be sent over the network, typically through a single switch.
+- `ANY` data is elsewhere on the network and not in the same rack.
 
 Spark prefers to schedule all tasks at the best locality level, but this is not always possible.  In
 situations where there is no unprocessed data on any idle executor, Spark switches to lower locality

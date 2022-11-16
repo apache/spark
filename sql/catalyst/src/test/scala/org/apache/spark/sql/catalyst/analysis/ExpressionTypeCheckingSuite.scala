@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -519,10 +519,30 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
         "expectedNum" -> "> 0",
         "actualNum" -> "0"))
 
-    assertError(Explode($"intField"),
-      "input to function explode should be array or map type")
-    assertError(PosExplode($"intField"),
-      "input to function explode should be array or map type")
+    checkError(
+      exception = intercept[AnalysisException] {
+        assertSuccess(Explode($"intField"))
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"explode(intField)\"",
+        "paramIndex" -> "1",
+        "inputSql" -> "\"intField\"",
+        "inputType" -> "\"INT\"",
+        "requiredType" -> "(\"ARRAY\" or \"MAP\")"))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        assertSuccess(PosExplode($"intField"))
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"posexplode(intField)\"",
+        "paramIndex" -> "1",
+        "inputSql" -> "\"intField\"",
+        "inputType" -> "\"INT\"",
+        "requiredType" -> "(\"ARRAY\" or \"MAP\")")
+    )
   }
 
   test("check types for CreateNamedStruct") {
@@ -743,6 +763,60 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
         errorSubClass = "HASH_MAP_TYPE",
         messageParameters = Map("functionName" -> toSQLId(murmur3Hash.prettyName))
       )
+    )
+  }
+
+  test("check types for Lag") {
+    val lag = Lag(Literal(1), NonFoldableLiteral(10), Literal(null), true)
+    assert(lag.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> "offset",
+          "inputType" -> "\"INT\"",
+          "inputExpr" -> "\"(- nonfoldableliteral())\""
+        )
+      ))
+  }
+
+  test("check types for SpecifiedWindowFrame") {
+    val swf1 = SpecifiedWindowFrame(RangeFrame, Literal(10.0), Literal(2147483648L))
+    assert(swf1.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "SPECIFIED_WINDOW_FRAME_DIFF_TYPES",
+        messageParameters = Map(
+          "lower" -> "\"10.0\"",
+          "upper" -> "\"2147483648\"",
+          "lowerType" -> "\"DOUBLE\"",
+          "upperType" -> "\"BIGINT\""
+        )
+      )
+    )
+
+    val swf2 = SpecifiedWindowFrame(RangeFrame, NonFoldableLiteral(10.0), Literal(2147483648L))
+    assert(swf2.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "SPECIFIED_WINDOW_FRAME_WITHOUT_FOLDABLE",
+        messageParameters = Map(
+          "location" -> "lower",
+          "expression" -> "\"nonfoldableliteral()\""
+        )
+      )
+    )
+  }
+
+  test("check types for WindowSpecDefinition") {
+    val wsd = WindowSpecDefinition(
+      UnresolvedAttribute("a") :: Nil,
+      SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
+      UnspecifiedFrame)
+    checkError(
+      exception = intercept[SparkException] {
+        wsd.checkInputDataTypes()
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> ("Cannot use an UnspecifiedFrame. " +
+        "This should have been converted during analysis."))
     )
   }
 }

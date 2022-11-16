@@ -139,7 +139,7 @@
     <jetty.version>9.4.49.v20220914</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
     <chill.version>0.10.0</chill.version>
-    <ivy.version>2.5.0</ivy.version>
+    <ivy.version>2.5.1</ivy.version>
     <oro.version>2.0.8</oro.version>
     <!--
     If you changes codahale.metrics.version, you also need to change
@@ -169,14 +169,14 @@
       errors building different Hadoop versions.
       See: SPARK-36547, SPARK-38394.
        -->
-    <scala-maven-plugin.version>4.7.1</scala-maven-plugin.version>
+    <scala-maven-plugin.version>4.7.2</scala-maven-plugin.version>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
     <scalafmt.changedOnly>true</scalafmt.changedOnly>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.13.4</fasterxml.jackson.version>
-    <fasterxml.jackson.databind.version>2.13.4.2</fasterxml.jackson.databind.version>
+    <fasterxml.jackson.version>2.14.0</fasterxml.jackson.version>
+    <fasterxml.jackson.databind.version>2.14.0</fasterxml.jackson.databind.version>
     <snappy.version>1.1.8.4</snappy.version>
     <netlib.ludovic.dev.version>3.0.2</netlib.ludovic.dev.version>
     <commons-codec.version>1.15</commons-codec.version>
@@ -192,7 +192,7 @@
     <guava.version>14.0.1</guava.version>
     <janino.version>3.1.7</janino.version>
     <jersey.version>2.36</jersey.version>
-    <joda.version>2.12.0</joda.version>
+    <joda.version>2.12.1</joda.version>
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
     <libthrift.version>0.12.0</libthrift.version>
@@ -207,11 +207,7 @@
     <commons-cli.version>1.5.0</commons-cli.version>
     <bouncycastle.version>1.60</bouncycastle.version>
     <tink.version>1.7.0</tink.version>
-    <!-- When upgrading `netty.version`, need to check whether
-         the version of `netty-tcnative-classes.version` also needs to be upgraded
-    -->
     <netty.version>4.1.84.Final</netty.version>
-    <netty-tcnative-classes.version>2.0.54.Final</netty-tcnative-classes.version>
     <!--
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
@@ -445,7 +441,7 @@
       <dependency>
         <groupId>org.scala-lang.modules</groupId>
         <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
-        <version>1.0.3</version>
+        <version>1.0.4</version>
       </dependency>
       --><!-- #endif scala-2.13 -->
       <dependency>
@@ -928,16 +924,6 @@
         <version>${netty.version}</version>
         <classifier>osx-x86_64</classifier>
       </dependency>
-      <!-- SPARK-38541: Add the explicit dependency on `netty-tcnative-classes` because the dependency on
-           `netty-tcnative-classes` is changed to `Optional` in [netty](https://github.com/netty/netty/pull/12146).
-           `netty-tcnative-classes` module is mainly used by SSL package in `netty-handler`.
-           We need to ensure that `netty-tcnative-classes` uses the corresponding version when Netty upgrade.
-      -->
-      <dependency>
-        <groupId>io.netty</groupId>
-        <artifactId>netty-tcnative-classes</artifactId>
-        <version>${netty-tcnative-classes.version}</version>
-      </dependency>
       <!-- Netty End -->
 
       <dependency>
@@ -1206,9 +1192,9 @@
         </exclusions>
       </dependency>
       <dependency>
-        <groupId>mysql</groupId>
-        <artifactId>mysql-connector-java</artifactId>
-        <version>8.0.30</version>
+        <groupId>com.mysql</groupId>
+        <artifactId>mysql-connector-j</artifactId>
+        <version>8.0.31</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1482,10 +1468,14 @@
           </exclusion>
         </exclusions>
       </dependency>
+      <!--
+        SPARK-41031: `xz` is marked as optional in the dependency tree of `avro`,
+        we need to manually check `xz` version when upgrading `avro`.
+      -->
       <dependency>
         <groupId>org.tukaani</groupId>
         <artifactId>xz</artifactId>
-        <version>1.8</version>
+        <version>1.9</version>
       </dependency>
       <!-- See SPARK-23654 for info on this dependency;
       It is used to keep javax.activation at v1.1.1 after dropping
