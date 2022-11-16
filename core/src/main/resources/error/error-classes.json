@@ -1279,7 +1279,7 @@
       },
       "CORRELATED_REFERENCE" : {
         "message" : [
-          "Expressions referencing the outer query are not supported outside of WHERE/HAVING clauses<treeNode>"
+          "Expressions '<sqlExprs>' referencing the outer query are not supported outside of WHERE/HAVING clauses."
         ]
       },
       "LATERAL_JOIN_CONDITION_NON_DETERMINISTIC" : {

@@ -1060,7 +1060,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         p.failAnalysis(
           errorClass =
             "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
-          messageParameters = Map("treeNode" -> planToString(p)))
+          messageParameters = Map("sqlExprs" -> p.expressions.map(_.sql).mkString(",")))
       }
     }
 
