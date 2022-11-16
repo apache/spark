@@ -109,7 +109,7 @@ object SparkBuild extends PomBuild {
     if (profiles.contains("jdwp-test-debug")) {
       sys.props.put("test.jdwp.enabled", "true")
     }
-    if (profiles.contains("user-defined-pb")) {
+    if (profiles.contains("user-defined-protoc")) {
       val connectProtocExecPath = Properties.envOrNone("CONNECT_PROTOC_EXEC_PATH")
       val connectPluginExecPath = Properties.envOrNone("CONNECT_PLUGIN_EXEC_PATH")
       if (connectProtocExecPath.isDefined && connectPluginExecPath.isDefined) {

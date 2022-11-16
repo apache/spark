@@ -352,7 +352,7 @@
   </build>
   <profiles>
     <profile>
-      <id>official-pb</id>
+      <id>official-protoc</id>
       <activation>
         <activeByDefault>true</activeByDefault>
       </activation>
@@ -383,7 +383,7 @@
       </build>
     </profile>
     <profile>
-      <id>user-defined-pb</id>
+      <id>user-defined-protoc</id>
       <properties>
         <connect.protoc.executable.path>${env.CONNECT_PROTOC_EXEC_PATH}</connect.protoc.executable.path>
         <connect.plugin.executable.path>${env.CONNECT_PLUGIN_EXEC_PATH}</connect.plugin.executable.path>

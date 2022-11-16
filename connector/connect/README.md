@@ -34,7 +34,7 @@ specifying the user-defined `protoc` and `protoc-gen-grpc-java` binary files as 
 ```bash
 export CONNECT_PROTOC_EXEC_PATH=/path-to-protoc-exe
 export CONNECT_PLUGIN_EXEC_PATH=/path-to-protoc-gen-grpc-java-exe
-./build/mvn -Phive -Puser-defined-pb clean package
+./build/mvn -Phive -Puser-defined-protoc clean package
 ```
 
 or
@@ -42,7 +42,7 @@ or
 ```bash
 export CONNECT_PROTOC_EXEC_PATH=/path-to-protoc-exe
 export CONNECT_PLUGIN_EXEC_PATH=/path-to-protoc-gen-grpc-java-exe
-./build/sbt -Puser-defined-pb clean package
+./build/sbt -Puser-defined-protoc clean package
 ```
 
 The user-defined `protoc` and `protoc-gen-grpc-java` binary files can be produced in the user's compilation environment by source code compilation, 
