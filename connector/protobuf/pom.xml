@@ -93,6 +93,7 @@
         <artifactId>maven-shade-plugin</artifactId>
         <configuration>
           <shadedArtifactAttached>false</shadedArtifactAttached>
+          <shadeTestJar>true</shadeTestJar>
           <artifactSet>
             <includes>
               <include>com.google.protobuf:*</include>

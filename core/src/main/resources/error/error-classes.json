@@ -50,7 +50,7 @@
   },
   "CANNOT_LOAD_PROTOBUF_CLASS" : {
     "message" : [
-      "Could not load Protobuf class with name <protobufClassName>. Ensure the class name includes package prefix."
+      "Could not load Protobuf class with name <protobufClassName>. <explanation>."
     ]
   },
   "CANNOT_PARSE_DECIMAL" : {
