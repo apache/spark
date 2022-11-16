@@ -204,11 +204,6 @@ object SubExprUtils extends PredicateHelper {
   def getOuterReferences(expr: Expression): Seq[Expression] = {
     val outerExpressions = ArrayBuffer.empty[Expression]
 
-    /*
-     * if true, means check if parent qualifies to be part of outer ref
-     * and if true, then delay adding to outerExpression till it bubbles up.
-     * If false, indicates that parent should not be considered as part of outer ref
-     */
     def collectOutRefs(input: Expression): Boolean = input match {
       case a: AggregateExpression if containsOuter(a) =>
         if (a.references.nonEmpty) {
@@ -221,28 +216,19 @@ object SubExprUtils extends PredicateHelper {
           // expression is dependent on more than 1 refs.
           true
         }
+      case u: UnaryExpression => collectOutRefs(u.child)
       case OuterReference(e) =>
         outerExpressions += e
         false
       case _ =>
-        val exprsOfInterestIndex = input.children.zipWithIndex.collect {
-          case (child, index) if collectOutRefs(child) => index
-        }
-        if (exprsOfInterestIndex.isEmpty) {
-          false
-        } else if (exprsOfInterestIndex.size == 1 && input.references.isEmpty) {
-          // outer reference will not yield any references hence size == 0 is checked
-          // in which case let parent decide whether the outer reference should include
-          // itself or not
-          true
-        } else {
-          exprsOfInterestIndex.foreach(i =>
-            outerExpressions += stripOuterReference(input.children(i)))
-          false
-        }
+        input.children.foreach(child => if (collectOutRefs(child)) {
+          outerExpressions += stripOuterReference(child)
+        })
+        false
     }
 
-    if (collectOutRefs(expr) && expr.references.isEmpty) {
+    if (collectOutRefs(expr) && (expr.isInstanceOf[UnaryExpression] ||
+      expr.isInstanceOf[AggregateExpression])) {
       outerExpressions += stripOuterReference(expr)
     }
     outerExpressions.toSeq

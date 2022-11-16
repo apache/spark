@@ -277,6 +277,21 @@ class ResolveSubquerySuite extends AnalysisTest {
     )
   }
 
+  test("SPARK-41141 aggregates of outer query referenced in subquery ") {
+    val a = 'a.int
+    val b = 'b.int
+    val c = 'c.int
+    val d = 'd.int
+
+    val t1 = LocalRelation(a, b)
+    val t2 = LocalRelation(c, d)
+
+    val analyzedLp = t1.select($"a", $"b").
+      having($"b")(sum($"a"), sum($"b"))(Exists(t2.select($"c").
+        where($"d" === sum($"a") + sum($"b")))).analyze
+    println(analyzedLp)
+  }
+
   test("SPARK-41141 aggregates of outer query referenced in subquery should not create" +
     " new aggregates if possible") {
     withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> s"${PropagateEmptyRelation.ruleName}") {
@@ -290,7 +305,6 @@ class ResolveSubquerySuite extends AnalysisTest {
       val optimizer = new SimpleTestOptimizer()
 
       val plansToTest = Seq(
-
         t1.select($"a", $"b").
           having($"b")(Cos(sum($"a")))(Exists(t2.select($"c").
             where($"d" === Cos(sum($"a"))))) -> 1,
@@ -298,14 +312,12 @@ class ResolveSubquerySuite extends AnalysisTest {
         t1.select($"a", $"b").
           having($"b")(sum($"a"))(Exists(t2.select($"c").
             where($"d" === Cos(sum($"a"))))) -> 1,
-
-        t1.select($"a", $"b").
-          having($"b")(sum($"a"), Cos(sum($"b")))(Exists(t2.select($"c").
-            where($"d" === Cos(sum($"a")) + sum($"a") + sum($"b") + Cos(sum($"b"))))) -> 3,
-
         t1.select($"a", $"b").
           having($"b")(Cos(sum($"a")))(Exists(t2.select($"c").
-            where($"d" === sum($"a")))) -> 2
+            where($"d" === sum($"a")))) -> 2,
+        t1.select($"a", $"b").
+          having($"b")(sum($"a"), Cos(sum($"b")))(Exists(t2.select($"c").
+            where($"d" === Cos(sum($"a")) + sum($"a") + sum($"b") + Cos(sum($"b"))))) -> 3
       )
 
       plansToTest.foreach {
