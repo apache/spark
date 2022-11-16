@@ -23,6 +23,7 @@ import scala.util.Random
 
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Benchmark to measure like any expressions performance.
@@ -70,8 +71,15 @@ object LikeAnyBenchmark extends SqlBasedBenchmark {
 
         val likeAnyExpr =
           Range(1000, 1200).map(i => s"'%$i%'").mkString("c1 like any(", ", ", ")")
-        benchmark.addCase("Query with LikeAny", numIters = 3) { _ =>
+        benchmark.addCase("Query with LikeAny simplification", numIters = 3) { _ =>
           spark.sql(s"SELECT * FROM parquetTable WHERE $likeAnyExpr").noop()
+        }
+
+        benchmark.addCase("Query without LikeAny simplification", numIters = 3) { _ =>
+          withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+            "org.apache.spark.sql.catalyst.optimizer.LikeSimplification") {
+            spark.sql(s"SELECT * FROM parquetTable WHERE $likeAnyExpr").noop()
+          }
         }
         benchmark.run()
       }
