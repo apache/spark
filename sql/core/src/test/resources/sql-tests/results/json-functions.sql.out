@@ -86,21 +86,12 @@ select to_json()
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.SparkException
 {
-  "errorClass" : "INVALID_FUNCTION_ARGUMENT",
+  "errorClass" : "INTERNAL_ERROR",
   "messageParameters" : {
-    "actualNumber" : "0",
-    "expectedInfo" : "one of 1 and 2",
-    "name" : "to_json"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 16,
-    "fragment" : "to_json()"
-  } ]
+    "message" : "Undefined error message parameter for error class: 'DATATYPE_MISMATCH.WRONG_NUM_ARGS'. Parameters: Map(name -> to_json, expectedInfo -> one of 1 and 2, actualNumber -> 0)"
+  }
 }
 
 
@@ -174,21 +165,12 @@ select from_json()
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.SparkException
 {
-  "errorClass" : "INVALID_FUNCTION_ARGUMENT",
+  "errorClass" : "INTERNAL_ERROR",
   "messageParameters" : {
-    "actualNumber" : "0",
-    "expectedInfo" : "one of 2 and 3",
-    "name" : "from_json"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 18,
-    "fragment" : "from_json()"
-  } ]
+    "message" : "Undefined error message parameter for error class: 'DATATYPE_MISMATCH.WRONG_NUM_ARGS'. Parameters: Map(name -> from_json, expectedInfo -> one of 2 and 3, actualNumber -> 0)"
+  }
 }
 
 
@@ -515,21 +497,12 @@ select json_array_length()
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.SparkException
 {
-  "errorClass" : "INVALID_FUNCTION_ARGUMENT",
+  "errorClass" : "INTERNAL_ERROR",
   "messageParameters" : {
-    "actualNumber" : "0",
-    "expectedInfo" : "1",
-    "name" : "json_array_length"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 26,
-    "fragment" : "json_array_length()"
-  } ]
+    "message" : "Undefined error message parameter for error class: 'DATATYPE_MISMATCH.WRONG_NUM_ARGS'. Parameters: Map(name -> json_array_length, expectedInfo -> 1, actualNumber -> 0)"
+  }
 }
 
 
@@ -602,21 +575,12 @@ select json_object_keys()
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.SparkException
 {
-  "errorClass" : "INVALID_FUNCTION_ARGUMENT",
+  "errorClass" : "INTERNAL_ERROR",
   "messageParameters" : {
-    "actualNumber" : "0",
-    "expectedInfo" : "1",
-    "name" : "json_object_keys"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 25,
-    "fragment" : "json_object_keys()"
-  } ]
+    "message" : "Undefined error message parameter for error class: 'DATATYPE_MISMATCH.WRONG_NUM_ARGS'. Parameters: Map(name -> json_object_keys, expectedInfo -> 1, actualNumber -> 0)"
+  }
 }
 
 

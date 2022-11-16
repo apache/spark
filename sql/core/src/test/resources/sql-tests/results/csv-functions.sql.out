@@ -69,21 +69,12 @@ select from_csv()
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.SparkException
 {
-  "errorClass" : "INVALID_FUNCTION_ARGUMENT",
+  "errorClass" : "INTERNAL_ERROR",
   "messageParameters" : {
-    "actualNumber" : "0",
-    "expectedInfo" : "one of 2 and 3",
-    "name" : "from_csv"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 17,
-    "fragment" : "from_csv()"
-  } ]
+    "message" : "Undefined error message parameter for error class: 'DATATYPE_MISMATCH.WRONG_NUM_ARGS'. Parameters: Map(name -> from_csv, expectedInfo -> one of 2 and 3, actualNumber -> 0)"
+  }
 }
 
 

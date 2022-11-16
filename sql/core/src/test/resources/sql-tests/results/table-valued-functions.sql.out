@@ -78,22 +78,12 @@ select * from range(1, 1, 1, 1, 1)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.SparkException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1179",
+  "errorClass" : "INTERNAL_ERROR",
   "messageParameters" : {
-    "arguments" : "integer, integer, integer, integer, integer",
-    "details" : "[INVALID_FUNCTION_ARGUMENT] Invalid number of arguments for function range. Expected: one of 1, 2, 3 and 4; Found: 5.",
-    "name" : "range",
-    "usage" : "\n    range(start: long, end: long, step: long, numSlices: integer)\n    range(start: long, end: long, step: long)\n    range(start: long, end: long)\n    range(end: long)"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 34,
-    "fragment" : "range(1, 1, 1, 1, 1)"
-  } ]
+    "message" : "Undefined error message parameter for error class: 'DATATYPE_MISMATCH.WRONG_NUM_ARGS'. Parameters: Map(name -> range, expectedInfo -> one of 1, 2, 3 and 4, actualNumber -> 5)"
+  }
 }
 
 

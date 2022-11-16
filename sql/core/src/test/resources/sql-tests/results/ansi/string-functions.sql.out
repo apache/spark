@@ -789,21 +789,12 @@ select decode()
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.SparkException
 {
-  "errorClass" : "INVALID_FUNCTION_ARGUMENT",
+  "errorClass" : "INTERNAL_ERROR",
   "messageParameters" : {
-    "actualNumber" : "0",
-    "expectedInfo" : "2",
-    "name" : "decode"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 15,
-    "fragment" : "decode()"
-  } ]
+    "message" : "Undefined error message parameter for error class: 'DATATYPE_MISMATCH.WRONG_NUM_ARGS'. Parameters: Map(name -> decode, expectedInfo -> 2, actualNumber -> 0)"
+  }
 }
 
 
@@ -812,21 +803,12 @@ select decode(encode('abc', 'utf-8'))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.SparkException
 {
-  "errorClass" : "INVALID_FUNCTION_ARGUMENT",
+  "errorClass" : "INTERNAL_ERROR",
   "messageParameters" : {
-    "actualNumber" : "1",
-    "expectedInfo" : "2",
-    "name" : "decode"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 37,
-    "fragment" : "decode(encode('abc', 'utf-8'))"
-  } ]
+    "message" : "Undefined error message parameter for error class: 'DATATYPE_MISMATCH.WRONG_NUM_ARGS'. Parameters: Map(name -> decode, expectedInfo -> 2, actualNumber -> 1)"
+  }
 }
 
 

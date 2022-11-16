@@ -44,21 +44,12 @@ SELECT make_timestamp_ntz(2021, 07, 11, 6, 30, 45.678, 'CET')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.SparkException
 {
-  "errorClass" : "INVALID_FUNCTION_ARGUMENT",
+  "errorClass" : "INTERNAL_ERROR",
   "messageParameters" : {
-    "actualNumber" : "7",
-    "expectedInfo" : "6",
-    "name" : "make_timestamp_ntz"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 61,
-    "fragment" : "make_timestamp_ntz(2021, 07, 11, 6, 30, 45.678, 'CET')"
-  } ]
+    "message" : "Undefined error message parameter for error class: 'DATATYPE_MISMATCH.WRONG_NUM_ARGS'. Parameters: Map(name -> make_timestamp_ntz, expectedInfo -> 6, actualNumber -> 7)"
+  }
 }
 
 

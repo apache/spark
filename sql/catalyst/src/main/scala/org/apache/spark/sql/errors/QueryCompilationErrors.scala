@@ -639,7 +639,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def invalidFunctionArgumentsError(
       name: String, expectedInfo: String, actualNumber: Int): Throwable = {
     new AnalysisException(
-      errorClass = "INVALID_FUNCTION_ARGUMENT",
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
       messageParameters = Map(
         "name" -> name,
         "expectedInfo" -> expectedInfo,
