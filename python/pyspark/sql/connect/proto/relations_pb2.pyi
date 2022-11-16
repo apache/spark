@@ -410,15 +410,28 @@ class Read(google.protobuf.message.Message):
             self,
             *,
             format: builtins.str = ...,
-            schema: builtins.str = ...,
+            schema: builtins.str | None = ...,
             options: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
         ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["_schema", b"_schema", "schema", b"schema"]
+        ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "format", b"format", "options", b"options", "schema", b"schema"
+                "_schema",
+                b"_schema",
+                "format",
+                b"format",
+                "options",
+                b"options",
+                "schema",
+                b"schema",
             ],
         ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_schema", b"_schema"]
+        ) -> typing_extensions.Literal["schema"] | None: ...
 
     NAMED_TABLE_FIELD_NUMBER: builtins.int
     DATA_SOURCE_FIELD_NUMBER: builtins.int
