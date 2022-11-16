@@ -18,10 +18,12 @@ package org.apache.spark.sql.avro
 
 import java.io.File
 import java.sql.Timestamp
+
 import org.apache.avro.{LogicalTypes, Schema}
 import org.apache.avro.Conversions.DecimalConversion
 import org.apache.avro.file.DataFileWriter
 import org.apache.avro.generic.{GenericData, GenericDatumWriter, GenericRecord}
+
 import org.apache.spark.{SparkArithmeticException, SparkConf, SparkException}
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
