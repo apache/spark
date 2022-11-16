@@ -1348,7 +1348,11 @@
           </exclusion>
           <exclusion>
             <groupId>com.sun.jersey</groupId>
-            <artifactId>*</artifactId>
+            <artifactId>jersey-json</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.sun.jersey</groupId>
+            <artifactId>jersey-server</artifactId>
           </exclusion>
           <exclusion>
             <groupId>com.sun.jersey.jersey-test-framework</groupId>
@@ -1515,7 +1519,11 @@
           </exclusion>
           <exclusion>
             <groupId>com.sun.jersey</groupId>
-            <artifactId>*</artifactId>
+            <artifactId>jersey-json</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.sun.jersey</groupId>
+            <artifactId>jersey-server</artifactId>
           </exclusion>
           <exclusion>
             <groupId>com.sun.jersey.jersey-test-framework</groupId>
@@ -1559,7 +1567,11 @@
           </exclusion>
           <exclusion>
             <groupId>com.sun.jersey</groupId>
-            <artifactId>*</artifactId>
+            <artifactId>jersey-json</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.sun.jersey</groupId>
+            <artifactId>jersey-server</artifactId>
           </exclusion>
           <exclusion>
             <groupId>com.sun.jersey.jersey-test-framework</groupId>
@@ -1696,7 +1708,11 @@
           </exclusion>
           <exclusion>
             <groupId>com.sun.jersey</groupId>
-            <artifactId>*</artifactId>
+            <artifactId>jersey-json</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.sun.jersey</groupId>
+            <artifactId>jersey-server</artifactId>
           </exclusion>
           <exclusion>
             <groupId>com.sun.jersey.jersey-test-framework</groupId>
@@ -1745,7 +1761,11 @@
           </exclusion>
           <exclusion>
             <groupId>com.sun.jersey</groupId>
-            <artifactId>*</artifactId>
+            <artifactId>jersey-json</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.sun.jersey</groupId>
+            <artifactId>jersey-server</artifactId>
           </exclusion>
           <exclusion>
             <groupId>com.sun.jersey.jersey-test-framework</groupId>

@@ -30,11 +30,17 @@
   <properties>
     <sbt.project.name>yarn</sbt.project.name>
     <jersey-1.version>1.19</jersey-1.version>
+    <jersey-1.core.scope>test</jersey-1.core.scope>
+    <shaded.dependency.prefix>org.apache.hadoop.shaded</shaded.dependency.prefix>
   </properties>
 
   <profiles>
     <profile>
       <id>hadoop-2</id>
+      <properties>
+        <jersey-1.version>1.9</jersey-1.version>
+        <jersey-1.core.scope>compile</jersey-1.core.scope>
+      </properties>
       <dependencies>
         <dependency>
           <groupId>org.apache.hadoop</groupId>
@@ -97,6 +103,12 @@
           <groupId>org.bouncycastle</groupId>
           <artifactId>bcpkix-jdk15on</artifactId>
           <scope>test</scope>
+        </dependency>
+        <dependency>
+          <groupId>com.sun.jersey</groupId>
+          <artifactId>jersey-servlet</artifactId>
+          <scope>test</scope>
+          <version>${jersey-1.version}</version>
         </dependency>
       </dependencies>
     </profile>
@@ -193,7 +205,7 @@
      <dependency>
        <groupId>com.sun.jersey</groupId>
        <artifactId>jersey-core</artifactId>
-       <scope>test</scope>
+       <scope>${jersey-1.core.scope}</scope>
        <version>${jersey-1.version}</version>
      </dependency>
      <dependency>
@@ -211,12 +223,6 @@
      <dependency>
        <groupId>com.sun.jersey.contribs</groupId>
        <artifactId>jersey-guice</artifactId>
-       <scope>test</scope>
-       <version>${jersey-1.version}</version>
-     </dependency>
-     <dependency>
-       <groupId>com.sun.jersey</groupId>
-       <artifactId>jersey-servlet</artifactId>
        <scope>test</scope>
        <version>${jersey-1.version}</version>
      </dependency>
@@ -255,6 +261,55 @@
         <filtering>true</filtering>
       </resource>
     </resources>
+
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+            <configuration>
+              <shadedArtifactAttached>false</shadedArtifactAttached>
+              <artifactSet>
+                <includes>
+                  <include>org.spark-project.spark:unused</include>
+                  <include>com.sun.jersey:*</include>
+                  <include>javax.ws.rs:jsr311-api</include>
+                  <include>javax.ws.rs:javax.ws.rs-api</include>
+                </includes>
+              </artifactSet>
+              <filters>
+                <filter>
+                  <artifact>*:*</artifact>
+                  <excludes>
+                    <exclude>META-INF/*.SF</exclude>
+                    <exclude>META-INF/*.DSA</exclude>
+                    <exclude>META-INF/*.RSA</exclude>
+                  </excludes>
+                </filter>
+              </filters>
+              <relocations>
+                <relocation>
+                  <pattern>javax.ws</pattern>
+                  <shadedPattern>${shaded.dependency.prefix}.javax.ws</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>javax/ws</pattern>
+                  <shadedPattern>${shaded.dependency.prefix}.javax.ws</shadedPattern>
+                </relocation>
+              </relocations>
+              <transformers>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+              </transformers>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
   </build>
 
 </project>
