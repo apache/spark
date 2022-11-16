@@ -33,7 +33,7 @@ from pyspark.sql.types import StructType, StructField, LongType, StringType
 if have_pandas:
     from pyspark.sql.connect.client import RemoteSparkSession, ChannelBuilder
     from pyspark.sql.connect.function_builder import udf
-    from pyspark.sql.connect.functions import lit
+    from pyspark.sql.connect.functions import lit, col
 from pyspark.sql.dataframe import DataFrame
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
@@ -290,6 +290,20 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         else:
             actualResult = pandasResult.values.tolist()
             self.assertEqual(len(expectResult), len(actualResult))
+
+    def test_alias(self) -> None:
+        """Testing supported and unsupported alias"""
+        col0 = (
+            self.connect.range(1, 10)
+            .select(col("id").alias("name", metadata={"max": 99}))
+            .schema()
+            .names[0]
+        )
+        self.assertEqual("name", col0)
+
+        with self.assertRaises(grpc.RpcError) as exc:
+            self.connect.range(1, 10).select(col("id").alias("this", "is", "not")).collect()
+        self.assertIn("Buffer(this, is, not)", str(exc.exception))
 
 
 class ChannelBuilderTests(ReusedPySparkTestCase):

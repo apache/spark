@@ -32,7 +32,7 @@ import org.apache.spark.sql.connect.dsl.commands._
 import org.apache.spark.sql.connect.dsl.expressions._
 import org.apache.spark.sql.connect.dsl.plans._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, MapType, Metadata, StringType, StructField, StructType}
 
 /**
  * This suite is based on connect DSL and test that given same dataframe operations, whether
@@ -50,6 +50,9 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     createLocalRelationProto(
       Seq(AttributeReference("id", IntegerType)(), AttributeReference("name", StringType)()))
 
+  lazy val connectTestRelationMap =
+    createLocalRelationProto(Seq(AttributeReference("id", MapType(StringType, StringType))()))
+
   lazy val sparkTestRelation: DataFrame =
     spark.createDataFrame(
       new java.util.ArrayList[Row](),
@@ -59,6 +62,11 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     spark.createDataFrame(
       new java.util.ArrayList[Row](),
       StructType(Seq(StructField("id", IntegerType), StructField("name", StringType))))
+
+  lazy val sparkTestRelationMap: DataFrame =
+    spark.createDataFrame(
+      new java.util.ArrayList[Row](),
+      StructType(Seq(StructField("id", MapType(StringType, StringType)))))
 
   lazy val localRelation = createLocalRelationProto(Seq(AttributeReference("id", IntegerType)()))
 
@@ -140,10 +148,35 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(connectPlan2, sparkPlan2)
   }
 
-  test("column alias") {
+  test("SPARK-40809: column alias") {
+    // Simple Test.
     val connectPlan = connectTestRelation.select("id".protoAttr.as("id2"))
     val sparkPlan = sparkTestRelation.select(Column("id").alias("id2"))
     comparePlans(connectPlan, sparkPlan)
+
+    // Scalar columns with metadata
+    val mdJson = "{\"max\": 99}"
+    comparePlans(
+      connectTestRelation.select("id".protoAttr.as("id2", mdJson)),
+      sparkTestRelation.select(Column("id").as("id2", Metadata.fromJson(mdJson))))
+
+    comparePlans(
+      connectTestRelationMap.select(proto_explode("id".protoAttr).as(Seq("a", "b"))),
+      sparkTestRelationMap.select(explode(Column("id")).as(Seq("a", "b"))))
+
+    // Metadata must only be specified for regular Aliases.
+    assertThrows[InvalidPlanInput] {
+      val attr = proto_explode("id".protoAttr)
+      val alias = proto.Expression.Alias
+        .newBuilder()
+        .setExpr(attr)
+        .addName("a")
+        .addName("b")
+        .setMetadata(mdJson)
+        .build()
+      transform(
+        connectTestRelationMap.select(proto.Expression.newBuilder().setAlias(alias).build()))
+    }
   }
 
   test("Aggregate with more than 1 grouping expressions") {

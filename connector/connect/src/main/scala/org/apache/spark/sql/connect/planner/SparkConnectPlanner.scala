@@ -27,7 +27,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.WriteOperation
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.AliasIdentifier
-import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
@@ -338,7 +338,9 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Expression.ExprTypeCase.ALIAS => transformAlias(exp.getAlias)
       case proto.Expression.ExprTypeCase.EXPRESSION_STRING =>
         transformExpressionString(exp.getExpressionString)
-      case _ => throw InvalidPlanInput()
+      case _ =>
+        throw InvalidPlanInput(
+          s"Expression with ID: ${exp.getExprTypeCase.getNumber} is not supported")
     }
   }
 
@@ -412,7 +414,20 @@ class SparkConnectPlanner(session: SparkSession) {
   }
 
   private def transformAlias(alias: proto.Expression.Alias): NamedExpression = {
-    Alias(transformExpression(alias.getExpr), alias.getName)()
+    if (alias.getNameCount == 1) {
+      val md = if (alias.hasMetadata()) {
+        Some(Metadata.fromJson(alias.getMetadata))
+      } else {
+        None
+      }
+      Alias(transformExpression(alias.getExpr), alias.getName(0))(explicitMetadata = md)
+    } else {
+      if (alias.hasMetadata) {
+        throw new InvalidPlanInput(
+          "Alias expressions with more than 1 identifier must not use optional metadata.")
+      }
+      MultiAlias(transformExpression(alias.getExpr), alias.getNameList.asScala.toSeq)
+    }
   }
 
   private def transformExpressionString(expr: proto.Expression.ExpressionString): Expression = {
