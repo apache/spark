@@ -52,7 +52,7 @@ trait AlterNamespaceSetLocationSuiteBase extends QueryTest with DDLCommandTestUt
           sql(sqlText)
         },
         errorClass = "INVALID_EMPTY_LOCATION",
-        parameters = Map.empty)
+        parameters = Map("location" -> ""))
     }
   }
 

@@ -75,7 +75,7 @@ trait CreateNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
             sql(sqlText)
           },
           errorClass = "INVALID_EMPTY_LOCATION",
-          parameters = Map.empty)
+          parameters = Map("location" -> "Some()"))
         val uri = new Path(path).toUri
         sql(s"CREATE NAMESPACE $ns LOCATION '$uri'")
         // Make sure the location is qualified.
