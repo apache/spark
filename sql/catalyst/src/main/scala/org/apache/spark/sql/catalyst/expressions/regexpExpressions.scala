@@ -362,8 +362,14 @@ sealed abstract class MultiLikeBase
     ev.copy(code =
       code"""
             |${eval.code}
-            |Boolean ${ev.value} = (Boolean) ($matchHelper.matches(${eval.value}));
-            |boolean ${ev.isNull} = ${ev.value} == null;
+            |boolean ${ev.value} = false;
+            |boolean ${ev.isNull} = false;
+            |Boolean ret = (Boolean) ($matchHelper.matches(${eval.value}));
+            |if(ret == null) {
+            |  ${ev.isNull} = true;
+            |} else {
+            |  ${ev.value} = ret;
+            |}
         """.stripMargin)
   }
 }
