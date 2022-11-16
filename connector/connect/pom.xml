@@ -352,7 +352,7 @@
   </build>
   <profiles>
     <profile>
-      <id>official-protoc</id>
+      <id>default-protoc</id>
       <activation>
         <activeByDefault>true</activeByDefault>
       </activation>
