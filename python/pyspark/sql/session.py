@@ -256,8 +256,12 @@ class SparkSession(SparkConversionMixin):
                         self._options[k] = v
                 elif map is not None:
                     for k, v in map.items():  # type: ignore[assignment]
+                        if isinstance(v, bool):
+                            v = "true" if v is True else "false"
                         self._options[k] = str(v)
                 else:
+                    if isinstance(value, bool):
+                        value = "true" if value is True else "false"
                     self._options[cast(str, key)] = str(value)
                 return self
 
