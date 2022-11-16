@@ -10,6 +10,7 @@ plotly
 mlflow>=1.0
 sklearn
 matplotlib<3.3.0
+memory-profiler==0.60.0
 
 # PySpark test dependencies
 unittest-xml-reporting

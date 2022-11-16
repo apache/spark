@@ -15,18 +15,43 @@
 # limitations under the License.
 #
 
-from typing import Any, Callable, List, Optional, Type, TYPE_CHECKING, cast
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    Type,
+    TYPE_CHECKING,
+    Union,
+    cast,
+)
 
 import cProfile
+import inspect
 import pstats
+import linecache
 import os
 import atexit
 import sys
+import warnings
+
+try:
+    from memory_profiler import choose_backend, CodeMap, LineProfiler  # type: ignore[import]
+
+    has_memory_profiler = True
+except Exception:
+    has_memory_profiler = False
 
 from pyspark.accumulators import AccumulatorParam
 
 if TYPE_CHECKING:
     from pyspark.context import SparkContext
+
+MemoryTuple = Tuple[float, float, int]
+LineProfile = Tuple[int, Optional[MemoryTuple]]
+CodeMapDict = Dict[str, List[LineProfile]]
 
 
 class ProfilerCollector:
@@ -40,10 +65,12 @@ class ProfilerCollector:
         self,
         profiler_cls: Type["Profiler"],
         udf_profiler_cls: Type["Profiler"],
+        memory_profiler_cls: Type["Profiler"],
         dump_path: Optional[str] = None,
     ):
         self.profiler_cls: Type[Profiler] = profiler_cls
         self.udf_profiler_cls: Type[Profiler] = udf_profiler_cls
+        self.memory_profiler_cls: Type[Profiler] = memory_profiler_cls
         self.profile_dump_path: Optional[str] = dump_path
         self.profilers: List[List[Any]] = []
 
@@ -54,6 +81,10 @@ class ProfilerCollector:
     def new_udf_profiler(self, ctx: "SparkContext") -> "Profiler":
         """Create a new profiler using class `udf_profiler_cls`"""
         return self.udf_profiler_cls(ctx)
+
+    def new_memory_profiler(self, ctx: "SparkContext") -> "Profiler":
+        """Create a new profiler using class `memory_profiler_cls`"""
+        return self.memory_profiler_cls(ctx)
 
     def add_profiler(self, id: int, profiler: "Profiler") -> None:
         """Add a profiler for RDD/UDF `id`"""
@@ -125,27 +156,95 @@ class Profiler:
         """Do profiling on the function `func`"""
         raise NotImplementedError
 
-    def stats(self) -> pstats.Stats:
-        """Return the collected profiling stats (pstats.Stats)"""
+    def stats(self) -> Union[pstats.Stats, Dict]:
+        """Return the collected profiling stats"""
         raise NotImplementedError
 
     def show(self, id: int) -> None:
-        """Print the profile stats to stdout, id is the RDD id"""
-        stats = self.stats()
-        if stats:
-            print("=" * 60)
-            print("Profile of RDD<id=%d>" % id)
-            print("=" * 60)
-            stats.sort_stats("time", "cumulative").print_stats()
+        """Print the profile stats to stdout"""
+        raise NotImplementedError
 
     def dump(self, id: int, path: str) -> None:
-        """Dump the profile into path, id is the RDD id"""
-        if not os.path.exists(path):
-            os.makedirs(path)
-        stats = self.stats()
-        if stats:
-            p = os.path.join(path, "rdd_%d.pstats" % id)
-            stats.dump_stats(p)
+        """Dump the profile into path"""
+        raise NotImplementedError
+
+
+if has_memory_profiler:
+
+    class CodeMapForUDF(CodeMap):
+        def add(
+            self,
+            code: Any,
+            toplevel_code: Optional[Any] = None,
+            *,
+            sub_lines: Optional[List] = None,
+            start_line: Optional[int] = None,
+        ) -> None:
+            if code in self:
+                return
+
+            if toplevel_code is None:
+                toplevel_code = code
+                filename = code.co_filename
+                if sub_lines is None or start_line is None:
+                    (sub_lines, start_line) = inspect.getsourcelines(code)
+                linenos = range(start_line, start_line + len(sub_lines))
+                self._toplevel.append((filename, code, linenos))
+                self[code] = {}
+            else:
+                self[code] = self[toplevel_code]
+            for subcode in filter(inspect.iscode, code.co_consts):
+                self.add(subcode, toplevel_code=toplevel_code)
+
+    class UDFLineProfiler(LineProfiler):
+        def __init__(self, **kw: Any) -> None:
+            include_children = kw.get("include_children", False)
+            backend = kw.get("backend", "psutil")
+            self.code_map = CodeMapForUDF(include_children=include_children, backend=backend)
+            self.enable_count = 0
+            self.max_mem = kw.get("max_mem", None)
+            self.prevlines: List = []
+            self.backend = choose_backend(kw.get("backend", None))
+            self.prev_lineno = None
+
+        def __call__(
+            self,
+            func: Optional[Callable[..., Any]] = None,
+            precision: int = 1,
+            *,
+            sub_lines: Optional[List] = None,
+            start_line: Optional[int] = None,
+        ) -> Callable[..., Any]:
+            if func is not None:
+                self.add_function(func, sub_lines=sub_lines, start_line=start_line)
+                f = self.wrap_function(func)
+                f.__module__ = func.__module__
+                f.__name__ = func.__name__
+                f.__doc__ = func.__doc__
+                f.__dict__.update(getattr(func, "__dict__", {}))
+                return f
+            else:
+
+                def inner_partial(f: Callable[..., Any]) -> Any:
+                    return self.__call__(f, precision=precision)
+
+                return inner_partial
+
+        def add_function(
+            self,
+            func: Callable[..., Any],
+            *,
+            sub_lines: Optional[List] = None,
+            start_line: Optional[int] = None,
+        ) -> None:
+            """Record line profiling information for the given Python function."""
+            try:
+                # func_code does not exist in Python3
+                code = func.__code__
+            except AttributeError:
+                warnings.warn("Could not extract a code object for the object %r" % func)
+            else:
+                self.code_map.add(code, sub_lines=sub_lines, start_line=start_line)
 
 
 class PStatsParam(AccumulatorParam[Optional[pstats.Stats]]):
@@ -165,6 +264,53 @@ class PStatsParam(AccumulatorParam[Optional[pstats.Stats]]):
         return value1
 
 
+class MemUsageParam(AccumulatorParam[Optional[CodeMapDict]]):
+    """MemUsageParam is used to merge memory usage code map"""
+
+    @staticmethod
+    def zero(value: Optional[CodeMapDict]) -> None:
+        return None
+
+    @staticmethod
+    def addInPlace(
+        value1: Optional[CodeMapDict], value2: Optional[CodeMapDict]
+    ) -> Optional[CodeMapDict]:
+        # An example value looks as below
+        # {'<command-1598004922717618>': [(3, (144.2578125, 144.2578125, 1)),
+        #   (4, (0.0, 144.2578125, 1))]}
+        if value1 is None or len(value1) == 0:
+            return value2
+        if value2 is None or len(value2) == 0:
+            return value1
+
+        # value1, value2 should have same keys - file name
+        for filename in value1:
+            l1 = cast(List[LineProfile], value1.get(filename))
+            l2 = cast(List[LineProfile], value2.get(filename))
+            c1 = dict((k, v) for k, v in l1)
+            c2 = dict((k, v) for k, v in l2)
+            udf_code_map: Dict[int, Optional[MemoryTuple]] = {}
+            for lineno in c1:
+                if c1[lineno] and c2[lineno]:
+                    # c1, c2 should have same keys - line number
+                    udf_code_map[lineno] = (
+                        cast(MemoryTuple, c1[lineno])[0]
+                        + cast(MemoryTuple, c2[lineno])[0],  # increment
+                        cast(MemoryTuple, c1[lineno])[1]
+                        + cast(MemoryTuple, c2[lineno])[1],  # mem_usage
+                        cast(MemoryTuple, c1[lineno])[2]
+                        + cast(MemoryTuple, c2[lineno])[2],  # occurrences
+                    )
+                elif c1[lineno]:
+                    udf_code_map[lineno] = cast(MemoryTuple, c1[lineno])
+                elif c2[lineno]:
+                    udf_code_map[lineno] = cast(MemoryTuple, c2[lineno])
+                else:
+                    udf_code_map[lineno] = None
+            value1[filename] = [(k, v) for k, v in udf_code_map.items()]
+        return value1
+
+
 class BasicProfiler(Profiler):
     """
     BasicProfiler is the default profiler, which is implemented based on
@@ -172,7 +318,7 @@ class BasicProfiler(Profiler):
     """
 
     def __init__(self, ctx: "SparkContext") -> None:
-        Profiler.__init__(self, ctx)
+        super().__init__(ctx)
         # Creates a new accumulator for combining the profiles of different
         # partitions of a stage
         self._accumulator = ctx.accumulator(None, PStatsParam)  # type: ignore[arg-type]
@@ -192,6 +338,24 @@ class BasicProfiler(Profiler):
 
     def stats(self) -> pstats.Stats:
         return cast(pstats.Stats, self._accumulator.value)
+
+    def show(self, id: int) -> None:
+        """Print the profile stats to stdout, id is the RDD id"""
+        stats = self.stats()
+        if stats:
+            print("=" * 60)
+            print("Profile of RDD<id=%d>" % id)
+            print("=" * 60)
+            stats.sort_stats("time", "cumulative").print_stats()
+
+    def dump(self, id: int, path: str) -> None:
+        """Dump the profile into path, id is the RDD id"""
+        if not os.path.exists(path):
+            os.makedirs(path)
+        stats = self.stats()
+        if stats:
+            p = os.path.join(path, "rdd_%d.pstats" % id)
+            stats.dump_stats(p)
 
 
 class UDFBasicProfiler(BasicProfiler):
@@ -216,6 +380,103 @@ class UDFBasicProfiler(BasicProfiler):
         if stats:
             p = os.path.join(path, "udf_%d.pstats" % id)
             stats.dump_stats(p)
+
+
+class MemoryProfiler(Profiler):
+    """
+    MemoryProfiler, which is implemented based on memory profiler and Accumulator
+    """
+
+    def __init__(self, ctx: "SparkContext") -> None:
+        super().__init__(ctx)
+        # Creates a new accumulator for combining the profiles
+        self._accumulator = ctx.accumulator(None, MemUsageParam)  # type: ignore[arg-type]
+
+    def profile(  # type: ignore
+        self,
+        sub_lines: Optional[List],
+        start_line: Optional[int],
+        func: Callable[..., Any],
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        """Runs and profiles the method func passed in. A profile object is returned."""
+        if has_memory_profiler:
+            profiler = UDFLineProfiler()
+            wrapped = profiler(func, sub_lines=sub_lines, start_line=start_line)
+            ret = wrapped(*args, **kwargs)
+            codemap_dict = {
+                filename: list(line_iterator)
+                for filename, line_iterator in profiler.code_map.items()
+            }
+            # Adds a new profile to the existing accumulated value
+            self._accumulator.add(codemap_dict)  # type: ignore[arg-type]
+            return ret
+        else:
+            raise RuntimeError(
+                "Install the 'memory_profiler' library in the cluster to enable memory profiling."
+            )
+
+    def stats(self) -> CodeMapDict:
+        """Return the collected memory profiles"""
+        return cast(CodeMapDict, self._accumulator.value)
+
+    def _show_results(
+        self, code_map: CodeMapDict, stream: Optional[Any] = None, precision: int = 1
+    ) -> None:
+        if stream is None:
+            stream = sys.stdout
+        template = "{0:>6} {1:>12} {2:>12}  {3:>10}   {4:<}"
+
+        for (filename, lines) in code_map.items():
+            header = template.format(
+                "Line #", "Mem usage", "Increment", "Occurrences", "Line Contents"
+            )
+
+            stream.write("Filename: " + filename + "\n\n")
+            stream.write(header + "\n")
+            stream.write("=" * len(header) + "\n")
+
+            all_lines = linecache.getlines(filename)
+
+            float_format = "{0}.{1}f".format(precision + 4, precision)
+            template_mem = "{0:" + float_format + "} MiB"
+            for (lineno, mem) in lines:
+                total_mem: Union[float, str]
+                inc: Union[float, str]
+                occurrences: Union[float, str]
+                if mem:
+                    inc = mem[0]
+                    total_mem = mem[1]
+                    total_mem = template_mem.format(total_mem)
+                    occurrences = mem[2]
+                    inc = template_mem.format(inc)
+                else:
+                    total_mem = ""
+                    inc = ""
+                    occurrences = ""
+                tmp = template.format(lineno, total_mem, inc, occurrences, all_lines[lineno - 1])
+                stream.write(tmp)
+            stream.write("\n\n")
+
+    def show(self, id: int) -> None:
+        """Print the profile stats to stdout, id is the PythonUDF id"""
+        code_map = self.stats()
+        if code_map:
+            print("=" * 60)
+            print("Profile of UDF<id=%d>" % id)
+            print("=" * 60)
+            self._show_results(code_map)
+
+    def dump(self, id: int, path: str) -> None:
+        """Dump the memory profile into path, id is the PythonUDF id"""
+        if not os.path.exists(path):
+            os.makedirs(path)
+        stats = self.stats()  # dict
+        if stats:
+            p = os.path.join(path, "udf_%d_memory.txt" % id)
+            with open(p, "w+") as f:
+                self._show_results(stats, stream=f)
 
 
 if __name__ == "__main__":

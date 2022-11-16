@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Optional, Any, Iterable, Union
 import pyspark.sql.connect.proto as proto
 import pyspark.sql.types
 from pyspark.sql.connect.column import (
-    ColumnRef,
+    Column,
     Expression,
     ScalarFunctionExpression,
 )
@@ -45,7 +45,7 @@ def _build(name: str, *args: "ExpressionOrString") -> ScalarFunctionExpression:
     -------
     :class:`ScalarFunctionExpression`
     """
-    cols = [x if isinstance(x, Expression) else ColumnRef.from_qualified_name(x) for x in args]
+    cols = [x if isinstance(x, Expression) else Column.from_qualified_name(x) for x in args]
     return ScalarFunctionExpression(name, *cols)
 
 
@@ -87,7 +87,7 @@ class UserDefinedFunction(Expression):
             self._args = []
         self._func_name = None
 
-    def to_plan(self, session: Optional["RemoteSparkSession"]) -> proto.Expression:
+    def to_plan(self, session: "RemoteSparkSession") -> proto.Expression:
         if session is None:
             raise Exception("CAnnot create UDF without remote Session.")
         # Needs to materialize the UDF to the server
