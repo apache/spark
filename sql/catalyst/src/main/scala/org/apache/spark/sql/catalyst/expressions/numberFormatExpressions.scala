@@ -51,11 +51,7 @@ abstract class ToNumberBase(left: Expression, right: Expression, errorOnFail: Bo
   override def checkInputDataTypes(): TypeCheckResult = {
     val inputTypeCheck = super.checkInputDataTypes()
     if (inputTypeCheck.isSuccess) {
-      if (numberFormatter == null) {
-        TypeCheckResult.TypeCheckSuccess
-      } else if (right.foldable) {
-        numberFormatter.checkInputDataTypes()
-      } else {
+      if (!right.foldable) {
         DataTypeMismatch(
           errorSubClass = "NON_FOLDABLE_INPUT",
           messageParameters = Map(
@@ -64,6 +60,10 @@ abstract class ToNumberBase(left: Expression, right: Expression, errorOnFail: Bo
             "inputExpr" -> toSQLExpr(right)
           )
         )
+      } else if (numberFormatter == null) {
+        TypeCheckResult.TypeCheckSuccess
+      } else {
+        numberFormatter.checkInputDataTypes()
       }
     } else {
       inputTypeCheck
