@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.Locale
 import java.util.regex.{Matcher, MatchResult, Pattern, PatternSyntaxException}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.text.StringEscapeUtils
@@ -31,6 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch,
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.optimizer.LikeSimplification
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LIKE_FAMLIY, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, TreePattern}
 import org.apache.spark.sql.catalyst.util.{GenericArrayData, StringUtils}
@@ -248,12 +248,89 @@ case class ILike(
   }
 }
 
+case class MatchMultiHelper(
+    isNotSpecified: Boolean,
+    partialMatch: Boolean,
+    patterns: Seq[UTF8String]) {
+
+  def this(isNotSpecified: Boolean, partialMatch: Boolean) =
+    this(isNotSpecified, partialMatch, Seq.empty)
+
+  val patternBufs = patterns.toBuffer
+  def addPattern(pattern: String): Unit = {
+    patternBufs += UTF8String.fromString(pattern)
+  }
+
+  protected lazy val cache: Seq[UTF8String => Boolean] = patternBufs.filterNot(_ == null)
+    .map(s => {
+      val escapeChar = '\\'
+      val func =
+        s.toString match {
+          case LikeSimplification.startsWith(prefixStr)
+            if prefixStr.charAt(prefixStr.length - 1) != escapeChar =>
+            val prefix = UTF8String.fromString(prefixStr)
+            input: UTF8String => input.startsWith(prefix)
+          case LikeSimplification.endsWith(postfixStr) =>
+            val postfix = UTF8String.fromString(postfixStr)
+            input: UTF8String => input.endsWith(postfix)
+          // 'a%a' pattern is basically same with 'a%' && '%a'.
+          // However, the additional `Length` condition is required to prevent 'a' match 'a%a'.
+          case LikeSimplification.startsAndEndsWith(prefixStr, postfixStr)
+            if prefixStr.charAt(prefixStr.length - 1) != escapeChar =>
+            val minLength = prefixStr.length + postfixStr.length
+            val prefix = UTF8String.fromString(prefixStr)
+            val postfix = UTF8String.fromString(postfixStr)
+            input: UTF8String =>
+              input.numChars >= minLength &&
+                input.startsWith(prefix) && input.endsWith(postfix)
+          case LikeSimplification.contains(infixStr)
+            if infixStr.charAt(infixStr.length - 1) != escapeChar =>
+            val infix = UTF8String.fromString(infixStr)
+            input: UTF8String => input.contains(infix)
+          case LikeSimplification.equalTo(str) =>
+            val utf8Str = UTF8String.fromString(str)
+            input: UTF8String => input.equals(utf8Str)
+          case _ =>
+            val p = Pattern.compile(StringUtils.escapeLikeRegex(s.toString, escapeChar))
+            input: UTF8String => p.matcher(input.toString).matches()
+        }
+      if (isNotSpecified) func.andThen(!_) else func
+    })
+
+  protected lazy val hasNull: Boolean = patternBufs.contains(null)
+
+  def matches(exprValue: Any): Any = {
+    if (exprValue == null) {
+      return null
+    }
+    val s = exprValue match {
+      case s: UTF8String => s
+      case v => UTF8String.fromString(v.toString)
+    }
+    if (partialMatch) {
+      if (cache.exists(_ (s))) {
+        true
+      } else {
+        if (hasNull) null else false
+      }
+    } else {
+      if (cache.forall(_ (s))) {
+        if (hasNull) null else true
+      } else {
+        false
+      }
+    }
+  }
+}
+
 sealed abstract class MultiLikeBase
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant with Predicate {
 
   protected def patterns: Seq[UTF8String]
 
   protected def isNotSpecified: Boolean
+
+  protected def partialMatch: Boolean
 
   override def inputTypes: Seq[DataType] = StringType :: Nil
 
@@ -263,82 +340,47 @@ sealed abstract class MultiLikeBase
 
   protected lazy val hasNull: Boolean = patterns.contains(null)
 
-  protected lazy val cache = patterns.filterNot(_ == null)
-    .map(s => Pattern.compile(StringUtils.escapeLikeRegex(s.toString, '\\')))
-
-  protected lazy val matchFunc = if (isNotSpecified) {
-    (p: Pattern, inputValue: String) => !p.matcher(inputValue).matches()
-  } else {
-    (p: Pattern, inputValue: String) => p.matcher(inputValue).matches()
-  }
-
-  protected def matches(exprValue: String): Any
+  protected lazy val matchHelper = MatchMultiHelper(isNotSpecified, partialMatch, patterns)
 
   override def eval(input: InternalRow): Any = {
-    val exprValue = child.eval(input)
-    if (exprValue == null) {
-      null
-    } else {
-      matches(exprValue.toString)
-    }
+    val exprValue: Any = child.eval(input)
+    matchHelper.matches(exprValue)
+  }
+
+  def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val eval = child.genCode(ctx)
+
+    val matchHelper =
+      ctx.addMutableState("MatchMultiHelper",
+        ctx.freshName("matchHelper"),
+        v => s"$v = new MatchMultiHelper($isNotSpecified, $partialMatch);\n" +
+          patterns.map(p =>
+            if (p != null) s"""$v.addPattern("${p.toString}");""" else s"$v.addPattern(null);"
+          ).mkString("\n"),
+        forceInline = true)
+
+    ev.copy(code =
+      code"""
+            |${eval.code}
+            |Boolean ${ev.value} = (Boolean) ($matchHelper.matches(${eval.value}));
+            |boolean ${ev.isNull} = ${ev.value} == null;
+        """.stripMargin)
   }
 }
 
 /**
  * Optimized version of LIKE ALL, when all pattern values are literal.
  */
-sealed abstract class LikeAllBase extends MultiLikeBase {
 
-  override def matches(exprValue: String): Any = {
-    if (cache.forall(matchFunc(_, exprValue))) {
-      if (hasNull) null else true
-    } else {
-      false
-    }
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val eval = child.genCode(ctx)
-    val patternClass = classOf[Pattern].getName
-    val javaDataType = CodeGenerator.javaType(child.dataType)
-    val pattern = ctx.freshName("pattern")
-    val valueArg = ctx.freshName("valueArg")
-    val patternCache = ctx.addReferenceObj("patternCache", cache.asJava)
-
-    val checkNotMatchCode = if (isNotSpecified) {
-      s"$pattern.matcher($valueArg.toString()).matches()"
-    } else {
-      s"!$pattern.matcher($valueArg.toString()).matches()"
-    }
-
-    ev.copy(code =
-      code"""
-            |${eval.code}
-            |boolean ${ev.isNull} = false;
-            |boolean ${ev.value} = true;
-            |if (${eval.isNull}) {
-            |  ${ev.isNull} = true;
-            |} else {
-            |  $javaDataType $valueArg = ${eval.value};
-            |  for ($patternClass $pattern: $patternCache) {
-            |    if ($checkNotMatchCode) {
-            |      ${ev.value} = false;
-            |      break;
-            |    }
-            |  }
-            |  if (${ev.value} && $hasNull) ${ev.isNull} = true;
-            |}
-      """.stripMargin)
-  }
-}
-
-case class LikeAll(child: Expression, patterns: Seq[UTF8String]) extends LikeAllBase {
+case class LikeAll(child: Expression, patterns: Seq[UTF8String]) extends MultiLikeBase {
+  override def partialMatch: Boolean = false
   override def isNotSpecified: Boolean = false
   override protected def withNewChildInternal(newChild: Expression): LikeAll =
     copy(child = newChild)
 }
 
-case class NotLikeAll(child: Expression, patterns: Seq[UTF8String]) extends LikeAllBase {
+case class NotLikeAll(child: Expression, patterns: Seq[UTF8String]) extends MultiLikeBase {
+  override def partialMatch: Boolean = false
   override def isNotSpecified: Boolean = true
   override protected def withNewChildInternal(newChild: Expression): NotLikeAll =
     copy(child = newChild)
@@ -347,58 +389,15 @@ case class NotLikeAll(child: Expression, patterns: Seq[UTF8String]) extends Like
 /**
  * Optimized version of LIKE ANY, when all pattern values are literal.
  */
-sealed abstract class LikeAnyBase extends MultiLikeBase {
-
-  override def matches(exprValue: String): Any = {
-    if (cache.exists(matchFunc(_, exprValue))) {
-      true
-    } else {
-      if (hasNull) null else false
-    }
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val eval = child.genCode(ctx)
-    val patternClass = classOf[Pattern].getName
-    val javaDataType = CodeGenerator.javaType(child.dataType)
-    val pattern = ctx.freshName("pattern")
-    val valueArg = ctx.freshName("valueArg")
-    val patternCache = ctx.addReferenceObj("patternCache", cache.asJava)
-
-    val checkMatchCode = if (isNotSpecified) {
-      s"!$pattern.matcher($valueArg.toString()).matches()"
-    } else {
-      s"$pattern.matcher($valueArg.toString()).matches()"
-    }
-
-    ev.copy(code =
-      code"""
-            |${eval.code}
-            |boolean ${ev.isNull} = false;
-            |boolean ${ev.value} = false;
-            |if (${eval.isNull}) {
-            |  ${ev.isNull} = true;
-            |} else {
-            |  $javaDataType $valueArg = ${eval.value};
-            |  for ($patternClass $pattern: $patternCache) {
-            |    if ($checkMatchCode) {
-            |      ${ev.value} = true;
-            |      break;
-            |    }
-            |  }
-            |  if (!${ev.value} && $hasNull) ${ev.isNull} = true;
-            |}
-      """.stripMargin)
-  }
-}
-
-case class LikeAny(child: Expression, patterns: Seq[UTF8String]) extends LikeAnyBase {
+case class LikeAny(child: Expression, patterns: Seq[UTF8String]) extends MultiLikeBase {
+  override def partialMatch: Boolean = true
   override def isNotSpecified: Boolean = false
   override protected def withNewChildInternal(newChild: Expression): LikeAny =
     copy(child = newChild)
 }
 
-case class NotLikeAny(child: Expression, patterns: Seq[UTF8String]) extends LikeAnyBase {
+case class NotLikeAny(child: Expression, patterns: Seq[UTF8String]) extends MultiLikeBase {
+  override def partialMatch: Boolean = true
   override def isNotSpecified: Boolean = true
   override protected def withNewChildInternal(newChild: Expression): NotLikeAny =
     copy(child = newChild)

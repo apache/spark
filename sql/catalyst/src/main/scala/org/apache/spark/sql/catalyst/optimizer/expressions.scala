@@ -707,11 +707,11 @@ object SupportedBinaryExpr {
 object LikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
   // if guards below protect from escapes on trailing %.
   // Cases like "something\%" are not optimized, but this does not affect correctness.
-  private val startsWith = "([^_%]+)%".r
-  private val endsWith = "%([^_%]+)".r
-  private val startsAndEndsWith = "([^_%]+)%([^_%]+)".r
-  private val contains = "%([^_%]+)%".r
-  private val equalTo = "([^_%]*)".r
+  val startsWith = "([^_%]+)%".r
+  val endsWith = "%([^_%]+)".r
+  val startsAndEndsWith = "([^_%]+)%([^_%]+)".r
+  val contains = "%([^_%]+)%".r
+  val equalTo = "([^_%]*)".r
 
   private def simplifyLike(
       input: Expression, pattern: String, escapeChar: Char = '\\'): Option[Expression] = {
