@@ -37,10 +37,10 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
   private val DRIVER_LABELS = Map(
     "label1key" -> "label1value",
     "label2key" -> "label2value")
-  private val DRIVER_SERVICE_LABELS = Map(
+  private val DRIVER_SERVICE_ANNOTATIONS = Map(
     "annotation1key" -> "annotation1value",
     "annotation2key" -> "annotation2value")
-  private val DRIVER_SERVICE_ANNOTATIONS = Map(
+  private val DRIVER_SERVICE_LABELS = Map(
     "svclabel1key" -> "svclabel1value",
     "svclabel2key" -> "svclabel2value")
 
