@@ -2199,7 +2199,7 @@ private[spark] class DAGScheduler(
    * The max size of removed executors is controlled by
    * spark.scheduler.maxRetainedRemovedExecutors
    */
-  private def isExecutorDecommissioningOrDecommissioned(
+  private[scheduler] def isExecutorDecommissioningOrDecommissioned(
       taskScheduler: TaskScheduler, bmAddress: BlockManagerId): Boolean = {
     if (bmAddress != null) {
       taskScheduler

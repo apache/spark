@@ -2237,7 +2237,8 @@ package object config {
         s"when ${STAGE_IGNORE_DECOMMISSION_FETCH_FAILURE.key} is enabled.")
       .version("3.4.0")
       .intConf
-      .createWithDefault(10000)
+      .checkValue(_ >= 0, "needs to be a non-negative value")
+      .createWithDefault(0)
 
   private[spark] val PUSH_BASED_SHUFFLE_ENABLED =
     ConfigBuilder("spark.shuffle.push.enabled")
