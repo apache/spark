@@ -69,7 +69,10 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
       val canPushDownPredicate = (predicate: Expression) => {
         val replaced = replaceAlias(predicate, aliasMap)
         predicate.references.nonEmpty &&
-          replaced.references.subsetOf(agg.child.outputSet ++ rightOp.outputSet)
+          replaced.references.subsetOf(agg.child.outputSet ++ rightOp.outputSet) &&
+          // references must not be ambiguous (i.e., not contained in both sides)
+          !replaced.references.exists(attr =>
+            agg.child.outputSet.contains(attr) && rightOp.outputSet.contains(attr))
       }
       val makeJoinCondition = (predicates: Seq[Expression]) => {
         replaceAlias(predicates.reduce(And), aliasMap)
