@@ -32,7 +32,6 @@ import org.apache.spark.sql.connect.dsl.commands._
 import org.apache.spark.sql.connect.dsl.expressions._
 import org.apache.spark.sql.connect.dsl.plans._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
 /**
@@ -148,29 +147,25 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   }
 
   test("Aggregate with more than 1 grouping expressions") {
-    withSQLConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS.key -> "false") {
-      val connectPlan =
-        connectTestRelation.groupBy("id".protoAttr, "name".protoAttr)()
-      val sparkPlan =
-        sparkTestRelation.groupBy(Column("id"), Column("name")).agg(Map.empty[String, String])
-      comparePlans(connectPlan, sparkPlan)
-    }
+    val connectPlan =
+      connectTestRelation.groupBy("id".protoAttr, "name".protoAttr)()
+    val sparkPlan =
+      sparkTestRelation.groupBy(Column("id"), Column("name")).agg(Map.empty[String, String])
+    comparePlans(connectPlan, sparkPlan)
   }
 
   test("Aggregate expressions") {
-    withSQLConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS.key -> "false") {
-      val connectPlan =
-        connectTestRelation.groupBy("id".protoAttr)(proto_min("name".protoAttr))
-      val sparkPlan =
-        sparkTestRelation.groupBy(Column("id")).agg(min(Column("name")))
-      comparePlans(connectPlan, sparkPlan)
+    val connectPlan =
+      connectTestRelation.groupBy("id".protoAttr)(proto_min("name".protoAttr))
+    val sparkPlan =
+      sparkTestRelation.groupBy(Column("id")).agg(min(Column("name")))
+    comparePlans(connectPlan, sparkPlan)
 
-      val connectPlan2 =
-        connectTestRelation.groupBy("id".protoAttr)(proto_min("name".protoAttr).as("agg1"))
-      val sparkPlan2 =
-        sparkTestRelation.groupBy(Column("id")).agg(min(Column("name")).as("agg1"))
-      comparePlans(connectPlan2, sparkPlan2)
-    }
+    val connectPlan2 =
+      connectTestRelation.groupBy("id".protoAttr)(proto_min("name".protoAttr).as("agg1"))
+    val sparkPlan2 =
+      sparkTestRelation.groupBy(Column("id")).agg(min(Column("name")).as("agg1"))
+    comparePlans(connectPlan2, sparkPlan2)
   }
 
   test("Test as(alias: String)") {
@@ -271,6 +266,21 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     val connectPlan2 = connectTestRelation.coalesce(2)
     val sparkPlan2 = sparkTestRelation.coalesce(2)
     comparePlans(connectPlan2, sparkPlan2)
+  }
+
+  test("SPARK-41128: Test fill na") {
+    comparePlans(connectTestRelation.na.fillValue(1L), sparkTestRelation.na.fill(1L))
+    comparePlans(connectTestRelation.na.fillValue(1.5), sparkTestRelation.na.fill(1.5))
+    comparePlans(connectTestRelation.na.fillValue("str"), sparkTestRelation.na.fill("str"))
+    comparePlans(
+      connectTestRelation.na.fillColumns(1L, Seq("id")),
+      sparkTestRelation.na.fill(1L, Seq("id")))
+    comparePlans(
+      connectTestRelation.na.fillValueMap(Map("id" -> 1L)),
+      sparkTestRelation.na.fill(Map("id" -> 1L)))
+    comparePlans(
+      connectTestRelation.na.fillValueMap(Map("id" -> 1L, "name" -> "xyz")),
+      sparkTestRelation.na.fill(Map("id" -> 1L, "name" -> "xyz")))
   }
 
   test("Test summary") {

@@ -16,6 +16,7 @@
 #
 
 from typing import (
+    Any,
     List,
     Optional,
     Sequence,
@@ -67,6 +68,9 @@ class LogicalPlan(object):
             return cast(Column, col).to_plan(session)
 
     def plan(self, session: "RemoteSparkSession") -> proto.Relation:
+        ...
+
+    def command(self, session: "RemoteSparkSession") -> proto.Command:
         ...
 
     def _verify(self, session: "RemoteSparkSession") -> bool:
@@ -844,6 +848,63 @@ class Range(LogicalPlan):
         """
 
 
+class NAFill(LogicalPlan):
+    def __init__(
+        self, child: Optional["LogicalPlan"], cols: Optional[List[str]], values: List[Any]
+    ) -> None:
+        super().__init__(child)
+
+        assert (
+            isinstance(values, list)
+            and len(values) > 0
+            and all(isinstance(v, (bool, int, float, str)) for v in values)
+        )
+
+        if cols is not None and len(cols) > 0:
+            assert isinstance(cols, list) and all(isinstance(c, str) for c in cols)
+            if len(values) > 1:
+                assert len(cols) == len(values)
+
+        self.cols = cols
+        self.values = values
+
+    def _convert_value(self, v: Any) -> proto.Expression.Literal:
+        value = proto.Expression.Literal()
+        if isinstance(v, bool):
+            value.boolean = v
+        elif isinstance(v, int):
+            value.i64 = v
+        elif isinstance(v, float):
+            value.fp64 = v
+        else:
+            value.string = v
+        return value
+
+    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
+        assert self._child is not None
+        plan = proto.Relation()
+        plan.fill_na.input.CopyFrom(self._child.plan(session))
+        if self.cols is not None and len(self.cols) > 0:
+            plan.fill_na.cols.extend(self.cols)
+        plan.fill_na.values.extend([self._convert_value(v) for v in self.values])
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        return f"""{" " * indent}<NAFill cols='{self.cols}', values='{self.values}'>"""
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>NAFill</b><br />
+              Cols: {self.cols} <br />
+              Values: {self.values} <br />
+              {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
 class StatSummary(LogicalPlan):
     def __init__(self, child: Optional["LogicalPlan"], statistics: List[str]) -> None:
         super().__init__(child)
@@ -899,6 +960,48 @@ class StatCrosstab(LogicalPlan):
               Col1: {self.col1} <br />
               Col2: {self.col2} <br />
               {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
+class CreateView(LogicalPlan):
+    def __init__(
+        self, child: Optional["LogicalPlan"], name: str, is_global: bool, replace: bool
+    ) -> None:
+        super().__init__(child)
+        self._name = name
+        self._is_gloal = is_global
+        self._replace = replace
+
+    def command(self, session: "RemoteSparkSession") -> proto.Command:
+        assert self._child is not None
+
+        plan = proto.Command()
+        plan.create_dataframe_view.replace = self._replace
+        plan.create_dataframe_view.is_global = self._is_gloal
+        plan.create_dataframe_view.name = self._name
+        plan.create_dataframe_view.input.CopyFrom(self._child.plan(session))
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return (
+            f"{i}"
+            f"<CreateView name='{self._name}' "
+            f"is_global='{self._is_gloal} "
+            f"replace='{self._replace}'>"
+        )
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>CreateView</b><br />
+              name: {self._name} <br />
+              is_global: {self._is_gloal} <br />
+              replace: {self._replace} <br />
+            {self._child_repr_()}
            </li>
         </ul>
         """
