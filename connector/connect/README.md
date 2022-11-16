@@ -70,3 +70,4 @@ When contributing a new client please be aware that we strive to have a common
 user experience across all languages. Please follow the below guidelines:
 
 * [Connection string configuration](docs/client-connection-string.md)
+* [Adding new messages](docs/adding-proto-messages.md) in the Spark Connect protocol.
