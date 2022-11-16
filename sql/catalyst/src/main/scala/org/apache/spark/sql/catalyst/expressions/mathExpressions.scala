@@ -288,7 +288,8 @@ trait CeilFloorExpressionBuilderBase extends ExpressionBuilder {
       }
       buildWithTwoParams(expressions(0), scale)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(2), funcName, numArgs)
+      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
+        expressions.map(_.sql).mkString(","), Seq(2), funcName, numArgs)
     }
   }
 }

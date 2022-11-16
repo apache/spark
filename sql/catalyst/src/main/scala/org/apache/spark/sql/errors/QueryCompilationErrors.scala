@@ -637,17 +637,21 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def invalidFunctionArgumentsError(
-      name: String, expectedInfo: String, actualNumber: Int): Throwable = {
+      sqlExpr: String, name: String, expectedInfo: String, actualNumber: Int): Throwable = {
     new AnalysisException(
       errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
       messageParameters = Map(
-        "name" -> name,
-        "expectedInfo" -> expectedInfo,
-        "actualNumber" -> actualNumber.toString))
+        "sqlExpr" -> sqlExpr,
+        "functionName" -> name,
+        "expectedNum" -> expectedInfo,
+        "actualNum" -> actualNumber.toString))
   }
 
   def invalidFunctionArgumentNumberError(
-      validParametersCount: Seq[Int], name: String, actualNumber: Int): Throwable = {
+      sqlExpr: String,
+      validParametersCount: Seq[Int],
+      name: String,
+      actualNumber: Int): Throwable = {
     if (validParametersCount.length == 0) {
       new AnalysisException(
         errorClass = "_LEGACY_ERROR_TEMP_1043",
@@ -659,7 +663,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         validParametersCount.init.mkString("one of ", ", ", " and ") +
           validParametersCount.last
       }
-      invalidFunctionArgumentsError(name, expectedNumberOfParameters, actualNumber)
+      invalidFunctionArgumentsError(sqlExpr, name, expectedNumberOfParameters, actualNumber)
     }
   }
 

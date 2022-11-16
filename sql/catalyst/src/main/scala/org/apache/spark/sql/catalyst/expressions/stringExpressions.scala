@@ -507,7 +507,8 @@ trait StringBinaryPredicateExpressionBuilderBase extends ExpressionBuilder {
         createStringPredicate(expressions(0), expressions(1))
       }
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(2), funcName, numArgs)
+      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
+        expressions.map(_.sql).mkString(","), Seq(2), funcName, numArgs)
     }
   }
 
@@ -1505,7 +1506,8 @@ trait PadExpressionBuilderBase extends ExpressionBuilder {
         createStringPad(expressions(0), expressions(1), expressions(2))
       }
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(2, 3), funcName, numArgs)
+      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
+        expressions.map(_.sql).mkString(","), Seq(2, 3), funcName, numArgs)
     }
   }
 
@@ -2424,7 +2426,8 @@ object Decode {
   def createExpr(params: Seq[Expression]): Expression = {
     params.length match {
       case 0 | 1 =>
-        throw QueryCompilationErrors.invalidFunctionArgumentsError("decode", "2", params.length)
+        throw QueryCompilationErrors.invalidFunctionArgumentsError(
+          params.map(_.sql).mkString(","), "decode", "2", params.length)
       case 2 => StringDecode(params.head, params.last)
       case _ =>
         val input = params.head

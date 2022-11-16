@@ -162,7 +162,8 @@ object TryAverageExpressionBuilder extends ExpressionBuilder {
     if (numArgs == 1) {
       Average(expressions.head, EvalMode.TRY)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(1, 2), funcName, numArgs)
+      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
+        expressions.map(_.sql).mkString(","), Seq(1, 2), funcName, numArgs)
     }
   }
 }

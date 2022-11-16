@@ -78,12 +78,22 @@ select * from range(1, 1, 1, 1, 1)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INTERNAL_ERROR",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1179",
   "messageParameters" : {
-    "message" : "Undefined error message parameter for error class: 'DATATYPE_MISMATCH.WRONG_NUM_ARGS'. Parameters: Map(name -> range, expectedInfo -> one of 1, 2, 3 and 4, actualNumber -> 5)"
-  }
+    "arguments" : "integer, integer, integer, integer, integer",
+    "details" : "[DATATYPE_MISMATCH.WRONG_NUM_ARGS] Cannot resolve 1,1,1,1,1 due to data type mismatch: The range requires one of 1, 2, 3 and 4 parameters but the actual number is 5.",
+    "name" : "range",
+    "usage" : "\n    range(start: long, end: long, step: long, numSlices: integer)\n    range(start: long, end: long, step: long)\n    range(start: long, end: long)\n    range(end: long)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 34,
+    "fragment" : "range(1, 1, 1, 1, 1)"
+  } ]
 }
 
 

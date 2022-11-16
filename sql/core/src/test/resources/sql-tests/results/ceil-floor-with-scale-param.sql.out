@@ -138,12 +138,22 @@ SELECT CEIL(2.5, 0, 0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INTERNAL_ERROR",
+  "errorClass" : "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
   "messageParameters" : {
-    "message" : "Undefined error message parameter for error class: 'DATATYPE_MISMATCH.WRONG_NUM_ARGS'. Parameters: Map(name -> ceil, expectedInfo -> 2, actualNumber -> 3)"
-  }
+    "actualNum" : "3",
+    "expectedNum" : "2",
+    "functionName" : "ceil",
+    "sqlExpr" : "2.5BD,0,0"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 22,
+    "fragment" : "CEIL(2.5, 0, 0)"
+  } ]
 }
 
 
@@ -286,10 +296,20 @@ SELECT FLOOR(2.5, 0, 0)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INTERNAL_ERROR",
+  "errorClass" : "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
   "messageParameters" : {
-    "message" : "Undefined error message parameter for error class: 'DATATYPE_MISMATCH.WRONG_NUM_ARGS'. Parameters: Map(name -> floor, expectedInfo -> 2, actualNumber -> 3)"
-  }
+    "actualNum" : "3",
+    "expectedNum" : "2",
+    "functionName" : "floor",
+    "sqlExpr" : "2.5BD,0,0"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 23,
+    "fragment" : "FLOOR(2.5, 0, 0)"
+  } ]
 }

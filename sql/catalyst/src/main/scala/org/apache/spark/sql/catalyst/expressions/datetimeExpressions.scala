@@ -172,7 +172,7 @@ object CurDateExpressionBuilder extends ExpressionBuilder {
       CurrentDate()
     } else {
       throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
-        Seq.empty, funcName, expressions.length)
+        expressions.map(_.sql).mkString(","), Seq.empty, funcName, expressions.length)
     }
   }
 }
@@ -1143,7 +1143,8 @@ object ParseToTimestampNTZExpressionBuilder extends ExpressionBuilder {
     if (numArgs == 1 || numArgs == 2) {
       ParseToTimestamp(expressions(0), expressions.drop(1).lastOption, TimestampNTZType)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(1, 2), funcName, numArgs)
+      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
+        expressions.map(_.sql).mkString(","), Seq(1, 2), funcName, numArgs)
     }
   }
 }
@@ -1180,7 +1181,8 @@ object ParseToTimestampLTZExpressionBuilder extends ExpressionBuilder {
     if (numArgs == 1 || numArgs == 2) {
       ParseToTimestamp(expressions(0), expressions.drop(1).lastOption, TimestampType)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(1, 2), funcName, numArgs)
+      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
+        expressions.map(_.sql).mkString(","), Seq(1, 2), funcName, numArgs)
     }
   }
 }
@@ -1224,7 +1226,8 @@ object TryToTimestampExpressionBuilder extends ExpressionBuilder {
         SQLConf.get.timestampType,
         failOnError = false)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(1, 2), funcName, numArgs)
+      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
+        expressions.map(_.sql).mkString(","), Seq(1, 2), funcName, numArgs)
     }
   }
 }
@@ -2518,7 +2521,8 @@ object MakeTimestampNTZExpressionBuilder extends ExpressionBuilder {
         expressions(5),
         dataType = TimestampNTZType)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(6), funcName, numArgs)
+      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
+        expressions.map(_.sql).mkString(","), Seq(6), funcName, numArgs)
     }
   }
 }
@@ -2566,7 +2570,8 @@ object MakeTimestampLTZExpressionBuilder extends ExpressionBuilder {
         expressions.drop(6).lastOption,
         dataType = TimestampType)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(6), funcName, numArgs)
+      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
+        expressions.map(_.sql).mkString(","), Seq(6), funcName, numArgs)
     }
   }
 }
@@ -2837,7 +2842,8 @@ object DatePartExpressionBuilder extends ExpressionBuilder {
       val source = expressions(1)
       Extract(field, source, Extract.createExpr(funcName, field, source))
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(2), funcName, numArgs)
+      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
+        expressions.map(_.sql).mkString(","), Seq(2), funcName, numArgs)
     }
   }
 }

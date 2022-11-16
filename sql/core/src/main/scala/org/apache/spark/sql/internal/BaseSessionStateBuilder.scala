@@ -414,7 +414,7 @@ class SparkUDFExpressionBuilder extends FunctionExpressionBuilder {
       // Check input argument size
       if (expr.inputTypes.size != input.size) {
         throw QueryCompilationErrors.invalidFunctionArgumentsError(
-          name, expr.inputTypes.size.toString, input.size)
+          expr.sql, name, expr.inputTypes.size.toString, input.size)
       }
       expr
     } else {

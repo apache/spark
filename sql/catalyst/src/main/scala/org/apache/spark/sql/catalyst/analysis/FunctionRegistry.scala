@@ -146,7 +146,7 @@ object FunctionRegistryBase {
             .filter(_.getParameterTypes.forall(_ == classOf[Expression]))
             .map(_.getParameterCount).distinct.sorted
           throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
-            validParametersCount, name, params.length)
+            expressions.map(_.sql).mkString(","), validParametersCount, name, params.length)
         }
         try {
           f.newInstance(expressions : _*).asInstanceOf[T]
