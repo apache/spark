@@ -95,7 +95,7 @@ message Read {
     string format = 1;
 
     // (Optional) If not set, Spark will infer the schema.
-    string schema = 2;
+    optional string schema = 2;
 
     // Options for the data source. The context of this map varies based on the
     // data source format. This options could be empty for valid data source format.
