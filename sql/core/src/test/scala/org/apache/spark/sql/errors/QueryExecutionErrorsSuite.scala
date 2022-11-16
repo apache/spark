@@ -28,7 +28,7 @@ import org.apache.hadoop.fs.permission.FsPermission
 import org.mockito.Mockito.{mock, spy, when}
 
 import org.apache.spark._
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util.BadRecordException
 import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions}
 import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
@@ -41,6 +41,7 @@ import org.apache.spark.sql.functions.{lit, lower, struct, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.EXCEPTION
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
+import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, DecimalType, LongType, MetadataBuilder, StructType}
 import org.apache.spark.util.Utils
@@ -722,6 +723,19 @@ class QueryExecutionErrorsSuite
         JdbcDialects.unregisterDialect(testH2DialectUnsupportedJdbcTransaction)
       }
     }
+  }
+
+  test("STREAM_FAILED: NPE in user code") {
+    val ds = spark.readStream.format("rate").load()
+    val query = ds.writeStream.foreachBatch { (_: Dataset[Row], _: Long) =>
+      val s: String = null
+      s.length: Unit
+    }.start()
+    val e = intercept[StreamingQueryException] {
+      query.awaitTermination()
+    }
+    assert(e.getErrorClass === "STREAM_FAILED")
+    assert(e.getCause.isInstanceOf[NullPointerException])
   }
 }
 
