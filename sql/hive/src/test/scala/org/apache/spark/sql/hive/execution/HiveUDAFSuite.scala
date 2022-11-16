@@ -176,9 +176,10 @@ class HiveUDAFSuite extends QueryTest
         },
         errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
         parameters = Map(
-          "name" -> "longProductSum",
-          "expectedInfo" -> "2",
-          "actualNumber" -> "1"),
+          "sqlExpr" -> "longProductSum(100)",
+          "functionName" -> "longProductSum",
+          "expectedNum" -> "2",
+          "actualNum" -> "1"),
         context = ExpectedContext(
           fragment = "longProductSum(100)",
           start = 7,

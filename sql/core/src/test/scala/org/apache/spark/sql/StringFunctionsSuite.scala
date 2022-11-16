@@ -575,10 +575,21 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       Row(null, Seq(Seq("10")), Seq(Seq("3.14"))))
 
     // Argument number exception
-    val m = intercept[AnalysisException] {
-      df.selectExpr("sentences()")
-    }.getMessage
-    assert(m.contains("Invalid number of arguments for function sentences"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("sentences()")
+      },
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+      parameters = Map(
+        "sqlExpr" -> "",
+        "functionName" -> "sentences",
+        "expectedNum" -> "one of 1, 2 and 3",
+        "actualNum" -> "0"),
+      context = ExpectedContext(
+        fragment = "sentences()",
+        start = 0,
+        stop = 10)
+    )
   }
 
   test("str_to_map function") {

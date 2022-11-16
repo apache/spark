@@ -4546,10 +4546,22 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       df.selectExpr("zip_with(a1, a2, x -> x)")
     }
     assert(ex1.getMessage.contains("The number of lambda function arguments '1' does not match"))
-    val ex2 = intercept[AnalysisException] {
-      df.selectExpr("zip_with(a1, a2, (acc, x) -> x, (acc, x) -> x)")
-    }
-    assert(ex2.getMessage.contains("Invalid number of arguments for function zip_with"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("zip_with(a1, a2, (acc, x) -> x, (acc, x) -> x)")
+      },
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+      parameters = Map(
+        "sqlExpr" -> "a1,a2,lambdafunction(x, acc, x),lambdafunction(x, acc, x)",
+        "functionName" -> "zip_with",
+        "expectedNum" -> "3",
+        "actualNum" -> "4"),
+      context = ExpectedContext(
+        fragment = "zip_with(a1, a2, (acc, x) -> x, (acc, x) -> x)",
+        start = 0,
+        stop = 45)
+    )
+    //assert(ex2.getMessage.contains("Invalid number of arguments for function zip_with"))
 
     checkError(
       exception = intercept[AnalysisException] {

@@ -2630,8 +2630,19 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("RuntimeReplaceable functions should not take extra parameters") {
-    val e = intercept[AnalysisException](sql("SELECT nvl(1, 2, 3)"))
-    assert(e.message.contains("Invalid number of arguments"))
+    checkError(
+      exception = intercept[AnalysisException](sql("SELECT nvl(1, 2, 3)")),
+      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+      parameters = Map(
+        "sqlExpr" -> "1,2,3",
+        "functionName" -> "nvl",
+        "expectedNum" -> "2",
+        "actualNum" -> "3"),
+      context = ExpectedContext(
+        fragment = "nvl(1, 2, 3)",
+        start = 7,
+        stop = 18)
+    )
   }
 
   test("SPARK-21228: InSet incorrect handling of structs") {
