@@ -55,7 +55,7 @@ public class SchemaColumnConvertNotSupportedException extends RuntimeException {
       String physicalType,
       String logicalType) {
     super("column: " + column + ", physicalType: " + physicalType +
-      ", logicalType: " + logicalType);
+        ", logicalType: " + logicalType);
     this.column = column;
     this.physicalType = physicalType;
     this.logicalType = logicalType;
