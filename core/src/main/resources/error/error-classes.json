@@ -137,6 +137,11 @@
       "Cannot resolve <sqlExpr> due to data type mismatch:"
     ],
     "subClass" : {
+      "ARRAY_FUNCTION_DIFF_TYPES" : {
+        "message" : [
+          "Input to <functionName> should have been <dataType> followed by a value with same element type, but it's [<leftType>, <rightType>]."
+        ]
+      },
       "BINARY_ARRAY_DIFF_TYPES" : {
         "message" : [
           "Input to function <functionName> should have been two <arrayType> with same element type, but it's [<leftType>, <rightType>]."
@@ -209,6 +214,46 @@
           "Input to <functionName> should all be the same type, but it's <dataType>."
         ]
       },
+      "FORMAT_CONT_THOUSANDS_SEPS" : {
+        "message" : [
+          "Thousands separators (, or G) must have digits in between them in the number format: <format>."
+        ]
+      },
+      "FORMAT_CUR_MUST_BEFORE_DEC" : {
+        "message" : [
+          "Currency characters must appear before any decimal point in the number format: <format>."
+        ]
+      },
+      "FORMAT_CUR_MUST_BEFORE_DIGIT" : {
+        "message" : [
+          "Currency characters must appear before digits in the number format: <format>."
+        ]
+      },
+      "FORMAT_EMPTY" : {
+        "message" : [
+          "The number format string cannot be empty."
+        ]
+      },
+      "FORMAT_THOUSANDS_SEPS_MUST_BEFORE_DEC" : {
+        "message" : [
+          "Thousands separators (, or G) may not appear after the decimal point in the number format: <format>."
+        ]
+      },
+      "FORMAT_UNEXPECTED_TOKEN" : {
+        "message" : [
+          "Unexpected <token> found in the format string <format>; the structure of the format string must match: [MI|S] [$] [0|9|G|,]* [.|D] [0|9]* [$] [PR|MI|S]."
+        ]
+      },
+      "FORMAT_WRONG_NUM_DIGIT" : {
+        "message" : [
+          "The format string requires at least one number digit."
+        ]
+      },
+      "FORMAT_WRONG_NUM_TOKEN" : {
+        "message" : [
+          "At most one <token> is allowed in the number format: <format>."
+        ]
+      },
       "HASH_MAP_TYPE" : {
         "message" : [
           "Input to the function <functionName> cannot contain elements of the \"MAP\" type. In Spark, same maps may have different hashcode, thus hash expressions are prohibited on \"MAP\" elements. To restore previous behavior set \"spark.sql.legacy.allowHashOnMapType\" to \"true\"."
@@ -249,7 +294,7 @@
           "The <functionName> should all be of type map, but it's <dataType>."
         ]
       },
-      "MAP_CONTAINS_KEY_DIFF_TYPES" : {
+      "MAP_FUNCTION_DIFF_TYPES" : {
         "message" : [
           "Input to <functionName> should have been <dataType> followed by a value with same key type, but it's [<leftType>, <rightType>]."
         ]
@@ -292,6 +337,14 @@
       "RANGE_FRAME_WITHOUT_ORDER" : {
         "message" : [
           "A range window frame cannot be used in an unordered window specification."
+        ]
+      },
+      "SEQUENCE_WRONG_INPUT_TYPES" : {
+        "message" : [
+          "<functionName> uses the wrong parameter type. The parameter type must conform to:",
+          "1. The start and stop expressions must resolve to the same type.",
+          "2. If start and stop expressions resolve to the <startType> type, then the step expression must resolve to the <stepType> type",
+          "3. Otherwise, if start and stop expressions resolve to the <otherStartType> type, then the step expression must resolve to the same type."
         ]
       },
       "SPECIFIED_WINDOW_FRAME_DIFF_TYPES" : {
@@ -347,11 +400,6 @@
       "UNEXPECTED_STATIC_METHOD" : {
         "message" : [
           "cannot find a static method <methodName> that matches the argument types in <className>"
-        ]
-      },
-      "UNSPECIFIED_FRAME" : {
-        "message" : [
-          "Cannot use an UnspecifiedFrame. This should have been converted during analysis."
         ]
       },
       "UNSUPPORTED_INPUT_TYPE" : {
@@ -474,15 +522,15 @@
       "Aggregate functions are not allowed in GROUP BY, but found <sqlExpr>."
     ]
   },
-  "GROUP_BY_POS_OUT_OF_RANGE" : {
+  "GROUP_BY_POS_AGGREGATE" : {
     "message" : [
-      "GROUP BY position <index> is not in select list (valid range is [1, <size>])."
+      "GROUP BY <index> refers to an expression <aggExpr> that contains an aggregate function. Aggregate functions are not allowed in GROUP BY."
     ],
     "sqlState" : "42000"
   },
-  "GROUP_BY_POS_REFERS_AGG_EXPR" : {
+  "GROUP_BY_POS_OUT_OF_RANGE" : {
     "message" : [
-      "GROUP BY <index> refers to an expression <aggExpr> that contains an aggregate function. Aggregate functions are not allowed in GROUP BY."
+      "GROUP BY position <index> is not in select list (valid range is [1, <size>])."
     ],
     "sqlState" : "42000"
   },
@@ -630,6 +678,28 @@
       "Input schema <jsonSchema> can only contain STRING as a key type for a MAP."
     ]
   },
+  "INVALID_LATERAL_JOIN_TYPE" : {
+    "message" : [
+      "The <joinType> JOIN with LATERAL correlation is not allowed because an OUTER subquery cannot correlate to its join partner. Remove the LATERAL correlation or use an INNER JOIN, or LEFT OUTER JOIN instead."
+    ]
+  },
+  "INVALID_LIKE_PATTERN" : {
+    "message" : [
+      "The pattern <pattern> is invalid."
+    ],
+    "subClass" : {
+      "ESC_AT_THE_END" : {
+        "message" : [
+          "the escape character is not allowed to end with."
+        ]
+      },
+      "ESC_IN_THE_MIDDLE" : {
+        "message" : [
+          "the escape character is not allowed to precede <char>."
+        ]
+      }
+    }
+  },
   "INVALID_PANDAS_UDF_PLACEMENT" : {
     "message" : [
       "The group aggregate pandas UDF <functionList> cannot be invoked together with as other, non-pandas aggregate functions."
@@ -674,6 +744,12 @@
       }
     }
   },
+  "INVALID_WHERE_CONDITION" : {
+    "message" : [
+      "The WHERE condition <condition> contains invalid expressions: <expressionList>.",
+      "Rewrite the query to avoid window functions, aggregate functions, and generator functions in the WHERE clause."
+    ]
+  },
   "LOCATION_ALREADY_EXISTS" : {
     "message" : [
       "Cannot name the managed table as <identifier>, as its associated location <location> already exists. Please pick a different table name, or remove the existing location first."
@@ -693,6 +769,11 @@
   "MULTI_UDF_INTERFACE_ERROR" : {
     "message" : [
       "Not allowed to implement multiple UDF interfaces, UDF class <className>"
+    ]
+  },
+  "NESTED_AGGREGATE_FUNCTION" : {
+    "message" : [
+      "It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query."
     ]
   },
   "NON_LAST_MATCHED_CLAUSE_OMIT_CONDITION" : {
@@ -916,6 +997,11 @@
       "Star (*) is not allowed in a select list when GROUP BY an ordinal position is used."
     ]
   },
+  "STREAM_FAILED" : {
+    "message" : [
+      "Query [id = <id>, runId = <runId>] terminated with exception: <message>"
+    ]
+  },
   "TABLE_OR_VIEW_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create table or view <relationName> because it already exists.",
@@ -1113,11 +1199,6 @@
       "JDBC_TRANSACTION" : {
         "message" : [
           "The target JDBC server does not support transactions and can only support ALTER TABLE with a single action."
-        ]
-      },
-      "LATERAL_JOIN_OF_TYPE" : {
-        "message" : [
-          "<joinType> JOIN with LATERAL correlation."
         ]
       },
       "LATERAL_JOIN_USING" : {
@@ -2674,11 +2755,6 @@
   "_LEGACY_ERROR_TEMP_1215" : {
     "message" : [
       "char/varchar type can only be used in the table schema. You can set <config> to true, so that Spark treat them as string type as same as Spark 3.0 and earlier."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1216" : {
-    "message" : [
-      "The pattern '<pattern>' is invalid, <message>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1218" : {
@@ -4993,11 +5069,6 @@
       "Input argument tolerance must be non-negative."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2420" : {
-    "message" : [
-      "It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2421" : {
     "message" : [
       "nondeterministic expression <sqlExpr> should not appear in the arguments of an aggregate function."
@@ -5094,22 +5165,10 @@
       "in operator <operator>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_2440" : {
-    "message" : [
-      "Aggregate/Window/Generate expressions are not valid in where clause of the query.",
-      "Expression in where clause: [<condition>]",
-      "Invalid expressions: [<invalidExprSqls>]"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2441" : {
     "message" : [
       "The query operator `<operator>` contains one or more unsupported expression types Aggregate, Window or Generate.",
       "Invalid expressions: [<invalidExprSqls>]"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2442" : {
-    "message" : [
-      "unresolved operator <operator>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2443" : {

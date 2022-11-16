@@ -78,6 +78,8 @@ class Relation(google.protobuf.message.Message):
     REPARTITION_FIELD_NUMBER: builtins.int
     RENAME_COLUMNS_BY_SAME_LENGTH_NAMES_FIELD_NUMBER: builtins.int
     RENAME_COLUMNS_BY_NAME_TO_NAME_MAP_FIELD_NUMBER: builtins.int
+    SHOW_STRING_FIELD_NUMBER: builtins.int
+    FILL_NA_FIELD_NUMBER: builtins.int
     SUMMARY_FIELD_NUMBER: builtins.int
     CROSSTAB_FIELD_NUMBER: builtins.int
     UNKNOWN_FIELD_NUMBER: builtins.int
@@ -120,6 +122,11 @@ class Relation(google.protobuf.message.Message):
     @property
     def rename_columns_by_name_to_name_map(self) -> global___RenameColumnsByNameToNameMap: ...
     @property
+    def show_string(self) -> global___ShowString: ...
+    @property
+    def fill_na(self) -> global___NAFill:
+        """NA functions"""
+    @property
     def summary(self) -> global___StatSummary:
         """stat functions"""
     @property
@@ -148,6 +155,8 @@ class Relation(google.protobuf.message.Message):
         repartition: global___Repartition | None = ...,
         rename_columns_by_same_length_names: global___RenameColumnsBySameLengthNames | None = ...,
         rename_columns_by_name_to_name_map: global___RenameColumnsByNameToNameMap | None = ...,
+        show_string: global___ShowString | None = ...,
+        fill_na: global___NAFill | None = ...,
         summary: global___StatSummary | None = ...,
         crosstab: global___StatCrosstab | None = ...,
         unknown: global___Unknown | None = ...,
@@ -163,6 +172,8 @@ class Relation(google.protobuf.message.Message):
             b"crosstab",
             "deduplicate",
             b"deduplicate",
+            "fill_na",
+            b"fill_na",
             "filter",
             b"filter",
             "join",
@@ -191,6 +202,8 @@ class Relation(google.protobuf.message.Message):
             b"sample",
             "set_op",
             b"set_op",
+            "show_string",
+            b"show_string",
             "sort",
             b"sort",
             "sql",
@@ -214,6 +227,8 @@ class Relation(google.protobuf.message.Message):
             b"crosstab",
             "deduplicate",
             b"deduplicate",
+            "fill_na",
+            b"fill_na",
             "filter",
             b"filter",
             "join",
@@ -242,6 +257,8 @@ class Relation(google.protobuf.message.Message):
             b"sample",
             "set_op",
             b"set_op",
+            "show_string",
+            b"show_string",
             "sort",
             b"sort",
             "sql",
@@ -275,6 +292,8 @@ class Relation(google.protobuf.message.Message):
         "repartition",
         "rename_columns_by_same_length_names",
         "rename_columns_by_name_to_name_map",
+        "show_string",
+        "fill_na",
         "summary",
         "crosstab",
         "unknown",
@@ -437,7 +456,11 @@ class Project(google.protobuf.message.Message):
     INPUT_FIELD_NUMBER: builtins.int
     EXPRESSIONS_FIELD_NUMBER: builtins.int
     @property
-    def input(self) -> global___Relation: ...
+    def input(self) -> global___Relation:
+        """(Optional) Input relation is optional for Project.
+
+        For example, `SELECT ABS(-1)` is valid plan without an input plan.
+        """
     @property
     def expressions(
         self,
@@ -924,18 +947,6 @@ class Sample(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    class Seed(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        SEED_FIELD_NUMBER: builtins.int
-        seed: builtins.int
-        def __init__(
-            self,
-            *,
-            seed: builtins.int = ...,
-        ) -> None: ...
-        def ClearField(self, field_name: typing_extensions.Literal["seed", b"seed"]) -> None: ...
-
     INPUT_FIELD_NUMBER: builtins.int
     LOWER_BOUND_FIELD_NUMBER: builtins.int
     UPPER_BOUND_FIELD_NUMBER: builtins.int
@@ -946,8 +957,7 @@ class Sample(google.protobuf.message.Message):
     lower_bound: builtins.float
     upper_bound: builtins.float
     with_replacement: builtins.bool
-    @property
-    def seed(self) -> global___Sample.Seed: ...
+    seed: builtins.int
     def __init__(
         self,
         *,
@@ -955,14 +965,19 @@ class Sample(google.protobuf.message.Message):
         lower_bound: builtins.float = ...,
         upper_bound: builtins.float = ...,
         with_replacement: builtins.bool = ...,
-        seed: global___Sample.Seed | None = ...,
+        seed: builtins.int | None = ...,
     ) -> None: ...
     def HasField(
-        self, field_name: typing_extensions.Literal["input", b"input", "seed", b"seed"]
+        self,
+        field_name: typing_extensions.Literal[
+            "_seed", b"_seed", "input", b"input", "seed", b"seed"
+        ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "_seed",
+            b"_seed",
             "input",
             b"input",
             "lower_bound",
@@ -975,6 +990,9 @@ class Sample(google.protobuf.message.Message):
             b"with_replacement",
         ],
     ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_seed", b"_seed"]
+    ) -> typing_extensions.Literal["seed"] | None: ...
 
 global___Sample = Sample
 
@@ -982,20 +1000,6 @@ class Range(google.protobuf.message.Message):
     """Relation of type [[Range]] that generates a sequence of integers."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-    class NumPartitions(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        NUM_PARTITIONS_FIELD_NUMBER: builtins.int
-        num_partitions: builtins.int
-        def __init__(
-            self,
-            *,
-            num_partitions: builtins.int = ...,
-        ) -> None: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["num_partitions", b"num_partitions"]
-        ) -> None: ...
 
     START_FIELD_NUMBER: builtins.int
     END_FIELD_NUMBER: builtins.int
@@ -1007,28 +1011,42 @@ class Range(google.protobuf.message.Message):
     """Required."""
     step: builtins.int
     """Required."""
-    @property
-    def num_partitions(self) -> global___Range.NumPartitions:
-        """Optional. Default value is assigned by 1) SQL conf "spark.sql.leafNodeDefaultParallelism" if
-        it is set, or 2) spark default parallelism.
-        """
+    num_partitions: builtins.int
+    """Optional. Default value is assigned by 1) SQL conf "spark.sql.leafNodeDefaultParallelism" if
+    it is set, or 2) spark default parallelism.
+    """
     def __init__(
         self,
         *,
         start: builtins.int = ...,
         end: builtins.int = ...,
         step: builtins.int = ...,
-        num_partitions: global___Range.NumPartitions | None = ...,
+        num_partitions: builtins.int | None = ...,
     ) -> None: ...
     def HasField(
-        self, field_name: typing_extensions.Literal["num_partitions", b"num_partitions"]
+        self,
+        field_name: typing_extensions.Literal[
+            "_num_partitions", b"_num_partitions", "num_partitions", b"num_partitions"
+        ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "end", b"end", "num_partitions", b"num_partitions", "start", b"start", "step", b"step"
+            "_num_partitions",
+            b"_num_partitions",
+            "end",
+            b"end",
+            "num_partitions",
+            b"num_partitions",
+            "start",
+            b"start",
+            "step",
+            b"step",
         ],
     ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_num_partitions", b"_num_partitions"]
+    ) -> typing_extensions.Literal["num_partitions"] | None: ...
 
 global___Range = Range
 
@@ -1102,6 +1120,89 @@ class Repartition(google.protobuf.message.Message):
     ) -> None: ...
 
 global___Repartition = Repartition
+
+class ShowString(google.protobuf.message.Message):
+    """Compose the string representing rows for output.
+    It will invoke 'Dataset.showString' to compute the results.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    NUMROWS_FIELD_NUMBER: builtins.int
+    TRUNCATE_FIELD_NUMBER: builtins.int
+    VERTICAL_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    numRows: builtins.int
+    """(Required) Number of rows to show."""
+    truncate: builtins.int
+    """(Required) If set to more than 0, truncates strings to
+    `truncate` characters and all cells will be aligned right.
+    """
+    vertical: builtins.bool
+    """(Required) If set to true, prints output rows vertically (one line per column value)."""
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        numRows: builtins.int | None = ...,
+        truncate: builtins.int | None = ...,
+        vertical: builtins.bool | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_numRows",
+            b"_numRows",
+            "_truncate",
+            b"_truncate",
+            "_vertical",
+            b"_vertical",
+            "input",
+            b"input",
+            "numRows",
+            b"numRows",
+            "truncate",
+            b"truncate",
+            "vertical",
+            b"vertical",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_numRows",
+            b"_numRows",
+            "_truncate",
+            b"_truncate",
+            "_vertical",
+            b"_vertical",
+            "input",
+            b"input",
+            "numRows",
+            b"numRows",
+            "truncate",
+            b"truncate",
+            "vertical",
+            b"vertical",
+        ],
+    ) -> None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_numRows", b"_numRows"]
+    ) -> typing_extensions.Literal["numRows"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_truncate", b"_truncate"]
+    ) -> typing_extensions.Literal["truncate"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_vertical", b"_vertical"]
+    ) -> typing_extensions.Literal["vertical"] | None: ...
+
+global___ShowString = ShowString
 
 class StatSummary(google.protobuf.message.Message):
     """Computes specified statistics for numeric and string columns.
@@ -1190,6 +1291,64 @@ class StatCrosstab(google.protobuf.message.Message):
     ) -> None: ...
 
 global___StatCrosstab = StatCrosstab
+
+class NAFill(google.protobuf.message.Message):
+    """Replaces null values.
+    It will invoke 'Dataset.na.fill' (same as 'DataFrameNaFunctions.fill') to compute the results.
+    Following 3 parameter combinations are supported:
+     1, 'values' only contains 1 item, 'cols' is empty:
+       replaces null values in all type-compatible columns.
+     2, 'values' only contains 1 item, 'cols' is not empty:
+       replaces null values in specified columns.
+     3, 'values' contains more than 1 items, then 'cols' is required to have the same length:
+       replaces each specified column with corresponding value.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    COLS_FIELD_NUMBER: builtins.int
+    VALUES_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    @property
+    def cols(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """(Optional) Optional list of column names to consider."""
+    @property
+    def values(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
+    ]:
+        """(Required) Values to replace null values with.
+
+        Should contain at least 1 item.
+        Only 4 data types are supported now: bool, long, double, string
+        """
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        cols: collections.abc.Iterable[builtins.str] | None = ...,
+        values: collections.abc.Iterable[
+            pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
+        ]
+        | None = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "cols", b"cols", "input", b"input", "values", b"values"
+        ],
+    ) -> None: ...
+
+global___NAFill = NAFill
 
 class RenameColumnsBySameLengthNames(google.protobuf.message.Message):
     """Rename columns on the input relation by the same length of names."""

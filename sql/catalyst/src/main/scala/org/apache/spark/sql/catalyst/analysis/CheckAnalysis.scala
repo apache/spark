@@ -18,6 +18,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
@@ -378,7 +379,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                   child.foreach {
                     case expr: Expression if AggregateExpression.isAggregate(expr) =>
                       expr.failAnalysis(
-                        errorClass = "_LEGACY_ERROR_TEMP_2420",
+                        errorClass = "NESTED_AGGREGATE_FUNCTION",
                         messageParameters = Map.empty)
                     case other => // OK
                   }
@@ -692,10 +693,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             if PlanHelper.specialExpressionsInUnsupportedOperator(f).nonEmpty =>
             val invalidExprSqls = PlanHelper.specialExpressionsInUnsupportedOperator(f).map(_.sql)
             f.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2440",
+              errorClass = "INVALID_WHERE_CONDITION",
               messageParameters = Map(
-                "condition" -> condition.sql,
-                "invalidExprSqls" -> invalidExprSqls.mkString(", ")))
+                "condition" -> toSQLExpr(condition),
+                "expressionList" -> invalidExprSqls.mkString(", ")))
 
           case other if PlanHelper.specialExpressionsInUnsupportedOperator(other).nonEmpty =>
             val invalidExprSqls =
@@ -713,9 +714,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     extendedCheckRules.foreach(_(plan))
     plan.foreachUp {
       case o if !o.resolved =>
-        o.failAnalysis(
-          errorClass = "_LEGACY_ERROR_TEMP_2442",
-          messageParameters = Map("operator" -> o.simpleString(SQLConf.get.maxToStringFields)))
+        throw SparkException.internalError(
+          msg = s"Found the unresolved operator: ${o.simpleString(SQLConf.get.maxToStringFields)}",
+          context = o.origin.getQueryContext,
+          summary = o.origin.context.summary)
       case _ =>
     }
 

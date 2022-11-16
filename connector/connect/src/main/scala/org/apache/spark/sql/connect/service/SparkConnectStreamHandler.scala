@@ -27,7 +27,6 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{Request, Response}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
-import org.apache.spark.sql.connect.command.SparkConnectCommandPlanner
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, QueryStageExec}
@@ -36,7 +35,7 @@ import org.apache.spark.sql.execution.arrow.ArrowConverters
 class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) extends Logging {
 
   // The maximum batch size in bytes for a single batch of data to be returned via proto.
-  val MAX_BATCH_SIZE: Long = 10 * 1024 * 1024
+  private val MAX_BATCH_SIZE: Long = 4 * 1024 * 1024
 
   def handle(v: Request): Unit = {
     val session =
@@ -51,8 +50,8 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
 
   def handlePlan(session: SparkSession, request: Request): Unit = {
     // Extract the plan from the request and convert it to a logical plan
-    val planner = new SparkConnectPlanner(request.getPlan.getRoot, session)
-    val dataframe = Dataset.ofRows(session, planner.transform())
+    val planner = new SparkConnectPlanner(session)
+    val dataframe = Dataset.ofRows(session, planner.transformRelation(request.getPlan.getRoot))
     try {
       processAsArrowBatches(request.getClientId, dataframe)
     } catch {
@@ -127,21 +126,23 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
   def processAsArrowBatches(clientId: String, dataframe: DataFrame): Unit = {
     val spark = dataframe.sparkSession
     val schema = dataframe.schema
-    // TODO: control the batch size instead of max records
     val maxRecordsPerBatch = spark.sessionState.conf.arrowMaxRecordsPerBatch
     val timeZoneId = spark.sessionState.conf.sessionLocalTimeZone
 
     SQLExecution.withNewExecutionId(dataframe.queryExecution, Some("collectArrow")) {
       val rows = dataframe.queryExecution.executedPlan.execute()
       val numPartitions = rows.getNumPartitions
+      // Conservatively sets it 70% because the size is not accurate but estimated.
+      val maxBatchSize = (MAX_BATCH_SIZE * 0.7).toLong
       var numSent = 0
 
       if (numPartitions > 0) {
         type Batch = (Array[Byte], Long)
 
         val batches = rows.mapPartitionsInternal { iter =>
-          ArrowConverters
-            .toArrowBatchIterator(iter, schema, maxRecordsPerBatch, timeZoneId)
+          val newIter = ArrowConverters
+            .toBatchWithSchemaIterator(iter, schema, maxRecordsPerBatch, maxBatchSize, timeZoneId)
+          newIter.map { batch: Array[Byte] => (batch, newIter.rowCountInLastBatch) }
         }
 
         val signal = new Object
@@ -160,17 +161,28 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
           ()
         }
 
-        spark.sparkContext.runJob(batches, processPartition, resultHandler)
+        spark.sparkContext.submitJob(
+          rdd = batches,
+          processPartition = processPartition,
+          partitions = Seq.range(0, numPartitions),
+          resultHandler = resultHandler,
+          resultFunc = () => ())
 
-        // The man thread will wait until 0-th partition is available,
-        // then send it to client and wait for next partition.
+        // The main thread will wait until 0-th partition is available,
+        // then send it to client and wait for the next partition.
+        // Different from the implementation of [[Dataset#collectAsArrowToPython]], it sends
+        // the arrow batches in main thread to avoid DAGScheduler thread been blocked for
+        // tasks not related to scheduling. This is particularly important if there are
+        // multiple users or clients running code at the same time.
         var currentPartitionId = 0
         while (currentPartitionId < numPartitions) {
           val partition = signal.synchronized {
-            while (!partitions.contains(currentPartitionId)) {
+            var result = partitions.remove(currentPartitionId)
+            while (result.isEmpty) {
               signal.wait()
+              result = partitions.remove(currentPartitionId)
             }
-            partitions.remove(currentPartitionId).get
+            result.get
           }
 
           partition.foreach { case (bytes, count) =>
@@ -218,8 +230,8 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
 
   def handleCommand(session: SparkSession, request: Request): Unit = {
     val command = request.getPlan.getCommand
-    val planner = new SparkConnectCommandPlanner(session, command)
-    planner.process()
+    val planner = new SparkConnectPlanner(session)
+    planner.process(command)
     responseObserver.onCompleted()
   }
 }
