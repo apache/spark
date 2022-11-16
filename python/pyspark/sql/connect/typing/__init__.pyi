@@ -24,6 +24,10 @@ ExpressionOrString = Union[str, Expression]
 
 ColumnOrString = Union[str, Column]
 
+PrimitiveType = Union[bool, float, int, str]
+
+LiteralType = PrimitiveType
+
 class FunctionBuilderCallable(Protocol):
     def __call__(self, *_: ExpressionOrString) -> ScalarFunctionExpression: ...
 

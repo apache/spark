@@ -400,6 +400,13 @@ class RemoteSparkSession(object):
     def explain_string(self, plan: pb2.Plan) -> str:
         return self._analyze(plan).explain_string
 
+    def execute_command(self, command: pb2.Command) -> None:
+        req = pb2.Request()
+        if self._user_id:
+            req.user_context.user_id = self._user_id
+        req.plan.command.CopyFrom(command)
+        self._execute_and_fetch(req)
+
     def _analyze(self, plan: pb2.Plan) -> AnalyzeResult:
         req = pb2.Request()
         if self._user_id:
