@@ -127,7 +127,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
 
   def unsupportedLateralJoinTypeError(ctx: ParserRuleContext, joinType: String): Throwable = {
     new ParseException(
-      errorClass = "UNSUPPORTED_FEATURE.LATERAL_JOIN_OF_TYPE",
+      errorClass = "INVALID_LATERAL_JOIN_TYPE",
       messageParameters = Map("joinType" -> toSQLStmt(joinType)),
       ctx)
   }

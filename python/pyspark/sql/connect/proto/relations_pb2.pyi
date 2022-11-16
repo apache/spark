@@ -79,6 +79,7 @@ class Relation(google.protobuf.message.Message):
     RENAME_COLUMNS_BY_SAME_LENGTH_NAMES_FIELD_NUMBER: builtins.int
     RENAME_COLUMNS_BY_NAME_TO_NAME_MAP_FIELD_NUMBER: builtins.int
     SHOW_STRING_FIELD_NUMBER: builtins.int
+    FILL_NA_FIELD_NUMBER: builtins.int
     SUMMARY_FIELD_NUMBER: builtins.int
     CROSSTAB_FIELD_NUMBER: builtins.int
     UNKNOWN_FIELD_NUMBER: builtins.int
@@ -123,6 +124,9 @@ class Relation(google.protobuf.message.Message):
     @property
     def show_string(self) -> global___ShowString: ...
     @property
+    def fill_na(self) -> global___NAFill:
+        """NA functions"""
+    @property
     def summary(self) -> global___StatSummary:
         """stat functions"""
     @property
@@ -152,6 +156,7 @@ class Relation(google.protobuf.message.Message):
         rename_columns_by_same_length_names: global___RenameColumnsBySameLengthNames | None = ...,
         rename_columns_by_name_to_name_map: global___RenameColumnsByNameToNameMap | None = ...,
         show_string: global___ShowString | None = ...,
+        fill_na: global___NAFill | None = ...,
         summary: global___StatSummary | None = ...,
         crosstab: global___StatCrosstab | None = ...,
         unknown: global___Unknown | None = ...,
@@ -167,6 +172,8 @@ class Relation(google.protobuf.message.Message):
             b"crosstab",
             "deduplicate",
             b"deduplicate",
+            "fill_na",
+            b"fill_na",
             "filter",
             b"filter",
             "join",
@@ -220,6 +227,8 @@ class Relation(google.protobuf.message.Message):
             b"crosstab",
             "deduplicate",
             b"deduplicate",
+            "fill_na",
+            b"fill_na",
             "filter",
             b"filter",
             "join",
@@ -284,6 +293,7 @@ class Relation(google.protobuf.message.Message):
         "rename_columns_by_same_length_names",
         "rename_columns_by_name_to_name_map",
         "show_string",
+        "fill_na",
         "summary",
         "crosstab",
         "unknown",
@@ -1281,6 +1291,64 @@ class StatCrosstab(google.protobuf.message.Message):
     ) -> None: ...
 
 global___StatCrosstab = StatCrosstab
+
+class NAFill(google.protobuf.message.Message):
+    """Replaces null values.
+    It will invoke 'Dataset.na.fill' (same as 'DataFrameNaFunctions.fill') to compute the results.
+    Following 3 parameter combinations are supported:
+     1, 'values' only contains 1 item, 'cols' is empty:
+       replaces null values in all type-compatible columns.
+     2, 'values' only contains 1 item, 'cols' is not empty:
+       replaces null values in specified columns.
+     3, 'values' contains more than 1 items, then 'cols' is required to have the same length:
+       replaces each specified column with corresponding value.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    COLS_FIELD_NUMBER: builtins.int
+    VALUES_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    @property
+    def cols(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """(Optional) Optional list of column names to consider."""
+    @property
+    def values(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
+    ]:
+        """(Required) Values to replace null values with.
+
+        Should contain at least 1 item.
+        Only 4 data types are supported now: bool, long, double, string
+        """
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        cols: collections.abc.Iterable[builtins.str] | None = ...,
+        values: collections.abc.Iterable[
+            pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
+        ]
+        | None = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "cols", b"cols", "input", b"input", "values", b"values"
+        ],
+    ) -> None: ...
+
+global___NAFill = NAFill
 
 class RenameColumnsBySameLengthNames(google.protobuf.message.Message):
     """Rename columns on the input relation by the same length of names."""

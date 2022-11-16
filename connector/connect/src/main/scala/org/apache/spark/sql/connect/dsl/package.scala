@@ -226,6 +226,58 @@ package object dsl {
       }
     }
 
+    implicit class DslNAFunctions(val logicalPlan: Relation) {
+
+      private def convertValue(value: Any) = {
+        value match {
+          case b: Boolean => Expression.Literal.newBuilder().setBoolean(b).build()
+          case l: Long => Expression.Literal.newBuilder().setI64(l).build()
+          case d: Double => Expression.Literal.newBuilder().setFp64(d).build()
+          case s: String => Expression.Literal.newBuilder().setString(s).build()
+          case o => throw new Exception(s"Unsupported value type: $o")
+        }
+      }
+
+      def fillValue(value: Any): Relation = {
+        Relation
+          .newBuilder()
+          .setFillNa(
+            proto.NAFill
+              .newBuilder()
+              .setInput(logicalPlan)
+              .addAllValues(Seq(convertValue(value)).asJava)
+              .build())
+          .build()
+      }
+
+      def fillColumns(value: Any, cols: Seq[String]): Relation = {
+        Relation
+          .newBuilder()
+          .setFillNa(
+            proto.NAFill
+              .newBuilder()
+              .setInput(logicalPlan)
+              .addAllCols(cols.toSeq.asJava)
+              .addAllValues(Seq(convertValue(value)).asJava)
+              .build())
+          .build()
+      }
+
+      def fillValueMap(valueMap: Map[String, Any]): Relation = {
+        val (cols, values) = valueMap.mapValues(convertValue).toSeq.unzip
+        Relation
+          .newBuilder()
+          .setFillNa(
+            proto.NAFill
+              .newBuilder()
+              .setInput(logicalPlan)
+              .addAllCols(cols.asJava)
+              .addAllValues(values.asJava)
+              .build())
+          .build()
+      }
+    }
+
     implicit class DslStatFunctions(val logicalPlan: Relation) {
       def crosstab(col1: String, col2: String): Relation = {
         Relation
@@ -487,6 +539,8 @@ package object dsl {
           .setRepartition(
             Repartition.newBuilder().setInput(logicalPlan).setNumPartitions(num).setShuffle(true))
           .build()
+
+      def na: DslNAFunctions = new DslNAFunctions(logicalPlan)
 
       def stat: DslStatFunctions = new DslStatFunctions(logicalPlan)
 
