@@ -28,6 +28,69 @@ import org.apache.spark.sql.catalyst.util.ToNumberParser
 import org.apache.spark.sql.types.{AbstractDataType, DataType, Decimal, DecimalType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
+abstract class ToNumberBase(left: Expression, right: Expression, errorOnFail: Boolean)
+  extends BinaryExpression with Serializable with ImplicitCastInputTypes with NullIntolerant {
+
+  private lazy val numberFormatter = {
+    val value = right.eval()
+    if (value != null) {
+      new ToNumberParser(value.toString.toUpperCase(Locale.ROOT), errorOnFail)
+    } else {
+      null
+    }
+  }
+
+  override def dataType: DataType = if (numberFormatter != null) {
+    numberFormatter.parsedDecimalType
+  } else {
+    DecimalType.USER_DEFAULT
+  }
+
+  override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val inputTypeCheck = super.checkInputDataTypes()
+    if (inputTypeCheck.isSuccess) {
+      if (!right.foldable) {
+        DataTypeMismatch(
+          errorSubClass = "NON_FOLDABLE_INPUT",
+          messageParameters = Map(
+            "inputName" -> toSQLId(right.prettyName),
+            "inputType" -> toSQLType(right.dataType),
+            "inputExpr" -> toSQLExpr(right)
+          )
+        )
+      } else if (numberFormatter == null) {
+        TypeCheckResult.TypeCheckSuccess
+      } else {
+        numberFormatter.checkInputDataTypes()
+      }
+    } else {
+      inputTypeCheck
+    }
+  }
+
+  override def nullSafeEval(string: Any, format: Any): Any = {
+    val input = string.asInstanceOf[UTF8String]
+    numberFormatter.parse(input)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val builder =
+      ctx.addReferenceObj("builder", numberFormatter, classOf[ToNumberParser].getName)
+    val eval = left.genCode(ctx)
+    ev.copy(code =
+      code"""
+        |${eval.code}
+        |boolean ${ev.isNull} = ${eval.isNull} || ($builder == null);
+        |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        |if (!${ev.isNull}) {
+        |  ${ev.value} = $builder.parse(${eval.value});
+        |}
+      """.stripMargin)
+  }
+}
+
 /**
  * A function that converts strings to decimal values, returning an exception if the input string
  * fails to match the format string.
@@ -70,50 +133,10 @@ import org.apache.spark.unsafe.types.UTF8String
   since = "3.3.0",
   group = "string_funcs")
 case class ToNumber(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
-  private lazy val numberFormat = right.eval().toString.toUpperCase(Locale.ROOT)
-  private lazy val numberFormatter = new ToNumberParser(numberFormat, true)
+  extends ToNumberBase(left, right, true) {
 
-  override def dataType: DataType = numberFormatter.parsedDecimalType
-  override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
-  override def checkInputDataTypes(): TypeCheckResult = {
-    val inputTypeCheck = super.checkInputDataTypes()
-    if (inputTypeCheck.isSuccess) {
-      if (right.foldable) {
-        numberFormatter.checkInputDataTypes()
-      } else {
-        DataTypeMismatch(
-          errorSubClass = "NON_FOLDABLE_INPUT",
-          messageParameters = Map(
-            "inputName" -> toSQLId(right.prettyName),
-            "inputType" -> toSQLType(right.dataType),
-            "inputExpr" -> toSQLExpr(right)
-          )
-        )
-      }
-    } else {
-      inputTypeCheck
-    }
-  }
   override def prettyName: String = "to_number"
-  override def nullSafeEval(string: Any, format: Any): Any = {
-    val input = string.asInstanceOf[UTF8String]
-    numberFormatter.parse(input)
-  }
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val builder =
-      ctx.addReferenceObj("builder", numberFormatter, classOf[ToNumberParser].getName)
-    val eval = left.genCode(ctx)
-    ev.copy(code =
-      code"""
-        |${eval.code}
-        |boolean ${ev.isNull} = ${eval.isNull};
-        |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        |if (!${ev.isNull}) {
-        |  ${ev.value} = $builder.parse(${eval.value});
-        |}
-      """.stripMargin)
-  }
+
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): ToNumber =
     copy(left = newLeft, right = newRight)
@@ -145,33 +168,12 @@ case class ToNumber(left: Expression, right: Expression)
   since = "3.3.0",
   group = "string_funcs")
 case class TryToNumber(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
-  private lazy val numberFormat = right.eval().toString.toUpperCase(Locale.ROOT)
-  private lazy val numberFormatter = new ToNumberParser(numberFormat, false)
+  extends ToNumberBase(left, right, false) {
 
-  override def dataType: DataType = numberFormatter.parsedDecimalType
-  override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
   override def nullable: Boolean = true
-  override def checkInputDataTypes(): TypeCheckResult = ToNumber(left, right).checkInputDataTypes()
+
   override def prettyName: String = "try_to_number"
-  override def nullSafeEval(string: Any, format: Any): Any = {
-    val input = string.asInstanceOf[UTF8String]
-    numberFormatter.parse(input)
-  }
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val builder =
-      ctx.addReferenceObj("builder", numberFormatter, classOf[ToNumberParser].getName)
-    val eval = left.genCode(ctx)
-    ev.copy(code =
-      code"""
-        |${eval.code}
-        |boolean ${ev.isNull} = ${eval.isNull};
-        |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        |if (!${ev.isNull}) {
-        |  ${ev.value} = $builder.parse(${eval.value});
-        |}
-      """.stripMargin)
-  }
+
   override protected def withNewChildrenInternal(
       newLeft: Expression,
       newRight: Expression): TryToNumber =
