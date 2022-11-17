@@ -17,6 +17,7 @@
 import uuid
 from typing import cast, get_args, TYPE_CHECKING, Callable, Any
 
+import json
 import decimal
 import datetime
 
@@ -81,6 +82,71 @@ class Expression(object):
 
     def __str__(self) -> str:
         ...
+
+    def alias(self, *alias: str, **kwargs: Any) -> "ColumnAlias":
+        """
+        Returns this column aliased with a new name or names (in the case of expressions that
+        return more than one column, such as explode).
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        alias : str
+            desired column names (collects all positional arguments passed)
+
+        Other Parameters
+        ----------------
+        metadata: dict
+            a dict of information to be stored in ``metadata`` attribute of the
+            corresponding :class:`StructField <pyspark.sql.types.StructField>` (optional, keyword
+            only argument)
+
+        Returns
+        -------
+        :class:`Column`
+            Column representing whether each element of Column is aliased with new name or names.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
+        >>> df.select(df.age.alias("age2")).collect()
+        [Row(age2=2), Row(age2=5)]
+        >>> df.select(df.age.alias("age3", metadata={'max': 99})).schema['age3'].metadata['max']
+        99
+        """
+        metadata = kwargs.pop("metadata", None)
+        assert not kwargs, "Unexpected kwargs where passed: %s" % kwargs
+        return ColumnAlias(self, list(alias), metadata)
+
+
+class ColumnAlias(Expression):
+    def __init__(self, parent: Expression, alias: list[str], metadata: Any):
+
+        self._alias = alias
+        self._metadata = metadata
+        self._parent = parent
+
+    def to_plan(self, session: "RemoteSparkSession") -> "proto.Expression":
+        if len(self._alias) == 1:
+            exp = proto.Expression()
+            exp.alias.name.append(self._alias[0])
+            exp.alias.expr.CopyFrom(self._parent.to_plan(session))
+
+            if self._metadata:
+                exp.alias.metadata = json.dumps(self._metadata)
+            return exp
+        else:
+            if self._metadata:
+                raise ValueError("metadata can only be provided for a single column")
+            exp = proto.Expression()
+            exp.alias.name.extend(self._alias)
+            exp.alias.expr.CopyFrom(self._parent.to_plan(session))
+            return exp
+
+    def __str__(self) -> str:
+        return f"Alias({self._parent}, ({','.join(self._alias)}))"
 
 
 class LiteralExpression(Expression):
