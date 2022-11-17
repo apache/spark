@@ -207,11 +207,17 @@ class LikeSimplificationSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
-      .where((((((StartsWith($"a", "abc") || EndsWith($"a", "xyz")) ||
-        (Length($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def")))) ||
-        Contains($"a", "mn")) || ($"a" === "")) || ($"a" === "abc")) ||
-        ($"a" likeAny("abc\\%", "abc\\%def", "%mn\\%")))
-      .analyze
+      .where(
+        (
+          (
+            (StartsWith($"a", "abc") || EndsWith($"a", "xyz")) ||
+            (Length($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def")) ||
+              Contains($"a", "mn"))
+          ) || (
+            ($"a" === "")  || ($"a" === "abc")
+          )
+        ) || ($"a" likeAny("abc\\%", "abc\\%def", "%mn\\%"))
+      ).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -224,11 +230,19 @@ class LikeSimplificationSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
-      .where((((((Not(StartsWith($"a", "abc")) || Not(EndsWith($"a", "xyz"))) ||
-        Not(Length($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def")))) ||
-        Not(Contains($"a", "mn"))) || Not($"a" === "")) || Not($"a" === "abc")) ||
-        ($"a" notLikeAny("abc\\%", "abc\\%def", "%mn\\%")))
-      .analyze
+      .where(
+        (
+          (
+            (Not(StartsWith($"a", "abc")) || Not(EndsWith($"a", "xyz"))) ||
+              (
+                Not(Length($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def"))) ||
+                Not(Contains($"a", "mn"))
+              )
+          ) || (
+            Not($"a" === "") || Not($"a" === "abc")
+          )
+        ) || ($"a" notLikeAny("abc\\%", "abc\\%def", "%mn\\%"))
+      ).analyze
 
     comparePlans(optimized, correctAnswer)
   }
