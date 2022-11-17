@@ -52,7 +52,13 @@ To use the release version of Spark Connect:
 ### Run Tests
 
 ```bash
+# Run a single Python class.
 ./python/run-tests --testnames 'pyspark.sql.tests.connect.test_connect_basic'
+```
+
+```bash
+# Run all Spark Connect Python tests as a module.
+./python/run-tests --module pyspark-connect
 ```
 
 
@@ -70,3 +76,4 @@ When contributing a new client please be aware that we strive to have a common
 user experience across all languages. Please follow the below guidelines:
 
 * [Connection string configuration](docs/client-connection-string.md)
+* [Adding new messages](docs/adding-proto-messages.md) in the Spark Connect protocol.

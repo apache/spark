@@ -1153,6 +1153,22 @@ class DatasetSuite extends QueryTest
       errorClass = "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS",
       parameters = Map("relationName" -> "`tempView`"))
     dataset.sparkSession.catalog.dropTempView("tempView")
+
+    withDatabase("test_db") {
+      withSQLConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_MULTIPLE_NAME_PARTS.key -> "false") {
+        spark.sql("CREATE DATABASE IF NOT EXISTS test_db")
+        val e = intercept[AnalysisException](
+          dataset.createTempView("test_db.tempView"))
+        checkError(e,
+          errorClass = "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS",
+          parameters = Map("actualName" -> "test_db.tempView"))
+      }
+
+      withSQLConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_MULTIPLE_NAME_PARTS.key -> "true") {
+          dataset.createTempView("test_db.tempView")
+          assert(spark.catalog.tableExists("tempView"))
+      }
+    }
   }
 
   test("SPARK-15381: physical object operator should define `reference` correctly") {

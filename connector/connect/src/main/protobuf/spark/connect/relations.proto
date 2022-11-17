@@ -67,11 +67,13 @@ message Unknown {}
 
 // Common metadata of all relations.
 message RelationCommon {
+  // (Required) Shared relation metadata.
   string source_info = 1;
 }
 
 // Relation that uses a SQL query to generate the output.
 message SQL {
+  // (Required) The SQL query.
   string query = 1;
 }
 
@@ -84,15 +86,20 @@ message Read {
   }
 
   message NamedTable {
+    // (Required) Unparsed identifier for the table.
     string unparsed_identifier = 1;
   }
 
   message DataSource {
-    // Required. Supported formats include: parquet, orc, text, json, parquet, csv, avro.
+    // (Required) Supported formats include: parquet, orc, text, json, parquet, csv, avro.
     string format = 1;
-    // Optional. If not set, Spark will infer the schema.
-    string schema = 2;
-    // The key is case insensitive.
+
+    // (Optional) If not set, Spark will infer the schema.
+    optional string schema = 2;
+
+    // Options for the data source. The context of this map varies based on the
+    // data source format. This options could be empty for valid data source format.
+    // The map key is case insensitive.
     map<string, string> options = 3;
   }
 }
@@ -106,13 +113,18 @@ message Project {
   //
   // For example, `SELECT ABS(-1)` is valid plan without an input plan.
   Relation input = 1;
+
+  // (Required) A Project requires at least one expression.
   repeated Expression expressions = 3;
 }
 
 // Relation that applies a boolean expression `condition` on each row of `input` to produce
 // the output result.
 message Filter {
+  // (Required) Input relation for a Filter.
   Relation input = 1;
+
+  // (Required) A Filter must have a condition expression.
   Expression condition = 2;
 }
 
@@ -120,10 +132,20 @@ message Filter {
 //
 // `left` and `right` must be present.
 message Join {
+  // (Required) Left input relation for a Join.
   Relation left = 1;
+
+  // (Required) Right input relation for a Join.
   Relation right = 2;
+
+  // (Optional) The join condition. Could be unset when `using_columns` is utilized.
+  //
+  // This field does not co-exist with using_columns.
   Expression join_condition = 3;
+
+  // (Required) The join type.
   JoinType join_type = 4;
+
   // Optional. using_columns provides a list of columns that should present on both sides of
   // the join inputs that this Join will join on. For example A JOIN B USING col_name is
   // equivalent to A JOIN B on A.col_name = B.col_name.
@@ -144,11 +166,25 @@ message Join {
 
 // Relation of type [[SetOperation]]
 message SetOperation {
+  // (Required) Left input relation for a Set operation.
   Relation left_input = 1;
+
+  // (Required) Right input relation for a Set operation.
   Relation right_input = 2;
+
+  // (Required) The Set operation type.
   SetOpType set_op_type = 3;
-  bool is_all = 4;
-  bool by_name = 5;
+
+  // (Optional) If to remove duplicate rows.
+  //
+  // True to preserve all results.
+  // False to remove duplicate rows.
+  optional bool is_all = 4;
+
+  // (Optional) If to perform the Set operation based on name resolution.
+  //
+  // Only UNION supports this option.
+  optional bool by_name = 5;
 
   enum SetOpType {
     SET_OP_TYPE_UNSPECIFIED = 0;
@@ -160,29 +196,42 @@ message SetOperation {
 
 // Relation of type [[Limit]] that is used to `limit` rows from the input relation.
 message Limit {
+  // (Required) Input relation for a Limit.
   Relation input = 1;
+
+  // (Required) the limit.
   int32 limit = 2;
 }
 
 // Relation of type [[Offset]] that is used to read rows staring from the `offset` on
 // the input relation.
 message Offset {
+  // (Required) Input relation for an Offset.
   Relation input = 1;
+
+  // (Required) the limit.
   int32 offset = 2;
 }
 
 // Relation of type [[Aggregate]].
 message Aggregate {
+  // (Required) Input relation for a Aggregate.
   Relation input = 1;
+
   repeated Expression grouping_expressions = 2;
   repeated Expression result_expressions = 3;
 }
 
 // Relation of type [[Sort]].
 message Sort {
+  // (Required) Input relation for a Sort.
   Relation input = 1;
+
+  // (Required) Sort fields.
   repeated SortField sort_fields = 2;
-  bool is_global = 3;
+
+  // (Optional) if this is a global sort.
+  optional bool is_global = 3;
 
   message SortField {
     Expression expression = 1;
@@ -206,33 +255,56 @@ message Sort {
 // Relation of type [[Deduplicate]] which have duplicate rows removed, could consider either only
 // the subset of columns or all the columns.
 message Deduplicate {
+  // (Required) Input relation for a Deduplicate.
   Relation input = 1;
+
+  // (Optional) Deduplicate based on a list of column names.
+  //
+  // This field does not co-use with `all_columns_as_keys`.
   repeated string column_names = 2;
-  bool all_columns_as_keys = 3;
+
+  // (Optional) Deduplicate based on all the columns of the input relation.
+  //
+  // This field does not co-use with `column_names`.
+  optional bool all_columns_as_keys = 3;
 }
 
+// A relation that does not need to be qualified by name.
 message LocalRelation {
+  // (Optional) A list qualified attributes.
   repeated Expression.QualifiedAttribute attributes = 1;
   // TODO: support local data.
 }
 
 // Relation of type [[Sample]] that samples a fraction of the dataset.
 message Sample {
+  // (Required) Input relation for a Sample.
   Relation input = 1;
+
+  // (Required) lower bound.
   double lower_bound = 2;
+
+  // (Required) upper bound.
   double upper_bound = 3;
-  bool with_replacement = 4;
+
+  // (Optional) Whether to sample with replacement.
+  optional bool with_replacement = 4;
+
+  // (Optional) The random seed.
   optional int64 seed = 5;
 }
 
 // Relation of type [[Range]] that generates a sequence of integers.
 message Range {
-  // Optional. Default value = 0
-  int64 start = 1;
-  // Required.
+  // (Optional) Default value = 0
+  optional int64 start = 1;
+
+  // (Required)
   int64 end = 2;
-  // Required.
+
+  // (Required)
   int64 step = 3;
+
   // Optional. Default value is assigned by 1) SQL conf "spark.sql.leafNodeDefaultParallelism" if
   // it is set, or 2) spark default parallelism.
   optional int32 num_partitions = 4;
@@ -240,24 +312,26 @@ message Range {
 
 // Relation alias.
 message SubqueryAlias {
-  // Required. The input relation.
+  // (Required) The input relation of SubqueryAlias.
   Relation input = 1;
-  // Required. The alias.
+
+  // (Required) The alias.
   string alias = 2;
-  // Optional. Qualifier of the alias.
+
+  // (Optional) Qualifier of the alias.
   repeated string qualifier = 3;
 }
 
 // Relation repartition.
 message Repartition {
-  // Required. The input relation.
+  // (Required) The input relation of Repartition.
   Relation input = 1;
 
-  // Required. Must be positive.
+  // (Required) Must be positive.
   int32 num_partitions = 2;
 
-  // Optional. Default value is false.
-  bool shuffle = 3;
+  // (Optional) Default value is false.
+  optional bool shuffle = 3;
 }
 
 // Compose the string representing rows for output.
@@ -267,14 +341,14 @@ message ShowString {
   Relation input = 1;
 
   // (Required) Number of rows to show.
-  optional int32 numRows = 2;
+  int32 numRows = 2;
 
   // (Required) If set to more than 0, truncates strings to
   // `truncate` characters and all cells will be aligned right.
-  optional int32 truncate = 3;
+  int32 truncate = 3;
 
   // (Required) If set to true, prints output rows vertically (one line per column value).
-  optional bool vertical = 4;
+  bool vertical = 4;
 }
 
 // Computes specified statistics for numeric and string columns.
@@ -344,10 +418,10 @@ message NAFill {
 
 // Rename columns on the input relation by the same length of names.
 message RenameColumnsBySameLengthNames {
-  // Required. The input relation.
+  // (Required) The input relation of RenameColumnsBySameLengthNames.
   Relation input = 1;
 
-  // Required.
+  // (Required)
   //
   // The number of columns of the input relation must be equal to the length
   // of this field. If this is not true, an exception will be returned.
@@ -357,11 +431,11 @@ message RenameColumnsBySameLengthNames {
 
 // Rename columns on the input relation by a map with name to name mapping.
 message RenameColumnsByNameToNameMap {
-  // Required. The input relation.
+  // (Required) The input relation.
   Relation input = 1;
 
 
-  // Required.
+  // (Required)
   //
   // Renaming column names of input relation from A to B where A is the map key
   // and B is the map value. This is a no-op if schema doesn't contain any A. It

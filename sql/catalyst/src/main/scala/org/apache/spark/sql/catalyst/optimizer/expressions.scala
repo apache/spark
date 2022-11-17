@@ -954,7 +954,7 @@ object FoldablePropagation extends Rule[LogicalPlan] {
       case j: Join =>
         val (newChildren, foldableMaps) = j.children.map(propagateFoldables).unzip
         val foldableMap = AttributeMap(
-          foldableMaps.foldLeft(Iterable.empty[(Attribute, Alias)])(_ ++ _.baseMap.values).toSeq)
+          foldableMaps.foldLeft(Iterable.empty[(Attribute, Alias)])(_ ++ _.baseMap.values))
         val newJoin =
           replaceFoldable(j.withNewChildren(newChildren).asInstanceOf[Join], foldableMap)
         val missDerivedAttrsSet: AttributeSet = AttributeSet(newJoin.joinType match {
@@ -966,7 +966,7 @@ object FoldablePropagation extends Rule[LogicalPlan] {
         })
         val newFoldableMap = AttributeMap(foldableMap.baseMap.values.filterNot {
           case (attr, _) => missDerivedAttrsSet.contains(attr)
-        }.toSeq)
+        })
         (newJoin, newFoldableMap)
 
       // For other plans, they are not safe to apply foldable propagation, and they should not
