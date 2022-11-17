@@ -4561,7 +4561,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         start = 0,
         stop = 45)
     )
-    //assert(ex2.getMessage.contains("Invalid number of arguments for function zip_with"))
 
     checkError(
       exception = intercept[AnalysisException] {
