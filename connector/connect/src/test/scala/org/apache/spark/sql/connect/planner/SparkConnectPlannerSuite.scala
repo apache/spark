@@ -33,7 +33,11 @@ import org.apache.spark.sql.test.SharedSparkSession
 trait SparkConnectPlanTest extends SharedSparkSession {
 
   def transform(rel: proto.Relation): logical.LogicalPlan = {
-    new SparkConnectPlanner(rel, spark).transform()
+    new SparkConnectPlanner(spark).transformRelation(rel)
+  }
+
+  def transform(cmd: proto.Command): Unit = {
+    new SparkConnectPlanner(spark).process(cmd)
   }
 
   def readRel: proto.Relation =
@@ -75,24 +79,23 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
   test("Simple Limit") {
     assertThrows[IndexOutOfBoundsException] {
-      new SparkConnectPlanner(
-        proto.Relation.newBuilder
-          .setLimit(proto.Limit.newBuilder.setLimit(10))
-          .build(),
-        None.orNull)
-        .transform()
+      new SparkConnectPlanner(None.orNull)
+        .transformRelation(
+          proto.Relation.newBuilder
+            .setLimit(proto.Limit.newBuilder.setLimit(10))
+            .build())
     }
   }
 
   test("InvalidInputs") {
     // No Relation Set
     intercept[IndexOutOfBoundsException](
-      new SparkConnectPlanner(proto.Relation.newBuilder().build(), None.orNull).transform())
+      new SparkConnectPlanner(None.orNull).transformRelation(proto.Relation.newBuilder().build()))
 
     intercept[InvalidPlanInput](
-      new SparkConnectPlanner(
-        proto.Relation.newBuilder.setUnknown(proto.Unknown.newBuilder().build()).build(),
-        None.orNull).transform())
+      new SparkConnectPlanner(None.orNull)
+        .transformRelation(
+          proto.Relation.newBuilder.setUnknown(proto.Unknown.newBuilder().build()).build()))
 
   }
 

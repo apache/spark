@@ -21,6 +21,7 @@ import scala.language.implicitConversions
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto._
+import org.apache.spark.connect.proto.Expression.ExpressionString
 import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.connect.proto.SetOperation.SetOpType
 import org.apache.spark.sql.SaveMode
@@ -78,7 +79,28 @@ package object dsl {
     implicit class DslExpression(val expr: Expression) {
       def as(alias: String): Expression = Expression
         .newBuilder()
-        .setAlias(Expression.Alias.newBuilder().setName(alias).setExpr(expr))
+        .setAlias(Expression.Alias.newBuilder().addName(alias).setExpr(expr))
+        .build()
+
+      def as(alias: String, metadata: String): Expression = Expression
+        .newBuilder()
+        .setAlias(
+          Expression.Alias
+            .newBuilder()
+            .setExpr(expr)
+            .addName(alias)
+            .setMetadata(metadata)
+            .build())
+        .build()
+
+      def as(alias: Seq[String]): Expression = Expression
+        .newBuilder()
+        .setAlias(
+          Expression.Alias
+            .newBuilder()
+            .setExpr(expr)
+            .addAllName(alias.asJava)
+            .build())
         .build()
 
       def <(other: Expression): Expression =
@@ -98,6 +120,13 @@ package object dsl {
         .newBuilder()
         .setUnresolvedFunction(
           Expression.UnresolvedFunction.newBuilder().addParts("min").addArguments(e))
+        .build()
+
+    def proto_explode(e: Expression): Expression =
+      Expression
+        .newBuilder()
+        .setUnresolvedFunction(
+          Expression.UnresolvedFunction.newBuilder().addParts("explode").addArguments(e))
         .build()
 
     /**
@@ -181,6 +210,19 @@ package object dsl {
         writeOp.setInput(logicalPlan)
         Command.newBuilder().setWriteOperation(writeOp.build()).build()
       }
+
+      def createView(name: String, global: Boolean, replace: Boolean): Command = {
+        Command
+          .newBuilder()
+          .setCreateDataframeView(
+            CreateDataFrameViewCommand
+              .newBuilder()
+              .setName(name)
+              .setIsGlobal(global)
+              .setReplace(replace)
+              .setInput(logicalPlan))
+          .build()
+      }
     }
   }
 
@@ -202,8 +244,7 @@ package object dsl {
           range.setStep(1L)
         }
         if (numPartitions.isDefined) {
-          range.setNumPartitions(
-            proto.Range.NumPartitions.newBuilder().setNumPartitions(numPartitions.get))
+          range.setNumPartitions(numPartitions.get)
         }
         Relation.newBuilder().setRange(range).build()
       }
@@ -211,6 +252,84 @@ package object dsl {
       def sql(sqlText: String): Relation = {
         Relation.newBuilder().setSql(SQL.newBuilder().setQuery(sqlText)).build()
       }
+    }
+
+    implicit class DslNAFunctions(val logicalPlan: Relation) {
+
+      private def convertValue(value: Any) = {
+        value match {
+          case b: Boolean => Expression.Literal.newBuilder().setBoolean(b).build()
+          case l: Long => Expression.Literal.newBuilder().setI64(l).build()
+          case d: Double => Expression.Literal.newBuilder().setFp64(d).build()
+          case s: String => Expression.Literal.newBuilder().setString(s).build()
+          case o => throw new Exception(s"Unsupported value type: $o")
+        }
+      }
+
+      def fillValue(value: Any): Relation = {
+        Relation
+          .newBuilder()
+          .setFillNa(
+            proto.NAFill
+              .newBuilder()
+              .setInput(logicalPlan)
+              .addAllValues(Seq(convertValue(value)).asJava)
+              .build())
+          .build()
+      }
+
+      def fillColumns(value: Any, cols: Seq[String]): Relation = {
+        Relation
+          .newBuilder()
+          .setFillNa(
+            proto.NAFill
+              .newBuilder()
+              .setInput(logicalPlan)
+              .addAllCols(cols.toSeq.asJava)
+              .addAllValues(Seq(convertValue(value)).asJava)
+              .build())
+          .build()
+      }
+
+      def fillValueMap(valueMap: Map[String, Any]): Relation = {
+        val (cols, values) = valueMap.mapValues(convertValue).toSeq.unzip
+        Relation
+          .newBuilder()
+          .setFillNa(
+            proto.NAFill
+              .newBuilder()
+              .setInput(logicalPlan)
+              .addAllCols(cols.asJava)
+              .addAllValues(values.asJava)
+              .build())
+          .build()
+      }
+    }
+
+    implicit class DslStatFunctions(val logicalPlan: Relation) {
+      def crosstab(col1: String, col2: String): Relation = {
+        Relation
+          .newBuilder()
+          .setCrosstab(
+            proto.StatCrosstab
+              .newBuilder()
+              .setInput(logicalPlan)
+              .setCol1(col1)
+              .setCol2(col2)
+              .build())
+          .build()
+      }
+    }
+
+    def select(exprs: Expression*): Relation = {
+      Relation
+        .newBuilder()
+        .setProject(
+          Project
+            .newBuilder()
+            .addAllExpressions(exprs.toIterable.asJava)
+            .build())
+        .build()
     }
 
     implicit class DslLogicalPlan(val logicalPlan: Relation) {
@@ -225,6 +344,14 @@ package object dsl {
               .build())
           .build()
       }
+
+      def selectExpr(exprs: String*): Relation =
+        select(exprs.map { expr =>
+          Expression
+            .newBuilder()
+            .setExpressionString(ExpressionString.newBuilder().setExpression(expr))
+            .build()
+        }: _*)
 
       def limit(limit: Int): Relation = {
         Relation
@@ -339,7 +466,7 @@ package object dsl {
               .setUpperBound(upperBound)
               .setLowerBound(lowerBound)
               .setWithReplacement(withReplacement)
-              .setSeed(Sample.Seed.newBuilder().setSeed(seed).build())
+              .setSeed(seed)
               .build())
           .build()
       }
@@ -441,19 +568,40 @@ package object dsl {
             Repartition.newBuilder().setInput(logicalPlan).setNumPartitions(num).setShuffle(true))
           .build()
 
+      def na: DslNAFunctions = new DslNAFunctions(logicalPlan)
+
+      def stat: DslStatFunctions = new DslStatFunctions(logicalPlan)
+
       def summary(statistics: String*): Relation = {
         Relation
           .newBuilder()
-          .setStatFunction(
-            proto.StatFunction
+          .setSummary(
+            proto.StatSummary
               .newBuilder()
               .setInput(logicalPlan)
-              .setSummary(
-                proto.StatFunction.Summary
-                  .newBuilder()
-                  .addAllStatistics(statistics.toSeq.asJava)
-                  .build())
+              .addAllStatistics(statistics.toSeq.asJava)
               .build())
+          .build()
+      }
+
+      def toDF(columnNames: String*): Relation =
+        Relation
+          .newBuilder()
+          .setRenameColumnsBySameLengthNames(
+            RenameColumnsBySameLengthNames
+              .newBuilder()
+              .setInput(logicalPlan)
+              .addAllColumnNames(columnNames.asJava))
+          .build()
+
+      def withColumnsRenamed(renameColumnsMap: Map[String, String]): Relation = {
+        Relation
+          .newBuilder()
+          .setRenameColumnsByNameToNameMap(
+            RenameColumnsByNameToNameMap
+              .newBuilder()
+              .setInput(logicalPlan)
+              .putAllRenameColumnsMap(renameColumnsMap.asJava))
           .build()
       }
 

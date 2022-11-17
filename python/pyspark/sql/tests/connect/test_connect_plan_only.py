@@ -70,10 +70,42 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertEqual(plan.root.filter.condition.unresolved_function.parts, [">"])
         self.assertEqual(len(plan.root.filter.condition.unresolved_function.arguments), 2)
 
+    def test_fill_na(self):
+        # SPARK-41128: Test fill na
+        df = self.connect.readTable(table_name=self.tbl_name)
+
+        plan = df.fillna(value=1)._plan.to_proto(self.connect)
+        self.assertEqual(len(plan.root.fill_na.values), 1)
+        self.assertEqual(plan.root.fill_na.values[0].i64, 1)
+        self.assertEqual(plan.root.fill_na.cols, [])
+
+        plan = df.na.fill(value="xyz")._plan.to_proto(self.connect)
+        self.assertEqual(len(plan.root.fill_na.values), 1)
+        self.assertEqual(plan.root.fill_na.values[0].string, "xyz")
+        self.assertEqual(plan.root.fill_na.cols, [])
+
+        plan = df.na.fill(value="xyz", subset=["col_a", "col_b"])._plan.to_proto(self.connect)
+        self.assertEqual(len(plan.root.fill_na.values), 1)
+        self.assertEqual(plan.root.fill_na.values[0].string, "xyz")
+        self.assertEqual(plan.root.fill_na.cols, ["col_a", "col_b"])
+
+        plan = df.na.fill(value=True, subset=("col_a", "col_b", "col_c"))._plan.to_proto(
+            self.connect
+        )
+        self.assertEqual(len(plan.root.fill_na.values), 1)
+        self.assertEqual(plan.root.fill_na.values[0].boolean, True)
+        self.assertEqual(plan.root.fill_na.cols, ["col_a", "col_b", "col_c"])
+
+        plan = df.fillna({"col_a": 1.5, "col_b": "abc"})._plan.to_proto(self.connect)
+        self.assertEqual(len(plan.root.fill_na.values), 2)
+        self.assertEqual(plan.root.fill_na.values[0].fp64, 1.5)
+        self.assertEqual(plan.root.fill_na.values[1].string, "abc")
+        self.assertEqual(plan.root.fill_na.cols, ["col_a", "col_b"])
+
     def test_summary(self):
         df = self.connect.readTable(table_name=self.tbl_name)
         plan = df.filter(df.col_name > 3).summary()._plan.to_proto(self.connect)
-        self.assertEqual(plan.root.stat_function.summary.statistics, [])
+        self.assertEqual(plan.root.summary.statistics, [])
 
         plan = (
             df.filter(df.col_name > 3)
@@ -81,9 +113,19 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
             ._plan.to_proto(self.connect)
         )
         self.assertEqual(
-            plan.root.stat_function.summary.statistics,
+            plan.root.summary.statistics,
             ["count", "mean", "stddev", "min", "25%"],
         )
+
+    def test_crosstab(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+        plan = df.filter(df.col_name > 3).crosstab("col_a", "col_b")._plan.to_proto(self.connect)
+        self.assertEqual(plan.root.crosstab.col1, "col_a")
+        self.assertEqual(plan.root.crosstab.col2, "col_b")
+
+        plan = df.stat.crosstab("col_a", "col_b")._plan.to_proto(self.connect)
+        self.assertEqual(plan.root.crosstab.col1, "col_a")
+        self.assertEqual(plan.root.crosstab.col2, "col_b")
 
     def test_limit(self):
         df = self.connect.readTable(table_name=self.tbl_name)
@@ -111,7 +153,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertEqual(plan.root.sample.lower_bound, 0.0)
         self.assertEqual(plan.root.sample.upper_bound, 0.4)
         self.assertEqual(plan.root.sample.with_replacement, True)
-        self.assertEqual(plan.root.sample.seed.seed, -1)
+        self.assertEqual(plan.root.sample.seed, -1)
 
     def test_sort(self):
         df = self.connect.readTable(table_name=self.tbl_name)
@@ -162,6 +204,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         df = self.connect.readTable(table_name=self.tbl_name)
         plan = df.alias("table_alias")._plan.to_proto(self.connect)
         self.assertEqual(plan.root.subquery_alias.alias, "table_alias")
+        self.assertIsNotNone(plan.root.subquery_alias.input)
 
     def test_range(self):
         plan = self.connect.range(start=10, end=20, step=3, num_partitions=4)._plan.to_proto(
@@ -170,7 +213,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertEqual(plan.root.range.start, 10)
         self.assertEqual(plan.root.range.end, 20)
         self.assertEqual(plan.root.range.step, 3)
-        self.assertEqual(plan.root.range.num_partitions.num_partitions, 4)
+        self.assertEqual(plan.root.range.num_partitions, 4)
 
         plan = self.connect.range(start=10, end=20)._plan.to_proto(self.connect)
         self.assertEqual(plan.root.range.start, 10)
@@ -210,10 +253,49 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         df2 = self.connect.readTable(table_name=self.tbl_name)
         plan1 = df1.union(df2)._plan.to_proto(self.connect)
         self.assertTrue(plan1.root.set_op.is_all)
+        self.assertEqual(proto.SetOperation.SET_OP_TYPE_UNION, plan1.root.set_op.set_op_type)
         plan2 = df1.union(df2)._plan.to_proto(self.connect)
         self.assertTrue(plan2.root.set_op.is_all)
+        self.assertEqual(proto.SetOperation.SET_OP_TYPE_UNION, plan2.root.set_op.set_op_type)
         plan3 = df1.unionByName(df2, True)._plan.to_proto(self.connect)
         self.assertTrue(plan3.root.set_op.by_name)
+        self.assertEqual(proto.SetOperation.SET_OP_TYPE_UNION, plan3.root.set_op.set_op_type)
+
+    def test_except(self):
+        # SPARK-41010: test `except` API for Python client.
+        df1 = self.connect.readTable(table_name=self.tbl_name)
+        df2 = self.connect.readTable(table_name=self.tbl_name)
+        plan1 = df1.exceptAll(df2)._plan.to_proto(self.connect)
+        self.assertTrue(plan1.root.set_op.is_all)
+        self.assertEqual(proto.SetOperation.SET_OP_TYPE_EXCEPT, plan1.root.set_op.set_op_type)
+
+    def test_intersect(self):
+        # SPARK-41010: test `intersect` API for Python client.
+        df1 = self.connect.readTable(table_name=self.tbl_name)
+        df2 = self.connect.readTable(table_name=self.tbl_name)
+        plan1 = df1.intersect(df2)._plan.to_proto(self.connect)
+        self.assertFalse(plan1.root.set_op.is_all)
+        self.assertEqual(proto.SetOperation.SET_OP_TYPE_INTERSECT, plan1.root.set_op.set_op_type)
+        plan2 = df1.intersectAll(df2)._plan.to_proto(self.connect)
+        self.assertTrue(plan2.root.set_op.is_all)
+        self.assertEqual(proto.SetOperation.SET_OP_TYPE_INTERSECT, plan2.root.set_op.set_op_type)
+
+    def test_coalesce_and_repartition(self):
+        # SPARK-41026: test Coalesce and Repartition API in Python client.
+        df = self.connect.readTable(table_name=self.tbl_name)
+        plan1 = df.coalesce(10)._plan.to_proto(self.connect)
+        self.assertEqual(10, plan1.root.repartition.num_partitions)
+        self.assertFalse(plan1.root.repartition.shuffle)
+        plan2 = df.repartition(20)._plan.to_proto(self.connect)
+        self.assertTrue(plan2.root.repartition.shuffle)
+
+        with self.assertRaises(ValueError) as context:
+            df.coalesce(-1)._plan.to_proto(self.connect)
+        self.assertTrue("numPartitions must be positive" in str(context.exception))
+
+        with self.assertRaises(ValueError) as context:
+            df.repartition(-1)._plan.to_proto(self.connect)
+        self.assertTrue("numPartitions must be positive" in str(context.exception))
 
 
 if __name__ == "__main__":
