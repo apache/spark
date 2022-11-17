@@ -82,7 +82,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    */
   def set(unscaled: Long, precision: Int, scale: Int): Decimal = {
     if (setOrNull(unscaled, precision, scale) == null) {
-      throw QueryExecutionErrors.unscaledValueTooLargeForPrecisionError()
+      throw QueryExecutionErrors.unscaledValueTooLargeForPrecisionError(this, precision, scale)
     }
     this
   }
