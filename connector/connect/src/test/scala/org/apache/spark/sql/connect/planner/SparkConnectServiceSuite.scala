@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.connect.planner
 
-import scala.collection.mutable
 import scala.concurrent.Promise
 import scala.concurrent.duration._
 
@@ -66,7 +65,7 @@ class SparkConnectServiceSuite extends SharedSparkSession {
     }
   }
 
-  test("failures in the arrow collect path should not cause hangs") {
+  test("SPARK-41165: failures in the arrow collect path should not cause hangs") {
     val instance = new SparkConnectService(false)
 
     // Add an always crashing UDF
@@ -77,24 +76,29 @@ class SparkConnectServiceSuite extends SharedSparkSession {
     session.udf.register("insta_kill", instaKill)
 
     val connect = new MockRemoteSession()
-    val context = proto.Request.UserContext.newBuilder()
+    val context = proto.Request.UserContext
+      .newBuilder()
       .setUserId("c1")
       .build()
-    val plan = proto.Plan.newBuilder()
+    val plan = proto.Plan
+      .newBuilder()
       .setRoot(connect.sql("select insta_kill(id) from range(10)"))
       .build()
-    val request = proto.Request.newBuilder()
+    val request = proto.Request
+      .newBuilder()
       .setPlan(plan)
       .setUserContext(context)
       .build()
 
     val promise = Promise[Seq[proto.Response]]
-    instance.executePlan(request, new StreamObserver[proto.Response] {
-      private val responses = mutable.Buffer.empty[proto.Response]
-      override def onNext(v: proto.Response): Unit = responses += v
-      override def onError(throwable: Throwable): Unit = promise.failure(throwable)
-      override def onCompleted(): Unit = promise.success(responses)
-    })
+    instance.executePlan(
+      request,
+      new StreamObserver[proto.Response] {
+        private val responses = Seq.newBuilder[proto.Response]
+        override def onNext(v: proto.Response): Unit = responses += v
+        override def onError(throwable: Throwable): Unit = promise.failure(throwable)
+        override def onCompleted(): Unit = promise.success(responses.result())
+      })
     intercept[SparkException] {
       ThreadUtils.awaitResult(promise.future, 2.seconds)
     }

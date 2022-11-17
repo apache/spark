@@ -142,11 +142,9 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
       if (numPartitions > 0) {
         type Batch = (Array[Byte], Long)
 
-        val batches = rows.mapPartitionsInternal(SparkConnectStreamHandler.rowToArrowConverter(
-          schema,
-          maxRecordsPerBatch,
-          maxBatchSize,
-          timeZoneId))
+        val batches = rows.mapPartitionsInternal(
+          SparkConnectStreamHandler
+            .rowToArrowConverter(schema, maxRecordsPerBatch, maxBatchSize, timeZoneId))
 
         val signal = new Object
         val partitions = collection.mutable.Map.empty[Int, Array[Batch]]
@@ -264,8 +262,7 @@ object SparkConnectStreamHandler {
       schema: StructType,
       maxRecordsPerBatch: Int,
       maxBatchSize: Long,
-      timeZoneId: String)
-  : Iterator[InternalRow] => Iterator[Batch] = { rows =>
+      timeZoneId: String): Iterator[InternalRow] => Iterator[Batch] = { rows =>
     val batches = ArrowConverters.toBatchWithSchemaIterator(
       rows,
       schema,
