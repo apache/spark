@@ -92,8 +92,8 @@ class ObjectSerializerPruningSuite extends PlanTest {
       val optimized = Optimize.execute(query.analyze)
 
       val prunedSerializer = serializerObject.serializer.head.transformDown {
-        case CreateNamedStruct(children) =>
-          CreateNamedStruct(children.take(2))
+        case CreateNamedStruct(children, nullable) =>
+          CreateNamedStruct(children.take(2), nullable)
       }.transformUp {
         // Aligns null literal in `If` expression to make it resolvable.
         case i @ If(_: IsNull, Literal(null, dt), ser) if !dt.sameType(ser.dataType) =>
@@ -122,7 +122,7 @@ class ObjectSerializerPruningSuite extends PlanTest {
       val optimized = Optimize.execute(query.analyze)
 
       val prunedSerializer = serializerObject.serializer.head.transformDown {
-        case CreateNamedStruct(children) => CreateNamedStruct(children.take(2))
+        case CreateNamedStruct(children, nullable) => CreateNamedStruct(children.take(2), nullable)
       }.transformUp {
         // Aligns null literal in `If` expression to make it resolvable.
         case i @ If(invoke: Invoke, Literal(null, dt), ser) if invoke.functionName == "isNullAt" &&

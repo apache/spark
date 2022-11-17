@@ -276,7 +276,8 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
           }
         }
         val metadataAlias =
-          Alias(CreateStruct(structColumns), METADATA_NAME)(exprId = metadataStruct.exprId)
+          Alias(CreateStruct(structColumns, metadataStruct.nullable),
+            METADATA_NAME)(exprId = metadataStruct.exprId)
         execution.ProjectExec(
           readDataColumns ++ partitionColumns :+ metadataAlias, scan)
       }.getOrElse(scan)

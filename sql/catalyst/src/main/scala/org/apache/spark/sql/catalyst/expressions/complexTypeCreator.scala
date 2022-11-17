@@ -365,7 +365,7 @@ object CreateStruct {
    * It should not be used for `struct` expressions or functions explicitly called
    * by users.
    */
-  def apply(children: Seq[Expression]): CreateNamedStruct = {
+  def apply(children: Seq[Expression], nullable: Boolean = false): CreateNamedStruct = {
     CreateNamedStruct(children.zipWithIndex.flatMap {
       // For multi-part column name like `struct(a.b.c)`, it may be resolved into:
       //   1. Attribute if `a.b.c` is simply a qualified column name.
@@ -379,7 +379,7 @@ object CreateStruct {
       case (e: NamedExpression, _) if e.resolved => Seq(Literal(e.name), e)
       case (e: NamedExpression, _) => Seq(NamePlaceholder, e)
       case (e, index) => Seq(Literal(s"col${index + 1}"), e)
-    })
+    }, nullable)
   }
 
   /**
@@ -433,14 +433,14 @@ object CreateStruct {
   since = "1.5.0",
   group = "struct_funcs")
 // scalastyle:on line.size.limit
-case class CreateNamedStruct(children: Seq[Expression]) extends Expression with NoThrow {
+case class CreateNamedStruct(children: Seq[Expression], override val nullable: Boolean = false)
+  extends Expression with NoThrow {
+
   lazy val (nameExprs, valExprs) = children.grouped(2).map {
     case Seq(name, value) => (name, value)
   }.toList.unzip
 
   lazy val names = nameExprs.map(_.eval(EmptyRow))
-
-  override def nullable: Boolean = false
 
   override def foldable: Boolean = valExprs.forall(_.foldable)
 

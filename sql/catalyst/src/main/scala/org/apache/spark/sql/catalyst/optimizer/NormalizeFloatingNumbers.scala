@@ -108,8 +108,8 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
     case a: Alias =>
       a.withNewChildren(Seq(normalize(a.child)))
 
-    case CreateNamedStruct(children) =>
-      CreateNamedStruct(children.map(normalize))
+    case CreateNamedStruct(children, nullable) =>
+      CreateNamedStruct(children.map(normalize), nullable)
 
     case CreateArray(children, useStringTypeWhenEmpty) =>
       CreateArray(children.map(normalize), useStringTypeWhenEmpty)
