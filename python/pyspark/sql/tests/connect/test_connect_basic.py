@@ -33,14 +33,15 @@ from pyspark.sql.types import StructType, StructField, LongType, StringType
 if have_pandas:
     from pyspark.sql.connect.client import RemoteSparkSession, ChannelBuilder
     from pyspark.sql.connect.function_builder import udf
-    from pyspark.sql.connect.functions import lit
+    from pyspark.sql.connect.functions import lit, col
 from pyspark.sql.dataframe import DataFrame
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.utils import ReusedPySparkTestCase
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
-class SparkConnectSQLTestCase(ReusedPySparkTestCase, SQLTestUtils):
+class SparkConnectSQLTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLTestUtils):
     """Parent test fixture class for all Spark Connect related
     test cases."""
 
@@ -192,20 +193,17 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertTrue("special_alias" in plan_text)
 
     def test_range(self):
-        self.assertTrue(
-            self.connect.range(start=0, end=10)
-            .toPandas()
-            .equals(self.spark.range(start=0, end=10).toPandas())
+        self.assert_eq(
+            self.connect.range(start=0, end=10).toPandas(),
+            self.spark.range(start=0, end=10).toPandas(),
         )
-        self.assertTrue(
-            self.connect.range(start=0, end=10, step=3)
-            .toPandas()
-            .equals(self.spark.range(start=0, end=10, step=3).toPandas())
+        self.assert_eq(
+            self.connect.range(start=0, end=10, step=3).toPandas(),
+            self.spark.range(start=0, end=10, step=3).toPandas(),
         )
-        self.assertTrue(
-            self.connect.range(start=0, end=10, step=3, numPartitions=2)
-            .toPandas()
-            .equals(self.spark.range(start=0, end=10, step=3, numPartitions=2).toPandas())
+        self.assert_eq(
+            self.connect.range(start=0, end=10, step=3, numPartitions=2).toPandas(),
+            self.spark.range(start=0, end=10, step=3, numPartitions=2).toPandas(),
         )
 
     def test_create_global_temp_view(self):
@@ -235,29 +233,21 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         # | null|   3| 3.0|
         # +-----+----+----+
 
-        self.assertTrue(
-            self.connect.sql(query)
-            .fillna(True)
-            .toPandas()
-            .equals(self.spark.sql(query).fillna(True).toPandas())
+        self.assert_eq(
+            self.connect.sql(query).fillna(True).toPandas(),
+            self.spark.sql(query).fillna(True).toPandas(),
         )
-        self.assertTrue(
-            self.connect.sql(query)
-            .fillna(2)
-            .toPandas()
-            .equals(self.spark.sql(query).fillna(2).toPandas())
+        self.assert_eq(
+            self.connect.sql(query).fillna(2).toPandas(),
+            self.spark.sql(query).fillna(2).toPandas(),
         )
-        self.assertTrue(
-            self.connect.sql(query)
-            .fillna(2, ["a", "b"])
-            .toPandas()
-            .equals(self.spark.sql(query).fillna(2, ["a", "b"]).toPandas())
+        self.assert_eq(
+            self.connect.sql(query).fillna(2, ["a", "b"]).toPandas(),
+            self.spark.sql(query).fillna(2, ["a", "b"]).toPandas(),
         )
-        self.assertTrue(
-            self.connect.sql(query)
-            .na.fill({"a": True, "b": 2})
-            .toPandas()
-            .equals(self.spark.sql(query).na.fill({"a": True, "b": 2}).toPandas())
+        self.assert_eq(
+            self.connect.sql(query).na.fill({"a": True, "b": 2}).toPandas(),
+            self.spark.sql(query).na.fill({"a": True, "b": 2}).toPandas(),
         )
 
     def test_empty_dataset(self):
@@ -300,6 +290,20 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         else:
             actualResult = pandasResult.values.tolist()
             self.assertEqual(len(expectResult), len(actualResult))
+
+    def test_alias(self) -> None:
+        """Testing supported and unsupported alias"""
+        col0 = (
+            self.connect.range(1, 10)
+            .select(col("id").alias("name", metadata={"max": 99}))
+            .schema()
+            .names[0]
+        )
+        self.assertEqual("name", col0)
+
+        with self.assertRaises(grpc.RpcError) as exc:
+            self.connect.range(1, 10).select(col("id").alias("this", "is", "not")).collect()
+        self.assertIn("Buffer(this, is, not)", str(exc.exception))
 
 
 class ChannelBuilderTests(ReusedPySparkTestCase):

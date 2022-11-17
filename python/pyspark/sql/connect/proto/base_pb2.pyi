@@ -135,6 +135,7 @@ class Request(google.protobuf.message.Message):
     CLIENT_ID_FIELD_NUMBER: builtins.int
     USER_CONTEXT_FIELD_NUMBER: builtins.int
     PLAN_FIELD_NUMBER: builtins.int
+    CLIENT_TYPE_FIELD_NUMBER: builtins.int
     client_id: builtins.str
     """The client_id is set by the client to be able to collate streaming responses from
     different queries.
@@ -145,23 +146,50 @@ class Request(google.protobuf.message.Message):
     @property
     def plan(self) -> global___Plan:
         """The logical plan to be executed / analyzed."""
+    client_type: builtins.str
+    """Provides optional information about the client sending the request. This field
+    can be used for language or version specific information and is only intended for
+    logging purposes and will not be interpreted by the server.
+    """
     def __init__(
         self,
         *,
         client_id: builtins.str = ...,
         user_context: global___Request.UserContext | None = ...,
         plan: global___Plan | None = ...,
+        client_type: builtins.str | None = ...,
     ) -> None: ...
     def HasField(
         self,
-        field_name: typing_extensions.Literal["plan", b"plan", "user_context", b"user_context"],
+        field_name: typing_extensions.Literal[
+            "_client_type",
+            b"_client_type",
+            "client_type",
+            b"client_type",
+            "plan",
+            b"plan",
+            "user_context",
+            b"user_context",
+        ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "client_id", b"client_id", "plan", b"plan", "user_context", b"user_context"
+            "_client_type",
+            b"_client_type",
+            "client_id",
+            b"client_id",
+            "client_type",
+            b"client_type",
+            "plan",
+            b"plan",
+            "user_context",
+            b"user_context",
         ],
     ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_client_type", b"_client_type"]
+    ) -> typing_extensions.Literal["client_type"] | None: ...
 
 global___Request = Request
 

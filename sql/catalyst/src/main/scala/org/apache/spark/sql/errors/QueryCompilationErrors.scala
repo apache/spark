@@ -3354,11 +3354,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def protobufClassLoadError(
       protobufClassName: String,
-      cause: Throwable): Throwable = {
+      explanation: String,
+      cause: Throwable = null): Throwable = {
     new AnalysisException(
       errorClass = "CANNOT_LOAD_PROTOBUF_CLASS",
-      messageParameters = Map("protobufClassName" -> protobufClassName),
-      cause = Option(cause.getCause))
+      messageParameters = Map(
+        "protobufClassName" -> protobufClassName,
+        "explanation" -> explanation
+      ),
+      cause = Option(cause))
   }
 
   def protobufMessageTypeError(protobufClassName: String): Throwable = {

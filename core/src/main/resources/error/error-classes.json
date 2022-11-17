@@ -50,7 +50,7 @@
   },
   "CANNOT_LOAD_PROTOBUF_CLASS" : {
     "message" : [
-      "Could not load Protobuf class with name <protobufClassName>. Ensure the class name includes package prefix."
+      "Could not load Protobuf class with name <protobufClassName>. <explanation>."
     ]
   },
   "CANNOT_PARSE_DECIMAL" : {
@@ -840,7 +840,7 @@
   },
   "NUMERIC_VALUE_OUT_OF_RANGE" : {
     "message" : [
-      "<value> cannot be represented as Decimal(<precision>, <scale>). If necessary set <config> to \"false\" to bypass this error."
+      "<value> cannot be represented as Decimal(<precision>, <scale>). If necessary set <config> to \"false\" to bypass this error, and return NULL instead."
     ],
     "sqlState" : "22005"
   },
@@ -1024,6 +1024,11 @@
     ],
     "sqlState" : "42000"
   },
+  "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS" : {
+    "message" : [
+      "CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names, but got: <actualName>"
+    ]
+  },
   "TOO_MANY_ARRAY_ELEMENTS" : {
     "message" : [
       "Cannot initialize array with <numElements> elements of size <size>"
@@ -1132,11 +1137,6 @@
       }
     },
     "sqlState" : "42000"
-  },
-  "UNSCALED_VALUE_TOO_LARGE_FOR_PRECISION" : {
-    "message" : [
-      "Unscaled value too large for precision. If necessary set <ansiConfig> to false to bypass this error."
-    ]
   },
   "UNSUPPORTED_DATATYPE" : {
     "message" : [
@@ -1248,7 +1248,7 @@
       },
       "PYTHON_UDF_IN_ON_CLAUSE" : {
         "message" : [
-          "Python UDF in the ON clause of a <joinType> JOIN."
+          "Python UDF in the ON clause of a <joinType> JOIN. In case of an INNNER JOIN consider rewriting to a CROSS JOIN with a WHERE clause."
         ]
       },
       "REPEATED_PIVOT" : {
@@ -1427,6 +1427,21 @@
       "2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { override def call(s: String): Integer = s.length() }, IntegerType)`, if input types are all non primitive",
       "3. set \"spark.sql.legacy.allowUntypedScalaUDF\" to \"true\" and use this API with caution"
     ]
+  },
+  "VIEW_ALREADY_EXISTS" : {
+    "message" : [
+      "Cannot create view <relationName> because it already exists.",
+      "Choose a different name, drop or replace the existing object, or add the IF NOT EXISTS clause to tolerate pre-existing objects."
+    ],
+    "sqlState" : "42000"
+  },
+  "VIEW_NOT_FOUND" : {
+    "message" : [
+      "The view <relationName> cannot be found. Verify the spelling and correctness of the schema and catalog.",
+      "If you did not qualify the name with a schema, verify the current_schema() output, or qualify the name with the correct schema and catalog.",
+      "To tolerate the error on drop use DROP VIEW IF EXISTS."
+    ],
+    "sqlState" : "42000"
   },
   "_LEGACY_ERROR_TEMP_0001" : {
     "message" : [
@@ -1661,11 +1676,6 @@
   "_LEGACY_ERROR_TEMP_0053" : {
     "message" : [
       "It is not allowed to define a TEMPORARY view with IF NOT EXISTS."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0054" : {
-    "message" : [
-      "It is not allowed to add database prefix `<database>` for the TEMPORARY view name."
     ]
   },
   "_LEGACY_ERROR_TEMP_0056" : {

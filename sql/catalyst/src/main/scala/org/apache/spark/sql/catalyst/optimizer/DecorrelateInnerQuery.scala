@@ -209,7 +209,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
     if (duplicates.nonEmpty) {
       val aliasMap = AttributeMap(duplicates.map { dup =>
         dup -> Alias(dup, dup.toString)()
-      }.toSeq)
+      })
       val aliasedExpressions = innerPlan.output.map { ref =>
         aliasMap.getOrElse(ref, ref)
       }
