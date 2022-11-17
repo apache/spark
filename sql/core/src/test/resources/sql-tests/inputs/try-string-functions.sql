@@ -46,3 +46,5 @@ select try_to_binary(null, cast(null as string));
 -- invalid format
 select try_to_binary('abc', 1);
 select try_to_binary('abc', 'invalidFormat');
+-- format must be folable
+SELECT try_to_binary(col1, col2) from values ('abc', 'utf-8') as data(col1, col2);

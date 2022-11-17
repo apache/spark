@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{DataType, NumericType}
 
 case class TryEval(child: Expression) extends UnaryExpression with NullIntolerant {
@@ -227,7 +228,8 @@ case class TryToBinary(
 
   def this(expr: Expression, formatExpression: Expression) =
     this(expr, Some(formatExpression),
-      TryEval(ToBinary(expr, Some(formatExpression), nullOnInvalidFormat = true)))
+      TryEval(ToBinary(expr, Some(TryToBinary.checkFormat(formatExpression)),
+        nullOnInvalidFormat = true)))
 
   override def prettyName: String = "try_to_binary"
 
@@ -235,4 +237,14 @@ case class TryToBinary(
 
   override protected def withNewChildInternal(newChild: Expression): Expression =
     this.copy(replacement = newChild)
+}
+
+object TryToBinary {
+  def checkFormat(format: Expression): Expression = {
+    if (format.foldable) {
+      format
+    } else {
+      throw QueryCompilationErrors.requireLiteralParameter("try_to_binary", "format", "string")
+    }
+  }
 }

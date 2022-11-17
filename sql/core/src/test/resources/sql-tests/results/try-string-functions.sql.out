@@ -281,3 +281,12 @@ select try_to_binary('abc', 'invalidFormat')
 struct<try_to_binary(abc, invalidFormat):binary>
 -- !query output
 NULL
+
+
+-- !query
+SELECT try_to_binary(col1, col2) from values ('abc', 'utf-8') as data(col1, col2)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+The 'format' parameter of function 'try_to_binary' needs to be a string literal.; line 1 pos 7
