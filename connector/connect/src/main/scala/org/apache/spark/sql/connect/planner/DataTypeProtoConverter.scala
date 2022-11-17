@@ -21,7 +21,7 @@ import scala.collection.convert.ImplicitConversions._
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.SaveMode
-import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, IntegerType, LongType, MapType, StringType, StructField, StructType}
 
 /**
  * This object offers methods to convert to/from connect proto to catalyst types.
@@ -32,6 +32,7 @@ object DataTypeProtoConverter {
       case proto.DataType.KindCase.I32 => IntegerType
       case proto.DataType.KindCase.STRING => StringType
       case proto.DataType.KindCase.STRUCT => convertProtoDataTypeToCatalyst(t.getStruct)
+      case proto.DataType.KindCase.MAP => convertProtoDataTypeToCatalyst(t.getMap)
       case _ =>
         throw InvalidPlanInput(s"Does not support convert ${t.getKindCase} to catalyst types.")
     }
@@ -44,6 +45,10 @@ object DataTypeProtoConverter {
     StructType.apply(structFields)
   }
 
+  private def convertProtoDataTypeToCatalyst(t: proto.DataType.Map): MapType = {
+    MapType(toCatalystType(t.getKey), toCatalystType(t.getValue))
+  }
+
   def toConnectProtoType(t: DataType): proto.DataType = {
     t match {
       case IntegerType =>
@@ -54,9 +59,22 @@ object DataTypeProtoConverter {
         proto.DataType.newBuilder().setI64(proto.DataType.I64.getDefaultInstance).build()
       case struct: StructType =>
         toConnectProtoStructType(struct)
+      case map: MapType => toConnectProtoMapType(map)
       case _ =>
         throw InvalidPlanInput(s"Does not support convert ${t.typeName} to connect proto types.")
     }
+  }
+
+  def toConnectProtoMapType(schema: MapType): proto.DataType = {
+    proto.DataType
+      .newBuilder()
+      .setMap(
+        proto.DataType.Map
+          .newBuilder()
+          .setKey(toConnectProtoType(schema.keyType))
+          .setValue(toConnectProtoType(schema.valueType))
+          .build())
+      .build()
   }
 
   def toConnectProtoStructType(schema: StructType): proto.DataType = {

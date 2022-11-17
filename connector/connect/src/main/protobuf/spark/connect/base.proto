@@ -48,6 +48,11 @@ message Request {
   // The logical plan to be executed / analyzed.
   Plan plan = 3;
 
+  // Provides optional information about the client sending the request. This field
+  // can be used for language or version specific information and is only intended for
+  // logging purposes and will not be interpreted by the server.
+  optional string client_type = 4;
+
   // User Context is used to refer to one particular user session that is executing
   // queries in the backend.
   message UserContext {
