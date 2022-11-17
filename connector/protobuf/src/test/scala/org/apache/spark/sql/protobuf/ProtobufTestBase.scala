@@ -26,14 +26,12 @@ trait ProtobufTestBase extends SQLTestUtils {
    * if the first choice throw NPE, try to return the full path of alternative.
    * The result path doesn't contain the `file:/` protocol part.
    */
-  protected def testFile(
-      firstChoiceFileName: String,
-      alternateFileName: String): String = {
-    try {
-      testFile(firstChoiceFileName).replace("file:/", "/")
+  protected def testFile(fileName: String, alternateFileName: String): String = {
+    val ret = try {
+      testFile(fileName)
     } catch {
-      case _: NullPointerException =>
-        testFile(alternateFileName).replace("file:/", "/")
+      case _: NullPointerException => testFile(alternateFileName)
     }
+    ret.replace("file:/", "/")
   }
 }
