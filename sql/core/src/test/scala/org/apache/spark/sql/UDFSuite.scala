@@ -106,7 +106,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       },
       errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
       parameters = Map(
-        "sqlExpr" -> "'abcd',2,3,4",
+        "sqlExpr" -> "abcd,2,3,4",
         "functionName" -> "substr",
         "expectedNum" -> "one of 2 and 3",
         "actualNum" -> "4"),
