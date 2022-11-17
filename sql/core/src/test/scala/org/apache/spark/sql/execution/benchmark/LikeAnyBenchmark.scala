@@ -40,7 +40,7 @@ import org.apache.spark.sql.internal.SQLConf
 object LikeAnyBenchmark extends SqlBasedBenchmark {
   import spark.implicits._
 
-  private val numRows = 50000
+  private val numRows = 200000
   private val width = 5
 
   def withTempTable(tableNames: String*)(f: => Unit): Unit = {
