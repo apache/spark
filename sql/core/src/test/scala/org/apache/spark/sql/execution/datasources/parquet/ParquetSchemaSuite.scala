@@ -1060,8 +1060,8 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
   }
 
   test("SPARK-40819 - ability to read parquet file with TIMESTAMP(NANOS, true)") {
-    val testDataPath = getClass.getResource("/test-data/timestamp-nanos.parquet")
-    val data = spark.read.parquet(testDataPath.toString).select("birthday")
+    val testDataPath = testFile("test-data/timestamp-nanos.parquet")
+    val data = spark.read.parquet(testDataPath).select("birthday")
 
     assert(data.schema.fields.head.dataType == LongType)
     assert(data.take(1).head.getAs[Long](0) == 1668537129000000000L)
