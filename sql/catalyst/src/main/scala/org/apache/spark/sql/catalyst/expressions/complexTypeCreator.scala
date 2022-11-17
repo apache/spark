@@ -437,7 +437,6 @@ object CreateStruct {
   group = "struct_funcs")
 // scalastyle:on line.size.limit
 case class CreateNamedStruct(children: Seq[Expression]) extends Expression with NoThrow {
-
   lazy val (nameExprs, valExprs) = children.grouped(2).map {
     case Seq(name, value) => (name, value)
   }.toList.unzip
