@@ -60,7 +60,7 @@ from pyspark.sql.types import (
     _parse_datatype_string,
     _from_numpy_type,
 )
-from pyspark.sql.utils import install_exception_handler, is_timestamp_ntz_preferred
+from pyspark.sql.utils import install_exception_handler, is_timestamp_ntz_preferred, to_str
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import AtomicValue, RowLike, OptionalPrimitiveType
@@ -256,13 +256,9 @@ class SparkSession(SparkConversionMixin):
                         self._options[k] = v
                 elif map is not None:
                     for k, v in map.items():  # type: ignore[assignment]
-                        if isinstance(v, bool):
-                            v = "true" if v is True else "false"
-                        self._options[k] = str(v)
+                        self._options[k] = to_str(v)
                 else:
-                    if isinstance(value, bool):
-                        value = "true" if value is True else "false"
-                    self._options[cast(str, key)] = str(value)
+                    self._options[cast(str, key)] = to_str(value)
                 return self
 
         def master(self, master: str) -> "SparkSession.Builder":
