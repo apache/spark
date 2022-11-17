@@ -17,6 +17,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
@@ -28,7 +29,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_WINDOW_EXPRESSION
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils, StringUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsPartitionManagement}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
@@ -1059,10 +1060,16 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     def failOnInvalidOuterReference(p: LogicalPlan): Unit = {
       p.expressions.foreach(checkMixedReferencesInsideAggregateExpr)
       if (!canHostOuter(p) && p.expressions.exists(containsOuter)) {
+        val exprs = new ListBuffer[String]()
+        for (expr <- p.expressions) {
+          if (containsOuter(expr)) {
+            exprs += toPrettySQL(expr)
+          }
+        }
         p.failAnalysis(
           errorClass =
             "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
-          messageParameters = Map("sqlExprs" -> p.expressions.map(_.sql).mkString(",")))
+          messageParameters = Map("sqlExprs" -> exprs.mkString(",")))
       }
     }
 
