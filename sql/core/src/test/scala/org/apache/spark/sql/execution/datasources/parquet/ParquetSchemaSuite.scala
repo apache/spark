@@ -29,6 +29,7 @@ import org.apache.parquet.schema.Type._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException
+import org.apache.spark.sql.functions.desc
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType._
 import org.apache.spark.sql.test.SharedSparkSession
@@ -1061,10 +1062,11 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
 
   test("SPARK-40819: ability to read parquet file with TIMESTAMP(NANOS, true)") {
     val testDataPath = testFile("test-data/timestamp-nanos.parquet")
-    val data = spark.read.parquet(testDataPath).select("birthday")
+    val tsAttribute = "birthday"
+    val data = spark.read.parquet(testDataPath).select(tsAttribute)
 
     assert(data.schema.fields.head.dataType == LongType)
-    assert(data.take(1).head.getAs[Long](0) == 1668537129000000000L)
+    assert(data.orderBy(desc(tsAttribute)).take(1).head.getAs[Long](0) == 1668537129123534758L)
   }
 
   // =======================================================
