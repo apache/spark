@@ -2756,7 +2756,6 @@ class Dataset[T] private[sql](
         s"the size of columns: ${cols.size}")
     SchemaUtils.checkColumnNameDuplication(
       colNames,
-      "in given column names",
       sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
     val resolver = sparkSession.sessionState.analyzer.resolver
@@ -2856,7 +2855,6 @@ class Dataset[T] private[sql](
     }
     SchemaUtils.checkColumnNameDuplication(
       projectList.map(_.name),
-      "in given column names for withColumnsRenamed",
       sparkSession.sessionState.conf.caseSensitiveAnalysis)
     withPlan(Project(projectList, logicalPlan))
   }
