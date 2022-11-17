@@ -369,7 +369,7 @@ sealed abstract class MultiLikeBase
             |if($matchRes == null) {
             |  ${ev.isNull} = true;
             |} else {
-            |  ${ev.value} = ret;
+            |  ${ev.value} = $matchRes;
             |}
         """.stripMargin)
   }
