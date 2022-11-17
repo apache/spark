@@ -311,6 +311,10 @@ case class Filter(condition: Expression, child: LogicalPlan)
     copy(child = newChild)
 }
 
+object Filter {
+  val FILTER_PUSHED_AS_LIMIT = TreeNodeTag[Unit]("filter_pushed_as_limit")
+}
+
 abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
 
   def duplicateResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty

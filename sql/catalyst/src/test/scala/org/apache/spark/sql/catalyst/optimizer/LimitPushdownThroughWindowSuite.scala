@@ -209,4 +209,22 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
       Optimize.execute(originalQuery.analyze),
       WithoutOptimize.execute(originalQuery.analyze))
   }
+
+  test("Push down filter through window when partitionSpec is empty") {
+    val originalQuery = testRelation
+      .select(a, b, c,
+        windowExpr(RowNumber(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))
+      .where($"rn" < 3)
+    val correctAnswer = testRelation
+      .select(a, b, c)
+      .orderBy(c.desc)
+      .limit(2)
+      .select(a, b, c,
+        windowExpr(RowNumber(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))
+      .where($"rn" < 3)
+
+    comparePlans(
+      Optimize.execute(originalQuery.analyze),
+      WithoutOptimize.execute(correctAnswer.analyze))
+  }
 }
