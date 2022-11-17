@@ -743,6 +743,21 @@ object LikeSimplification extends Rule[LogicalPlan] {
     }
   }
 
+  def combinePatterns(
+      patterns: Seq[Expression],
+      op: (Expression, Expression) => Expression): Option[Expression] = {
+    if (patterns.isEmpty) {
+      None
+    } else {
+      var res = patterns
+      while (res.size > 1) {
+        res = res.sliding(2, 2).toSeq
+          .map(tup => if (tup.size == 2) op(tup.head, tup.last) else tup(0))
+      }
+      Some(res.head)
+    }
+  }
+
   private def simplifyMultiLike(
       child: Expression, patterns: Seq[UTF8String], multi: MultiLikeBase): Expression = {
     val (remainPatternMap, replacementMap) =
@@ -756,16 +771,16 @@ object LikeSimplification extends Rule[LogicalPlan] {
     } else {
       multi match {
         case l: LikeAll =>
-          val and = replacements.reduceLeft(And)
+          val and = combinePatterns(replacements, And.apply).get
           if (remainPatterns.nonEmpty) And(and, l.copy(patterns = remainPatterns)) else and
         case l: NotLikeAll =>
-          val and = replacements.map(Not(_)).reduceLeft(And)
+          val and = combinePatterns(replacements.map(Not(_)), And.apply).get
           if (remainPatterns.nonEmpty) And(and, l.copy(patterns = remainPatterns)) else and
         case l: LikeAny =>
-          val or = replacements.reduceLeft(Or)
+          val or = combinePatterns(replacements, Or.apply).get
           if (remainPatterns.nonEmpty) Or(or, l.copy(patterns = remainPatterns)) else or
         case l: NotLikeAny =>
-          val or = replacements.map(Not(_)).reduceLeft(Or)
+          val or = combinePatterns(replacements.map(Not(_)), Or.apply).get
           if (remainPatterns.nonEmpty) Or(or, l.copy(patterns = remainPatterns)) else or
       }
     }
