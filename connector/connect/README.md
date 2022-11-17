@@ -52,7 +52,13 @@ To use the release version of Spark Connect:
 ### Run Tests
 
 ```bash
+# Run a single Python class.
 ./python/run-tests --testnames 'pyspark.sql.tests.connect.test_connect_basic'
+```
+
+```bash
+# Run all Spark Connect Python tests as a module.
+./python/run-tests --module pyspark-connect
 ```
 
 

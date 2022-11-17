@@ -301,9 +301,7 @@ class RemoteSparkSession(object):
         fun.parts.append(name)
         fun.serialized_function = cloudpickle.dumps((function, return_type))
 
-        req = pb2.Request()
-        if self._user_id is not None:
-            req.user_context.user_id = self._user_id
+        req = self._request_with_metadata()
         req.plan.command.create_function.CopyFrom(fun)
 
         self._execute_and_fetch(req)
@@ -357,9 +355,7 @@ class RemoteSparkSession(object):
         )
 
     def _to_pandas(self, plan: pb2.Plan) -> Optional[pandas.DataFrame]:
-        req = pb2.Request()
-        if self._user_id is not None:
-            req.user_context.user_id = self._user_id
+        req = self._request_with_metadata()
         req.plan.CopyFrom(plan)
         return self._execute_and_fetch(req)
 
@@ -407,12 +403,16 @@ class RemoteSparkSession(object):
         req.plan.command.CopyFrom(command)
         self._execute_and_fetch(req)
 
-    def _analyze(self, plan: pb2.Plan) -> AnalyzeResult:
+    def _request_with_metadata(self) -> pb2.Request:
         req = pb2.Request()
+        req.client_type = "_SPARK_CONNECT_PYTHON"
         if self._user_id:
             req.user_context.user_id = self._user_id
-        req.plan.CopyFrom(plan)
+        return req
 
+    def _analyze(self, plan: pb2.Plan) -> AnalyzeResult:
+        req = self._request_with_metadata()
+        req.plan.CopyFrom(plan)
         resp = self._stub.AnalyzePlan(req, metadata=self._builder.metadata())
         return AnalyzeResult.fromProto(resp)
 
