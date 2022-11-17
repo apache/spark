@@ -1059,7 +1059,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     }
   }
 
-  test("SPARK-40819 - ability to read parquet file with TIMESTAMP(NANOS, true)") {
+  test("SPARK-40819: ability to read parquet file with TIMESTAMP(NANOS, true)") {
     val testDataPath = testFile("test-data/timestamp-nanos.parquet")
     val data = spark.read.parquet(testDataPath).select("birthday")
 
