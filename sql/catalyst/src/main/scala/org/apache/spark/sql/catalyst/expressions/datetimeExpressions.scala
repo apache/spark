@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegist
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, LegacyDateFormats, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, DateTimeUtils, LegacyDateFormats, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.SIMPLE_DATE_FORMAT
@@ -172,7 +172,7 @@ object CurDateExpressionBuilder extends ExpressionBuilder {
       CurrentDate()
     } else {
       throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
-        expressions.map(_.sql).mkString(","), Seq.empty, funcName, expressions.length)
+        expressions.map(toPrettySQL(_)).mkString(","), Seq.empty, funcName, expressions.length)
     }
   }
 }
@@ -1144,7 +1144,7 @@ object ParseToTimestampNTZExpressionBuilder extends ExpressionBuilder {
       ParseToTimestamp(expressions(0), expressions.drop(1).lastOption, TimestampNTZType)
     } else {
       throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
-        expressions.map(_.sql).mkString(","), Seq(1, 2), funcName, numArgs)
+        expressions.map(toPrettySQL(_)).mkString(","), Seq(1, 2), funcName, numArgs)
     }
   }
 }
@@ -1182,7 +1182,7 @@ object ParseToTimestampLTZExpressionBuilder extends ExpressionBuilder {
       ParseToTimestamp(expressions(0), expressions.drop(1).lastOption, TimestampType)
     } else {
       throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
-        expressions.map(_.sql).mkString(","), Seq(1, 2), funcName, numArgs)
+        expressions.map(toPrettySQL(_)).mkString(","), Seq(1, 2), funcName, numArgs)
     }
   }
 }
@@ -1227,7 +1227,7 @@ object TryToTimestampExpressionBuilder extends ExpressionBuilder {
         failOnError = false)
     } else {
       throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
-        expressions.map(_.sql).mkString(","), Seq(1, 2), funcName, numArgs)
+        expressions.map(toPrettySQL(_)).mkString(","), Seq(1, 2), funcName, numArgs)
     }
   }
 }
@@ -2522,7 +2522,7 @@ object MakeTimestampNTZExpressionBuilder extends ExpressionBuilder {
         dataType = TimestampNTZType)
     } else {
       throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
-        expressions.map(_.sql).mkString(","), Seq(6), funcName, numArgs)
+        expressions.map(toPrettySQL(_)).mkString(","), Seq(6), funcName, numArgs)
     }
   }
 }
@@ -2571,7 +2571,7 @@ object MakeTimestampLTZExpressionBuilder extends ExpressionBuilder {
         dataType = TimestampType)
     } else {
       throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
-        expressions.map(_.sql).mkString(","), Seq(6), funcName, numArgs)
+        expressions.map(toPrettySQL(_)).mkString(","), Seq(6), funcName, numArgs)
     }
   }
 }
@@ -2843,7 +2843,7 @@ object DatePartExpressionBuilder extends ExpressionBuilder {
       Extract(field, source, Extract.createExpr(funcName, field, source))
     } else {
       throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
-        expressions.map(_.sql).mkString(","), Seq(2), funcName, numArgs)
+        expressions.map(toPrettySQL(_)).mkString(","), Seq(2), funcName, numArgs)
     }
   }
 }

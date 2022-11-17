@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, SQLQueryContext}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UPPER_OR_LOWER}
-import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, ArrayData, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -508,7 +508,7 @@ trait StringBinaryPredicateExpressionBuilderBase extends ExpressionBuilder {
       }
     } else {
       throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
-        expressions.map(_.sql).mkString(","), Seq(2), funcName, numArgs)
+        expressions.map(toPrettySQL(_)).mkString(","), Seq(2), funcName, numArgs)
     }
   }
 
@@ -1507,7 +1507,7 @@ trait PadExpressionBuilderBase extends ExpressionBuilder {
       }
     } else {
       throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
-        expressions.map(_.sql).mkString(","), Seq(2, 3), funcName, numArgs)
+        expressions.map(toPrettySQL(_)).mkString(","), Seq(2, 3), funcName, numArgs)
     }
   }
 
@@ -2427,7 +2427,7 @@ object Decode {
     params.length match {
       case 0 | 1 =>
         throw QueryCompilationErrors.invalidFunctionArgumentsError(
-          params.map(_.sql).mkString(","), "decode", "2", params.length)
+          params.map(toPrettySQL(_)).mkString(","), "decode", "2", params.length)
       case 2 => StringDecode(params.head, params.last)
       case _ =>
         val input = params.head

@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch,
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{NumberConverter, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, NumberConverter, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -289,7 +289,7 @@ trait CeilFloorExpressionBuilderBase extends ExpressionBuilder {
       buildWithTwoParams(expressions(0), scale)
     } else {
       throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
-        expressions.map(_.sql).mkString(","), Seq(2), funcName, numArgs)
+        expressions.map(toPrettySQL(_)).mkString(","), Seq(2), funcName, numArgs)
     }
   }
 }

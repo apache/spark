@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.xml._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Range}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 
@@ -146,7 +147,10 @@ object FunctionRegistryBase {
             .filter(_.getParameterTypes.forall(_ == classOf[Expression]))
             .map(_.getParameterCount).distinct.sorted
           throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
-            expressions.map(_.sql).mkString(","), validParametersCount, name, params.length)
+            expressions.map(toPrettySQL(_)).mkString(","),
+            validParametersCount,
+            name,
+            params.length)
         }
         try {
           f.newInstance(expressions : _*).asInstanceOf[T]
