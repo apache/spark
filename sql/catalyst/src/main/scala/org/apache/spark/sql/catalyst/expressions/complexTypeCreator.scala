@@ -365,8 +365,8 @@ object CreateStruct {
    * It should not be used for `struct` expressions or functions explicitly called
    * by users.
    */
-  def apply(children: Seq[Expression], nullable: Boolean = false): CreateNamedStruct = {
-    CreateNamedStruct(children.zipWithIndex.flatMap {
+  def apply(children: Seq[Expression], nullableOpt: Option[Boolean] = None): CreateNamedStruct = {
+    val structFields = children.zipWithIndex.flatMap {
       // For multi-part column name like `struct(a.b.c)`, it may be resolved into:
       //   1. Attribute if `a.b.c` is simply a qualified column name.
       //   2. GetStructField if `a.b` refers to a struct-type column.
@@ -379,7 +379,10 @@ object CreateStruct {
       case (e: NamedExpression, _) if e.resolved => Seq(Literal(e.name), e)
       case (e: NamedExpression, _) => Seq(NamePlaceholder, e)
       case (e, index) => Seq(Literal(s"col${index + 1}"), e)
-    }, nullable)
+    }
+    nullableOpt.map { nullable =>
+      new NullableCreateNamedStruct(structFields, nullable)
+    }.getOrElse(CreateNamedStruct(structFields))
   }
 
   /**
@@ -433,14 +436,15 @@ object CreateStruct {
   since = "1.5.0",
   group = "struct_funcs")
 // scalastyle:on line.size.limit
-case class CreateNamedStruct(children: Seq[Expression], override val nullable: Boolean = false)
-  extends Expression with NoThrow {
+case class CreateNamedStruct(children: Seq[Expression]) extends Expression with NoThrow {
 
   lazy val (nameExprs, valExprs) = children.grouped(2).map {
     case Seq(name, value) => (name, value)
   }.toList.unzip
 
   lazy val names = nameExprs.map(_.eval(EmptyRow))
+
+  override def nullable: Boolean = false
 
   override def foldable: Boolean = valExprs.forall(_.foldable)
 
@@ -543,6 +547,14 @@ case class CreateNamedStruct(children: Seq[Expression], override val nullable: B
   override protected def withNewChildrenInternal(
     newChildren: IndexedSeq[Expression]): CreateNamedStruct = copy(children = newChildren)
 }
+
+/**
+ * A nullable CreateNamedStruct override the default value `false`
+ */
+class NullableCreateNamedStruct(
+    children: Seq[Expression],
+    override val nullable: Boolean)
+  extends CreateNamedStruct(children)
 
 /**
  * Creates a map after splitting the input text into key/value pairs using delimiters

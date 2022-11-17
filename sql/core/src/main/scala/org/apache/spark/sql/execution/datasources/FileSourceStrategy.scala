@@ -275,8 +275,10 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
                 .get.withName(FileFormat.ROW_INDEX)
           }
         }
+        // SPARK-41151: Pass the metadata nullable to the NamedStruct,
+        // to avoid any risk of inconsistent schema value
         val metadataAlias =
-          Alias(CreateStruct(structColumns, metadataStruct.nullable),
+          Alias(CreateStruct(structColumns, Option(metadataStruct.nullable)),
             METADATA_NAME)(exprId = metadataStruct.exprId)
         execution.ProjectExec(
           readDataColumns ++ partitionColumns :+ metadataAlias, scan)
