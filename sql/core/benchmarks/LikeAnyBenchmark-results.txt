@@ -1,0 +1,8 @@
+OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1022-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+Multi like query:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Query with multi like                              1128           1188          87          0.0     1128237.2       1.0X
+Query with LikeAny simplification                  5032           5075          43          0.0     5031594.6       0.2X
+Query without LikeAny simplification                172            177           8          0.0      171789.4       6.6X
+
