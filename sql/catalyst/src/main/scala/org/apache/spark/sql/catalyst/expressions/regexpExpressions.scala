@@ -358,14 +358,15 @@ sealed abstract class MultiLikeBase
             if (p != null) s"""$v.addPattern("${p.toString}");""" else s"$v.addPattern(null);"
           ).mkString("\n"),
         forceInline = true)
+    val matchRes = ctx.freshName("matchRes")
 
     ev.copy(code =
       code"""
             |${eval.code}
             |boolean ${ev.value} = false;
             |boolean ${ev.isNull} = false;
-            |Boolean ret = (Boolean) ($matchHelper.matches(${eval.value}));
-            |if(ret == null) {
+            |Boolean $matchRes = (Boolean) ($matchHelper.matches(${eval.value}));
+            |if($matchRes == null) {
             |  ${ev.isNull} = true;
             |} else {
             |  ${ev.value} = ret;
