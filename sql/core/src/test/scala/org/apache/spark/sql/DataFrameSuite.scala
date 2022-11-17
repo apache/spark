@@ -59,13 +59,6 @@ class DataFrameSuite extends QueryTest
   with AdaptiveSparkPlanHelper {
   import testImplicits._
 
-  test("aggr antijoin") {
-    val ids = Seq(1, 2, 3).toDF("id").distinct()
-    val result = ids.withColumn("id", $"id" + 1)
-      .join(ids, "id", "left_anti").collect()
-    assert(result.length == 1)
-  }
-
   test("analysis error should be eagerly reported") {
     intercept[Exception] { testData.select("nonExistentName") }
     intercept[Exception] {
