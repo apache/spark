@@ -1529,3 +1529,20 @@ org.apache.spark.sql.AnalysisException
     "invalidValue" : "invalidformat"
   }
 }
+
+
+-- !query
+SELECT to_binary(col1, col2) from values ('abc', 'utf-8') as data(col1, col2)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+The 'format' parameter of function 'to_binary' needs to be a string literal.; line 1 pos 7
+
+
+-- !query
+SELECT to_binary(col1, 'utf-8') from values ('abc') as data(col1)
+-- !query schema
+struct<to_binary(col1, utf-8):binary>
+-- !query output
+abc

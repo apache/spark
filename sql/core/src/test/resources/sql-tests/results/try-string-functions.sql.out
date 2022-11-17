@@ -290,3 +290,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 The 'format' parameter of function 'try_to_binary' needs to be a string literal.; line 1 pos 7
+
+
+-- !query
+SELECT try_to_binary(col1, 'utf-8') from values ('abc') as data(col1)
+-- !query schema
+struct<try_to_binary(col1, utf-8):binary>
+-- !query output
+abc
