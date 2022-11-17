@@ -439,7 +439,10 @@ abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
         }.getCause.getCause.asInstanceOf[SparkArithmeticException],
         errorClass = "NUMERIC_VALUE_OUT_OF_RANGE",
         parameters = Map(
-          "value" -> "0", "precision" -> "4", "scale" -> "2", "config" -> "\"spark.sql.ansi.enabled\"")
+          "value" -> "0",
+          "precision" -> "4",
+          "scale" -> "2",
+          "config" -> "\"spark.sql.ansi.enabled\"")
       )
     }
   }
