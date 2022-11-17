@@ -865,7 +865,7 @@ See the [configuration page](configuration.html) for information on Spark config
     Note that Spark also adds its own labels to the driver service
     for bookkeeping purposes.
   </td>
-  <td>3.3.2</td>
+  <td>3.4.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.driver.service.annotation.[AnnotationName]</code></td>
