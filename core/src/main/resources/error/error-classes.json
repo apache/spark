@@ -1024,6 +1024,11 @@
     ],
     "sqlState" : "42000"
   },
+  "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS" : {
+    "message" : [
+      "CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names, but got: <actualName>"
+    ]
+  },
   "TOO_MANY_ARRAY_ELEMENTS" : {
     "message" : [
       "Cannot initialize array with <numElements> elements of size <size>"
@@ -1676,11 +1681,6 @@
   "_LEGACY_ERROR_TEMP_0053" : {
     "message" : [
       "It is not allowed to define a TEMPORARY view with IF NOT EXISTS."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0054" : {
-    "message" : [
-      "It is not allowed to add database prefix `<database>` for the TEMPORARY view name."
     ]
   },
   "_LEGACY_ERROR_TEMP_0056" : {
