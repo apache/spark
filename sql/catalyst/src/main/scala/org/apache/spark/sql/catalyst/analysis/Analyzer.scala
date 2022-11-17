@@ -3951,10 +3951,10 @@ object CleanupAliases extends Rule[LogicalPlan] with AliasHelper {
       val cleanedAggs = aggs.map(trimNonTopLevelAliases)
       Aggregate(grouping.map(trimAliases), cleanedAggs, child)
 
-    case Window(windowExprs, partitionSpec, orderSpec, child) =>
+    case Window(windowExprs, partitionSpec, orderSpec, child, groupLimit) =>
       val cleanedWindowExprs = windowExprs.map(trimNonTopLevelAliases)
       Window(cleanedWindowExprs, partitionSpec.map(trimAliases),
-        orderSpec.map(trimAliases(_).asInstanceOf[SortOrder]), child)
+        orderSpec.map(trimAliases(_).asInstanceOf[SortOrder]), child, groupLimit)
 
     case CollectMetrics(name, metrics, child) =>
       val cleanedMetrics = metrics.map(trimNonTopLevelAliases)

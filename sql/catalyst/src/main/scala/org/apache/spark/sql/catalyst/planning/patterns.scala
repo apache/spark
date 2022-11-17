@@ -312,11 +312,11 @@ object PhysicalAggregation {
  */
 object PhysicalWindow {
   // windowFunctionType, windowExpression, partitionSpec, orderSpec, child
-  private type ReturnType =
-    (WindowFunctionType, Seq[NamedExpression], Seq[Expression], Seq[SortOrder], LogicalPlan)
+  private type ReturnType = (WindowFunctionType, Seq[NamedExpression],
+    Seq[Expression], Seq[SortOrder], LogicalPlan, Option[Int])
 
   def unapply(a: Any): Option[ReturnType] = a match {
-    case expr @ logical.Window(windowExpressions, partitionSpec, orderSpec, child) =>
+    case expr @ logical.Window(windowExpressions, partitionSpec, orderSpec, child, groupLimit) =>
 
       // The window expression should not be empty here, otherwise it's a bug.
       if (windowExpressions.isEmpty) {
@@ -333,7 +333,7 @@ object PhysicalWindow {
           }
         }
 
-      Some((windowFunctionType, windowExpressions, partitionSpec, orderSpec, child))
+      Some((windowFunctionType, windowExpressions, partitionSpec, orderSpec, child, groupLimit))
 
     case _ => None
   }

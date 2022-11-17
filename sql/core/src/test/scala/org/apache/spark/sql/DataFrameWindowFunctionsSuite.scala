@@ -1265,4 +1265,105 @@ class DataFrameWindowFunctionsSuite extends QueryTest
       )
     )
   }
+
+  test("SPARK-37099: Optimize the filter based on rank-like window function") {
+
+    val nullStr: String = null
+    val df = Seq(
+      ("a", 0, "c", 1.0),
+      ("a", 1, "x", 2.0),
+      ("a", 2, "y", 3.0),
+      ("a", 3, "z", -1.0),
+      ("a", 4, "", 2.0),
+      ("b", 1, "h", Double.NaN),
+      ("b", 1, "n", Double.PositiveInfinity),
+      ("c", 1, "z", -2.0),
+      ("c", 1, "a", -4.0),
+      ("c", 2, nullStr, 5.0)).toDF("key", "value", "order", "value2")
+
+    val orderCols = Seq(
+      $"order".asc_nulls_first :: Nil,
+      $"order".asc_nulls_last :: Nil,
+      $"order".desc_nulls_first :: Nil,
+      $"order".desc_nulls_last :: Nil,
+      $"order".asc_nulls_first :: $"value2".asc_nulls_last :: Nil,
+      $"order".asc_nulls_first :: $"value2".desc_nulls_last :: Nil
+    )
+
+//    val conditions = Seq(
+//      $"rn" === 1,
+//      $"rn" <= 3,
+//      $"rn" === 2 && $"value2" > 0.5,
+//      $"rn" < 2 && $"value2" < 0.01,
+//      $"rn" <= 4 && $"value" + $"value2" > 2
+//    )
+
+    val windowFunctions = Seq(
+      row_number(),
+      rank(),
+      dense_rank()
+    )
+
+    val window = Window.partitionBy($"key").orderBy($"order".asc_nulls_first)
+
+    val conditions = Seq(
+      $"rn" === 1,
+      $"rn" < 2,
+      $"rn" <= 1
+    )
+
+    for (function <- windowFunctions; condition <- conditions) {
+      checkAnswer(df.withColumn("rn", function.over(window)).where(condition),
+        Seq(
+          Row("a", 4, "", 2.0, 1),
+          Row("b", 1, "h", Double.NaN, 1),
+          Row("c", 2, null, 5.0, 1)
+        )
+      )
+    }
+
+    for (function <- windowFunctions) {
+      checkAnswer(df.withColumn("rn", function.over(window)).where($"rn" <= 2),
+        Seq(
+          Row("a", 0, "c", 1.0, 2),
+          Row("a", 4, "", 2.0, 1),
+          Row("b", 1, "h", Double.NaN, 1),
+          Row("b", 1, "n", Double.PositiveInfinity, 2),
+          Row("c", 1, "a", -4.0, 2),
+          Row("c", 2, null, 5.0, 1)
+        )
+      )
+    }
+
+    for (function <- windowFunctions) {
+      val condition = $"rn" === 2 && $"value2" > 0.5
+      checkAnswer(df.withColumn("rn", function.over(window)).where(condition),
+        Seq(
+          Row("a", 0, "c", 1.0, 2),
+          Row("b", 1, "n", Double.PositiveInfinity, 2)
+        )
+      )
+    }
+
+    for (function <- windowFunctions) {
+      val condition = $"rn" < 2 && $"value2" < 0.01
+      checkAnswer(df.withColumn("rn", function.over(window)).where(condition),
+        Seq.empty
+      )
+    }
+
+    for (function <- windowFunctions) {
+      val condition = $"rn" <= 4 && $"value" + $"value2" > 2
+      checkAnswer(df.withColumn("rn", function.over(window)).where(condition),
+        Seq(
+          Row("a", 1, "x", 2.0, 3),
+          Row("a", 2, "y", 3.0, 4),
+          Row("a", 4, "", 2.0, 1),
+          Row("b", 1, "h", Double.NaN, 1),
+          Row("b", 1, "n", Double.PositiveInfinity, 2),
+          Row("c", 2, null, 5.0, 1)
+        )
+      )
+    }
+  }
 }

@@ -87,7 +87,8 @@ case class WindowExec(
     windowExpression: Seq[NamedExpression],
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
-    child: SparkPlan)
+    child: SparkPlan,
+    rankLimit: Option[Int] = None)
   extends WindowExecBase {
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -96,6 +97,17 @@ case class WindowExec(
     val factories = windowFrameExpressionFactoryPairs.map(_._2).toArray
     val inMemoryThreshold = conf.windowExecBufferInMemoryThreshold
     val spillThreshold = conf.windowExecBufferSpillThreshold
+
+    val addBuffer = if (rankLimit.isDefined) {
+      val groupLimit = rankLimit.get
+      (buffer: ExternalAppendOnlyUnsafeRowArray, row: UnsafeRow) =>
+        if (buffer.length < groupLimit) {
+          buffer.add(row)
+        }
+    } else {
+      (buffer: ExternalAppendOnlyUnsafeRowArray, row: UnsafeRow) =>
+        buffer.add(row)
+    }
 
     // Start processing.
     child.execute().mapPartitions { stream =>
@@ -139,7 +151,7 @@ case class WindowExec(
           buffer.clear()
 
           while (nextRowAvailable && nextGroup == currentGroup) {
-            buffer.add(nextRow)
+            addBuffer(buffer, nextRow)
             fetchNextRow()
           }
 
