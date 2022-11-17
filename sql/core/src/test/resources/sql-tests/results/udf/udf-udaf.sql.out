@@ -37,7 +37,7 @@ org.apache.spark.sql.AnalysisException
     "actualNum" : "2",
     "expectedNum" : "1",
     "functionName" : "spark_catalog.default.mydoubleavg",
-    "sqlExpr" : "spark_catalog.default.mydoubleavg(cast(udf(cast(int_col1 as string)) as int),cast(udf(cast(3 as string)) as int))"
+    "sqlExpr" : "spark_catalog.default.mydoubleavg(udf(int_col1),udf(3))"
   },
   "queryContext" : [ {
     "objectType" : "",

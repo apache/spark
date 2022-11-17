@@ -145,7 +145,7 @@ org.apache.spark.sql.AnalysisException
     "actualNum" : "3",
     "expectedNum" : "2",
     "functionName" : "ceil",
-    "sqlExpr" : "2.5BD,0,0"
+    "sqlExpr" : "2.5,0,0"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -303,7 +303,7 @@ org.apache.spark.sql.AnalysisException
     "actualNum" : "3",
     "expectedNum" : "2",
     "functionName" : "floor",
-    "sqlExpr" : "2.5BD,0,0"
+    "sqlExpr" : "2.5,0,0"
   },
   "queryContext" : [ {
     "objectType" : "",

@@ -820,7 +820,7 @@ org.apache.spark.sql.AnalysisException
     "actualNum" : "1",
     "expectedNum" : "2",
     "functionName" : "decode",
-    "sqlExpr" : "encode('abc', 'utf-8')"
+    "sqlExpr" : "encode(abc, utf-8)"
   },
   "queryContext" : [ {
     "objectType" : "",
