@@ -34,7 +34,7 @@ import org.apache.spark.internal.config.PLUGINS
 private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
 
   import DecommissionSuite._
-  import KubernetesSuite.k8sTestTag
+  import KubernetesSuite.{decomTestTag, k8sTestTag}
 
   def runDecommissionTest(f: () => Unit): Unit = {
     val logConfFilePath = s"${sparkHomeDir.toFile}/conf/log4j2.properties"
@@ -61,7 +61,7 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
     }
   }
 
-  test("Test basic decommissioning", k8sTestTag) {
+  test("Test basic decommissioning", k8sTestTag, decomTestTag) {
     runDecommissionTest(() => {
       sparkAppConf
         .set(config.DECOMMISSION_ENABLED.key, "true")
@@ -91,7 +91,7 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
     })
   }
 
-  test("Test basic decommissioning with shuffle cleanup", k8sTestTag) {
+  test("Test basic decommissioning with shuffle cleanup", k8sTestTag, decomTestTag) {
     runDecommissionTest(() => {
       sparkAppConf
         .set(config.DECOMMISSION_ENABLED.key, "true")
@@ -122,7 +122,8 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
     })
   }
 
-  test("Test decommissioning with dynamic allocation & shuffle cleanups", k8sTestTag) {
+  test("Test decommissioning with dynamic allocation & shuffle cleanups",
+      k8sTestTag, decomTestTag) {
     runDecommissionTest(() => {
       sparkAppConf
         .set(config.DECOMMISSION_ENABLED.key, "true")
@@ -183,7 +184,7 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
     })
   }
 
-  test("Test decommissioning timeouts", k8sTestTag) {
+  test("Test decommissioning timeouts", k8sTestTag, decomTestTag) {
     runDecommissionTest(() => {
       sparkAppConf
         .set(config.DECOMMISSION_ENABLED.key, "true")
@@ -216,7 +217,7 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
     })
   }
 
-  test("SPARK-37576: Rolling decommissioning", k8sTestTag) {
+  test("SPARK-37576: Rolling decommissioning", k8sTestTag, decomTestTag) {
     runDecommissionTest(() => {
       sparkAppConf
         .set("spark.kubernetes.container.image", pyImage)

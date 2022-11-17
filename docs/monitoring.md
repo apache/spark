@@ -395,6 +395,25 @@ Security options for the Spark History Server are covered more detail in the
     </td>
     <td>3.1.0</td>
   </tr>
+  <tr>
+    <td>spark.history.store.hybridStore.diskBackend</td>
+    <td>LEVELDB</td>
+    <td>
+      Specifies a disk-based store used in hybrid store; LEVELDB or ROCKSDB.
+    </td>
+    <td>3.3.0</td>
+  </tr>
+  <tr>
+    <td>spark.history.fs.update.batchSize</td>
+    <td>Int.MaxValue</td>
+    <td>
+      Specifies the batch size for updating new eventlog files.
+      This controls each scan process to be completed within a reasonable time, and such
+      prevent the initial scan from running too long and blocking new eventlog files to
+      be scanned in time in large environments.
+    </td>
+    <td>3.4.0</td>
+  </tr>
 </table>
 
 Note that in all of these UIs, the tables are sortable by clicking their headers,
@@ -609,17 +628,6 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     <code>?details=[true (default) | false]</code> lists/hides metric details in addition to given query details.
     <br>
     <code>?planDescription=[true (default) | false]</code> enables/disables Physical <code>planDescription</code> on demand for the given query when Physical Plan size is high.
-    </td>
-  </tr>
-  <tr>
-    <td><code>/applications/[app-id]/diagnostics/sql/[execution-id]</code></td>
-    <td>Diagnostic for the given query, including:
-    <br>
-    1. plan change history of adaptive execution
-    <br>
-    2. physical plan description with unlimited fields
-    <br>
-    This API requires setting <code>spark.appStatusStore.diskStoreDir</code> for storing the diagnostic information.
     </td>
   </tr>
   <tr>

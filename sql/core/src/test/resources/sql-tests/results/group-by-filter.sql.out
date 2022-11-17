@@ -49,10 +49,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_2422",
   "messageParameters" : {
-    "message" : "grouping expressions sequence is empty, and 'testdata.a' is not an aggregate function. Wrap '(count(testdata.b) FILTER (WHERE (testdata.a >= 2)) AS `count(b) FILTER (WHERE (a >= 2))`)' in windowing function(s) or wrap 'testdata.a' in first() (or first_value) if you don't care which value you get.;\nAggregate [a#x, count(b#x) FILTER (WHERE (a#x >= 2)) AS count(b) FILTER (WHERE (a >= 2))#xL]\n+- SubqueryAlias testdata\n   +- View (`testData`, [a#x,b#x])\n      +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]\n         +- Project [a#x, b#x]\n            +- SubqueryAlias testData\n               +- LocalRelation [a#x, b#x]\n"
-  }
+    "aggExprs" : "(count(testdata.b) FILTER (WHERE (testdata.a >= 2)) AS `count(b) FILTER (WHERE (a >= 2))`)",
+    "sqlExpr" : "testdata.a"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 8,
+    "fragment" : "a"
+  } ]
 }
 
 
@@ -234,9 +242,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "message" : "expression 'testdata.a' is neither present in the group by, nor is it an aggregate function. Add to group by or wrap in first() (or first_value) if you don't care which value you get.;\nAggregate [b#x], [a#x, count(b#x) FILTER (WHERE NOT (a#x = 2)) AS count(b) FILTER (WHERE (NOT (a = 2)))#xL]\n+- SubqueryAlias testdata\n   +- View (`testData`, [a#x,b#x])\n      +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]\n         +- Project [a#x, b#x]\n            +- SubqueryAlias testData\n               +- LocalRelation [a#x, b#x]\n"
+    "expression" : "\"a\""
   }
 }
 
@@ -719,9 +728,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "message" : "expression 'testdata.a' is neither present in the group by, nor is it an aggregate function. Add to group by or wrap in first() (or first_value) if you don't care which value you get.;\nAggregate [(a#x + 1)], [(a#x + 2) AS (a + 2)#x, count(b#x) FILTER (WHERE b#x IN (1,2)) AS count(b) FILTER (WHERE (b IN (1, 2)))#xL]\n+- SubqueryAlias testdata\n   +- View (`testData`, [a#x,b#x])\n      +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]\n         +- Project [a#x, b#x]\n            +- SubqueryAlias testData\n               +- LocalRelation [a#x, b#x]\n"
+    "expression" : "\"a\""
   }
 }
 

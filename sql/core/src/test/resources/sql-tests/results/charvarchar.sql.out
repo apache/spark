@@ -260,9 +260,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1245",
   "messageParameters" : {
-    "message" : "ALTER TABLE CHANGE COLUMN is not supported for changing column 'c' with type 'CharType(5)' to 'c' with type 'CharType(6)'"
+    "newName" : "c",
+    "newType" : "CharType(6)",
+    "originName" : "c",
+    "originType" : "CharType(5)"
   }
 }
 
@@ -581,9 +584,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1232",
   "messageParameters" : {
-    "message" : "Partition spec is invalid. The spec (v2) must match the partition spec (v2, c2) defined in table '`spark_catalog`.`default`.`char_part`'"
+    "partitionColumnNames" : "v2, c2",
+    "specKeys" : "v2",
+    "tableName" : "`spark_catalog`.`default`.`char_part`"
   }
 }
 

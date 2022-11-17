@@ -129,10 +129,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve 'sort_array(array('b', 'd'), '1')' due to data type mismatch: Sort order in second argument requires a boolean literal.; line 1 pos 7;\n'Project [unresolvedalias(sort_array(array(b, d), 1), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"1\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "2",
+    "requiredType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"sort_array(array(b, d), 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 39,
+    "fragment" : "sort_array(array('b', 'd'), '1')"
+  } ]
 }
 
 
@@ -143,10 +154,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve 'sort_array(array('b', 'd'), CAST(NULL AS BOOLEAN))' due to data type mismatch: Sort order in second argument requires a boolean literal.; line 1 pos 7;\n'Project [unresolvedalias(sort_array(array(b, d), cast(null as boolean)), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"CAST(NULL AS BOOLEAN)\"",
+    "inputType" : "\"BOOLEAN\"",
+    "paramIndex" : "2",
+    "requiredType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"sort_array(array(b, d), CAST(NULL AS BOOLEAN))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 57,
+    "fragment" : "sort_array(array('b', 'd'), cast(NULL as boolean))"
+  } ]
 }
 
 
@@ -178,9 +200,9 @@ org.apache.spark.SparkArrayIndexOutOfBoundsException
 {
   "errorClass" : "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
   "messageParameters" : {
-    "indexValue" : "5",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "arraySize" : "3",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "indexValue" : "5"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -201,9 +223,9 @@ org.apache.spark.SparkArrayIndexOutOfBoundsException
 {
   "errorClass" : "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
   "messageParameters" : {
-    "indexValue" : "-5",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "arraySize" : "3",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "indexValue" : "-5"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -242,9 +264,9 @@ org.apache.spark.SparkArrayIndexOutOfBoundsException
 {
   "errorClass" : "INVALID_ARRAY_INDEX",
   "messageParameters" : {
-    "indexValue" : "4",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "arraySize" : "2",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "indexValue" : "4"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -265,9 +287,9 @@ org.apache.spark.SparkArrayIndexOutOfBoundsException
 {
   "errorClass" : "INVALID_ARRAY_INDEX",
   "messageParameters" : {
-    "indexValue" : "0",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "arraySize" : "2",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "indexValue" : "0"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -288,9 +310,9 @@ org.apache.spark.SparkArrayIndexOutOfBoundsException
 {
   "errorClass" : "INVALID_ARRAY_INDEX",
   "messageParameters" : {
-    "indexValue" : "-1",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "arraySize" : "2",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "indexValue" : "-1"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -343,9 +365,9 @@ org.apache.spark.SparkArrayIndexOutOfBoundsException
 {
   "errorClass" : "INVALID_ARRAY_INDEX",
   "messageParameters" : {
-    "indexValue" : "5",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "arraySize" : "3",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "indexValue" : "5"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -366,9 +388,9 @@ org.apache.spark.SparkArrayIndexOutOfBoundsException
 {
   "errorClass" : "INVALID_ARRAY_INDEX",
   "messageParameters" : {
-    "indexValue" : "-1",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "arraySize" : "3",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "indexValue" : "-1"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -419,10 +441,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve 'array_size(map('a', 1, 'b', 2))' due to data type mismatch: argument 1 requires array type, however, 'map('a', 1, 'b', 2)' is of map<string,int> type.; line 1 pos 7;\n'Project [unresolvedalias(array_size(map(a, 1, b, 2)), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"map(a, 1, b, 2)\"",
+    "inputType" : "\"MAP<STRING, INT>\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"ARRAY\"",
+    "sqlExpr" : "\"array_size(map(a, 1, b, 2))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 38,
+    "fragment" : "array_size(map('a', 1, 'b', 2))"
+  } ]
 }
 
 

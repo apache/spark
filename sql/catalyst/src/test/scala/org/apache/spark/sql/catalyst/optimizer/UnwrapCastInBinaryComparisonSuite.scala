@@ -248,18 +248,6 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
     val intLit = Literal.create(null, IntegerType)
     val shortLit = Literal.create(null, ShortType)
 
-    def checkInAndInSet(in: In, expected: Expression): Unit = {
-      assertEquivalent(in, expected)
-      val toInSet = (in: In) => InSet(in.value, HashSet() ++ in.list.map(_.eval()))
-      val expectedInSet = expected match {
-        case expectedIn: In =>
-          toInSet(expectedIn)
-        case Or(falseIfNotNull: And, expectedIn: In) =>
-          Or(falseIfNotNull, toInSet(expectedIn))
-      }
-      assertEquivalent(toInSet(in), expectedInSet)
-    }
-
     checkInAndInSet(
       In(Cast(f, LongType), Seq(1.toLong, 2.toLong, 3.toLong)),
       f.in(1.toShort, 2.toShort, 3.toShort))
@@ -267,12 +255,12 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
     // in.list contains the value which out of `fromType` range
     checkInAndInSet(
       In(Cast(f, LongType), Seq(1.toLong, Int.MaxValue.toLong, Long.MaxValue)),
-      Or(falseIfNotNull(f), f.in(1.toShort)))
+      f.in(1.toShort))
 
     // in.list only contains the value which out of `fromType` range
     checkInAndInSet(
       In(Cast(f, LongType), Seq(Int.MaxValue.toLong, Long.MaxValue)),
-      Or(falseIfNotNull(f), f.in()))
+      falseIfNotNull(f))
 
     // in.list is empty
     checkInAndInSet(
@@ -280,15 +268,49 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
 
     // in.list contains null value
     checkInAndInSet(
-      In(Cast(f, IntegerType), Seq(intLit)), In(Cast(f, IntegerType), Seq(intLit)))
+      In(Cast(f, IntegerType), Seq(intLit)), f.in(shortLit))
     checkInAndInSet(
-      In(Cast(f, IntegerType), Seq(intLit, intLit)), In(Cast(f, IntegerType), Seq(intLit, intLit)))
+      In(Cast(f, IntegerType), Seq(intLit, intLit)), f.in(shortLit, shortLit))
     checkInAndInSet(
       In(Cast(f, IntegerType), Seq(intLit, 1)), f.in(shortLit, 1.toShort))
     checkInAndInSet(
       In(Cast(f, LongType), Seq(longLit, 1.toLong, Long.MaxValue)),
-      Or(falseIfNotNull(f), f.in(shortLit, 1.toShort))
+      f.in(shortLit, 1.toShort)
     )
+    checkInAndInSet(
+      In(Cast(f, LongType), Seq(longLit, Long.MaxValue)),
+      f.in(shortLit)
+    )
+  }
+
+  test("SPARK-39896: unwrap cast when the literal of In/InSet downcast failed") {
+    val decimalValue = decimal2(123456.1234)
+    val decimalValue2 = decimal2(100.20)
+    checkInAndInSet(
+      In(castDecimal2(f3), Seq(decimalValue, decimalValue2)),
+      f3.in(decimal(decimalValue2)))
+  }
+
+  test("SPARK-39896: unwrap cast when the literal of In/Inset has round up or down") {
+
+    val doubleValue = 1.0
+    val doubleValue1 = 100.6
+    checkInAndInSet(
+      In(castDouble(f), Seq(doubleValue1, doubleValue)),
+      f.in(doubleValue.toShort))
+
+    // Cases for rounding up: 3.14 will be rounded to 3.14000010... after casting to float
+    val doubleValue2 = 3.14
+    checkInAndInSet(
+      In(castDouble(f2), Seq(doubleValue2, doubleValue)),
+      f2.in(doubleValue.toFloat))
+
+    // Another case: 400.5678 is rounded up to 400.57
+    val decimalValue1 = decimal2(400.5678)
+    val decimalValue2 = decimal2(1.0)
+    checkInAndInSet(
+      In(castDecimal2(f3), Seq(decimalValue1, decimalValue2)),
+      f3.in(decimal(decimalValue2)))
   }
 
   test("SPARK-36130: unwrap In should skip when in.list contains an expression that " +
@@ -374,5 +396,17 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
         checkEvaluation(e1, e2.eval(row), row)
       })
     }
+  }
+
+  private def checkInAndInSet(in: In, expected: Expression): Unit = {
+    assertEquivalent(in, expected)
+    val toInSet = (in: In) => InSet(in.value, HashSet() ++ in.list.map(_.eval()))
+    val expectedInSet = expected match {
+      case expectedIn: In =>
+        toInSet(expectedIn)
+      case falseIfNotNull: And =>
+        falseIfNotNull
+    }
+    assertEquivalent(toInSet(in), expectedInSet)
   }
 }

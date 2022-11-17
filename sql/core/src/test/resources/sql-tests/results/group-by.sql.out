@@ -16,10 +16,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_2422",
   "messageParameters" : {
-    "message" : "grouping expressions sequence is empty, and 'testdata.a' is not an aggregate function. Wrap '(count(testdata.b) AS `count(b)`)' in windowing function(s) or wrap 'testdata.a' in first() (or first_value) if you don't care which value you get.;\nAggregate [a#x, count(b#x) AS count(b)#xL]\n+- SubqueryAlias testdata\n   +- View (`testData`, [a#x,b#x])\n      +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]\n         +- Project [a#x, b#x]\n            +- SubqueryAlias testData\n               +- LocalRelation [a#x, b#x]\n"
-  }
+    "aggExprs" : "(count(testdata.b) AS `count(b)`)",
+    "sqlExpr" : "testdata.a"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 8,
+    "fragment" : "a"
+  } ]
 }
 
 
@@ -49,9 +57,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "message" : "expression 'testdata.a' is neither present in the group by, nor is it an aggregate function. Add to group by or wrap in first() (or first_value) if you don't care which value you get.;\nAggregate [b#x], [a#x, count(b#x) AS count(b)#xL]\n+- SubqueryAlias testdata\n   +- View (`testData`, [a#x,b#x])\n      +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]\n         +- Project [a#x, b#x]\n            +- SubqueryAlias testData\n               +- LocalRelation [a#x, b#x]\n"
+    "expression" : "\"a\""
   }
 }
 
@@ -118,9 +127,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "message" : "expression 'testdata.a' is neither present in the group by, nor is it an aggregate function. Add to group by or wrap in first() (or first_value) if you don't care which value you get.;\nAggregate [(a#x + 1)], [(a#x + 2) AS (a + 2)#x, count(b#x) AS count(b)#xL]\n+- SubqueryAlias testdata\n   +- View (`testData`, [a#x,b#x])\n      +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]\n         +- Project [a#x, b#x]\n            +- SubqueryAlias testData\n               +- LocalRelation [a#x, b#x]\n"
+    "expression" : "\"a\""
   }
 }
 
@@ -180,12 +190,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`non_existing`",
-    "objectList" : "`testdata`.`a`, `testdata`.`b`"
-  }
+    "proposal" : "`testdata`.`a`, `testdata`.`b`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 22,
+    "stopIndex" : 33,
+    "fragment" : "non_existing"
+  } ]
 }
 
 
@@ -196,10 +213,17 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "GROUP_BY_AGGREGATE",
   "messageParameters" : {
-    "message" : "aggregate functions are not allowed in GROUP BY, but found count(testdata.b);\nAggregate [count(b#x)], [count(b#x) AS k#xL]\n+- SubqueryAlias testdata\n   +- View (`testData`, [a#x,b#x])\n      +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]\n         +- Project [a#x, b#x]\n            +- SubqueryAlias testData\n               +- LocalRelation [a#x, b#x]\n"
-  }
+    "sqlExpr" : "count(testdata.b)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 15,
+    "fragment" : "COUNT(b)"
+  } ]
 }
 
 
@@ -219,9 +243,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "message" : "expression 'testdatahassamenamewithalias.k' is neither present in the group by, nor is it an aggregate function. Add to group by or wrap in first() (or first_value) if you don't care which value you get.;\nAggregate [a#x], [k#x AS a#x, count(v#x) AS count(v)#xL]\n+- SubqueryAlias testdatahassamenamewithalias\n   +- View (`testDataHasSameNameWithAlias`, [k#x,a#x,v#x])\n      +- Project [cast(k#x as int) AS k#x, cast(a#x as int) AS a#x, cast(v#x as int) AS v#x]\n         +- Project [k#x, a#x, v#x]\n            +- SubqueryAlias testDataHasSameNameWithAlias\n               +- LocalRelation [k#x, a#x, v#x]\n"
+    "expression" : "\"k\""
   }
 }
 
@@ -241,12 +266,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`k`",
-    "objectList" : "`testdata`.`a`, `testdata`.`b`"
-  }
+    "proposal" : "`testdata`.`a`, `testdata`.`b`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 48,
+    "stopIndex" : 48,
+    "fragment" : "k"
+  } ]
 }
 
 
@@ -320,10 +352,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_2422",
   "messageParameters" : {
-    "message" : "grouping expressions sequence is empty, and 'id' is not an aggregate function. Wrap '()' in windowing function(s) or wrap 'id' in first() (or first_value) if you don't care which value you get.;\nFilter (id#xL > cast(0 as bigint))\n+- Aggregate [id#xL]\n   +- Range (0, 10, step=1, splits=None)\n"
-  }
+    "aggExprs" : "()",
+    "sqlExpr" : "id"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 16,
+    "stopIndex" : 24,
+    "fragment" : "range(10)"
+  } ]
 }
 
 
@@ -359,10 +399,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "INVALID_WHERE_CONDITION",
   "messageParameters" : {
-    "message" : "\nAggregate/Window/Generate expressions are not valid in where clause of the query.\nExpression in where clause: [(max(id) > CAST(0 AS BIGINT))]\nInvalid expressions: [max(id)];\nProject [1#x]\n+- Filter (max(id#xL) > cast(0 as bigint))\n   +- Project [1 AS 1#x, id#xL]\n      +- Range (0, 10, step=1, splits=None)\n"
-  }
+    "condition" : "\"(max(id) > 0)\"",
+    "expressionList" : "max(id)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 42,
+    "fragment" : "SELECT 1 FROM range(10) HAVING MAX(id) > 0"
+  } ]
 }
 
 
@@ -494,10 +542,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve 'every(1)' due to data type mismatch: argument 1 requires boolean type, however, '1' is of int type.; line 1 pos 7;\n'Aggregate [unresolvedalias(every(1), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"1\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"every(1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 15,
+    "fragment" : "every(1)"
+  } ]
 }
 
 
@@ -508,10 +567,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve 'some(1S)' due to data type mismatch: argument 1 requires boolean type, however, '1S' is of smallint type.; line 1 pos 7;\n'Aggregate [unresolvedalias(some(1), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"1\"",
+    "inputType" : "\"SMALLINT\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"some(1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 15,
+    "fragment" : "some(1S)"
+  } ]
 }
 
 
@@ -522,10 +592,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve 'any(1L)' due to data type mismatch: argument 1 requires boolean type, however, '1L' is of bigint type.; line 1 pos 7;\n'Aggregate [unresolvedalias(any(1), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"1\"",
+    "inputType" : "\"BIGINT\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"any(1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 14,
+    "fragment" : "any(1L)"
+  } ]
 }
 
 
@@ -536,10 +617,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve 'every('true')' due to data type mismatch: argument 1 requires boolean type, however, ''true'' is of string type.; line 1 pos 7;\n'Aggregate [unresolvedalias(every(true), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"true\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"every(true)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 20,
+    "fragment" : "every(\"true\")"
+  } ]
 }
 
 
@@ -550,10 +642,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve 'bool_and(1.0BD)' due to data type mismatch: argument 1 requires boolean type, however, '1.0BD' is of decimal(2,1) type.; line 1 pos 7;\n'Aggregate [unresolvedalias(bool_and(1.0), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"1.0\"",
+    "inputType" : "\"DECIMAL(2,1)\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"bool_and(1.0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 20,
+    "fragment" : "bool_and(1.0)"
+  } ]
 }
 
 
@@ -564,10 +667,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve 'bool_or(1.0D)' due to data type mismatch: argument 1 requires boolean type, however, '1.0D' is of double type.; line 1 pos 7;\n'Aggregate [unresolvedalias(bool_or(1.0), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"1.0\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"bool_or(1.0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 20,
+    "fragment" : "bool_or(1.0D)"
+  } ]
 }
 
 
@@ -689,10 +803,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "INVALID_WHERE_CONDITION",
   "messageParameters" : {
-    "message" : "\nAggregate/Window/Generate expressions are not valid in where clause of the query.\nExpression in where clause: [(count(1) > 1L)]\nInvalid expressions: [count(1)];\nAggregate [count(1) AS count(1)#xL]\n+- Filter (count(1) > 1)\n   +- SubqueryAlias test_agg\n      +- View (`test_agg`, [k#x,v#x])\n         +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]\n            +- Project [k#x, v#x]\n               +- SubqueryAlias test_agg\n                  +- LocalRelation [k#x, v#x]\n"
-  }
+    "condition" : "\"(count(1) > 1)\"",
+    "expressionList" : "count(1)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 49,
+    "fragment" : "SELECT count(*) FROM test_agg WHERE count(*) > 1L"
+  } ]
 }
 
 
@@ -703,10 +825,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "INVALID_WHERE_CONDITION",
   "messageParameters" : {
-    "message" : "\nAggregate/Window/Generate expressions are not valid in where clause of the query.\nExpression in where clause: [((count(1) + 1L) > 1L)]\nInvalid expressions: [count(1)];\nAggregate [count(1) AS count(1)#xL]\n+- Filter ((count(1) + 1) > 1)\n   +- SubqueryAlias test_agg\n      +- View (`test_agg`, [k#x,v#x])\n         +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]\n            +- Project [k#x, v#x]\n               +- SubqueryAlias test_agg\n                  +- LocalRelation [k#x, v#x]\n"
-  }
+    "condition" : "\"((count(1) + 1) > 1)\"",
+    "expressionList" : "count(1)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 54,
+    "fragment" : "SELECT count(*) FROM test_agg WHERE count(*) + 1L > 1L"
+  } ]
 }
 
 
@@ -717,10 +847,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "INVALID_WHERE_CONDITION",
   "messageParameters" : {
-    "message" : "\nAggregate/Window/Generate expressions are not valid in where clause of the query.\nExpression in where clause: [(((test_agg.k = 1) OR (test_agg.k = 2)) OR (((count(1) + 1L) > 1L) OR (max(test_agg.k) > 1)))]\nInvalid expressions: [count(1), max(test_agg.k)];\nAggregate [count(1) AS count(1)#xL]\n+- Filter (((k#x = 1) OR (k#x = 2)) OR (((count(1) + 1) > 1) OR (max(k#x) > 1)))\n   +- SubqueryAlias test_agg\n      +- View (`test_agg`, [k#x,v#x])\n         +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]\n            +- Project [k#x, v#x]\n               +- SubqueryAlias test_agg\n                  +- LocalRelation [k#x, v#x]\n"
-  }
+    "condition" : "\"(((k = 1) OR (k = 2)) OR (((count(1) + 1) > 1) OR (max(k) > 1)))\"",
+    "expressionList" : "count(1), max(test_agg.k)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 86,
+    "fragment" : "SELECT count(*) FROM test_agg WHERE k = 1 or k = 2 or count(*) + 1L > 1L or max(k) > 1"
+  } ]
 }
 
 

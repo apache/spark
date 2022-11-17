@@ -320,7 +320,7 @@ class NumOpsTest(OpsTestBase):
         pdf, psdf = self.pdf, self.psdf
         for col in self.numeric_df_cols:
             pser, psser = pdf[col], psdf[col]
-            self.assert_eq(pser, psser.to_pandas())
+            self.assert_eq(pser, psser._to_pandas())
             self.assert_eq(ps.from_pandas(pser), psser)
 
     def test_isnull(self):
@@ -464,7 +464,7 @@ class IntegralExtensionOpsTest(OpsTestBase):
 
     def test_from_to_pandas(self):
         for pser, psser in self.intergral_extension_pser_psser_pairs:
-            self.check_extension(pser, psser.to_pandas())
+            self.check_extension(pser, psser._to_pandas())
             self.check_extension(ps.from_pandas(pser), psser)
 
     def test_isnull(self):
@@ -607,7 +607,7 @@ class FractionalExtensionOpsTest(OpsTestBase):
 
     def test_from_to_pandas(self):
         for pser, psser in self.fractional_extension_pser_psser_pairs:
-            self.check_extension(pser, psser.to_pandas())
+            self.check_extension(pser, psser._to_pandas())
             self.check_extension(ps.from_pandas(pser), psser)
 
     def test_isnull(self):

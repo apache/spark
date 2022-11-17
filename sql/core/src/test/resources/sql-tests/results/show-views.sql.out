@@ -140,9 +140,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "SCHEMA_NOT_FOUND",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "message" : "Database 'wrongdb' not found"
+    "schemaName" : "`wrongdb`"
   }
 }
 

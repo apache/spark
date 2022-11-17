@@ -22,7 +22,7 @@ import java.time.{Duration, Period}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions.{DslAttr, DslString, StringToAttributeConversionHelper}
 import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
@@ -96,7 +96,14 @@ class HistogramNumericSuite extends SparkFunSuite with SQLHelper {
 
     assertEqual(
       wrongNB.checkInputDataTypes(),
-      TypeCheckFailure("histogram_numeric needs the nBins provided must be a constant literal.")
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> "nb",
+          "inputType" -> "\"INT\"",
+          "inputExpr" -> "\"b\""
+        )
+      )
     )
   }
 
@@ -106,7 +113,14 @@ class HistogramNumericSuite extends SparkFunSuite with SQLHelper {
 
     assertEqual(
       wrongNB.checkInputDataTypes(),
-      TypeCheckFailure("histogram_numeric needs nBins to be at least 2, but you supplied 1.")
+      DataTypeMismatch(
+        errorSubClass = "VALUE_OUT_OF_RANGE",
+        messageParameters = Map(
+          "exprName" -> "nb",
+          "valueRange" -> s"[2, ${Int.MaxValue}]",
+          "currentValue" -> "1"
+        )
+      )
     )
   }
 
@@ -158,10 +172,15 @@ class HistogramNumericSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("HistogramNumeric: nulls in nBins expression") {
-    assert(new HistogramNumeric(
-      AttributeReference("a", DoubleType)(),
-      Literal(null, IntegerType)).checkInputDataTypes() ===
-      TypeCheckFailure("histogram_numeric needs nBins value must not be null."))
+    assertEqual(
+      new HistogramNumeric(
+        AttributeReference("a", DoubleType)(),
+        Literal(null, IntegerType)).checkInputDataTypes(),
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_NULL",
+        messageParameters = Map("exprName" -> "nb")
+      )
+    )
   }
 
   test("class HistogramNumeric, null handling") {

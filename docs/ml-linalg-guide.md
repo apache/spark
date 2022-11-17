@@ -58,15 +58,17 @@ sudo yum install openblas
 
 To verify native libraries are properly loaded, start `spark-shell` and run the following code:
 ```
-scala> import dev.ludovic.netlib.NativeBLAS
+scala> import dev.ludovic.netlib.blas.NativeBLAS
 scala> NativeBLAS.getInstance()
 ```
 
-If they are correctly loaded, it should print `dev.ludovic.netlib.NativeBLAS = dev.ludovic.netlib.blas.JNIBLAS@...`. Otherwise the warnings should be printed:
+If they are correctly loaded, it should print `dev.ludovic.netlib.blas.NativeBLAS = dev.ludovic.netlib.blas.JNIBLAS@...`. Otherwise the warnings should be printed:
 ```
-WARN NativeBLAS: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
+WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
+...
 java.lang.RuntimeException: Unable to load native implementation
-  at dev.ludovic.netlib.NativeBLAS.getInstance(NativeBLAS.java:44)
+  at dev.ludovic.netlib.blas.InstanceBuilder.nativeBlas(InstanceBuilder.java:59)
+  at dev.ludovic.netlib.blas.NativeBLAS.getInstance(NativeBLAS.java:31)
   ...
 ```
 

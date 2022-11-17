@@ -24,10 +24,17 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0035",
   "messageParameters" : {
-    "message" : "\nOperation not allowed: ALTER TABLE table CHANGE COLUMN requires a TYPE, a SET/DROP, a COMMENT, or a FIRST/AFTER(line 1, pos 0)\n\n== SQL ==\nALTER TABLE test_change CHANGE a\n^^^\n"
-  }
+    "message" : "ALTER TABLE table CHANGE COLUMN requires a TYPE, a SET/DROP, a COMMENT, or a FIRST/AFTER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 32,
+    "fragment" : "ALTER TABLE test_change CHANGE a"
+  } ]
 }
 
 
@@ -48,9 +55,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+  "sqlState" : "0A000",
   "messageParameters" : {
-    "message" : "RENAME COLUMN is only supported with v2 tables."
+    "operation" : "RENAME COLUMN",
+    "tableName" : "`spark_catalog`.`default`.`test_change`"
   }
 }
 
@@ -72,9 +81,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1245",
   "messageParameters" : {
-    "message" : "ALTER TABLE CHANGE COLUMN is not supported for changing column 'a' with type 'IntegerType' to 'a' with type 'StringType'"
+    "newName" : "a",
+    "newType" : "StringType",
+    "originName" : "a",
+    "originType" : "IntegerType"
   }
 }
 
@@ -96,9 +108,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+  "sqlState" : "0A000",
   "messageParameters" : {
-    "message" : "ALTER COLUMN ... FIRST | ALTER is only supported with v2 tables."
+    "operation" : "ALTER COLUMN ... FIRST | ALTER",
+    "tableName" : "`spark_catalog`.`default`.`test_change`"
   }
 }
 
@@ -110,9 +124,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+  "sqlState" : "0A000",
   "messageParameters" : {
-    "message" : "ALTER COLUMN ... FIRST | ALTER is only supported with v2 tables."
+    "operation" : "ALTER COLUMN ... FIRST | ALTER",
+    "tableName" : "`spark_catalog`.`default`.`test_change`"
   }
 }
 
@@ -194,10 +210,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1331",
   "messageParameters" : {
-    "message" : "Missing field invalid_col in table spark_catalog.default.test_change with schema:\nroot\n |-- a: integer (nullable = true)\n |-- b: string (nullable = true)\n |-- c: integer (nullable = true)\n; line 1 pos 0"
-  }
+    "fieldName" : "invalid_col",
+    "schema" : "root\n |-- a: integer (nullable = true)\n |-- b: string (nullable = true)\n |-- c: integer (nullable = true)\n",
+    "table" : "spark_catalog.default.test_change"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 51,
+    "fragment" : "ALTER TABLE test_change CHANGE invalid_col TYPE INT"
+  } ]
 }
 
 
@@ -244,10 +269,20 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1013",
   "messageParameters" : {
-    "message" : "temp_view is a temp view. 'ALTER TABLE ... CHANGE COLUMN' expects a table.; line 1 pos 12"
-  }
+    "cmd" : "ALTER TABLE ... CHANGE COLUMN",
+    "hintStr" : "",
+    "nameParts" : "temp_view",
+    "viewStr" : "temp view"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 13,
+    "stopIndex" : 21,
+    "fragment" : "temp_view"
+  } ]
 }
 
 
@@ -266,10 +301,20 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1013",
   "messageParameters" : {
-    "message" : "global_temp.global_temp_view is a temp view. 'ALTER TABLE ... CHANGE COLUMN' expects a table.; line 1 pos 12"
-  }
+    "cmd" : "ALTER TABLE ... CHANGE COLUMN",
+    "hintStr" : "",
+    "nameParts" : "global_temp.global_temp_view",
+    "viewStr" : "temp view"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 13,
+    "stopIndex" : 40,
+    "fragment" : "global_temp.global_temp_view"
+  } ]
 }
 
 

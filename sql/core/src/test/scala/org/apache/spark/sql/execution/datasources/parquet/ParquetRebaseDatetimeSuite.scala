@@ -413,7 +413,7 @@ abstract class ParquetRebaseDatetimeSuite
         val e = intercept[SparkException] {
           df.write.parquet(dir.getCanonicalPath)
         }
-        val errMsg = e.getCause.getCause.getCause.asInstanceOf[SparkUpgradeException].getMessage
+        val errMsg = e.getCause.getCause.asInstanceOf[SparkUpgradeException].getMessage
         assert(errMsg.contains("You may get a different result due to the upgrading"))
       }
     }
@@ -429,7 +429,7 @@ abstract class ParquetRebaseDatetimeSuite
           val e = intercept[SparkException] {
             df.write.parquet(dir.getCanonicalPath)
           }
-          val errMsg = e.getCause.getCause.getCause.asInstanceOf[SparkUpgradeException].getMessage
+          val errMsg = e.getCause.getCause.asInstanceOf[SparkUpgradeException].getMessage
           assert(errMsg.contains("You may get a different result due to the upgrading"))
         }
       }

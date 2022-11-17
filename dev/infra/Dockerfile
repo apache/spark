@@ -17,9 +17,9 @@
 
 # Image for building and testing Spark branches. Based on Ubuntu 20.04.
 # See also in https://hub.docker.com/_/ubuntu
-FROM ubuntu:focal-20220801
+FROM ubuntu:focal-20220922
 
-ENV FULL_REFRESH_DATE 20220706
+ENV FULL_REFRESH_DATE 20221019
 
 ENV DEBIAN_FRONTEND noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN true
@@ -32,7 +32,7 @@ RUN $APT_INSTALL software-properties-common git libxml2-dev pkg-config curl wget
 RUN update-alternatives --set java /usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java
 
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.9
-RUN python3.9 -m pip install numpy pyarrow 'pandas<=1.4.3' scipy unittest-xml-reporting plotly>=4.8 sklearn 'mlflow>=1.0' coverage matplotlib
+RUN python3.9 -m pip install numpy pyarrow 'pandas<=1.5.1' scipy unittest-xml-reporting plotly>=4.8 sklearn 'mlflow>=1.0' coverage matplotlib openpyxl
 
 RUN add-apt-repository ppa:pypy/ppa
 RUN apt update
@@ -45,11 +45,11 @@ RUN mkdir -p /usr/local/pypy/pypy3.7 && \
     ln -sf /usr/local/pypy/pypy3.7/bin/pypy /usr/local/bin/pypy3
 
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | pypy3
-RUN pypy3 -m pip install numpy 'pandas<=1.4.3' scipy coverage matplotlib
+RUN pypy3 -m pip install numpy 'pandas<=1.5.1' scipy coverage matplotlib
 
 RUN $APT_INSTALL gnupg ca-certificates pandoc
 RUN echo 'deb https://cloud.r-project.org/bin/linux/ubuntu focal-cran40/' >> /etc/apt/sources.list
-RUN gpg --keyserver keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57CBB651716619E084DAB9
+RUN gpg --keyserver hkps://keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57CBB651716619E084DAB9
 RUN gpg -a --export E084DAB9 | apt-key add -
 RUN add-apt-repository 'deb https://cloud.r-project.org/bin/linux/ubuntu focal-cran40/'
 RUN apt update
@@ -65,3 +65,6 @@ RUN Rscript -e "devtools::install_version('roxygen2', version='7.2.0', repos='ht
 
 # See more in SPARK-39735
 ENV R_LIBS_SITE "/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
+
+# Add Python deps for Spark Connect.
+RUN python3.9 -m pip install grpcio protobuf

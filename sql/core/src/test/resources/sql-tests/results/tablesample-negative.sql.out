@@ -30,10 +30,17 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0064",
   "messageParameters" : {
-    "message" : "\nSampling fraction (-0.01) must be on interval [0, 1](line 1, pos 24)\n\n== SQL ==\nSELECT mydb1.t1 FROM t1 TABLESAMPLE (-1 PERCENT)\n------------------------^^^\n"
-  }
+    "msg" : "Sampling fraction (-0.01) must be on interval [0, 1]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 25,
+    "stopIndex" : 48,
+    "fragment" : "TABLESAMPLE (-1 PERCENT)"
+  } ]
 }
 
 
@@ -44,10 +51,17 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0064",
   "messageParameters" : {
-    "message" : "\nSampling fraction (1.01) must be on interval [0, 1](line 1, pos 24)\n\n== SQL ==\nSELECT mydb1.t1 FROM t1 TABLESAMPLE (101 PERCENT)\n------------------------^^^\n"
-  }
+    "msg" : "Sampling fraction (1.01) must be on interval [0, 1]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 25,
+    "stopIndex" : 49,
+    "fragment" : "TABLESAMPLE (101 PERCENT)"
+  } ]
 }
 
 

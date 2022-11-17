@@ -92,10 +92,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "message" : "Table or view not found: showdb.badtable; line 1 pos 16;\n'ShowColumns ArrayBuffer(showdb), [col_name#x]\n+- 'UnresolvedTableOrView [showdb, badtable], SHOW COLUMNS, true\n"
-  }
+    "relationName" : "`showdb`.`badtable`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 17,
+    "stopIndex" : 24,
+    "fragment" : "badtable"
+  } ]
 }
 
 
@@ -115,9 +123,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1057",
   "messageParameters" : {
-    "message" : "SHOW COLUMNS with conflicting databases: 'baddb' != 'showdb'"
+    "dbA" : "baddb",
+    "dbB" : "showdb"
   }
 }
 
@@ -138,10 +147,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "message" : "Table or view not found: showdb.showcolumn3; line 1 pos 16;\n'ShowColumns [col_name#x]\n+- 'UnresolvedTableOrView [showdb, showcolumn3], SHOW COLUMNS, true\n"
-  }
+    "relationName" : "`showdb`.`showcolumn3`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 17,
+    "stopIndex" : 34,
+    "fragment" : "showdb.showcolumn3"
+  } ]
 }
 
 
@@ -152,10 +169,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "message" : "Table or view not found: showdb.showcolumn3; line 1 pos 16;\n'ShowColumns ArrayBuffer(showdb), [col_name#x]\n+- 'UnresolvedTableOrView [showdb, showcolumn3], SHOW COLUMNS, true\n"
-  }
+    "relationName" : "`showdb`.`showcolumn3`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 17,
+    "stopIndex" : 27,
+    "fragment" : "showcolumn3"
+  } ]
 }
 
 
@@ -166,10 +191,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "message" : "Table or view not found: showcolumn4; line 1 pos 16;\n'ShowColumns [col_name#x]\n+- 'UnresolvedTableOrView [showcolumn4], SHOW COLUMNS, true\n"
-  }
+    "relationName" : "`showcolumn4`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 17,
+    "stopIndex" : 27,
+    "fragment" : "showcolumn4"
+  } ]
 }
 
 

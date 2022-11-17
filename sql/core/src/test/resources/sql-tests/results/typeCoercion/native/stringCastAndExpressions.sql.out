@@ -102,10 +102,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "messageParameters" : {
-    "message" : "cannot resolve 't.a' due to data type mismatch: cannot cast string to array<string>; line 1 pos 7;\n'Project [unresolvedalias(cast(a#x as array<string>), None)]\n+- SubqueryAlias t\n   +- View (`t`, [a#x])\n      +- Project [cast(a#x as string) AS a#x]\n         +- Project [aa AS a#x]\n            +- OneRowRelation\n"
-  }
+    "sqlExpr" : "\"a\"",
+    "srcType" : "\"STRING\"",
+    "targetType" : "\"ARRAY<STRING>\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 31,
+    "fragment" : "cast(a as array<string>)"
+  } ]
 }
 
 
@@ -116,10 +125,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "messageParameters" : {
-    "message" : "cannot resolve 't.a' due to data type mismatch: cannot cast string to struct<s:string>; line 1 pos 7;\n'Project [unresolvedalias(cast(a#x as struct<s:string>), None)]\n+- SubqueryAlias t\n   +- View (`t`, [a#x])\n      +- Project [cast(a#x as string) AS a#x]\n         +- Project [aa AS a#x]\n            +- OneRowRelation\n"
-  }
+    "sqlExpr" : "\"a\"",
+    "srcType" : "\"STRING\"",
+    "targetType" : "\"STRUCT<s: STRING>\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 34,
+    "fragment" : "cast(a as struct<s:string>)"
+  } ]
 }
 
 
@@ -130,10 +148,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "messageParameters" : {
-    "message" : "cannot resolve 't.a' due to data type mismatch: cannot cast string to map<string,string>; line 1 pos 7;\n'Project [unresolvedalias(cast(a#x as map<string,string>), None)]\n+- SubqueryAlias t\n   +- View (`t`, [a#x])\n      +- Project [cast(a#x as string) AS a#x]\n         +- Project [aa AS a#x]\n            +- OneRowRelation\n"
-  }
+    "sqlExpr" : "\"a\"",
+    "srcType" : "\"STRING\"",
+    "targetType" : "\"MAP<STRING, STRING>\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 37,
+    "fragment" : "cast(a as map<string, string>)"
+  } ]
 }
 
 
@@ -152,11 +179,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-  "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
   "messageParameters" : {
-    "pattern" : "'aa'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'aa'"
   }
 }
 
@@ -176,11 +202,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-  "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
   "messageParameters" : {
-    "pattern" : "'aa'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'aa'"
   }
 }
 
@@ -200,11 +225,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-  "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
   "messageParameters" : {
-    "pattern" : "'aa'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'aa'"
   }
 }
 

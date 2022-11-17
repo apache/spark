@@ -210,9 +210,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "message" : "Table or view 'show_t*' not found in database 'showdb'"
+    "relationName" : "`showdb`.`show_t*`"
   }
 }
 
@@ -224,9 +225,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1232",
   "messageParameters" : {
-    "message" : "Partition spec is invalid. The spec (c) must match the partition spec (c, d) defined in table '`spark_catalog`.`showdb`.`show_t1`'"
+    "partitionColumnNames" : "c, d",
+    "specKeys" : "c",
+    "tableName" : "`spark_catalog`.`showdb`.`show_t1`"
   }
 }
 
@@ -238,9 +241,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1231",
   "messageParameters" : {
-    "message" : "a is not a valid partition column in table `spark_catalog`.`showdb`.`show_t1`."
+    "key" : "a",
+    "tblName" : "`spark_catalog`.`showdb`.`show_t1`"
   }
 }
 
@@ -252,9 +256,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "PARTITIONS_NOT_FOUND",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "message" : "Partition not found in table 'show_t1' database 'showdb':\nc -> Ch\nd -> 1"
+    "partitionList" : "PARTITION (`c` = Ch, `d` = 1)",
+    "tableName" : "`showdb`.`show_t1`"
   }
 }
 

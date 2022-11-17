@@ -42,6 +42,9 @@ class ExecutorPodsWatchSnapshotSourceSuite extends SparkFunSuite with BeforeAndA
   private var podOperations: PODS = _
 
   @Mock
+  private var podsWithNamespace: PODS_WITH_NAMESPACE = _
+
+  @Mock
   private var appIdLabeledPods: LABELED_PODS = _
 
   @Mock
@@ -58,7 +61,8 @@ class ExecutorPodsWatchSnapshotSourceSuite extends SparkFunSuite with BeforeAndA
     MockitoAnnotations.openMocks(this).close()
     watch = ArgumentCaptor.forClass(classOf[Watcher[Pod]])
     when(kubernetesClient.pods()).thenReturn(podOperations)
-    when(podOperations.withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID))
+    when(podOperations.inNamespace("default")).thenReturn(podsWithNamespace)
+    when(podsWithNamespace.withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID))
       .thenReturn(appIdLabeledPods)
     when(appIdLabeledPods.withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
       .thenReturn(executorRoleLabeledPods)

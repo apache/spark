@@ -19,6 +19,7 @@ package org.apache.spark.memory;
 
 import java.io.IOException;
 
+import org.apache.spark.errors.SparkCoreErrors;
 import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 
@@ -153,9 +154,6 @@ public abstract class MemoryConsumer {
       taskMemoryManager.freePage(page, this);
     }
     taskMemoryManager.showMemoryUsage();
-    // checkstyle.off: RegexpSinglelineJava
-    throw new SparkOutOfMemoryError("UNABLE_TO_ACQUIRE_MEMORY",
-            new String[]{Long.toString(required), Long.toString(got)});
-    // checkstyle.on: RegexpSinglelineJava
+    throw SparkCoreErrors.outOfMemoryError(required, got);
   }
 }

@@ -27,7 +27,8 @@ import org.apache.spark.util.Utils
 /**
  * The class contains tests for the `DESCRIBE TABLE` command to check V2 table catalogs.
  */
-class DescribeTableSuite extends command.DescribeTableSuiteBase with CommandSuiteBase {
+class DescribeTableSuite extends command.DescribeTableSuiteBase
+  with CommandSuiteBase {
 
   test("Describing a partition is not supported") {
     withNamespaceAndTable("ns", "table") { tbl =>
@@ -99,15 +100,21 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase with CommandSuit
         |CREATE TABLE $tbl
         |(key int COMMENT 'column_comment', col struct<x:int, y:string>)
         |$defaultUsing""".stripMargin)
+      val query = s"DESC $tbl key1"
       checkError(
         exception = intercept[AnalysisException] {
-          sql(s"DESC $tbl key1").collect()
+          sql(query).collect()
         },
-        errorClass = "UNRESOLVED_COLUMN",
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = "42000",
         parameters = Map(
           "objectName" -> "`key1`",
-          "objectList" -> "`test_catalog`.`ns`.`tbl`.`key`, `test_catalog`.`ns`.`tbl`.`col`"))
+          "proposal" -> "`test_catalog`.`ns`.`tbl`.`key`, `test_catalog`.`ns`.`tbl`.`col`"),
+        context = ExpectedContext(
+          fragment = query,
+          start = 0,
+          stop = query.length -1)
+      )
     }
   }
 
@@ -124,15 +131,20 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase with CommandSuit
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       withNamespaceAndTable("ns", "tbl") { tbl =>
         sql(s"CREATE TABLE $tbl (key int COMMENT 'comment1') $defaultUsing")
+        val query = s"DESC $tbl KEY"
         checkError(
           exception = intercept[AnalysisException] {
-            sql(s"DESC $tbl KEY").collect()
+            sql(query).collect()
           },
-          errorClass = "UNRESOLVED_COLUMN",
+          errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
           sqlState = "42000",
           parameters = Map(
             "objectName" -> "`KEY`",
-            "objectList" -> "`test_catalog`.`ns`.`tbl`.`key`"))
+            "proposal" -> "`test_catalog`.`ns`.`tbl`.`key`"),
+          context = ExpectedContext(
+            fragment = query,
+            start = 0,
+            stop = query.length - 1))
       }
     }
   }

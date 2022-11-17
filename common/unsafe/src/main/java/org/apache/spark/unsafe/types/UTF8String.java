@@ -1000,6 +1000,21 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public UTF8String[] split(UTF8String pattern, int limit) {
+    // For the empty `pattern` a `split` function ignores trailing empty strings unless original
+    // string is empty.
+    if (numBytes() != 0 && pattern.numBytes() == 0) {
+      int newLimit = limit > numChars() || limit <= 0 ? numChars() : limit;
+      byte[] input = getBytes();
+      int byteIndex = 0;
+      int charIndex = 0;
+      UTF8String[] result = new UTF8String[newLimit];
+      while (charIndex < newLimit) {
+        int currCharNumBytes = numBytesForFirstByte(input[byteIndex]);
+        result[charIndex++] = UTF8String.fromBytes(input, byteIndex, currCharNumBytes);
+        byteIndex += currCharNumBytes;
+      }
+      return result;
+    }
     return split(pattern.toString(), limit);
   }
 

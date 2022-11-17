@@ -35,6 +35,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.YearMonthIntervalType._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.collection.Utils
 
 /**
  * Functions to convert Scala types to Catalyst types and vice versa.
@@ -229,7 +230,7 @@ object CatalystTypeConverters {
         val convertedValues =
           if (isPrimitive(valueType)) values else values.map(valueConverter.toScala)
 
-        convertedKeys.zip(convertedValues).toMap
+        Utils.toMap(convertedKeys, convertedValues)
       }
     }
 

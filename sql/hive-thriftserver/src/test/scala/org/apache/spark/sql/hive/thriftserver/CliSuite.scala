@@ -388,7 +388,7 @@ class CliSuite extends SparkFunSuite {
   test("SPARK-11188 Analysis error reporting") {
     runCliWithin(timeout = 2.minute,
       errorResponses = Seq("AnalysisException"))(
-      "select * from nonexistent_table;" -> "Table or view not found: nonexistent_table;"
+      "select * from nonexistent_table;" -> "nonexistent_table"
     )
   }
 
@@ -626,13 +626,14 @@ class CliSuite extends SparkFunSuite {
   }
 
   test("SPARK-37555: spark-sql should pass last unclosed comment to backend") {
-    runCliWithin(2.minute)(
+    runCliWithin(5.minute)(
       // Only unclosed comment.
       "/* SELECT /*+ HINT() 4; */;".stripMargin -> "Syntax error at or near ';'",
       // Unclosed nested bracketed comment.
       "/* SELECT /*+ HINT() 4; */ SELECT 1;".stripMargin -> "1",
       // Unclosed comment with query.
-      "/* Here is a unclosed bracketed comment SELECT 1;"-> "Unclosed bracketed comment",
+      "/* Here is a unclosed bracketed comment SELECT 1;"->
+        "Found an unclosed bracketed comment. Please, append */ at the end of the comment.",
       // Whole comment.
       "/* SELECT /*+ HINT() */ 4; */;".stripMargin -> ""
     )
@@ -755,7 +756,7 @@ class CliSuite extends SparkFunSuite {
         errorMessage =
           """{
             |  "errorClass" : "DIVIDE_BY_ZERO",
-            |  "message" : "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error.",
+            |  "messageTemplate" : "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error.",
             |  "sqlState" : "22012",
             |  "messageParameters" : {
             |    "config" : "\"spark.sql.ansi.enabled\""
@@ -772,4 +773,19 @@ class CliSuite extends SparkFunSuite {
     }
   }
   // scalastyle:on line.size.limit
+
+  test("SPARK-35242: Support change catalog default database for spark") {
+    // Create db and table first
+    runCliWithin(2.minute,
+      Seq("--conf", s"${StaticSQLConf.WAREHOUSE_PATH.key}=${sparkWareHouseDir}"))(
+      "create database spark_35242;" -> "",
+      "use spark_35242;" -> "",
+      "CREATE TABLE spark_test(key INT, val STRING);" -> "")
+
+    // Set default db
+    runCliWithin(2.minute,
+      Seq("--conf", s"${StaticSQLConf.WAREHOUSE_PATH.key}=${sparkWareHouseDir}",
+          "--conf", s"${StaticSQLConf.CATALOG_DEFAULT_DATABASE.key}=spark_35242"))(
+      "show tables;" -> "spark_test")
+  }
 }

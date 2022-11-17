@@ -51,10 +51,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_2403",
   "messageParameters" : {
-    "message" : "The limit expression must be equal to or greater than 0, but got -1;\nGlobalLimit -1\n+- LocalLimit -1\n   +- Project [key#x, value#x]\n      +- SubqueryAlias spark_catalog.default.testdata\n         +- Relation spark_catalog.default.testdata[key#x,value#x] parquet\n"
-  }
+    "name" : "limit",
+    "v" : "-1"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 30,
+    "stopIndex" : 31,
+    "fragment" : "-1"
+  } ]
 }
 
 
@@ -65,10 +73,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_2403",
   "messageParameters" : {
-    "message" : "The limit expression must be equal to or greater than 0, but got -1;\nProject [key#x, value#x]\n+- GlobalLimit -1\n   +- LocalLimit -1\n      +- SubqueryAlias spark_catalog.default.testdata\n         +- Relation spark_catalog.default.testdata[key#x,value#x] parquet\n"
-  }
+    "name" : "limit",
+    "v" : "-1"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 37,
+    "stopIndex" : 38,
+    "fragment" : "-1"
+  } ]
 }
 
 
@@ -87,10 +103,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_2402",
   "messageParameters" : {
-    "message" : "The evaluated limit expression must not be null, but got CAST(NULL AS INT);\nGlobalLimit cast(null as int)\n+- LocalLimit cast(null as int)\n   +- Project [key#x, value#x]\n      +- SubqueryAlias spark_catalog.default.testdata\n         +- Relation spark_catalog.default.testdata[key#x,value#x] parquet\n"
-  }
+    "limitExpr" : "CAST(NULL AS INT)",
+    "name" : "limit"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 30,
+    "stopIndex" : 46,
+    "fragment" : "CAST(NULL AS INT)"
+  } ]
 }
 
 
@@ -101,10 +125,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_2400",
   "messageParameters" : {
-    "message" : "The limit expression must evaluate to a constant value, but got (spark_catalog.default.testdata.key > 3);\nGlobalLimit (key#x > 3)\n+- LocalLimit (key#x > 3)\n   +- Project [key#x, value#x]\n      +- SubqueryAlias spark_catalog.default.testdata\n         +- Relation spark_catalog.default.testdata[key#x,value#x] parquet\n"
-  }
+    "limitExpr" : "(spark_catalog.default.testdata.key > 3)",
+    "name" : "limit"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 30,
+    "stopIndex" : 36,
+    "fragment" : "key > 3"
+  } ]
 }
 
 
@@ -115,9 +147,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_2401",
   "messageParameters" : {
-    "message" : "The limit expression must be integer type, but got boolean;\nGlobalLimit true\n+- LocalLimit true\n   +- Project [key#x, value#x]\n      +- SubqueryAlias spark_catalog.default.testdata\n         +- Relation spark_catalog.default.testdata[key#x,value#x] parquet\n"
+    "dataType" : "boolean",
+    "name" : "limit"
   }
 }
 
@@ -129,10 +162,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_2401",
   "messageParameters" : {
-    "message" : "The limit expression must be integer type, but got string;\nGlobalLimit a\n+- LocalLimit a\n   +- Project [key#x, value#x]\n      +- SubqueryAlias spark_catalog.default.testdata\n         +- Relation spark_catalog.default.testdata[key#x,value#x] parquet\n"
-  }
+    "dataType" : "string",
+    "name" : "limit"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 30,
+    "stopIndex" : 32,
+    "fragment" : "'a'"
+  } ]
 }
 
 

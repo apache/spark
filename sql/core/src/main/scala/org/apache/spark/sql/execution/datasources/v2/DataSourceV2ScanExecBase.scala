@@ -91,11 +91,18 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
   }
 
   override def outputPartitioning: physical.Partitioning = {
-    if (partitions.length == 1) SinglePartition
-    else groupedPartitions.map { partitionValues =>
-      KeyGroupedPartitioning(keyGroupedPartitioning.get,
-        partitionValues.size, Some(partitionValues.map(_._1)))
-    }.getOrElse(super.outputPartitioning)
+    if (partitions.length == 1) {
+      SinglePartition
+    } else {
+      keyGroupedPartitioning match {
+        case Some(exprs) if KeyGroupedPartitioning.supportsExpressions(exprs) =>
+          groupedPartitions.map { partitionValues =>
+            KeyGroupedPartitioning(exprs, partitionValues.size, Some(partitionValues.map(_._1)))
+          }.getOrElse(super.outputPartitioning)
+        case _ =>
+          super.outputPartitioning
+      }
+    }
   }
 
   @transient lazy val groupedPartitions: Option[Seq[(InternalRow, Seq[InputPartition])]] =

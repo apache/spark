@@ -73,10 +73,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "ORDER_BY_POS_OUT_OF_RANGE",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "message" : "ORDER BY position 0 is not in select list (valid range is [1, 2]); line 1 pos 28"
-  }
+    "index" : "0",
+    "size" : "2"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 29,
+    "stopIndex" : 29,
+    "fragment" : "0"
+  } ]
 }
 
 
@@ -87,10 +96,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "ORDER_BY_POS_OUT_OF_RANGE",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "message" : "ORDER BY position -1 is not in select list (valid range is [1, 2]); line 1 pos 28"
-  }
+    "index" : "-1",
+    "size" : "2"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 29,
+    "stopIndex" : 30,
+    "fragment" : "-1"
+  } ]
 }
 
 
@@ -101,10 +119,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "ORDER_BY_POS_OUT_OF_RANGE",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "message" : "ORDER BY position 3 is not in select list (valid range is [1, 2]); line 1 pos 28"
-  }
+    "index" : "3",
+    "size" : "2"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 29,
+    "stopIndex" : 29,
+    "fragment" : "3"
+  } ]
 }
 
 

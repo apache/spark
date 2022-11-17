@@ -217,10 +217,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "message" : "Table or view not found: outermost; line 4 pos 23;\n'WithCTE\n:- CTERelationDef 137, false\n:  +- SubqueryAlias innermost\n:     +- Project [2 AS 2#x]\n:        +- OneRowRelation\n:- 'CTERelationDef 138, false\n:  +- 'SubqueryAlias outermost\n:     +- 'UnresolvedSubqueryColumnAliases [x]\n:        +- 'Distinct\n:           +- 'Union false, false\n:              :- Project [1 AS 1#x]\n:              :  +- OneRowRelation\n:              +- 'Distinct\n:                 +- 'Union false, false\n:                    :- 'Project [*]\n:                    :  +- 'UnresolvedRelation [outermost], [], false\n:                    +- Project [2#x]\n:                       +- SubqueryAlias innermost\n:                          +- CTERelationRef 137, true, [2#x]\n+- 'Sort [unresolvedordinal(1) ASC NULLS FIRST], true\n   +- 'Project [*]\n      +- 'SubqueryAlias outermost\n         +- 'CTERelationRef 138, false\n"
-  }
+    "relationName" : "`outermost`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 96,
+    "stopIndex" : 104,
+    "fragment" : "outermost"
+  } ]
 }
 
 
@@ -352,10 +360,17 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0030",
   "messageParameters" : {
-    "message" : "\nDataType baz is not supported.(line 1, pos 23)\n\n== SQL ==\ncreate table foo (with baz)\n-----------------------^^^\n"
-  }
+    "dataType" : "baz"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 24,
+    "stopIndex" : 26,
+    "fragment" : "baz"
+  } ]
 }
 
 
@@ -366,10 +381,17 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0030",
   "messageParameters" : {
-    "message" : "\nDataType ordinality is not supported.(line 1, pos 23)\n\n== SQL ==\ncreate table foo (with ordinality)\n-----------------------^^^\n"
-  }
+    "dataType" : "ordinality"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 24,
+    "stopIndex" : 33,
+    "fragment" : "ordinality"
+  } ]
 }
 
 
@@ -388,10 +410,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "message" : "Table not found: test; line 1 pos 37;\n'InsertIntoStatement 'UnresolvedRelation [test], [], false, false, false\n+- LocalRelation [col1#x]\n"
-  }
+    "relationName" : "`test`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 38,
+    "stopIndex" : 41,
+    "fragment" : "test"
+  } ]
 }
 
 

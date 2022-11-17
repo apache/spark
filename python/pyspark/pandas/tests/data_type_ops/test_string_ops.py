@@ -160,7 +160,7 @@ class StringOpsTest(OpsTestBase):
         data = ["x", "y", "z"]
         pser = pd.Series(data)
         psser = ps.Series(data)
-        self.assert_eq(pser, psser.to_pandas())
+        self.assert_eq(pser, psser._to_pandas())
         self.assert_eq(ps.from_pandas(pser), psser)
 
     def test_isnull(self):
@@ -275,7 +275,7 @@ class StringExtensionOpsTest(StringOpsTest):
         data = ["x", "y", "z", None]
         pser = pd.Series(data, dtype="string")
         psser = ps.Series(data, dtype="string")
-        self.assert_eq(pser, psser.to_pandas())
+        self.assert_eq(pser, psser._to_pandas())
         self.assert_eq(ps.from_pandas(pser), psser)
 
     def test_isnull(self):

@@ -166,7 +166,7 @@ class CategoricalOpsTest(OpsTestBase):
         data = [1, "x", "y"]
         pser = pd.Series(data, dtype="category")
         psser = ps.Series(data, dtype="category")
-        self.assert_eq(pser, psser.to_pandas())
+        self.assert_eq(pser, psser._to_pandas())
         self.assert_eq(ps.from_pandas(pser), psser)
 
     def test_isnull(self):

@@ -6,10 +6,17 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_2308",
   "messageParameters" : {
-    "message" : "could not resolve `dummy` to a table-valued function; line 1 pos 14"
-  }
+    "name" : "dummy"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 22,
+    "fragment" : "dummy(3)"
+  } ]
 }
 
 
@@ -73,10 +80,20 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1179",
   "messageParameters" : {
-    "message" : "Table-valued function range with alternatives: \n    range(start: long, end: long, step: long, numSlices: integer)\n    range(start: long, end: long, step: long)\n    range(start: long, end: long)\n    range(end: long)\ncannot be applied to (integer, integer, integer, integer, integer): Invalid number of arguments for function range. Expected: one of 1, 2, 3 and 4; Found: 5; line 1 pos 14"
-  }
+    "arguments" : "integer, integer, integer, integer, integer",
+    "details" : "Invalid number of arguments for function range. Expected: one of 1, 2, 3 and 4; Found: 5.",
+    "name" : "range",
+    "usage" : "\n    range(start: long, end: long, step: long, numSlices: integer)\n    range(start: long, end: long, step: long)\n    range(start: long, end: long)\n    range(end: long)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 34,
+    "fragment" : "range(1, 1, 1, 1, 1)"
+  } ]
 }
 
 
@@ -87,10 +104,20 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1179",
   "messageParameters" : {
-    "message" : "Table-valued function range with alternatives: \n    range(start: long, end: long, step: long, numSlices: integer)\n    range(start: long, end: long, step: long)\n    range(start: long, end: long)\n    range(end: long)\ncannot be applied to (integer, void): Incompatible input data type. Expected: long; Found: void; line 1 pos 14"
-  }
+    "arguments" : "integer, void",
+    "details" : "Incompatible input data type.\nExpected: long; Found: void.",
+    "name" : "range",
+    "usage" : "\n    range(start: long, end: long, step: long, numSlices: integer)\n    range(start: long, end: long, step: long)\n    range(start: long, end: long)\n    range(end: long)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 28,
+    "fragment" : "range(1, null)"
+  } ]
 }
 
 
@@ -101,10 +128,20 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1179",
   "messageParameters" : {
-    "message" : "Table-valued function range with alternatives: \n    range(start: long, end: long, step: long, numSlices: integer)\n    range(start: long, end: long, step: long)\n    range(start: long, end: long)\n    range(end: long)\ncannot be applied to (array): Incompatible input data type. Expected: long; Found: array; line 1 pos 14"
-  }
+    "arguments" : "array",
+    "details" : "Incompatible input data type.\nExpected: long; Found: array.",
+    "name" : "range",
+    "usage" : "\n    range(start: long, end: long, step: long, numSlices: integer)\n    range(start: long, end: long, step: long)\n    range(start: long, end: long)\n    range(end: long)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 35,
+    "fragment" : "range(array(1, 2, 3))"
+  } ]
 }
 
 
@@ -115,10 +152,20 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1179",
   "messageParameters" : {
-    "message" : "Table-valued function range with alternatives: \n    range(start: long, end: long, step: long, numSlices: integer)\n    range(start: long, end: long, step: long)\n    range(start: long, end: long)\n    range(end: long)\ncannot be applied to (integer, integer, integer): requirement failed: step (0) cannot be 0; line 1 pos 14"
-  }
+    "arguments" : "integer, integer, integer",
+    "details" : "requirement failed: step (0) cannot be 0",
+    "name" : "range",
+    "usage" : "\n    range(start: long, end: long, step: long, numSlices: integer)\n    range(start: long, end: long, step: long)\n    range(start: long, end: long)\n    range(end: long)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 28,
+    "fragment" : "range(0, 5, 0)"
+  } ]
 }
 
 

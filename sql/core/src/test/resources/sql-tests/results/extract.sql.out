@@ -664,10 +664,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1102",
   "messageParameters" : {
-    "message" : "Literals of type 'not_supported' are currently not supported for the string type.; line 1 pos 7"
-  }
+    "field" : "not_supported",
+    "srcDataType" : "string"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 36,
+    "fragment" : "date_part('not_supported', c)"
+  } ]
 }
 
 
@@ -678,10 +686,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1100",
   "messageParameters" : {
-    "message" : "The 'field' parameter of function 'date_part' needs to be a string literal.; line 1 pos 7"
-  }
+    "argName" : "field",
+    "funcName" : "date_part",
+    "requiredType" : "string"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 22,
+    "fragment" : "date_part(c, c)"
+  } ]
 }
 
 
@@ -700,10 +717,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1100",
   "messageParameters" : {
-    "message" : "The 'field' parameter of function 'date_part' needs to be a string literal.; line 1 pos 7"
-  }
+    "argName" : "field",
+    "funcName" : "date_part",
+    "requiredType" : "string"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 22,
+    "fragment" : "date_part(i, i)"
+  } ]
 }
 
 
@@ -928,10 +954,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1102",
   "messageParameters" : {
-    "message" : "Literals of type 'DAY' are currently not supported for the interval year to month type.; line 1 pos 7"
-  }
+    "field" : "DAY",
+    "srcDataType" : "interval year to month"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 53,
+    "fragment" : "date_part('DAY', interval '2-1' YEAR TO MONTH)"
+  } ]
 }
 
 
@@ -942,10 +976,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1102",
   "messageParameters" : {
-    "message" : "Literals of type 'not_supported' are currently not supported for the interval year to month type.; line 1 pos 7"
-  }
+    "field" : "not_supported",
+    "srcDataType" : "interval year to month"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 63,
+    "fragment" : "date_part('not_supported', interval '2-1' YEAR TO MONTH)"
+  } ]
 }
 
 
@@ -1074,8 +1116,32 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1102",
   "messageParameters" : {
-    "message" : "Literals of type 'not_supported' are currently not supported for the interval day to second type.; line 1 pos 7"
-  }
+    "field" : "not_supported",
+    "srcDataType" : "interval day to second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 82,
+    "fragment" : "date_part('not_supported', interval '123 12:34:56.789123123' DAY TO SECOND)"
+  } ]
 }
+
+
+-- !query
+select datepart('year', c), datepart('year', ntz), datepart('year', i) from t
+-- !query schema
+struct<datepart(year FROM c):int,datepart(year FROM ntz):int,datepart(year FROM i):int>
+-- !query output
+2011	2011	11
+
+
+-- !query
+select datepart('DAY', interval '123 12:34:56.789123123' DAY TO SECOND)
+-- !query schema
+struct<datepart(DAY FROM INTERVAL '123 12:34:56.789123' DAY TO SECOND):int>
+-- !query output
+123

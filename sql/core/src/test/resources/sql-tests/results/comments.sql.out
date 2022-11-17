@@ -133,10 +133,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "\nUnclosed bracketed comment(line 3, pos 0)\n\n== SQL ==\n/*abc*/\nselect 1 as a\n/*\n^^^\n\n2 as b\n/*abc*/\n, 3 as c\n\n/**/\n"
-  }
+  "errorClass" : "UNCLOSED_BRACKETED_COMMENT"
 }
 
 
@@ -156,8 +153,5 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "\nUnclosed bracketed comment(line 3, pos 0)\n\n== SQL ==\n/*abc*/\nselect 1 as a\n/*\n^^^\n\n2 as b\n/*abc*/\n, 3 as c\n\n/**/\nselect 4 as d\n"
-  }
+  "errorClass" : "UNCLOSED_BRACKETED_COMMENT"
 }

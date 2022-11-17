@@ -201,7 +201,7 @@ private[spark] class BasicExecutorFeatureStep(
         .withValue(Utils.getCurrentUserName())
         .endEnv()
       .addAllToEnv(executorEnv.asJava)
-      .withPorts(requiredPorts.asJava)
+      .addAllToPorts(requiredPorts.asJava)
       .addToArgs("executor")
       .build()
     val executorContainerWithConfVolume = if (disableConfigMap) {

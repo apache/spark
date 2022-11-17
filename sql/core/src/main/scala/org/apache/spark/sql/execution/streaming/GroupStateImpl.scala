@@ -20,6 +20,9 @@ package org.apache.spark.sql.execution.streaming
 import java.sql.Date
 import java.util.concurrent.TimeUnit
 
+import org.json4s._
+import org.json4s.jackson.JsonMethods._
+
 import org.apache.spark.api.java.Optional
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeTimeout, NoTimeout, ProcessingTimeTimeout}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
@@ -27,6 +30,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.GroupStateImpl._
 import org.apache.spark.sql.streaming.{GroupStateTimeout, TestGroupState}
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.Utils
 
 /**
  * Internal implementation of the [[TestGroupState]] interface. Methods are not thread-safe.
@@ -46,6 +50,9 @@ private[sql] class GroupStateImpl[S] private(
     timeoutConf: GroupStateTimeout,
     override val hasTimedOut: Boolean,
     watermarkPresent: Boolean) extends TestGroupState[S] {
+  // NOTE: if you're adding new properties here, fix:
+  // - `json` and `fromJson` methods of this class in Scala
+  // - pyspark.sql.streaming.state.GroupStateImpl in Python
 
   private var value: S = optionalValue.getOrElse(null.asInstanceOf[S])
   private var defined: Boolean = optionalValue.isDefined
@@ -173,6 +180,22 @@ private[sql] class GroupStateImpl[S] private(
       throw QueryExecutionErrors.cannotSetTimeoutTimestampError()
     }
   }
+
+  private[sql] def json(): String = compact(render(new JObject(
+    // Constructor
+    "optionalValue" -> JNull :: // Note that optionalValue will be manually serialized.
+    "batchProcessingTimeMs" -> JLong(batchProcessingTimeMs) ::
+    "eventTimeWatermarkMs" -> JLong(eventTimeWatermarkMs) ::
+    "timeoutConf" -> JString(Utils.stripDollars(Utils.getSimpleName(timeoutConf.getClass))) ::
+    "hasTimedOut" -> JBool(hasTimedOut) ::
+    "watermarkPresent" -> JBool(watermarkPresent) ::
+
+    // Internal state
+    "defined" -> JBool(defined) ::
+    "updated" -> JBool(updated) ::
+    "removed" -> JBool(removed) ::
+    "timeoutTimestamp" -> JLong(timeoutTimestamp) :: Nil
+  )))
 }
 
 
@@ -213,5 +236,36 @@ private[sql] object GroupStateImpl {
       timeoutConf,
       hasTimedOut = false,
       watermarkPresent)
+  }
+
+  def groupStateTimeoutFromString(clazz: String): GroupStateTimeout = clazz match {
+    case "ProcessingTimeTimeout" => GroupStateTimeout.ProcessingTimeTimeout
+    case "EventTimeTimeout" => GroupStateTimeout.EventTimeTimeout
+    case "NoTimeout" => GroupStateTimeout.NoTimeout
+    case _ => throw new IllegalStateException("Invalid string for GroupStateTimeout: " + clazz)
+  }
+
+  def fromJson[S](value: Option[S], json: JValue): GroupStateImpl[S] = {
+    implicit val formats = org.json4s.DefaultFormats
+
+    val hmap = json.extract[Map[String, Any]]
+
+    // Constructor
+    val newGroupState = new GroupStateImpl[S](
+      value,
+      hmap("batchProcessingTimeMs").asInstanceOf[Number].longValue(),
+      hmap("eventTimeWatermarkMs").asInstanceOf[Number].longValue(),
+      groupStateTimeoutFromString(hmap("timeoutConf").asInstanceOf[String]),
+      hmap("hasTimedOut").asInstanceOf[Boolean],
+      hmap("watermarkPresent").asInstanceOf[Boolean])
+
+    // Internal state
+    newGroupState.defined = hmap("defined").asInstanceOf[Boolean]
+    newGroupState.updated = hmap("updated").asInstanceOf[Boolean]
+    newGroupState.removed = hmap("removed").asInstanceOf[Boolean]
+    newGroupState.timeoutTimestamp =
+      hmap("timeoutTimestamp").asInstanceOf[Number].longValue()
+
+    newGroupState
   }
 }

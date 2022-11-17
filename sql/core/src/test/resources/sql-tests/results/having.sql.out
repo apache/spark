@@ -36,10 +36,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(hav.v = array(1))' due to data type mismatch: differing types in '(hav.v = array(1))' (int and array<int>).; line 1 pos 43;\n'Project [count(k)#xL]\n+- 'Filter (v#x = array(1))\n   +- Aggregate [v#x], [count(k#x) AS count(k)#xL, v#x]\n      +- SubqueryAlias hav\n         +- View (`hav`, [k#x,v#x])\n            +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]\n               +- Project [k#x, v#x]\n                  +- SubqueryAlias hav\n                     +- LocalRelation [k#x, v#x]\n"
-  }
+    "left" : "\"INT\"",
+    "right" : "\"ARRAY<INT>\"",
+    "sqlExpr" : "\"(v = array(1))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 44,
+    "stopIndex" : 55,
+    "fragment" : "v = array(1)"
+  } ]
 }
 
 

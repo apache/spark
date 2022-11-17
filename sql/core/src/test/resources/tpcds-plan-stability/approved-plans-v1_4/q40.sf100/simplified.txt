@@ -21,7 +21,7 @@ TakeOrderedAndProject [w_state,i_item_id,sales_before,sales_after]
                                         WholeStageCodegen (1)
                                           Filter [cs_warehouse_sk,cs_item_sk]
                                             Subquery #2
-                                              ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(i_item_sk, 42), 1019, 8152, 0, 0),bloomFilter,buf]
+                                              ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(i_item_sk, 42), 1019, 24988, 0, 0),bloomFilter,buf]
                                                 Exchange #4
                                                   ObjectHashAggregate [i_item_sk] [buf,buf]
                                                     WholeStageCodegen (1)

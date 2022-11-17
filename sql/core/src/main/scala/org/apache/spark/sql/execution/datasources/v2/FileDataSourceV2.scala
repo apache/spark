@@ -21,6 +21,7 @@ import java.util
 import scala.collection.JavaConverters._
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
@@ -50,9 +51,8 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
   lazy val sparkSession = SparkSession.active
 
   protected def getPaths(map: CaseInsensitiveStringMap): Seq[String] = {
-    val objectMapper = new ObjectMapper()
     val paths = Option(map.get("paths")).map { pathStr =>
-      objectMapper.readValue(pathStr, classOf[Array[String]]).toSeq
+      FileDataSourceV2.readPathsToSeq(pathStr)
     }.getOrElse(Seq.empty)
     paths ++ Option(map.get("path")).toSeq
   }
@@ -112,4 +112,10 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
       getTable(new CaseInsensitiveStringMap(properties), schema)
     }
   }
+}
+
+private object FileDataSourceV2 {
+  private lazy val objectMapper = new ObjectMapper().registerModule(DefaultScalaModule)
+  private def readPathsToSeq(paths: String): Seq[String] =
+    objectMapper.readValue(paths, classOf[Seq[String]])
 }

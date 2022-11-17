@@ -17,10 +17,14 @@
 
 package org.apache.spark.sql
 
+import scala.collection.mutable.ArraySeq
+
+import org.json4s.JsonAST.{JArray, JObject, JString}
 import org.scalatest.funspec.AnyFunSpec
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, GenericRowWithSchema}
 import org.apache.spark.sql.types._
@@ -83,13 +87,21 @@ class RowTest extends AnyFunSpec with Matchers {
     }
 
     it("getAs() on type extending AnyVal throws an exception when accessing field that is null") {
-      intercept[NullPointerException] {
+      intercept[SparkException] {
         sampleRowWithoutCol3.getInt(sampleRowWithoutCol3.fieldIndex("col3"))
       }
     }
 
     it("getAs() on type extending AnyVal does not throw exception when value is null") {
       sampleRowWithoutCol3.getAs[String](sampleRowWithoutCol3.fieldIndex("col1")) shouldBe null
+    }
+
+    it("json should convert a mutable array to JSON") {
+      val schema = new StructType().add(StructField("list", ArrayType(StringType)))
+      val values = ArraySeq("1", "2", "3")
+      val row = new GenericRowWithSchema(Array(values), schema)
+      val expectedList = JArray(JString("1") :: JString("2") :: JString("3") :: Nil)
+      row.jsonValue shouldBe new JObject(("list", expectedList) :: Nil)
     }
   }
 

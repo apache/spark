@@ -28,7 +28,7 @@ import org.scalatestplus.selenium.WebBrowser
 
 import org.apache.spark._
 import org.apache.spark.internal.config.{EVENT_LOG_STAGE_EXECUTOR_METRICS, EXECUTOR_PROCESS_TREE_METRICS_ENABLED}
-import org.apache.spark.internal.config.History.{HISTORY_LOG_DIR, LOCAL_STORE_DIR, UPDATE_INTERVAL_S}
+import org.apache.spark.internal.config.History.{HISTORY_LOG_DIR, HYBRID_STORE_DISK_BACKEND, HybridStoreDiskBackend, LOCAL_STORE_DIR, UPDATE_INTERVAL_S}
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.util.{ResetSystemProperties, Utils}
 
@@ -47,6 +47,8 @@ abstract class RealBrowserUIHistoryServerSuite(val driverProp: String)
   private var provider: FsHistoryProvider = null
   private var server: HistoryServer = null
   private var port: Int = -1
+
+  protected def diskBackend: HybridStoreDiskBackend.Value
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -79,6 +81,7 @@ abstract class RealBrowserUIHistoryServerSuite(val driverProp: String)
       .set(LOCAL_STORE_DIR, storeDir.getAbsolutePath())
       .set(EVENT_LOG_STAGE_EXECUTOR_METRICS, true)
       .set(EXECUTOR_PROCESS_TREE_METRICS_ENABLED, true)
+      .set(HYBRID_STORE_DISK_BACKEND, diskBackend.toString)
     conf.setAll(extraConf)
     provider = new FsHistoryProvider(conf)
     provider.checkForLogs()

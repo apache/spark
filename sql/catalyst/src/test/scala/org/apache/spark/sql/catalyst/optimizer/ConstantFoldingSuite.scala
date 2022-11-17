@@ -336,6 +336,51 @@ class ConstantFoldingSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("SPARK-40380: InvokeLike should only constant-fold to serializable types") {
+    val serializableObjType = ObjectType(classOf[SerializableBoxedInt])
+    val notSerializableObjType = ObjectType(classOf[NotSerializableBoxedInt])
+
+    val originalQuery =
+      testRelation
+        .select(
+          // SerializableBoxedInt(42).add(1).toNotSerializable().addAsInt($"a")
+          Invoke(
+            Invoke(
+              Invoke(
+                Literal.fromObject(SerializableBoxedInt(42), serializableObjType),
+                "add",
+                serializableObjType,
+                Literal(1) :: Nil
+              ),
+              "toNotSerializable",
+              notSerializableObjType),
+            "addAsInt",
+            IntegerType,
+            $"a" :: Nil).as("c1"))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer = originalQuery.analyze
+
+    // If serializable ObjectType is allowed to be constant-folded in the future, this chain can
+    // be optimized into:
+    // val correctAnswer =
+    //   testRelation
+    //     .select(
+    //       // SerializableBoxedInt(43).toNotSerializable().addAsInt($"a")
+    //       Invoke(
+    //         Invoke(
+    //           Literal.fromObject(SerializableBoxedInt(43), serializableObjType),
+    //           "toNotSerializable",
+    //           notSerializableObjType),
+    //         "addAsInt",
+    //         IntegerType,
+    //         $"a" :: Nil).as("c1"))
+    //     .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
   test("SPARK-39106: Correct conditional expression constant folding") {
     val t = LocalRelation.fromExternalRows(
       $"c".double :: Nil,
@@ -370,4 +415,13 @@ class ConstantFoldingSuite extends PlanTest {
       }
     }
   }
+}
+
+case class SerializableBoxedInt(intVal: Int) {
+  def add(other: Int): SerializableBoxedInt = SerializableBoxedInt(intVal + other)
+  def toNotSerializable(): NotSerializableBoxedInt = new NotSerializableBoxedInt(intVal)
+}
+
+class NotSerializableBoxedInt(intVal: Int) {
+  def addAsInt(other: Int): Int = intVal + other
 }

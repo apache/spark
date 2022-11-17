@@ -40,10 +40,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1028",
   "messageParameters" : {
-    "message" : "Number of column aliases does not match number of columns. Number of column aliases: 3; number of columns: 2.; line 1 pos 14"
-  }
+    "columnSize" : "3",
+    "outputSize" : "2"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 45,
+    "fragment" : "testData AS t(col1, col2, col3)"
+  } ]
 }
 
 
@@ -54,10 +62,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1028",
   "messageParameters" : {
-    "message" : "Number of column aliases does not match number of columns. Number of column aliases: 1; number of columns: 2.; line 1 pos 14"
-  }
+    "columnSize" : "1",
+    "outputSize" : "2"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 33,
+    "fragment" : "testData AS t(col1)"
+  } ]
 }
 
 
@@ -68,12 +84,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`a`",
-    "objectList" : "`t`.`c`, `t`.`d`"
-  }
+    "proposal" : "`t`.`c`, `t`.`d`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 8,
+    "fragment" : "a"
+  } ]
 }
 
 

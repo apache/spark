@@ -49,12 +49,7 @@ select from_csv('1', 'a INT', named_struct('mode', 'PERMISSIVE'))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "Must use a map() function for options; line 1 pos 7"
-  }
-}
+Must use a map() function for options.; line 1 pos 7
 
 
 -- !query
@@ -63,12 +58,7 @@ select from_csv('1', 'a INT', map('mode', 1))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "A type of keys and values in map() must be string, but got map<string,int>; line 1 pos 7"
-  }
-}
+A type of keys and values in map() must be string, but got map<string,int>.; line 1 pos 7
 
 
 -- !query
@@ -78,10 +68,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1042",
   "messageParameters" : {
-    "message" : "Invalid number of arguments for function from_csv. Expected: one of 2 and 3; Found: 0; line 1 pos 7"
-  }
+    "actualNumber" : "0",
+    "expectedInfo" : "one of 2 and 3",
+    "name" : "from_csv"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 17,
+    "fragment" : "from_csv()"
+  } ]
 }
 
 
@@ -108,10 +107,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
   "messageParameters" : {
-    "message" : "cannot resolve 'schema_of_csv(NULL)' due to data type mismatch: The input csv should be a foldable string expression and not null; however, got NULL.; line 1 pos 7;\n'Project [unresolvedalias(schema_of_csv(null), None)]\n+- OneRowRelation\n"
-  }
+    "exprName" : "csv",
+    "sqlExpr" : "\"schema_of_csv(NULL)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 26,
+    "fragment" : "schema_of_csv(null)"
+  } ]
 }
 
 
@@ -130,10 +137,20 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
   "messageParameters" : {
-    "message" : "cannot resolve 'schema_of_csv(csvtable.csvField)' due to data type mismatch: The input csv should be a foldable string expression and not null; however, got csvtable.csvField.; line 1 pos 7;\n'Project [unresolvedalias(schema_of_csv(csvField#x), None)]\n+- SubqueryAlias csvtable\n   +- View (`csvTable`, [csvField#x,a#x])\n      +- Project [cast(col1#x as string) AS csvField#x, cast(col2#x as string) AS a#x]\n         +- Project [col1#x, col2#x]\n            +- LocalRelation [col1#x, col2#x]\n"
-  }
+    "inputExpr" : "\"csvField\"",
+    "inputName" : "csv",
+    "inputType" : "\"STRING\"",
+    "sqlExpr" : "\"schema_of_csv(csvField)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 30,
+    "fragment" : "schema_of_csv(csvField)"
+  } ]
 }
 
 
@@ -167,12 +184,7 @@ select to_csv(named_struct('a', 1, 'b', 2), named_struct('mode', 'PERMISSIVE'))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "Must use a map() function for options; line 1 pos 7"
-  }
-}
+Must use a map() function for options.; line 1 pos 7
 
 
 -- !query
@@ -181,9 +193,4 @@ select to_csv(named_struct('a', 1, 'b', 2), map('mode', 1))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "A type of keys and values in map() must be string, but got map<string,int>; line 1 pos 7"
-  }
-}
+A type of keys and values in map() must be string, but got map<string,int>.; line 1 pos 7

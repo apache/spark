@@ -158,6 +158,13 @@ object CheckpointFileManager extends Logging {
               s"Failed to rename temp file $tempPath to $finalPath because file exists", fe)
             if (!overwriteIfPossible) throw fe
         }
+
+        // Optionally, check if the renamed file exists
+        if (SQLConf.get.checkpointRenamedFileCheck && !fm.exists(finalPath)) {
+          throw new IllegalStateException(s"Renamed temp file $tempPath to $finalPath. " +
+            s"But $finalPath does not exist.")
+        }
+
         logInfo(s"Renamed temp file $tempPath to $finalPath")
       } finally {
         terminated = true

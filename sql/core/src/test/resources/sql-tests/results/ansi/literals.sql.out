@@ -38,10 +38,20 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0023",
   "messageParameters" : {
-    "message" : "\nNumeric literal 128 does not fit in range [-128, 127] for type tinyint(line 1, pos 7)\n\n== SQL ==\nselect 128Y\n-------^^^\n"
-  }
+    "maxValue" : "127",
+    "minValue" : "-128",
+    "rawStrippedQualifier" : "128",
+    "typeName" : "tinyint"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 11,
+    "fragment" : "128Y"
+  } ]
 }
 
 
@@ -68,10 +78,20 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0023",
   "messageParameters" : {
-    "message" : "\nNumeric literal 32768 does not fit in range [-32768, 32767] for type smallint(line 1, pos 7)\n\n== SQL ==\nselect 32768S\n-------^^^\n"
-  }
+    "maxValue" : "32767",
+    "minValue" : "-32768",
+    "rawStrippedQualifier" : "32768",
+    "typeName" : "smallint"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 13,
+    "fragment" : "32768S"
+  } ]
 }
 
 
@@ -98,10 +118,20 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0023",
   "messageParameters" : {
-    "message" : "\nNumeric literal 9223372036854775808 does not fit in range [-9223372036854775808, 9223372036854775807] for type bigint(line 1, pos 7)\n\n== SQL ==\nselect 9223372036854775808L\n-------^^^\n"
-  }
+    "maxValue" : "9223372036854775807",
+    "minValue" : "-9223372036854775808",
+    "rawStrippedQualifier" : "9223372036854775808",
+    "typeName" : "bigint"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 27,
+    "fragment" : "9223372036854775808L"
+  } ]
 }
 
 
@@ -144,9 +174,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1229",
   "messageParameters" : {
-    "message" : "\ndecimal can only support precision up to 38\n== SQL ==\nselect 1234567890123456789012345678901234567890"
+    "decimalType" : "decimal",
+    "precision" : "38"
   }
 }
 
@@ -158,9 +189,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1229",
   "messageParameters" : {
-    "message" : "\ndecimal can only support precision up to 38\n== SQL ==\nselect 1234567890123456789012345678901234567890.0"
+    "decimalType" : "decimal",
+    "precision" : "38"
   }
 }
 
@@ -188,10 +220,20 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0023",
   "messageParameters" : {
-    "message" : "\nNumeric literal -3.4028235E39 does not fit in range [-3.4028234663852886E+38, 3.4028234663852886E+38] for type float(line 1, pos 7)\n\n== SQL ==\nselect -3.4028235E39f\n-------^^^\n"
-  }
+    "maxValue" : "3.4028234663852886E+38",
+    "minValue" : "-3.4028234663852886E+38",
+    "rawStrippedQualifier" : "-3.4028235E39",
+    "typeName" : "float"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 21,
+    "fragment" : "-3.4028235E39f"
+  } ]
 }
 
 
@@ -234,10 +276,20 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0023",
   "messageParameters" : {
-    "message" : "\nNumeric literal 1E309 does not fit in range [-1.7976931348623157E+308, 1.7976931348623157E+308] for type double(line 1, pos 7)\n\n== SQL ==\nselect 1E309, -1E309\n-------^^^\n"
-  }
+    "maxValue" : "1.7976931348623157E+308",
+    "minValue" : "-1.7976931348623157E+308",
+    "rawStrippedQualifier" : "1E309",
+    "typeName" : "double"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 12,
+    "fragment" : "1E309"
+  } ]
 }
 
 
@@ -338,10 +390,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
   "messageParameters" : {
-    "message" : "\nCannot parse the DATE value: mar 11 2016(line 1, pos 7)\n\n== SQL ==\nselect date 'mar 11 2016'\n-------^^^\n"
-  }
+    "value" : "mar 11 2016",
+    "valueType" : "DATE"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "date 'mar 11 2016'"
+  } ]
 }
 
 
@@ -360,10 +420,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
   "messageParameters" : {
-    "message" : "\nCannot parse the TIMESTAMP value: 2016-33-11 20:54:00.000(line 1, pos 7)\n\n== SQL ==\nselect timestamp '2016-33-11 20:54:00.000'\n-------^^^\n"
-  }
+    "value" : "2016-33-11 20:54:00.000",
+    "valueType" : "TIMESTAMP"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 42,
+    "fragment" : "timestamp '2016-33-11 20:54:00.000'"
+  } ]
 }
 
 
@@ -374,10 +442,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "UNSUPPORTED_TYPED_LITERAL",
   "messageParameters" : {
-    "message" : "\nLiterals of type 'GEO' are currently not supported.(line 1, pos 7)\n\n== SQL ==\nselect GEO '(10,-6)'\n-------^^^\n"
-  }
+    "supportedTypes" : "\"DATE\", \"TIMESTAMP_NTZ\", \"TIMESTAMP_LTZ\", \"TIMESTAMP\", \"INTERVAL\", \"X\"",
+    "unsupportedType" : "\"GEO\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 20,
+    "fragment" : "GEO '(10,-6)'"
+  } ]
 }
 
 
@@ -396,10 +472,17 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0061",
   "messageParameters" : {
-    "message" : "\ndecimal can only support precision up to 38(line 1, pos 7)\n\n== SQL ==\nselect 1.20E-38BD\n-------^^^\n"
-  }
+    "msg" : "decimal can only support precision up to 38."
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 17,
+    "fragment" : "1.20E-38BD"
+  } ]
 }
 
 
@@ -418,10 +501,17 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0022",
   "messageParameters" : {
-    "message" : "\ncontains illegal character for hexBinary: 0XuZ(line 1, pos 7)\n\n== SQL ==\nselect X'XuZ'\n-------^^^\n"
-  }
+    "msg" : "contains illegal character for hexBinary: 0XuZ"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 13,
+    "fragment" : "X'XuZ'"
+  } ]
 }
 
 
@@ -440,10 +530,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve '(+ DATE '1999-01-01')' due to data type mismatch: argument 1 requires (numeric or interval day to second or interval year to month or interval) type, however, 'DATE '1999-01-01'' is of date type.; line 1 pos 7;\n'Project [unresolvedalias(positive(1999-01-01), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"DATE '1999-01-01'\"",
+    "inputType" : "\"DATE\"",
+    "paramIndex" : "1",
+    "requiredType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
+    "sqlExpr" : "\"(+ DATE '1999-01-01')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "+date '1999-01-01'"
+  } ]
 }
 
 
@@ -454,10 +555,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve '(+ TIMESTAMP '1999-01-01 00:00:00')' due to data type mismatch: argument 1 requires (numeric or interval day to second or interval year to month or interval) type, however, 'TIMESTAMP '1999-01-01 00:00:00'' is of timestamp type.; line 1 pos 7;\n'Project [unresolvedalias(positive(1999-01-01 00:00:00), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"TIMESTAMP '1999-01-01 00:00:00'\"",
+    "inputType" : "\"TIMESTAMP\"",
+    "paramIndex" : "1",
+    "requiredType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
+    "sqlExpr" : "\"(+ TIMESTAMP '1999-01-01 00:00:00')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 30,
+    "fragment" : "+timestamp '1999-01-01'"
+  } ]
 }
 
 
@@ -476,10 +588,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve '(+ map(1, 2))' due to data type mismatch: argument 1 requires (numeric or interval day to second or interval year to month or interval) type, however, 'map(1, 2)' is of map<int,int> type.; line 1 pos 7;\n'Project [unresolvedalias(positive(map(1, 2)), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"map(1, 2)\"",
+    "inputType" : "\"MAP<INT, INT>\"",
+    "paramIndex" : "1",
+    "requiredType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
+    "sqlExpr" : "\"(+ map(1, 2))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 17,
+    "fragment" : "+map(1, 2)"
+  } ]
 }
 
 
@@ -490,10 +613,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve '(+ array(1, 2))' due to data type mismatch: argument 1 requires (numeric or interval day to second or interval year to month or interval) type, however, 'array(1, 2)' is of array<int> type.; line 1 pos 7;\n'Project [unresolvedalias(positive(array(1, 2)), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"array(1, 2)\"",
+    "inputType" : "\"ARRAY<INT>\"",
+    "paramIndex" : "1",
+    "requiredType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
+    "sqlExpr" : "\"(+ array(1, 2))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 18,
+    "fragment" : "+array(1,2)"
+  } ]
 }
 
 
@@ -504,10 +638,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve '(+ named_struct('a', 1, 'b', 'spark'))' due to data type mismatch: argument 1 requires (numeric or interval day to second or interval year to month or interval) type, however, 'named_struct('a', 1, 'b', 'spark')' is of struct<a:int,b:string> type.; line 1 pos 7;\n'Project [unresolvedalias(positive(named_struct(a, 1, b, spark)), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"named_struct(a, 1, b, spark)\"",
+    "inputType" : "\"STRUCT<a: INT, b: STRING>\"",
+    "paramIndex" : "1",
+    "requiredType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
+    "sqlExpr" : "\"(+ named_struct(a, 1, b, spark))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 42,
+    "fragment" : "+named_struct('a', 1, 'b', 'spark')"
+  } ]
 }
 
 
@@ -518,10 +663,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve '(+ X'01')' due to data type mismatch: argument 1 requires (numeric or interval day to second or interval year to month or interval) type, however, 'X'01'' is of binary type.; line 1 pos 7;\n'Project [unresolvedalias(positive(0x01), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"X'01'\"",
+    "inputType" : "\"BINARY\"",
+    "paramIndex" : "1",
+    "requiredType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
+    "sqlExpr" : "\"(+ X'01')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 12,
+    "fragment" : "+X'1'"
+  } ]
 }
 
 
@@ -532,10 +688,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve '(- DATE '1999-01-01')' due to data type mismatch: argument 1 requires (numeric or interval day to second or interval year to month or interval) type, however, 'DATE '1999-01-01'' is of date type.; line 1 pos 7;\n'Project [unresolvedalias(-1999-01-01, None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"DATE '1999-01-01'\"",
+    "inputType" : "\"DATE\"",
+    "paramIndex" : "1",
+    "requiredType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
+    "sqlExpr" : "\"(- DATE '1999-01-01')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "-date '1999-01-01'"
+  } ]
 }
 
 
@@ -546,10 +713,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve '(- TIMESTAMP '1999-01-01 00:00:00')' due to data type mismatch: argument 1 requires (numeric or interval day to second or interval year to month or interval) type, however, 'TIMESTAMP '1999-01-01 00:00:00'' is of timestamp type.; line 1 pos 7;\n'Project [unresolvedalias(-1999-01-01 00:00:00, None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"TIMESTAMP '1999-01-01 00:00:00'\"",
+    "inputType" : "\"TIMESTAMP\"",
+    "paramIndex" : "1",
+    "requiredType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
+    "sqlExpr" : "\"(- TIMESTAMP '1999-01-01 00:00:00')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 30,
+    "fragment" : "-timestamp '1999-01-01'"
+  } ]
 }
 
 
@@ -560,8 +738,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve '(- X'2379ACFE')' due to data type mismatch: argument 1 requires (numeric or interval day to second or interval year to month or interval) type, however, 'X'2379ACFE'' is of binary type.; line 1 pos 7;\n'Project [unresolvedalias(-0x2379ACFE, None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"X'2379ACFE'\"",
+    "inputType" : "\"BINARY\"",
+    "paramIndex" : "1",
+    "requiredType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
+    "sqlExpr" : "\"(- X'2379ACFE')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 19,
+    "fragment" : "-x'2379ACFe'"
+  } ]
 }

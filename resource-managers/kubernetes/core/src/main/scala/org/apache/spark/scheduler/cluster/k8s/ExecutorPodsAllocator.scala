@@ -76,6 +76,7 @@ class ExecutorPodsAllocator(
 
   val driverPod = kubernetesDriverPodName
     .map(name => Option(kubernetesClient.pods()
+      .inNamespace(namespace)
       .withName(name)
       .get())
       .getOrElse(throw new SparkException(
@@ -112,6 +113,7 @@ class ExecutorPodsAllocator(
       Utils.tryLogNonFatalError {
         kubernetesClient
           .pods()
+          .inNamespace(namespace)
           .withName(pod.getMetadata.getName)
           .waitUntilReady(driverPodReadinessTimeout, TimeUnit.SECONDS)
       }
@@ -185,6 +187,7 @@ class ExecutorPodsAllocator(
         Utils.tryLogNonFatalError {
           kubernetesClient
             .pods()
+            .inNamespace(namespace)
             .withLabel(SPARK_APP_ID_LABEL, applicationId)
             .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
             .withLabelIn(SPARK_EXECUTOR_ID_LABEL, timedOut.toSeq.map(_.toString): _*)
@@ -299,6 +302,7 @@ class ExecutorPodsAllocator(
           Utils.tryLogNonFatalError {
             kubernetesClient
               .pods()
+              .inNamespace(namespace)
               .withField("status.phase", "Pending")
               .withLabel(SPARK_APP_ID_LABEL, applicationId)
               .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
@@ -363,6 +367,7 @@ class ExecutorPodsAllocator(
       try {
         val createdPVCs = kubernetesClient
           .persistentVolumeClaims
+          .inNamespace(namespace)
           .withLabel("spark-app-selector", applicationId)
           .list()
           .getItems
@@ -406,7 +411,8 @@ class ExecutorPodsAllocator(
         .build()
       val resources = replacePVCsIfNeeded(
         podWithAttachedContainer, resolvedExecutorSpec.executorKubernetesResources, reusablePVCs)
-      val createdExecutorPod = kubernetesClient.pods().create(podWithAttachedContainer)
+      val createdExecutorPod =
+        kubernetesClient.pods().inNamespace(namespace).resource(podWithAttachedContainer).create()
       try {
         addOwnerReference(createdExecutorPod, resources)
         resources
@@ -418,13 +424,16 @@ class ExecutorPodsAllocator(
             val pvc = resource.asInstanceOf[PersistentVolumeClaim]
             logInfo(s"Trying to create PersistentVolumeClaim ${pvc.getMetadata.getName} with " +
               s"StorageClass ${pvc.getSpec.getStorageClassName}")
-            kubernetesClient.persistentVolumeClaims().create(pvc)
+            kubernetesClient.persistentVolumeClaims().inNamespace(namespace).resource(pvc).create()
           }
         newlyCreatedExecutors(newExecutorId) = (resourceProfileId, clock.getTimeMillis())
         logDebug(s"Requested executor with id $newExecutorId from Kubernetes.")
       } catch {
         case NonFatal(e) =>
-          kubernetesClient.pods().delete(createdExecutorPod)
+          kubernetesClient.pods()
+            .inNamespace(namespace)
+            .resource(createdExecutorPod)
+            .delete()
           throw e
       }
     }
@@ -475,6 +484,7 @@ class ExecutorPodsAllocator(
     Utils.tryLogNonFatalError {
       kubernetesClient
         .pods()
+        .inNamespace(namespace)
         .withLabel(SPARK_APP_ID_LABEL, applicationId)
         .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
         .delete()

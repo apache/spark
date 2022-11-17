@@ -199,10 +199,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
   "messageParameters" : {
-    "message" : "\nCannot parse the DATE value: 1999 Jan 08(line 1, pos 7)\n\n== SQL ==\nSELECT date '1999 Jan 08'\n-------^^^\n"
-  }
+    "value" : "1999 Jan 08",
+    "valueType" : "DATE"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "date '1999 Jan 08'"
+  } ]
 }
 
 
@@ -213,10 +221,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
   "messageParameters" : {
-    "message" : "\nCannot parse the DATE value: 1999 08 Jan(line 1, pos 7)\n\n== SQL ==\nSELECT date '1999 08 Jan'\n-------^^^\n"
-  }
+    "value" : "1999 08 Jan",
+    "valueType" : "DATE"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "date '1999 08 Jan'"
+  } ]
 }
 
 
@@ -243,10 +259,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
   "messageParameters" : {
-    "message" : "\nCannot parse the DATE value: 1999 01 08(line 1, pos 7)\n\n== SQL ==\nSELECT date '1999 01 08'\n-------^^^\n"
-  }
+    "value" : "1999 01 08",
+    "valueType" : "DATE"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "date '1999 01 08'"
+  } ]
 }
 
 
@@ -257,10 +281,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
   "messageParameters" : {
-    "message" : "\nCannot parse the DATE value: 1999 08 01(line 1, pos 7)\n\n== SQL ==\nSELECT date '1999 08 01'\n-------^^^\n"
-  }
+    "value" : "1999 08 01",
+    "valueType" : "DATE"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "date '1999 08 01'"
+  } ]
 }
 
 
@@ -279,10 +311,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
   "messageParameters" : {
-    "message" : "\nCannot parse the DATE value: 1999 Jan 08(line 1, pos 7)\n\n== SQL ==\nSELECT date '1999 Jan 08'\n-------^^^\n"
-  }
+    "value" : "1999 Jan 08",
+    "valueType" : "DATE"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "date '1999 Jan 08'"
+  } ]
 }
 
 
@@ -293,10 +333,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
   "messageParameters" : {
-    "message" : "\nCannot parse the DATE value: 1999 08 Jan(line 1, pos 7)\n\n== SQL ==\nSELECT date '1999 08 Jan'\n-------^^^\n"
-  }
+    "value" : "1999 08 Jan",
+    "valueType" : "DATE"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "date '1999 08 Jan'"
+  } ]
 }
 
 
@@ -323,10 +371,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
   "messageParameters" : {
-    "message" : "\nCannot parse the DATE value: 1999 01 08(line 1, pos 7)\n\n== SQL ==\nSELECT date '1999 01 08'\n-------^^^\n"
-  }
+    "value" : "1999 01 08",
+    "valueType" : "DATE"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "date '1999 01 08'"
+  } ]
 }
 
 
@@ -337,10 +393,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
   "messageParameters" : {
-    "message" : "\nCannot parse the DATE value: 1999 08 01(line 1, pos 7)\n\n== SQL ==\nSELECT date '1999 08 01'\n-------^^^\n"
-  }
+    "value" : "1999 08 01",
+    "valueType" : "DATE"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "date '1999 08 01'"
+  } ]
 }
 
 
@@ -367,10 +431,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
   "messageParameters" : {
-    "message" : "\nCannot parse the DATE value: 1999 Jan 08(line 1, pos 7)\n\n== SQL ==\nSELECT date '1999 Jan 08'\n-------^^^\n"
-  }
+    "value" : "1999 Jan 08",
+    "valueType" : "DATE"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "date '1999 Jan 08'"
+  } ]
 }
 
 
@@ -381,10 +453,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
   "messageParameters" : {
-    "message" : "\nCannot parse the DATE value: 1999 08 Jan(line 1, pos 7)\n\n== SQL ==\nSELECT date '1999 08 Jan'\n-------^^^\n"
-  }
+    "value" : "1999 08 Jan",
+    "valueType" : "DATE"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "date '1999 08 Jan'"
+  } ]
 }
 
 
@@ -411,10 +491,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
   "messageParameters" : {
-    "message" : "\nCannot parse the DATE value: 1999 01 08(line 1, pos 7)\n\n== SQL ==\nSELECT date '1999 01 08'\n-------^^^\n"
-  }
+    "value" : "1999 01 08",
+    "valueType" : "DATE"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "date '1999 01 08'"
+  } ]
 }
 
 
@@ -425,10 +513,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
   "messageParameters" : {
-    "message" : "\nCannot parse the DATE value: 1999 08 01(line 1, pos 7)\n\n== SQL ==\nSELECT date '1999 08 01'\n-------^^^\n"
-  }
+    "value" : "1999 08 01",
+    "valueType" : "DATE"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "date '1999 08 01'"
+  } ]
 }
 
 
@@ -577,8 +673,14 @@ select make_date(2013, 2, 30)
 -- !query schema
 struct<>
 -- !query output
-java.time.DateTimeException
-Invalid date 'FEBRUARY 30'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2000",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Invalid date 'FEBRUARY 30'"
+  }
+}
 
 
 -- !query
@@ -586,8 +688,14 @@ select make_date(2013, 13, 1)
 -- !query schema
 struct<>
 -- !query output
-java.time.DateTimeException
-Invalid value for MonthOfYear (valid values 1 - 12): 13. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2000",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Invalid value for MonthOfYear (valid values 1 - 12): 13"
+  }
+}
 
 
 -- !query
@@ -595,8 +703,14 @@ select make_date(2013, 11, -1)
 -- !query schema
 struct<>
 -- !query output
-java.time.DateTimeException
-Invalid value for DayOfMonth (valid values 1 - 28/31): -1. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2000",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Invalid value for DayOfMonth (valid values 1 - 28/31): -1"
+  }
+}
 
 
 -- !query

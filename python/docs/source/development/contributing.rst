@@ -130,7 +130,7 @@ If you are using Conda, the development environment can be set as follows.
     # Python 3.7+ is required
     conda create --name pyspark-dev-env python=3.9
     conda activate pyspark-dev-env
-    pip install -r dev/requirements.txt
+    pip install --upgrade -r dev/requirements.txt
 
 Once it is set up, make sure you switch to `pyspark-dev-env` before starting the development:
 
@@ -147,7 +147,7 @@ With Python 3.7+, pip can be used as below to install and set up the development
 
 .. code-block:: bash
 
-    pip install -r dev/requirements.txt
+    pip install --upgrade -r dev/requirements.txt
 
 Now, you can start developing and `running the tests <testing.rst>`_.
 
@@ -155,10 +155,7 @@ Now, you can start developing and `running the tests <testing.rst>`_.
 Contributing and Maintaining Type Hints
 ----------------------------------------
 
-PySpark type hints are provided using stub files, placed in the same directory as the annotated module, with exception to:
-
-* ``# type: ignore`` in modules which don't have their own stubs (tests, examples and non-public API). 
-* pandas API on Spark (``pyspark.pandas`` package) where the type hints are inlined.
+PySpark type hints are inlined, to take advantage of static type checking.
 
 As a rule of thumb, only public API is annotated.
 
@@ -166,7 +163,7 @@ Annotations should, when possible:
 
 * Reflect expectations of the underlying JVM API, to help avoid type related failures outside Python interpreter.
 * In case of conflict between too broad (``Any``) and too narrow argument annotations, prefer the latter as one, as long as it is covering most of the typical use cases.
-* Indicate nonsensical combinations of arguments using ``@overload``  annotations. For example, to indicate that ``*Col`` and ``*Cols`` arguments are mutually exclusive:
+* Indicate nonsensical combinations of arguments using ``@overload`` annotations. For example, to indicate that ``*Col`` and ``*Cols`` arguments are mutually exclusive:
 
   .. code-block:: python
 

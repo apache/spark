@@ -27,7 +27,8 @@ import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.BinaryLike
@@ -36,7 +37,6 @@ import org.apache.spark.sql.catalyst.util.{GenericArrayData, StringUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
-
 
 abstract class StringRegexExpression extends BinaryExpression
   with ImplicitCastInputTypes with NullIntolerant with Predicate {
@@ -527,7 +527,7 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
   override def second: Expression = regex
   override def third: Expression = limit
 
-  def this(exp: Expression, regex: Expression) = this(exp, regex, Literal(-1));
+  def this(exp: Expression, regex: Expression) = this(exp, regex, Literal(-1))
 
   override def nullSafeEval(string: Any, regex: Any, limit: Any): Any = {
     val strings = string.asInstanceOf[UTF8String].split(
@@ -594,14 +594,28 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
       return defaultCheck
     }
     if (!pos.foldable) {
-      return TypeCheckFailure(s"Position expression must be foldable, but got $pos")
+      return DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> "position",
+          "inputType" -> toSQLType(pos.dataType),
+          "inputExpr" -> toSQLExpr(pos)
+        )
+      )
     }
 
     val posEval = pos.eval()
     if (posEval == null || posEval.asInstanceOf[Int] > 0) {
       TypeCheckSuccess
     } else {
-      TypeCheckFailure(s"Position expression must be positive, but got: $posEval")
+      DataTypeMismatch(
+        errorSubClass = "VALUE_OUT_OF_RANGE",
+        messageParameters = Map(
+          "exprName" -> "position",
+          "valueRange" -> s"(0, ${Int.MaxValue}]",
+          "currentValue" -> toSQLValue(posEval, pos.dataType)
+        )
+      )
     }
   }
 

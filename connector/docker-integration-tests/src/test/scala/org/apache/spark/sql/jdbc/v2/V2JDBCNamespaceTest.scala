@@ -87,10 +87,12 @@ private[v2] trait V2JDBCNamespaceTest extends SharedSparkSession with DockerInte
       }
       assert(catalog.namespaceExists(Array("foo")) === false)
       assert(catalog.listNamespaces() === builtinNamespaces)
-      val msg = intercept[AnalysisException] {
+      val e = intercept[AnalysisException] {
         catalog.listNamespaces(Array("foo"))
-      }.getMessage
-      assert(msg.contains("Namespace 'foo' not found"))
+      }
+      checkError(e,
+        errorClass = "SCHEMA_NOT_FOUND",
+        parameters = Map("schemaName" -> "`foo`"))
     }
   }
 

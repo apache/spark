@@ -193,7 +193,7 @@ private[spark] object FallbackStorage extends Logging {
         val array = new Array[Byte](size.toInt)
         val startTimeNs = System.nanoTime()
         f.seek(offset)
-        f.read(array)
+        f.readFully(array)
         logDebug(s"Took ${(System.nanoTime() - startTimeNs) / (1000 * 1000)}ms")
         f.close()
         new NioManagedBuffer(ByteBuffer.wrap(array))

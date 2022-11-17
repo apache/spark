@@ -45,7 +45,6 @@ from pandas.api.types import is_list_like  # type: ignore[attr-defined]
 # For running doctests and reference resolution in PyCharm.
 from pyspark import pandas as ps  # noqa: F401
 from pyspark.pandas._typing import Axis, Label, Name, DataFrameOrSeries
-from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef.typehints import as_spark_type
 
 if TYPE_CHECKING:
@@ -413,7 +412,7 @@ def align_diff_frames(
                 # is intentional so that `this_columns` and `that_columns` can be paired.
                 additional_that_columns.append(combined_label)
             elif fillna:
-                columns_to_keep.append(SF.lit(None).cast(DoubleType()).alias(str(combined_label)))
+                columns_to_keep.append(F.lit(None).cast(DoubleType()).alias(str(combined_label)))
                 column_labels_to_keep.append(combined_label)
             else:
                 columns_to_keep.append(combined._psser_for(combined_label))
@@ -915,11 +914,11 @@ def spark_column_equals(left: Column, right: Column) -> bool:
     """
     Check both `left` and `right` have the same expressions.
 
-    >>> spark_column_equals(SF.lit(0), SF.lit(0))
+    >>> spark_column_equals(F.lit(0), F.lit(0))
     True
-    >>> spark_column_equals(SF.lit(0) + 1, SF.lit(0) + 1)
+    >>> spark_column_equals(F.lit(0) + 1, F.lit(0) + 1)
     True
-    >>> spark_column_equals(SF.lit(0) + 1, SF.lit(0) + 2)
+    >>> spark_column_equals(F.lit(0) + 1, F.lit(0) + 2)
     False
     >>> sdf1 = ps.DataFrame({"x": ['a', 'b', 'c']}).to_spark()
     >>> spark_column_equals(sdf1["x"] + 1, sdf1["x"] + 1)

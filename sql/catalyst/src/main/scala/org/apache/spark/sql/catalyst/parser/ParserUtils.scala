@@ -98,7 +98,7 @@ object ParserUtils {
   def string(node: TerminalNode): String = unescapeSQLString(node.getText)
 
   /** Convert a string node into a string without unescaping. */
-  def stringWithoutUnescape(node: TerminalNode): String = {
+  def stringWithoutUnescape(node: Token): String = {
     // STRING parser rule forces that the input always has quotes at the starting and ending.
     node.getText.slice(1, node.getText.size - 1)
   }
@@ -135,7 +135,10 @@ object ParserUtils {
   /** Validate the condition. If it doesn't throw a parse exception. */
   def validate(f: => Boolean, message: String, ctx: ParserRuleContext): Unit = {
     if (!f) {
-      throw new ParseException(message, ctx)
+      throw new ParseException(
+        errorClass = "_LEGACY_ERROR_TEMP_0064",
+        messageParameters = Map("msg" -> message),
+        ctx)
     }
   }
 

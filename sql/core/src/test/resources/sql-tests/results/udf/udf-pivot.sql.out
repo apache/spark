@@ -200,9 +200,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1006",
   "messageParameters" : {
-    "message" : "Aggregate expression required for pivot, but 'coursesales.earnings' did not appear in any aggregate function."
+    "sql" : "coursesales.earnings"
   }
 }
 
@@ -220,9 +220,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1006",
   "messageParameters" : {
-    "message" : "Aggregate expression required for pivot, but '__auto_generated_subquery_name.year' did not appear in any aggregate function."
+    "sql" : "__auto_generated_subquery_name.year"
   }
 }
 
@@ -240,12 +240,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`year`",
-    "objectList" : "`__auto_generated_subquery_name`.`course`, `__auto_generated_subquery_name`.`earnings`"
-  }
+    "proposal" : "`__auto_generated_subquery_name`.`course`, `__auto_generated_subquery_name`.`earnings`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 62,
+    "stopIndex" : 118,
+    "fragment" : "PIVOT (\n  udf(sum(earnings))\n  FOR year IN (2012, 2013)\n)"
+  } ]
 }
 
 
@@ -277,10 +284,14 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query.;\nProject [year#x, dotNET#x, Java#x]\n+- Project [year#x, __pivot_sum(CAST(udf(cast(avg(earnings) as string)) AS DOUBLE)) AS `sum(CAST(udf(cast(avg(earnings) as string)) AS DOUBLE))`#x[0] AS dotNET#x, __pivot_sum(CAST(udf(cast(avg(earnings) as string)) AS DOUBLE)) AS `sum(CAST(udf(cast(avg(earnings) as string)) AS DOUBLE))`#x[1] AS Java#x]\n   +- Aggregate [year#x], [year#x, pivotfirst(course#x, sum(CAST(udf(cast(avg(earnings) as string)) AS DOUBLE))#x, dotNET, Java, 0, 0) AS __pivot_sum(CAST(udf(cast(avg(earnings) as string)) AS DOUBLE)) AS `sum(CAST(udf(cast(avg(earnings) as string)) AS DOUBLE))`#x]\n      +- Aggregate [year#x, course#x], [year#x, course#x, sum(cast(udf(cast(avg(earnings#x) as string)) as double)) AS sum(CAST(udf(cast(avg(earnings) as string)) AS DOUBLE))#x]\n         +- SubqueryAlias __auto_generated_subquery_name\n            +- Project [year#x, course#x, earnings#x]\n               +- SubqueryAlias coursesales\n                  +- View (`courseSales`, [course#x,year#x,earnings#x])\n                     +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]\n                        +- Project [course#x, year#x, earnings#x]\n                           +- SubqueryAlias courseSales\n                              +- LocalRelation [course#x, year#x, earnings#x]\n"
-  }
+  "errorClass" : "NESTED_AGGREGATE_FUNCTION",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 86,
+    "stopIndex" : 98,
+    "fragment" : "avg(earnings)"
+  } ]
 }
 
 
@@ -336,9 +347,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "PIVOT_VALUE_DATA_TYPE_MISMATCH",
   "sqlState" : "42000",
   "messageParameters" : {
+    "pivotType" : "struct<course:string,year:int>",
     "value" : "dotNET",
-    "valueType" : "string",
-    "pivotType" : "struct<course:string,year:int>"
+    "valueType" : "string"
   }
 }
 
@@ -354,12 +365,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`s`",
-    "objectList" : "`coursesales`.`year`, `coursesales`.`course`, `coursesales`.`earnings`"
-  }
+    "proposal" : "`coursesales`.`year`, `coursesales`.`course`, `coursesales`.`earnings`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 71,
+    "stopIndex" : 71,
+    "fragment" : "s"
+  } ]
 }
 
 

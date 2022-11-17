@@ -22,7 +22,6 @@ import scala.collection.JavaConverters._
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
-import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{Scan, SupportsPushDownAggregates}
 import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, PartitioningAwareFileIndex}
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFilters, SparkToParquetSchemaConverter}
@@ -46,7 +45,13 @@ case class ParquetScanBuilder(
     sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
   }
 
-  lazy val pushedParquetFilters = {
+  private var finalSchema = new StructType()
+
+  private var pushedAggregations = Option.empty[Aggregation]
+
+  override protected val supportsNestedSchemaPruning: Boolean = true
+
+  override def pushDataFilters(dataFilters: Array[Filter]): Array[Filter] = {
     val sqlConf = sparkSession.sessionState.conf
     if (sqlConf.parquetFilterPushDown) {
       val pushDownDate = sqlConf.parquetFilterPushDownDate
@@ -68,24 +73,11 @@ case class ParquetScanBuilder(
         // The rebase mode doesn't matter here because the filters are used to determine
         // whether they is convertible.
         RebaseSpec(LegacyBehaviorPolicy.CORRECTED))
-      parquetFilters.convertibleFilters(pushedDataFilters).toArray
+      parquetFilters.convertibleFilters(dataFilters).toArray
     } else {
       Array.empty[Filter]
     }
   }
-
-  private var finalSchema = new StructType()
-
-  private var pushedAggregations = Option.empty[Aggregation]
-
-  override protected val supportsNestedSchemaPruning: Boolean = true
-
-  override def pushDataFilters(dataFilters: Array[Filter]): Array[Filter] = dataFilters
-
-  // Note: for Parquet, the actual filter push down happens in [[ParquetPartitionReaderFactory]].
-  // It requires the Parquet physical schema to determine whether a filter is convertible.
-  // All filters that can be converted to Parquet are pushed down.
-  override def pushedFilters: Array[Predicate] = pushedParquetFilters.map(_.toV2)
 
   override def pushAggregation(aggregation: Aggregation): Boolean = {
     if (!sparkSession.sessionState.conf.parquetAggregatePushDown) {
@@ -114,7 +106,7 @@ case class ParquetScanBuilder(
       finalSchema = readDataSchema()
     }
     ParquetScan(sparkSession, hadoopConf, fileIndex, dataSchema, finalSchema,
-      readPartitionSchema(), pushedParquetFilters, options, pushedAggregations,
+      readPartitionSchema(), pushedDataFilters, options, pushedAggregations,
       partitionFilters, dataFilters)
   }
 }

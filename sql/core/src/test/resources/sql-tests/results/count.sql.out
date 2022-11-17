@@ -147,10 +147,23 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.WRONG_NUM_ARGS_WITH_SUGGESTION",
   "messageParameters" : {
-    "message" : "cannot resolve 'count()' due to data type mismatch: count requires at least one argument. If you have to call the function count without arguments, set the legacy configuration `spark.sql.legacy.allowParameterlessCount` as true; line 1 pos 7;\n'Aggregate [unresolvedalias(count(), None)]\n+- SubqueryAlias testdata\n   +- View (`testData`, [a#x,b#x])\n      +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]\n         +- Project [a#x, b#x]\n            +- SubqueryAlias testData\n               +- LocalRelation [a#x, b#x]\n"
-  }
+    "actualNum" : "0",
+    "expectedNum" : " >= 1",
+    "functionName" : "`count`",
+    "legacyConfKey" : "\"spark.sql.legacy.allowParameterlessCount\"",
+    "legacyConfValue" : "\"true\"",
+    "legacyNum" : "0",
+    "sqlExpr" : "\"count()\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 14,
+    "fragment" : "count()"
+  } ]
 }
 
 
@@ -185,8 +198,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1021",
   "messageParameters" : {
-    "message" : "count(testData.*) is not allowed. Please use count(*) or expand the columns manually, e.g. count(col1, col2)"
+    "targetString" : "testData"
   }
 }

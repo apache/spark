@@ -39,10 +39,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.IN_SUBQUERY_LENGTH_MISMATCH",
   "messageParameters" : {
-    "message" : "cannot resolve '(named_struct('a1', tab_a.a1, 'b1', tab_a.b1) IN (listquery()))' due to data type mismatch: \nThe number of columns in the left hand side of an IN subquery does not match the\nnumber of columns in the output of subquery.\n#columns in left hand side: 2.\n#columns in right hand side: 1.\nLeft side columns:\n[tab_a.a1, tab_a.b1].\nRight side columns:\n[`named_struct(a2, a2, b2, b2)`].; line 1 pos 35;\n'Project [unresolvedalias(1, None)]\n+- 'Filter NOT named_struct(a1, a1#x, b1, b1#x) IN (list#x [])\n   :  +- Project [named_struct(a2, a2#x, b2, b2#x) AS named_struct(a2, a2, b2, b2)#x]\n   :     +- SubqueryAlias tab_b\n   :        +- View (`tab_b`, [a2#x,b2#x])\n   :           +- Project [cast(a2#x as int) AS a2#x, cast(b2#x as int) AS b2#x]\n   :              +- Project [a2#x, b2#x]\n   :                 +- SubqueryAlias tab_b\n   :                    +- LocalRelation [a2#x, b2#x]\n   +- SubqueryAlias tab_a\n      +- View (`tab_a`, [a1#x,b1#x])\n         +- Project [cast(a1#x as int) AS a1#x, cast(b1#x as int) AS b1#x]\n            +- Project [a1#x, b1#x]\n               +- SubqueryAlias tab_a\n                  +- LocalRelation [a1#x, b1#x]\n"
-  }
+    "leftColumns" : "\"a1\", \"b1\"",
+    "leftLength" : "2",
+    "rightColumns" : "\"named_struct(a2, a2, b2, b2)\"",
+    "rightLength" : "1",
+    "sqlExpr" : "\"(named_struct('a1', a1, 'b1', b1) IN (listquery()))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 36,
+    "stopIndex" : 70,
+    "fragment" : "not in (select (a2, b2) from tab_b)"
+  } ]
 }
 
 

@@ -21,8 +21,9 @@ import java.io.{DataInputStream, DataOutputStream}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Time, Timestamp}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+
+import org.apache.spark.util.collection.Utils
 
 /**
  * Utility functions to serialize, deserialize objects to / from R
@@ -236,7 +237,7 @@ private[spark] object SerDe {
       val keys = readArray(in, jvmObjectTracker).asInstanceOf[Array[Object]]
       val values = readList(in, jvmObjectTracker)
 
-      keys.zip(values).toMap.asJava
+      Utils.toJavaMap(keys, values)
     } else {
       new java.util.HashMap[Object, Object]()
     }

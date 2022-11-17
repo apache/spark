@@ -14,10 +14,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve 'CAST(1 AS TINYINT) + INTERVAL '2' DAY' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'CAST(1 AS TINYINT)' is of tinyint type.; line 1 pos 7;\n'Project [unresolvedalias(cast(cast(1 as tinyint) + INTERVAL '2' DAY as tinyint), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"CAST(1 AS TINYINT)\"",
+    "inputType" : "\"TINYINT\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"CAST(1 AS TINYINT) + INTERVAL '2' DAY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 42,
+    "fragment" : "cast(1 as tinyint) + interval 2 day"
+  } ]
 }
 
 
@@ -28,10 +39,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve 'CAST(1 AS SMALLINT) + INTERVAL '2' DAY' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'CAST(1 AS SMALLINT)' is of smallint type.; line 1 pos 7;\n'Project [unresolvedalias(cast(cast(1 as smallint) + INTERVAL '2' DAY as smallint), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"CAST(1 AS SMALLINT)\"",
+    "inputType" : "\"SMALLINT\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"CAST(1 AS SMALLINT) + INTERVAL '2' DAY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 43,
+    "fragment" : "cast(1 as smallint) + interval 2 day"
+  } ]
 }
 
 
@@ -42,10 +64,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve 'CAST(1 AS INT) + INTERVAL '2' DAY' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'CAST(1 AS INT)' is of int type.; line 1 pos 7;\n'Project [unresolvedalias(cast(cast(1 as int) + INTERVAL '2' DAY as int), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"CAST(1 AS INT)\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"CAST(1 AS INT) + INTERVAL '2' DAY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 38,
+    "fragment" : "cast(1 as int) + interval 2 day"
+  } ]
 }
 
 
@@ -56,10 +89,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve 'CAST(1 AS BIGINT) + INTERVAL '2' DAY' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'CAST(1 AS BIGINT)' is of bigint type.; line 1 pos 7;\n'Project [unresolvedalias(cast(cast(1 as bigint) + INTERVAL '2' DAY as bigint), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"CAST(1 AS BIGINT)\"",
+    "inputType" : "\"BIGINT\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"CAST(1 AS BIGINT) + INTERVAL '2' DAY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 41,
+    "fragment" : "cast(1 as bigint) + interval 2 day"
+  } ]
 }
 
 
@@ -70,10 +114,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve 'CAST(1 AS FLOAT) + INTERVAL '2' DAY' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'CAST(1 AS FLOAT)' is of float type.; line 1 pos 7;\n'Project [unresolvedalias(cast(cast(1 as float) + INTERVAL '2' DAY as float), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"CAST(1 AS FLOAT)\"",
+    "inputType" : "\"FLOAT\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"CAST(1 AS FLOAT) + INTERVAL '2' DAY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 40,
+    "fragment" : "cast(1 as float) + interval 2 day"
+  } ]
 }
 
 
@@ -84,10 +139,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve 'CAST(1 AS DOUBLE) + INTERVAL '2' DAY' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'CAST(1 AS DOUBLE)' is of double type.; line 1 pos 7;\n'Project [unresolvedalias(cast(cast(1 as double) + INTERVAL '2' DAY as double), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"CAST(1 AS DOUBLE)\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"CAST(1 AS DOUBLE) + INTERVAL '2' DAY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 41,
+    "fragment" : "cast(1 as double) + interval 2 day"
+  } ]
 }
 
 
@@ -98,10 +164,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve 'CAST(1 AS DECIMAL(10,0)) + INTERVAL '2' DAY' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'CAST(1 AS DECIMAL(10,0))' is of decimal(10,0) type.; line 1 pos 7;\n'Project [unresolvedalias(cast(cast(1 as decimal(10,0)) + INTERVAL '2' DAY as decimal(10,0)), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"CAST(1 AS DECIMAL(10,0))\"",
+    "inputType" : "\"DECIMAL(10,0)\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"CAST(1 AS DECIMAL(10,0)) + INTERVAL '2' DAY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 49,
+    "fragment" : "cast(1 as decimal(10, 0)) + interval 2 day"
+  } ]
 }
 
 
@@ -128,10 +205,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve 'CAST('1' AS BINARY) + INTERVAL '2' DAY' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'CAST('1' AS BINARY)' is of binary type.; line 1 pos 7;\n'Project [unresolvedalias(cast(cast(1 as binary) + INTERVAL '2' DAY as binary), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"CAST(1 AS BINARY)\"",
+    "inputType" : "\"BINARY\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"CAST(1 AS BINARY) + INTERVAL '2' DAY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 43,
+    "fragment" : "cast('1' as binary) + interval 2 day"
+  } ]
 }
 
 
@@ -142,10 +230,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve 'CAST(1 AS BOOLEAN) + INTERVAL '2' DAY' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'CAST(1 AS BOOLEAN)' is of boolean type.; line 1 pos 7;\n'Project [unresolvedalias(cast(cast(1 as boolean) + INTERVAL '2' DAY as boolean), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"CAST(1 AS BOOLEAN)\"",
+    "inputType" : "\"BOOLEAN\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"CAST(1 AS BOOLEAN) + INTERVAL '2' DAY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 42,
+    "fragment" : "cast(1 as boolean) + interval 2 day"
+  } ]
 }
 
 
@@ -172,10 +271,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve 'CAST(1 AS TINYINT) + INTERVAL '2' DAY' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'CAST(1 AS TINYINT)' is of tinyint type.; line 1 pos 7;\n'Project [unresolvedalias(cast(cast(1 as tinyint) + INTERVAL '2' DAY as tinyint), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"CAST(1 AS TINYINT)\"",
+    "inputType" : "\"TINYINT\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"CAST(1 AS TINYINT) + INTERVAL '2' DAY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 42,
+    "fragment" : "interval 2 day + cast(1 as tinyint)"
+  } ]
 }
 
 
@@ -186,10 +296,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve 'CAST(1 AS SMALLINT) + INTERVAL '2' DAY' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'CAST(1 AS SMALLINT)' is of smallint type.; line 1 pos 7;\n'Project [unresolvedalias(cast(cast(1 as smallint) + INTERVAL '2' DAY as smallint), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"CAST(1 AS SMALLINT)\"",
+    "inputType" : "\"SMALLINT\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"CAST(1 AS SMALLINT) + INTERVAL '2' DAY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 43,
+    "fragment" : "interval 2 day + cast(1 as smallint)"
+  } ]
 }
 
 
@@ -200,10 +321,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve 'CAST(1 AS INT) + INTERVAL '2' DAY' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'CAST(1 AS INT)' is of int type.; line 1 pos 7;\n'Project [unresolvedalias(cast(cast(1 as int) + INTERVAL '2' DAY as int), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"CAST(1 AS INT)\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"CAST(1 AS INT) + INTERVAL '2' DAY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 38,
+    "fragment" : "interval 2 day + cast(1 as int)"
+  } ]
 }
 
 
@@ -214,10 +346,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve 'CAST(1 AS BIGINT) + INTERVAL '2' DAY' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'CAST(1 AS BIGINT)' is of bigint type.; line 1 pos 7;\n'Project [unresolvedalias(cast(cast(1 as bigint) + INTERVAL '2' DAY as bigint), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"CAST(1 AS BIGINT)\"",
+    "inputType" : "\"BIGINT\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"CAST(1 AS BIGINT) + INTERVAL '2' DAY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 41,
+    "fragment" : "interval 2 day + cast(1 as bigint)"
+  } ]
 }
 
 
@@ -228,10 +371,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve 'CAST(1 AS FLOAT) + INTERVAL '2' DAY' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'CAST(1 AS FLOAT)' is of float type.; line 1 pos 7;\n'Project [unresolvedalias(cast(cast(1 as float) + INTERVAL '2' DAY as float), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"CAST(1 AS FLOAT)\"",
+    "inputType" : "\"FLOAT\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"CAST(1 AS FLOAT) + INTERVAL '2' DAY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 40,
+    "fragment" : "interval 2 day + cast(1 as float)"
+  } ]
 }
 
 
@@ -242,10 +396,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve 'CAST(1 AS DOUBLE) + INTERVAL '2' DAY' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'CAST(1 AS DOUBLE)' is of double type.; line 1 pos 7;\n'Project [unresolvedalias(cast(cast(1 as double) + INTERVAL '2' DAY as double), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"CAST(1 AS DOUBLE)\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"CAST(1 AS DOUBLE) + INTERVAL '2' DAY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 41,
+    "fragment" : "interval 2 day + cast(1 as double)"
+  } ]
 }
 
 
@@ -256,10 +421,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve 'CAST(1 AS DECIMAL(10,0)) + INTERVAL '2' DAY' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'CAST(1 AS DECIMAL(10,0))' is of decimal(10,0) type.; line 1 pos 7;\n'Project [unresolvedalias(cast(cast(1 as decimal(10,0)) + INTERVAL '2' DAY as decimal(10,0)), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"CAST(1 AS DECIMAL(10,0))\"",
+    "inputType" : "\"DECIMAL(10,0)\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"CAST(1 AS DECIMAL(10,0)) + INTERVAL '2' DAY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 49,
+    "fragment" : "interval 2 day + cast(1 as decimal(10, 0))"
+  } ]
 }
 
 
@@ -286,10 +462,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve 'CAST('1' AS BINARY) + INTERVAL '2' DAY' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'CAST('1' AS BINARY)' is of binary type.; line 1 pos 7;\n'Project [unresolvedalias(cast(cast(1 as binary) + INTERVAL '2' DAY as binary), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"CAST(1 AS BINARY)\"",
+    "inputType" : "\"BINARY\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"CAST(1 AS BINARY) + INTERVAL '2' DAY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 43,
+    "fragment" : "interval 2 day + cast('1' as binary)"
+  } ]
 }
 
 
@@ -300,10 +487,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve 'CAST(1 AS BOOLEAN) + INTERVAL '2' DAY' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'CAST(1 AS BOOLEAN)' is of boolean type.; line 1 pos 7;\n'Project [unresolvedalias(cast(cast(1 as boolean) + INTERVAL '2' DAY as boolean), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"CAST(1 AS BOOLEAN)\"",
+    "inputType" : "\"BOOLEAN\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"CAST(1 AS BOOLEAN) + INTERVAL '2' DAY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 42,
+    "fragment" : "interval 2 day + cast(1 as boolean)"
+  } ]
 }
 
 
@@ -330,10 +528,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve 'CAST(1 AS TINYINT) + (- INTERVAL '2' DAY)' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'CAST(1 AS TINYINT)' is of tinyint type.; line 1 pos 7;\n'Project [unresolvedalias(cast(cast(1 as tinyint) - INTERVAL '2' DAY as tinyint), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"CAST(1 AS TINYINT)\"",
+    "inputType" : "\"TINYINT\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"CAST(1 AS TINYINT) + (- INTERVAL '2' DAY)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 42,
+    "fragment" : "cast(1 as tinyint) - interval 2 day"
+  } ]
 }
 
 
@@ -344,10 +553,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve 'CAST(1 AS SMALLINT) + (- INTERVAL '2' DAY)' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'CAST(1 AS SMALLINT)' is of smallint type.; line 1 pos 7;\n'Project [unresolvedalias(cast(cast(1 as smallint) - INTERVAL '2' DAY as smallint), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"CAST(1 AS SMALLINT)\"",
+    "inputType" : "\"SMALLINT\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"CAST(1 AS SMALLINT) + (- INTERVAL '2' DAY)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 43,
+    "fragment" : "cast(1 as smallint) - interval 2 day"
+  } ]
 }
 
 
@@ -358,10 +578,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve 'CAST(1 AS INT) + (- INTERVAL '2' DAY)' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'CAST(1 AS INT)' is of int type.; line 1 pos 7;\n'Project [unresolvedalias(cast(cast(1 as int) - INTERVAL '2' DAY as int), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"CAST(1 AS INT)\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"CAST(1 AS INT) + (- INTERVAL '2' DAY)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 38,
+    "fragment" : "cast(1 as int) - interval 2 day"
+  } ]
 }
 
 
@@ -372,10 +603,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve 'CAST(1 AS BIGINT) + (- INTERVAL '2' DAY)' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'CAST(1 AS BIGINT)' is of bigint type.; line 1 pos 7;\n'Project [unresolvedalias(cast(cast(1 as bigint) - INTERVAL '2' DAY as bigint), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"CAST(1 AS BIGINT)\"",
+    "inputType" : "\"BIGINT\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"CAST(1 AS BIGINT) + (- INTERVAL '2' DAY)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 41,
+    "fragment" : "cast(1 as bigint) - interval 2 day"
+  } ]
 }
 
 
@@ -386,10 +628,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve 'CAST(1 AS FLOAT) + (- INTERVAL '2' DAY)' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'CAST(1 AS FLOAT)' is of float type.; line 1 pos 7;\n'Project [unresolvedalias(cast(cast(1 as float) - INTERVAL '2' DAY as float), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"CAST(1 AS FLOAT)\"",
+    "inputType" : "\"FLOAT\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"CAST(1 AS FLOAT) + (- INTERVAL '2' DAY)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 40,
+    "fragment" : "cast(1 as float) - interval 2 day"
+  } ]
 }
 
 
@@ -400,10 +653,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve 'CAST(1 AS DOUBLE) + (- INTERVAL '2' DAY)' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'CAST(1 AS DOUBLE)' is of double type.; line 1 pos 7;\n'Project [unresolvedalias(cast(cast(1 as double) - INTERVAL '2' DAY as double), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"CAST(1 AS DOUBLE)\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"CAST(1 AS DOUBLE) + (- INTERVAL '2' DAY)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 41,
+    "fragment" : "cast(1 as double) - interval 2 day"
+  } ]
 }
 
 
@@ -414,10 +678,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve 'CAST(1 AS DECIMAL(10,0)) + (- INTERVAL '2' DAY)' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'CAST(1 AS DECIMAL(10,0))' is of decimal(10,0) type.; line 1 pos 7;\n'Project [unresolvedalias(cast(cast(1 as decimal(10,0)) - INTERVAL '2' DAY as decimal(10,0)), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"CAST(1 AS DECIMAL(10,0))\"",
+    "inputType" : "\"DECIMAL(10,0)\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"CAST(1 AS DECIMAL(10,0)) + (- INTERVAL '2' DAY)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 49,
+    "fragment" : "cast(1 as decimal(10, 0)) - interval 2 day"
+  } ]
 }
 
 
@@ -444,10 +719,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve 'CAST('1' AS BINARY) + (- INTERVAL '2' DAY)' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'CAST('1' AS BINARY)' is of binary type.; line 1 pos 7;\n'Project [unresolvedalias(cast(cast(1 as binary) - INTERVAL '2' DAY as binary), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"CAST(1 AS BINARY)\"",
+    "inputType" : "\"BINARY\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"CAST(1 AS BINARY) + (- INTERVAL '2' DAY)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 43,
+    "fragment" : "cast('1' as binary) - interval 2 day"
+  } ]
 }
 
 
@@ -458,10 +744,21 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "message" : "cannot resolve 'CAST(1 AS BOOLEAN) + (- INTERVAL '2' DAY)' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'CAST(1 AS BOOLEAN)' is of boolean type.; line 1 pos 7;\n'Project [unresolvedalias(cast(cast(1 as boolean) - INTERVAL '2' DAY as boolean), None)]\n+- OneRowRelation\n"
-  }
+    "inputSql" : "\"CAST(1 AS BOOLEAN)\"",
+    "inputType" : "\"BOOLEAN\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"CAST(1 AS BOOLEAN) + (- INTERVAL '2' DAY)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 42,
+    "fragment" : "cast(1 as boolean) - interval 2 day"
+  } ]
 }
 
 

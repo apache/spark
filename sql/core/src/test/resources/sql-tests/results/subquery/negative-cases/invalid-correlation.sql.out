@@ -44,10 +44,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_2422",
   "messageParameters" : {
-    "message" : "grouping expressions sequence is empty, and 't2.t2b' is not an aggregate function. Wrap '(avg(t2.t2b) AS avg)' in windowing function(s) or wrap 't2.t2b' in first() (or first_value) if you don't care which value you get.;\nProject [t1a#x, t2b#x]\n+- Filter ((t1b#x = t2c#x) AND (cast(t2b#x as double) = scalar-subquery#x [t1b#x]))\n   :  +- Aggregate [max(avg#x) AS max(avg)#x]\n   :     +- SubqueryAlias __auto_generated_subquery_name\n   :        +- Aggregate [t2b#x, avg(t2b#x) AS avg#x]\n   :           +- Filter (t2a#x = outer(t1b#x))\n   :              +- SubqueryAlias t2\n   :                 +- View (`t2`, [t2a#x,t2b#x,t2c#x])\n   :                    +- Project [cast(t2a#x as int) AS t2a#x, cast(t2b#x as int) AS t2b#x, cast(t2c#x as int) AS t2c#x]\n   :                       +- Project [t2a#x, t2b#x, t2c#x]\n   :                          +- SubqueryAlias t2\n   :                             +- LocalRelation [t2a#x, t2b#x, t2c#x]\n   +- Join Inner\n      :- SubqueryAlias t1\n      :  +- View (`t1`, [t1a#x,t1b#x,t1c#x])\n      :     +- Project [cast(t1a#x as int) AS t1a#x, cast(t1b#x as int) AS t1b#x, cast(t1c#x as int) AS t1c#x]\n      :        +- Project [t1a#x, t1b#x, t1c#x]\n      :           +- SubqueryAlias t1\n      :              +- LocalRelation [t1a#x, t1b#x, t1c#x]\n      +- SubqueryAlias t2\n         +- View (`t2`, [t2a#x,t2b#x,t2c#x])\n            +- Project [cast(t2a#x as int) AS t2a#x, cast(t2b#x as int) AS t2b#x, cast(t2c#x as int) AS t2c#x]\n               +- Project [t2a#x, t2b#x, t2c#x]\n                  +- SubqueryAlias t2\n                     +- LocalRelation [t2a#x, t2b#x, t2c#x]\n"
-  }
+    "aggExprs" : "(avg(t2.t2b) AS avg)",
+    "sqlExpr" : "t2.t2b"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 109,
+    "stopIndex" : 111,
+    "fragment" : "t2b"
+  } ]
 }
 
 
@@ -66,10 +74,17 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_2432",
   "messageParameters" : {
-    "message" : "Resolved attribute(s) t2b#x missing from min(t2a)#x,t2c#x in operator !Filter t2c#x IN (list#x [t2b#x]).;\nProject [t1a#x, t1b#x, t1c#x]\n+- Filter t1a#x IN (list#x [])\n   :  +- Project [min(t2a)#x]\n   :     +- !Filter t2c#x IN (list#x [t2b#x])\n   :        :  +- Project [max(t3c)#x]\n   :        :     +- Filter (t3b#x > outer(t2b#x))\n   :        :        +- Aggregate [t3b#x], [max(t3c#x) AS max(t3c)#x, t3b#x]\n   :        :           +- SubqueryAlias t3\n   :        :              +- View (`t3`, [t3a#x,t3b#x,t3c#x])\n   :        :                 +- Project [cast(t3a#x as int) AS t3a#x, cast(t3b#x as int) AS t3b#x, cast(t3c#x as int) AS t3c#x]\n   :        :                    +- Project [t3a#x, t3b#x, t3c#x]\n   :        :                       +- SubqueryAlias t3\n   :        :                          +- LocalRelation [t3a#x, t3b#x, t3c#x]\n   :        +- Aggregate [t2c#x], [min(t2a#x) AS min(t2a)#x, t2c#x]\n   :           +- SubqueryAlias t2\n   :              +- View (`t2`, [t2a#x,t2b#x,t2c#x])\n   :                 +- Project [cast(t2a#x as int) AS t2a#x, cast(t2b#x as int) AS t2b#x, cast(t2c#x as int) AS t2c#x]\n   :                    +- Project [t2a#x, t2b#x, t2c#x]\n   :                       +- SubqueryAlias t2\n   :                          +- LocalRelation [t2a#x, t2b#x, t2c#x]\n   +- SubqueryAlias t1\n      +- View (`t1`, [t1a#x,t1b#x,t1c#x])\n         +- Project [cast(t1a#x as int) AS t1a#x, cast(t1b#x as int) AS t1b#x, cast(t1c#x as int) AS t1c#x]\n            +- Project [t1a#x, t1b#x, t1c#x]\n               +- SubqueryAlias t1\n                  +- LocalRelation [t1a#x, t1b#x, t1c#x]\n"
-  }
+    "msg" : "Resolved attribute(s) t2b#x missing from min(t2a)#x,t2c#x in operator !Filter t2c#x IN (list#x [t2b#x])."
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 35,
+    "stopIndex" : 298,
+    "fragment" : "SELECT   min(t2a)\n               FROM     t2\n               GROUP BY t2c\n               HAVING   t2c IN (SELECT   max(t3c)\n                                FROM     t3\n                                GROUP BY t3b\n                                HAVING   t3b > t2b )"
+  } ]
 }
 
 
@@ -86,10 +101,17 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.AGGREGATE_FUNCTION_MIXED_OUTER_LOCAL_REFERENCES",
   "messageParameters" : {
-    "message" : "Found an aggregate function in a correlated predicate that has both outer and local references, which is not supported: min((outer(t1.t1a) + t2.t2a))"
-  }
+    "function" : "min((outer(t1.t1a) + t2.t2a))"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 139,
+    "stopIndex" : 152,
+    "fragment" : "min(t1a + t2a)"
+  } ]
 }
 
 
@@ -107,10 +129,17 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.AGGREGATE_FUNCTION_MIXED_OUTER_LOCAL_REFERENCES",
   "messageParameters" : {
-    "message" : "Found an aggregate function in a correlated predicate that has both outer and local references, which is not supported: min((outer(t2.t2a) + t3.t3a))"
-  }
+    "function" : "min((outer(t2.t2a) + t3.t3a))"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 233,
+    "stopIndex" : 246,
+    "fragment" : "min(t2a + t3a)"
+  } ]
 }
 
 
@@ -126,10 +155,17 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_CORRELATED_REFERENCE",
   "messageParameters" : {
-    "message" : "Expressions referencing the outer query are not supported outside of WHERE/HAVING clauses:\nAggregate [min(outer(t2a#x)) AS min(outer(t2.t2a))#x]\n+- SubqueryAlias t3\n   +- View (`t3`, [t3a#x,t3b#x,t3c#x])\n      +- Project [cast(t3a#x as int) AS t3a#x, cast(t3b#x as int) AS t3b#x, cast(t3c#x as int) AS t3c#x]\n         +- Project [t3a#x, t3b#x, t3c#x]\n            +- SubqueryAlias t3\n               +- LocalRelation [t3a#x, t3b#x, t3c#x]\n;\nProject [t1a#x]\n+- Filter t1a#x IN (list#x [])\n   :  +- Project [t2a#x]\n   :     +- Filter exists#x [min(t2a#x)]\n   :        :  +- Aggregate [min(outer(t2a#x)) AS min(outer(t2.t2a))#x]\n   :        :     +- SubqueryAlias t3\n   :        :        +- View (`t3`, [t3a#x,t3b#x,t3c#x])\n   :        :           +- Project [cast(t3a#x as int) AS t3a#x, cast(t3b#x as int) AS t3b#x, cast(t3c#x as int) AS t3c#x]\n   :        :              +- Project [t3a#x, t3b#x, t3c#x]\n   :        :                 +- SubqueryAlias t3\n   :        :                    +- LocalRelation [t3a#x, t3b#x, t3c#x]\n   :        +- SubqueryAlias t2\n   :           +- View (`t2`, [t2a#x,t2b#x,t2c#x])\n   :              +- Project [cast(t2a#x as int) AS t2a#x, cast(t2b#x as int) AS t2b#x, cast(t2c#x as int) AS t2c#x]\n   :                 +- Project [t2a#x, t2b#x, t2c#x]\n   :                    +- SubqueryAlias t2\n   :                       +- LocalRelation [t2a#x, t2b#x, t2c#x]\n   +- SubqueryAlias t1\n      +- View (`t1`, [t1a#x,t1b#x,t1c#x])\n         +- Project [cast(t1a#x as int) AS t1a#x, cast(t1b#x as int) AS t1b#x, cast(t1c#x as int) AS t1c#x]\n            +- Project [t1a#x, t1b#x, t1c#x]\n               +- SubqueryAlias t1\n                  +- LocalRelation [t1a#x, t1b#x, t1c#x]\n"
-  }
+    "treeNode" : "Aggregate [min(outer(t2a#x)) AS min(outer(t2.t2a))#x]\n+- SubqueryAlias t3\n   +- View (`t3`, [t3a#x,t3b#x,t3c#x])\n      +- Project [cast(t3a#x as int) AS t3a#x, cast(t3b#x as int) AS t3b#x, cast(t3c#x as int) AS t3c#x]\n         +- Project [t3a#x, t3b#x, t3c#x]\n            +- SubqueryAlias t3\n               +- LocalRelation [t3a#x, t3b#x, t3c#x]\n"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 105,
+    "stopIndex" : 160,
+    "fragment" : "SELECT min(t2a) \n                              FROM   t3"
+  } ]
 }
 
 
@@ -153,10 +189,17 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`t1a`",
-    "objectList" : "`t2`.`t2a`, `t2`.`t2b`, `t2`.`t2c`"
-  }
+    "proposal" : "`t2`.`t2a`, `t2`.`t2b`, `t2`.`t2c`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 84,
+    "stopIndex" : 86,
+    "fragment" : "t1a"
+  } ]
 }

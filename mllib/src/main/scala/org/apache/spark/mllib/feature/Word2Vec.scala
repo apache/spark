@@ -39,6 +39,7 @@ import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd._
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.{Utils => CUtils}
 import org.apache.spark.util.random.XORShiftRandom
 
 /**
@@ -470,7 +471,7 @@ class Word2Vec extends Serializable with Logging {
     newSentences.unpersist()
 
     val wordArray = vocab.map(_.word)
-    new Word2VecModel(wordArray.zipWithIndex.toMap, syn0Global)
+    new Word2VecModel(CUtils.toMapWithIndex(wordArray), syn0Global)
   }
 
   /**
@@ -639,7 +640,7 @@ class Word2VecModel private[spark] (
 object Word2VecModel extends Loader[Word2VecModel] {
 
   private def buildWordIndex(model: Map[String, Array[Float]]): Map[String, Int] = {
-    model.keys.zipWithIndex.toMap
+    CUtils.toMapWithIndex(model.keys)
   }
 
   private def buildWordVectors(model: Map[String, Array[Float]]): Array[Float] = {

@@ -141,10 +141,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_2422",
   "messageParameters" : {
-    "message" : "grouping expressions sequence is empty, and 'spark_catalog.default.test_having.a' is not an aggregate function. Wrap '(min(spark_catalog.default.test_having.a) AS `min(a#x)`, max(spark_catalog.default.test_having.a) AS `max(a#x)`)' in windowing function(s) or wrap 'spark_catalog.default.test_having.a' in first() (or first_value) if you don't care which value you get.;\nProject [a#x]\n+- Filter (min(a#x)#x < max(a#x)#x)\n   +- Aggregate [a#x, min(a#x) AS min(a#x)#x, max(a#x) AS max(a#x)#x]\n      +- SubqueryAlias spark_catalog.default.test_having\n         +- Relation spark_catalog.default.test_having[a#x,b#x,c#x,d#x] parquet\n"
-  }
+    "aggExprs" : "(min(spark_catalog.default.test_having.a) AS `min(a#x)`, max(spark_catalog.default.test_having.a) AS `max(a#x)`)",
+    "sqlExpr" : "spark_catalog.default.test_having.a"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 48,
+    "fragment" : "SELECT a FROM test_having HAVING min(a) < max(a)"
+  } ]
 }
 
 
@@ -155,12 +163,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`a`",
-    "objectList" : "`one`"
-  }
+    "proposal" : "`one`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 41,
+    "stopIndex" : 41,
+    "fragment" : "a"
+  } ]
 }
 
 

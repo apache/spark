@@ -363,9 +363,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "PARTITIONS_NOT_FOUND",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "message" : "Partition not found in table 't' database 'default':\nc -> Us\nd -> 2"
+    "partitionList" : "PARTITION (`c` = Us, `d` = 2)",
+    "tableName" : "`default`.`t`"
   }
 }
 
@@ -377,9 +379,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1232",
   "messageParameters" : {
-    "message" : "Partition spec is invalid. The spec (c) must match the partition spec (c, d) defined in table '`spark_catalog`.`default`.`t`'"
+    "partitionColumnNames" : "c, d",
+    "specKeys" : "c",
+    "tableName" : "`spark_catalog`.`default`.`t`"
   }
 }
 
@@ -395,7 +399,14 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "sqlState" : "42000",
   "messageParameters" : {
     "inputString" : "PARTITION specification is incomplete: `d`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 28,
+    "fragment" : "DESC t PARTITION (c='Us', d)"
+  } ]
 }
 
 
@@ -475,9 +486,9 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "FORBIDDEN_OPERATION",
   "messageParameters" : {
-    "statement" : "DESC PARTITION",
+    "objectName" : "`temp_v`",
     "objectType" : "TEMPORARY VIEW",
-    "objectName" : "`temp_v`"
+    "statement" : "DESC PARTITION"
   }
 }
 
@@ -561,9 +572,9 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "FORBIDDEN_OPERATION",
   "messageParameters" : {
-    "statement" : "DESC PARTITION",
+    "objectName" : "`v`",
     "objectType" : "VIEW",
-    "objectName" : "`v`"
+    "statement" : "DESC PARTITION"
   }
 }
 

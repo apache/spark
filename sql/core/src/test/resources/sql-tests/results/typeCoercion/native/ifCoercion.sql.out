@@ -78,10 +78,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS TINYINT), CAST('2' AS BINARY)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS TINYINT), CAST('2' AS BINARY)))' (tinyint and binary).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as tinyint) else cast(2 as binary), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"TINYINT\", \"BINARY\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS TINYINT), CAST(2 AS BINARY)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 56,
+    "fragment" : "IF(true, cast(1 as tinyint), cast('2' as binary))"
+  } ]
 }
 
 
@@ -92,10 +101,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS TINYINT), CAST(2 AS BOOLEAN)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS TINYINT), CAST(2 AS BOOLEAN)))' (tinyint and boolean).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as tinyint) else cast(2 as boolean), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"TINYINT\", \"BOOLEAN\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS TINYINT), CAST(2 AS BOOLEAN)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "IF(true, cast(1 as tinyint), cast(2 as boolean))"
+  } ]
 }
 
 
@@ -106,10 +124,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS TINYINT), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS TINYINT), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' (tinyint and timestamp).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as tinyint) else cast(2017-12-11 09:30:00.0 as timestamp), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"TINYINT\", \"TIMESTAMP\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS TINYINT), CAST(2017-12-11 09:30:00.0 AS TIMESTAMP)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 79,
+    "fragment" : "IF(true, cast(1 as tinyint), cast('2017-12-11 09:30:00.0' as timestamp))"
+  } ]
 }
 
 
@@ -120,10 +147,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS TINYINT), CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS TINYINT), CAST('2017-12-11 09:30:00' AS DATE)))' (tinyint and date).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as tinyint) else cast(2017-12-11 09:30:00 as date), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"TINYINT\", \"DATE\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS TINYINT), CAST(2017-12-11 09:30:00 AS DATE)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 72,
+    "fragment" : "IF(true, cast(1 as tinyint), cast('2017-12-11 09:30:00' as date))"
+  } ]
 }
 
 
@@ -198,10 +234,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS SMALLINT), CAST('2' AS BINARY)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS SMALLINT), CAST('2' AS BINARY)))' (smallint and binary).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as smallint) else cast(2 as binary), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"SMALLINT\", \"BINARY\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS SMALLINT), CAST(2 AS BINARY)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 57,
+    "fragment" : "IF(true, cast(1 as smallint), cast('2' as binary))"
+  } ]
 }
 
 
@@ -212,10 +257,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS SMALLINT), CAST(2 AS BOOLEAN)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS SMALLINT), CAST(2 AS BOOLEAN)))' (smallint and boolean).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as smallint) else cast(2 as boolean), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"SMALLINT\", \"BOOLEAN\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS SMALLINT), CAST(2 AS BOOLEAN)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 56,
+    "fragment" : "IF(true, cast(1 as smallint), cast(2 as boolean))"
+  } ]
 }
 
 
@@ -226,10 +280,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS SMALLINT), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS SMALLINT), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' (smallint and timestamp).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as smallint) else cast(2017-12-11 09:30:00.0 as timestamp), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"SMALLINT\", \"TIMESTAMP\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS SMALLINT), CAST(2017-12-11 09:30:00.0 AS TIMESTAMP)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 80,
+    "fragment" : "IF(true, cast(1 as smallint), cast('2017-12-11 09:30:00.0' as timestamp))"
+  } ]
 }
 
 
@@ -240,10 +303,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS SMALLINT), CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS SMALLINT), CAST('2017-12-11 09:30:00' AS DATE)))' (smallint and date).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as smallint) else cast(2017-12-11 09:30:00 as date), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"SMALLINT\", \"DATE\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS SMALLINT), CAST(2017-12-11 09:30:00 AS DATE)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 73,
+    "fragment" : "IF(true, cast(1 as smallint), cast('2017-12-11 09:30:00' as date))"
+  } ]
 }
 
 
@@ -318,10 +390,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS INT), CAST('2' AS BINARY)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS INT), CAST('2' AS BINARY)))' (int and binary).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as int) else cast(2 as binary), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"INT\", \"BINARY\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS INT), CAST(2 AS BINARY)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 52,
+    "fragment" : "IF(true, cast(1 as int), cast('2' as binary))"
+  } ]
 }
 
 
@@ -332,10 +413,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS INT), CAST(2 AS BOOLEAN)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS INT), CAST(2 AS BOOLEAN)))' (int and boolean).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as int) else cast(2 as boolean), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"INT\", \"BOOLEAN\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS INT), CAST(2 AS BOOLEAN)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 51,
+    "fragment" : "IF(true, cast(1 as int), cast(2 as boolean))"
+  } ]
 }
 
 
@@ -346,10 +436,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS INT), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS INT), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' (int and timestamp).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as int) else cast(2017-12-11 09:30:00.0 as timestamp), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"INT\", \"TIMESTAMP\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS INT), CAST(2017-12-11 09:30:00.0 AS TIMESTAMP)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 75,
+    "fragment" : "IF(true, cast(1 as int), cast('2017-12-11 09:30:00.0' as timestamp))"
+  } ]
 }
 
 
@@ -360,10 +459,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS INT), CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS INT), CAST('2017-12-11 09:30:00' AS DATE)))' (int and date).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as int) else cast(2017-12-11 09:30:00 as date), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"INT\", \"DATE\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS INT), CAST(2017-12-11 09:30:00 AS DATE)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 68,
+    "fragment" : "IF(true, cast(1 as int), cast('2017-12-11 09:30:00' as date))"
+  } ]
 }
 
 
@@ -438,10 +546,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS BIGINT), CAST('2' AS BINARY)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS BIGINT), CAST('2' AS BINARY)))' (bigint and binary).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as bigint) else cast(2 as binary), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"BIGINT\", \"BINARY\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BIGINT), CAST(2 AS BINARY)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "IF(true, cast(1 as bigint), cast('2' as binary))"
+  } ]
 }
 
 
@@ -452,10 +569,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS BIGINT), CAST(2 AS BOOLEAN)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS BIGINT), CAST(2 AS BOOLEAN)))' (bigint and boolean).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as bigint) else cast(2 as boolean), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"BIGINT\", \"BOOLEAN\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BIGINT), CAST(2 AS BOOLEAN)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 54,
+    "fragment" : "IF(true, cast(1 as bigint), cast(2 as boolean))"
+  } ]
 }
 
 
@@ -466,10 +592,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS BIGINT), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS BIGINT), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' (bigint and timestamp).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as bigint) else cast(2017-12-11 09:30:00.0 as timestamp), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"BIGINT\", \"TIMESTAMP\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BIGINT), CAST(2017-12-11 09:30:00.0 AS TIMESTAMP)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 78,
+    "fragment" : "IF(true, cast(1 as bigint), cast('2017-12-11 09:30:00.0' as timestamp))"
+  } ]
 }
 
 
@@ -480,10 +615,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS BIGINT), CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS BIGINT), CAST('2017-12-11 09:30:00' AS DATE)))' (bigint and date).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as bigint) else cast(2017-12-11 09:30:00 as date), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"BIGINT\", \"DATE\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BIGINT), CAST(2017-12-11 09:30:00 AS DATE)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 71,
+    "fragment" : "IF(true, cast(1 as bigint), cast('2017-12-11 09:30:00' as date))"
+  } ]
 }
 
 
@@ -558,10 +702,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS FLOAT), CAST('2' AS BINARY)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS FLOAT), CAST('2' AS BINARY)))' (float and binary).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as float) else cast(2 as binary), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"FLOAT\", \"BINARY\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS FLOAT), CAST(2 AS BINARY)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 54,
+    "fragment" : "IF(true, cast(1 as float), cast('2' as binary))"
+  } ]
 }
 
 
@@ -572,10 +725,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS FLOAT), CAST(2 AS BOOLEAN)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS FLOAT), CAST(2 AS BOOLEAN)))' (float and boolean).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as float) else cast(2 as boolean), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"FLOAT\", \"BOOLEAN\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS FLOAT), CAST(2 AS BOOLEAN)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 53,
+    "fragment" : "IF(true, cast(1 as float), cast(2 as boolean))"
+  } ]
 }
 
 
@@ -586,10 +748,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS FLOAT), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS FLOAT), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' (float and timestamp).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as float) else cast(2017-12-11 09:30:00.0 as timestamp), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"FLOAT\", \"TIMESTAMP\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS FLOAT), CAST(2017-12-11 09:30:00.0 AS TIMESTAMP)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 77,
+    "fragment" : "IF(true, cast(1 as float), cast('2017-12-11 09:30:00.0' as timestamp))"
+  } ]
 }
 
 
@@ -600,10 +771,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS FLOAT), CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS FLOAT), CAST('2017-12-11 09:30:00' AS DATE)))' (float and date).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as float) else cast(2017-12-11 09:30:00 as date), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"FLOAT\", \"DATE\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS FLOAT), CAST(2017-12-11 09:30:00 AS DATE)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 70,
+    "fragment" : "IF(true, cast(1 as float), cast('2017-12-11 09:30:00' as date))"
+  } ]
 }
 
 
@@ -678,10 +858,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS DOUBLE), CAST('2' AS BINARY)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS DOUBLE), CAST('2' AS BINARY)))' (double and binary).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as double) else cast(2 as binary), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"DOUBLE\", \"BINARY\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS DOUBLE), CAST(2 AS BINARY)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "IF(true, cast(1 as double), cast('2' as binary))"
+  } ]
 }
 
 
@@ -692,10 +881,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS DOUBLE), CAST(2 AS BOOLEAN)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS DOUBLE), CAST(2 AS BOOLEAN)))' (double and boolean).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as double) else cast(2 as boolean), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"DOUBLE\", \"BOOLEAN\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS DOUBLE), CAST(2 AS BOOLEAN)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 54,
+    "fragment" : "IF(true, cast(1 as double), cast(2 as boolean))"
+  } ]
 }
 
 
@@ -706,10 +904,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS DOUBLE), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS DOUBLE), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' (double and timestamp).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as double) else cast(2017-12-11 09:30:00.0 as timestamp), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"DOUBLE\", \"TIMESTAMP\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS DOUBLE), CAST(2017-12-11 09:30:00.0 AS TIMESTAMP)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 78,
+    "fragment" : "IF(true, cast(1 as double), cast('2017-12-11 09:30:00.0' as timestamp))"
+  } ]
 }
 
 
@@ -720,10 +927,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS DOUBLE), CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS DOUBLE), CAST('2017-12-11 09:30:00' AS DATE)))' (double and date).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as double) else cast(2017-12-11 09:30:00 as date), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"DOUBLE\", \"DATE\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS DOUBLE), CAST(2017-12-11 09:30:00 AS DATE)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 71,
+    "fragment" : "IF(true, cast(1 as double), cast('2017-12-11 09:30:00' as date))"
+  } ]
 }
 
 
@@ -798,10 +1014,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS DECIMAL(10,0)), CAST('2' AS BINARY)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS DECIMAL(10,0)), CAST('2' AS BINARY)))' (decimal(10,0) and binary).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as decimal(10,0)) else cast(2 as binary), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"DECIMAL(10,0)\", \"BINARY\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS DECIMAL(10,0)), CAST(2 AS BINARY)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 63,
+    "fragment" : "IF(true, cast(1 as decimal(10, 0)), cast('2' as binary))"
+  } ]
 }
 
 
@@ -812,10 +1037,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS DECIMAL(10,0)), CAST(2 AS BOOLEAN)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS DECIMAL(10,0)), CAST(2 AS BOOLEAN)))' (decimal(10,0) and boolean).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as decimal(10,0)) else cast(2 as boolean), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"DECIMAL(10,0)\", \"BOOLEAN\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS DECIMAL(10,0)), CAST(2 AS BOOLEAN)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 62,
+    "fragment" : "IF(true, cast(1 as decimal(10, 0)), cast(2 as boolean))"
+  } ]
 }
 
 
@@ -826,10 +1060,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS DECIMAL(10,0)), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS DECIMAL(10,0)), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' (decimal(10,0) and timestamp).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as decimal(10,0)) else cast(2017-12-11 09:30:00.0 as timestamp), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"DECIMAL(10,0)\", \"TIMESTAMP\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS DECIMAL(10,0)), CAST(2017-12-11 09:30:00.0 AS TIMESTAMP)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 86,
+    "fragment" : "IF(true, cast(1 as decimal(10, 0)), cast('2017-12-11 09:30:00.0' as timestamp))"
+  } ]
 }
 
 
@@ -840,10 +1083,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS DECIMAL(10,0)), CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS DECIMAL(10,0)), CAST('2017-12-11 09:30:00' AS DATE)))' (decimal(10,0) and date).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as decimal(10,0)) else cast(2017-12-11 09:30:00 as date), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"DECIMAL(10,0)\", \"DATE\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS DECIMAL(10,0)), CAST(2017-12-11 09:30:00 AS DATE)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 79,
+    "fragment" : "IF(true, cast(1 as decimal(10, 0)), cast('2017-12-11 09:30:00' as date))"
+  } ]
 }
 
 
@@ -918,10 +1170,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS STRING), CAST('2' AS BINARY)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS STRING), CAST('2' AS BINARY)))' (string and binary).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as string) else cast(2 as binary), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"STRING\", \"BINARY\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS STRING), CAST(2 AS BINARY)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "IF(true, cast(1 as string), cast('2' as binary))"
+  } ]
 }
 
 
@@ -932,10 +1193,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS STRING), CAST(2 AS BOOLEAN)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS STRING), CAST(2 AS BOOLEAN)))' (string and boolean).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as string) else cast(2 as boolean), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"STRING\", \"BOOLEAN\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS STRING), CAST(2 AS BOOLEAN)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 54,
+    "fragment" : "IF(true, cast(1 as string), cast(2 as boolean))"
+  } ]
 }
 
 
@@ -962,10 +1232,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST('1' AS BINARY), CAST(2 AS TINYINT)))' due to data type mismatch: differing types in '(IF(true, CAST('1' AS BINARY), CAST(2 AS TINYINT)))' (binary and tinyint).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as binary) else cast(2 as tinyint), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"BINARY\", \"TINYINT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BINARY), CAST(2 AS TINYINT)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 56,
+    "fragment" : "IF(true, cast('1' as binary), cast(2 as tinyint))"
+  } ]
 }
 
 
@@ -976,10 +1255,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST('1' AS BINARY), CAST(2 AS SMALLINT)))' due to data type mismatch: differing types in '(IF(true, CAST('1' AS BINARY), CAST(2 AS SMALLINT)))' (binary and smallint).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as binary) else cast(2 as smallint), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"BINARY\", \"SMALLINT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BINARY), CAST(2 AS SMALLINT)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 57,
+    "fragment" : "IF(true, cast('1' as binary), cast(2 as smallint))"
+  } ]
 }
 
 
@@ -990,10 +1278,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST('1' AS BINARY), CAST(2 AS INT)))' due to data type mismatch: differing types in '(IF(true, CAST('1' AS BINARY), CAST(2 AS INT)))' (binary and int).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as binary) else cast(2 as int), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"BINARY\", \"INT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BINARY), CAST(2 AS INT)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 52,
+    "fragment" : "IF(true, cast('1' as binary), cast(2 as int))"
+  } ]
 }
 
 
@@ -1004,10 +1301,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST('1' AS BINARY), CAST(2 AS BIGINT)))' due to data type mismatch: differing types in '(IF(true, CAST('1' AS BINARY), CAST(2 AS BIGINT)))' (binary and bigint).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as binary) else cast(2 as bigint), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"BINARY\", \"BIGINT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BINARY), CAST(2 AS BIGINT)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "IF(true, cast('1' as binary), cast(2 as bigint))"
+  } ]
 }
 
 
@@ -1018,10 +1324,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST('1' AS BINARY), CAST(2 AS FLOAT)))' due to data type mismatch: differing types in '(IF(true, CAST('1' AS BINARY), CAST(2 AS FLOAT)))' (binary and float).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as binary) else cast(2 as float), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"BINARY\", \"FLOAT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BINARY), CAST(2 AS FLOAT)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 54,
+    "fragment" : "IF(true, cast('1' as binary), cast(2 as float))"
+  } ]
 }
 
 
@@ -1032,10 +1347,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST('1' AS BINARY), CAST(2 AS DOUBLE)))' due to data type mismatch: differing types in '(IF(true, CAST('1' AS BINARY), CAST(2 AS DOUBLE)))' (binary and double).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as binary) else cast(2 as double), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"BINARY\", \"DOUBLE\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BINARY), CAST(2 AS DOUBLE)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "IF(true, cast('1' as binary), cast(2 as double))"
+  } ]
 }
 
 
@@ -1046,10 +1370,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST('1' AS BINARY), CAST(2 AS DECIMAL(10,0))))' due to data type mismatch: differing types in '(IF(true, CAST('1' AS BINARY), CAST(2 AS DECIMAL(10,0))))' (binary and decimal(10,0)).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as binary) else cast(2 as decimal(10,0)), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"BINARY\", \"DECIMAL(10,0)\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BINARY), CAST(2 AS DECIMAL(10,0))))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 63,
+    "fragment" : "IF(true, cast('1' as binary), cast(2 as decimal(10, 0)))"
+  } ]
 }
 
 
@@ -1060,10 +1393,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST('1' AS BINARY), CAST(2 AS STRING)))' due to data type mismatch: differing types in '(IF(true, CAST('1' AS BINARY), CAST(2 AS STRING)))' (binary and string).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as binary) else cast(2 as string), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"BINARY\", \"STRING\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BINARY), CAST(2 AS STRING)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "IF(true, cast('1' as binary), cast(2 as string))"
+  } ]
 }
 
 
@@ -1082,10 +1424,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST('1' AS BINARY), CAST(2 AS BOOLEAN)))' due to data type mismatch: differing types in '(IF(true, CAST('1' AS BINARY), CAST(2 AS BOOLEAN)))' (binary and boolean).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as binary) else cast(2 as boolean), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"BINARY\", \"BOOLEAN\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BINARY), CAST(2 AS BOOLEAN)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 56,
+    "fragment" : "IF(true, cast('1' as binary), cast(2 as boolean))"
+  } ]
 }
 
 
@@ -1096,10 +1447,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST('1' AS BINARY), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: differing types in '(IF(true, CAST('1' AS BINARY), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' (binary and timestamp).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as binary) else cast(2017-12-11 09:30:00.0 as timestamp), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"BINARY\", \"TIMESTAMP\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BINARY), CAST(2017-12-11 09:30:00.0 AS TIMESTAMP)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 80,
+    "fragment" : "IF(true, cast('1' as binary), cast('2017-12-11 09:30:00.0' as timestamp))"
+  } ]
 }
 
 
@@ -1110,10 +1470,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST('1' AS BINARY), CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: differing types in '(IF(true, CAST('1' AS BINARY), CAST('2017-12-11 09:30:00' AS DATE)))' (binary and date).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as binary) else cast(2017-12-11 09:30:00 as date), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"BINARY\", \"DATE\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BINARY), CAST(2017-12-11 09:30:00 AS DATE)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 73,
+    "fragment" : "IF(true, cast('1' as binary), cast('2017-12-11 09:30:00' as date))"
+  } ]
 }
 
 
@@ -1124,10 +1493,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS TINYINT)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS TINYINT)))' (boolean and tinyint).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as boolean) else cast(2 as tinyint), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"BOOLEAN\", \"TINYINT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS TINYINT)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "IF(true, cast(1 as boolean), cast(2 as tinyint))"
+  } ]
 }
 
 
@@ -1138,10 +1516,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS SMALLINT)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS SMALLINT)))' (boolean and smallint).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as boolean) else cast(2 as smallint), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"BOOLEAN\", \"SMALLINT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS SMALLINT)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 56,
+    "fragment" : "IF(true, cast(1 as boolean), cast(2 as smallint))"
+  } ]
 }
 
 
@@ -1152,10 +1539,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS INT)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS INT)))' (boolean and int).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as boolean) else cast(2 as int), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"BOOLEAN\", \"INT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS INT)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 51,
+    "fragment" : "IF(true, cast(1 as boolean), cast(2 as int))"
+  } ]
 }
 
 
@@ -1166,10 +1562,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS BIGINT)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS BIGINT)))' (boolean and bigint).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as boolean) else cast(2 as bigint), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"BOOLEAN\", \"BIGINT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS BIGINT)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 54,
+    "fragment" : "IF(true, cast(1 as boolean), cast(2 as bigint))"
+  } ]
 }
 
 
@@ -1180,10 +1585,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS FLOAT)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS FLOAT)))' (boolean and float).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as boolean) else cast(2 as float), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"BOOLEAN\", \"FLOAT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS FLOAT)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 53,
+    "fragment" : "IF(true, cast(1 as boolean), cast(2 as float))"
+  } ]
 }
 
 
@@ -1194,10 +1608,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS DOUBLE)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS DOUBLE)))' (boolean and double).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as boolean) else cast(2 as double), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"BOOLEAN\", \"DOUBLE\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS DOUBLE)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 54,
+    "fragment" : "IF(true, cast(1 as boolean), cast(2 as double))"
+  } ]
 }
 
 
@@ -1208,10 +1631,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS DECIMAL(10,0))))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS DECIMAL(10,0))))' (boolean and decimal(10,0)).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as boolean) else cast(2 as decimal(10,0)), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"BOOLEAN\", \"DECIMAL(10,0)\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS DECIMAL(10,0))))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 62,
+    "fragment" : "IF(true, cast(1 as boolean), cast(2 as decimal(10, 0)))"
+  } ]
 }
 
 
@@ -1222,10 +1654,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS STRING)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS STRING)))' (boolean and string).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as boolean) else cast(2 as string), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"BOOLEAN\", \"STRING\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS STRING)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 54,
+    "fragment" : "IF(true, cast(1 as boolean), cast(2 as string))"
+  } ]
 }
 
 
@@ -1236,10 +1677,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS BOOLEAN), CAST('2' AS BINARY)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS BOOLEAN), CAST('2' AS BINARY)))' (boolean and binary).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as boolean) else cast(2 as binary), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"BOOLEAN\", \"BINARY\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BOOLEAN), CAST(2 AS BINARY)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 56,
+    "fragment" : "IF(true, cast(1 as boolean), cast('2' as binary))"
+  } ]
 }
 
 
@@ -1258,10 +1708,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS BOOLEAN), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS BOOLEAN), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' (boolean and timestamp).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as boolean) else cast(2017-12-11 09:30:00.0 as timestamp), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"BOOLEAN\", \"TIMESTAMP\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BOOLEAN), CAST(2017-12-11 09:30:00.0 AS TIMESTAMP)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 79,
+    "fragment" : "IF(true, cast(1 as boolean), cast('2017-12-11 09:30:00.0' as timestamp))"
+  } ]
 }
 
 
@@ -1272,10 +1731,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST(1 AS BOOLEAN), CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: differing types in '(IF(true, CAST(1 AS BOOLEAN), CAST('2017-12-11 09:30:00' AS DATE)))' (boolean and date).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(1 as boolean) else cast(2017-12-11 09:30:00 as date), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"BOOLEAN\", \"DATE\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(1 AS BOOLEAN), CAST(2017-12-11 09:30:00 AS DATE)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 72,
+    "fragment" : "IF(true, cast(1 as boolean), cast('2017-12-11 09:30:00' as date))"
+  } ]
 }
 
 
@@ -1286,10 +1754,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(2 AS TINYINT)))' due to data type mismatch: differing types in '(IF(true, CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(2 AS TINYINT)))' (timestamp and tinyint).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(2017-12-12 09:30:00.0 as timestamp) else cast(2 as tinyint), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"TIMESTAMP\", \"TINYINT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(2017-12-12 09:30:00.0 AS TIMESTAMP), CAST(2 AS TINYINT)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 79,
+    "fragment" : "IF(true, cast('2017-12-12 09:30:00.0' as timestamp), cast(2 as tinyint))"
+  } ]
 }
 
 
@@ -1300,10 +1777,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(2 AS SMALLINT)))' due to data type mismatch: differing types in '(IF(true, CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(2 AS SMALLINT)))' (timestamp and smallint).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(2017-12-12 09:30:00.0 as timestamp) else cast(2 as smallint), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"TIMESTAMP\", \"SMALLINT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(2017-12-12 09:30:00.0 AS TIMESTAMP), CAST(2 AS SMALLINT)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 80,
+    "fragment" : "IF(true, cast('2017-12-12 09:30:00.0' as timestamp), cast(2 as smallint))"
+  } ]
 }
 
 
@@ -1314,10 +1800,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(2 AS INT)))' due to data type mismatch: differing types in '(IF(true, CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(2 AS INT)))' (timestamp and int).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(2017-12-12 09:30:00.0 as timestamp) else cast(2 as int), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"TIMESTAMP\", \"INT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(2017-12-12 09:30:00.0 AS TIMESTAMP), CAST(2 AS INT)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 75,
+    "fragment" : "IF(true, cast('2017-12-12 09:30:00.0' as timestamp), cast(2 as int))"
+  } ]
 }
 
 
@@ -1328,10 +1823,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(2 AS BIGINT)))' due to data type mismatch: differing types in '(IF(true, CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(2 AS BIGINT)))' (timestamp and bigint).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(2017-12-12 09:30:00.0 as timestamp) else cast(2 as bigint), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"TIMESTAMP\", \"BIGINT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(2017-12-12 09:30:00.0 AS TIMESTAMP), CAST(2 AS BIGINT)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 78,
+    "fragment" : "IF(true, cast('2017-12-12 09:30:00.0' as timestamp), cast(2 as bigint))"
+  } ]
 }
 
 
@@ -1342,10 +1846,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(2 AS FLOAT)))' due to data type mismatch: differing types in '(IF(true, CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(2 AS FLOAT)))' (timestamp and float).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(2017-12-12 09:30:00.0 as timestamp) else cast(2 as float), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"TIMESTAMP\", \"FLOAT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(2017-12-12 09:30:00.0 AS TIMESTAMP), CAST(2 AS FLOAT)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 77,
+    "fragment" : "IF(true, cast('2017-12-12 09:30:00.0' as timestamp), cast(2 as float))"
+  } ]
 }
 
 
@@ -1356,10 +1869,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(2 AS DOUBLE)))' due to data type mismatch: differing types in '(IF(true, CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(2 AS DOUBLE)))' (timestamp and double).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(2017-12-12 09:30:00.0 as timestamp) else cast(2 as double), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"TIMESTAMP\", \"DOUBLE\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(2017-12-12 09:30:00.0 AS TIMESTAMP), CAST(2 AS DOUBLE)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 78,
+    "fragment" : "IF(true, cast('2017-12-12 09:30:00.0' as timestamp), cast(2 as double))"
+  } ]
 }
 
 
@@ -1370,10 +1892,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(2 AS DECIMAL(10,0))))' due to data type mismatch: differing types in '(IF(true, CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(2 AS DECIMAL(10,0))))' (timestamp and decimal(10,0)).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(2017-12-12 09:30:00.0 as timestamp) else cast(2 as decimal(10,0)), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"TIMESTAMP\", \"DECIMAL(10,0)\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(2017-12-12 09:30:00.0 AS TIMESTAMP), CAST(2 AS DECIMAL(10,0))))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 86,
+    "fragment" : "IF(true, cast('2017-12-12 09:30:00.0' as timestamp), cast(2 as decimal(10, 0)))"
+  } ]
 }
 
 
@@ -1392,10 +1923,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST('2' AS BINARY)))' due to data type mismatch: differing types in '(IF(true, CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST('2' AS BINARY)))' (timestamp and binary).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(2017-12-12 09:30:00.0 as timestamp) else cast(2 as binary), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"TIMESTAMP\", \"BINARY\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(2017-12-12 09:30:00.0 AS TIMESTAMP), CAST(2 AS BINARY)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 80,
+    "fragment" : "IF(true, cast('2017-12-12 09:30:00.0' as timestamp), cast('2' as binary))"
+  } ]
 }
 
 
@@ -1406,10 +1946,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(2 AS BOOLEAN)))' due to data type mismatch: differing types in '(IF(true, CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(2 AS BOOLEAN)))' (timestamp and boolean).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(2017-12-12 09:30:00.0 as timestamp) else cast(2 as boolean), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"TIMESTAMP\", \"BOOLEAN\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(2017-12-12 09:30:00.0 AS TIMESTAMP), CAST(2 AS BOOLEAN)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 79,
+    "fragment" : "IF(true, cast('2017-12-12 09:30:00.0' as timestamp), cast(2 as boolean))"
+  } ]
 }
 
 
@@ -1436,10 +1985,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST('2017-12-12 09:30:00' AS DATE), CAST(2 AS TINYINT)))' due to data type mismatch: differing types in '(IF(true, CAST('2017-12-12 09:30:00' AS DATE), CAST(2 AS TINYINT)))' (date and tinyint).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(2017-12-12 09:30:00 as date) else cast(2 as tinyint), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"DATE\", \"TINYINT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(2017-12-12 09:30:00 AS DATE), CAST(2 AS TINYINT)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 72,
+    "fragment" : "IF(true, cast('2017-12-12 09:30:00' as date), cast(2 as tinyint))"
+  } ]
 }
 
 
@@ -1450,10 +2008,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST('2017-12-12 09:30:00' AS DATE), CAST(2 AS SMALLINT)))' due to data type mismatch: differing types in '(IF(true, CAST('2017-12-12 09:30:00' AS DATE), CAST(2 AS SMALLINT)))' (date and smallint).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(2017-12-12 09:30:00 as date) else cast(2 as smallint), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"DATE\", \"SMALLINT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(2017-12-12 09:30:00 AS DATE), CAST(2 AS SMALLINT)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 73,
+    "fragment" : "IF(true, cast('2017-12-12 09:30:00' as date), cast(2 as smallint))"
+  } ]
 }
 
 
@@ -1464,10 +2031,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST('2017-12-12 09:30:00' AS DATE), CAST(2 AS INT)))' due to data type mismatch: differing types in '(IF(true, CAST('2017-12-12 09:30:00' AS DATE), CAST(2 AS INT)))' (date and int).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(2017-12-12 09:30:00 as date) else cast(2 as int), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"DATE\", \"INT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(2017-12-12 09:30:00 AS DATE), CAST(2 AS INT)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 68,
+    "fragment" : "IF(true, cast('2017-12-12 09:30:00' as date), cast(2 as int))"
+  } ]
 }
 
 
@@ -1478,10 +2054,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST('2017-12-12 09:30:00' AS DATE), CAST(2 AS BIGINT)))' due to data type mismatch: differing types in '(IF(true, CAST('2017-12-12 09:30:00' AS DATE), CAST(2 AS BIGINT)))' (date and bigint).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(2017-12-12 09:30:00 as date) else cast(2 as bigint), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"DATE\", \"BIGINT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(2017-12-12 09:30:00 AS DATE), CAST(2 AS BIGINT)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 71,
+    "fragment" : "IF(true, cast('2017-12-12 09:30:00' as date), cast(2 as bigint))"
+  } ]
 }
 
 
@@ -1492,10 +2077,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST('2017-12-12 09:30:00' AS DATE), CAST(2 AS FLOAT)))' due to data type mismatch: differing types in '(IF(true, CAST('2017-12-12 09:30:00' AS DATE), CAST(2 AS FLOAT)))' (date and float).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(2017-12-12 09:30:00 as date) else cast(2 as float), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"DATE\", \"FLOAT\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(2017-12-12 09:30:00 AS DATE), CAST(2 AS FLOAT)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 70,
+    "fragment" : "IF(true, cast('2017-12-12 09:30:00' as date), cast(2 as float))"
+  } ]
 }
 
 
@@ -1506,10 +2100,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST('2017-12-12 09:30:00' AS DATE), CAST(2 AS DOUBLE)))' due to data type mismatch: differing types in '(IF(true, CAST('2017-12-12 09:30:00' AS DATE), CAST(2 AS DOUBLE)))' (date and double).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(2017-12-12 09:30:00 as date) else cast(2 as double), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"DATE\", \"DOUBLE\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(2017-12-12 09:30:00 AS DATE), CAST(2 AS DOUBLE)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 71,
+    "fragment" : "IF(true, cast('2017-12-12 09:30:00' as date), cast(2 as double))"
+  } ]
 }
 
 
@@ -1520,10 +2123,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST('2017-12-12 09:30:00' AS DATE), CAST(2 AS DECIMAL(10,0))))' due to data type mismatch: differing types in '(IF(true, CAST('2017-12-12 09:30:00' AS DATE), CAST(2 AS DECIMAL(10,0))))' (date and decimal(10,0)).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(2017-12-12 09:30:00 as date) else cast(2 as decimal(10,0)), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"DATE\", \"DECIMAL(10,0)\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(2017-12-12 09:30:00 AS DATE), CAST(2 AS DECIMAL(10,0))))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 79,
+    "fragment" : "IF(true, cast('2017-12-12 09:30:00' as date), cast(2 as decimal(10, 0)))"
+  } ]
 }
 
 
@@ -1542,10 +2154,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST('2017-12-12 09:30:00' AS DATE), CAST('2' AS BINARY)))' due to data type mismatch: differing types in '(IF(true, CAST('2017-12-12 09:30:00' AS DATE), CAST('2' AS BINARY)))' (date and binary).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(2017-12-12 09:30:00 as date) else cast(2 as binary), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"DATE\", \"BINARY\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(2017-12-12 09:30:00 AS DATE), CAST(2 AS BINARY)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 73,
+    "fragment" : "IF(true, cast('2017-12-12 09:30:00' as date), cast('2' as binary))"
+  } ]
 }
 
 
@@ -1556,10 +2177,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "cannot resolve '(IF(true, CAST('2017-12-12 09:30:00' AS DATE), CAST(2 AS BOOLEAN)))' due to data type mismatch: differing types in '(IF(true, CAST('2017-12-12 09:30:00' AS DATE), CAST(2 AS BOOLEAN)))' (date and boolean).; line 1 pos 7;\n'Project [unresolvedalias(if (true) cast(2017-12-12 09:30:00 as date) else cast(2 as boolean), None)]\n+- SubqueryAlias t\n   +- View (`t`, [1#x])\n      +- Project [cast(1#x as int) AS 1#x]\n         +- Project [1 AS 1#x]\n            +- OneRowRelation\n"
-  }
+    "dataType" : "[\"DATE\", \"BOOLEAN\"]",
+    "functionName" : "`if`",
+    "sqlExpr" : "\"(IF(true, CAST(2017-12-12 09:30:00 AS DATE), CAST(2 AS BOOLEAN)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 72,
+    "fragment" : "IF(true, cast('2017-12-12 09:30:00' as date), cast(2 as boolean))"
+  } ]
 }
 
 
