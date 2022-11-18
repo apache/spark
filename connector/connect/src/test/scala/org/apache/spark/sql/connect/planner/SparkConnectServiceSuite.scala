@@ -78,7 +78,7 @@ class SparkConnectServiceSuite extends SharedSparkSession {
     session.udf.register("insta_kill", instaKill)
 
     val connect = new MockRemoteSession()
-    val context = proto.Request.UserContext
+    val context = proto.UserContext
       .newBuilder()
       .setUserId("c1")
       .build()
@@ -86,19 +86,19 @@ class SparkConnectServiceSuite extends SharedSparkSession {
       .newBuilder()
       .setRoot(connect.sql("select insta_kill(id) from range(10)"))
       .build()
-    val request = proto.Request
+    val request = proto.ExecutePlanRequest
       .newBuilder()
       .setPlan(plan)
       .setUserContext(context)
       .build()
 
-    val promise = Promise[Seq[proto.Response]]
+    val promise = Promise[Seq[proto.ExecutePlanResponse]]
     instance.executePlan(
       request,
-      new StreamObserver[proto.Response] {
-        private val responses = Seq.newBuilder[proto.Response]
+      new StreamObserver[proto.ExecutePlanResponse] {
+        private val responses = Seq.newBuilder[proto.ExecutePlanResponse]
 
-        override def onNext(v: proto.Response): Unit = responses += v
+        override def onNext(v: proto.ExecutePlanResponse): Unit = responses += v
 
         override def onError(throwable: Throwable): Unit = promise.failure(throwable)
 
