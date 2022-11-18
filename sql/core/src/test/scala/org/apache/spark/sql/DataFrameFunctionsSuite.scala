@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import java.io.File
-import java.lang.reflect.Modifier
+import java.lang.reflect.{InvocationTargetException, Modifier}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
@@ -5177,6 +5177,25 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       map_zip_with($"m1", $"m2", (k2: Column, iv1: Column, iv2: Column) =>
         ov1 + iv1 + ov2 + iv2))),
       Seq(Row(Map("a" -> Map("a" -> 6, "b" -> 8), "b" -> Map("a" -> 8, "b" -> 10))))
+    )
+  }
+
+  test("from_json - invalid schema string") {
+    val e1 = intercept[Exception] {
+      sql("select from_json('{\"a\":1}', 1)")
+    }
+    assert(e1.isInstanceOf[AnalysisException])
+    val e2 = e1.getCause
+    assert(e2.isInstanceOf[InvocationTargetException])
+    val e3 = e2.getCause
+    assert(e3.isInstanceOf[AnalysisException])
+    val e4 = e3.asInstanceOf[AnalysisException]
+    checkError(
+      exception = e4,
+      errorClass = "INVALID_SCHEMA",
+      parameters = Map(
+        "expression" -> "\"1\""
+      )
     )
   }
 }
