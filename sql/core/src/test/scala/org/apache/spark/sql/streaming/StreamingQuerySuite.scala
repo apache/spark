@@ -33,8 +33,8 @@ import org.scalactic.TolerantNumerics
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatestplus.mockito.MockitoSugar
-import org.apache.spark.{SparkException, TestUtils}
 
+import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Dataset, Row, SaveMode}
 import org.apache.spark.sql.catalyst.InternalRow
