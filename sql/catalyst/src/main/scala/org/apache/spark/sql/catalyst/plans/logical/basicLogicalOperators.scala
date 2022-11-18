@@ -606,7 +606,9 @@ case class Join(
     }
   }
 
-  def duplicateResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
+  def duplicateResolved: Boolean = {
+    (left.outputSet ++ left.references).intersect(right.outputSet).isEmpty
+  }
 
   // Joins are only resolved if they don't introduce ambiguous expression ids.
   // NaturalJoin should be ready for resolution only if everything else is resolved here
@@ -1938,7 +1940,10 @@ case class LateralJoin(
     joinType: JoinType,
     condition: Option[Expression]) extends UnaryNode {
 
-  require(Seq(Inner, LeftOuter, Cross).contains(joinType),
+  require(Seq(Inner, LeftOuter, Cross).contains(joinType match {
+    case uj: UsingJoin => uj.tpe
+    case jt: JoinType => jt
+  }),
     s"Unsupported lateral join type $joinType")
 
   override def child: LogicalPlan = left
@@ -1968,7 +1973,8 @@ case class LateralJoin(
 
   override def childrenResolved: Boolean = left.resolved && right.resolved
 
-  def duplicateResolved: Boolean = left.outputSet.intersect(right.plan.outputSet).isEmpty
+  def duplicateResolved: Boolean = (left.outputSet ++ left.references)
+    .intersect(right.plan.outputSet).isEmpty
 
   override lazy val resolved: Boolean = {
     childrenResolved &&
