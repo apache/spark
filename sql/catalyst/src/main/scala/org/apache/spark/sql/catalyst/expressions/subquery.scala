@@ -227,8 +227,7 @@ object SubExprUtils extends PredicateHelper {
         false
     }
 
-    if (collectOutRefs(expr) && (expr.isInstanceOf[UnaryExpression] ||
-      expr.isInstanceOf[AggregateExpression])) {
+    if (collectOutRefs(expr)) {
       outerExpressions += stripOuterReference(expr)
     }
     outerExpressions.toSeq
