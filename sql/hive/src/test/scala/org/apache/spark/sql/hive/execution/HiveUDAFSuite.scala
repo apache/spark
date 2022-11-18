@@ -174,11 +174,11 @@ class HiveUDAFSuite extends QueryTest
         exception = intercept[AnalysisException] {
           sql(s"SELECT $functionName(100)")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1042",
+        errorClass = "FUNCTION_WRONG_NUM_ARGS",
         parameters = Map(
-          "name" -> "longProductSum",
-          "expectedInfo" -> "2",
-          "actualNumber" -> "1"),
+          "functionName" -> "longProductSum",
+          "expectedNum" -> "2",
+          "actualNum" -> "1"),
         context = ExpectedContext(
           fragment = "longProductSum(100)",
           start = 7,
