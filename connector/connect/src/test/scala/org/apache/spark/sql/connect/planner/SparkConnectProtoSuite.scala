@@ -476,6 +476,14 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(select(1), spark.sql("SELECT 1"))
   }
 
+
+  test("Origin is properly propagated") {
+    val exception = intercept[AnalysisException] {
+      analyzePlan(transform(connectTestRelation.select("nothign".protoAttr)))
+    }
+    assert(exception.context.length == 1)
+  }
+
   private def createLocalRelationProtoByQualifiedAttributes(
       attrs: Seq[proto.Expression.QualifiedAttribute]): proto.Relation = {
     val localRelationBuilder = proto.LocalRelation.newBuilder()

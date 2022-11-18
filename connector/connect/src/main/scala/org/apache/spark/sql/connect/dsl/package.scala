@@ -43,6 +43,7 @@ package object dsl {
       def protoAttr: Expression =
         Expression
           .newBuilder()
+          .setCommon(proto.ExpressionCommon.newBuilder().setSourceInfo("debug attr").build())
           .setUnresolvedAttribute(
             Expression.UnresolvedAttribute
               .newBuilder()
@@ -336,6 +337,7 @@ package object dsl {
       def select(exprs: Expression*): Relation = {
         Relation
           .newBuilder()
+          .setCommon(proto.RelationCommon.newBuilder().setSourceInfo("select").build())
           .setProject(
             Project
               .newBuilder()

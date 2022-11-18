@@ -32,8 +32,9 @@ import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.catalyst.plans.{logical, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
+import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin, logical}
 import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, SubqueryAlias, Union}
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
@@ -53,11 +54,30 @@ final case class InvalidCommandInput(
     extends Exception(message, cause)
 
 class SparkConnectPlanner(session: SparkSession) {
+
+  lazy val origin = CurrentOrigin.get
+
   lazy val pythonExec =
     sys.env.getOrElse("PYSPARK_PYTHON", sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python3"))
 
+  def withOrigin(rel: proto.Relation)(f: => LogicalPlan): LogicalPlan =
+    CurrentOrigin.withOrigin(origin) {
+      if (rel.hasCommon) {
+        CurrentOrigin.set(Origin(sourceInfo = Some(rel.getCommon.getSourceInfo)))
+      }
+    f
+  }
+
+  def withOrigin(rel: proto.Expression)(f: => Expression): Expression =
+    CurrentOrigin.withOrigin(origin) {
+      if (rel.hasCommon) {
+        CurrentOrigin.set(Origin(sourceInfo = Some(rel.getCommon.getSourceInfo)))
+      }
+      f
+    }
+
   // The root of the query plan is a relation and we apply the transformations to it.
-  def transformRelation(rel: proto.Relation): LogicalPlan = {
+  def transformRelation(rel: proto.Relation): LogicalPlan = withOrigin(rel) {
     rel.getRelTypeCase match {
       case proto.Relation.RelTypeCase.SHOW_STRING => transformShowString(rel.getShowString)
       case proto.Relation.RelTypeCase.READ => transformReadRel(rel.getRead)
@@ -328,7 +348,7 @@ class SparkConnectPlanner(session: SparkSession) {
     UnresolvedAttribute(exp.getUnresolvedAttribute.getUnparsedIdentifier)
   }
 
-  private def transformExpression(exp: proto.Expression): Expression = {
+  private def transformExpression(exp: proto.Expression): Expression = withOrigin(exp) {
     exp.getExprTypeCase match {
       case proto.Expression.ExprTypeCase.LITERAL => transformLiteral(exp.getLiteral)
       case proto.Expression.ExprTypeCase.UNRESOLVED_ATTRIBUTE =>

@@ -25,9 +25,16 @@ package spark.connect;
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
 
+message ExpressionCommon {
+  string source_info = 1;
+}
+
 // Expression used to refer to fields, functions and similar. This can be used everywhere
 // expressions in SQL appear.
 message Expression {
+
+  // Common data and source information.
+  ExpressionCommon common = 7;
 
   oneof expr_type {
     Literal literal = 1;

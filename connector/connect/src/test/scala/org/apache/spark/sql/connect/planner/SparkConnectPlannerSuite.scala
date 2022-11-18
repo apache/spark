@@ -66,7 +66,11 @@ trait SparkConnectPlanTest extends SharedSparkSession {
           .setName(attr.name)
           .setType(DataTypeProtoConverter.toConnectProtoType(attr.dataType)))
     }
-    proto.Relation.newBuilder().setLocalRelation(localRelationBuilder.build()).build()
+    proto.Relation
+      .newBuilder()
+      .setCommon(proto.RelationCommon.newBuilder().setSourceInfo("test_local_relation").build())
+      .setLocalRelation(localRelationBuilder.build())
+      .build()
   }
 }
 

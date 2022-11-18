@@ -27,7 +27,8 @@ case class SQLQueryContext(
     originStopIndex: Option[Int],
     sqlText: Option[String],
     originObjectType: Option[String],
-    originObjectName: Option[String]) extends QueryContext {
+    originObjectName: Option[String],
+    sourceInfo: Option[String]) extends QueryContext {
 
   override val objectType = originObjectType.getOrElse("")
   override val objectName = originObjectName.getOrElse("")
@@ -44,7 +45,7 @@ case class SQLQueryContext(
     // If the query context is missing or incorrect, simply return an empty string.
     if (!isValid) {
       ""
-    } else {
+    } else if (!sourceInfo.isDefined) {
       val positionContext = if (line.isDefined && startPosition.isDefined) {
         // Note that the line number starts from 1, while the start position starts from 0.
         // Here we increase the start position by 1 for consistency.
@@ -112,6 +113,8 @@ case class SQLQueryContext(
         builder ++= "\n"
       }
       builder.result()
+    } else {
+      sourceInfo.get
     }
   }
 
@@ -125,9 +128,9 @@ case class SQLQueryContext(
   }
 
   def isValid: Boolean = {
-    sqlText.isDefined && originStartIndex.isDefined && originStopIndex.isDefined &&
+    (sqlText.isDefined && originStartIndex.isDefined && originStopIndex.isDefined &&
       originStartIndex.get >= 0 && originStopIndex.get < sqlText.get.length &&
-      originStartIndex.get <= originStopIndex.get
+      originStartIndex.get <= originStopIndex.get) || sourceInfo.isDefined
 
   }
 }

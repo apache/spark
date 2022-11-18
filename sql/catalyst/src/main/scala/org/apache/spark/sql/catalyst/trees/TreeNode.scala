@@ -65,10 +65,11 @@ case class Origin(
     stopIndex: Option[Int] = None,
     sqlText: Option[String] = None,
     objectType: Option[String] = None,
-    objectName: Option[String] = None) {
+    objectName: Option[String] = None,
+    sourceInfo: Option[String] = None) {
 
   lazy val context: SQLQueryContext = SQLQueryContext(
-    line, startPosition, startIndex, stopIndex, sqlText, objectType, objectName)
+    line, startPosition, startIndex, stopIndex, sqlText, objectType, objectName, sourceInfo)
 
   def getQueryContext: Array[QueryContext] = if (context.isValid) {
     Array(context)

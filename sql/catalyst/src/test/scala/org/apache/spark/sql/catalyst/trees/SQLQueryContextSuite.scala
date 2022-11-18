@@ -31,7 +31,8 @@ class SQLQueryContextSuite extends SparkFunSuite with SQLHelper {
         originStopIndex = Some(stop),
         sqlText = Some(sqlText),
         originObjectType = None,
-        originObjectName = None)
+        originObjectName = None,
+        sourceInfo = None)
       context.fragment
     }
     Seq(
