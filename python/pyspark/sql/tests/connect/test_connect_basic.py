@@ -189,7 +189,9 @@ class SparkConnectTests(SparkConnectSQLTestCase):
 
     def test_subquery_alias(self) -> None:
         # SPARK-40938: test subquery alias.
-        plan_text = self.connect.read.table(self.tbl_name).alias("special_alias").explain()
+        plan_text = (
+            self.connect.read.table(self.tbl_name).alias("special_alias").explain(extended=True)
+        )
         self.assertTrue("special_alias" in plan_text)
 
     def test_range(self):
@@ -276,6 +278,18 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         # +---+---+
         expected = "+---+---+\n|  X|  Y|\n+---+---+\n|  1|  2|\n+---+---+\n"
         self.assertEqual(show_str, expected)
+
+    def test_explain_string(self):
+        # SPARK-41122: test explain API.
+        plan_str = self.connect.sql("SELECT 1").explain(extended=True)
+        self.assertTrue("Parsed Logical Plan" in plan_str)
+        self.assertTrue("Analyzed Logical Plan" in plan_str)
+        self.assertTrue("Optimized Logical Plan" in plan_str)
+        self.assertTrue("Physical Plan" in plan_str)
+
+        with self.assertRaises(ValueError) as context:
+            self.connect.sql("SELECT 1").explain(mode="unknown")
+        self.assertTrue("unknown" in str(context.exception))
 
     def test_simple_datasource_read(self) -> None:
         writeDf = self.df_text
