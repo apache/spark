@@ -112,11 +112,11 @@ class QueryExecution(
       commandExecuted
     } else {
       val planChangeLogger = new PlanChangeLogger[LogicalPlan]()
-      val normalized = normalizationRules.foldLeft(commandExecuted)((p, rule) => {
+      val normalized = normalizationRules.foldLeft(commandExecuted) { (p, rule) =>
         val result = rule.apply(p)
         planChangeLogger.logRule(rule.ruleName, p, result)
         result
-      })
+      }
       planChangeLogger.logBatch("Plan Normalization", commandExecuted, normalized)
       normalized
     }
