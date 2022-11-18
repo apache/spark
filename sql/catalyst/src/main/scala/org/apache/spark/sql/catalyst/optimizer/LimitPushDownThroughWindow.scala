@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, CurrentRow, DenseRank, Expression, IntegerLiteral, Literal, NamedExpression, PredicateHelper, Rank, RowFrame, RowNumber, SpecifiedWindowFrame, UnboundedPreceding, WindowExpression, WindowSpecDefinition}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentRow, DenseRank, EqualTo, Expression, GreaterThan, GreaterThanOrEqual, IntegerLiteral, LessThan, LessThanOrEqual, Literal, NamedExpression, PredicateHelper, Rank, RowFrame, RowNumber, SpecifiedWindowFrame, UnboundedPreceding, WindowExpression, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Limit, LocalLimit, LogicalPlan, Project, Sort, Window}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{FILTER, LIMIT, WINDOW}
+import org.apache.spark.sql.types.IntegerType
 
 /**
  * Pushes down [[LocalLimit]] beneath WINDOW. This rule optimizes the following case:
@@ -40,21 +41,24 @@ object LimitPushDownThroughWindow extends Rule[LogicalPlan] with PredicateHelper
     case _ => false
   }
 
-  // Extract limit from filter condition and select the min limit.
-  private def extractLimit(
-      condition: Expression,
-      windowExpressions: Seq[NamedExpression]): Option[Int] = {
-    val limits = windowExpressions.collect {
-      case alias @ Alias(WindowExpression(_, _), _) =>
-        extractLimits(condition, alias.toAttribute)
-    }.filter(_.isDefined)
-
-    if (limits.nonEmpty) {
-      Some(limits.flatten.min)
-    } else {
-      None
+  /**
+   * Extract all the limit values from predicates.
+   */
+  def extractLimits(condition: Expression, attr: Attribute): Seq[Int] =
+    splitConjunctivePredicates(condition).collect {
+      case EqualTo(Literal(limit: Int, IntegerType), e)
+        if e.semanticEquals(attr) => limit
+      case EqualTo(e, Literal(limit: Int, IntegerType))
+        if e.semanticEquals(attr) => limit
+      case LessThan(e, Literal(limit: Int, IntegerType))
+        if e.semanticEquals(attr) => limit - 1
+      case GreaterThan(Literal(limit: Int, IntegerType), e)
+        if e.semanticEquals(attr) => limit - 1
+      case LessThanOrEqual(e, Literal(limit: Int, IntegerType))
+        if e.semanticEquals(attr) => limit
+      case GreaterThanOrEqual(Literal(limit: Int, IntegerType), e)
+        if e.semanticEquals(attr) => limit
     }
-  }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsAnyPattern(WINDOW, LIMIT, FILTER), ruleId) {
@@ -76,12 +80,19 @@ object LimitPushDownThroughWindow extends Rule[LogicalPlan] with PredicateHelper
         window @ Window(windowExpressions, Nil, orderSpec, child))
       if condition.getTagValue(Filter.FILTER_PUSHED_AS_LIMIT).isEmpty &&
         supportsPushdownThroughWindow(windowExpressions) && orderSpec.nonEmpty =>
-      val limit = extractLimit(condition, windowExpressions)
-      if (limit.isDefined && limit.get < conf.topKSortFallbackThreshold) {
-        val newWindow = window.copy(child = Limit(Literal(limit.get), Sort(orderSpec, true, child)))
-        condition.setTagValue(Filter.FILTER_PUSHED_AS_LIMIT, ())
-        val newFilter = filter.copy(child = newWindow)
-        newFilter
+      val limits = windowExpressions.collect {
+        case alias: Alias => extractLimits(condition, alias.toAttribute)
+      }.flatten
+      if (limits.nonEmpty) {
+        val limit = limits.min
+        if (limit < conf.topKSortFallbackThreshold) {
+          val newWindow = window.copy(child = Limit(Literal(limit), Sort(orderSpec, true, child)))
+          condition.setTagValue(Filter.FILTER_PUSHED_AS_LIMIT, ())
+          val newFilter = filter.copy(child = newWindow)
+          newFilter
+        } else {
+          filter
+        }
       } else {
         filter
       }

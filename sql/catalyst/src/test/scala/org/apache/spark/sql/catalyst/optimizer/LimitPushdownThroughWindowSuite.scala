@@ -210,7 +210,7 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
       WithoutOptimize.execute(originalQuery.analyze))
   }
 
-  test("Push down filter through window when partitionSpec is empty") {
+  test("SPARK-41171: Push down filter through window when partitionSpec is empty") {
     val originalQuery = testRelation
       .select(a, b, c,
         windowExpr(RowNumber(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))

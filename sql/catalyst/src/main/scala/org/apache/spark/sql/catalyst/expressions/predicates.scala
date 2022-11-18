@@ -305,25 +305,6 @@ trait PredicateHelper extends AliasHelper with Logging {
     case _: MultiLikeBase => true
     case _ => false
   }
-
-  def extractLimits(condition: Expression, attr: Attribute): Option[Int] = {
-    val limits = splitConjunctivePredicates(condition).collect {
-      case EqualTo(Literal(limit: Int, IntegerType), e)
-        if e.semanticEquals(attr) => limit
-      case EqualTo(e, Literal(limit: Int, IntegerType))
-        if e.semanticEquals(attr) => limit
-      case LessThan(e, Literal(limit: Int, IntegerType))
-        if e.semanticEquals(attr) => limit - 1
-      case GreaterThan(Literal(limit: Int, IntegerType), e)
-        if e.semanticEquals(attr) => limit - 1
-      case LessThanOrEqual(e, Literal(limit: Int, IntegerType))
-        if e.semanticEquals(attr) => limit
-      case GreaterThanOrEqual(Literal(limit: Int, IntegerType), e)
-        if e.semanticEquals(attr) => limit
-    }
-
-    if (limits.nonEmpty) Some(limits.min) else None
-  }
 }
 
 @ExpressionDescription(
