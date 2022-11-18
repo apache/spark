@@ -828,8 +828,8 @@ final class ShuffleBlockFetcherIterator(
                   case ce: ClosedByInterruptException =>
                     logError("Failed to create input stream from local block, " +
                       ce.getMessage)
-                  case e: IOException => logError(
-                    "Failed to create input stream from local block", e)
+                  case e: IOException =>
+                    logError("Failed to create input stream from local block", e)
                 }
                 buf.release()
                 if (blockId.isShuffleChunk) {
