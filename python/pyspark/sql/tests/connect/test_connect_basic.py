@@ -302,6 +302,30 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             self.spark.sql(query).toPandas(),
         )
 
+    def test_select_expr(self):
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name).selectExpr("id * 2").toPandas(),
+            self.spark.read.table(self.tbl_name).selectExpr("id * 2").toPandas(),
+        )
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name)
+            .selectExpr(["id * 2", "cast(name as long) as name"])
+            .toPandas(),
+            self.spark.read.table(self.tbl_name)
+            .selectExpr(["id * 2", "cast(name as long) as name"])
+            .toPandas(),
+        )
+
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name)
+            .selectExpr("id * 2", "cast(name as long) as name")
+            .toPandas(),
+            self.spark.read.table(self.tbl_name)
+            .selectExpr("id * 2", "cast(name as long) as name")
+            .toPandas(),
+        )
+
+    @unittest.skip("test_fill_na is flaky")
     def test_fill_na(self):
         # SPARK-41128: Test fill na
         query = """

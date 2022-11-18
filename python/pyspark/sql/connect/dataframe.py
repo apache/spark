@@ -36,6 +36,7 @@ from pyspark.sql.connect.column import (
     Column,
     Expression,
     LiteralExpression,
+    SQLExpression,
 )
 from pyspark.sql.types import (
     StructType,
@@ -139,6 +140,29 @@ class DataFrame(object):
 
     def select(self, *cols: "ExpressionOrString") -> "DataFrame":
         return DataFrame.withPlan(plan.Project(self._plan, *cols), session=self._session)
+
+    def selectExpr(self, *expr: Union[str, List[str]]) -> "DataFrame":
+        """Projects a set of SQL expressions and returns a new :class:`DataFrame`.
+
+        This is a variant of :func:`select` that accepts SQL expressions.
+
+        .. versionadded:: 3.4.0
+
+        Returns
+        -------
+        :class:`DataFrame`
+            A DataFrame with new/old columns transformed by expressions.
+        """
+        sql_expr = []
+        if len(expr) == 1 and isinstance(expr[0], list):
+            expr = expr[0]  # type: ignore[assignment]
+        for element in expr:
+            if isinstance(element, str):
+                sql_expr.append(SQLExpression(element))
+            else:
+                sql_expr.extend([SQLExpression(e) for e in element])
+
+        return DataFrame.withPlan(plan.Project(self._plan, *sql_expr), session=self._session)
 
     def agg(self, exprs: Optional[GroupingFrame.MeasuresType]) -> "DataFrame":
         return self.groupBy().agg(exprs)
