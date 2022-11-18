@@ -1275,7 +1275,6 @@ case class CatalystToExternalMap private(
     val genInputData = inputData.genCode(ctx)
     val dataLength = ctx.freshName("dataLength")
     val loopIndex = ctx.freshName("loopIndex")
-    val tupleLoopValue = ctx.freshName("tupleLoopValue")
     val builderValue = ctx.freshName("builderValue")
 
     val keyArray = ctx.freshName("keyArray")
@@ -1310,15 +1309,13 @@ case class CatalystToExternalMap private(
 
     val tupleClass = classOf[(_, _)].getName
     val appendToBuilder = s"""
-      $tupleClass $tupleLoopValue = null;
 
       if (${genValueFunction.isNull}) {
-        $tupleLoopValue = new $tupleClass($genKeyFunctionValue, null);
+        $builderValue.$$plus$$eq(new $tupleClass($genKeyFunctionValue, null));
       } else {
-        $tupleLoopValue = new $tupleClass($genKeyFunctionValue, $genValueFunctionValue);
+        $builderValue.$$plus$$eq(new $tupleClass($genKeyFunctionValue, $genValueFunctionValue));
       }
 
-      $builderValue.$$plus$$eq($tupleLoopValue);
      """
     val getBuilderResult = s"${ev.value} = (${collClass.getName}) $builderValue.result();"
 
