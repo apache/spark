@@ -74,13 +74,14 @@ object LimitPushDownThroughWindow extends Rule[LogicalPlan] with PredicateHelper
       project.copy(child = window.copy(child = Limit(limitExpr, Sort(orderSpec, true, child))))
     case filter @ Filter(condition,
         window @ Window(windowExpressions, Nil, orderSpec, child))
-      if filter.getTagValue(Filter.FILTER_PUSHED_AS_LIMIT).isEmpty &&
+      if condition.getTagValue(Filter.FILTER_PUSHED_AS_LIMIT).isEmpty &&
         supportsPushdownThroughWindow(windowExpressions) && orderSpec.nonEmpty =>
       val limit = extractLimit(condition, windowExpressions)
       if (limit.isDefined && limit.get < conf.topKSortFallbackThreshold) {
         val newWindow = window.copy(child = Limit(Literal(limit.get), Sort(orderSpec, true, child)))
-        filter.setTagValue(Filter.FILTER_PUSHED_AS_LIMIT, ())
-        filter.copy(child = newWindow)
+        condition.setTagValue(Filter.FILTER_PUSHED_AS_LIMIT, ())
+        val newFilter = filter.copy(child = newWindow)
+        newFilter
       } else {
         filter
       }
