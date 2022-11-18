@@ -365,8 +365,8 @@ object CreateStruct {
    * It should not be used for `struct` expressions or functions explicitly called
    * by users.
    */
-  def apply(children: Seq[Expression], nullableOpt: Option[Boolean] = None): CreateNamedStruct = {
-    val structFields = children.zipWithIndex.flatMap {
+  def apply(children: Seq[Expression]): CreateNamedStruct = {
+    CreateNamedStruct(children.zipWithIndex.flatMap {
       // For multi-part column name like `struct(a.b.c)`, it may be resolved into:
       //   1. Attribute if `a.b.c` is simply a qualified column name.
       //   2. GetStructField if `a.b` refers to a struct-type column.
@@ -379,10 +379,7 @@ object CreateStruct {
       case (e: NamedExpression, _) if e.resolved => Seq(Literal(e.name), e)
       case (e: NamedExpression, _) => Seq(NamePlaceholder, e)
       case (e, index) => Seq(Literal(s"col${index + 1}"), e)
-    }
-    nullableOpt.map { nullable =>
-      new NullableCreateNamedStruct(structFields, nullable)
-    }.getOrElse(CreateNamedStruct(structFields))
+    })
   }
 
   /**
@@ -546,14 +543,6 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
   override protected def withNewChildrenInternal(
     newChildren: IndexedSeq[Expression]): CreateNamedStruct = copy(children = newChildren)
 }
-
-/**
- * A nullable CreateNamedStruct override the default value `false`
- */
-class NullableCreateNamedStruct(
-    children: Seq[Expression],
-    override val nullable: Boolean)
-  extends CreateNamedStruct(children)
 
 /**
  * Creates a map after splitting the input text into key/value pairs using delimiters
