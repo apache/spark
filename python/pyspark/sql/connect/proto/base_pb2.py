@@ -41,18 +41,25 @@ DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
 
 
 _PLAN = DESCRIPTOR.message_types_by_name["Plan"]
-_REQUEST = DESCRIPTOR.message_types_by_name["Request"]
-_REQUEST_USERCONTEXT = _REQUEST.nested_types_by_name["UserContext"]
-_RESPONSE = DESCRIPTOR.message_types_by_name["Response"]
-_RESPONSE_ARROWBATCH = _RESPONSE.nested_types_by_name["ArrowBatch"]
-_RESPONSE_JSONBATCH = _RESPONSE.nested_types_by_name["JSONBatch"]
-_RESPONSE_METRICS = _RESPONSE.nested_types_by_name["Metrics"]
-_RESPONSE_METRICS_METRICOBJECT = _RESPONSE_METRICS.nested_types_by_name["MetricObject"]
-_RESPONSE_METRICS_METRICOBJECT_EXECUTIONMETRICSENTRY = (
-    _RESPONSE_METRICS_METRICOBJECT.nested_types_by_name["ExecutionMetricsEntry"]
+_EXPLAIN = DESCRIPTOR.message_types_by_name["Explain"]
+_USERCONTEXT = DESCRIPTOR.message_types_by_name["UserContext"]
+_ANALYZEPLANREQUEST = DESCRIPTOR.message_types_by_name["AnalyzePlanRequest"]
+_ANALYZEPLANRESPONSE = DESCRIPTOR.message_types_by_name["AnalyzePlanResponse"]
+_EXECUTEPLANREQUEST = DESCRIPTOR.message_types_by_name["ExecutePlanRequest"]
+_EXECUTEPLANRESPONSE = DESCRIPTOR.message_types_by_name["ExecutePlanResponse"]
+_EXECUTEPLANRESPONSE_ARROWBATCH = _EXECUTEPLANRESPONSE.nested_types_by_name["ArrowBatch"]
+_EXECUTEPLANRESPONSE_JSONBATCH = _EXECUTEPLANRESPONSE.nested_types_by_name["JSONBatch"]
+_EXECUTEPLANRESPONSE_METRICS = _EXECUTEPLANRESPONSE.nested_types_by_name["Metrics"]
+_EXECUTEPLANRESPONSE_METRICS_METRICOBJECT = _EXECUTEPLANRESPONSE_METRICS.nested_types_by_name[
+    "MetricObject"
+]
+_EXECUTEPLANRESPONSE_METRICS_METRICOBJECT_EXECUTIONMETRICSENTRY = (
+    _EXECUTEPLANRESPONSE_METRICS_METRICOBJECT.nested_types_by_name["ExecutionMetricsEntry"]
 )
-_RESPONSE_METRICS_METRICVALUE = _RESPONSE_METRICS.nested_types_by_name["MetricValue"]
-_ANALYZERESPONSE = DESCRIPTOR.message_types_by_name["AnalyzeResponse"]
+_EXECUTEPLANRESPONSE_METRICS_METRICVALUE = _EXECUTEPLANRESPONSE_METRICS.nested_types_by_name[
+    "MetricValue"
+]
+_EXPLAIN_EXPLAINMODE = _EXPLAIN.enum_types_by_name["ExplainMode"]
 Plan = _reflection.GeneratedProtocolMessageType(
     "Plan",
     (_message.Message,),
@@ -64,47 +71,81 @@ Plan = _reflection.GeneratedProtocolMessageType(
 )
 _sym_db.RegisterMessage(Plan)
 
-Request = _reflection.GeneratedProtocolMessageType(
-    "Request",
+Explain = _reflection.GeneratedProtocolMessageType(
+    "Explain",
     (_message.Message,),
     {
-        "UserContext": _reflection.GeneratedProtocolMessageType(
-            "UserContext",
-            (_message.Message,),
-            {
-                "DESCRIPTOR": _REQUEST_USERCONTEXT,
-                "__module__": "spark.connect.base_pb2"
-                # @@protoc_insertion_point(class_scope:spark.connect.Request.UserContext)
-            },
-        ),
-        "DESCRIPTOR": _REQUEST,
+        "DESCRIPTOR": _EXPLAIN,
         "__module__": "spark.connect.base_pb2"
-        # @@protoc_insertion_point(class_scope:spark.connect.Request)
+        # @@protoc_insertion_point(class_scope:spark.connect.Explain)
     },
 )
-_sym_db.RegisterMessage(Request)
-_sym_db.RegisterMessage(Request.UserContext)
+_sym_db.RegisterMessage(Explain)
 
-Response = _reflection.GeneratedProtocolMessageType(
-    "Response",
+UserContext = _reflection.GeneratedProtocolMessageType(
+    "UserContext",
+    (_message.Message,),
+    {
+        "DESCRIPTOR": _USERCONTEXT,
+        "__module__": "spark.connect.base_pb2"
+        # @@protoc_insertion_point(class_scope:spark.connect.UserContext)
+    },
+)
+_sym_db.RegisterMessage(UserContext)
+
+AnalyzePlanRequest = _reflection.GeneratedProtocolMessageType(
+    "AnalyzePlanRequest",
+    (_message.Message,),
+    {
+        "DESCRIPTOR": _ANALYZEPLANREQUEST,
+        "__module__": "spark.connect.base_pb2"
+        # @@protoc_insertion_point(class_scope:spark.connect.AnalyzePlanRequest)
+    },
+)
+_sym_db.RegisterMessage(AnalyzePlanRequest)
+
+AnalyzePlanResponse = _reflection.GeneratedProtocolMessageType(
+    "AnalyzePlanResponse",
+    (_message.Message,),
+    {
+        "DESCRIPTOR": _ANALYZEPLANRESPONSE,
+        "__module__": "spark.connect.base_pb2"
+        # @@protoc_insertion_point(class_scope:spark.connect.AnalyzePlanResponse)
+    },
+)
+_sym_db.RegisterMessage(AnalyzePlanResponse)
+
+ExecutePlanRequest = _reflection.GeneratedProtocolMessageType(
+    "ExecutePlanRequest",
+    (_message.Message,),
+    {
+        "DESCRIPTOR": _EXECUTEPLANREQUEST,
+        "__module__": "spark.connect.base_pb2"
+        # @@protoc_insertion_point(class_scope:spark.connect.ExecutePlanRequest)
+    },
+)
+_sym_db.RegisterMessage(ExecutePlanRequest)
+
+ExecutePlanResponse = _reflection.GeneratedProtocolMessageType(
+    "ExecutePlanResponse",
     (_message.Message,),
     {
         "ArrowBatch": _reflection.GeneratedProtocolMessageType(
             "ArrowBatch",
             (_message.Message,),
             {
-                "DESCRIPTOR": _RESPONSE_ARROWBATCH,
+                "DESCRIPTOR": _EXECUTEPLANRESPONSE_ARROWBATCH,
                 "__module__": "spark.connect.base_pb2"
-                # @@protoc_insertion_point(class_scope:spark.connect.Response.ArrowBatch)
+                # @@protoc_insertion_point(class_scope:spark.connect.ExecutePlanResponse.ArrowBatch)
             },
         ),
         "JSONBatch": _reflection.GeneratedProtocolMessageType(
             "JSONBatch",
             (_message.Message,),
             {
-                "DESCRIPTOR": _RESPONSE_JSONBATCH,
+                "DESCRIPTOR": _EXECUTEPLANRESPONSE_JSONBATCH,
                 "__module__": "spark.connect.base_pb2"
-                # @@protoc_insertion_point(class_scope:spark.connect.Response.JSONBatch)
+                # @@protoc_insertion_point(class_scope:spark.connect.ExecutePlanResponse.JSONBatch)
             },
         ),
         "Metrics": _reflection.GeneratedProtocolMessageType(
@@ -119,53 +160,42 @@ Response = _reflection.GeneratedProtocolMessageType(
                             "ExecutionMetricsEntry",
                             (_message.Message,),
                             {
-                                "DESCRIPTOR": _RESPONSE_METRICS_METRICOBJECT_EXECUTIONMETRICSENTRY,
+                                "DESCRIPTOR": _EXECUTEPLANRESPONSE_METRICS_METRICOBJECT_EXECUTIONMETRICSENTRY,
                                 "__module__": "spark.connect.base_pb2"
-                                # @@protoc_insertion_point(class_scope:spark.connect.Response.Metrics.MetricObject.ExecutionMetricsEntry)
+                                # @@protoc_insertion_point(class_scope:spark.connect.ExecutePlanResponse.Metrics.MetricObject.ExecutionMetricsEntry)
                             },
                         ),
-                        "DESCRIPTOR": _RESPONSE_METRICS_METRICOBJECT,
+                        "DESCRIPTOR": _EXECUTEPLANRESPONSE_METRICS_METRICOBJECT,
                         "__module__": "spark.connect.base_pb2"
-                        # @@protoc_insertion_point(class_scope:spark.connect.Response.Metrics.MetricObject)
+                        # @@protoc_insertion_point(class_scope:spark.connect.ExecutePlanResponse.Metrics.MetricObject)
                     },
                 ),
                 "MetricValue": _reflection.GeneratedProtocolMessageType(
                     "MetricValue",
                     (_message.Message,),
                     {
-                        "DESCRIPTOR": _RESPONSE_METRICS_METRICVALUE,
+                        "DESCRIPTOR": _EXECUTEPLANRESPONSE_METRICS_METRICVALUE,
                         "__module__": "spark.connect.base_pb2"
-                        # @@protoc_insertion_point(class_scope:spark.connect.Response.Metrics.MetricValue)
+                        # @@protoc_insertion_point(class_scope:spark.connect.ExecutePlanResponse.Metrics.MetricValue)
                     },
                 ),
-                "DESCRIPTOR": _RESPONSE_METRICS,
+                "DESCRIPTOR": _EXECUTEPLANRESPONSE_METRICS,
                 "__module__": "spark.connect.base_pb2"
-                # @@protoc_insertion_point(class_scope:spark.connect.Response.Metrics)
+                # @@protoc_insertion_point(class_scope:spark.connect.ExecutePlanResponse.Metrics)
             },
         ),
-        "DESCRIPTOR": _RESPONSE,
+        "DESCRIPTOR": _EXECUTEPLANRESPONSE,
         "__module__": "spark.connect.base_pb2"
-        # @@protoc_insertion_point(class_scope:spark.connect.Response)
+        # @@protoc_insertion_point(class_scope:spark.connect.ExecutePlanResponse)
     },
 )
-_sym_db.RegisterMessage(Response)
-_sym_db.RegisterMessage(Response.ArrowBatch)
-_sym_db.RegisterMessage(Response.JSONBatch)
-_sym_db.RegisterMessage(Response.Metrics)
-_sym_db.RegisterMessage(Response.Metrics.MetricObject)
-_sym_db.RegisterMessage(Response.Metrics.MetricObject.ExecutionMetricsEntry)
-_sym_db.RegisterMessage(Response.Metrics.MetricValue)
-
-AnalyzeResponse = _reflection.GeneratedProtocolMessageType(
-    "AnalyzeResponse",
-    (_message.Message,),
-    {
-        "DESCRIPTOR": _ANALYZERESPONSE,
-        "__module__": "spark.connect.base_pb2"
-        # @@protoc_insertion_point(class_scope:spark.connect.AnalyzeResponse)
-    },
-)
-_sym_db.RegisterMessage(AnalyzeResponse)
+_sym_db.RegisterMessage(ExecutePlanResponse)
+_sym_db.RegisterMessage(ExecutePlanResponse.ArrowBatch)
+_sym_db.RegisterMessage(ExecutePlanResponse.JSONBatch)
+_sym_db.RegisterMessage(ExecutePlanResponse.Metrics)
+_sym_db.RegisterMessage(ExecutePlanResponse.Metrics.MetricObject)
+_sym_db.RegisterMessage(ExecutePlanResponse.Metrics.MetricObject.ExecutionMetricsEntry)
+_sym_db.RegisterMessage(ExecutePlanResponse.Metrics.MetricValue)
 
 _SPARKCONNECTSERVICE = DESCRIPTOR.services_by_name["SparkConnectService"]
 if _descriptor._USE_C_DESCRIPTORS == False:
