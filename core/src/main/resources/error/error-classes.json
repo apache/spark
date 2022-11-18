@@ -840,7 +840,7 @@
   },
   "NUMERIC_VALUE_OUT_OF_RANGE" : {
     "message" : [
-      "<value> cannot be represented as Decimal(<precision>, <scale>). If necessary set <config> to \"false\" to bypass this error."
+      "<value> cannot be represented as Decimal(<precision>, <scale>). If necessary set <config> to \"false\" to bypass this error, and return NULL instead."
     ],
     "sqlState" : "22005"
   },
@@ -1137,11 +1137,6 @@
       }
     },
     "sqlState" : "42000"
-  },
-  "UNSCALED_VALUE_TOO_LARGE_FOR_PRECISION" : {
-    "message" : [
-      "Unscaled value too large for precision. If necessary set <ansiConfig> to false to bypass this error."
-    ]
   },
   "UNSUPPORTED_DATATYPE" : {
     "message" : [

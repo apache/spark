@@ -16,9 +16,18 @@
  */
 package org.apache.spark.sql.connect.planner
 
+import scala.concurrent.Promise
+import scala.concurrent.duration._
+
+import io.grpc.stub.StreamObserver
+
+import org.apache.spark.SparkException
 import org.apache.spark.connect.proto
+import org.apache.spark.sql.connect.dsl.MockRemoteSession
+import org.apache.spark.sql.connect.dsl.plans._
 import org.apache.spark.sql.connect.service.SparkConnectService
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.ThreadUtils
 
 /**
  * Testing Connect Service implementation.
@@ -53,6 +62,45 @@ class SparkConnectServiceSuite extends SharedSparkSession {
       assert(
         schema.getFields(1).getName == "col2"
           && schema.getFields(1).getType.getKindCase == proto.DataType.KindCase.STRING)
+    }
+  }
+
+  test("SPARK-41165: failures in the arrow collect path should not cause hangs") {
+    val instance = new SparkConnectService(false)
+
+    // Add an always crashing UDF
+    val session = SparkConnectService.getOrCreateIsolatedSession("c1").session
+    val instaKill: Long => Long = { _ =>
+      throw new Exception("Kaboom")
+    }
+    session.udf.register("insta_kill", instaKill)
+
+    val connect = new MockRemoteSession()
+    val context = proto.Request.UserContext
+      .newBuilder()
+      .setUserId("c1")
+      .build()
+    val plan = proto.Plan
+      .newBuilder()
+      .setRoot(connect.sql("select insta_kill(id) from range(10)"))
+      .build()
+    val request = proto.Request
+      .newBuilder()
+      .setPlan(plan)
+      .setUserContext(context)
+      .build()
+
+    val promise = Promise[Seq[proto.Response]]
+    instance.executePlan(
+      request,
+      new StreamObserver[proto.Response] {
+        private val responses = Seq.newBuilder[proto.Response]
+        override def onNext(v: proto.Response): Unit = responses += v
+        override def onError(throwable: Throwable): Unit = promise.failure(throwable)
+        override def onCompleted(): Unit = promise.success(responses.result())
+      })
+    intercept[SparkException] {
+      ThreadUtils.awaitResult(promise.future, 2.seconds)
     }
   }
 }
