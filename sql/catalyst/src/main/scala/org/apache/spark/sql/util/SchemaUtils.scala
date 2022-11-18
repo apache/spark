@@ -65,7 +65,6 @@ private[spark] object SchemaUtils {
    * duplication exists.
    *
    * @param schema schema to check
-   * @param colType column type name, used in an exception message
    * @param resolver resolver used to determine if two identifiers are equal
    */
   def checkSchemaColumnNameDuplication(schema: StructType, resolver: Resolver): Unit = {
