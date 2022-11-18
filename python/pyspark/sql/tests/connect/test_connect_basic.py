@@ -218,6 +218,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             with self.assertRaises(_MultiThreadedRendezvous):
                 self.connect.sql("SELECT 1 AS X LIMIT 0").createGlobalTempView("view_1")
 
+    @unittest.skip("test_fill_na is flaky")
     def test_fill_na(self):
         # SPARK-41128: Test fill na
         query = """
