@@ -65,10 +65,7 @@ RUN Rscript -e "devtools::install_version('roxygen2', version='7.2.0', repos='ht
 ENV R_LIBS_SITE "/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
 
 RUN pypy3 -m pip install numpy 'pandas<=1.5.1' scipy coverage matplotlib
-RUN python3.9 -m pip install numpy pyarrow 'pandas<=1.5.1' scipy unittest-xml-reporting plotly>=4.8 sklearn 'mlflow>=1.0' coverage matplotlib openpyxl
+RUN python3.9 -m pip install numpy pyarrow 'pandas<=1.5.1' scipy unittest-xml-reporting plotly>=4.8 sklearn 'mlflow>=1.0' coverage matplotlib openpyxl 'memory-profiler==0.60.0'
 
 # Add Python deps for Spark Connect.
 RUN python3.9 -m pip install grpcio protobuf
-
-# SPARK-41186: Move memory-profiler to pyspark deps install when mlfow doctest test fix
-RUN python3.9 -m pip install 'memory-profiler==0.60.0'
