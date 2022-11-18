@@ -21,7 +21,6 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentRow, 
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Limit, LocalLimit, LogicalPlan, Project, Sort, Window}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{FILTER, LIMIT, WINDOW}
-import org.apache.spark.sql.types.IntegerType
 
 /**
  * Pushes down [[LocalLimit]] beneath WINDOW. This rule optimizes the following case:
@@ -46,18 +45,12 @@ object LimitPushDownThroughWindow extends Rule[LogicalPlan] with PredicateHelper
    */
   def extractLimits(condition: Expression, attr: Attribute): Seq[Int] =
     splitConjunctivePredicates(condition).collect {
-      case EqualTo(Literal(limit: Int, IntegerType), e)
-        if e.semanticEquals(attr) => limit
-      case EqualTo(e, Literal(limit: Int, IntegerType))
-        if e.semanticEquals(attr) => limit
-      case LessThan(e, Literal(limit: Int, IntegerType))
-        if e.semanticEquals(attr) => limit - 1
-      case GreaterThan(Literal(limit: Int, IntegerType), e)
-        if e.semanticEquals(attr) => limit - 1
-      case LessThanOrEqual(e, Literal(limit: Int, IntegerType))
-        if e.semanticEquals(attr) => limit
-      case GreaterThanOrEqual(Literal(limit: Int, IntegerType), e)
-        if e.semanticEquals(attr) => limit
+      case EqualTo(IntegerLiteral(limit), e) if e.semanticEquals(attr) => limit
+      case EqualTo(e, IntegerLiteral(limit)) if e.semanticEquals(attr) => limit
+      case LessThan(e, IntegerLiteral(limit)) if e.semanticEquals(attr) => limit - 1
+      case GreaterThan(IntegerLiteral(limit), e) if e.semanticEquals(attr) => limit - 1
+      case LessThanOrEqual(e, IntegerLiteral(limit)) if e.semanticEquals(attr) => limit
+      case GreaterThanOrEqual(IntegerLiteral(limit), e) if e.semanticEquals(attr) => limit
     }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
