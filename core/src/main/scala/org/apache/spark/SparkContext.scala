@@ -541,6 +541,12 @@ class SparkContext(config: SparkConf) extends Logging {
     executorEnvs ++= _conf.getExecutorEnv
     executorEnvs("SPARK_USER") = sparkUser
 
+    if (_conf.getOption("spark.executorEnv.OMP_NUM_THREADS").isEmpty) {
+      // SPARK-41188: limit the thread number for OpenBLAS routine to the number of cores assigned
+      // to this executor because some spark ML algorithms calls OpenBlAS via netlib-java
+      executorEnvs.put("OMP_NUM_THREADS", _conf.get("spark.task.cpus", "1"))
+    }
+
     _shuffleDriverComponents = ShuffleDataIOUtils.loadShuffleDataIO(config).driver()
     _shuffleDriverComponents.initializeApplication().asScala.foreach { case (k, v) =>
       _conf.set(ShuffleDataIOUtils.SHUFFLE_SPARK_CONF_PREFIX + k, v)
