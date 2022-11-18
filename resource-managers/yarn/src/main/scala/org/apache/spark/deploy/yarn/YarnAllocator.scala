@@ -840,7 +840,7 @@ private[yarn] class YarnAllocator(
         val exitStatus = completedContainer.getExitStatus
         val (exitCausedByApp, containerExitReason) = exitStatus match {
           case _ if shutdown =>
-            (false, s"Executor for container $containerId exited after Application is shutdown.")
+            (false, s"Executor for container $containerId exited after Application shutdown.")
           case ContainerExitStatus.SUCCESS =>
             (false, s"Executor for container $containerId exited because of a YARN event (e.g., " +
               "preemption) and not because of an error in the running job.")
