@@ -771,16 +771,16 @@ object LikeSimplification extends Rule[LogicalPlan] {
     } else {
       multi match {
         case l: LikeAll =>
-          val and = combinePatterns(replacements, And.apply).get
+          val and = ExprUtils.reduceToExpressionTree(replacements, And.apply)
           if (remainPatterns.nonEmpty) And(and, l.copy(patterns = remainPatterns)) else and
         case l: NotLikeAll =>
-          val and = combinePatterns(replacements.map(Not(_)), And.apply).get
+          val and = ExprUtils.reduceToExpressionTree(replacements.map(Not(_)), And.apply)
           if (remainPatterns.nonEmpty) And(and, l.copy(patterns = remainPatterns)) else and
         case l: LikeAny =>
-          val or = combinePatterns(replacements, Or.apply).get
+          val or = ExprUtils.reduceToExpressionTree(replacements, Or.apply)
           if (remainPatterns.nonEmpty) Or(or, l.copy(patterns = remainPatterns)) else or
         case l: NotLikeAny =>
-          val or = combinePatterns(replacements.map(Not(_)), Or.apply).get
+          val or = ExprUtils.reduceToExpressionTree(replacements.map(Not(_)), Or.apply)
           if (remainPatterns.nonEmpty) Or(or, l.copy(patterns = remainPatterns)) else or
       }
     }
