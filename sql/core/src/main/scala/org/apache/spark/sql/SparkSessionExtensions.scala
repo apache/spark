@@ -40,7 +40,7 @@ import org.apache.spark.sql.execution.{ColumnarRule, SparkPlan}
  * <ul>
  * <li>Analyzer Rules.</li>
  * <li>Check Analysis Rules.</li>
- * <li>Plan Normalization Rules.</li>
+ * <li>Cache Plan Normalization Rules.</li>
  * <li>Optimizer Rules.</li>
  * <li>Pre CBO Rules.</li>
  * <li>Planning Strategies.</li>

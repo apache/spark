@@ -105,6 +105,7 @@ class QueryExecution(
     case other => other
   }
 
+  // The plan that has been normalized by custom rules, so that it's more likely to hit cache.
   lazy val normalized: LogicalPlan = {
     val normalizationRules = sparkSession.sessionState.planNormalizationRules
     if (normalizationRules.isEmpty) {
@@ -116,9 +117,7 @@ class QueryExecution(
         planChangeLogger.logRule(rule.ruleName, p, result)
         result
       })
-      if (normalizationRules.nonEmpty) {
-        planChangeLogger.logBatch("Plan Normalization", commandExecuted, normalized)
-      }
+      planChangeLogger.logBatch("Plan Normalization", commandExecuted, normalized)
       normalized
     }
   }
