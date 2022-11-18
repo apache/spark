@@ -743,21 +743,6 @@ object LikeSimplification extends Rule[LogicalPlan] {
     }
   }
 
-  def combinePatterns(
-      patterns: Seq[Expression],
-      op: (Expression, Expression) => Expression): Option[Expression] = {
-    if (patterns.isEmpty) {
-      None
-    } else {
-      var res = patterns
-      while (res.size > 1) {
-        res = res.sliding(2, 2).toSeq
-          .map(tup => if (tup.size == 2) op(tup.head, tup.last) else tup(0))
-      }
-      Some(res.head)
-    }
-  }
-
   private def simplifyMultiLike(
       child: Expression, patterns: Seq[UTF8String], multi: MultiLikeBase): Expression = {
     val (remainPatternMap, replacementMap) =
