@@ -32,7 +32,7 @@ RUN $APT_INSTALL software-properties-common git libxml2-dev pkg-config curl wget
 RUN update-alternatives --set java /usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java
 
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.9
-RUN python3.9 -m pip install numpy pyarrow 'pandas<=1.5.1' scipy unittest-xml-reporting plotly>=4.8 sklearn 'mlflow>=1.0' coverage matplotlib openpyxl 'memory-profiler==0.60.0'
+RUN python3.9 -m pip install numpy pyarrow 'pandas<=1.5.1' scipy unittest-xml-reporting plotly>=4.8 sklearn 'mlflow>=1.0' coverage matplotlib openpyxl
 
 RUN add-apt-repository ppa:pypy/ppa
 RUN apt update
@@ -68,3 +68,6 @@ ENV R_LIBS_SITE "/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library
 
 # Add Python deps for Spark Connect.
 RUN python3.9 -m pip install grpcio protobuf
+
+# SPARK-41186: Move memory-profiler to pyspark deps install when mlfow doctest test fix
+RUN python3.9 -m pip install 'memory-profiler==0.60.0'
