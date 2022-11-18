@@ -43,7 +43,7 @@ import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils, StringUtils}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.connector.catalog._
+import org.apache.spark.sql.connector.catalog.{View => _, _}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.{After, ColumnPosition}
 import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction => V2AggregateFunction, ScalarFunction, UnboundFunction}
@@ -2554,17 +2554,17 @@ class Analyzer(override val catalogManager: CatalogManager)
      */
     private def resolveSubQueries(plan: LogicalPlan, outer: LogicalPlan): LogicalPlan = {
       plan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION), ruleId) {
-        case s @ ScalarSubquery(sub, _, exprId, _) if !sub.resolved =>
+        case s @ ScalarSubquery(sub, _, exprId, _, _) if !sub.resolved =>
           resolveSubQuery(s, outer)(ScalarSubquery(_, _, exprId))
-        case e @ Exists(sub, _, exprId, _) if !sub.resolved =>
+        case e @ Exists(sub, _, exprId, _, _) if !sub.resolved =>
           resolveSubQuery(e, outer)(Exists(_, _, exprId))
-        case InSubquery(values, l @ ListQuery(_, _, exprId, _, _))
+        case InSubquery(values, l @ ListQuery(_, _, exprId, _, _, _))
             if values.forall(_.resolved) && !l.resolved =>
           val expr = resolveSubQuery(l, outer)((plan, exprs) => {
             ListQuery(plan, exprs, exprId, plan.output)
           })
           InSubquery(values, expr.asInstanceOf[ListQuery])
-        case s @ LateralSubquery(sub, _, exprId, _) if !sub.resolved =>
+        case s @ LateralSubquery(sub, _, exprId, _, _) if !sub.resolved =>
           resolveSubQuery(s, outer)(LateralSubquery(_, _, exprId))
       }
     }

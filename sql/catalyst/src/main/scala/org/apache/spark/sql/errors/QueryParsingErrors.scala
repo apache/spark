@@ -542,11 +542,11 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def notAllowedToAddDBPrefixForTempViewError(
-      database: String,
+      nameParts: Seq[String],
       ctx: CreateViewContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0054",
-      messageParameters = Map("database" -> database),
+      errorClass = "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS",
+      messageParameters = Map("actualName" -> toSQLId(nameParts)),
       ctx)
   }
 

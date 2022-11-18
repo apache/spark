@@ -79,7 +79,28 @@ package object dsl {
     implicit class DslExpression(val expr: Expression) {
       def as(alias: String): Expression = Expression
         .newBuilder()
-        .setAlias(Expression.Alias.newBuilder().setName(alias).setExpr(expr))
+        .setAlias(Expression.Alias.newBuilder().addName(alias).setExpr(expr))
+        .build()
+
+      def as(alias: String, metadata: String): Expression = Expression
+        .newBuilder()
+        .setAlias(
+          Expression.Alias
+            .newBuilder()
+            .setExpr(expr)
+            .addName(alias)
+            .setMetadata(metadata)
+            .build())
+        .build()
+
+      def as(alias: Seq[String]): Expression = Expression
+        .newBuilder()
+        .setAlias(
+          Expression.Alias
+            .newBuilder()
+            .setExpr(expr)
+            .addAllName(alias.asJava)
+            .build())
         .build()
 
       def <(other: Expression): Expression =
@@ -99,6 +120,13 @@ package object dsl {
         .newBuilder()
         .setUnresolvedFunction(
           Expression.UnresolvedFunction.newBuilder().addParts("min").addArguments(e))
+        .build()
+
+    def proto_explode(e: Expression): Expression =
+      Expression
+        .newBuilder()
+        .setUnresolvedFunction(
+          Expression.UnresolvedFunction.newBuilder().addParts("explode").addArguments(e))
         .build()
 
     /**

@@ -802,6 +802,8 @@ package object config {
     ConfigBuilder("spark.task.maxDirectResultSize")
       .version("2.0.0")
       .bytesConf(ByteUnit.BYTE)
+      .checkValue(_ < ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toLong,
+        "The max direct result size is 2GB")
       .createWithDefault(1L << 20)
 
   private[spark] val TASK_MAX_FAILURES =
@@ -2228,6 +2230,17 @@ package object config {
       .version("3.4.0")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val SCHEDULER_MAX_RETAINED_REMOVED_EXECUTORS =
+    ConfigBuilder("spark.scheduler.maxRetainedRemovedDecommissionExecutors")
+      .internal()
+      .doc("Max number of removed executors by decommission to retain. This affects " +
+        "whether fetch failure caused by removed decommissioned executors could be ignored " +
+        s"when ${STAGE_IGNORE_DECOMMISSION_FETCH_FAILURE.key} is enabled.")
+      .version("3.4.0")
+      .intConf
+      .checkValue(_ >= 0, "needs to be a non-negative value")
+      .createWithDefault(0)
 
   private[spark] val PUSH_BASED_SHUFFLE_ENABLED =
     ConfigBuilder("spark.shuffle.push.enabled")

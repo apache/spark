@@ -32,13 +32,13 @@ class SparkConnectServiceStub(object):
         """
         self.ExecutePlan = channel.unary_stream(
             "/spark.connect.SparkConnectService/ExecutePlan",
-            request_serializer=spark_dot_connect_dot_base__pb2.Request.SerializeToString,
-            response_deserializer=spark_dot_connect_dot_base__pb2.Response.FromString,
+            request_serializer=spark_dot_connect_dot_base__pb2.ExecutePlanRequest.SerializeToString,
+            response_deserializer=spark_dot_connect_dot_base__pb2.ExecutePlanResponse.FromString,
         )
         self.AnalyzePlan = channel.unary_unary(
             "/spark.connect.SparkConnectService/AnalyzePlan",
-            request_serializer=spark_dot_connect_dot_base__pb2.Request.SerializeToString,
-            response_deserializer=spark_dot_connect_dot_base__pb2.AnalyzeResponse.FromString,
+            request_serializer=spark_dot_connect_dot_base__pb2.AnalyzePlanRequest.SerializeToString,
+            response_deserializer=spark_dot_connect_dot_base__pb2.AnalyzePlanResponse.FromString,
         )
 
 
@@ -62,13 +62,13 @@ def add_SparkConnectServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
         "ExecutePlan": grpc.unary_stream_rpc_method_handler(
             servicer.ExecutePlan,
-            request_deserializer=spark_dot_connect_dot_base__pb2.Request.FromString,
-            response_serializer=spark_dot_connect_dot_base__pb2.Response.SerializeToString,
+            request_deserializer=spark_dot_connect_dot_base__pb2.ExecutePlanRequest.FromString,
+            response_serializer=spark_dot_connect_dot_base__pb2.ExecutePlanResponse.SerializeToString,
         ),
         "AnalyzePlan": grpc.unary_unary_rpc_method_handler(
             servicer.AnalyzePlan,
-            request_deserializer=spark_dot_connect_dot_base__pb2.Request.FromString,
-            response_serializer=spark_dot_connect_dot_base__pb2.AnalyzeResponse.SerializeToString,
+            request_deserializer=spark_dot_connect_dot_base__pb2.AnalyzePlanRequest.FromString,
+            response_serializer=spark_dot_connect_dot_base__pb2.AnalyzePlanResponse.SerializeToString,
         ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -98,8 +98,8 @@ class SparkConnectService(object):
             request,
             target,
             "/spark.connect.SparkConnectService/ExecutePlan",
-            spark_dot_connect_dot_base__pb2.Request.SerializeToString,
-            spark_dot_connect_dot_base__pb2.Response.FromString,
+            spark_dot_connect_dot_base__pb2.ExecutePlanRequest.SerializeToString,
+            spark_dot_connect_dot_base__pb2.ExecutePlanResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -127,8 +127,8 @@ class SparkConnectService(object):
             request,
             target,
             "/spark.connect.SparkConnectService/AnalyzePlan",
-            spark_dot_connect_dot_base__pb2.Request.SerializeToString,
-            spark_dot_connect_dot_base__pb2.AnalyzeResponse.FromString,
+            spark_dot_connect_dot_base__pb2.AnalyzePlanRequest.SerializeToString,
+            spark_dot_connect_dot_base__pb2.AnalyzePlanResponse.FromString,
             options,
             channel_credentials,
             insecure,
