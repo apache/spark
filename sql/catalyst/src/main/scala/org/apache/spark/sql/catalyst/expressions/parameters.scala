@@ -17,19 +17,26 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.types.{DataType, NullType}
 
 /**
- * The logical node represents a named parameter that should be bound to a literal
+ * The expression represents a named parameter that should be bound to a literal
  * with concrete value and type later.
  *
  * @param name The identifier of the parameter without the marker '@'.
  */
-case class UnboundParameter(name: String) extends LogicalPlan {
-  override def output: Seq[Attribute] = Seq.empty
+case class UnboundParameter(name: String) extends LeafExpression {
+  override def dataType: DataType = NullType
+  override def nullable: Boolean = true
 
-  override def children: Seq[LogicalPlan] = Seq.empty
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    throw SparkException.internalError(s"Found an unbound parameter: $name")
+  }
 
-  override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = this
+  def eval(input: InternalRow): Any = {
+    throw SparkException.internalError(s"Found an unbound parameter: $name")
+  }
 }

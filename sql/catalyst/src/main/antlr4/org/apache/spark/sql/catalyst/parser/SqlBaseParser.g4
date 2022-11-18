@@ -924,12 +924,12 @@ primaryExpression
 
 constant
     : NULL                                                                                     #nullLiteral
+    | NAMED_PARAMETER                                                                          #unboundParameter
     | interval                                                                                 #intervalLiteral
     | identifier stringLit                                                                     #typeConstructor
     | number                                                                                   #numericLiteral
     | booleanValue                                                                             #booleanLiteral
     | stringLit+                                                                               #stringLiteral
-    | namedParameter                                                                           #unboundParameter
     ;
 
 comparisonOperator
@@ -1160,10 +1160,6 @@ comment
 version
     : INTEGER_VALUE
     | stringLit
-    ;
-
-namedParameter
-    : NAMED_PARAMETER_MARKER IDENTIFIER
     ;
 
 // When `SQL_standard_keyword_behavior=true`, there are 2 kinds of keywords in Spark SQL.

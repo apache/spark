@@ -1542,4 +1542,10 @@ class PlanParserSuite extends AnalysisTest {
         .toAggregateExpression(false, Some(GreaterThan(UnresolvedAttribute("id"), Literal(10))))
     )
   }
+
+  test("named parameters") {
+    comparePlans(
+      parsePlan("SELECT @param1"),
+      Project(UnresolvedAlias(UnboundParameter("@param1"), None) :: Nil, OneRowRelation()))
+  }
 }

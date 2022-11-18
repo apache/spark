@@ -4824,10 +4824,9 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   }
 
   /**
-   * Create a node in logical plan of named parameter which represents a literal with
-   * a non-bound value and unknown type.
+   * Create a named parameter which represents a literal with a non-bound value and unknown type.
    * */
-  override def visitUnboundParameter(ctx: UnboundParameterContext): LogicalPlan = withOrigin(ctx) {
+  override def visitUnboundParameter(ctx: UnboundParameterContext): Expression = withOrigin(ctx) {
     UnboundParameter(ctx.getText)
   }
 }
