@@ -206,6 +206,62 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             self.spark.range(start=0, end=10, step=3, numPartitions=2).toPandas(),
         )
 
+    def test_sql_schema(self):
+        # SPARK-41128: Test fill na
+        query = """
+            SELECT * FROM VALUES
+            (false, 1, float(NULL)), (false, NULL, float(2.0)), (NULL, 3, float(3.0))
+            AS tab(a, b, c)
+            """
+
+        # self.assert_eq(self.connect.sql(query).schema(), self.spark.sql(query).schema)
+        self.assert_eq(
+            self.connect.sql(query).toPandas(),
+            self.spark.sql(query).toPandas(),
+        )
+
+    def test_sql_schema2(self):
+        # SPARK-41128: Test fill na
+        query = """
+            SELECT * FROM VALUES
+            (1, 1, float(NULL)), (2, NULL, float(2.0)), (3, 3, float(3.0))
+            AS tab(a, b, c)
+            """
+
+        # self.assert_eq(self.connect.sql(query).schema(), self.spark.sql(query).schema)
+        self.assert_eq(
+            self.connect.sql(query).toPandas(),
+            self.spark.sql(query).toPandas(),
+        )
+
+    def test_sql_schema3(self):
+        # SPARK-41128: Test fill na
+        query = """
+            SELECT * FROM VALUES
+            (1.0, 1, "1"), (NULL, NULL, NULL), (2.0, 3, "3")
+            AS tab(a, b, c)
+            """
+
+        # self.assert_eq(self.connect.sql(query).schema(), self.spark.sql(query).schema)
+        self.assert_eq(
+            self.connect.sql(query).toPandas(),
+            self.spark.sql(query).toPandas(),
+        )
+
+    def test_sql_schema4(self):
+        # SPARK-41128: Test fill na
+        query = """
+            SELECT * FROM VALUES
+            (float(1.0), 1.0, 1, "1"), (float(2.0), 2.0, 2, "2"), (float(3.0), 2.0, 3, "3")
+            AS tab(a, b, c, d)
+            """
+
+        # self.assert_eq(self.connect.sql(query).schema(), self.spark.sql(query).schema)
+        self.assert_eq(
+            self.connect.sql(query).toPandas(),
+            self.spark.sql(query).toPandas(),
+        )
+
     def test_create_global_temp_view(self):
         # SPARK-41127: test global temp view creation.
         with self.tempView("view_1"):
