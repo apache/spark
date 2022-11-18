@@ -3254,7 +3254,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             DataFrame(internal.with_new_sdf(sdf, index_fields=([None] * internal.index_level)))
         )
 
-    def autocorr(self, periods: int = 1) -> float:
+    def autocorr(self, lag: int = 1) -> float:
         """
         Compute the lag-N autocorrelation.
 
@@ -3270,7 +3270,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Parameters
         ----------
-        periods : int, default 1
+        lag : int, default 1
             Number of lags to apply before performing autocorrelation.
 
         Returns
@@ -3312,15 +3312,15 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         # This implementation is suboptimal because it moves all data to a single partition,
         # global sort should be used instead of window, but it should be a start
-        if not isinstance(periods, int):
-            raise TypeError("periods should be an int; however, got [%s]" % type(periods).__name__)
+        if not isinstance(lag, int):
+            raise TypeError("lag should be an int; however, got [%s]" % type(lag).__name__)
 
         sdf = self._internal.spark_frame
         scol = self.spark.column
-        if periods == 0:
+        if lag == 0:
             corr = sdf.select(F.corr(scol, scol)).head()[0]
         else:
-            lag_scol = F.lag(scol, periods).over(Window.orderBy(NATURAL_ORDER_COLUMN_NAME))
+            lag_scol = F.lag(scol, lag).over(Window.orderBy(NATURAL_ORDER_COLUMN_NAME))
             lag_col_name = verify_temp_column_name(sdf, "__autocorr_lag_tmp_col__")
             corr = (
                 sdf.withColumn(lag_col_name, lag_scol)

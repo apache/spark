@@ -32,9 +32,7 @@ class FlatMapGroupsInPandasWithStateDistributionSuite extends StreamTest
 
   test("applyInPandasWithState should require StatefulOpClusteredDistribution " +
     "from children - without initial state") {
-    // scalastyle:off assume
     assume(shouldTestPandasUDFs)
-    // scalastyle:on assume
 
     // Function to maintain running count up to 2, and then remove the count
     // Returns the data and the count if state is defined, otherwise does not return anything

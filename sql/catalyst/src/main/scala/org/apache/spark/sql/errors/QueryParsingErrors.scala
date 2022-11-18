@@ -49,22 +49,8 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0004", ctx.source)
   }
 
-  def unrecognizedMatchedActionError(ctx: MatchedClauseContext): Throwable = {
-    new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0005",
-      messageParameters = Map("matchedAction" -> ctx.matchedAction().getText),
-      ctx.matchedAction())
-  }
-
   def insertedValueNumberNotMatchFieldNumberError(ctx: NotMatchedClauseContext): Throwable = {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0006", ctx.notMatchedAction())
-  }
-
-  def unrecognizedNotMatchedActionError(ctx: NotMatchedClauseContext): Throwable = {
-    new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0007",
-      messageParameters = Map("matchedAction" -> ctx.notMatchedAction().getText),
-      ctx.notMatchedAction())
   }
 
   def mergeStatementWithoutWhenClauseError(ctx: MergeIntoTableContext): Throwable = {
@@ -72,11 +58,15 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def nonLastMatchedClauseOmitConditionError(ctx: MergeIntoTableContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0009", ctx)
+    new ParseException(errorClass = "NON_LAST_MATCHED_CLAUSE_OMIT_CONDITION", ctx)
   }
 
   def nonLastNotMatchedClauseOmitConditionError(ctx: MergeIntoTableContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0010", ctx)
+    new ParseException(errorClass = "NON_LAST_NOT_MATCHED_BY_TARGET_CLAUSE_OMIT_CONDITION", ctx)
+  }
+
+  def nonLastNotMatchedBySourceClauseOmitConditionError(ctx: MergeIntoTableContext): Throwable = {
+    new ParseException(errorClass = "NON_LAST_NOT_MATCHED_BY_SOURCE_CLAUSE_OMIT_CONDITION", ctx)
   }
 
   def emptyPartitionKeyError(key: String, ctx: PartitionSpecContext): Throwable = {
@@ -97,44 +87,47 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
 
   def transformNotSupportQuantifierError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "TRANSFORM_DISTINCT_ALL",
+      errorClass = "UNSUPPORTED_FEATURE.TRANSFORM_DISTINCT_ALL",
       messageParameters = Map.empty,
       ctx)
   }
 
   def transformWithSerdeUnsupportedError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "TRANSFORM_NON_HIVE",
+      errorClass = "UNSUPPORTED_FEATURE.TRANSFORM_NON_HIVE",
       messageParameters = Map.empty,
       ctx)
+  }
+
+  def unpivotWithPivotInFromClauseNotAllowedError(ctx: FromClauseContext): Throwable = {
+    new ParseException("UNPIVOT cannot be used together with PIVOT in FROM clause", ctx)
   }
 
   def lateralWithPivotInFromClauseNotAllowedError(ctx: FromClauseContext): Throwable = {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0013", ctx)
   }
 
+  def lateralWithUnpivotInFromClauseNotAllowedError(ctx: FromClauseContext): Throwable = {
+    new ParseException("LATERAL cannot be used together with UNPIVOT in FROM clause", ctx)
+  }
+
   def lateralJoinWithNaturalJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "LATERAL_NATURAL_JOIN",
+      errorClass = "UNSUPPORTED_FEATURE.LATERAL_NATURAL_JOIN",
       messageParameters = Map.empty,
       ctx)
   }
 
   def lateralJoinWithUsingJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "LATERAL_JOIN_USING",
+      errorClass = "UNSUPPORTED_FEATURE.LATERAL_JOIN_USING",
       messageParameters = Map.empty,
       ctx)
   }
 
   def unsupportedLateralJoinTypeError(ctx: ParserRuleContext, joinType: String): Throwable = {
     new ParseException(
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "LATERAL_JOIN_OF_TYPE",
+      errorClass = "INVALID_LATERAL_JOIN_TYPE",
       messageParameters = Map("joinType" -> toSQLStmt(joinType)),
       ctx)
   }
@@ -173,8 +166,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
 
   def naturalCrossJoinUnsupportedError(ctx: RelationContext): Throwable = {
     new ParseException(
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "NATURAL_CROSS_JOIN",
+      errorClass = "UNSUPPORTED_FEATURE.NATURAL_CROSS_JOIN",
       messageParameters = Map.empty,
       ctx = ctx)
   }
@@ -232,10 +224,14 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def literalValueTypeUnsupportedError(
-      valueType: String, ctx: TypeConstructorContext): Throwable = {
+      unsupportedType: String,
+      supportedTypes: Seq[String],
+      ctx: TypeConstructorContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0021",
-      messageParameters = Map("valueType" -> valueType),
+      errorClass = "UNSUPPORTED_TYPED_LITERAL",
+      messageParameters = Map(
+        "unsupportedType" -> toSQLType(unsupportedType),
+        "supportedTypes" -> supportedTypes.map(toSQLType).mkString(", ")),
       ctx)
   }
 
@@ -303,7 +299,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
 
   def charTypeMissingLengthError(dataType: String, ctx: PrimitiveDataTypeContext): Throwable = {
     new ParseException(
-      errorClass = "PARSE_CHAR_MISSING_LENGTH",
+      errorClass = "DATATYPE_MISSING_SIZE",
       messageParameters = Map("type" -> toSQLType(dataType)),
       ctx)
   }
@@ -336,16 +332,14 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   def cannotCleanReservedNamespacePropertyError(
       property: String, ctx: ParserRuleContext, msg: String): Throwable = {
     new ParseException(
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "SET_NAMESPACE_PROPERTY",
+      errorClass = "UNSUPPORTED_FEATURE.SET_NAMESPACE_PROPERTY",
       messageParameters = Map("property" -> property, "msg" -> msg),
       ctx)
   }
 
   def propertiesAndDbPropertiesBothSpecifiedError(ctx: CreateNamespaceContext): Throwable = {
     new ParseException(
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "SET_PROPERTIES_AND_DBPROPERTIES",
+      errorClass = "UNSUPPORTED_FEATURE.SET_PROPERTIES_AND_DBPROPERTIES",
       messageParameters = Map.empty,
       ctx
     )
@@ -354,8 +348,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   def cannotCleanReservedTablePropertyError(
       property: String, ctx: ParserRuleContext, msg: String): Throwable = {
     new ParseException(
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "SET_TABLE_PROPERTY",
+      errorClass = "UNSUPPORTED_FEATURE.SET_TABLE_PROPERTY",
       messageParameters = Map("property" -> property, "msg" -> msg),
       ctx)
   }
@@ -395,8 +388,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
 
   def descColumnForPartitionUnsupportedError(ctx: DescribeRelationContext): Throwable = {
     new ParseException(
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "DESC_TABLE_COLUMN_PARTITION",
+      errorClass = "UNSUPPORTED_FEATURE.DESC_TABLE_COLUMN_PARTITION",
       messageParameters = Map.empty,
       ctx)
   }
@@ -456,9 +448,9 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
       Some("_LEGACY_ERROR_TEMP_0039"))
   }
 
-  def unquotedIdentifierError(ident: String, ctx: ErrorIdentContext): Throwable = {
+  def invalidIdentifierError(ident: String, ctx: ErrorIdentContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0040",
+      errorClass = "INVALID_IDENTIFIER",
       messageParameters = Map("ident" -> ident),
       ctx)
   }
@@ -550,11 +542,11 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def notAllowedToAddDBPrefixForTempViewError(
-      database: String,
+      nameParts: Seq[String],
       ctx: CreateViewContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0054",
-      messageParameters = Map("database" -> database),
+      errorClass = "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS",
+      messageParameters = Map("actualName" -> toSQLId(nameParts)),
       ctx)
   }
 
@@ -609,9 +601,13 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
       ctx)
   }
 
-  def unclosedBracketedCommentError(command: String, position: Origin): Throwable = {
-    new ParseException(Some(command), "Unclosed bracketed comment", position, position,
-      Some("_LEGACY_ERROR_TEMP_0055"))
+  def unclosedBracketedCommentError(command: String, start: Origin, stop: Origin): Throwable = {
+    new ParseException(
+      command = Some(command),
+      start = start,
+      stop = stop,
+      errorClass = "UNCLOSED_BRACKETED_COMMENT",
+      messageParameters = Map.empty)
   }
 
   def invalidTimeTravelSpec(reason: String, ctx: ParserRuleContext): Throwable = {
@@ -641,5 +637,17 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
 
   def defaultColumnReferencesNotAllowedInPartitionSpec(ctx: ParserRuleContext): Throwable = {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0059", ctx)
+  }
+
+  def duplicateCreateTableColumnOption(
+      ctx: ParserRuleContext,
+      columnName: String,
+      optionName: String): Throwable = {
+    new ParseException(
+      errorClass = "CREATE_TABLE_COLUMN_OPTION_DUPLICATE",
+      messageParameters = Map(
+        "columnName" -> columnName,
+        "optionName" -> optionName),
+      ctx)
   }
 }

@@ -52,4 +52,15 @@ public class CharVarcharCodegenUtils {
       return trimTrailingSpaces(inputStr, numChars, limit);
     }
   }
+
+  public static UTF8String readSidePadding(UTF8String inputStr, int limit) {
+    int numChars = inputStr.numChars();
+    if (numChars == limit) {
+      return inputStr;
+    } else if (numChars < limit) {
+      return inputStr.rpad(limit, SPACE);
+    } else {
+      return inputStr;
+    }
+  }
 }

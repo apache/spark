@@ -346,7 +346,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
 
   override def toString: String = value match {
     case null => "null"
-    case binary: Array[Byte] => s"0x" + ApacheHex.encodeHexString(binary, false)
+    case binary: Array[Byte] => "0x" + ApacheHex.encodeHexString(binary, false)
     case d: ArrayBasedMapData => s"map(${d.toString})"
     case other =>
       dataType match {

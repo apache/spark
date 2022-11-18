@@ -527,8 +527,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
         val (functionsWithDistinct, functionsWithoutDistinct) =
           aggregateExpressions.partition(_.isDistinct)
-        if (functionsWithDistinct.map(
-          _.aggregateFunction.children.filterNot(_.foldable).toSet).distinct.length > 1) {
+        val distinctAggChildSets = functionsWithDistinct.map { ae =>
+          ExpressionSet(ae.aggregateFunction.children.filterNot(_.foldable))
+        }.distinct
+        if (distinctAggChildSets.length > 1) {
           // This is a sanity check. We should not reach here when we have multiple distinct
           // column sets. Our `RewriteDistinctAggregates` should take care this case.
           throw new IllegalStateException(
@@ -676,7 +678,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         val execPlan = FlatMapGroupsWithStateExec(
           func, keyDeser, valueDeser, sDeser, groupAttr, stateGroupAttr, dataAttr, sda, outputAttr,
           None, stateEnc, stateVersion, outputMode, timeout, batchTimestampMs = None,
-          eventTimeWatermark = None, planLater(initialState), hasInitialState, planLater(child)
+          eventTimeWatermarkForLateEvents = None, eventTimeWatermarkForEviction = None,
+          planLater(initialState), hasInitialState, planLater(child)
         )
         execPlan :: Nil
       case _ =>
@@ -695,7 +698,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         val stateVersion = conf.getConf(SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION)
         val execPlan = python.FlatMapGroupsInPandasWithStateExec(
           func, groupAttr, outputAttr, stateType, None, stateVersion, outputMode, timeout,
-          batchTimestampMs = None, eventTimeWatermark = None, planLater(child)
+          batchTimestampMs = None, eventTimeWatermarkForLateEvents = None,
+          eventTimeWatermarkForEviction = None, planLater(child)
         )
         execPlan :: Nil
       case _ =>

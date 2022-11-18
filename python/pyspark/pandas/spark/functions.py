@@ -27,6 +27,11 @@ from pyspark.sql.column import (
 )
 
 
+def product(col: Column, dropna: bool) -> Column:
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.PythonSQLUtils.pandasProduct(col._jc, dropna))
+
+
 def stddev(col: Column, ddof: int) -> Column:
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.PythonSQLUtils.pandasStddev(col._jc, ddof))

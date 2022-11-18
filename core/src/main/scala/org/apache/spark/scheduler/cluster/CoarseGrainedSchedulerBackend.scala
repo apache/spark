@@ -99,8 +99,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // Executors that have been lost, but for which we don't yet know the real exit reason.
   protected val executorsPendingLossReason = new HashSet[String]
 
-  // Executors which are being decommissioned. Maps from executorId to workerHost.
-  protected val executorsPendingDecommission = new HashMap[String, Option[String]]
+  // Executors which are being decommissioned. Maps from executorId to ExecutorDecommissionInfo.
+  protected val executorsPendingDecommission = new HashMap[String, ExecutorDecommissionInfo]
 
   // A map of ResourceProfile id to map of hostname with its possible task number running on it
   @GuardedBy("CoarseGrainedSchedulerBackend.this")
@@ -447,11 +447,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             executorDataMap -= executorId
             executorsPendingLossReason -= executorId
             val killedByDriver = executorsPendingToRemove.remove(executorId).getOrElse(false)
-            val workerHostOpt = executorsPendingDecommission.remove(executorId)
+            val decommissionInfoOpt = executorsPendingDecommission.remove(executorId)
             if (killedByDriver) {
               ExecutorKilled
-            } else if (workerHostOpt.isDefined) {
-              ExecutorDecommission(workerHostOpt.get)
+            } else if (decommissionInfoOpt.isDefined) {
+              val decommissionInfo = decommissionInfoOpt.get
+              ExecutorDecommission(decommissionInfo.workerHost, decommissionInfo.message)
             } else {
               reason
             }
@@ -535,7 +536,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       // Only bother decommissioning executors which are alive.
       if (isExecutorActive(executorId)) {
         scheduler.executorDecommission(executorId, decomInfo)
-        executorsPendingDecommission(executorId) = decomInfo.workerHost
+        executorsPendingDecommission(executorId) = decomInfo
         Some(executorId)
       } else {
         None

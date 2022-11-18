@@ -51,8 +51,7 @@ class QueryCompilationErrorsDSv2Suite
         checkAnswer(spark.table(tbl), spark.emptyDataFrame)
         checkError(
           exception = e,
-          errorClass = "UNSUPPORTED_FEATURE",
-          errorSubClass = "INSERT_PARTITION_SPEC_IF_NOT_EXISTS",
+          errorClass = "UNSUPPORTED_FEATURE.INSERT_PARTITION_SPEC_IF_NOT_EXISTS",
           parameters = Map("tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`"),
           sqlState = "0A000")
       }

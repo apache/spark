@@ -19,6 +19,8 @@ package org.apache.spark
 
 import scala.collection.JavaConverters._
 
+import com.fasterxml.jackson.core.util.MinimalPrettyPrinter
+
 import org.apache.spark.util.JsonProtocol.toJsonString
 import org.apache.spark.util.Utils
 
@@ -36,27 +38,23 @@ private[spark] object SparkThrowableHelper {
 
   def getMessage(
       errorClass: String,
-      errorSubClass: String,
       messageParameters: Map[String, String]): String = {
-    getMessage(errorClass, errorSubClass, messageParameters, "")
+    getMessage(errorClass, messageParameters, "")
   }
 
   def getMessage(
       errorClass: String,
-      errorSubClass: String,
       messageParameters: java.util.Map[String, String]): String = {
-    getMessage(errorClass, errorSubClass, messageParameters.asScala.toMap, "")
+    getMessage(errorClass, messageParameters.asScala.toMap, "")
   }
 
   def getMessage(
       errorClass: String,
-      errorSubClass: String,
       messageParameters: Map[String, String],
       context: String): String = {
-    val displayClass = errorClass + Option(errorSubClass).map("." + _).getOrElse("")
-    val displayMessage = errorReader.getErrorMessage(displayClass, messageParameters)
+    val displayMessage = errorReader.getErrorMessage(errorClass, messageParameters)
     val displayQueryContext = (if (context.isEmpty) "" else "\n") + context
-    val prefix = if (displayClass.startsWith("_LEGACY_ERROR_TEMP_")) "" else s"[$displayClass] "
+    val prefix = if (errorClass.startsWith("_LEGACY_ERROR_TEMP_")) "" else s"[$errorClass] "
     s"$prefix$displayMessage$displayQueryContext"
   }
 
@@ -88,11 +86,8 @@ private[spark] object SparkThrowableHelper {
           val g = generator.useDefaultPrettyPrinter()
           g.writeStartObject()
           g.writeStringField("errorClass", errorClass)
-          val errorSubClass = e.getErrorSubClass
-          if (errorSubClass != null) g.writeStringField("errorSubClass", errorSubClass)
           if (format == STANDARD) {
-            val finalClass = errorClass + Option(errorSubClass).map("." + _).getOrElse("")
-            g.writeStringField("messageTemplate", errorReader.getMessageTemplate(finalClass))
+            g.writeStringField("messageTemplate", errorReader.getMessageTemplate(errorClass))
           }
           val sqlState = e.getSqlState
           if (sqlState != null) g.writeStringField("sqlState", sqlState)
@@ -124,6 +119,18 @@ private[spark] object SparkThrowableHelper {
           }
           g.writeEndObject()
         }
+    }
+  }
+
+  def getMessage(throwable: Throwable): String = {
+    toJsonString { generator =>
+      val g = generator.setPrettyPrinter(new MinimalPrettyPrinter)
+      g.writeStartObject()
+      g.writeStringField("errorClass", throwable.getClass.getCanonicalName)
+      g.writeObjectFieldStart("messageParameters")
+      g.writeStringField("message", throwable.getMessage)
+      g.writeEndObject()
+      g.writeEndObject()
     }
   }
 }

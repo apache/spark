@@ -139,7 +139,13 @@ SHOW VIEWS IN wrongdb LIKE 'view_*'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
-Database 'wrongdb' not found
+{
+  "errorClass" : "SCHEMA_NOT_FOUND",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "schemaName" : "`wrongdb`"
+  }
+}
 
 
 -- !query

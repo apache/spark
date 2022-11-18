@@ -24,6 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
 import org.apache.spark.SparkConf
+import org.apache.spark.SparkException
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.memory.{TaskMemoryManager, UnifiedMemoryManager}
@@ -534,7 +535,7 @@ class HashedRelationSuite extends SharedSparkSession {
       buffer.append(keyIterator.next().getLong(0))
     }
     // attempt an illegal next() call
-    val caught = intercept[NoSuchElementException] {
+    val caught = intercept[SparkException] {
       keyIterator.next()
     }
     assert(caught.getLocalizedMessage === "End of the iterator")

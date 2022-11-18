@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Subque
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils}
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.types.StructType
@@ -411,8 +411,7 @@ class SessionCatalog(
       val fs = tableLocation.getFileSystem(hadoopConf)
 
       if (fs.exists(tableLocation) && fs.listStatus(tableLocation).nonEmpty) {
-        throw QueryCompilationErrors.cannotOperateManagedTableWithExistingLocationError(
-          "create", table.identifier, tableLocation)
+        throw QueryExecutionErrors.locationAlreadyExists(table.identifier, tableLocation)
       }
     }
   }
@@ -808,8 +807,7 @@ class SessionCatalog(
             oldName, newName)
         }
         if (tempViews.contains(newTableName)) {
-          throw QueryCompilationErrors.cannotRenameTempViewToExistingTableError(
-            oldName, newName)
+          throw QueryCompilationErrors.cannotRenameTempViewToExistingTableError(newName)
         }
         val table = tempViews(oldTableName)
         tempViews.remove(oldTableName)
@@ -1395,7 +1393,7 @@ class SessionCatalog(
     if (!functionExists(qualifiedIdent)) {
       externalCatalog.createFunction(db, newFuncDefinition)
     } else if (!ignoreIfExists) {
-      throw new FunctionAlreadyExistsException(db = db, func = qualifiedIdent.funcName)
+      throw new FunctionAlreadyExistsException(Seq(db, qualifiedIdent.funcName))
     }
   }
 
@@ -1784,11 +1782,11 @@ class SessionCatalog(
   }
 
   /**
-   * List all registered functions in a database with the given pattern.
+   * List all built-in and temporary functions with the given pattern.
    */
-  private def listRegisteredFunctions(db: String, pattern: String): Seq[FunctionIdentifier] = {
+  private def listBuiltinAndTempFunctions(pattern: String): Seq[FunctionIdentifier] = {
     val functions = (functionRegistry.listFunction() ++ tableFunctionRegistry.listFunction())
-      .filter(_.database.forall(_ == db))
+      .filter(_.database.isEmpty)
     StringUtils.filterPattern(functions.map(_.unquotedString), pattern).map { f =>
       // In functionRegistry, function names are stored as an unquoted format.
       Try(parser.parseFunctionIdentifier(f)) match {
@@ -1817,7 +1815,7 @@ class SessionCatalog(
     requireDbExists(dbName)
     val dbFunctions = externalCatalog.listFunctions(dbName, pattern).map { f =>
       FunctionIdentifier(f, Some(dbName)) }
-    val loadedFunctions = listRegisteredFunctions(db, pattern)
+    val loadedFunctions = listBuiltinAndTempFunctions(pattern)
     val functions = dbFunctions ++ loadedFunctions
     // The session catalog caches some persistent functions in the FunctionRegistry
     // so there can be duplicates.
@@ -1913,8 +1911,7 @@ class SessionCatalog(
       val newTableLocation = new Path(new Path(databaseLocation), format(newName.table))
       val fs = newTableLocation.getFileSystem(hadoopConf)
       if (fs.exists(newTableLocation)) {
-        throw QueryCompilationErrors.cannotOperateManagedTableWithExistingLocationError(
-          "rename", oldName, newTableLocation)
+        throw QueryExecutionErrors.locationAlreadyExists(newName, newTableLocation)
       }
     }
   }

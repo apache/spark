@@ -38,7 +38,7 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(LEFT_SEMI_OR_ANTI_JOIN), ruleId) {
     // LeftSemi/LeftAnti over Project
-    case Join(p @ Project(pList, gChild), rightOp, LeftSemiOrAnti(joinType), joinCond, hint)
+    case j @ Join(p @ Project(pList, gChild), rightOp, LeftSemiOrAnti(joinType), joinCond, hint)
         if pList.forall(_.deterministic) &&
         !pList.exists(ScalarSubquery.hasCorrelatedScalarSubquery) &&
         canPushThroughCondition(Seq(gChild), joinCond, rightOp) =>
@@ -47,12 +47,17 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
         p.copy(child = Join(gChild, rightOp, joinType, joinCond, hint))
       } else {
         val aliasMap = getAliasMap(p)
-        val newJoinCond = if (aliasMap.nonEmpty) {
-          Option(replaceAlias(joinCond.get, aliasMap))
+        // Do not push complex join condition
+        if (aliasMap.forall(_._2.child.children.isEmpty)) {
+          val newJoinCond = if (aliasMap.nonEmpty) {
+            Option(replaceAlias(joinCond.get, aliasMap))
+          } else {
+            joinCond
+          }
+          p.copy(child = Join(gChild, rightOp, joinType, newJoinCond, hint))
         } else {
-          joinCond
+          j
         }
-        p.copy(child = Join(gChild, rightOp, joinType, newJoinCond, hint))
       }
 
     // LeftSemi/LeftAnti over Aggregate, only push down if join can be planned as broadcast join.

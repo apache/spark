@@ -123,16 +123,17 @@ class EncoderResolutionSuite extends PlanTest {
     val attrs = Seq($"arr".int)
     checkError(
       exception = intercept[AnalysisException](encoder.resolveAndBind(attrs)),
-      errorClass = "UNSUPPORTED_DESERIALIZER",
-      errorSubClass = Some("DATA_TYPE_MISMATCH"),
+      errorClass = "UNSUPPORTED_DESERIALIZER.DATA_TYPE_MISMATCH",
       parameters = Map("desiredType" -> "\"ARRAY\"", "dataType" -> "\"INT\""))
   }
 
   test("the real type is not compatible with encoder schema: array element type") {
     val encoder = ExpressionEncoder[ArrayClass]
     val attrs = Seq($"arr".array(new StructType().add("c", "int")))
-    assert(intercept[AnalysisException](encoder.resolveAndBind(attrs)).message ==
-      "No such struct field a in c.")
+    checkError(
+      exception = intercept[AnalysisException](encoder.resolveAndBind(attrs)),
+      errorClass = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`a`", "fields" -> "`c`"))
   }
 
   test("the real type is not compatible with encoder schema: nested array element type") {
@@ -142,8 +143,7 @@ class EncoderResolutionSuite extends PlanTest {
       val attrs = Seq($"nestedArr".array(new StructType().add("arr", "int")))
       checkError(
         exception = intercept[AnalysisException](encoder.resolveAndBind(attrs)),
-        errorClass = "UNSUPPORTED_DESERIALIZER",
-        errorSubClass = Some("DATA_TYPE_MISMATCH"),
+        errorClass = "UNSUPPORTED_DESERIALIZER.DATA_TYPE_MISMATCH",
         parameters = Map("desiredType" -> "\"ARRAY\"", "dataType" -> "\"INT\""))
     }
 
@@ -152,8 +152,8 @@ class EncoderResolutionSuite extends PlanTest {
         .add("arr", ArrayType(new StructType().add("c", "int")))))
       checkError(
         exception = intercept[AnalysisException](encoder.resolveAndBind(attrs)),
-        errorClass = "_LEGACY_ERROR_TEMP_1208",
-        parameters = Map("fieldName" -> "a", "fields" -> "c"))
+        errorClass = "FIELD_NOT_FOUND",
+        parameters = Map("fieldName" -> "`a`", "fields" -> "`c`"))
     }
   }
 
@@ -181,8 +181,7 @@ class EncoderResolutionSuite extends PlanTest {
       val attrs = Seq($"a".string, $"b".long, $"c".int)
       checkError(
         exception = intercept[AnalysisException](encoder.resolveAndBind(attrs)),
-        errorClass = "UNSUPPORTED_DESERIALIZER",
-        errorSubClass = Some("FIELD_NUMBER_MISMATCH"),
+        errorClass = "UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH",
         parameters = Map("schema" -> "\"STRUCT<a: STRING, b: BIGINT, c: INT>\"",
           "ordinal" -> "2"))
     }
@@ -191,8 +190,7 @@ class EncoderResolutionSuite extends PlanTest {
       val attrs = Seq($"a".string)
       checkError(
         exception = intercept[AnalysisException](encoder.resolveAndBind(attrs)),
-        errorClass = "UNSUPPORTED_DESERIALIZER",
-        errorSubClass = Some("FIELD_NUMBER_MISMATCH"),
+        errorClass = "UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH",
         parameters = Map("schema" -> "\"STRUCT<a: STRING>\"",
           "ordinal" -> "2"))
     }
@@ -205,8 +203,7 @@ class EncoderResolutionSuite extends PlanTest {
       val attrs = Seq($"a".string, $"b".struct($"x".long, $"y".string, $"z".int))
       checkError(
         exception = intercept[AnalysisException](encoder.resolveAndBind(attrs)),
-        errorClass = "UNSUPPORTED_DESERIALIZER",
-        errorSubClass = Some("FIELD_NUMBER_MISMATCH"),
+        errorClass = "UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH",
         parameters = Map("schema" -> "\"STRUCT<x: BIGINT, y: STRING, z: INT>\"",
           "ordinal" -> "2"))
     }
@@ -215,8 +212,7 @@ class EncoderResolutionSuite extends PlanTest {
       val attrs = Seq($"a".string, $"b".struct($"x".long))
       checkError(
         exception = intercept[AnalysisException](encoder.resolveAndBind(attrs)),
-        errorClass = "UNSUPPORTED_DESERIALIZER",
-        errorSubClass = Some("FIELD_NUMBER_MISMATCH"),
+        errorClass = "UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH",
         parameters = Map("schema" -> "\"STRUCT<x: BIGINT>\"",
           "ordinal" -> "2"))
     }

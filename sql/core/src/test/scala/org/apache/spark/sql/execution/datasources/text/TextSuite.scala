@@ -236,6 +236,15 @@ abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFi
     assert(data(3) == Row("\"doh\""))
     assert(data.length == 4)
   }
+
+  test("SPARK-40667: validate Text Options") {
+    assert(TextOptions.getAllOptions.size == 4)
+    // Please add validation on any new Text options here
+    assert(TextOptions.isValidOption("compression"))
+    assert(TextOptions.isValidOption("wholetext"))
+    assert(TextOptions.isValidOption("encoding"))
+    assert(TextOptions.isValidOption("lineSep"))
+  }
 }
 
 class TextV1Suite extends TextSuite {

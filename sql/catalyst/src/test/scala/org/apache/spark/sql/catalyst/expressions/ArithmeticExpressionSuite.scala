@@ -23,7 +23,7 @@ import java.time.temporal.ChronoUnit
 
 import org.apache.spark.{SparkArithmeticException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
@@ -503,10 +503,13 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       Timestamp.valueOf("2015-07-01 08:00:00"), InternalRow.empty)
 
     // Type checking error
-    assert(
-      Least(Seq(Literal(1), Literal("1"))).checkInputDataTypes() ==
-        TypeCheckFailure("The expressions should all have the same type, " +
-          "got LEAST(int, string)."))
+    Least(Seq(Literal(1), Literal("1"))).checkInputDataTypes() match {
+      case TypeCheckResult.DataTypeMismatch(errorSubClass, messageParameters) =>
+        assert(errorSubClass == "DATA_DIFF_TYPES")
+        assert(messageParameters === Map(
+          "functionName" -> "`least`",
+          "dataType" -> "[\"INT\", \"STRING\"]"))
+    }
 
     DataTypeTestUtils.ordered.foreach { dt =>
       checkConsistencyBetweenInterpretedAndCodegen(Least, dt, 2)
@@ -561,10 +564,13 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       Timestamp.valueOf("2015-07-01 10:00:00"), InternalRow.empty)
 
     // Type checking error
-    assert(
-      Greatest(Seq(Literal(1), Literal("1"))).checkInputDataTypes() ==
-        TypeCheckFailure("The expressions should all have the same type, " +
-          "got GREATEST(int, string)."))
+    Greatest(Seq(Literal(1), Literal("1"))).checkInputDataTypes() match {
+      case TypeCheckResult.DataTypeMismatch(errorSubClass, messageParameters) =>
+        assert(errorSubClass == "DATA_DIFF_TYPES")
+        assert(messageParameters === Map(
+          "functionName" -> "`greatest`",
+          "dataType" -> "[\"INT\", \"STRING\"]"))
+    }
 
     DataTypeTestUtils.ordered.foreach { dt =>
       checkConsistencyBetweenInterpretedAndCodegen(Greatest, dt, 2)

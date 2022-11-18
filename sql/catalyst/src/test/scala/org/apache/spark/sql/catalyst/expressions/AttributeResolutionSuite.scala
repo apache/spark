@@ -94,10 +94,12 @@ class AttributeResolutionSuite extends SparkFunSuite {
       case _ => fail()
     }
 
-    val ex = intercept[AnalysisException] {
-      attrs.resolve(Seq("ns1", "t", "a", "cc"), resolver)
-    }
-    assert(ex.getMessage.contains("No such struct field cc in aa, bb"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        attrs.resolve(Seq("ns1", "t", "a", "cc"), resolver)
+      },
+      errorClass = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`cc`", "fields" -> "`aa`, `bb`"))
   }
 
   test("attribute resolution with case insensitive resolver") {

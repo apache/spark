@@ -92,9 +92,11 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase 
   }
 
   test("show table in a not existing namespace") {
-    val msg = intercept[NoSuchNamespaceException] {
+    val e = intercept[NoSuchNamespaceException] {
       runShowTablesSql(s"SHOW TABLES IN $catalog.unknown", Seq())
-    }.getMessage
-    assert(msg.matches("(Database|Namespace) 'unknown' not found"))
+    }
+    checkError(e,
+      errorClass = "SCHEMA_NOT_FOUND",
+      parameters = Map("schemaName" -> "`unknown`"))
   }
 }

@@ -60,7 +60,7 @@ from pyspark.sql.types import (
     _parse_datatype_string,
     _from_numpy_type,
 )
-from pyspark.sql.utils import install_exception_handler, is_timestamp_ntz_preferred
+from pyspark.sql.utils import install_exception_handler, is_timestamp_ntz_preferred, to_str
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import AtomicValue, RowLike, OptionalPrimitiveType
@@ -256,9 +256,9 @@ class SparkSession(SparkConversionMixin):
                         self._options[k] = v
                 elif map is not None:
                     for k, v in map.items():  # type: ignore[assignment]
-                        self._options[k] = str(v)
+                        self._options[k] = to_str(v)
                 else:
-                    self._options[cast(str, key)] = str(value)
+                    self._options[cast(str, key)] = to_str(value)
                 return self
 
         def master(self, master: str) -> "SparkSession.Builder":
@@ -1139,7 +1139,12 @@ class SparkSession(SparkConversionMixin):
             require_minimum_pandas_version()
             if data.ndim not in [1, 2]:
                 raise ValueError("NumPy array input should be of 1 or 2 dimensions.")
-            column_names = ["value"] if data.ndim == 1 else ["_1", "_2"]
+
+            if data.ndim == 1 or data.shape[1] == 1:
+                column_names = ["value"]
+            else:
+                column_names = ["_%s" % i for i in range(1, data.shape[1] + 1)]
+
             if schema is None and not self._jconf.arrowPySparkEnabled():
                 # Construct `schema` from `np.dtype` of the input NumPy array
                 # TODO: Apply the logic below when self._jconf.arrowPySparkEnabled() is True

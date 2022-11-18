@@ -130,6 +130,10 @@ package object util extends Logging {
     "`" + name.replace("`", "``") + "`"
   }
 
+  def quoteNameParts(name: Seq[String]): String = {
+    name.map(part => quoteIdentifier(part)).mkString(".")
+  }
+
   def quoteIfNeeded(part: String): String = {
     if (part.matches("[a-zA-Z0-9_]+") && !part.matches("\\d+")) {
       part

@@ -33,7 +33,7 @@ class InvalidUDFClassException private[sql](
 
   def this(errorClass: String, messageParameters: Map[String, String]) =
     this(
-      SparkThrowableHelper.getMessage(errorClass, null, messageParameters),
+      SparkThrowableHelper.getMessage(errorClass, messageParameters),
       Some(errorClass),
       messageParameters)
 }

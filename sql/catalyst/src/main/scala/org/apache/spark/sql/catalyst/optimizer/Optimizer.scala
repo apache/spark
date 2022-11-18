@@ -320,6 +320,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
     }
     def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
       _.containsPattern(PLAN_EXPRESSION), ruleId) {
+      // Do not optimize DPP subquery, as it was created from optimized plan and we should not
+      // optimize it again, to save optimization time and avoid breaking broadcast/subquery reuse.
+      case d: DynamicPruningSubquery => d
       case s: SubqueryExpression =>
         val Subquery(newPlan, _) = Optimizer.this.execute(Subquery.fromExpression(s))
         // At this point we have an optimized subquery plan that we are going to attach
@@ -584,7 +587,7 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
           newChild
         }
 
-        val mapping = AttributeMap(currentNextAttrPairs.toSeq)
+        val mapping = AttributeMap(currentNextAttrPairs)
 
         // Create a an expression cleaning function for nodes that can actually produce redundant
         // aliases, use identity otherwise.
@@ -989,7 +992,10 @@ object ColumnPruning extends Rule[LogicalPlan] {
 object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
 
   def apply(plan: LogicalPlan): LogicalPlan = {
-    val alwaysInline = conf.getConf(SQLConf.COLLAPSE_PROJECT_ALWAYS_INLINE)
+    apply(plan, conf.getConf(SQLConf.COLLAPSE_PROJECT_ALWAYS_INLINE))
+  }
+
+  def apply(plan: LogicalPlan, alwaysInline: Boolean): LogicalPlan = {
     plan.transformUpWithPruning(_.containsPattern(PROJECT), ruleId) {
       case p1 @ Project(_, p2: Project)
           if canCollapseExpressions(p1.projectList, p2.projectList, alwaysInline) =>

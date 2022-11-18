@@ -673,8 +673,14 @@ select make_date(2013, 2, 30)
 -- !query schema
 struct<>
 -- !query output
-java.time.DateTimeException
-Invalid date 'FEBRUARY 30'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2000",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Invalid date 'FEBRUARY 30'"
+  }
+}
 
 
 -- !query
@@ -682,8 +688,14 @@ select make_date(2013, 13, 1)
 -- !query schema
 struct<>
 -- !query output
-java.time.DateTimeException
-Invalid value for MonthOfYear (valid values 1 - 12): 13. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2000",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Invalid value for MonthOfYear (valid values 1 - 12): 13"
+  }
+}
 
 
 -- !query
@@ -691,8 +703,14 @@ select make_date(2013, 11, -1)
 -- !query schema
 struct<>
 -- !query output
-java.time.DateTimeException
-Invalid value for DayOfMonth (valid values 1 - 28/31): -1. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2000",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Invalid value for DayOfMonth (valid values 1 - 28/31): -1"
+  }
+}
 
 
 -- !query

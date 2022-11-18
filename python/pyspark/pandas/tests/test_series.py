@@ -3240,7 +3240,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self._test_autocorr(pdf)
 
         psser = ps.from_pandas(pdf["s1"])
-        with self.assertRaisesRegex(TypeError, r"periods should be an int; however, got"):
+        with self.assertRaisesRegex(TypeError, r"lag should be an int; however, got"):
             psser.autocorr(1.0)
 
     def _test_autocorr(self, pdf):

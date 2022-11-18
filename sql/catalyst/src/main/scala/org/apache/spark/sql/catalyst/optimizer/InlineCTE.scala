@@ -128,7 +128,11 @@ case class InlineCTE(alwaysInline: Boolean = false) extends Rule[LogicalPlan] {
             val ctePlan = DeduplicateRelations(
               Join(cteDef.child, cteDef.child, Inner, None, JoinHint(None, None))).children(1)
             val projectList = ref.output.zip(ctePlan.output).map { case (tgtAttr, srcAttr) =>
-              Alias(srcAttr, tgtAttr.name)(exprId = tgtAttr.exprId)
+              if (srcAttr.semanticEquals(tgtAttr)) {
+                tgtAttr
+              } else {
+                Alias(srcAttr, tgtAttr.name)(exprId = tgtAttr.exprId)
+              }
             }
             Project(projectList, ctePlan)
           }
