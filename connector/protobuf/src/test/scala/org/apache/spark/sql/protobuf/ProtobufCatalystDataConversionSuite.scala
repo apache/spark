@@ -34,9 +34,10 @@ import org.apache.spark.unsafe.types.UTF8String
 class ProtobufCatalystDataConversionSuite
     extends SparkFunSuite
     with SharedSparkSession
-    with ExpressionEvalHelper {
+    with ExpressionEvalHelper
+    with ProtobufTestBase {
 
-  private val testFileDesc = testFile("catalyst_types.desc").replace("file:/", "/")
+  private val testFileDesc = testFile("catalyst_types.desc", "protobuf/catalyst_types.desc")
   private val javaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.CatalystTypes$"
 
   private def checkResultWithEval(
