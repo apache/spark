@@ -2802,7 +2802,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def invalidEmptyLocationError(location: String): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
       errorClass = "INVALID_EMPTY_LOCATION",
-      messageParameters = Map("location" -> location.toString))
+      messageParameters = Map("location" -> location))
   }
 
   def malformedProtobufMessageDetectedInMessageParsingError(e: Throwable): Throwable = {
