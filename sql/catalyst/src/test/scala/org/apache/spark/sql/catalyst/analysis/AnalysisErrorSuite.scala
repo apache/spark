@@ -875,8 +875,11 @@ class AnalysisErrorSuite extends AnalysisTest {
     val a = AttributeReference("a", IntegerType)()
     val b = AttributeReference("b", IntegerType)()
     val plan = Filter($"a" === UnresolvedFunction("max", Seq(b), true), LocalRelation(a, b))
-    assertAnalysisError(plan,
-      "Aggregate/Window/Generate expressions are not valid in where clause of the query" :: Nil)
+    assertAnalysisErrorClass(plan,
+      expectedErrorClass = "INVALID_WHERE_CONDITION",
+      expectedMessageParameters = Map(
+        "condition" -> "\"(a = max(DISTINCT b))\"",
+        "expressionList" -> "max(DISTINCT b)"))
   }
 
   test("SPARK-30811: CTE should not cause stack overflow when " +
