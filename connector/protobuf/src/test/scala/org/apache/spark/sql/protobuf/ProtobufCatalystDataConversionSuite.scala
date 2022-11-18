@@ -34,9 +34,10 @@ import org.apache.spark.unsafe.types.UTF8String
 class ProtobufCatalystDataConversionSuite
     extends SparkFunSuite
     with SharedSparkSession
-    with ExpressionEvalHelper {
+    with ExpressionEvalHelper
+    with ProtobufTestBase {
 
-  private val testFileDesc = testFile("catalyst_types.desc").replace("file:/", "/")
+  private val testFileDesc = testFile("catalyst_types.desc", "protobuf/catalyst_types.desc")
   private val javaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.CatalystTypes$"
 
   private def checkResultWithEval(
@@ -116,11 +117,11 @@ class ProtobufCatalystDataConversionSuite
     StructType(StructField("string_type", StringType, nullable = true) :: Nil))
 
   private val catalystTypesToProtoMessages: Map[DataType, (String, Any)] = Map(
-    IntegerType -> ("IntegerMsg", 0),
-    DoubleType -> ("DoubleMsg", 0.0d),
-    FloatType -> ("FloatMsg", 0.0f),
-    BinaryType -> ("BytesMsg", ByteString.empty().toByteArray),
-    StringType -> ("StringMsg", ""))
+    (IntegerType, ("IntegerMsg", 0)), // Don't use '->', it causes a scala warning.
+    (DoubleType, ("DoubleMsg", 0.0d)),
+    (FloatType, ("FloatMsg", 0.0f)),
+    (BinaryType, ("BytesMsg", ByteString.empty().toByteArray)),
+    (StringType, ("StringMsg", "")))
 
   testingTypes.foreach { dt =>
     val seed = scala.util.Random.nextInt(RandomDataGenerator.MAX_STR_LEN)

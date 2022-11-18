@@ -68,3 +68,6 @@ ENV R_LIBS_SITE "/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library
 
 # Add Python deps for Spark Connect.
 RUN python3.9 -m pip install grpcio protobuf
+
+# SPARK-41186: Move memory-profiler to pyspark deps install when mlfow doctest test fix
+RUN python3.9 -m pip install 'memory-profiler==0.60.0'

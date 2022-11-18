@@ -301,13 +301,15 @@ class RemoteSparkSession(object):
         fun.parts.append(name)
         fun.serialized_function = cloudpickle.dumps((function, return_type))
 
-        req = self._request_with_metadata()
+        req = self._execute_plan_request_with_metadata()
         req.plan.command.create_function.CopyFrom(fun)
 
         self._execute_and_fetch(req)
         return name
 
-    def _build_metrics(self, metrics: "pb2.Response.Metrics") -> typing.List[PlanMetrics]:
+    def _build_metrics(
+        self, metrics: "pb2.ExecutePlanResponse.Metrics"
+    ) -> typing.List[PlanMetrics]:
         return [
             PlanMetrics(
                 x.name,
@@ -355,7 +357,7 @@ class RemoteSparkSession(object):
         )
 
     def _to_pandas(self, plan: pb2.Plan) -> Optional[pandas.DataFrame]:
-        req = self._request_with_metadata()
+        req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
         return self._execute_and_fetch(req)
 
@@ -393,30 +395,57 @@ class RemoteSparkSession(object):
             )
         return StructType(structFields)
 
-    def explain_string(self, plan: pb2.Plan) -> str:
-        return self._analyze(plan).explain_string
+    def explain_string(self, plan: pb2.Plan, explain_mode: str = "extended") -> str:
+        result = self._analyze(plan, explain_mode)
+        return result.explain_string
 
     def execute_command(self, command: pb2.Command) -> None:
-        req = pb2.Request()
+        req = self._execute_plan_request_with_metadata()
         if self._user_id:
             req.user_context.user_id = self._user_id
         req.plan.command.CopyFrom(command)
         self._execute_and_fetch(req)
+        return
 
-    def _request_with_metadata(self) -> pb2.Request:
-        req = pb2.Request()
+    def _execute_plan_request_with_metadata(self) -> pb2.ExecutePlanRequest:
+        req = pb2.ExecutePlanRequest()
         req.client_type = "_SPARK_CONNECT_PYTHON"
         if self._user_id:
             req.user_context.user_id = self._user_id
         return req
 
-    def _analyze(self, plan: pb2.Plan) -> AnalyzeResult:
-        req = self._request_with_metadata()
+    def _analyze_plan_request_with_metadata(self) -> pb2.AnalyzePlanRequest:
+        req = pb2.AnalyzePlanRequest()
+        req.client_type = "_SPARK_CONNECT_PYTHON"
+        if self._user_id:
+            req.user_context.user_id = self._user_id
+        return req
+
+    def _analyze(self, plan: pb2.Plan, explain_mode: str = "extended") -> AnalyzeResult:
+        req = self._analyze_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
+        if explain_mode not in ["simple", "extended", "codegen", "cost", "formatted"]:
+            raise ValueError(
+                f"""
+                Unknown explain mode: {explain_mode}. Accepted "
+                "explain modes are 'simple', 'extended', 'codegen', 'cost', 'formatted'."
+                """
+            )
+        if explain_mode == "simple":
+            req.explain.explain_mode = pb2.Explain.ExplainMode.SIMPLE
+        elif explain_mode == "extended":
+            req.explain.explain_mode = pb2.Explain.ExplainMode.EXTENDED
+        elif explain_mode == "cost":
+            req.explain.explain_mode = pb2.Explain.ExplainMode.COST
+        elif explain_mode == "codegen":
+            req.explain.explain_mode = pb2.Explain.ExplainMode.CODEGEN
+        else:  # formatted
+            req.explain.explain_mode = pb2.Explain.ExplainMode.FORMATTED
+
         resp = self._stub.AnalyzePlan(req, metadata=self._builder.metadata())
         return AnalyzeResult.fromProto(resp)
 
-    def _process_batch(self, b: pb2.Response) -> Optional[pandas.DataFrame]:
+    def _process_batch(self, b: pb2.ExecutePlanResponse) -> Optional[pandas.DataFrame]:
         import pandas as pd
 
         if b.arrow_batch is not None and len(b.arrow_batch.data) > 0:
@@ -426,10 +455,10 @@ class RemoteSparkSession(object):
             return pd.read_json(io.BytesIO(b.json_batch.data), lines=True)
         return None
 
-    def _execute_and_fetch(self, req: pb2.Request) -> typing.Optional[pandas.DataFrame]:
+    def _execute_and_fetch(self, req: pb2.ExecutePlanRequest) -> typing.Optional[pandas.DataFrame]:
         import pandas as pd
 
-        m: Optional[pb2.Response.Metrics] = None
+        m: Optional[pb2.ExecutePlanResponse.Metrics] = None
         result_dfs = []
 
         for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):

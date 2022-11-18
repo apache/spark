@@ -85,7 +85,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       }
       val rewrites = AttributeMap(duplicates.map { dup =>
         dup -> Alias(dup, dup.toString)()
-      }.toSeq)
+      })
       val aliasedExpressions = subplan.output.map { ref =>
         rewrites.getOrElse(ref, ref)
       }
@@ -644,7 +644,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
           }
         }
     }
-    (newChild, AttributeMap(subqueryAttrMapping.toSeq))
+    (newChild, AttributeMap(subqueryAttrMapping))
   }
 
   private def updateAttrs[E <: Expression](

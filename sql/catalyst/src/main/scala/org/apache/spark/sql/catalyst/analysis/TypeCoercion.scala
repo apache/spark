@@ -1223,13 +1223,13 @@ trait TypeCoercionRule extends Rule[LogicalPlan] with Logging {
     // Check if the inputs have changed.
     val references = AttributeMap(plan.references.collect {
       case a if a.resolved => a -> a
-    }.toSeq)
+    })
     def sameButDifferent(a: Attribute): Boolean = {
       references.get(a).exists(b => b.dataType != a.dataType || b.nullable != a.nullable)
     }
     val inputMap = AttributeMap(plan.inputSet.collect {
       case a if a.resolved && sameButDifferent(a) => a -> a
-    }.toSeq)
+    })
     if (inputMap.isEmpty) {
       // Nothing changed.
       plan
