@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.collection.mutable
+
+import org.junit.Assert
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -27,9 +31,6 @@ import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
 
-import org.junit.Assert
-
-import scala.collection.mutable
 
 /**
  * Unit tests for [[ResolveSubquery]].
