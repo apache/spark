@@ -469,13 +469,13 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
 
     post(SparkListenerStageSubmitted(createStageInfo(1, 2)))
     // Verify that we're capped at number of tasks including the speculative ones in the stage
-    post(SparkListenerSpeculativeTaskSubmitted(1))
+    post(SparkListenerSpeculativeTaskSubmitted(1, taskIndex = 0))
     assert(numExecutorsTargetForDefaultProfileId(manager) === 0)
     assert(numExecutorsToAddForDefaultProfile(manager) === 1)
     assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
     doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
-    post(SparkListenerSpeculativeTaskSubmitted(1))
-    post(SparkListenerSpeculativeTaskSubmitted(1))
+    post(SparkListenerSpeculativeTaskSubmitted(1, taskIndex = 1))
+    post(SparkListenerSpeculativeTaskSubmitted(1, taskIndex = 2))
     assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
     assert(numExecutorsToAddForDefaultProfile(manager) === 2)
     assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 2)
@@ -671,6 +671,82 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     onExecutorRemoved(manager, "5")
   }
 
+  test("SPARK-41192: remove executors when task finished before speculative task scheduled") {
+    val clock = new ManualClock()
+    val stage = createStageInfo(0, 40)
+    val conf = createConf(0, 10, 0).set(config.EXECUTOR_CORES, 4)
+    val manager = createManager(conf, clock = clock)
+    val updatesNeeded =
+      new mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
+
+    // submit 40 tasks, total executors needed = 40/4 = 10
+    post(SparkListenerStageSubmitted(stage))
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 2)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 4)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 3)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+
+    (0 to 9).foreach(execId => onExecutorAddedDefaultProfile(manager, execId.toString))
+    (0 to 39).map { i => createTaskInfo(i, i, executorId = s"${i / 4}")}.foreach {
+      info => post(SparkListenerTaskStart(0, 0, info))
+    }
+    assert(numExecutorsTarget(manager, defaultProfile.id) === 10)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 10)
+    // 30 tasks (0 - 29) finished
+    (0 to 29).map { i => createTaskInfo(i, i, executorId = s"${i / 4}")}.foreach {
+      info => post(SparkListenerTaskEnd(0, 0, null, Success, info, new ExecutorMetrics, null)) }
+    // 10 speculative tasks (30 - 39) launch for the remaining tasks
+    (30 to 39).foreach { index => post(SparkListenerSpeculativeTaskSubmitted(0, taskIndex = index))}
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
+    assert(numExecutorsTarget(manager, defaultProfile.id) === 5)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 5)
+    (0 to 4).foreach { i => assert(removeExecutorDefaultProfile(manager, i.toString))}
+    (0 to 4).foreach { i => onExecutorRemoved(manager, i.toString)}
+
+    // 5 original tasks (30 - 34) finished before speculative task start,
+    // the speculative task will not be scheduled
+    // executors needed = (5 + 10) / 4 + 1
+    (30 to 34).map { i =>
+      createTaskInfo(i, i, executorId = s"${i / 4}")}
+      .foreach { info => post(
+        SparkListenerTaskEnd(0, 0, null, Success, info, new ExecutorMetrics, null))}
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
+    assert(numExecutorsTarget(manager, defaultProfile.id) === 3)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 3)
+
+    (40 to 44).map { i =>
+      createTaskInfo(i, i - 5, executorId = s"${i / 4}", speculative = true)
+    }.foreach {
+      info => post(SparkListenerTaskStart(0, 0, info))
+    }
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
+    assert(numExecutorsTarget(manager, defaultProfile.id) === 3)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 3)
+
+    (35 to 38).map { i =>
+      createTaskInfo(i, i, executorId = s"${i / 4}")
+    }.foreach {
+      info => post(SparkListenerTaskEnd(0, 0, null, Success, info, new ExecutorMetrics, null))
+    }
+    (35 to 38).map { i =>
+      createTaskInfo(i + 5, i, executorId = s"${(i + 5) / 4}", speculative = true)
+    }.foreach {
+      info => post(SparkListenerTaskEnd(0, 0, null, TaskKilled("attempt"),
+        info, new ExecutorMetrics, null))
+    }
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
+    assert(numExecutorsTarget(manager, defaultProfile.id) === 1)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 1)
+  }
+
   test("SPARK-30511 remove executors when speculative tasks end") {
     val clock = new ManualClock()
     val stage = createStageInfo(0, 40)
@@ -707,7 +783,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     (0 to 6).foreach { i => onExecutorRemoved(manager, i.toString)}
 
     // 10 speculative tasks (30 - 39) launch for the remaining tasks
-    (30 to 39).foreach { _ => post(SparkListenerSpeculativeTaskSubmitted(0))}
+    (30 to 39).foreach { i => post(SparkListenerSpeculativeTaskSubmitted(0, taskIndex = i))}
     assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
     doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
     assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
@@ -785,7 +861,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       createTaskInfo(38, 38, executorId = "9"), new ExecutorMetrics, null))
     post(SparkListenerTaskEnd(0, 0, null, UnknownReason,
       createTaskInfo(49, 39, executorId = "12", speculative = true), new ExecutorMetrics, null))
-    post(SparkListenerSpeculativeTaskSubmitted(0))
+    post(SparkListenerSpeculativeTaskSubmitted(0, taskIndex = 39))
     clock.advance(1000)
     manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
     // maxNeeded = 1, allocate one more to satisfy speculation locality requirement

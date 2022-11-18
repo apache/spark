@@ -1143,7 +1143,7 @@ private[spark] class TaskSetManager(
               " than %.0f ms(%d speculatable tasks in this taskset now)")
               .format(index, taskSet.id, info.host, threshold, speculatableTasks.size + 1))
           speculatableTasks += index
-          sched.dagScheduler.speculativeTaskSubmitted(tasks(index))
+          sched.dagScheduler.speculativeTaskSubmitted(tasks(index), index)
         }
         foundTasksResult |= speculated
       }
