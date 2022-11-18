@@ -246,7 +246,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
         errorSubClass = "MAP_CONCAT_DIFF_TYPES",
         messageParameters = Map(
           "functionName" -> "`map_concat`",
-          "dataType" -> "\"MAP<STRING, STRING>\", \"INT\""
+          "dataType" -> "[\"MAP<STRING, STRING>\", \"INT\"]"
         )
       )
     )

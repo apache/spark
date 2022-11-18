@@ -298,7 +298,7 @@ class PercentileSuite extends SparkFunSuite {
           messageParameters = Map(
             "paramIndex" -> "2",
             "requiredType" -> "\"DOUBLE\"",
-            "inputSql" -> "\"0\"",
+            "inputSql" -> toSQLExpr(percentage),
             "inputType" -> toSQLType(dataType)
           )
         )
