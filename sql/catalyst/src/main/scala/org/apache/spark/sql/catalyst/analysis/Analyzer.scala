@@ -2653,16 +2653,6 @@ class Analyzer(override val catalogManager: CatalogManager)
    * underlying aggregate operator and then projected away after the original operator.
    */
   object ResolveAggregateFunctions extends Rule[LogicalPlan] {
-    val aggregateAttribSubstituter = (aggregateExpression: NamedExpression, expr: Expression) => {
-      val extractedAggExpr = aggregateExpression match {
-        case Alias(child, _) => child
-        case other => other
-      }
-      expr transformDown {
-        case subexpr if subexpr semanticEquals extractedAggExpr => aggregateExpression.toAttribute
-      }
-    }
-
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsPattern(AGGREGATE), ruleId) {
       // Resolve aggregate with having clause to Filter(..., Aggregate()). Note, to avoid wrongly
@@ -2745,45 +2735,42 @@ class Analyzer(override val catalogManager: CatalogManager)
       (extraAggExprs.toSeq, transformed)
     }
 
-    private def trimTempResolvedField(input: Expression): Expression = input.transform {
-      case t: TempResolvedColumn => t.child
-    }
-
     private def buildAggExprList(
         expr: Expression,
         agg: Aggregate,
         aggExprList: ArrayBuffer[NamedExpression]): Expression = {
       // Avoid adding an extra aggregate expression if it's already present in
       // `agg.aggregateExpressions`.
-      // First resolve the expression using aggregate expressions
-      // it is possible that expression uses more than 1 aggregate expressions.
-
-      val substitutedExpr = agg.aggregateExpressions.foldLeft(expr)((expression, aggExpr) =>
-        aggregateAttribSubstituter(aggExpr, expression))
-
-      substitutedExpr match {
-        case attr: Attribute if agg.output.exists(_ == attr) => attr // found match. no action
-        case ae: AggregateExpression =>
-          val cleaned = trimTempResolvedField(ae)
-          val alias = Alias(cleaned, cleaned.toString)()
-          aggExprList += alias
-          alias.toAttribute
-        case grouping: Expression if agg.groupingExpressions.exists(grouping.semanticEquals) =>
-          trimTempResolvedField(grouping) match {
-            case ne: NamedExpression =>
-              aggExprList += ne
-              ne.toAttribute
-            case other =>
-              val alias = Alias(other, other.toString)()
-              aggExprList += alias
-              alias.toAttribute
-          }
-        case t: TempResolvedColumn =>
-          // Undo the resolution as this column is neither inside aggregate functions nor a
-          // grouping column. It shouldn't be resolved with `agg.child.output`.
-          CurrentOrigin.withOrigin(t.origin)(UnresolvedAttribute(t.nameParts))
-        case other =>
-          other.withNewChildren(other.children.map(buildAggExprList(_, agg, aggExprList)))
+      val index = agg.aggregateExpressions.indexWhere {
+        case Alias(child, _) => child semanticEquals expr
+        case other => other semanticEquals expr
+      }
+      if (index >= 0) {
+        agg.aggregateExpressions(index).toAttribute
+      } else {
+        expr match {
+          case ae: AggregateExpression =>
+            val cleaned = RemoveTempResolvedColumn.trimTempResolvedColumn(ae)
+            val alias = Alias(cleaned, cleaned.toString)()
+            aggExprList += alias
+            alias.toAttribute
+          case grouping: Expression if agg.groupingExpressions.exists(grouping.semanticEquals) =>
+            RemoveTempResolvedColumn.trimTempResolvedColumn(grouping) match {
+              case ne: NamedExpression =>
+                aggExprList += ne
+                ne.toAttribute
+              case other =>
+                val alias = Alias(other, other.toString)()
+                aggExprList += alias
+                alias.toAttribute
+            }
+          case t: TempResolvedColumn =>
+            // Undo the resolution as this column is neither inside aggregate functions nor a
+            // grouping column. It shouldn't be resolved with `agg.child.output`.
+            RemoveTempResolvedColumn.restoreTempResolvedColumn(t)
+          case other =>
+            other.withNewChildren(other.children.map(buildAggExprList(_, agg, aggExprList)))
+        }
       }
     }
 
