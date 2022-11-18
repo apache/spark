@@ -126,14 +126,20 @@ object ExprUtils extends QueryErrorsBase {
    * performance degradations and can cause stack overflows.
    */
   def reduceToExpressionTree(
-       patterns: Seq[Expression],
+       expressions: Seq[Expression],
        expressionCombiner: (Expression, Expression) => Expression): Expression = {
-    assert(patterns.size > 0)
-    var res = patterns
-    while (res.size > 1) {
-      res = res.sliding(2, 2).toSeq
-        .map(tup => if (tup.size == 2) expressionCombiner(tup.head, tup.last) else tup(0))
+    assert(expressions.size > 0)
+    def combineRangeExpressions(low: Int, high: Int): Expression = high - low match {
+      case 0 =>
+        expressions(low)
+      case 1 =>
+        expressionCombiner(expressions(low), expressions(high))
+      case x =>
+        val mid = low + x / 2
+        expressionCombiner(
+          combineRangeExpressions(low, mid),
+          combineRangeExpressions(mid + 1, high))
     }
-    res.head
+    combineRangeExpressions(0, expressions.size - 1)
   }
 }

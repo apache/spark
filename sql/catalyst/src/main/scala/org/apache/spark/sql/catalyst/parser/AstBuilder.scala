@@ -1667,7 +1667,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
 
     // Reverse the contexts to have them in the same sequence as in the SQL statement & turn them
     // into expressions.
-    val expressions = contexts.reverseMap(expression)
+    val expressions = contexts.reverseMap(expression).toSeq
     ExprUtils.reduceToExpressionTree(expressions, expressionCombiner)
   }
 
