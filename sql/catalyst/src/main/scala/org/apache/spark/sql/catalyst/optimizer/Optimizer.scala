@@ -587,7 +587,7 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
           newChild
         }
 
-        val mapping = AttributeMap(currentNextAttrPairs.toSeq)
+        val mapping = AttributeMap(currentNextAttrPairs)
 
         // Create a an expression cleaning function for nodes that can actually produce redundant
         // aliases, use identity otherwise.

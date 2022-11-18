@@ -28,12 +28,12 @@ import io.grpc.stub.StreamObserver
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{AnalyzeResponse, Request, Response, SparkConnectServiceGrpc}
+import org.apache.spark.connect.proto.{AnalyzePlanRequest, AnalyzePlanResponse, ExecutePlanRequest, ExecutePlanResponse, SparkConnectServiceGrpc}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_BINDING_PORT
 import org.apache.spark.sql.connect.planner.{DataTypeProtoConverter, SparkConnectPlanner}
-import org.apache.spark.sql.execution.ExtendedMode
+import org.apache.spark.sql.execution.{CodegenMode, CostMode, ExplainMode, ExtendedMode, FormattedMode, SimpleMode}
 
 /**
  * The SparkConnectService implementation.
@@ -57,7 +57,9 @@ class SparkConnectService(debug: Boolean)
    * @param request
    * @param responseObserver
    */
-  override def executePlan(request: Request, responseObserver: StreamObserver[Response]): Unit = {
+  override def executePlan(
+      request: ExecutePlanRequest,
+      responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     try {
       new SparkConnectStreamHandler(responseObserver).handle(request)
     } catch {
@@ -81,8 +83,8 @@ class SparkConnectService(debug: Boolean)
    * @param responseObserver
    */
   override def analyzePlan(
-      request: Request,
-      responseObserver: StreamObserver[AnalyzeResponse]): Unit = {
+      request: AnalyzePlanRequest,
+      responseObserver: StreamObserver[AnalyzePlanResponse]): Unit = {
     try {
       if (request.getPlan.getOpTypeCase != proto.Plan.OpTypeCase.ROOT) {
         responseObserver.onError(
@@ -91,7 +93,20 @@ class SparkConnectService(debug: Boolean)
       }
       val session =
         SparkConnectService.getOrCreateIsolatedSession(request.getUserContext.getUserId).session
-      val response = handleAnalyzePlanRequest(request.getPlan.getRoot, session)
+
+      val explainMode = request.getExplain.getExplainMode match {
+        case proto.Explain.ExplainMode.SIMPLE => SimpleMode
+        case proto.Explain.ExplainMode.EXTENDED => ExtendedMode
+        case proto.Explain.ExplainMode.CODEGEN => CodegenMode
+        case proto.Explain.ExplainMode.COST => CostMode
+        case proto.Explain.ExplainMode.FORMATTED => FormattedMode
+        case _ =>
+          throw new IllegalArgumentException(
+            s"Explain mode unspecified. Accepted " +
+              "explain modes are 'simple', 'extended', 'codegen', 'cost', 'formatted'.")
+      }
+
+      val response = handleAnalyzePlanRequest(request.getPlan.getRoot, session, explainMode)
       response.setClientId(request.getClientId)
       responseObserver.onNext(response.build())
       responseObserver.onCompleted()
@@ -105,13 +120,14 @@ class SparkConnectService(debug: Boolean)
 
   def handleAnalyzePlanRequest(
       relation: proto.Relation,
-      session: SparkSession): proto.AnalyzeResponse.Builder = {
+      session: SparkSession,
+      explainMode: ExplainMode): proto.AnalyzePlanResponse.Builder = {
     val logicalPlan = new SparkConnectPlanner(session).transformRelation(relation)
 
     val ds = Dataset.ofRows(session, logicalPlan)
-    val explainString = ds.queryExecution.explainString(ExtendedMode)
+    val explainString = ds.queryExecution.explainString(explainMode)
 
-    val response = proto.AnalyzeResponse
+    val response = proto.AnalyzePlanResponse
       .newBuilder()
       .setExplainString(explainString)
     response.setSchema(DataTypeProtoConverter.toConnectProtoType(ds.schema))

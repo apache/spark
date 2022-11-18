@@ -1107,7 +1107,7 @@
       <dependency>
         <groupId>org.scala-lang.modules</groupId>
         <artifactId>scala-parser-combinators_${scala.binary.version}</artifactId>
-        <version>1.1.2</version>
+        <version>2.1.1</version>
       </dependency>
       <dependency>
         <groupId>jline</groupId>

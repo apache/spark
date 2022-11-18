@@ -172,7 +172,7 @@ private[sql] object ProtobufUtils extends Logging {
         throw QueryCompilationErrors.protobufClassLoadError(protobufClassName, explanation, e)
 
       case e: NoClassDefFoundError if e.getMessage.matches("com/google/proto.*Generated.*") =>
-        // This indicates the the the Java classes are not shaded.
+        // This indicates the Java classes are not shaded.
         throw QueryCompilationErrors.protobufClassLoadError(
           protobufClassName, missingShadingErrorMessage, e)
     }
@@ -180,7 +180,9 @@ private[sql] object ProtobufUtils extends Logging {
     if (!shadedMessageClass.isAssignableFrom(protobufClass)) {
       // Check if this extends 2.x Message class included in spark, that does not work.
       val unshadedMessageClass = Utils.classForName(
-        "com.escape-shading.google.protobuf.Message".replace("escape-shading.", "")
+        // Generate "com.google.protobuf.Message". Using join() is a trick to escape from
+        // jar shader. Otherwise, it will be replaced with 'org.sparkproject...'.
+        String.join(".", "com", "google", "protobuf", "Message")
       )
       val explanation =
         if (unshadedMessageClass.isAssignableFrom(protobufClass)) {

@@ -350,7 +350,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val normalizedProjects = DataSourceStrategy
         .normalizeExprs(project, sHolder.output)
         .asInstanceOf[Seq[NamedExpression]]
-      val allFilters = filtersStayUp ++ filtersPushDown.reduceOption(And)
+      val allFilters = filtersPushDown.reduceOption(And).toSeq ++ filtersStayUp
       val normalizedFilters = DataSourceStrategy.normalizeExprs(allFilters, sHolder.output)
       val (scan, output) = PushDownUtils.pruneColumns(
         sHolder.builder, sHolder.relation, normalizedProjects, normalizedFilters)
@@ -371,7 +371,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       }
 
       val finalFilters = normalizedFilters.map(projectionFunc)
-      val withFilter = finalFilters.foldRight[LogicalPlan](scanRelation)((cond, plan) => {
+      // bottom-most filters are put in the left of the list.
+      val withFilter = finalFilters.foldLeft[LogicalPlan](scanRelation)((plan, cond) => {
         Filter(cond, plan)
       })
 

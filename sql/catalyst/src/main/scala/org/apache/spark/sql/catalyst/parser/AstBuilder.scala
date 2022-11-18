@@ -914,7 +914,11 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    */
   override def visitFromClause(ctx: FromClauseContext): LogicalPlan = withOrigin(ctx) {
     val from = ctx.relation.asScala.foldLeft(null: LogicalPlan) { (left, relation) =>
-      val right = plan(relation.relationPrimary)
+      val right = if (conf.ansiRelationPrecedence) {
+        visitRelation(relation)
+      } else {
+        plan(relation.relationPrimary)
+      }
       val join = right.optionalMap(left) { (left, right) =>
         if (relation.LATERAL != null) {
           if (!relation.relationPrimary.isInstanceOf[AliasedQueryContext]) {
@@ -925,7 +929,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
           Join(left, right, Inner, None, JoinHint.NONE)
         }
       }
-      withJoinRelations(join, relation)
+      if (conf.ansiRelationPrecedence) join else withJoinRelations(join, relation)
     }
     if (ctx.pivotClause() != null) {
       if (ctx.unpivotClause() != null) {

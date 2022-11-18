@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 
@@ -45,8 +45,9 @@ case class DynamicPruningSubquery(
     buildKeys: Seq[Expression],
     broadcastKeyIndex: Int,
     onlyInBroadcast: Boolean,
-    exprId: ExprId = NamedExpression.newExprId)
-  extends SubqueryExpression(buildQuery, Seq(pruningKey), exprId)
+    exprId: ExprId = NamedExpression.newExprId,
+    hint: Option[HintInfo] = None)
+  extends SubqueryExpression(buildQuery, Seq(pruningKey), exprId, Seq.empty, hint)
   with DynamicPruning
   with Unevaluable
   with UnaryLike[Expression] {
@@ -58,6 +59,8 @@ case class DynamicPruningSubquery(
   override def nullable: Boolean = false
 
   override def withNewPlan(plan: LogicalPlan): DynamicPruningSubquery = copy(buildQuery = plan)
+
+  override def withNewHint(hint: Option[HintInfo]): SubqueryExpression = copy(hint = hint)
 
   override lazy val resolved: Boolean = {
     pruningKey.resolved &&

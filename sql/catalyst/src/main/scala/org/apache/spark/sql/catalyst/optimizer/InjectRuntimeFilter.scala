@@ -231,9 +231,9 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       leftKey: Expression,
       rightKey: Expression): Boolean = {
     (left, right) match {
-      case (Filter(DynamicPruningSubquery(pruningKey, _, _, _, _, _), plan), _) =>
+      case (Filter(DynamicPruningSubquery(pruningKey, _, _, _, _, _, _), plan), _) =>
         pruningKey.fastEquals(leftKey) || hasDynamicPruningSubquery(plan, right, leftKey, rightKey)
-      case (_, Filter(DynamicPruningSubquery(pruningKey, _, _, _, _, _), plan)) =>
+      case (_, Filter(DynamicPruningSubquery(pruningKey, _, _, _, _, _, _), plan)) =>
         pruningKey.fastEquals(rightKey) ||
           hasDynamicPruningSubquery(left, plan, leftKey, rightKey)
       case _ => false
@@ -264,10 +264,10 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       rightKey: Expression): Boolean = {
     (left, right) match {
       case (Filter(InSubquery(Seq(key),
-      ListQuery(Aggregate(Seq(Alias(_, _)), Seq(Alias(_, _)), _), _, _, _, _)), _), _) =>
+      ListQuery(Aggregate(Seq(Alias(_, _)), Seq(Alias(_, _)), _), _, _, _, _, _)), _), _) =>
         key.fastEquals(leftKey) || key.fastEquals(new Murmur3Hash(Seq(leftKey)))
       case (_, Filter(InSubquery(Seq(key),
-      ListQuery(Aggregate(Seq(Alias(_, _)), Seq(Alias(_, _)), _), _, _, _, _)), _)) =>
+      ListQuery(Aggregate(Seq(Alias(_, _)), Seq(Alias(_, _)), _), _, _, _, _, _)), _)) =>
         key.fastEquals(rightKey) || key.fastEquals(new Murmur3Hash(Seq(rightKey)))
       case _ => false
     }
