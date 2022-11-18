@@ -21,7 +21,7 @@ select from_csv('1', 1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The expression '1' is not a valid schema string.; line 1 pos 7
+[INVALID_SCHEMA] The expression "1" is not a valid schema string.; line 1 pos 7
 
 
 -- !query
