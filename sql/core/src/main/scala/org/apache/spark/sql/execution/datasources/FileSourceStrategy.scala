@@ -275,15 +275,13 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
                 .get.withName(FileFormat.ROW_INDEX)
           }
         }
-        // SPARK-41151: enforce the metadata nullability to the NamedStruct,
-        // to avoid any risk of inconsistent schema value
-        val nullabilityEnforceStruct = if (metadataStruct.nullable) {
-          KnownNullable(CreateStruct(structColumns))
-        } else {
-          KnownNotNull(CreateStruct(structColumns))
-        }
+        // SPARK-41151: metadata column is not nullable for file sources,
+        // [[CreateNamedStruct]] is also not nullable.
+        // Here, we *explicitly* enforce the not null to the created named struct
+        // to avoid any risk of inconsistent schema nullability
         val metadataAlias =
-          Alias(nullabilityEnforceStruct, METADATA_NAME)(exprId = metadataStruct.exprId)
+          Alias(KnownNotNull(CreateStruct(structColumns)),
+            METADATA_NAME)(exprId = metadataStruct.exprId)
         execution.ProjectExec(
           readDataColumns ++ partitionColumns :+ metadataAlias, scan)
       }.getOrElse(scan)

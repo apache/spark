@@ -655,7 +655,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  metadataColumnsTest("SPARK-41151: consistent _metadata nullable " +
+  metadataColumnsTest("SPARK-41151: consistent _metadata nullability " +
     "between analyzed and executed", schema) { (df, _, _) =>
     val queryExecution = df.select("_metadata").queryExecution
     val analyzedSchema = queryExecution.analyzed.schema
@@ -665,7 +665,8 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
     // For stateful streaming, we store the schema in the state store
     // and check consistency across batches.
     // To avoid state schema compatibility mismatched,
-    // we should keep nullable consistent for _metadata struct
+    // we should keep nullability consistent for _metadata struct
+    assert(!analyzedSchema.fields.head.nullable)
     assert(analyzedSchema.fields.head.nullable == executedSchema.fields.head.nullable)
   }
 }
