@@ -213,8 +213,8 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           val newSub = dedupSubqueryOnSelfJoin(newPlan, sub, Some(values))
           val inConditions = values.zip(newSub.output).map(EqualTo.tupled)
           val newConditions = (inConditions ++ conditions).reduceLeftOption(And)
-          newPlan =
-            Join(newPlan, newSub, ExistenceJoin(exists), newConditions, JoinHint(None, subHint))
+          val joinHint = JoinHint(None, subHint)
+          newPlan = Join(newPlan, newSub, ExistenceJoin(exists), newConditions, joinHint)
           exists
       }
     }
