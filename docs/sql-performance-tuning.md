@@ -40,7 +40,7 @@ Configuration of in-memory caching can be done using the `setConf` method on `Sp
   <td><code>spark.sql.inMemoryColumnarStorage.compressed</code></td>
   <td>true</td>
   <td>
-    When set to true Spark SQL will automatically select a compression codec for each column based
+    When set to true, Spark SQL will automatically select a compression codec for each column based
     on statistics of the data.
   </td>
   <td>1.0.1</td>
@@ -77,8 +77,8 @@ that these options will be deprecated in future release as more optimizations ar
     <td><code>spark.sql.files.openCostInBytes</code></td>
     <td>4194304 (4 MB)</td>
     <td>
-      The estimated cost to open a file, measured by the number of bytes could be scanned in the same
-      time. This is used when putting multiple files into a partition. It is better to over-estimated,
+      The estimated cost to open a file, measured by the number of bytes that could be scanned in the same
+      time. This is used when putting multiple files into a partition. It is better to over-estimate,
       then the partitions with small files will be faster than partitions with bigger files (which is
       scheduled first). This configuration is effective only when using file-based sources such as Parquet,
       JSON and ORC.
@@ -110,7 +110,7 @@ that these options will be deprecated in future release as more optimizations ar
     <td>10485760 (10 MB)</td>
     <td>
       Configures the maximum size in bytes for a table that will be broadcast to all worker nodes when
-      performing a join. By setting this value to -1 broadcasting can be disabled. Note that currently
+      performing a join. By setting this value to -1, broadcasting can be disabled. Note that currently
       statistics are only supported for Hive Metastore tables where the command
       <code>ANALYZE TABLE &lt;tableName&gt; COMPUTE STATISTICS noscan</code> has been run.
     </td>
@@ -140,8 +140,7 @@ that these options will be deprecated in future release as more optimizations ar
     <td>10000</td>
     <td>
       Configures the maximum listing parallelism for job input paths. In case the number of input
-      paths is larger than this value, it will be throttled down to use this value. Same as above,
-      this configuration is only effective when using file-based data sources such as Parquet, ORC
+      paths is larger than this value, it will be throttled down to use this value. This configuration is only effective when using file-based data sources such as Parquet, ORC
       and JSON.
     </td>
     <td>2.1.1</td>
@@ -215,8 +214,8 @@ For more details please refer to the documentation of [Join Hints](sql-ref-synta
 
 ## Coalesce Hints for SQL Queries
 
-Coalesce hints allows the Spark SQL users to control the number of output files just like the
-`coalesce`, `repartition` and `repartitionByRange` in Dataset API, they can be used for performance
+Coalesce hints allow Spark SQL users to control the number of output files just like
+`coalesce`, `repartition` and `repartitionByRange` in the Dataset API, they can be used for performance
 tuning and reducing the number of output files. The "COALESCE" hint only has a partition number as a
 parameter. The "REPARTITION" hint has a partition number, columns, or both/neither of them as parameters.
 The "REPARTITION_BY_RANGE" hint must have column names and a partition number is optional. The "REBALANCE"
@@ -295,7 +294,7 @@ AQE converts sort-merge join to broadcast hash join when the runtime statistics 
        <td><code>spark.sql.adaptive.autoBroadcastJoinThreshold</code></td>
        <td>(none)</td>
        <td>
-         Configures the maximum size in bytes for a table that will be broadcast to all worker nodes when performing a join. By setting this value to -1 broadcasting can be disabled. The default value is same with <code>spark.sql.autoBroadcastJoinThreshold</code>. Note that, this config is used only in adaptive framework.
+         Configures the maximum size in bytes for a table that will be broadcast to all worker nodes when performing a join. By setting this value to -1, broadcasting can be disabled. The default value is the same as <code>spark.sql.autoBroadcastJoinThreshold</code>. Note that, this config is used only in adaptive framework.
        </td>
        <td>3.2.0</td>
      </tr>
@@ -309,7 +308,7 @@ AQE converts sort-merge join to shuffled hash join when all post shuffle partiti
        <td><code>spark.sql.adaptive.maxShuffledHashJoinLocalMapThreshold</code></td>
        <td>0</td>
        <td>
-         Configures the maximum size in bytes per partition that can be allowed to build local hash map. If this value is not smaller than <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code> and all the partition size are not larger than this config, join selection prefer to use shuffled hash join instead of sort merge join regardless of the value of <code>spark.sql.join.preferSortMergeJoin</code>.
+         Configures the maximum size in bytes per partition that can be allowed to build local hash map. If this value is not smaller than <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code> and all the partition sizes are not larger than this config, join selection prefers to use shuffled hash join instead of sort merge join regardless of the value of <code>spark.sql.join.preferSortMergeJoin</code>.
        </td>
        <td>3.2.0</td>
      </tr>
@@ -339,7 +338,7 @@ Data skew can severely downgrade the performance of join queries. This feature d
        <td><code>spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes</code></td>
        <td>256MB</td>
        <td>
-         A partition is considered as skewed if its size in bytes is larger than this threshold and also larger than <code>spark.sql.adaptive.skewJoin.skewedPartitionFactor</code> multiplying the median partition size. Ideally this config should be set larger than <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code>.
+         A partition is considered as skewed if its size in bytes is larger than this threshold and also larger than <code>spark.sql.adaptive.skewJoin.skewedPartitionFactor</code> multiplying the median partition size. Ideally, this config should be set larger than <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code>.
        </td>
        <td>3.0.0</td>
      </tr>

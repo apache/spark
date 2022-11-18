@@ -894,7 +894,7 @@ org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "_LEGACY_ERROR_TEMP_2130",
   "messageParameters" : {
-    "pattern" : "yyyy-MM-dd GGGGG"
+    "pattern" : "'yyyy-MM-dd GGGGG'"
   }
 }
 
@@ -908,7 +908,7 @@ org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "_LEGACY_ERROR_TEMP_2130",
   "messageParameters" : {
-    "pattern" : "dd MM yyyy EEEEEE"
+    "pattern" : "'dd MM yyyy EEEEEE'"
   }
 }
 
@@ -922,7 +922,7 @@ org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "_LEGACY_ERROR_TEMP_2130",
   "messageParameters" : {
-    "pattern" : "dd MM yyyy EEEEE"
+    "pattern" : "'dd MM yyyy EEEEE'"
   }
 }
 

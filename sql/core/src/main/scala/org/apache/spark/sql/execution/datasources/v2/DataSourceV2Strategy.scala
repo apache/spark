@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
+import org.apache.commons.lang3.StringUtils
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedTable}
@@ -350,6 +352,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       AlterNamespaceSetPropertiesExec(catalog.asNamespaceCatalog, ns, properties) :: Nil
 
     case SetNamespaceLocation(ResolvedNamespace(catalog, ns), location) =>
+      if (StringUtils.isEmpty(location)) {
+        throw QueryExecutionErrors.unsupportedEmptyLocationError()
+      }
       AlterNamespaceSetPropertiesExec(
         catalog.asNamespaceCatalog,
         ns,
@@ -362,6 +367,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         Map(SupportsNamespaces.PROP_COMMENT -> comment)) :: Nil
 
     case CreateNamespace(ResolvedNamespace(catalog, ns), ifNotExists, properties) =>
+      val location = properties.get(SupportsNamespaces.PROP_LOCATION)
+      if (location.isDefined && location.get.isEmpty) {
+        throw QueryExecutionErrors.unsupportedEmptyLocationError()
+      }
       val finalProperties = properties.get(SupportsNamespaces.PROP_LOCATION).map { loc =>
         properties + (SupportsNamespaces.PROP_LOCATION -> makeQualifiedDBObjectPath(loc))
       }.getOrElse(properties)

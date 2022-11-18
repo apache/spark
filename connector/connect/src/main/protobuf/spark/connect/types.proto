@@ -55,134 +55,114 @@ message DataType {
     uint32 user_defined_type_reference = 31;
   }
 
-  enum Nullability {
-    NULLABILITY_UNSPECIFIED = 0;
-    NULLABILITY_NULLABLE = 1;
-    NULLABILITY_REQUIRED = 2;
-  }
-
   message Boolean {
     uint32 type_variation_reference = 1;
-    Nullability nullability = 2;
   }
 
   message I8 {
     uint32 type_variation_reference = 1;
-    Nullability nullability = 2;
   }
 
   message I16 {
     uint32 type_variation_reference = 1;
-    Nullability nullability = 2;
   }
 
   message I32 {
     uint32 type_variation_reference = 1;
-    Nullability nullability = 2;
   }
 
   message I64 {
     uint32 type_variation_reference = 1;
-    Nullability nullability = 2;
   }
 
   message FP32 {
     uint32 type_variation_reference = 1;
-    Nullability nullability = 2;
   }
 
   message FP64 {
     uint32 type_variation_reference = 1;
-    Nullability nullability = 2;
   }
 
   message String {
     uint32 type_variation_reference = 1;
-    Nullability nullability = 2;
   }
 
   message Binary {
     uint32 type_variation_reference = 1;
-    Nullability nullability = 2;
   }
 
   message Timestamp {
     uint32 type_variation_reference = 1;
-    Nullability nullability = 2;
   }
 
   message Date {
     uint32 type_variation_reference = 1;
-    Nullability nullability = 2;
   }
 
   message Time {
     uint32 type_variation_reference = 1;
-    Nullability nullability = 2;
   }
 
   message TimestampTZ {
     uint32 type_variation_reference = 1;
-    Nullability nullability = 2;
   }
 
   message IntervalYear {
     uint32 type_variation_reference = 1;
-    Nullability nullability = 2;
   }
 
   message IntervalDay {
     uint32 type_variation_reference = 1;
-    Nullability nullability = 2;
   }
 
   message UUID {
     uint32 type_variation_reference = 1;
-    Nullability nullability = 2;
   }
 
   // Start compound types.
   message FixedChar {
     int32 length = 1;
     uint32 type_variation_reference = 2;
-    Nullability nullability = 3;
   }
 
   message VarChar {
     int32 length = 1;
     uint32 type_variation_reference = 2;
-    Nullability nullability = 3;
   }
 
   message FixedBinary {
     int32 length = 1;
     uint32 type_variation_reference = 2;
-    Nullability nullability = 3;
   }
 
   message Decimal {
     int32 scale = 1;
     int32 precision = 2;
     uint32 type_variation_reference = 3;
-    Nullability nullability = 4;
+  }
+
+  message StructField {
+    DataType type = 1;
+    string name = 2;
+    bool nullable = 3;
+    map<string, string> metadata = 4;
   }
 
   message Struct {
-    repeated DataType types = 1;
+    repeated StructField fields = 1;
     uint32 type_variation_reference = 2;
-    Nullability nullability = 3;
   }
 
   message List {
     DataType DataType = 1;
     uint32 type_variation_reference = 2;
-    Nullability nullability = 3;
+    bool element_nullable = 3;
   }
 
   message Map {
     DataType key = 1;
     DataType value = 2;
     uint32 type_variation_reference = 3;
-    Nullability nullability = 4;
+    bool value_nullable = 4;
   }
 }

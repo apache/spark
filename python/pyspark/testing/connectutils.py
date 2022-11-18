@@ -15,15 +15,24 @@
 # limitations under the License.
 #
 import os
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 import functools
 import unittest
-import uuid
 
-from pyspark.testing.utils import search_jar
+from pyspark.testing.sqlutils import have_pandas
+
+if have_pandas:
+    from pyspark.sql.connect import DataFrame
+    from pyspark.sql.connect.plan import Read, Range, SQL
+    from pyspark.testing.utils import search_jar
+    from pyspark.sql.connect.plan import LogicalPlan
+    from pyspark.sql.connect.client import RemoteSparkSession
+
+    connect_jar = search_jar("connector/connect", "spark-connect-assembly-", "spark-connect")
+else:
+    connect_jar = None
 
 
-connect_jar = search_jar("connector/connect", "spark-connect-assembly-", "spark-connect")
 if connect_jar is None:
     connect_requirement_message = (
         "Skipping all Spark Connect Python tests as the optional Spark Connect project was "
@@ -37,7 +46,7 @@ else:
     os.environ["PYSPARK_SUBMIT_ARGS"] = " ".join([jars_args, plugin_args, existing_args])
     connect_requirement_message = None  # type: ignore
 
-should_test_connect = connect_requirement_message is None
+should_test_connect = connect_requirement_message is None and have_pandas
 
 
 class MockRemoteSession:
@@ -46,6 +55,9 @@ class MockRemoteSession:
 
     def set_hook(self, name: str, hook: Any) -> None:
         self.hooks[name] = hook
+
+    def drop_hook(self, name: str) -> None:
+        self.hooks.pop(name)
 
     def __getattr__(self, item: str) -> Any:
         if item not in self.hooks:
@@ -57,8 +69,52 @@ class MockRemoteSession:
 class PlanOnlyTestFixture(unittest.TestCase):
 
     connect: "MockRemoteSession"
+    session: RemoteSparkSession
+
+    @classmethod
+    def _read_table(cls, table_name: str) -> "DataFrame":
+        return DataFrame.withPlan(Read(table_name), cls.connect)  # type: ignore
+
+    @classmethod
+    def _udf_mock(cls, *args, **kwargs) -> str:
+        return "internal_name"
+
+    @classmethod
+    def _session_range(
+        cls,
+        start: int,
+        end: int,
+        step: int = 1,
+        num_partitions: Optional[int] = None,
+    ) -> "DataFrame":
+        return DataFrame.withPlan(
+            Range(start, end, step, num_partitions), cls.connect  # type: ignore
+        )
+
+    @classmethod
+    def _session_sql(cls, query: str) -> "DataFrame":
+        return DataFrame.withPlan(SQL(query), cls.connect)  # type: ignore
+
+    @classmethod
+    def _with_plan(cls, plan: LogicalPlan) -> "DataFrame":
+        return DataFrame.withPlan(plan, cls.connect)  # type: ignore
 
     @classmethod
     def setUpClass(cls: Any) -> None:
         cls.connect = MockRemoteSession()
-        cls.tbl_name = f"tbl{uuid.uuid4()}".replace("-", "")
+        cls.session = RemoteSparkSession()
+        cls.tbl_name = "test_connect_plan_only_table_1"
+
+        cls.connect.set_hook("register_udf", cls._udf_mock)
+        cls.connect.set_hook("readTable", cls._read_table)
+        cls.connect.set_hook("range", cls._session_range)
+        cls.connect.set_hook("sql", cls._session_sql)
+        cls.connect.set_hook("with_plan", cls._with_plan)
+
+    @classmethod
+    def tearDownClass(cls: Any) -> None:
+        cls.connect.drop_hook("register_udf")
+        cls.connect.drop_hook("readTable")
+        cls.connect.drop_hook("range")
+        cls.connect.drop_hook("sql")
+        cls.connect.drop_hook("with_plan")

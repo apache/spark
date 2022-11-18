@@ -18,9 +18,10 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.types.{DataType, UserDefinedType}
-
 
 /**
  * Unwrap UDT data type column into its underlying type.
@@ -33,8 +34,13 @@ case class UnwrapUDT(child: Expression) extends UnaryExpression with NonSQLExpre
     if (child.dataType.isInstanceOf[UserDefinedType[_]]) {
       TypeCheckResult.TypeCheckSuccess
     } else {
-      TypeCheckResult.TypeCheckFailure(
-        s"Input type should be UserDefinedType but got ${child.dataType.catalogString}")
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "1",
+          "requiredType" -> toSQLType("UserDefinedType"),
+          "inputSql" -> toSQLExpr(child),
+          "inputType" -> toSQLType(child.dataType)))
     }
   }
   override def dataType: DataType = child.dataType.asInstanceOf[UserDefinedType[_]].sqlType

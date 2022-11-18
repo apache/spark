@@ -355,7 +355,9 @@ case class GetJsonObject(json: Expression, path: Expression)
   since = "1.6.0")
 // scalastyle:on line.size.limit line.contains.tab
 case class JsonTuple(children: Seq[Expression])
-  extends Generator with CodegenFallback {
+  extends Generator
+  with CodegenFallback
+  with QueryErrorsBase {
 
   import SharedFactory._
 
@@ -394,14 +396,17 @@ case class JsonTuple(children: Seq[Expression])
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length < 2) {
       DataTypeMismatch(
-        errorSubClass = "WRONG_NUM_PARAMS",
-        messageParameters = Map("actualNum" -> children.length.toString))
+        errorSubClass = "WRONG_NUM_ARGS",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName),
+          "expectedNum" -> "> 1",
+          "actualNum" -> children.length.toString))
     } else if (children.forall(child => StringType.acceptsType(child.dataType))) {
       TypeCheckResult.TypeCheckSuccess
     } else {
       DataTypeMismatch(
         errorSubClass = "NON_STRING_TYPE",
-        messageParameters = Map("funcName" -> prettyName))
+        messageParameters = Map("funcName" -> toSQLId(prettyName)))
     }
   }
 

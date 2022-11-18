@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -858,5 +860,21 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(arraySort(Literal.create(Seq(3, 1, 1, 2)), comparator),
         Seq(1, 1, 2, 3))
     }
+  }
+
+  test("Return type of the given function has to be IntegerType") {
+    val comparator = {
+      val comp = ArraySort.comparator _
+      (left: Expression, right: Expression) => Literal.create("hello", StringType)
+    }
+
+    val result = arraySort(Literal.create(Seq(3, 1, 1, 2)), comparator).checkInputDataTypes()
+    assert(result == DataTypeMismatch(
+      errorSubClass = "UNEXPECTED_RETURN_TYPE",
+      messageParameters = Map(
+        "functionName" -> toSQLId("lambdafunction"),
+        "expectedType" -> toSQLType(IntegerType),
+        "actualType" -> toSQLType(StringType)
+      )))
   }
 }

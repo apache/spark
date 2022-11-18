@@ -25,6 +25,7 @@ import org.scalatest.exceptions.TestFailedException
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.util._
@@ -406,6 +407,15 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
       InternalRow(UTF8String.fromString("1"), null, UTF8String.fromString("1")))
   }
 
+  test("json_tuple - all arguments must be strings") {
+    assert(JsonTuple(Seq(Literal(888), Literal(999))).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "NON_STRING_TYPE",
+        messageParameters = Map("funcName" -> "`json_tuple`")
+      )
+    )
+  }
+
   test("from_json escaping") {
     val schema = StructType(StructField("\"quote", IntegerType) :: Nil)
     GenerateUnsafeProjection.generate(
@@ -578,6 +588,19 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     checkEvaluation(
       StructsToJson(Map.empty, struct, UTC_OPT),
       """{"a":1}"""
+    )
+  }
+
+  test("to_json - struct: unable to convert column of ObjectType to JSON") {
+    val schema = StructType(StructField("a", ObjectType(classOf[java.lang.Integer])) :: Nil)
+    val structData = Literal.create(create_row(Integer.valueOf(1)), schema)
+    assert(StructsToJson(Map.empty, structData).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "CANNOT_CONVERT_TO_JSON",
+        messageParameters = Map(
+          "name" -> "`a`",
+          "type" -> "\"JAVA.LANG.INTEGER\"")
+      )
     )
   }
 

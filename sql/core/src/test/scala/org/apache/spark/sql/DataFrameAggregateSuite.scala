@@ -588,7 +588,15 @@ class DataFrameAggregateSuite extends QueryTest
     val error = intercept[AnalysisException] {
       df.select(collect_set($"a"), collect_set($"b"))
     }
-    assert(error.message.contains("collect_set() cannot have map type data"))
+    checkError(
+      exception = error,
+      errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_INPUT_TYPE",
+      parameters = Map(
+        "functionName" -> "`collect_set`",
+        "dataType" -> "\"MAP\"",
+        "sqlExpr" -> "\"collect_set(b)\""
+      )
+    )
   }
 
   test("SPARK-17641: collect functions should not collect null values") {
@@ -655,10 +663,13 @@ class DataFrameAggregateSuite extends QueryTest
   }
 
   test("aggregate function in GROUP BY") {
-    val e = intercept[AnalysisException] {
-      testData.groupBy(sum($"key")).count()
-    }
-    assert(e.message.contains("aggregate functions are not allowed in GROUP BY"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        testData.groupBy(sum($"key")).count()
+      },
+      errorClass = "GROUP_BY_AGGREGATE",
+      parameters = Map("sqlExpr" -> "sum(key)")
+    )
   }
 
   private def assertNoExceptions(c: Column): Unit = {
@@ -918,7 +929,7 @@ class DataFrameAggregateSuite extends QueryTest
         errorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
         sqlState = None,
         parameters = Map(
-          "functionName" -> "function max_by",
+          "functionName" -> "`max_by`",
           "dataType" -> "\"MAP<INT, STRING>\"",
           "sqlExpr" -> "\"max_by(x, y)\""
         ),
@@ -988,7 +999,7 @@ class DataFrameAggregateSuite extends QueryTest
         errorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
         sqlState = None,
         parameters = Map(
-          "functionName" -> "function min_by",
+          "functionName" -> "`min_by`",
           "dataType" -> "\"MAP<INT, STRING>\"",
           "sqlExpr" -> "\"min_by(x, y)\""
         ),
@@ -1518,6 +1529,16 @@ class DataFrameAggregateSuite extends QueryTest
         |group by k
         |""".stripMargin)
     checkAnswer(res3, Row(1, 7, 4.5, 1) :: Row(2, 7, 4.5, 2) :: Nil)
+  }
+
+  test("SPARK-41035: Reuse of literal in distinct aggregations should work") {
+    val res = sql(
+      """select a, count(distinct 100), count(distinct b, 100)
+        |from values (1, 2), (4, 5), (4, 6) as data(a, b)
+        |group by a;
+        |""".stripMargin
+    )
+    checkAnswer(res, Row(1, 1, 1) :: Row(4, 1, 2) :: Nil)
   }
 }
 

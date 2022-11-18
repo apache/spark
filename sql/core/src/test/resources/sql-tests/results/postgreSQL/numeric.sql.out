@@ -4694,8 +4694,15 @@ SELECT '' AS to_number_1,  to_number('-34,338,492', '99G999G999')
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-The input string '-34,338,492' does not match the given number format: '99G999G999'
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2278",
+  "messageParameters" : {
+    "format" : "99G999G999",
+    "input" : "-34,338,492",
+    "valueType" : "string"
+  }
+}
 
 
 -- !query
@@ -4704,7 +4711,20 @@ SELECT '' AS to_number_2,  to_number('-34,338,492.654,878', '99G999G999D999G999'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'to_number('-34,338,492.654,878', '99G999G999D999G999')' due to data type mismatch: Thousands separators (, or G) may not appear after the decimal point in the number format: '99G999G999D999G999'; line 1 pos 27
+{
+  "errorClass" : "DATATYPE_MISMATCH.FORMAT_THOUSANDS_SEPS_MUST_BEFORE_DEC",
+  "messageParameters" : {
+    "format" : "'99G999G999D999G999'",
+    "sqlExpr" : "\"to_number(-34,338,492.654,878, 99G999G999D999G999)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 28,
+    "stopIndex" : 81,
+    "fragment" : "to_number('-34,338,492.654,878', '99G999G999D999G999')"
+  } ]
+}
 
 
 -- !query
@@ -4753,7 +4773,20 @@ SELECT '' AS to_number_15, to_number('123,000','999G')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'to_number('123,000', '999G')' due to data type mismatch: Thousands separators (, or G) must have digits in between them in the number format: '999G'; line 1 pos 27
+{
+  "errorClass" : "DATATYPE_MISMATCH.FORMAT_CONT_THOUSANDS_SEPS",
+  "messageParameters" : {
+    "format" : "'999G'",
+    "sqlExpr" : "\"to_number(123,000, 999G)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 28,
+    "stopIndex" : 54,
+    "fragment" : "to_number('123,000','999G')"
+  } ]
+}
 
 
 -- !query
@@ -4761,8 +4794,15 @@ SELECT '' AS to_number_16, to_number('123456','999G999')
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-The input string '123456' does not match the given number format: '999G999'
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2278",
+  "messageParameters" : {
+    "format" : "999G999",
+    "input" : "123456",
+    "valueType" : "string"
+  }
+}
 
 
 -- !query

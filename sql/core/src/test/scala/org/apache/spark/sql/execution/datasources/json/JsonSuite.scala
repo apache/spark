@@ -3381,6 +3381,27 @@ abstract class JsonSuite
     }
   }
 
+  test("SPARK-40646: parse subsequent fields if the first JSON field does not match schema") {
+    // In this example, the first record has "a.y" as boolean but it needs to be an object.
+    // We should parse "a" as null but continue parsing "b" correctly as it is valid.
+    withTempPath { path =>
+      Seq(
+        """{"a": {"x": 1, "y": true}, "b": {"x": 1}}""",
+        """{"a": {"x": 2}, "b": {"x": 2}}"""").toDF()
+        .repartition(1)
+        .write.text(path.getAbsolutePath)
+
+      val df = spark.read
+        .schema("a struct<x: int, y: struct<x: int>>, b struct<x: int>")
+        .json(path.getAbsolutePath)
+
+      checkAnswer(
+        df,
+        Seq(Row(null, Row(1)), Row(Row(2, null), Row(2)))
+      )
+    }
+  }
+
   test("SPARK-40667: validate JSON Options") {
     assert(JSONOptions.getAllOptions.size == 28)
     // Please add validation on any new Json options here

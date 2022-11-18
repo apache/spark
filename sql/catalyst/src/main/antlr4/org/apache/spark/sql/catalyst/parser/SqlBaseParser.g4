@@ -319,6 +319,7 @@ query
 insertInto
     : INSERT OVERWRITE TABLE? multipartIdentifier (partitionSpec (IF NOT EXISTS)?)?  identifierList?        #insertOverwriteTable
     | INSERT INTO TABLE? multipartIdentifier partitionSpec? (IF NOT EXISTS)? identifierList?                #insertIntoTable
+    | INSERT INTO TABLE? multipartIdentifier REPLACE whereClause                                            #insertIntoReplaceWhere
     | INSERT OVERWRITE LOCAL? DIRECTORY path=stringLit rowFormat? createFileFormat?                            #insertOverwriteHiveDir
     | INSERT OVERWRITE LOCAL? DIRECTORY (path=stringLit)? tableProvider (OPTIONS options=propertyList)?        #insertOverwriteDir
     ;
@@ -440,7 +441,8 @@ dmlStatementNoWith
           LEFT_PAREN sourceQuery=query RIGHT_PAREN) sourceAlias=tableAlias
         ON mergeCondition=booleanExpression
         matchedClause*
-        notMatchedClause*                                                          #mergeIntoTable
+        notMatchedClause*
+        notMatchedBySourceClause*                                                  #mergeIntoTable
     ;
 
 queryOrganization
@@ -537,7 +539,11 @@ matchedClause
     : WHEN MATCHED (AND matchedCond=booleanExpression)? THEN matchedAction
     ;
 notMatchedClause
-    : WHEN NOT MATCHED (AND notMatchedCond=booleanExpression)? THEN notMatchedAction
+    : WHEN NOT MATCHED (BY TARGET)? (AND notMatchedCond=booleanExpression)? THEN notMatchedAction
+    ;
+
+notMatchedBySourceClause
+    : WHEN NOT MATCHED BY SOURCE (AND notMatchedBySourceCond=booleanExpression)? THEN notMatchedBySourceAction
     ;
 
 matchedAction
@@ -550,6 +556,11 @@ notMatchedAction
     : INSERT ASTERISK
     | INSERT LEFT_PAREN columns=multipartIdentifierList RIGHT_PAREN
         VALUES LEFT_PAREN expression (COMMA expression)* RIGHT_PAREN
+    ;
+
+notMatchedBySourceAction
+    : DELETE
+    | UPDATE SET assignmentList
     ;
 
 assignmentList
@@ -945,7 +956,7 @@ errorCapturingMultiUnitsInterval
     ;
 
 multiUnitsInterval
-    : (intervalValue unit+=identifier)+
+    : (intervalValue unit+=unitInMultiUnits)+
     ;
 
 errorCapturingUnitToUnitInterval
@@ -953,12 +964,22 @@ errorCapturingUnitToUnitInterval
     ;
 
 unitToUnitInterval
-    : value=intervalValue from=identifier TO to=identifier
+    : value=intervalValue from=unitInUnitToUnit TO to=unitInUnitToUnit
     ;
 
 intervalValue
     : (PLUS | MINUS)?
       (INTEGER_VALUE | DECIMAL_VALUE | stringLit)
+    ;
+
+unitInMultiUnits
+    : NANOSECOND | NANOSECONDS | MICROSECOND | MICROSECONDS | MILLISECOND | MILLISECONDS
+    | SECOND | SECONDS | MINUTE | MINUTES | HOUR | HOURS | DAY | DAYS | WEEK | WEEKS
+    | MONTH | MONTHS | YEAR | YEARS
+    ;
+
+unitInUnitToUnit
+    : SECOND | MINUTE | HOUR | DAY | MONTH | YEAR
     ;
 
 colPosition
@@ -1001,7 +1022,13 @@ createOrReplaceTableColTypeList
     ;
 
 createOrReplaceTableColType
-    : colName=errorCapturingIdentifier dataType (NOT NULL)? defaultExpression? commentSpec?
+    : colName=errorCapturingIdentifier dataType colDefinitionOption*
+    ;
+
+colDefinitionOption
+    : NOT NULL
+    | defaultExpression
+    | commentSpec
     ;
 
 complexColTypeList
@@ -1186,6 +1213,7 @@ ansiNonReserved
     | DATEADD
     | DATEDIFF
     | DAY
+    | DAYS
     | DAYOFYEAR
     | DBPROPERTIES
     | DEFAULT
@@ -1220,6 +1248,7 @@ ansiNonReserved
     | GLOBAL
     | GROUPING
     | HOUR
+    | HOURS
     | IF
     | IGNORE
     | IMPORT
@@ -1250,12 +1279,18 @@ ansiNonReserved
     | MATCHED
     | MERGE
     | MICROSECOND
+    | MICROSECONDS
     | MILLISECOND
+    | MILLISECONDS
     | MINUTE
+    | MINUTES
     | MONTH
+    | MONTHS
     | MSCK
     | NAMESPACE
     | NAMESPACES
+    | NANOSECOND
+    | NANOSECONDS
     | NO
     | NULLS
     | OF
@@ -1303,6 +1338,7 @@ ansiNonReserved
     | SCHEMA
     | SCHEMAS
     | SECOND
+    | SECONDS
     | SEMI
     | SEPARATED
     | SERDE
@@ -1314,6 +1350,7 @@ ansiNonReserved
     | SKEWED
     | SORT
     | SORTED
+    | SOURCE
     | START
     | STATISTICS
     | STORED
@@ -1326,6 +1363,7 @@ ansiNonReserved
     | SYSTEM_VERSION
     | TABLES
     | TABLESAMPLE
+    | TARGET
     | TBLPROPERTIES
     | TEMPORARY
     | TERMINATED
@@ -1354,8 +1392,10 @@ ansiNonReserved
     | VIEW
     | VIEWS
     | WEEK
+    | WEEKS
     | WINDOW
     | YEAR
+    | YEARS
     | ZONE
 //--ANSI-NON-RESERVED-END
     ;
@@ -1446,6 +1486,7 @@ nonReserved
     | DATEADD
     | DATEDIFF
     | DAY
+    | DAYS
     | DAYOFYEAR
     | DBPROPERTIES
     | DEFAULT
@@ -1493,6 +1534,7 @@ nonReserved
     | GROUPING
     | HAVING
     | HOUR
+    | HOURS
     | IF
     | IGNORE
     | IMPORT
@@ -1527,12 +1569,18 @@ nonReserved
     | MATCHED
     | MERGE
     | MICROSECOND
+    | MICROSECONDS
     | MILLISECOND
+    | MILLISECONDS
     | MINUTE
+    | MINUTES
     | MONTH
+    | MONTHS
     | MSCK
     | NAMESPACE
     | NAMESPACES
+    | NANOSECOND
+    | NANOSECONDS
     | NO
     | NOT
     | NULL
@@ -1592,6 +1640,7 @@ nonReserved
     | SCHEMA
     | SCHEMAS
     | SECOND
+    | SECONDS
     | SELECT
     | SEPARATED
     | SERDE
@@ -1604,6 +1653,7 @@ nonReserved
     | SOME
     | SORT
     | SORTED
+    | SOURCE
     | START
     | STATISTICS
     | STORED
@@ -1617,6 +1667,7 @@ nonReserved
     | TABLE
     | TABLES
     | TABLESAMPLE
+    | TARGET
     | TBLPROPERTIES
     | TEMPORARY
     | TERMINATED
@@ -1652,12 +1703,14 @@ nonReserved
     | VIEW
     | VIEWS
     | WEEK
+    | WEEKS
     | WHEN
     | WHERE
     | WINDOW
     | WITH
     | WITHIN
     | YEAR
+    | YEARS
     | ZONE
 //--DEFAULT-NON-RESERVED-END
     ;

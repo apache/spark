@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.execution.dynamicpruning
 
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, DynamicPruningSubquery, Expression, PredicateHelper, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, DynamicPruningExpression, Expression, InSubquery, ListQuery, PredicateHelper, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.planning.GroupBasedRowLevelOperation
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.read.SupportsRuntimeV2Filtering
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Implicits, DataSourceV2Relation, DataSourceV2ScanRelation}
@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Implicits, Dat
  *
  * Note this rule only applies to group-based row-level operations.
  */
-case class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPlan])
+class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPlan])
   extends Rule[LogicalPlan] with PredicateHelper {
 
   import DataSourceV2Implicits._
@@ -78,9 +78,8 @@ case class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[Logic
     // clone the relation and assign new expr IDs to avoid conflicts
     matchingRowsPlan transformUpWithNewOutput {
       case r: DataSourceV2Relation if r eq relation =>
-        val oldOutput = r.output
-        val newOutput = oldOutput.map(_.newInstance())
-        r.copy(output = newOutput) -> oldOutput.zip(newOutput)
+        val newRelation = r.newInstance()
+        newRelation -> r.output.zip(newRelation.output)
     }
   }
 
@@ -89,10 +88,8 @@ case class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[Logic
       buildKeys: Seq[Attribute],
       pruningKeys: Seq[Attribute]): Expression = {
 
-    val buildQuery = Project(buildKeys, matchingRowsPlan)
-    val dynamicPruningSubqueries = pruningKeys.zipWithIndex.map { case (key, index) =>
-      DynamicPruningSubquery(key, buildQuery, buildKeys, index, onlyInBroadcast = false)
-    }
-    dynamicPruningSubqueries.reduce(And)
+    val buildQuery = Aggregate(buildKeys, buildKeys, matchingRowsPlan)
+    DynamicPruningExpression(
+      InSubquery(pruningKeys, ListQuery(buildQuery, childOutputs = buildQuery.output)))
   }
 }

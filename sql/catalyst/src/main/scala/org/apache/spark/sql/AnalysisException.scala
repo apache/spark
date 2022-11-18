@@ -84,6 +84,20 @@ class AnalysisException protected[sql] (
       messageParameters = messageParameters,
       context = origin.getQueryContext)
 
+  def this(
+      errorClass: String,
+      messageParameters: Map[String, String],
+      origin: Origin,
+      cause: Option[Throwable]) =
+    this(
+      SparkThrowableHelper.getMessage(errorClass, messageParameters),
+      line = origin.line,
+      startPosition = origin.startPosition,
+      errorClass = Some(errorClass),
+      messageParameters = messageParameters,
+      context = origin.getQueryContext,
+      cause = cause)
+
   def copy(
       message: String = this.message,
       line: Option[Int] = this.line,

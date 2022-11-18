@@ -244,7 +244,7 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
       Decimal("12345678901234567890123456789012345678"))
     checkExceptionInExpression[ArithmeticException](
       cast("123456789012345678901234567890123456789", DecimalType(38, 0)),
-      "out of decimal type range")
+      "Out of decimal type range")
     checkExceptionInExpression[ArithmeticException](
       cast("12345678901234567890123456789012345678", DecimalType(38, 1)),
       "cannot be represented as Decimal(38, 1)")
@@ -262,7 +262,7 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
       Decimal("60000000000000000000000000000000000000"))
     checkExceptionInExpression[ArithmeticException](
       cast("6E+38", DecimalType(38, 0)),
-      "out of decimal type range")
+      "Out of decimal type range")
     checkExceptionInExpression[ArithmeticException](
       cast("6E+37", DecimalType(38, 1)),
       "cannot be represented as Decimal(38, 1)")

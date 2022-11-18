@@ -29,26 +29,13 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation}
 import org.apache.spark.sql.internal.SQLConf
 
-/**
- * A pattern that matches any number of project or filter operations even if they are
- * non-deterministic, as long as they satisfy the requirement of CollapseProject and CombineFilters.
- * All filter operators are collected and their conditions are broken up and returned
- * together with the top project operator. [[Alias Aliases]] are in-lined/substituted if
- * necessary.
- */
-object PhysicalOperation extends AliasHelper with PredicateHelper {
+trait OperationHelper extends AliasHelper with PredicateHelper {
   import org.apache.spark.sql.catalyst.optimizer.CollapseProject.canCollapseExpressions
 
-  type ReturnType =
-    (Seq[NamedExpression], Seq[Expression], LogicalPlan)
   type IntermediateType =
     (Option[Seq[NamedExpression]], Seq[Expression], LogicalPlan, AttributeMap[Alias])
 
-  def unapply(plan: LogicalPlan): Option[ReturnType] = {
-    val alwaysInline = SQLConf.get.getConf(SQLConf.COLLAPSE_PROJECT_ALWAYS_INLINE)
-    val (fields, filters, child, _) = collectProjectsAndFilters(plan, alwaysInline)
-    Some((fields.getOrElse(child.output), filters, child))
-  }
+  protected def collectAllFilters: Boolean
 
   /**
    * Collects all adjacent projects and filters, in-lining/substituting aliases if necessary.
@@ -64,7 +51,7 @@ object PhysicalOperation extends AliasHelper with PredicateHelper {
    *   SELECT key AS c2 FROM t1 WHERE key > 10
    * }}}
    */
-  private def collectProjectsAndFilters(
+  protected def collectProjectsAndFilters(
       plan: LogicalPlan,
       alwaysInline: Boolean): IntermediateType = {
     def empty: IntermediateType = (None, Nil, plan, AttributeMap.empty)
@@ -84,16 +71,21 @@ object PhysicalOperation extends AliasHelper with PredicateHelper {
         // When collecting projects and filters, we effectively push down filters through
         // projects. We need to meet the following conditions to do so:
         //   1) no Project collected so far or the collected Projects are all deterministic
-        //   2) the collected filters and this filter are all deterministic, or this is the
-        //      first collected filter.
-        //   3) this filter does not repeat any expensive expressions from the collected
+        //   2) this filter does not repeat any expensive expressions from the collected
         //      projects.
-        val canIncludeThisFilter = fields.forall(_.forall(_.deterministic)) && {
-          filters.isEmpty || (filters.forall(_.deterministic) && condition.deterministic)
-        } && canCollapseExpressions(Seq(condition), aliases, alwaysInline)
-        if (canIncludeThisFilter) {
-          val replaced = replaceAlias(condition, aliases)
-          (fields, filters ++ splitConjunctivePredicates(replaced), other, aliases)
+        val canPushFilterThroughProject = fields.forall(_.forall(_.deterministic)) &&
+          canCollapseExpressions(Seq(condition), aliases, alwaysInline)
+        if (canPushFilterThroughProject) {
+          // Ideally we can't combine non-deterministic filters, but if `collectAllFilters` is true,
+          // we relax this restriction and assume the caller will take care of it.
+          val canIncludeThisFilter = filters.isEmpty || {
+            filters.last.deterministic && condition.deterministic
+          }
+          if (canIncludeThisFilter || collectAllFilters) {
+            (fields, filters :+ replaceAlias(condition, aliases), other, aliases)
+          } else {
+            empty
+          }
         } else {
           empty
         }
@@ -102,6 +94,54 @@ object PhysicalOperation extends AliasHelper with PredicateHelper {
 
       case _ => empty
     }
+  }
+}
+
+/**
+ * A pattern that matches any number of project or filter operations even if they are
+ * non-deterministic, as long as they satisfy the requirement of CollapseProject and CombineFilters.
+ * All filter operators are collected and their conditions are broken up and returned
+ * together with the top project operator. [[Alias Aliases]] are in-lined/substituted if
+ * necessary.
+ */
+object PhysicalOperation extends OperationHelper {
+  // Returns: (the final project list, filters to push down, relation)
+  type ReturnType = (Seq[NamedExpression], Seq[Expression], LogicalPlan)
+  override protected def collectAllFilters: Boolean = false
+
+  def unapply(plan: LogicalPlan): Option[ReturnType] = {
+    val alwaysInline = SQLConf.get.getConf(SQLConf.COLLAPSE_PROJECT_ALWAYS_INLINE)
+    val (fields, filters, child, _) = collectProjectsAndFilters(plan, alwaysInline)
+    // If more than 2 filters are collected, they must all be deterministic.
+    if (filters.length > 1) assert(filters.forall(_.deterministic))
+    Some((
+      fields.getOrElse(child.output),
+      filters.flatMap(splitConjunctivePredicates),
+      child))
+  }
+}
+
+/**
+ * A variant of [[PhysicalOperation]] which can match multiple Filters that are not combinable due
+ * to non-deterministic predicates. This is useful for scan operations as we need to match a bunch
+ * of adjacent Projects/Filters to apply column pruning, even if the Filters can't be combined,
+ * such as `Project(a, Filter(rand() > 0.5, Filter(rand() < 0.8, TableScan)))`, which we should
+ * only read column `a` from the relation.
+ */
+object ScanOperation extends OperationHelper {
+  // Returns: (the final project list, filters to stay up, filters to push down, relation)
+  type ReturnType = (Seq[NamedExpression], Seq[Expression], Seq[Expression], LogicalPlan)
+  override protected def collectAllFilters: Boolean = true
+
+  def unapply(plan: LogicalPlan): Option[ReturnType] = {
+    val alwaysInline = SQLConf.get.getConf(SQLConf.COLLAPSE_PROJECT_ALWAYS_INLINE)
+    val (fields, filters, child, _) = collectProjectsAndFilters(plan, alwaysInline)
+    // `collectProjectsAndFilters` transforms the plan bottom-up, so the bottom-most filter are
+    // placed at the beginning of `filters` list. According to the SQL semantic, we can only
+    // push down the bottom deterministic filters.
+    val filtersCanPushDown = filters.takeWhile(_.deterministic).flatMap(splitConjunctivePredicates)
+    val filtersStayUp = filters.dropWhile(_.deterministic)
+    Some((fields.getOrElse(child.output), filtersStayUp, filtersCanPushDown, child))
   }
 }
 

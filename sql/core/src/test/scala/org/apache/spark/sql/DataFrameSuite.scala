@@ -40,10 +40,10 @@ import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LeafNode, LocalRelation, LogicalPlan, OneRowRelation, Statistics}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.FakeV2Provider
-import org.apache.spark.sql.execution.{FilterExec, LogicalRDD, QueryExecution, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{FilterExec, LogicalRDD, QueryExecution, SortExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike}
 import org.apache.spark.sql.expressions.{Aggregator, Window}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -2891,7 +2891,8 @@ class DataFrameSuite extends QueryTest
     val e = intercept[AnalysisException] {
       sql("WITH t AS (SELECT 1 FROM nonexist.t) SELECT * FROM t")
     }
-    assert(e.getMessage.contains("Table or view not found:"))
+    checkErrorTableNotFound(e, "`nonexist`.`t`",
+      ExpectedContext("nonexist.t", 25, 34))
   }
 
   test("SPARK-32680: Don't analyze CTAS with unresolved query") {
@@ -2899,7 +2900,9 @@ class DataFrameSuite extends QueryTest
     val e = intercept[AnalysisException] {
       sql(s"CREATE TABLE t USING $v2Source AS SELECT * from nonexist")
     }
-    assert(e.getMessage.contains("Table or view not found:"))
+    checkErrorTableNotFound(e, "`nonexist`",
+      ExpectedContext("nonexist", s"CREATE TABLE t USING $v2Source AS SELECT * from ".length,
+        s"CREATE TABLE t USING $v2Source AS SELECT * from nonexist".length - 1))
   }
 
   test("CalendarInterval reflection support") {
@@ -3508,6 +3511,25 @@ class DataFrameSuite extends QueryTest
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       val df = spark.sql("select * from values(1) where 1 < rand()").repartition(2)
       assert(df.queryExecution.executedPlan.execute().getNumPartitions == 2)
+    }
+  }
+
+  test("SPARK-41048: Improve output partitioning and ordering with AQE cache") {
+    withSQLConf(
+        SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val df1 = spark.range(10).selectExpr("cast(id as string) c1")
+      val df2 = spark.range(10).selectExpr("cast(id as string) c2")
+      val cached = df1.join(df2, $"c1" === $"c2").cache()
+      cached.count()
+      val executedPlan = cached.groupBy("c1").agg(max($"c2")).queryExecution.executedPlan
+      // before is 2 sort and 1 shuffle
+      assert(collect(executedPlan) {
+        case s: ShuffleExchangeLike => s
+      }.isEmpty)
+      assert(collect(executedPlan) {
+        case s: SortExec => s
+      }.isEmpty)
     }
   }
 }

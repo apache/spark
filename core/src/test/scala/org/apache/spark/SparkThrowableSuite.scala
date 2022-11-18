@@ -74,7 +74,8 @@ class SparkThrowableSuite extends SparkFunSuite {
   }
 
   test("Error classes are correctly formatted") {
-    val errorClassFileContents = IOUtils.toString(errorJsonFilePath.toUri.toURL.openStream())
+    val errorClassFileContents =
+      IOUtils.toString(errorJsonFilePath.toUri.toURL.openStream(), StandardCharsets.UTF_8)
     val mapper = JsonMapper.builder()
       .addModule(DefaultScalaModule)
       .enable(SerializationFeature.INDENT_OUTPUT)
@@ -101,7 +102,8 @@ class SparkThrowableSuite extends SparkFunSuite {
   test("SQLSTATE invariants") {
     val sqlStates = errorReader.errorInfoMap.values.toSeq.flatMap(_.sqlState)
     val errorClassReadMe = Utils.getSparkClassLoader.getResource("error/README.md")
-    val errorClassReadMeContents = IOUtils.toString(errorClassReadMe.openStream())
+    val errorClassReadMeContents =
+      IOUtils.toString(errorClassReadMe.openStream(), StandardCharsets.UTF_8)
     val sqlStateTableRegex =
       "(?s)<!-- SQLSTATE table start -->(.+)<!-- SQLSTATE table stop -->".r
     val sqlTable = sqlStateTableRegex.findFirstIn(errorClassReadMeContents).get
@@ -331,8 +333,8 @@ class SparkThrowableSuite extends SparkFunSuite {
           |    ]
           |  }
           |}
-          |""".stripMargin)
-      val reader = new ErrorClassesJsonReader(Seq(errorJsonFilePath.toUri.toURL, json.toURL))
+          |""".stripMargin, StandardCharsets.UTF_8)
+      val reader = new ErrorClassesJsonReader(Seq(errorJsonFilePath.toUri.toURL, json.toURI.toURL))
       assert(reader.getErrorMessage("DIVIDE_BY_ZERO", Map.empty) == "abc")
     }
   }
@@ -349,9 +351,9 @@ class SparkThrowableSuite extends SparkFunSuite {
           |    ]
           |  }
           |}
-          |""".stripMargin)
+          |""".stripMargin, StandardCharsets.UTF_8)
       val e = intercept[SparkException] {
-        new ErrorClassesJsonReader(Seq(errorJsonFilePath.toUri.toURL, json.toURL))
+        new ErrorClassesJsonReader(Seq(errorJsonFilePath.toUri.toURL, json.toURI.toURL))
       }
       assert(e.getErrorClass === "INTERNAL_ERROR")
       assert(e.getMessage.contains("DIVIDE.BY_ZERO"))
@@ -375,9 +377,9 @@ class SparkThrowableSuite extends SparkFunSuite {
           |    }
           |  }
           |}
-          |""".stripMargin)
+          |""".stripMargin, StandardCharsets.UTF_8)
       val e = intercept[SparkException] {
-        new ErrorClassesJsonReader(Seq(errorJsonFilePath.toUri.toURL, json.toURL))
+        new ErrorClassesJsonReader(Seq(errorJsonFilePath.toUri.toURL, json.toURI.toURL))
       }
       assert(e.getErrorClass === "INTERNAL_ERROR")
       assert(e.getMessage.contains("BY.ZERO"))

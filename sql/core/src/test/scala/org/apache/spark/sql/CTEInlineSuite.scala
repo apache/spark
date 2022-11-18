@@ -275,7 +275,8 @@ abstract class CTEInlineSuiteBase
            |  select * from v2 where c1 > 0 union select * from v2 where c2 > 0
            |)
          """.stripMargin))
-      assert(ex.message.contains("Table or view not found: v1"))
+      checkErrorTableNotFound(ex, "`v1`",
+        ExpectedContext("v1", 29, 30))
     }
   }
 

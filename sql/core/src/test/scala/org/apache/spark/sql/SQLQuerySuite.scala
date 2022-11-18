@@ -31,6 +31,7 @@ import org.apache.commons.io.FileUtils
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, Hex}
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression, Sort}
@@ -1616,12 +1617,14 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     var e = intercept[AnalysisException] {
       sql("select * from in_valid_table")
     }
-    assert(e.message.contains("Table or view not found"))
+    checkErrorTableNotFound(e, "`in_valid_table`",
+      ExpectedContext("in_valid_table", 14, 13 + "in_valid_table".length))
 
     e = intercept[AnalysisException] {
       sql("select * from no_db.no_table").show()
     }
-    assert(e.message.contains("Table or view not found"))
+    checkErrorTableNotFound(e, "`no_db`.`no_table`",
+      ExpectedContext("no_db.no_table", 14, 13 + "no_db.no_table".length))
 
     e = intercept[AnalysisException] {
       sql("select * from json.invalid_file")
@@ -1636,8 +1639,10 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     e = intercept[AnalysisException] {
       sql(s"select id from `org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`")
     }
-    assert(e.message.contains("Table or view not found: " +
-      "`org.apache.spark.sql.sources.HadoopFsRelationProvider`.file_path"))
+    checkErrorTableNotFound(e,
+      "`org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`",
+    ExpectedContext("`org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`", 15,
+      14 + "`org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`".length))
 
     e = intercept[AnalysisException] {
       sql(s"select id from `Jdbc`.`file_path`")
@@ -2990,13 +2995,19 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
   test("SPARK-26402: accessing nested fields with different cases in case insensitive mode") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      val msg = intercept[AnalysisException] {
-        withTable("t") {
-          sql("create table t (s struct<i: Int>) using json")
-          checkAnswer(sql("select s.I from t group by s.i"), Nil)
-        }
-      }.message
-      assert(msg.contains("No such struct field I in i"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          withTable("t") {
+            sql("create table t (s struct<i: Int>) using json")
+            checkAnswer(sql("select s.I from t group by s.i"), Nil)
+          }
+        },
+        errorClass = "FIELD_NOT_FOUND",
+        parameters = Map("fieldName" -> "`I`", "fields" -> "`i`"),
+        context = ExpectedContext(
+          fragment = "s.I",
+          start = 7,
+          stop = 9))
     }
 
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
@@ -3703,12 +3714,25 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         exception = intercept[AnalysisException] {
           sql("SELECT s LIKE 'm%@ca' ESCAPE '%' FROM df").collect()
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1216",
+        errorClass = "INVALID_LIKE_PATTERN.ESC_IN_THE_MIDDLE",
         parameters = Map(
-          "pattern" -> "m%@ca",
-          "message" -> "the escape character is not allowed to precede '@'"))
+          "pattern" -> toSQLValue("m%@ca", StringType),
+          "char" -> toSQLValue("@", StringType)))
 
       checkAnswer(sql("SELECT s LIKE 'm@@ca' ESCAPE '@' FROM df"), Row(true))
+    }
+  }
+
+  test("the escape character is not allowed to end with") {
+    withTempView("df") {
+      Seq("jialiuping").toDF("a").createOrReplaceTempView("df")
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT a LIKE 'jialiuping%' ESCAPE '%' FROM df").collect()
+        },
+        errorClass = "INVALID_LIKE_PATTERN.ESC_AT_THE_END",
+        parameters = Map("pattern" -> toSQLValue("jialiuping%", StringType)))
     }
   }
 
@@ -4512,6 +4536,22 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         }.getCause.getMessage
         assert(msg.contains("[CAST_OVERFLOW]"))
       }
+    }
+  }
+
+  test("SPARK-40903: Don't reorder Add for canonicalize if it is decimal type") {
+    val tableName = "decimalTable"
+    withTable(tableName) {
+      sql(s"create table $tableName(a decimal(12, 5), b decimal(12, 6)) using orc")
+      checkAnswer(sql(s"select sum(coalesce(a + b + 1.75, a)) from $tableName"), Row(null))
+    }
+  }
+
+  test("SPARK-41144: Unresolved hint should not cause query failure") {
+    withTable("t1", "t2") {
+      sql("CREATE TABLE t1(c1 bigint) USING PARQUET")
+      sql("CREATE TABLE t2(c2 bigint) USING PARQUET")
+      sql("SELECT /*+ hash(t2) */ * FROM t1 join t2 on c1 = c2")
     }
   }
 }

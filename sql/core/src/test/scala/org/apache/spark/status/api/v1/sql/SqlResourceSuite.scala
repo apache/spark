@@ -93,7 +93,8 @@ object SqlResourceSuite {
         0 -> JobExecutionStatus.SUCCEEDED,
         1 -> JobExecutionStatus.SUCCEEDED),
       stages = Set[Int](),
-      metricValues = getMetricValues()
+      metricValues = getMetricValues(),
+      errorMessage = None
     )
   }
 

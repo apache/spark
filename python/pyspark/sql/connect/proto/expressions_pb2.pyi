@@ -536,17 +536,17 @@ class Expression(google.protobuf.message.Message):
 
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        PARTS_FIELD_NUMBER: builtins.int
-        @property
-        def parts(
-            self,
-        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+        UNPARSED_IDENTIFIER_FIELD_NUMBER: builtins.int
+        unparsed_identifier: builtins.str
         def __init__(
             self,
             *,
-            parts: collections.abc.Iterable[builtins.str] | None = ...,
+            unparsed_identifier: builtins.str = ...,
         ) -> None: ...
-        def ClearField(self, field_name: typing_extensions.Literal["parts", b"parts"]) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal["unparsed_identifier", b"unparsed_identifier"],
+        ) -> None: ...
 
     class UnresolvedFunction(google.protobuf.message.Message):
         """An unresolved function is not explicitly bound to one explicit function, but the function
@@ -633,21 +633,37 @@ class Expression(google.protobuf.message.Message):
 
         EXPR_FIELD_NUMBER: builtins.int
         NAME_FIELD_NUMBER: builtins.int
+        METADATA_FIELD_NUMBER: builtins.int
         @property
         def expr(self) -> global___Expression: ...
-        name: builtins.str
+        @property
+        def name(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+        metadata: builtins.str
+        """Alias metadata expressed as a JSON map."""
         def __init__(
             self,
             *,
             expr: global___Expression | None = ...,
-            name: builtins.str = ...,
+            name: collections.abc.Iterable[builtins.str] | None = ...,
+            metadata: builtins.str | None = ...,
         ) -> None: ...
         def HasField(
-            self, field_name: typing_extensions.Literal["expr", b"expr"]
+            self,
+            field_name: typing_extensions.Literal[
+                "_metadata", b"_metadata", "expr", b"expr", "metadata", b"metadata"
+            ],
         ) -> builtins.bool: ...
         def ClearField(
-            self, field_name: typing_extensions.Literal["expr", b"expr", "name", b"name"]
+            self,
+            field_name: typing_extensions.Literal[
+                "_metadata", b"_metadata", "expr", b"expr", "metadata", b"metadata", "name", b"name"
+            ],
         ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_metadata", b"_metadata"]
+        ) -> typing_extensions.Literal["metadata"] | None: ...
 
     LITERAL_FIELD_NUMBER: builtins.int
     UNRESOLVED_ATTRIBUTE_FIELD_NUMBER: builtins.int

@@ -18,7 +18,9 @@
 package org.apache.spark.sql
 
 import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.SchemaRequiredDataSource
 import org.apache.spark.sql.connector.catalog.InMemoryPartitionTableCatalog
@@ -859,6 +861,26 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
           sql(s"CREATE TABLE t (col $typ(2)) using $format LOCATION '$dir'")
           checkAnswer(spark.table("t"), Row("12  "))
         }
+      }
+    }
+  }
+
+  test("SPARK-40697: read-side char padding should only be applied if necessary") {
+    withTable("t") {
+      sql(
+        s"""
+          |CREATE TABLE t (
+          |  c1 CHAR(5),
+          |  c2 STRUCT<i VARCHAR(5)>,
+          |  c3 ARRAY<VARCHAR(5)>,
+          |  c4 MAP<INT, VARCHAR(5)>
+          |) USING $format
+          |""".stripMargin)
+      spark.read.table("t").queryExecution.analyzed.foreach {
+        case Project(projectList, _) =>
+          assert(projectList.length == 4)
+          assert(projectList.drop(1).forall(_.isInstanceOf[Attribute]))
+        case _ =>
       }
     }
   }

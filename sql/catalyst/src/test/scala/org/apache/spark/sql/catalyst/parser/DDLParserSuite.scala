@@ -1734,6 +1734,9 @@ class DDLParserSuite extends AnalysisTest {
         |WHEN MATCHED AND (target.col2='update') THEN UPDATE SET target.col2 = source.col2
         |WHEN NOT MATCHED AND (target.col2='insert')
         |THEN INSERT (target.col1, target.col2) values (source.col1, source.col2)
+        |WHEN NOT MATCHED BY SOURCE AND (target.col3='delete') THEN DELETE
+        |WHEN NOT MATCHED BY SOURCE AND (target.col3='update')
+        |THEN UPDATE SET target.col3 = 'delete'
       """.stripMargin,
       MergeIntoTable(
         SubqueryAlias("target", UnresolvedRelation(Seq("testcat1", "ns1", "ns2", "tbl"))),
@@ -1745,7 +1748,10 @@ class DDLParserSuite extends AnalysisTest {
               UnresolvedAttribute("source.col2"))))),
         Seq(InsertAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert"))),
           Seq(Assignment(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
-            Assignment(UnresolvedAttribute("target.col2"), UnresolvedAttribute("source.col2")))))))
+            Assignment(UnresolvedAttribute("target.col2"), UnresolvedAttribute("source.col2"))))),
+        Seq(DeleteAction(Some(EqualTo(UnresolvedAttribute("target.col3"), Literal("delete")))),
+          UpdateAction(Some(EqualTo(UnresolvedAttribute("target.col3"), Literal("update"))),
+            Seq(Assignment(UnresolvedAttribute("target.col3"), Literal("delete")))))))
   }
 
   test("merge into table: using subquery") {
@@ -1758,6 +1764,9 @@ class DDLParserSuite extends AnalysisTest {
         |WHEN MATCHED AND (target.col2='update') THEN UPDATE SET target.col2 = source.col2
         |WHEN NOT MATCHED AND (target.col2='insert')
         |THEN INSERT (target.col1, target.col2) values (source.col1, source.col2)
+        |WHEN NOT MATCHED BY SOURCE AND (target.col3='delete') THEN DELETE
+        |WHEN NOT MATCHED BY SOURCE AND (target.col3='update')
+        |THEN UPDATE SET target.col3 = 'delete'
       """.stripMargin,
       MergeIntoTable(
         SubqueryAlias("target", UnresolvedRelation(Seq("testcat1", "ns1", "ns2", "tbl"))),
@@ -1770,7 +1779,10 @@ class DDLParserSuite extends AnalysisTest {
               UnresolvedAttribute("source.col2"))))),
         Seq(InsertAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert"))),
           Seq(Assignment(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
-            Assignment(UnresolvedAttribute("target.col2"), UnresolvedAttribute("source.col2")))))))
+            Assignment(UnresolvedAttribute("target.col2"), UnresolvedAttribute("source.col2"))))),
+        Seq(DeleteAction(Some(EqualTo(UnresolvedAttribute("target.col3"), Literal("delete")))),
+          UpdateAction(Some(EqualTo(UnresolvedAttribute("target.col3"), Literal("update"))),
+            Seq(Assignment(UnresolvedAttribute("target.col3"), Literal("delete")))))))
   }
 
   test("merge into table: cte") {
@@ -1783,6 +1795,9 @@ class DDLParserSuite extends AnalysisTest {
         |WHEN MATCHED AND (target.col2='update') THEN UPDATE SET target.col2 = source.col2
         |WHEN NOT MATCHED AND (target.col2='insert')
         |THEN INSERT (target.col1, target.col2) values (source.col1, source.col2)
+        |WHEN NOT MATCHED BY SOURCE AND (target.col3='delete') THEN DELETE
+        |WHEN NOT MATCHED BY SOURCE AND (target.col3='update')
+        |THEN UPDATE SET target.col3 = 'delete'
       """.stripMargin,
       MergeIntoTable(
         SubqueryAlias("target", UnresolvedRelation(Seq("testcat1", "ns1", "ns2", "tbl"))),
@@ -1797,7 +1812,10 @@ class DDLParserSuite extends AnalysisTest {
               UnresolvedAttribute("source.col2"))))),
         Seq(InsertAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert"))),
           Seq(Assignment(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
-            Assignment(UnresolvedAttribute("target.col2"), UnresolvedAttribute("source.col2")))))))
+            Assignment(UnresolvedAttribute("target.col2"), UnresolvedAttribute("source.col2"))))),
+        Seq(DeleteAction(Some(EqualTo(UnresolvedAttribute("target.col3"), Literal("delete")))),
+          UpdateAction(Some(EqualTo(UnresolvedAttribute("target.col3"), Literal("update"))),
+            Seq(Assignment(UnresolvedAttribute("target.col3"), Literal("delete")))))))
   }
 
   test("merge into table: no additional condition") {
@@ -1809,6 +1827,7 @@ class DDLParserSuite extends AnalysisTest {
         |WHEN MATCHED THEN UPDATE SET target.col2 = source.col2
         |WHEN NOT MATCHED
         |THEN INSERT (target.col1, target.col2) values (source.col1, source.col2)
+        |WHEN NOT MATCHED BY SOURCE THEN DELETE
       """.stripMargin,
     MergeIntoTable(
       SubqueryAlias("target", UnresolvedRelation(Seq("testcat1", "ns1", "ns2", "tbl"))),
@@ -1818,7 +1837,8 @@ class DDLParserSuite extends AnalysisTest {
         Seq(Assignment(UnresolvedAttribute("target.col2"), UnresolvedAttribute("source.col2"))))),
       Seq(InsertAction(None,
         Seq(Assignment(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
-          Assignment(UnresolvedAttribute("target.col2"), UnresolvedAttribute("source.col2")))))))
+          Assignment(UnresolvedAttribute("target.col2"), UnresolvedAttribute("source.col2"))))),
+      Seq(DeleteAction(None))))
   }
 
   test("merge into table: star") {
@@ -1838,7 +1858,49 @@ class DDLParserSuite extends AnalysisTest {
       EqualTo(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
       Seq(DeleteAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("delete")))),
         UpdateStarAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update"))))),
-      Seq(InsertStarAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert")))))))
+      Seq(InsertStarAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert"))))),
+      Seq.empty))
+  }
+
+  test("merge into table: invalid star in not matched by source") {
+    val sql = """
+        |MERGE INTO testcat1.ns1.ns2.tbl AS target
+        |USING testcat2.ns1.ns2.tbl AS source
+        |ON target.col1 = source.col1
+        |WHEN NOT MATCHED BY SOURCE THEN UPDATE *
+      """.stripMargin
+    checkError(
+      exception = parseException(sql),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'*'", "hint" -> ""))
+  }
+
+  test("merge into table: not matched by target") {
+    parseCompare(
+      """
+        |MERGE INTO testcat1.ns1.ns2.tbl AS target
+        |USING testcat2.ns1.ns2.tbl AS source
+        |ON target.col1 = source.col1
+        |WHEN NOT MATCHED BY TARGET AND (target.col3='insert1')
+        |THEN INSERT (target.col1, target.col2) VALUES (source.col1, 0)
+        |WHEN NOT MATCHED AND (target.col3='insert2')
+        |THEN INSERT (target.col1, target.col2) VALUES (1, source.col2)
+        |WHEN NOT MATCHED BY TARGET
+        |THEN INSERT *
+      """.stripMargin,
+      MergeIntoTable(
+        SubqueryAlias("target", UnresolvedRelation(Seq("testcat1", "ns1", "ns2", "tbl"))),
+        SubqueryAlias("source", UnresolvedRelation(Seq("testcat2", "ns1", "ns2", "tbl"))),
+        EqualTo(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
+        Seq.empty,
+        Seq(InsertAction(Some(EqualTo(UnresolvedAttribute("target.col3"), Literal("insert1"))),
+            Seq(Assignment(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
+              Assignment(UnresolvedAttribute("target.col2"), Literal(0)))),
+          InsertAction(Some(EqualTo(UnresolvedAttribute("target.col3"), Literal("insert2"))),
+            Seq(Assignment(UnresolvedAttribute("target.col1"), Literal(1)),
+              Assignment(UnresolvedAttribute("target.col2"), UnresolvedAttribute("source.col2")))),
+          InsertStarAction(None)),
+        Seq.empty))
   }
 
   test("merge into table: columns aliases are not allowed") {
@@ -1863,7 +1925,7 @@ class DDLParserSuite extends AnalysisTest {
     }
   }
 
-  test("merge into table: multi matched and not matched clauses") {
+  test("merge into table: multi matched, not matched and not matched by source clauses") {
     parseCompare(
       """
         |MERGE INTO testcat1.ns1.ns2.tbl AS target
@@ -1876,6 +1938,9 @@ class DDLParserSuite extends AnalysisTest {
         |THEN INSERT (target.col1, target.col2) values (source.col1, 1)
         |WHEN NOT MATCHED AND (target.col2='insert2')
         |THEN INSERT (target.col1, target.col2) values (source.col1, 2)
+        |WHEN NOT MATCHED BY SOURCE AND (target.col3='delete') THEN DELETE
+        |WHEN NOT MATCHED BY SOURCE AND (target.col3='update1') THEN UPDATE SET target.col3 = 1
+        |WHEN NOT MATCHED BY SOURCE AND (target.col3='update2') THEN UPDATE SET target.col3 = 2
       """.stripMargin,
       MergeIntoTable(
         SubqueryAlias("target", UnresolvedRelation(Seq("testcat1", "ns1", "ns2", "tbl"))),
@@ -1891,7 +1956,12 @@ class DDLParserSuite extends AnalysisTest {
             Assignment(UnresolvedAttribute("target.col2"), Literal(1)))),
           InsertAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert2"))),
             Seq(Assignment(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
-              Assignment(UnresolvedAttribute("target.col2"), Literal(2)))))))
+              Assignment(UnresolvedAttribute("target.col2"), Literal(2))))),
+        Seq(DeleteAction(Some(EqualTo(UnresolvedAttribute("target.col3"), Literal("delete")))),
+          UpdateAction(Some(EqualTo(UnresolvedAttribute("target.col3"), Literal("update1"))),
+            Seq(Assignment(UnresolvedAttribute("target.col3"), Literal(1)))),
+          UpdateAction(Some(EqualTo(UnresolvedAttribute("target.col3"), Literal("update2"))),
+            Seq(Assignment(UnresolvedAttribute("target.col3"), Literal(2)))))))
   }
 
   test("merge into table: only the last matched clause can omit the condition") {
@@ -1906,7 +1976,7 @@ class DDLParserSuite extends AnalysisTest {
         |THEN INSERT (target.col1, target.col2) values (source.col1, source.col2)""".stripMargin
     checkError(
       exception = parseException(sql),
-      errorClass = "_LEGACY_ERROR_TEMP_0009",
+      errorClass = "NON_LAST_MATCHED_CLAUSE_OMIT_CONDITION",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql,
@@ -1929,12 +1999,36 @@ class DDLParserSuite extends AnalysisTest {
         |THEN INSERT (target.col1, target.col2) values (source.col1, source.col2)""".stripMargin
     checkError(
       exception = parseException(sql),
-      errorClass = "_LEGACY_ERROR_TEMP_0010",
+      errorClass = "NON_LAST_NOT_MATCHED_BY_TARGET_CLAUSE_OMIT_CONDITION",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql,
         start = 0,
         stop = 494))
+  }
+
+  test("merge into table: only the last not matched by source clause can omit the " +
+       "condition") {
+    val sql =
+      """MERGE INTO testcat1.ns1.ns2.tbl AS target
+        |USING testcat2.ns1.ns2.tbl AS source
+        |ON target.col1 = source.col1
+        |WHEN MATCHED AND (target.col2 == 'update') THEN UPDATE SET target.col2 = source.col2
+        |WHEN MATCHED THEN DELETE
+        |WHEN NOT MATCHED AND (target.col2='insert')
+        |THEN INSERT (target.col1, target.col2) values (source.col1, source.col2)
+        |WHEN NOT MATCHED BY SOURCE AND (target.col3='update')
+        |THEN UPDATE SET target.col3 = 'delete'
+        |WHEN NOT MATCHED BY SOURCE THEN UPDATE SET target.col3 = 'update'
+        |WHEN NOT MATCHED BY SOURCE THEN DELETE""".stripMargin
+    checkError(
+      exception = parseException(sql),
+      errorClass = "NON_LAST_NOT_MATCHED_BY_SOURCE_CLAUSE_OMIT_CONDITION",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = sql,
+        start = 0,
+        stop = 531))
   }
 
   test("merge into table: there must be a when (not) matched condition") {
@@ -2463,17 +2557,24 @@ class DDLParserSuite extends AnalysisTest {
         new MetadataBuilder()
           .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "\"abc\"")
           .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "\"abc\"").build())
-    comparePlans(parsePlan(
-      "CREATE TABLE my_tab(a INT, b STRING NOT NULL DEFAULT \"abc\") USING parquet"),
+    val createTableResult =
       CreateTable(UnresolvedIdentifier(Seq("my_tab")), schemaWithDefaultColumn,
         Seq.empty[Transform], LogicalTableSpec(Map.empty[String, String], Some("parquet"),
-          Map.empty[String, String], None, None, None, false), false))
+          Map.empty[String, String], None, None, None, false), false)
+    // Parse the CREATE TABLE statement twice, swapping the order of the NOT NULL and DEFAULT
+    // options, to make sure that the parser accepts any ordering of these options.
+    comparePlans(parsePlan(
+      "CREATE TABLE my_tab(a INT, b STRING NOT NULL DEFAULT \"abc\") USING parquet"),
+      createTableResult)
+    comparePlans(parsePlan(
+      "CREATE TABLE my_tab(a INT, b STRING DEFAULT \"abc\" NOT NULL) USING parquet"),
+      createTableResult)
     comparePlans(parsePlan("REPLACE TABLE my_tab(a INT, " +
       "b STRING NOT NULL DEFAULT \"abc\") USING parquet"),
       ReplaceTable(UnresolvedIdentifier(Seq("my_tab")), schemaWithDefaultColumn,
         Seq.empty[Transform], LogicalTableSpec(Map.empty[String, String], Some("parquet"),
           Map.empty[String, String], None, None, None, false), false))
-    // THese ALTER TABLE statements should parse successfully.
+    // These ALTER TABLE statements should parse successfully.
     comparePlans(
       parsePlan("ALTER TABLE t1 ADD COLUMN x int NOT NULL DEFAULT 42"),
       AddColumns(UnresolvedTable(Seq("t1"), "ALTER TABLE ... ADD COLUMN", None),
@@ -2562,6 +2663,8 @@ class DDLParserSuite extends AnalysisTest {
         |WHEN MATCHED AND (target.col2='update') THEN UPDATE SET target.col2 = DEFAULT
         |WHEN NOT MATCHED AND (target.col2='insert')
         |THEN INSERT (target.col1, target.col2) VALUES (source.col1, DEFAULT)
+        |WHEN NOT MATCHED BY SOURCE AND (target.col2='delete') THEN DELETE
+        |WHEN NOT MATCHED BY SOURCE AND (target.col2='update') THEN UPDATE SET target.col2 = DEFAULT
       """.stripMargin,
       MergeIntoTable(
         SubqueryAlias("target", UnresolvedRelation(Seq("testcat1", "ns1", "ns2", "tbl"))),
@@ -2573,6 +2676,45 @@ class DDLParserSuite extends AnalysisTest {
               UnresolvedAttribute("DEFAULT"))))),
         Seq(InsertAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert"))),
           Seq(Assignment(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
-            Assignment(UnresolvedAttribute("target.col2"), UnresolvedAttribute("DEFAULT")))))))
+            Assignment(UnresolvedAttribute("target.col2"), UnresolvedAttribute("DEFAULT"))))),
+        Seq(DeleteAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("delete")))),
+          UpdateAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update"))),
+            Seq(Assignment(UnresolvedAttribute("target.col2"),
+              UnresolvedAttribute("DEFAULT")))))))
+  }
+
+  test("SPARK-40944: Relax ordering constraint for CREATE TABLE column options") {
+    // These are negative test cases exercising error cases. Note that positive test cases
+    // exercising flexible column option ordering exist elsewhere in this suite.
+    checkError(
+      exception = intercept[ParseException](
+        parsePlan(
+          "CREATE TABLE my_tab(a INT, b STRING NOT NULL DEFAULT \"abc\" NOT NULL)")),
+      errorClass = "CREATE_TABLE_COLUMN_OPTION_DUPLICATE",
+      parameters = Map(
+        "columnName" -> "b",
+        "optionName" -> "NOT NULL"),
+      context = ExpectedContext(
+        fragment = "b STRING NOT NULL DEFAULT \"abc\" NOT NULL", start = 27, stop = 66))
+    checkError(
+      exception = intercept[ParseException](
+        parsePlan(
+          "CREATE TABLE my_tab(a INT, b STRING DEFAULT \"123\" NOT NULL DEFAULT \"abc\")")),
+      errorClass = "CREATE_TABLE_COLUMN_OPTION_DUPLICATE",
+      parameters = Map(
+        "columnName" -> "b",
+        "optionName" -> "DEFAULT"),
+      context = ExpectedContext(
+        fragment = "b STRING DEFAULT \"123\" NOT NULL DEFAULT \"abc\"", start = 27, stop = 71))
+    checkError(
+      exception = intercept[ParseException](
+        parsePlan(
+          "CREATE TABLE my_tab(a INT, b STRING COMMENT \"abc\" NOT NULL COMMENT \"abc\")")),
+      errorClass = "CREATE_TABLE_COLUMN_OPTION_DUPLICATE",
+      parameters = Map(
+        "columnName" -> "b",
+        "optionName" -> "COMMENT"),
+      context = ExpectedContext(
+        fragment = "b STRING COMMENT \"abc\" NOT NULL COMMENT \"abc\"", start = 27, stop = 71))
   }
 }

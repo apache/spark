@@ -232,7 +232,20 @@ SELECT * FROM t2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table or view not found: t1; line 5 pos 20
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "relationName" : "`t1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 73,
+    "stopIndex" : 74,
+    "fragment" : "t1"
+  } ]
+}
 
 
 -- !query
@@ -270,7 +283,20 @@ SELECT * FROM (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table or view not found: cte_outer; line 8 pos 22
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "relationName" : "`cte_outer`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 146,
+    "stopIndex" : 154,
+    "fragment" : "cte_outer"
+  } ]
+}
 
 
 -- !query
@@ -290,7 +316,20 @@ SELECT * FROM (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table or view not found: cte_invisible_inner; line 9 pos 18
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "relationName" : "`cte_invisible_inner`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 164,
+    "stopIndex" : 182,
+    "fragment" : "cte_invisible_inner"
+  } ]
+}
 
 
 -- !query
@@ -312,4 +351,17 @@ SELECT * FROM (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table or view not found: cte_invisible_inner; line 11 pos 18
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "relationName" : "`cte_invisible_inner`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 194,
+    "stopIndex" : 212,
+    "fragment" : "cte_invisible_inner"
+  } ]
+}

@@ -19,8 +19,6 @@ package org.apache.spark.sql.connect.service
 
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
-
 import com.google.common.base.Ticker
 import com.google.common.cache.CacheBuilder
 import io.grpc.{Server, Status}
@@ -29,14 +27,13 @@ import io.grpc.protobuf.services.ProtoReflectionService
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.SparkEnv
-import org.apache.spark.annotation.{Since, Unstable}
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{AnalyzeResponse, Request, Response, SparkConnectServiceGrpc}
+import org.apache.spark.connect.proto.{AnalyzePlanRequest, AnalyzePlanResponse, ExecutePlanRequest, ExecutePlanResponse, SparkConnectServiceGrpc}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_BINDING_PORT
-import org.apache.spark.sql.connect.planner.SparkConnectPlanner
-import org.apache.spark.sql.execution.ExtendedMode
+import org.apache.spark.sql.connect.planner.{DataTypeProtoConverter, SparkConnectPlanner}
+import org.apache.spark.sql.execution.{CodegenMode, CostMode, ExplainMode, ExtendedMode, FormattedMode, SimpleMode}
 
 /**
  * The SparkConnectService implementation.
@@ -46,10 +43,9 @@ import org.apache.spark.sql.execution.ExtendedMode
  * @param debug
  *   delegates debug behavior to the handlers.
  */
-@Unstable
-@Since("3.4.0")
 class SparkConnectService(debug: Boolean)
-  extends SparkConnectServiceGrpc.SparkConnectServiceImplBase with Logging {
+    extends SparkConnectServiceGrpc.SparkConnectServiceImplBase
+    with Logging {
 
   /**
    * This is the main entry method for Spark Connect and all calls to execute a plan.
@@ -61,7 +57,9 @@ class SparkConnectService(debug: Boolean)
    * @param request
    * @param responseObserver
    */
-  override def executePlan(request: Request, responseObserver: StreamObserver[Response]): Unit = {
+  override def executePlan(
+      request: ExecutePlanRequest,
+      responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     try {
       new SparkConnectStreamHandler(responseObserver).handle(request)
     } catch {
@@ -85,32 +83,32 @@ class SparkConnectService(debug: Boolean)
    * @param responseObserver
    */
   override def analyzePlan(
-      request: Request,
-      responseObserver: StreamObserver[AnalyzeResponse]): Unit = {
+      request: AnalyzePlanRequest,
+      responseObserver: StreamObserver[AnalyzePlanResponse]): Unit = {
     try {
+      if (request.getPlan.getOpTypeCase != proto.Plan.OpTypeCase.ROOT) {
+        responseObserver.onError(
+          new UnsupportedOperationException(
+            s"${request.getPlan.getOpTypeCase} not supported for analysis."))
+      }
       val session =
         SparkConnectService.getOrCreateIsolatedSession(request.getUserContext.getUserId).session
 
-      val logicalPlan = request.getPlan.getOpTypeCase match {
-        case proto.Plan.OpTypeCase.ROOT =>
-          new SparkConnectPlanner(request.getPlan.getRoot, session).transform()
+      val explainMode = request.getExplain.getExplainMode match {
+        case proto.Explain.ExplainMode.SIMPLE => SimpleMode
+        case proto.Explain.ExplainMode.EXTENDED => ExtendedMode
+        case proto.Explain.ExplainMode.CODEGEN => CodegenMode
+        case proto.Explain.ExplainMode.COST => CostMode
+        case proto.Explain.ExplainMode.FORMATTED => FormattedMode
         case _ =>
-          responseObserver.onError(
-            new UnsupportedOperationException(
-              s"${request.getPlan.getOpTypeCase} not supported for analysis."))
-          return
+          throw new IllegalArgumentException(
+            s"Explain mode unspecified. Accepted " +
+              "explain modes are 'simple', 'extended', 'codegen', 'cost', 'formatted'.")
       }
-      val ds = Dataset.ofRows(session, logicalPlan)
-      val explainString = ds.queryExecution.explainString(ExtendedMode)
 
-      val resp = proto.AnalyzeResponse
-        .newBuilder()
-        .setExplainString(explainString)
-        .setClientId(request.getClientId)
-
-      resp.addAllColumnTypes(ds.schema.fields.map(_.dataType.sql).toSeq.asJava)
-      resp.addAllColumnNames(ds.schema.fields.map(_.name).toSeq.asJava)
-      responseObserver.onNext(resp.build())
+      val response = handleAnalyzePlanRequest(request.getPlan.getRoot, session, explainMode)
+      response.setClientId(request.getClientId)
+      responseObserver.onNext(response.build())
       responseObserver.onCompleted()
     } catch {
       case e: Throwable =>
@@ -118,6 +116,21 @@ class SparkConnectService(debug: Boolean)
         responseObserver.onError(
           Status.UNKNOWN.withCause(e).withDescription(e.getLocalizedMessage).asRuntimeException())
     }
+  }
+
+  def handleAnalyzePlanRequest(
+      relation: proto.Relation,
+      session: SparkSession,
+      explainMode: ExplainMode): proto.AnalyzePlanResponse.Builder = {
+    val logicalPlan = new SparkConnectPlanner(session).transformRelation(relation)
+
+    val ds = Dataset.ofRows(session, logicalPlan)
+    val explainString = ds.queryExecution.explainString(explainMode)
+
+    val response = proto.AnalyzePlanResponse
+      .newBuilder()
+      .setExplainString(explainString)
+    response.setSchema(DataTypeProtoConverter.toConnectProtoType(ds.schema))
   }
 }
 
@@ -127,9 +140,7 @@ class SparkConnectService(debug: Boolean)
  * @param userId
  * @param session
  */
-@Unstable
-@Since("3.4.0")
-private[connect] case class SessionHolder(userId: String, session: SparkSession)
+case class SessionHolder(userId: String, session: SparkSession)
 
 /**
  * Static instance of the SparkConnectService.
@@ -137,8 +148,6 @@ private[connect] case class SessionHolder(userId: String, session: SparkSession)
  * Used to start the overall SparkConnect service and provides global state to manage the
  * different SparkSession from different users connecting to the cluster.
  */
-@Unstable
-@Since("3.4.0")
 object SparkConnectService {
 
   private val CACHE_SIZE = 100
@@ -169,7 +178,7 @@ object SparkConnectService {
   /**
    * Based on the `key` find or create a new SparkSession.
    */
-  private[connect] def getOrCreateIsolatedSession(key: SessionCacheKey): SessionHolder = {
+  def getOrCreateIsolatedSession(key: SessionCacheKey): SessionHolder = {
     userSessionMapping.get(
       key,
       () => {
@@ -183,7 +192,6 @@ object SparkConnectService {
 
   /**
    * Starts the GRPC Serivce.
-   *
    */
   def startGRPCService(): Unit = {
     val debugMode = SparkEnv.get.conf.getBoolean("spark.connect.grpc.debug.enabled", true)
@@ -191,6 +199,9 @@ object SparkConnectService {
     val sb = NettyServerBuilder
       .forPort(port)
       .addService(new SparkConnectService(debugMode))
+
+    // Add all registered interceptors to the server builder.
+    SparkConnectInterceptorRegistry.chainInterceptors(sb)
 
     // If debug mode is configured, load the ProtoReflection service so that tools like
     // grpcurl can introspect the API for debugging.
@@ -212,4 +223,3 @@ object SparkConnectService {
     }
   }
 }
-
