@@ -139,8 +139,8 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
             .rowToArrowConverter(schema, maxRecordsPerBatch, maxBatchSize, timeZoneId))
 
         batches.collect().foreach { case (bytes, count) =>
-          val response = proto.Response.newBuilder().setClientId(clientId)
-          val batch = proto.Response.ArrowBatch
+          val response = proto.ExecutePlanResponse.newBuilder().setClientId(clientId)
+          val batch = proto.ExecutePlanResponse.ArrowBatch
             .newBuilder()
             .setRowCount(count)
             .setData(ByteString.copyFrom(bytes))
