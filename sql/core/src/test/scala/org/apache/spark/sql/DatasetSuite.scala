@@ -20,13 +20,16 @@ package org.apache.spark.sql
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
+import scala.util.Random
+
 import org.apache.hadoop.fs.{Path, PathFilter}
 import org.scalatest.Assertions._
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.TableDrivenPropertyChecks._
 
-import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.{SparkConf, SparkException, TaskContext}
 import org.apache.spark.TestUtils.withListener
+import org.apache.spark.internal.config.MAX_RESULT_SIZE
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, ScroogeLikeExample}
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
@@ -1150,6 +1153,22 @@ class DatasetSuite extends QueryTest
       errorClass = "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS",
       parameters = Map("relationName" -> "`tempView`"))
     dataset.sparkSession.catalog.dropTempView("tempView")
+
+    withDatabase("test_db") {
+      withSQLConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_MULTIPLE_NAME_PARTS.key -> "false") {
+        spark.sql("CREATE DATABASE IF NOT EXISTS test_db")
+        val e = intercept[AnalysisException](
+          dataset.createTempView("test_db.tempView"))
+        checkError(e,
+          errorClass = "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS",
+          parameters = Map("actualName" -> "test_db.tempView"))
+      }
+
+      withSQLConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_MULTIPLE_NAME_PARTS.key -> "true") {
+          dataset.createTempView("test_db.tempView")
+          assert(spark.catalog.tableExists("tempView"))
+      }
+    }
   }
 
   test("SPARK-15381: physical object operator should define `reference` correctly") {
@@ -2225,6 +2244,31 @@ class DatasetSuite extends QueryTest
       })
       assert(parquetFiles.size === 10)
     }
+  }
+}
+
+class DatasetLargeResultCollectingSuite extends QueryTest
+  with SharedSparkSession {
+
+  override protected def sparkConf: SparkConf = super.sparkConf.set(MAX_RESULT_SIZE.key, "4g")
+  test("collect data with single partition larger than 2GB bytes array limit") {
+    // This test requires large memory and leads to OOM in Github Action so we skip it. Developer
+    // should verify it in local build.
+    assume(!sys.env.contains("GITHUB_ACTIONS"))
+    import org.apache.spark.sql.functions.udf
+
+    val genData = udf((id: Long, bytesSize: Int) => {
+      val rand = new Random(id)
+      val arr = new Array[Byte](bytesSize)
+      rand.nextBytes(arr)
+      arr
+    })
+
+    spark.udf.register("genData", genData.asNondeterministic())
+    // create data of size >2GB in single partition, which exceeds the byte array limit
+    // random gen to make sure it's poorly compressed
+    val df = spark.range(0, 2100, 1, 1).selectExpr("id", s"genData(id, 1000000) as data")
+    val res = df.queryExecution.executedPlan.executeCollect()
   }
 }
 

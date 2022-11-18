@@ -24,7 +24,31 @@ or
 ```bash
 ./build/sbt -Phive clean package
 ```
-   
+
+### Build with user-defined `protoc` and `protoc-gen-grpc-java`
+
+When the user cannot use the official `protoc` and `protoc-gen-grpc-java` binary files to build the `connect` module in the compilation environment,
+for example, compiling `connect` module on CentOS 6 or CentOS 7 which the default `glibc` version is less than 2.14, we can try to compile and test by 
+specifying the user-defined `protoc` and `protoc-gen-grpc-java` binary files as follows:
+
+```bash
+export CONNECT_PROTOC_EXEC_PATH=/path-to-protoc-exe
+export CONNECT_PLUGIN_EXEC_PATH=/path-to-protoc-gen-grpc-java-exe
+./build/mvn -Phive -Puser-defined-protoc clean package
+```
+
+or
+
+```bash
+export CONNECT_PROTOC_EXEC_PATH=/path-to-protoc-exe
+export CONNECT_PLUGIN_EXEC_PATH=/path-to-protoc-gen-grpc-java-exe
+./build/sbt -Puser-defined-protoc clean package
+```
+
+The user-defined `protoc` and `protoc-gen-grpc-java` binary files can be produced in the user's compilation environment by source code compilation, 
+for compilation steps, please refer to [protobuf](https://github.com/protocolbuffers/protobuf) and [grpc-java](https://github.com/grpc/grpc-java).
+
+
 ### Run Spark Shell
 
 To run Spark Connect you locally built:
@@ -52,7 +76,13 @@ To use the release version of Spark Connect:
 ### Run Tests
 
 ```bash
+# Run a single Python class.
 ./python/run-tests --testnames 'pyspark.sql.tests.connect.test_connect_basic'
+```
+
+```bash
+# Run all Spark Connect Python tests as a module.
+./python/run-tests --module pyspark-connect
 ```
 
 
@@ -70,3 +100,4 @@ When contributing a new client please be aware that we strive to have a common
 user experience across all languages. Please follow the below guidelines:
 
 * [Connection string configuration](docs/client-connection-string.md)
+* [Adding new messages](docs/adding-proto-messages.md) in the Spark Connect protocol.

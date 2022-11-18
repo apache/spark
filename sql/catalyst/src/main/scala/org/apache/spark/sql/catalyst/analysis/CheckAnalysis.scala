@@ -693,10 +693,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             if PlanHelper.specialExpressionsInUnsupportedOperator(f).nonEmpty =>
             val invalidExprSqls = PlanHelper.specialExpressionsInUnsupportedOperator(f).map(_.sql)
             f.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2440",
+              errorClass = "INVALID_WHERE_CONDITION",
               messageParameters = Map(
-                "condition" -> condition.sql,
-                "invalidExprSqls" -> invalidExprSqls.mkString(", ")))
+                "condition" -> toSQLExpr(condition),
+                "expressionList" -> invalidExprSqls.mkString(", ")))
 
           case other if PlanHelper.specialExpressionsInUnsupportedOperator(other).nonEmpty =>
             val invalidExprSqls =

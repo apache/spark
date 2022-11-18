@@ -35,8 +35,7 @@ import org.apache.spark.api.python.{PythonRDD, SerDeUtil}
 import org.apache.spark.api.r.RRDD
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
-import org.apache.spark.sql.catalyst.QueryPlanningTracker
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, QueryPlanningTracker, ScalaReflection, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.encoders._
@@ -3799,13 +3798,21 @@ class Dataset[T] private[sql](
       global: Boolean): CreateViewCommand = {
     val viewType = if (global) GlobalTempView else LocalTempView
 
-    val tableIdentifier = try {
-      sparkSession.sessionState.sqlParser.parseTableIdentifier(viewName)
+    val identifier = try {
+      sparkSession.sessionState.sqlParser.parseMultipartIdentifier(viewName)
     } catch {
       case _: ParseException => throw QueryCompilationErrors.invalidViewNameError(viewName)
     }
+
+    if (!SQLConf.get.allowsTempViewCreationWithMultipleNameparts && identifier.size > 1) {
+      // Temporary view names should NOT contain database prefix like "database.table"
+      throw new AnalysisException(
+        errorClass = "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS",
+        messageParameters = Map("actualName" -> viewName))
+    }
+
     CreateViewCommand(
-      name = tableIdentifier,
+      name = TableIdentifier(identifier.last),
       userSpecifiedColumns = Nil,
       comment = None,
       properties = Map.empty,

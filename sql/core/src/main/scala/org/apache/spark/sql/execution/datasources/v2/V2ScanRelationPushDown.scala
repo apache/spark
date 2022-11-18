@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, Cast, Expression, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.CollapseProject
-import org.apache.spark.sql.catalyst.planning.PhysicalOperation
+import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, ScanOperation}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LimitAndOffset, LocalLimit, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
@@ -345,13 +345,15 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   def pruneColumns(plan: LogicalPlan): LogicalPlan = plan.transform {
-    case PhysicalOperation(project, filters, sHolder: ScanBuilderHolder) =>
+    case ScanOperation(project, filtersStayUp, filtersPushDown, sHolder: ScanBuilderHolder) =>
       // column pruning
       val normalizedProjects = DataSourceStrategy
         .normalizeExprs(project, sHolder.output)
         .asInstanceOf[Seq[NamedExpression]]
+      val allFilters = filtersPushDown.reduceOption(And).toSeq ++ filtersStayUp
+      val normalizedFilters = DataSourceStrategy.normalizeExprs(allFilters, sHolder.output)
       val (scan, output) = PushDownUtils.pruneColumns(
-        sHolder.builder, sHolder.relation, normalizedProjects, filters)
+        sHolder.builder, sHolder.relation, normalizedProjects, normalizedFilters)
 
       logInfo(
         s"""
@@ -368,11 +370,13 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         case projectionOverSchema(newExpr) => newExpr
       }
 
-      val filterCondition = filters.reduceLeftOption(And)
-      val newFilterCondition = filterCondition.map(projectionFunc)
-      val withFilter = newFilterCondition.map(Filter(_, scanRelation)).getOrElse(scanRelation)
+      val finalFilters = normalizedFilters.map(projectionFunc)
+      // bottom-most filters are put in the left of the list.
+      val withFilter = finalFilters.foldLeft[LogicalPlan](scanRelation)((plan, cond) => {
+        Filter(cond, plan)
+      })
 
-      val withProjection = if (withFilter.output != project) {
+      if (withFilter.output != project) {
         val newProjects = normalizedProjects
           .map(projectionFunc)
           .asInstanceOf[Seq[NamedExpression]]
@@ -380,12 +384,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       } else {
         withFilter
       }
-      withProjection
   }
 
   def pushDownSample(plan: LogicalPlan): LogicalPlan = plan.transform {
     case sample: Sample => sample.child match {
-      case PhysicalOperation(_, filter, sHolder: ScanBuilderHolder) if filter.isEmpty =>
+      case PhysicalOperation(_, Nil, sHolder: ScanBuilderHolder) =>
         val tableSample = TableSampleInfo(
           sample.lowerBound,
           sample.upperBound,
@@ -404,7 +407,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   private def pushDownLimit(plan: LogicalPlan, limit: Int): (LogicalPlan, Boolean) = plan match {
-    case operation @ PhysicalOperation(_, filter, sHolder: ScanBuilderHolder) if filter.isEmpty =>
+    case operation @ PhysicalOperation(_, Nil, sHolder: ScanBuilderHolder) =>
       val (isPushed, isPartiallyPushed) = PushDownUtils.pushLimit(sHolder.builder, limit)
       if (isPushed) {
         sHolder.pushedLimit = Some(limit)

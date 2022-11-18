@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connect.planner
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 import com.google.common.collect.{Lists, Maps}
 
@@ -26,7 +27,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.WriteOperation
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.AliasIdentifier
-import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
@@ -77,6 +78,7 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Relation.RelTypeCase.SUBQUERY_ALIAS =>
         transformSubqueryAlias(rel.getSubqueryAlias)
       case proto.Relation.RelTypeCase.REPARTITION => transformRepartition(rel.getRepartition)
+      case proto.Relation.RelTypeCase.FILL_NA => transformNAFill(rel.getFillNa)
       case proto.Relation.RelTypeCase.SUMMARY => transformStatSummary(rel.getSummary)
       case proto.Relation.RelTypeCase.CROSSTAB =>
         transformStatCrosstab(rel.getCrosstab)
@@ -142,6 +144,68 @@ class SparkConnectPlanner(session: SparkSession) {
       session.leafNodeDefaultParallelism
     }
     logical.Range(start, end, step, numPartitions)
+  }
+
+  private def transformNAFill(rel: proto.NAFill): LogicalPlan = {
+    if (rel.getValuesCount == 0) {
+      throw InvalidPlanInput(s"values must contains at least 1 item!")
+    }
+    if (rel.getValuesCount > 1 && rel.getValuesCount != rel.getColsCount) {
+      throw InvalidPlanInput(
+        s"When values contains more than 1 items, " +
+          s"values and cols should have the same length!")
+    }
+
+    val dataset = Dataset.ofRows(session, transformRelation(rel.getInput))
+
+    val cols = rel.getColsList.asScala.toArray
+    val values = rel.getValuesList.asScala.toArray
+    if (values.length == 1) {
+      val value = values.head
+      value.getLiteralTypeCase match {
+        case proto.Expression.Literal.LiteralTypeCase.BOOLEAN =>
+          if (cols.nonEmpty) {
+            dataset.na.fill(value = value.getBoolean, cols = cols).logicalPlan
+          } else {
+            dataset.na.fill(value = value.getBoolean).logicalPlan
+          }
+        case proto.Expression.Literal.LiteralTypeCase.I64 =>
+          if (cols.nonEmpty) {
+            dataset.na.fill(value = value.getI64, cols = cols).logicalPlan
+          } else {
+            dataset.na.fill(value = value.getI64).logicalPlan
+          }
+        case proto.Expression.Literal.LiteralTypeCase.FP64 =>
+          if (cols.nonEmpty) {
+            dataset.na.fill(value = value.getFp64, cols = cols).logicalPlan
+          } else {
+            dataset.na.fill(value = value.getFp64).logicalPlan
+          }
+        case proto.Expression.Literal.LiteralTypeCase.STRING =>
+          if (cols.nonEmpty) {
+            dataset.na.fill(value = value.getString, cols = cols).logicalPlan
+          } else {
+            dataset.na.fill(value = value.getString).logicalPlan
+          }
+        case other => throw InvalidPlanInput(s"Unsupported value type: $other")
+      }
+    } else {
+      val valueMap = mutable.Map.empty[String, Any]
+      cols.zip(values).foreach { case (col, value) =>
+        value.getLiteralTypeCase match {
+          case proto.Expression.Literal.LiteralTypeCase.BOOLEAN =>
+            valueMap.update(col, value.getBoolean)
+          case proto.Expression.Literal.LiteralTypeCase.I64 =>
+            valueMap.update(col, value.getI64)
+          case proto.Expression.Literal.LiteralTypeCase.FP64 =>
+            valueMap.update(col, value.getFp64)
+          case proto.Expression.Literal.LiteralTypeCase.STRING =>
+            valueMap.update(col, value.getString)
+          case other => throw InvalidPlanInput(s"Unsupported value type: $other")
+        }
+      }
+      dataset.na.fill(valueMap = valueMap.toMap).logicalPlan
+    }
   }
 
   private def transformStatSummary(rel: proto.StatSummary): LogicalPlan = {
@@ -274,7 +338,9 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Expression.ExprTypeCase.ALIAS => transformAlias(exp.getAlias)
       case proto.Expression.ExprTypeCase.EXPRESSION_STRING =>
         transformExpressionString(exp.getExpressionString)
-      case _ => throw InvalidPlanInput()
+      case _ =>
+        throw InvalidPlanInput(
+          s"Expression with ID: ${exp.getExprTypeCase.getNumber} is not supported")
     }
   }
 
@@ -348,7 +414,20 @@ class SparkConnectPlanner(session: SparkSession) {
   }
 
   private def transformAlias(alias: proto.Expression.Alias): NamedExpression = {
-    Alias(transformExpression(alias.getExpr), alias.getName)()
+    if (alias.getNameCount == 1) {
+      val md = if (alias.hasMetadata()) {
+        Some(Metadata.fromJson(alias.getMetadata))
+      } else {
+        None
+      }
+      Alias(transformExpression(alias.getExpr), alias.getName(0))(explicitMetadata = md)
+    } else {
+      if (alias.hasMetadata) {
+        throw new InvalidPlanInput(
+          "Alias expressions with more than 1 identifier must not use optional metadata.")
+      }
+      MultiAlias(transformExpression(alias.getExpr), alias.getNameList.asScala.toSeq)
+    }
   }
 
   private def transformExpressionString(expr: proto.Expression.ExpressionString): Expression = {
@@ -455,11 +534,14 @@ class SparkConnectPlanner(session: SparkSession) {
           case x => UnresolvedAlias(x)
         }
 
+    // Retain group columns in aggregate expressions:
+    val aggExprs =
+      groupingExprs ++ rel.getResultExpressionsList.asScala.map(transformResultExpression)
+
     logical.Aggregate(
       child = transformRelation(rel.getInput),
       groupingExpressions = groupingExprs.toSeq,
-      aggregateExpressions =
-        rel.getResultExpressionsList.asScala.map(transformResultExpression).toSeq)
+      aggregateExpressions = aggExprs.toSeq)
   }
 
   private def transformResultExpression(exp: proto.Expression): expressions.NamedExpression = {
