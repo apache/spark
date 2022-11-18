@@ -52,13 +52,7 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
     // Extract the plan from the request and convert it to a logical plan
     val planner = new SparkConnectPlanner(session)
     val dataframe = Dataset.ofRows(session, planner.transformRelation(request.getPlan.getRoot))
-    try {
-      processAsArrowBatches(request.getClientId, dataframe)
-    } catch {
-      case e: Exception =>
-        logWarning(e.getMessage)
-        processAsJsonBatches(request.getClientId, dataframe)
-    }
+    processAsArrowBatches(request.getClientId, dataframe)
   }
 
   def processAsJsonBatches(clientId: String, dataframe: DataFrame): Unit = {
