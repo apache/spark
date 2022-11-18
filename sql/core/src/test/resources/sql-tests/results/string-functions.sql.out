@@ -29,7 +29,22 @@ select format_string()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-0; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+  "messageParameters" : {
+    "actualNum" : "0",
+    "expectedNum" : "> 0",
+    "functionName" : "`format_string`",
+    "sqlExpr" : "\"format_string()\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 22,
+    "fragment" : "format_string()"
+  } ]
+}
 
 
 -- !query

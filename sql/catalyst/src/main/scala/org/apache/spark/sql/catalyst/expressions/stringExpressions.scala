@@ -1675,7 +1675,7 @@ case class StringRPad(str: Expression, len: Expression, pad: Expression = Litera
 // scalastyle:on line.size.limit
 case class FormatString(children: Expression*) extends Expression with ImplicitCastInputTypes {
 
-  if (!SQLConf.get.getConf(SQLConf.ALLOW_ZERO_INDEX_IN_FORMAT_STRING)) {
+  if (children.nonEmpty && !SQLConf.get.getConf(SQLConf.ALLOW_ZERO_INDEX_IN_FORMAT_STRING)) {
     checkArgumentIndexNotZero(children(0))
   }
 
