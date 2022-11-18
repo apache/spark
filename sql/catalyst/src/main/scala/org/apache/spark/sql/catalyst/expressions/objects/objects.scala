@@ -1310,7 +1310,7 @@ case class CatalystToExternalMap private(
 
     val tupleClass = classOf[(_, _)].getName
     val appendToBuilder = s"""
-      $tupleClass $tupleLoopValue;
+      $tupleClass $tupleLoopValue = null;
 
       if (${genValueFunction.isNull}) {
         $tupleLoopValue = new $tupleClass($genKeyFunctionValue, null);
