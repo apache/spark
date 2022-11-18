@@ -32,7 +32,7 @@ import org.scalatest.time.{Minutes, Span}
 
 import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s.integrationtest.DepsTestsSuite.{DEPS_TIMEOUT, FILE_CONTENTS, HOST_PATH}
-import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.{INTERVAL, MinikubeTag, TIMEOUT}
+import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.{INTERVAL, MinikubeTag, SPARK_PI_MAIN_CLASS, TIMEOUT}
 import org.apache.spark.deploy.k8s.integrationtest.Utils.getExamplesJarName
 import org.apache.spark.deploy.k8s.integrationtest.backend.minikube.Minikube
 import org.apache.spark.internal.config.{ARCHIVES, PYSPARK_DRIVER_PYTHON, PYSPARK_PYTHON}
@@ -239,6 +239,39 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
     }
   }
 
+  test(
+    "SPARK-40817: Check that remote files do not get discarded in spark.files",
+    k8sTestTag,
+    MinikubeTag) {
+    tryDepsTest({
+      // Create a local file
+      val localFileName = Utils.createTempFile(FILE_CONTENTS, HOST_PATH)
+
+      // Create a remote file on S3
+      val remoteFileKey = "some-path/some-remote-file.txt"
+      createS3Object(remoteFileKey, "Some Content")
+      val remoteFileFullPath = s"s3a://${BUCKET}/${remoteFileKey}"
+
+      // Put both file paths in spark.files
+      sparkAppConf.set("spark.files", s"$HOST_PATH/$localFileName,${remoteFileFullPath}")
+
+      // Run SparkPi and make sure that both files have been properly downloaded on running pods
+      val examplesJar = Utils.getTestFileAbsolutePath(getExamplesJarName(), sparkHomeDir)
+      runSparkApplicationAndVerifyCompletion(
+        appResource = examplesJar,
+        mainClass = SPARK_PI_MAIN_CLASS,
+        appArgs = Array(),
+        expectedDriverLogOnCompletion = Seq("Pi is roughly 3"),
+        // We can check whether the Executor pod has successfully
+        // downloaded both the local and the remote file
+        expectedExecutorLogOnCompletion = Seq(localFileName, "some-remote-file.txt"),
+        driverPodChecker = doBasicDriverPodCheck,
+        executorPodChecker = doBasicExecutorPodCheck,
+        isJVM = true
+      )
+    })
+  }
+
   private def testPython(
       pySparkFiles: String,
       expectedDriverLogs: Seq[String],
@@ -259,16 +292,42 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
     }
   }
 
-  private def createS3Bucket(accessKey: String, secretKey: String, endPoint: String): Unit = {
+  private def getS3Client(
+      s3Endpoint: String,
+      accessKey: String = ACCESS_KEY,
+      secretKey: String = SECRET_KEY): AmazonS3Client = {
+    val credentials = new BasicAWSCredentials(accessKey, secretKey)
+    val s3client = new AmazonS3Client(credentials)
+    s3client.setEndpoint(s3Endpoint)
+    s3client
+  }
+
+  private def createS3Bucket(
+      s3Endpoint: String = getServiceUrl(svcName),
+      bucket: String = BUCKET): Unit = {
     Eventually.eventually(TIMEOUT, INTERVAL) {
       try {
-        val credentials = new BasicAWSCredentials(accessKey, secretKey)
-        val s3client = new AmazonS3Client(credentials)
-        s3client.setEndpoint(endPoint)
-        s3client.createBucket(BUCKET)
+        val s3client = getS3Client(s3Endpoint)
+        s3client.createBucket(bucket)
       } catch {
         case e: Exception =>
           throw new SparkException(s"Failed to create bucket $BUCKET.", e)
+      }
+    }
+  }
+
+  private def createS3Object(
+      objectKey: String,
+      objectContent: String,
+      s3Endpoint: String = getServiceUrl(svcName),
+      bucket: String = BUCKET): Unit = {
+    Eventually.eventually(TIMEOUT, INTERVAL) {
+      try {
+        val s3client = getS3Client(s3Endpoint)
+        s3client.putObject(bucket, objectKey, objectContent)
+      } catch {
+        case e: Exception =>
+          throw new SparkException(s"Failed to create object $BUCKET/$objectKey.", e)
       }
     }
   }
@@ -323,7 +382,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
     try {
       setupMinioStorage()
       val minioUrlStr = getServiceUrl(svcName)
-      createS3Bucket(ACCESS_KEY, SECRET_KEY, minioUrlStr)
+      createS3Bucket(minioUrlStr)
       setCommonSparkConfPropertiesForS3Access(sparkAppConf, minioUrlStr)
       runTest
     } finally {
