@@ -4822,4 +4822,12 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   override def visitTimestampdiff(ctx: TimestampdiffContext): Expression = withOrigin(ctx) {
     TimestampDiff(ctx.unit.getText, expression(ctx.startTimestamp), expression(ctx.endTimestamp))
   }
+
+  /**
+   * Create a node in logical plan of named parameter which represents a literal with
+   * a non-bound value and unknown type.
+   * */
+  override def visitUnboundParameter(ctx: UnboundParameterContext): LogicalPlan = withOrigin(ctx) {
+    UnboundParameter(ctx.getText)
+  }
 }

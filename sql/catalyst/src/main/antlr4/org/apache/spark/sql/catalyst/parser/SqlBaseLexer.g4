@@ -507,3 +507,7 @@ WS
 UNRECOGNIZED
     : .
     ;
+
+NAMED_PARAMETER_MARKER
+    : '@'
+    ;
