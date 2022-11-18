@@ -511,7 +511,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       if (tableIdentifier.database.isDefined) {
         // Temporary view names should NOT contain database prefix like "database.table"
         throw QueryParsingErrors
-          .notAllowedToAddDBPrefixForTempViewError(tableIdentifier.database.get, ctx)
+          .notAllowedToAddDBPrefixForTempViewError(tableIdentifier.nameParts, ctx)
       }
 
       CreateViewCommand(

@@ -311,7 +311,8 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     val e = intercept[AnalysisException] {
       sql("CREATE OR REPLACE TEMPORARY VIEW default.myabcdview AS SELECT * FROM jt")
     }
-    assert(e.message.contains("It is not allowed to add database prefix"))
+    assert(e.message.contains(
+      "CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names"))
   }
 
   test("error handling: disallow IF NOT EXISTS for CREATE TEMPORARY VIEW") {

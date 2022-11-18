@@ -62,6 +62,14 @@ class NoSuchTableException(errorClass: String, messageParameters: Map[String, St
   }
 }
 
+class NoSuchViewException(errorClass: String, messageParameters: Map[String, String])
+  extends AnalysisException(errorClass, messageParameters) {
+
+  def this(ident: Identifier) =
+    this(errorClass = "VIEW_NOT_FOUND",
+      messageParameters = Map("relationName" -> ident.quoted))
+}
+
 class NoSuchPartitionException(errorClass: String, messageParameters: Map[String, String])
   extends AnalysisException(errorClass, messageParameters) {
 

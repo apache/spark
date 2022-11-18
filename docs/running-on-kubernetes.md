@@ -857,6 +857,17 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>2.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.driver.service.label.[LabelName]</code></td>
+  <td>(none)</td>
+  <td>
+    Add the Kubernetes <a href="https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/">label</a> specified by <code>LabelName</code> to the driver service.
+    For example, <code>spark.kubernetes.driver.service.label.something=true</code>.
+    Note that Spark also adds its own labels to the driver service
+    for bookkeeping purposes.
+  </td>
+  <td>3.4.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.driver.service.annotation.[AnnotationName]</code></td>
   <td>(none)</td>
   <td>

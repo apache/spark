@@ -155,21 +155,54 @@ private[sql] object ProtobufUtils extends Logging {
    *  Loads the given protobuf class and returns Protobuf descriptor for it.
    */
   def buildDescriptorFromJavaClass(protobufClassName: String): Descriptor = {
+
+    // Default 'Message' class here is shaded while using the package (as in production).
+    // The incoming classes might not be shaded. Check both.
+    val shadedMessageClass = classOf[Message] // Shaded in prod, not in unit tests.
+    val missingShadingErrorMessage = "The jar with Protobuf classes needs to be shaded " +
+      s"(com.google.protobuf.* --> ${shadedMessageClass.getPackage.getName}.*)"
+
     val protobufClass = try {
       Utils.classForName(protobufClassName)
     } catch {
       case e: ClassNotFoundException =>
-        throw QueryCompilationErrors.protobufClassLoadError(protobufClassName, e)
+        val explanation =
+          if (protobufClassName.contains(".")) "Ensure the class include in the jar"
+          else "Ensure the class name includes package prefix"
+        throw QueryCompilationErrors.protobufClassLoadError(protobufClassName, explanation, e)
+
+      case e: NoClassDefFoundError if e.getMessage.matches("com/google/proto.*Generated.*") =>
+        // This indicates the Java classes are not shaded.
+        throw QueryCompilationErrors.protobufClassLoadError(
+          protobufClassName, missingShadingErrorMessage, e)
     }
 
-    if (!classOf[Message].isAssignableFrom(protobufClass)) {
-      throw QueryCompilationErrors.protobufMessageTypeError(protobufClassName)
-      // TODO: Need to support V2. This might work with V2 classes too.
+    if (!shadedMessageClass.isAssignableFrom(protobufClass)) {
+      // Check if this extends 2.x Message class included in spark, that does not work.
+      val unshadedMessageClass = Utils.classForName(
+        // Generate "com.google.protobuf.Message". Using join() is a trick to escape from
+        // jar shader. Otherwise, it will be replaced with 'org.sparkproject...'.
+        String.join(".", "com", "google", "protobuf", "Message")
+      )
+      val explanation =
+        if (unshadedMessageClass.isAssignableFrom(protobufClass)) {
+          s"$protobufClassName does not extend shaded Protobuf Message class " +
+          s"${shadedMessageClass.getName}. $missingShadingErrorMessage"
+        } else s"$protobufClassName is not a Protobuf Message type"
+      throw QueryCompilationErrors.protobufClassLoadError(protobufClassName, explanation)
     }
 
     // Extract the descriptor from Protobuf message.
-    protobufClass
-      .getDeclaredMethod("getDescriptor")
+    val getDescriptorMethod = try {
+      protobufClass
+        .getDeclaredMethod("getDescriptor")
+    } catch {
+      case e: NoSuchMethodError => // This is usually not expected.
+        throw QueryCompilationErrors.protobufClassLoadError(
+          protobufClassName, "Could not find getDescriptor() method", e)
+    }
+
+    getDescriptorMethod
       .invoke(null)
       .asInstanceOf[Descriptor]
   }

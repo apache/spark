@@ -26,6 +26,8 @@ import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, Buffer, HashMap, HashSet}
 import scala.util.Random
 
+import com.google.common.cache.CacheBuilder
+
 import org.apache.spark._
 import org.apache.spark.InternalAccumulator.{input, shuffleRead}
 import org.apache.spark.TaskState.TaskState
@@ -144,6 +146,13 @@ private[spark] class TaskSchedulerImpl(
   // We add executors here when we first get decommission notification for them. Executors can
   // continue to run even after being asked to decommission, but they will eventually exit.
   val executorsPendingDecommission = new HashMap[String, ExecutorDecommissionState]
+
+  // Keep removed executors due to decommission, so getExecutorDecommissionState
+  // still return correct value even after executor is lost
+  val executorsRemovedByDecom =
+    CacheBuilder.newBuilder()
+      .maximumSize(conf.get(SCHEDULER_MAX_RETAINED_REMOVED_EXECUTORS))
+      .build[String, ExecutorDecommissionState]()
 
   def runningTasksByExecutors: Map[String, Int] = synchronized {
     executorIdToRunningTaskIds.toMap.mapValues(_.size).toMap
@@ -1022,7 +1031,8 @@ private[spark] class TaskSchedulerImpl(
 
   override def getExecutorDecommissionState(executorId: String)
     : Option[ExecutorDecommissionState] = synchronized {
-    executorsPendingDecommission.get(executorId)
+    executorsPendingDecommission.get(executorId).orElse(
+      Option(executorsRemovedByDecom.getIfPresent(executorId)))
   }
 
   override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {
@@ -1118,6 +1128,7 @@ private[spark] class TaskSchedulerImpl(
     }
 
     executorsPendingDecommission.remove(executorId)
+      .foreach(executorsRemovedByDecom.put(executorId, _))
 
     if (reason != LossReasonPending) {
       executorIdToHost -= executorId
