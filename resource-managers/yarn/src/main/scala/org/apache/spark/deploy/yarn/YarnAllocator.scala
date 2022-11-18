@@ -839,6 +839,8 @@ private[yarn] class YarnAllocator(
         // now I think its ok as none of the containers are expected to exit.
         val exitStatus = completedContainer.getExitStatus
         val (exitCausedByApp, containerExitReason) = exitStatus match {
+          case _ if shutdown =>
+            (false, s"Executor for container $containerId exited after Application is shutdown.")
           case ContainerExitStatus.SUCCESS =>
             (false, s"Executor for container $containerId exited because of a YARN event (e.g., " +
               "preemption) and not because of an error in the running job.")
@@ -869,7 +871,7 @@ private[yarn] class YarnAllocator(
             // .com/apache/hadoop/blob/228156cfd1b474988bc4fedfbf7edddc87db41e3/had
             // oop-yarn-project/hadoop-yarn/hadoop-yarn-common/src/main/java/org/ap
             // ache/hadoop/yarn/util/Apps.java#L273 for details)
-            if (NOT_APP_AND_SYSTEM_FAULT_EXIT_STATUS.contains(other_exit_status) || shutdown) {
+            if (NOT_APP_AND_SYSTEM_FAULT_EXIT_STATUS.contains(other_exit_status)) {
               (false, s"Container marked as failed: $containerId$onHostStr" +
                 s". Exit status: ${completedContainer.getExitStatus}" +
                 s". Diagnostics: ${completedContainer.getDiagnostics}.")
