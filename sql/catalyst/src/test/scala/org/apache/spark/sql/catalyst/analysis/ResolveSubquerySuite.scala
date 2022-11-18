@@ -277,21 +277,6 @@ class ResolveSubquerySuite extends AnalysisTest {
     )
   }
 
-  test("SPARK-41141 aggregates of outer query referenced in subquery ") {
-    val a = 'a.int
-    val b = 'b.int
-    val c = 'c.int
-    val d = 'd.int
-
-    val t1 = LocalRelation(a, b)
-    val t2 = LocalRelation(c, d)
-
-    val analyzedLp = t1.select($"a", $"b").
-      having($"b")(sum($"a"), sum($"b"))(Exists(t2.select($"c").
-        where($"d" === sum($"a") + sum($"b")))).analyze
-    println(analyzedLp)
-  }
-
   test("SPARK-41141 aggregates of outer query referenced in subquery should not create" +
     " new aggregates if possible") {
     withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> s"${PropagateEmptyRelation.ruleName}") {
