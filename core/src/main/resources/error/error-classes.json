@@ -838,6 +838,11 @@
       "The comparison result is null. If you want to handle null as 0 (equal), you can set \"spark.sql.legacy.allowNullComparisonResultInArraySort\" to \"true\"."
     ]
   },
+  "NUMERIC_OUT_OF_SUPPORTED_RANGE" : {
+    "message" : [
+      "The value <value> cannot be interpreted as a numeric since it has more than 38 digits."
+    ]
+  },
   "NUMERIC_VALUE_OUT_OF_RANGE" : {
     "message" : [
       "<value> cannot be represented as Decimal(<precision>, <scale>). If necessary set <config> to \"false\" to bypass this error, and return NULL instead."
@@ -854,11 +859,6 @@
       "ORDER BY position <index> is not in select list (valid range is [1, <size>])."
     ],
     "sqlState" : "42000"
-  },
-  "OUT_OF_DECIMAL_TYPE_RANGE" : {
-    "message" : [
-      "Out of decimal type range: <value>."
-    ]
   },
   "PARSE_EMPTY_STATEMENT" : {
     "message" : [
