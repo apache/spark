@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Join, JoinStrategyHint, SHUFFLE_HASH}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
-import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, RDDScanExec, SparkPlan}
+import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, ExternalRDDScanExec, RDDScanExec, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
@@ -1669,6 +1669,18 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
         sql("CACHE TABLE cached_t as SELECT udf(id) FROM VALUES (1), (2) t(id)")
         checkAnswer(sql("SELECT * FROM cached_t"), Row(2) :: Row(3) :: Nil)
       }
+    }
+  }
+
+  test("SPARK-41191: Cache Table is not working while nested caches exist") {
+    withCache("t1", "t2") {
+      sql("CACHE TABLE t1 as SELECT a FROM testData3 GROUP BY a")
+      sql("CACHE TABLE t2 as SELECT a,b FROM testData2 WHERE a IN " +
+        "(SELECT a FROM t1)")
+      val sparkPlan = sql("SELECT key,value,b FROM testData t3 JOIN t2 ON t3.key=t2.a")
+        .queryExecution.sparkPlan
+      assert(sparkPlan.collect { case e: InMemoryTableScanExec => e }.size === 1)
+      assert(sparkPlan.collect { case e: ExternalRDDScanExec[_] => e }.size === 1)
     }
   }
 }

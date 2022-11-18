@@ -355,7 +355,7 @@ case class ListQuery(
       plan.canonicalized,
       outerAttrs.map(_.canonicalized),
       ExprId(0),
-      childOutputs.map(_.canonicalized.asInstanceOf[Attribute]),
+      plan.canonicalized.output,
       joinCond.map(_.canonicalized))
   }
 
