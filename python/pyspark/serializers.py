@@ -365,7 +365,7 @@ if sys.version_info < (3, 8) or os.environ.get("PYSPARK_ENABLE_NAMEDTUPLE_PATCH"
     # requires namedtuple hack.
     # The whole hack here should be removed once we drop Python 3.7.
 
-    __cls = {}
+    __cls = {}  # type: ignore[var-annotated]
 
     def _restore(name, fields, value):
         """Restore an object of namedtuple"""
@@ -475,7 +475,7 @@ class CloudPickleSerializer(FramedSerializer):
 if sys.version_info < (3, 8) or os.environ.get("PYSPARK_ENABLE_NAMEDTUPLE_PATCH") == "1":
     CPickleSerializer = PickleSerializer
 else:
-    CPickleSerializer = CloudPickleSerializer
+    CPickleSerializer = CloudPickleSerializer  # type: ignore[misc, assignment]
 
 
 class MarshalSerializer(FramedSerializer):
