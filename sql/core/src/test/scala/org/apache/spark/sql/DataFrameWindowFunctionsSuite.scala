@@ -1281,23 +1281,6 @@ class DataFrameWindowFunctionsSuite extends QueryTest
       ("c", 1, "a", -4.0),
       ("c", 2, nullStr, 5.0)).toDF("key", "value", "order", "value2")
 
-    val orderCols = Seq(
-      $"order".asc_nulls_first :: Nil,
-      $"order".asc_nulls_last :: Nil,
-      $"order".desc_nulls_first :: Nil,
-      $"order".desc_nulls_last :: Nil,
-      $"order".asc_nulls_first :: $"value2".asc_nulls_last :: Nil,
-      $"order".asc_nulls_first :: $"value2".desc_nulls_last :: Nil
-    )
-
-//    val conditions = Seq(
-//      $"rn" === 1,
-//      $"rn" <= 3,
-//      $"rn" === 2 && $"value2" > 0.5,
-//      $"rn" < 2 && $"value2" < 0.01,
-//      $"rn" <= 4 && $"value" + $"value2" > 2
-//    )
-
     val windowFunctions = Seq(
       row_number(),
       rank(),

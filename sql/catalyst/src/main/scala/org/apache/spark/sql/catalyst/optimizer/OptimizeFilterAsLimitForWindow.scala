@@ -17,60 +17,37 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentRow, DenseRank, EqualTo, Expression, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Literal, NamedExpression, PredicateHelper, Rank, RowFrame, RowNumber, SpecifiedWindowFrame, UnboundedPreceding, WindowExpression, WindowSpecDefinition}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentRow, DenseRank, EqualTo, Expression, GreaterThan, GreaterThanOrEqual, IntegerLiteral, LessThan, LessThanOrEqual, NamedExpression, PredicateHelper, Rank, RowFrame, RowNumber, SpecifiedWindowFrame, UnboundedPreceding, WindowExpression, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, Window}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{FILTER, WINDOW}
-import org.apache.spark.sql.types.IntegerType
 
 /**
  * Optimize the filter based on rank-like window function by reduce not required rows.
  * This rule optimizes the following cases:
  * {{{
- *   SELECT *, ROW_NUMBER() OVER(ORDER BY a) AS rn FROM Tab1 WHERE rn = 5
- *   SELECT *, ROW_NUMBER() OVER(ORDER BY a) AS rn FROM Tab1 WHERE 5 = rn
- *   SELECT *, ROW_NUMBER() OVER(ORDER BY a) AS rn FROM Tab1 WHERE rn < 5
- *   SELECT *, ROW_NUMBER() OVER(ORDER BY a) AS rn FROM Tab1 WHERE 5 > rn
- *   SELECT *, ROW_NUMBER() OVER(ORDER BY a) AS rn FROM Tab1 WHERE rn <= 5
- *   SELECT *, ROW_NUMBER() OVER(ORDER BY a) AS rn FROM Tab1 WHERE 5 >= rn
+ *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE rn = 5
+ *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE 5 = rn
+ *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE rn < 5
+ *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE 5 > rn
+ *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE rn <= 5
+ *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE 5 >= rn
  * }}}
  */
 object OptimizeFilterAsLimitForWindow extends Rule[LogicalPlan] with PredicateHelper {
 
-  private def extractLimits(condition: Expression, attr: Attribute): Option[Int] = {
-    val limits = splitConjunctivePredicates(condition).collect {
-      case EqualTo(Literal(limit: Int, IntegerType), e)
-        if e.semanticEquals(attr) => limit
-      case EqualTo(e, Literal(limit: Int, IntegerType))
-        if e.semanticEquals(attr) => limit
-      case LessThan(e, Literal(limit: Int, IntegerType))
-        if e.semanticEquals(attr) => limit - 1
-      case GreaterThan(Literal(limit: Int, IntegerType), e)
-        if e.semanticEquals(attr) => limit - 1
-      case LessThanOrEqual(e, Literal(limit: Int, IntegerType))
-        if e.semanticEquals(attr) => limit
-      case GreaterThanOrEqual(Literal(limit: Int, IntegerType), e)
-        if e.semanticEquals(attr) => limit
+  /**
+   * Extract all the limit values from predicates.
+   */
+  def extractLimits(condition: Expression, attr: Attribute): Seq[Int] =
+    splitConjunctivePredicates(condition).collect {
+      case EqualTo(IntegerLiteral(limit), e) if e.semanticEquals(attr) => limit
+      case EqualTo(e, IntegerLiteral(limit)) if e.semanticEquals(attr) => limit
+      case LessThan(e, IntegerLiteral(limit)) if e.semanticEquals(attr) => limit - 1
+      case GreaterThan(IntegerLiteral(limit), e) if e.semanticEquals(attr) => limit - 1
+      case LessThanOrEqual(e, IntegerLiteral(limit)) if e.semanticEquals(attr) => limit
+      case GreaterThanOrEqual(IntegerLiteral(limit), e) if e.semanticEquals(attr) => limit
     }
-
-    if (limits.nonEmpty) Some(limits.min) else None
-  }
-
-  private def extractLimitAndRankFunction(
-      condition: Expression,
-      windowExpressions: Seq[NamedExpression]): Option[(Int, Expression)] = {
-    val limitAndWindowFunctions = windowExpressions.collect {
-      case alias @ Alias(WindowExpression(windowFunction, _), _) =>
-        val limits = extractLimits(condition, alias.toAttribute)
-        limits.map((_, windowFunction))
-    }.filter(_.isDefined)
-
-    if (limitAndWindowFunctions.nonEmpty) {
-      limitAndWindowFunctions.sortBy(_.get._1).head
-    } else {
-      None
-    }
-  }
 
   private def supports(
       windowExpressions: Seq[NamedExpression]): Boolean = windowExpressions.forall {
@@ -81,16 +58,24 @@ object OptimizeFilterAsLimitForWindow extends Rule[LogicalPlan] with PredicateHe
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsAllPatterns(FILTER, WINDOW), ruleId) {
-    case filter @ Filter(condition, w @ Window(windowExpressions, partitionSpec, orderSpec, _, _))
-      if supports(windowExpressions) && partitionSpec.nonEmpty && orderSpec.nonEmpty =>
-      extractLimitAndRankFunction(condition, windowExpressions) match {
-        case Some((limit, windowFunction)) if limit > 0 =>
-          val newWindow = w.copy(groupLimit = Some(limit))
+    case filter @ Filter(condition,
+        window @ Window(windowExpressions, partitionSpec, orderSpec, _, _))
+      if window.groupLimit.isEmpty && supports(windowExpressions) &&
+        partitionSpec.nonEmpty && orderSpec.nonEmpty =>
+      val limits = windowExpressions.collect {
+        case alias: Alias => extractLimits(condition, alias.toAttribute)
+      }.flatten
+      if (limits.nonEmpty) {
+        val limit = limits.min
+        if (limit > 0) {
+          val newWindow = window.copy(groupLimit = Some(limit))
           val newFilter = filter.withNewChildren(Seq(newWindow))
           newFilter
-        case Some((limit, _)) if limit <= 0 =>
+        } else {
           LocalRelation(filter.output, data = Seq.empty, isStreaming = filter.isStreaming)
-        case _ => filter
+        }
+      } else {
+        filter
       }
   }
 }
