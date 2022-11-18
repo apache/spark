@@ -171,7 +171,7 @@ private class DedicatedMessageLoop(
   }
 
   (1 to endpoint.threadCount()).foreach { _ =>
-    threadpool.submit(receiveLoopRunnable)
+    threadpool.execute(receiveLoopRunnable)
   }
 
   // Mark active to handle the OnStart message.
