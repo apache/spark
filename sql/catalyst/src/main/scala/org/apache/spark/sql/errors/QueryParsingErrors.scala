@@ -99,15 +99,15 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
       ctx)
   }
 
-  def unpivotWithPivotInFromClauseNotAllowedError(ctx: FromClauseContext): Throwable = {
+  def unpivotWithPivotInFromClauseNotAllowedError(ctx: ParserRuleContext): Throwable = {
     new ParseException("UNPIVOT cannot be used together with PIVOT in FROM clause", ctx)
   }
 
-  def lateralWithPivotInFromClauseNotAllowedError(ctx: FromClauseContext): Throwable = {
+  def lateralWithPivotInFromClauseNotAllowedError(ctx: ParserRuleContext): Throwable = {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0013", ctx)
   }
 
-  def lateralWithUnpivotInFromClauseNotAllowedError(ctx: FromClauseContext): Throwable = {
+  def lateralWithUnpivotInFromClauseNotAllowedError(ctx: ParserRuleContext): Throwable = {
     new ParseException("LATERAL cannot be used together with UNPIVOT in FROM clause", ctx)
   }
 
@@ -164,7 +164,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
       ctx)
   }
 
-  def naturalCrossJoinUnsupportedError(ctx: RelationContext): Throwable = {
+  def naturalCrossJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "UNSUPPORTED_FEATURE.NATURAL_CROSS_JOIN",
       messageParameters = Map.empty,
