@@ -55,7 +55,7 @@ object EliminateResolvedHint extends Rule[LogicalPlan] {
   }
 
   def pullHintsIntoSubqueries(plan: LogicalPlan): LogicalPlan = {
-    plan.transformAllExpressionsUpWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
+    plan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
       case s: SubqueryExpression if s.hint.isEmpty =>
         val (newPlan, subqueryHints) = extractHintsFromPlan(s.plan)
         val newHint = mergeHints(subqueryHints)
