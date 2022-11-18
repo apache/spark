@@ -35,6 +35,10 @@ private[spark] class YarnClusterSchedulerBackend(
     startBindings()
   }
 
+  override def stop(exitCode: Int): Unit = {
+    yarnSchedulerEndpoint.signalDriverStop(exitCode)
+  }
+
   override def getDriverLogUrls: Option[Map[String, String]] = {
     YarnContainerInfoHelper.getLogUrls(sc.hadoopConfiguration, container = None)
   }
