@@ -96,7 +96,7 @@
   },
   "COLUMN_ALREADY_EXISTS" : {
     "message" : [
-      "The column <column> already exists. Consider to choose another name or rename the existing column."
+      "The column <columnName> already exists. Consider to choose another name or rename the existing column."
     ]
   },
   "COLUMN_NOT_IN_GROUP_BY_CLAUSE" : {
