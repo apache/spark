@@ -345,7 +345,14 @@ trait ProgressReporter extends Logging {
       val allExecPlanLeaves = lastExecution.executedPlan.collectLeaves()
       if (allLogicalPlanLeaves.size == allExecPlanLeaves.size) {
         val execLeafToSource = allLogicalPlanLeaves.zip(allExecPlanLeaves).flatMap {
-          case (lp, ep) => logicalPlanLeafToSource.get(lp).map { source => ep -> source }
+          case (_, ep: MicroBatchScanExec) =>
+            // SPARK-41199: `logicalPlanLeafToSource` contains OffsetHolder instance for DSv2
+            // streaming source, hence we cannot lookup the actual source from the map.
+            // The physical node for DSv2 streaming source contains the information of the source
+            // by itself, so leverage it.
+            Some(ep -> ep.stream)
+          case (lp, ep) =>
+            logicalPlanLeafToSource.get(lp).map { source => ep -> source }
         }
         val sourceToInputRowsTuples = execLeafToSource.map { case (execLeaf, source) =>
           val numRows = execLeaf.metrics.get("numOutputRows").map(_.value).getOrElse(0L)
