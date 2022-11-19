@@ -306,6 +306,21 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             actualResult = pandasResult.values.tolist()
             self.assertEqual(len(expectResult), len(actualResult))
 
+    def test_simple_transform(self) -> None:
+        """SPARK-39375: Support DF.transform"""
+
+        def transform_df(input_df: DataFrame) -> DataFrame:
+            return input_df.select((col("id") + lit(10)).alias("id"))
+
+        df = self.connect.range(1, 100)
+        result_left = df.transform(transform_df).collect()
+        result_right = self.connect.range(11, 110).collect()
+        self.assertEqual(result_right, result_left)
+
+        # Check assertion.
+        with self.assertRaises(AssertionError) as exc:
+            df.transform(lambda x: 2)
+
     def test_alias(self) -> None:
         """Testing supported and unsupported alias"""
         col0 = (
