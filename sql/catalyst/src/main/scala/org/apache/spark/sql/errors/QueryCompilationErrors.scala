@@ -1073,10 +1073,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def literalTypeUnsupportedForSourceTypeError(field: String, source: Expression): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1102",
+      errorClass = "UNSUPPORTED_LITERAL_FOR_SOURCE_TYPE",
       messageParameters = Map(
-        "field" -> field,
-        "srcDataType" -> source.dataType.catalogString))
+        "field" -> toSQLId(field),
+        "sourceDataType" -> toSQLType(source.dataType)))
   }
 
   def arrayComponentTypeUnsupportedError(clz: Class[_]): Throwable = {

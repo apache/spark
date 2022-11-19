@@ -1326,6 +1326,11 @@
       "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup"
     ]
   },
+  "UNSUPPORTED_LITERAL_FOR_SOURCE_TYPE" : {
+    "message" : [
+      "Literals of the type <field> are currently not supported for the <sourceDataType> type."
+    ]
+  },
   "UNSUPPORTED_SAVE_MODE" : {
     "message" : [
       "The save mode <saveMode> is not supported for:"
@@ -2193,11 +2198,6 @@
   "_LEGACY_ERROR_TEMP_1101" : {
     "message" : [
       "Invalid value for the '<argName>' parameter of function '<funcName>': <invalidValue>.<endingMsg>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1102" : {
-    "message" : [
-      "Literals of type '<field>' are currently not supported for the <srcDataType> type."
     ]
   },
   "_LEGACY_ERROR_TEMP_1103" : {
