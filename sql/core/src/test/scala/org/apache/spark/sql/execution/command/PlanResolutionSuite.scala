@@ -1932,6 +1932,11 @@ class PlanResolutionSuite extends AnalysisTest {
 
       val target = pair._1
       val source = pair._2
+      def referenceNames(column: String) = target match {
+        case "v2Table" => s"[`spark_catalog`.`default`.`v2Table1`.`$column`, " +
+          s"`spark_catalog`.`default`.`v2Table`.`$column`]"
+        case "testcat.tab" => s"[`testcat`.`tab1`.`$column`, `testcat`.`tab`.`$column`]"
+      }
 
       val sql1 =
         s"""
@@ -1986,8 +1991,8 @@ class PlanResolutionSuite extends AnalysisTest {
       // resolve column `i` as it's ambiguous.
       checkError(
         exception = intercept[AnalysisException](parseAndResolve(sql2)),
-        errorClass = null,
-        parameters = Map.empty,
+        errorClass = "AMBIGUOUS_REFERENCE",
+        parameters = Map("name" -> "`i`", "referenceNames" -> referenceNames("i")),
         context = ExpectedContext(
           fragment = "i",
           start = 22 + target.length + source.length,
@@ -2002,8 +2007,8 @@ class PlanResolutionSuite extends AnalysisTest {
       // resolve column `s` as it's ambiguous.
       checkError(
         exception = intercept[AnalysisException](parseAndResolve(sql3)),
-        errorClass = null,
-        parameters = Map.empty,
+        errorClass = "AMBIGUOUS_REFERENCE",
+        parameters = Map("name" -> "`s`", "referenceNames" -> referenceNames("s")),
         context = ExpectedContext(
           fragment = "s",
           start = 46 + target.length + source.length,
@@ -2018,8 +2023,8 @@ class PlanResolutionSuite extends AnalysisTest {
       // resolve column `s` as it's ambiguous.
       checkError(
         exception = intercept[AnalysisException](parseAndResolve(sql4)),
-        errorClass = null,
-        parameters = Map.empty,
+        errorClass = "AMBIGUOUS_REFERENCE",
+        parameters = Map("name" -> "`s`", "referenceNames" -> referenceNames("s")),
         context = ExpectedContext(
           fragment = "s",
           start = 46 + target.length + source.length,
@@ -2034,8 +2039,8 @@ class PlanResolutionSuite extends AnalysisTest {
       // resolve column `s` as it's ambiguous.
       checkError(
         exception = intercept[AnalysisException](parseAndResolve(sql5)),
-        errorClass = null,
-        parameters = Map.empty,
+        errorClass = "AMBIGUOUS_REFERENCE",
+        parameters = Map("name" -> "`s`", "referenceNames" -> referenceNames("s")),
         context = ExpectedContext(
           fragment = "s",
           start = 61 + target.length + source.length,
