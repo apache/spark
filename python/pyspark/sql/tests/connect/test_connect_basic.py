@@ -307,7 +307,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             self.assertEqual(len(expectResult), len(actualResult))
 
     def test_simple_transform(self) -> None:
-        """SPARK-39375: Support DF.transform"""
+        """SPARK-41203: Support DF.transform"""
 
         def transform_df(input_df: DataFrame) -> DataFrame:
             return input_df.select((col("id") + lit(10)).alias("id"))
