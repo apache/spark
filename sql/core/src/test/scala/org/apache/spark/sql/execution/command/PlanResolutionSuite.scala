@@ -1929,10 +1929,10 @@ class PlanResolutionSuite extends AnalysisTest {
 
     // no aliases
     Seq(("v2Table", "v2Table1"), ("testcat.tab", "testcat.tab1")).foreach { pair =>
-
       val target = pair._1
       val source = pair._2
-      def referenceNames(column: String) = target match {
+      
+      def referenceNames(column: String): String = target match {
         case "v2Table" => s"[`spark_catalog`.`default`.`v2Table1`.`$column`, " +
           s"`spark_catalog`.`default`.`v2Table`.`$column`]"
         case "testcat.tab" => s"[`testcat`.`tab1`.`$column`, `testcat`.`tab`.`$column`]"
