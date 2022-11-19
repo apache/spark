@@ -1929,15 +1929,14 @@ class PlanResolutionSuite extends AnalysisTest {
 
     // no aliases
     Seq(("v2Table", "v2Table1"), ("testcat.tab", "testcat.tab1")).foreach { pair =>
-      val target = pair._1
-      val source = pair._2
-      
-      def referenceNames(column: String): String = target match {
+      def referenceNames(target: String, column: String): String = target match {
         case "v2Table" => s"[`spark_catalog`.`default`.`v2Table1`.`$column`, " +
           s"`spark_catalog`.`default`.`v2Table`.`$column`]"
         case "testcat.tab" => s"[`testcat`.`tab1`.`$column`, `testcat`.`tab`.`$column`]"
       }
 
+      val target = pair._1
+      val source = pair._2
       val sql1 =
         s"""
            |MERGE INTO $target
@@ -1992,7 +1991,7 @@ class PlanResolutionSuite extends AnalysisTest {
       checkError(
         exception = intercept[AnalysisException](parseAndResolve(sql2)),
         errorClass = "AMBIGUOUS_REFERENCE",
-        parameters = Map("name" -> "`i`", "referenceNames" -> referenceNames("i")),
+        parameters = Map("name" -> "`i`", "referenceNames" -> referenceNames(target, "i")),
         context = ExpectedContext(
           fragment = "i",
           start = 22 + target.length + source.length,
@@ -2008,7 +2007,7 @@ class PlanResolutionSuite extends AnalysisTest {
       checkError(
         exception = intercept[AnalysisException](parseAndResolve(sql3)),
         errorClass = "AMBIGUOUS_REFERENCE",
-        parameters = Map("name" -> "`s`", "referenceNames" -> referenceNames("s")),
+        parameters = Map("name" -> "`s`", "referenceNames" -> referenceNames(target, "s")),
         context = ExpectedContext(
           fragment = "s",
           start = 46 + target.length + source.length,
@@ -2024,7 +2023,7 @@ class PlanResolutionSuite extends AnalysisTest {
       checkError(
         exception = intercept[AnalysisException](parseAndResolve(sql4)),
         errorClass = "AMBIGUOUS_REFERENCE",
-        parameters = Map("name" -> "`s`", "referenceNames" -> referenceNames("s")),
+        parameters = Map("name" -> "`s`", "referenceNames" -> referenceNames(target, "s")),
         context = ExpectedContext(
           fragment = "s",
           start = 46 + target.length + source.length,
@@ -2040,7 +2039,7 @@ class PlanResolutionSuite extends AnalysisTest {
       checkError(
         exception = intercept[AnalysisException](parseAndResolve(sql5)),
         errorClass = "AMBIGUOUS_REFERENCE",
-        parameters = Map("name" -> "`s`", "referenceNames" -> referenceNames("s")),
+        parameters = Map("name" -> "`s`", "referenceNames" -> referenceNames(target, "s")),
         context = ExpectedContext(
           fragment = "s",
           start = 61 + target.length + source.length,
