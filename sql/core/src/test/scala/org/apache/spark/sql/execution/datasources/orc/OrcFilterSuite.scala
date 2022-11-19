@@ -674,11 +674,21 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
 
         // Exception thrown for ambiguous case.
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-          val e = intercept[AnalysisException] {
-            sql(s"select a from $tableName where a < 0").collect()
-          }
-          assert(e.getMessage.contains(
-            "Reference 'a' is ambiguous"))
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"select a from $tableName where a < 0").collect()
+            },
+            errorClass = "AMBIGUOUS_REFERENCE",
+            parameters = Map(
+              "name" -> "`a`",
+              "referenceNames" -> ("[`spark_catalog`.`default`.`spark_32622`.`a`, " +
+                "`spark_catalog`.`default`.`spark_32622`.`a`]")),
+            context = ExpectedContext(
+              fragment = "a",
+              start = 32,
+              stop = 32
+            )
+          )
         }
       }
 

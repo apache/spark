@@ -1834,6 +1834,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "n" -> numMatches.toString))
   }
 
+  def ambiguousReferenceError(name: String, ambiguousReferences: Seq[Attribute]): Throwable = {
+    new AnalysisException(
+      errorClass = "AMBIGUOUS_REFERENCE",
+      messageParameters = Map(
+        "name" -> toSQLId(name),
+        "referenceNames" ->
+          ambiguousReferences.map(ar => toSQLId(ar.qualifiedName)).sorted.mkString("[", ", ", "]")))
+  }
+
   def cannotUseIntervalTypeInTableSchemaError(): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1183",

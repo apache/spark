@@ -5,6 +5,11 @@
     ],
     "sqlState" : "42000"
   },
+  "AMBIGUOUS_REFERENCE" : {
+    "message" : [
+      "Reference <name> is ambiguous, could be: <referenceNames>."
+    ]
+  },
   "ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<message>.<alternative> If necessary set <config> to \"false\" to bypass this error."
