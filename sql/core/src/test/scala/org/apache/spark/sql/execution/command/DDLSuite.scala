@@ -2092,10 +2092,16 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       val function = CatalogFunction(func, "test.non.exists.udf", Seq.empty)
       spark.sessionState.catalog.createFunction(function, false)
       assert(!spark.sessionState.catalog.isRegisteredFunction(func))
-      val err = intercept[AnalysisException] {
-        sql("REFRESH FUNCTION func1")
-      }.getMessage
-      assert(err.contains("Can not load class"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("REFRESH FUNCTION func1")
+        },
+        errorClass = "CANNOT_LOAD_FUNCTION_CLASS",
+        parameters = Map(
+          "className" -> "test.non.exists.udf",
+          "functionName" -> "`spark_catalog`.`default`.`func1`"
+        )
+      )
       assert(!spark.sessionState.catalog.isRegisteredFunction(func))
     }
   }
