@@ -1249,13 +1249,20 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map("o" -> o.toString()))
   }
 
-  def unscaledValueTooLargeForPrecisionError(): SparkArithmeticException = {
+  def unscaledValueTooLargeForPrecisionError(
+      value: Decimal,
+      decimalPrecision: Int,
+      decimalScale: Int,
+      context: SQLQueryContext = null): ArithmeticException = {
     new SparkArithmeticException(
-      errorClass = "UNSCALED_VALUE_TOO_LARGE_FOR_PRECISION",
+      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE",
       messageParameters = Map(
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      context = Array.empty,
-      summary = "")
+        "value" -> value.toPlainString,
+        "precision" -> decimalPrecision.toString,
+        "scale" -> decimalScale.toString,
+        "config" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+      context = getQueryContext(context),
+      summary = getSummary(context))
   }
 
   def decimalPrecisionExceedsMaxPrecisionError(
@@ -1272,7 +1279,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def outOfDecimalTypeRangeError(str: UTF8String): SparkArithmeticException = {
     new SparkArithmeticException(
-      errorClass = "OUT_OF_DECIMAL_TYPE_RANGE",
+      errorClass = "NUMERIC_OUT_OF_SUPPORTED_RANGE",
       messageParameters = Map(
         "value" -> str.toString),
       context = Array.empty,

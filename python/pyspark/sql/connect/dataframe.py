@@ -25,6 +25,7 @@ from typing import (
     Union,
     TYPE_CHECKING,
     overload,
+    cast,
 )
 
 import pandas
@@ -755,12 +756,70 @@ class DataFrame(object):
         else:
             return self._schema
 
-    def explain(self) -> str:
+    def explain(
+        self, extended: Optional[Union[bool, str]] = None, mode: Optional[str] = None
+    ) -> str:
+        """Retruns plans in string for debugging purpose.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        extended : bool, optional
+            default ``False``. If ``False``, returns only the physical plan.
+            When this is a string without specifying the ``mode``, it works as the mode is
+            specified.
+        mode : str, optional
+            specifies the expected output format of plans.
+
+            * ``simple``: Print only a physical plan.
+            * ``extended``: Print both logical and physical plans.
+            * ``codegen``: Print a physical plan and generated codes if they are available.
+            * ``cost``: Print a logical plan and statistics if they are available.
+            * ``formatted``: Split explain output into two sections: a physical plan outline \
+                and node details.
+        """
+        if extended is not None and mode is not None:
+            raise ValueError("extended and mode should not be set together.")
+
+        # For the no argument case: df.explain()
+        is_no_argument = extended is None and mode is None
+
+        # For the cases below:
+        #   explain(True)
+        #   explain(extended=False)
+        is_extended_case = isinstance(extended, bool) and mode is None
+
+        # For the case when extended is mode:
+        #   df.explain("formatted")
+        is_extended_as_mode = isinstance(extended, str) and mode is None
+
+        # For the mode specified:
+        #   df.explain(mode="formatted")
+        is_mode_case = extended is None and isinstance(mode, str)
+
+        if not (is_no_argument or is_extended_case or is_extended_as_mode or is_mode_case):
+            argtypes = [str(type(arg)) for arg in [extended, mode] if arg is not None]
+            raise TypeError(
+                "extended (optional) and mode (optional) should be a string "
+                "and bool; however, got [%s]." % ", ".join(argtypes)
+            )
+
+        # Sets an explain mode depending on a given argument
+        if is_no_argument:
+            explain_mode = "simple"
+        elif is_extended_case:
+            explain_mode = "extended" if extended else "simple"
+        elif is_mode_case:
+            explain_mode = cast(str, mode)
+        elif is_extended_as_mode:
+            explain_mode = cast(str, extended)
+
         if self._plan is not None:
             query = self._plan.to_proto(self._session)
             if self._session is None:
                 raise Exception("Cannot analyze without RemoteSparkSession.")
-            return self._session.explain_string(query)
+            return self._session.explain_string(query, explain_mode)
         else:
             return ""
 
