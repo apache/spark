@@ -549,10 +549,10 @@ class HiveDDLSuite
   }
 
   test("create table: partition column names exist in table definition") {
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       "CREATE TABLE tbl(a int) PARTITIONED BY (a string)",
-      "Found duplicate column(s) in the table definition of " +
-        s"`$SESSION_CATALOG_NAME`.`default`.`tbl`: `a`")
+      "COLUMN_ALREADY_EXISTS",
+      Map("columnName" -> "`a`"))
   }
 
   test("create partitioned table without specifying data type for the partition columns") {
