@@ -431,10 +431,12 @@ trait AlterTableTests extends SharedSparkSession {
     val t = s"${catalogAndNamespace}table_name"
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
-      val e = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t ADD COLUMNS (data string, data1 string, data string)")
-      }
-      assert(e.message.contains("Found duplicate column(s) in the user specified columns: `data`"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $t ADD COLUMNS (data string, data1 string, data string)")
+        },
+        errorClass = "COLUMN_ALREADY_EXISTS",
+        parameters = Map("columnName" -> "`data`"))
     }
   }
 
@@ -442,11 +444,12 @@ trait AlterTableTests extends SharedSparkSession {
     val t = s"${catalogAndNamespace}table_name"
     withTable(t) {
       sql(s"CREATE TABLE $t (id int, point struct<x: double, y: double>) USING $v2Format")
-      val e = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t ADD COLUMNS (point.z double, point.z double, point.xx double)")
-      }
-      assert(e.message.contains(
-        "Found duplicate column(s) in the user specified columns: `point.z`"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $t ADD COLUMNS (point.z double, point.z double, point.xx double)")
+        },
+        errorClass = "COLUMN_ALREADY_EXISTS",
+        parameters = Map("columnName" -> "`point.z`"))
     }
   }
 
@@ -1221,10 +1224,12 @@ trait AlterTableTests extends SharedSparkSession {
     val t = s"${catalogAndNamespace}table_name"
     withTable(t) {
       sql(s"CREATE TABLE $t (data string) USING $v2Format")
-      val e = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t REPLACE COLUMNS (data string, data1 string, data string)")
-      }
-      assert(e.message.contains("Found duplicate column(s) in the user specified columns: `data`"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $t REPLACE COLUMNS (data string, data1 string, data string)")
+        },
+        errorClass = "COLUMN_ALREADY_EXISTS",
+        parameters = Map("columnName" -> "`data`"))
     }
   }
 }
