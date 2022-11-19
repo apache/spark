@@ -196,13 +196,14 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
               signal.wait()
               result = partitions.remove(currentPartitionId)
             }
-            error match {
-              case NonFatal(e) =>
-                responseObserver.onError(error)
-                logError("Error while processing query.", e)
-                return
-              case fatal: Throwable => throw fatal
-              case null => result.get
+            if (error == null) {
+              result.get
+            } else if (NonFatal(error)) {
+              responseObserver.onError(error)
+              logError("Error while processing query.", error)
+              return
+            } else {
+              throw error
             }
           }
 
