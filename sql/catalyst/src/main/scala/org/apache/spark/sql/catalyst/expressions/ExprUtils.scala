@@ -128,7 +128,6 @@ object ExprUtils extends QueryErrorsBase {
   def reduceToExpressionTree(
        expressions: Seq[Expression],
        expressionCombiner: (Expression, Expression) => Expression): Expression = {
-    assert(expressions.size > 0)
     def combineRangeExpressions(low: Int, high: Int): Expression = high - low match {
       case 0 =>
         expressions(low)
