@@ -899,10 +899,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def cannotLoadClassWhenRegisteringFunctionError(
       className: String, func: FunctionIdentifier): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1078",
+      errorClass = "CANNOT_LOAD_FUNCTION_CLASS",
       messageParameters = Map(
         "className" -> className,
-        "func" -> func.toString))
+        "functionName" -> toSQLId(func.toString)))
   }
 
   def resourceTypeNotSupportedError(resourceType: String): Throwable = {

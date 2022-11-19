@@ -48,6 +48,11 @@
     ],
     "sqlState" : "42000"
   },
+  "CANNOT_LOAD_FUNCTION_CLASS" : {
+    "message" : [
+      "Cannot load class <className> when registering the function <functionName>, please make sure it is on the classpath."
+    ]
+  },
   "CANNOT_LOAD_PROTOBUF_CLASS" : {
     "message" : [
       "Could not load Protobuf class with name <protobufClassName>. <explanation>."
@@ -2073,11 +2078,6 @@
   "_LEGACY_ERROR_TEMP_1076" : {
     "message" : [
       "Partition spec is invalid. <details>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1078" : {
-    "message" : [
-      "Can not load class '<className>' when registering the function '<func>', please make sure it is on the classpath."
     ]
   },
   "_LEGACY_ERROR_TEMP_1079" : {
