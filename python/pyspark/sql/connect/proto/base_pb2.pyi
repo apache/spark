@@ -43,6 +43,7 @@ import pyspark.sql.connect.proto.commands_pb2
 import pyspark.sql.connect.proto.relations_pb2
 import pyspark.sql.connect.proto.types_pb2
 import sys
+import typing
 
 if sys.version_info >= (3, 8):
     import typing as typing_extensions
@@ -50,6 +51,61 @@ else:
     import typing_extensions
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
+
+class ErrorResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    MESSAGE_FIELD_NUMBER: builtins.int
+    SOURCE_INFO_FIELD_NUMBER: builtins.int
+    CODE_FIELD_NUMBER: builtins.int
+    message: builtins.str
+    source_info: builtins.str
+    code: builtins.int
+    def __init__(
+        self,
+        *,
+        message: builtins.str = ...,
+        source_info: builtins.str | None = ...,
+        code: builtins.int | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_code",
+            b"_code",
+            "_source_info",
+            b"_source_info",
+            "code",
+            b"code",
+            "source_info",
+            b"source_info",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_code",
+            b"_code",
+            "_source_info",
+            b"_source_info",
+            "code",
+            b"code",
+            "message",
+            b"message",
+            "source_info",
+            b"source_info",
+        ],
+    ) -> None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_code", b"_code"]
+    ) -> typing_extensions.Literal["code"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_source_info", b"_source_info"]
+    ) -> typing_extensions.Literal["source_info"] | None: ...
+
+global___ErrorResponse = ErrorResponse
 
 class Plan(google.protobuf.message.Message):
     """A [[Plan]] is the structure that carries the runtime information for the execution from the

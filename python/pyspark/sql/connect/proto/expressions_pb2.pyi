@@ -49,6 +49,22 @@ else:
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
+class ExpressionCommon(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    SOURCE_INFO_FIELD_NUMBER: builtins.int
+    source_info: builtins.str
+    def __init__(
+        self,
+        *,
+        source_info: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["source_info", b"source_info"]
+    ) -> None: ...
+
+global___ExpressionCommon = ExpressionCommon
+
 class Expression(google.protobuf.message.Message):
     """Expression used to refer to fields, functions and similar. This can be used everywhere
     expressions in SQL appear.
@@ -665,12 +681,16 @@ class Expression(google.protobuf.message.Message):
             self, oneof_group: typing_extensions.Literal["_metadata", b"_metadata"]
         ) -> typing_extensions.Literal["metadata"] | None: ...
 
+    COMMON_FIELD_NUMBER: builtins.int
     LITERAL_FIELD_NUMBER: builtins.int
     UNRESOLVED_ATTRIBUTE_FIELD_NUMBER: builtins.int
     UNRESOLVED_FUNCTION_FIELD_NUMBER: builtins.int
     EXPRESSION_STRING_FIELD_NUMBER: builtins.int
     UNRESOLVED_STAR_FIELD_NUMBER: builtins.int
     ALIAS_FIELD_NUMBER: builtins.int
+    @property
+    def common(self) -> global___ExpressionCommon:
+        """Common data and source information."""
     @property
     def literal(self) -> global___Expression.Literal: ...
     @property
@@ -686,6 +706,7 @@ class Expression(google.protobuf.message.Message):
     def __init__(
         self,
         *,
+        common: global___ExpressionCommon | None = ...,
         literal: global___Expression.Literal | None = ...,
         unresolved_attribute: global___Expression.UnresolvedAttribute | None = ...,
         unresolved_function: global___Expression.UnresolvedFunction | None = ...,
@@ -698,6 +719,8 @@ class Expression(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "alias",
             b"alias",
+            "common",
+            b"common",
             "expr_type",
             b"expr_type",
             "expression_string",
@@ -717,6 +740,8 @@ class Expression(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "alias",
             b"alias",
+            "common",
+            b"common",
             "expr_type",
             b"expr_type",
             "expression_string",

@@ -23,6 +23,7 @@ import datetime
 
 import pyspark.sql.connect.proto as proto
 from pyspark.sql.connect._typing import PrimitiveType
+from pyspark.traceback_utils import first_spark_call
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.client import RemoteSparkSession
@@ -70,15 +71,27 @@ class Expression(object):
         """Returns a binary expression with the current column as the left
         side and the other expression as the right side.
         """
+
         if isinstance(other, get_args(PrimitiveType)):
             other = LiteralExpression(other)
         return ScalarFunctionExpression("==", self, other)
 
     def __init__(self) -> None:
-        pass
+        self._source_info = first_spark_call()
 
     def to_plan(self, session: "RemoteSparkSession") -> "proto.Expression":
         ...
+
+    def _proto_expression(self) -> "proto.Expression":
+        exp = proto.Expression()
+        exp.common.source_info = self._json_callsite()
+        return exp
+
+    def _json_callsite(self):
+        return json.dumps(
+            {"function": self._source_info.function,
+             "file": self._source_info.file,
+             "linenum": self._source_info.linenum})
 
     def __str__(self) -> str:
         ...
@@ -130,7 +143,7 @@ class ColumnAlias(Expression):
 
     def to_plan(self, session: "RemoteSparkSession") -> "proto.Expression":
         if len(self._alias) == 1:
-            exp = proto.Expression()
+            exp = self._proto_expression()
             exp.alias.name.append(self._alias[0])
             exp.alias.expr.CopyFrom(self._parent.to_plan(session))
 
@@ -140,7 +153,7 @@ class ColumnAlias(Expression):
         else:
             if self._metadata:
                 raise ValueError("metadata can only be provided for a single column")
-            exp = proto.Expression()
+            exp = self._proto_expression()
             exp.alias.name.extend(self._alias)
             exp.alias.expr.CopyFrom(self._parent.to_plan(session))
             return exp
@@ -165,7 +178,7 @@ class LiteralExpression(Expression):
         TODO(SPARK-40533) This method always assumes the largest type and can thus
              create weird interpretations of the literal."""
         value_type = type(self._value)
-        exp = proto.Expression()
+        exp = self._proto_expression()
         if value_type is int:
             exp.literal.i64 = cast(int, self._value)
         elif value_type is bool:
@@ -249,7 +262,7 @@ class Column(Expression):
 
     def to_plan(self, session: "RemoteSparkSession") -> proto.Expression:
         """Returns the Proto representation of the expression."""
-        expr = proto.Expression()
+        expr = self._proto_expression()
         expr.unresolved_attribute.unparsed_identifier = self._unparsed_identifier
         return expr
 
@@ -288,7 +301,7 @@ class ScalarFunctionExpression(Expression):
         self._op = op
 
     def to_plan(self, session: "RemoteSparkSession") -> proto.Expression:
-        fun = proto.Expression()
+        fun = self._proto_expression()
         fun.unresolved_function.parts.append(self._op)
         fun.unresolved_function.arguments.extend([x.to_plan(session) for x in self._args])
         return fun

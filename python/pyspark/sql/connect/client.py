@@ -17,6 +17,7 @@
 
 
 import io
+import json
 import logging
 import os
 import typing
@@ -431,14 +432,23 @@ class RemoteSparkSession(object):
 
         m: Optional[pb2.Response.Metrics] = None
         result_dfs = []
+        try:
+            for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
+                if b.metrics is not None:
+                    m = b.metrics
 
-        for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
-            if b.metrics is not None:
-                m = b.metrics
-
-            pb = self._process_batch(b)
-            if pb is not None:
-                result_dfs.append(pb)
+                pb = self._process_batch(b)
+                if pb is not None:
+                    result_dfs.append(pb)
+        except grpc.RpcError as rpc_error:
+            from grpc_status import rpc_status
+            status = rpc_status.from_call(rpc_error)
+            for d in status.details:
+                if d.Is(pb2.ErrorResponse.DESCRIPTOR):
+                    info = pb2.ErrorResponse()
+                    d.Unpack(info)
+                    raise RuntimeError(self._format_error(status.message, info.source_info)) from None
+            raise RuntimeError(str(rpc_error)) from None
 
         if len(result_dfs) > 0:
             df = pd.concat(result_dfs)
@@ -455,3 +465,14 @@ class RemoteSparkSession(object):
             return df
         else:
             return None
+
+
+    def _format_error(self, message: str, source_info: str) -> str:
+        source = json.loads(source_info)
+        return (
+            f"{message}\n"
+            "================\n"
+            "Source location:\n"
+            f"\t- {source['file']}:{source['linenum']}"
+        )
+

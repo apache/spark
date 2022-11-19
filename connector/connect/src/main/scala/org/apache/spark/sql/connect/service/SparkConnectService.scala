@@ -21,8 +21,11 @@ import java.util.concurrent.TimeUnit
 
 import com.google.common.base.Ticker
 import com.google.common.cache.CacheBuilder
+import com.google.protobuf.Any
+import com.google.rpc.{Code, Status => RpcStatus}
 import io.grpc.{Server, Status}
 import io.grpc.netty.NettyServerBuilder
+import io.grpc.protobuf.StatusProto
 import io.grpc.protobuf.services.ProtoReflectionService
 import io.grpc.stub.StreamObserver
 
@@ -30,7 +33,8 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AnalyzeResponse, Request, Response, SparkConnectServiceGrpc}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Dataset, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Dataset, SparkSession}
+import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_BINDING_PORT
 import org.apache.spark.sql.connect.planner.{DataTypeProtoConverter, SparkConnectPlanner}
 import org.apache.spark.sql.execution.ExtendedMode
@@ -61,10 +65,25 @@ class SparkConnectService(debug: Boolean)
     try {
       new SparkConnectStreamHandler(responseObserver).handle(request)
     } catch {
+      case e: AnalysisException =>
+        log.error("Error executing plan.", e)
+        val ctx = e.getQueryContext.toSeq(0).asInstanceOf[SQLQueryContext]
+        val rpcStatus = RpcStatus.newBuilder()
+          .setCode(Code.UNKNOWN.getNumber)
+          .addDetails(
+            Any.pack(proto.ErrorResponse.newBuilder().setMessage(e.getLocalizedMessage)
+            .setCode(Code.UNKNOWN_VALUE)
+            .setSourceInfo(ctx.sourceInfo.get).build()))
+          .setMessage(e.getLocalizedMessage)
+          .build()
+
+        val status = StatusProto.toStatusRuntimeException(rpcStatus)
+        responseObserver.onError(status)
       case e: Throwable =>
         log.error("Error executing plan.", e)
         responseObserver.onError(
           Status.UNKNOWN.withCause(e).withDescription(e.getLocalizedMessage).asRuntimeException())
+
     }
   }
 
