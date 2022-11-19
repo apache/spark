@@ -2356,14 +2356,16 @@ class HiveDDLSuite
           sql("CREATE TABLE tab (c1 int) PARTITIONED BY (c2 int) STORED AS PARQUET")
           if (!caseSensitive) {
             // duplicating partitioning column name
-            assertAnalysisError(
+            assertAnalysisErrorClass(
               "ALTER TABLE tab ADD COLUMNS (C2 string)",
-              "Found duplicate column(s)")
+              "COLUMN_ALREADY_EXISTS",
+              Map("columnName" -> "`c2`"))
 
             // duplicating data column name
-            assertAnalysisError(
+            assertAnalysisErrorClass(
               "ALTER TABLE tab ADD COLUMNS (C1 string)",
-              "Found duplicate column(s)")
+              "COLUMN_ALREADY_EXISTS",
+              Map("columnName" -> "`c1`"))
           } else {
             // hive catalog will still complains that c1 is duplicate column name because hive
             // identifiers are case insensitive.
