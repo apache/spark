@@ -22,6 +22,7 @@ import scala.collection.mutable
 
 import com.google.common.collect.{Lists, Maps}
 
+import org.apache.spark.SparkException
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.WriteOperation
@@ -45,12 +46,18 @@ import org.apache.spark.util.Utils
 final case class InvalidPlanInput(
     private val message: String = "",
     private val cause: Throwable = None.orNull)
-    extends Exception(message, cause)
+    extends SparkException(
+      errorClass = "CONNECT.INVALID_PLAN_INPUT",
+      messageParameters = Map("msg" -> message),
+      cause = cause)
 
 final case class InvalidCommandInput(
     private val message: String = "",
     private val cause: Throwable = null)
-    extends Exception(message, cause)
+    extends SparkException(
+      errorClass = "CONNECT.INVALID_COMMAND_INPUT",
+      messageParameters = Map("msg" -> message),
+      cause = cause)
 
 class SparkConnectPlanner(session: SparkSession) {
   lazy val pythonExec =

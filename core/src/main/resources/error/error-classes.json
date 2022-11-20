@@ -129,6 +129,16 @@
         "message" : [
           "Error instantiating GRPC interceptor: <msg>"
         ]
+      },
+      "INVALID_PLAN_INPUT": {
+        "message" : [
+          "Error transforming Spark Connect plan: <msg>"
+        ]
+      },
+      "INVALID_COMMAND_INPUT": {
+        "message" : [
+          "Error transforming Spark Connect command: <msg>"
+        ]
       }
     }
   },
