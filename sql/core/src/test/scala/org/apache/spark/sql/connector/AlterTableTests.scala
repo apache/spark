@@ -25,11 +25,12 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.connector.catalog.Table
+import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-trait AlterTableTests extends SharedSparkSession {
+trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
 
   protected def getTableMetadata(tableName: String): Table
 
@@ -449,7 +450,7 @@ trait AlterTableTests extends SharedSparkSession {
           sql(s"ALTER TABLE $t ADD COLUMNS (point.z double, point.z double, point.xx double)")
         },
         errorClass = "COLUMN_ALREADY_EXISTS",
-        parameters = Map("columnName" -> "`point.z`"))
+        parameters = Map("columnName" -> toSQLId("point.z")))
     }
   }
 
