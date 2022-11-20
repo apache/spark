@@ -5,6 +5,11 @@
     ],
     "sqlState" : "42000"
   },
+  "AMBIGUOUS_REFERENCE" : {
+    "message" : [
+      "Reference <name> is ambiguous, could be: <referenceNames>."
+    ]
+  },
   "ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<message>.<alternative> If necessary set <config> to \"false\" to bypass this error."
@@ -47,6 +52,11 @@
       "Cannot decode url : <url>."
     ],
     "sqlState" : "42000"
+  },
+  "CANNOT_LOAD_FUNCTION_CLASS" : {
+    "message" : [
+      "Cannot load class <className> when registering the function <functionName>, please make sure it is on the classpath."
+    ]
   },
   "CANNOT_LOAD_PROTOBUF_CLASS" : {
     "message" : [
@@ -2073,11 +2083,6 @@
   "_LEGACY_ERROR_TEMP_1076" : {
     "message" : [
       "Partition spec is invalid. <details>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1078" : {
-    "message" : [
-      "Can not load class '<className>' when registering the function '<func>', please make sure it is on the classpath."
     ]
   },
   "_LEGACY_ERROR_TEMP_1079" : {

@@ -3827,10 +3827,16 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           s"default.$functionName" -> false,
           functionName -> true) {
           // create temporary function without class
-          val e = intercept[AnalysisException] {
-            sql(s"CREATE TEMPORARY FUNCTION $functionName AS '$sumFuncClass'")
-          }.getMessage
-          assert(e.contains("Can not load class 'org.apache.spark.examples.sql.Spark33084"))
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"CREATE TEMPORARY FUNCTION $functionName AS '$sumFuncClass'")
+            },
+            errorClass = "CANNOT_LOAD_FUNCTION_CLASS",
+            parameters = Map(
+              "className" -> "org.apache.spark.examples.sql.Spark33084",
+              "functionName" -> "`test_udf`"
+            )
+          )
           sql("ADD JAR ivy://org.apache.spark:SPARK-33084:1.0")
           sql(s"CREATE TEMPORARY FUNCTION $functionName AS '$sumFuncClass'")
           // create a view using a function in 'default' database
