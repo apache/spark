@@ -348,8 +348,9 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
 
     checkError(
       exception = intercept[AnalysisException] {
-        transform(connectTestRelation.withColumnsRenamed(
-          Map("id" -> "duplicatedCol", "name" -> "duplicatedCol")))
+        transform(
+          connectTestRelation.withColumnsRenamed(
+            Map("id" -> "duplicatedCol", "name" -> "duplicatedCol")))
       },
       errorClass = "COLUMN_ALREADY_EXISTS",
       parameters = Map("columnName" -> "`duplicatedcol`"))
