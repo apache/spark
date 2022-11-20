@@ -318,7 +318,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertEqual(result_right, result_left)
 
         # Check assertion.
-        with self.assertRaises(AssertionError) as exc:
+        with self.assertRaises(AssertionError):
             df.transform(lambda x: 2)
 
     def test_alias(self) -> None:

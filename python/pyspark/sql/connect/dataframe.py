@@ -760,7 +760,7 @@ class DataFrame(object):
     def transform(self, func: Callable[..., "DataFrame"], *args: Any, **kwargs: Any) -> "DataFrame":
         """Returns a new :class:`DataFrame`. Concise syntax for chaining custom transformations.
 
-        .. versionadded:: 3.0.0
+        .. versionadded:: 3.4.0
 
         Parameters
         ----------
@@ -769,11 +769,8 @@ class DataFrame(object):
         *args
             Positional arguments to pass to func.
 
-            .. versionadded:: 3.3.0
         **kwargs
             Keyword arguments to pass to func.
-
-            .. versionadded:: 3.3.0
 
         Returns
         -------
