@@ -94,7 +94,7 @@ case class WindowExec(
   val addBuffer = if (rankLimit.isDefined) {
     val groupLimit = rankLimit.get
     (buffer: ExternalAppendOnlyUnsafeRowArray, row: UnsafeRow) =>
-      if (buffer.length < groupLimit) {
+      if (buffer.length <= groupLimit) {
         buffer.add(row)
       }
   } else {
