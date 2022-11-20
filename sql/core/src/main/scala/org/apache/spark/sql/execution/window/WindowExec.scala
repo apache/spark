@@ -91,23 +91,23 @@ case class WindowExec(
     rankLimit: Option[Int] = None)
   extends WindowExecBase {
 
+  val addBuffer = if (rankLimit.isDefined) {
+    val groupLimit = rankLimit.get
+    (buffer: ExternalAppendOnlyUnsafeRowArray, row: UnsafeRow) =>
+      if (buffer.length < groupLimit) {
+        buffer.add(row)
+      }
+  } else {
+    (buffer: ExternalAppendOnlyUnsafeRowArray, row: UnsafeRow) =>
+      buffer.add(row)
+  }
+
   protected override def doExecute(): RDD[InternalRow] = {
     // Unwrap the window expressions and window frame factories from the map.
     val expressions = windowFrameExpressionFactoryPairs.flatMap(_._1)
     val factories = windowFrameExpressionFactoryPairs.map(_._2).toArray
     val inMemoryThreshold = conf.windowExecBufferInMemoryThreshold
     val spillThreshold = conf.windowExecBufferSpillThreshold
-
-    val addBuffer = if (rankLimit.isDefined) {
-      val groupLimit = rankLimit.get
-      (buffer: ExternalAppendOnlyUnsafeRowArray, row: UnsafeRow) =>
-        if (buffer.length < groupLimit) {
-          buffer.add(row)
-        }
-    } else {
-      (buffer: ExternalAppendOnlyUnsafeRowArray, row: UnsafeRow) =>
-        buffer.add(row)
-    }
 
     // Start processing.
     child.execute().mapPartitions { stream =>
