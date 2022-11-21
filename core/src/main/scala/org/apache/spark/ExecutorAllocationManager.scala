@@ -643,11 +643,8 @@ private[spark] class ExecutorAllocationManager(
     // Should be 0 when no stages are active.
     private val stageAttemptToNumRunningTask = new mutable.HashMap[StageAttempt, Int]
     private val stageAttemptToTaskIndices = new mutable.HashMap[StageAttempt, mutable.HashSet[Int]]
-    // Number of speculative tasks pending/running in each stageAttempt
-    private val stageAttemptToNumSpeculativeTasks =
-      new mutable.HashMap[StageAttempt, mutable.HashSet[Int]]
-    // The speculative tasks started in each stageAttempt
-    private val stageAttemptToSpeculativeTaskIndices =
+    // Number of speculative tasks pending in each stageAttempt
+    private val stageAttemptToUnsubmittedSpeculativeTasks =
       new mutable.HashMap[StageAttempt, mutable.HashSet[Int]]
 
     private val resourceProfileIdToStageAttempt =
@@ -723,9 +720,8 @@ private[spark] class ExecutorAllocationManager(
         // because the attempt may still have running tasks,
         // even after another attempt for the stage is submitted.
         stageAttemptToNumTasks -= stageAttempt
-        stageAttemptToNumSpeculativeTasks -= stageAttempt
+        stageAttemptToUnsubmittedSpeculativeTasks -= stageAttempt
         stageAttemptToTaskIndices -= stageAttempt
-        stageAttemptToSpeculativeTaskIndices -= stageAttempt
         stageAttemptToExecutorPlacementHints -= stageAttempt
         removeStageFromResourceProfileIfUnused(stageAttempt)
 
@@ -734,7 +730,7 @@ private[spark] class ExecutorAllocationManager(
 
         // If this is the last stage with pending tasks, mark the scheduler queue as empty
         // This is needed in case the stage is aborted for any reason
-        if (stageAttemptToNumTasks.isEmpty && stageAttemptToNumSpeculativeTasks.isEmpty) {
+        if (stageAttemptToNumTasks.isEmpty && stageAttemptToUnsubmittedSpeculativeTasks.isEmpty) {
           allocationManager.onSchedulerQueueEmpty()
         }
       }
@@ -750,8 +746,8 @@ private[spark] class ExecutorAllocationManager(
           stageAttemptToNumRunningTask.getOrElse(stageAttempt, 0) + 1
         // If this is the last pending task, mark the scheduler queue as empty
         if (taskStart.taskInfo.speculative) {
-          stageAttemptToSpeculativeTaskIndices.getOrElseUpdate(stageAttempt,
-            new mutable.HashSet[Int]) += taskIndex
+          stageAttemptToUnsubmittedSpeculativeTasks
+            .getOrElseUpdate(stageAttempt, new mutable.HashSet[Int]).remove(taskIndex)
         } else {
           stageAttemptToTaskIndices.getOrElseUpdate(stageAttempt,
             new mutable.HashSet[Int]) += taskIndex
@@ -775,17 +771,11 @@ private[spark] class ExecutorAllocationManager(
             removeStageFromResourceProfileIfUnused(stageAttempt)
           }
         }
-        if (taskEnd.taskInfo.speculative) {
-          stageAttemptToSpeculativeTaskIndices.get(stageAttempt).foreach {_.remove{taskIndex}}
-          // If the previous task attempt succeeded first and it was the last task in a stage,
-          // the stage may have been removed before handing this speculative TaskEnd event.
-          stageAttemptToNumSpeculativeTasks.get(stageAttempt).foreach(_.remove(taskIndex))
-        }
 
         taskEnd.reason match {
           case Success =>
             // remove speculative task for task finished.
-            stageAttemptToNumSpeculativeTasks.get(stageAttempt).foreach(_.remove(taskIndex))
+            stageAttemptToUnsubmittedSpeculativeTasks.get(stageAttempt).foreach(_.remove(taskIndex))
           case _: TaskKilled =>
           case _ =>
             if (!hasPendingTasks) {
@@ -814,7 +804,7 @@ private[spark] class ExecutorAllocationManager(
       val stageAttempt = StageAttempt(stageId, stageAttemptId)
       val taskIndex = speculativeTask.taskIndex
       allocationManager.synchronized {
-        stageAttemptToNumSpeculativeTasks.getOrElseUpdate(stageAttempt,
+        stageAttemptToUnsubmittedSpeculativeTasks.getOrElseUpdate(stageAttempt,
           new mutable.HashSet[Int]).add(taskIndex)
         allocationManager.onSchedulerBacklogged()
       }
@@ -846,9 +836,8 @@ private[spark] class ExecutorAllocationManager(
     def removeStageFromResourceProfileIfUnused(stageAttempt: StageAttempt): Unit = {
       if (!stageAttemptToNumRunningTask.contains(stageAttempt) &&
           !stageAttemptToNumTasks.contains(stageAttempt) &&
-          !stageAttemptToNumSpeculativeTasks.contains(stageAttempt) &&
-          !stageAttemptToTaskIndices.contains(stageAttempt) &&
-          !stageAttemptToSpeculativeTaskIndices.contains(stageAttempt)
+          !stageAttemptToUnsubmittedSpeculativeTasks.contains(stageAttempt) &&
+          !stageAttemptToTaskIndices.contains(stageAttempt)
       ) {
         val rpForStage = resourceProfileIdToStageAttempt.filter { case (k, v) =>
           v.contains(stageAttempt)
@@ -899,10 +888,8 @@ private[spark] class ExecutorAllocationManager(
     }
 
     private def getPendingSpeculativeTaskSum(attempt: StageAttempt): Int = {
-      val numTotalTasks = stageAttemptToNumSpeculativeTasks
+      stageAttemptToUnsubmittedSpeculativeTasks
         .getOrElse(attempt, mutable.HashSet.empty[Int]).size
-      val numRunning = stageAttemptToSpeculativeTaskIndices.get(attempt).map(_.size).getOrElse(0)
-      Math.max(0, numTotalTasks - numRunning)
     }
 
     /**
