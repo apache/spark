@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Unpivot}
+import org.apache.spark.sql.internal.SQLConf
 
 class UnpivotParserSuite extends AnalysisTest {
 
@@ -192,4 +193,151 @@ class UnpivotParserSuite extends AnalysisTest {
     )
   }
 
+  test("unpivot - with joins") {
+    // unpivot the left table
+    assertEqual(
+      "SELECT * FROM t1 UNPIVOT (val FOR col in (a, b)) JOIN t2",
+      Unpivot(
+        None,
+        Some(Seq(Seq(UnresolvedAlias($"a")), Seq(UnresolvedAlias($"b")))),
+        None,
+        "col",
+        Seq("val"),
+        table("t1")
+      ).where(coalesce($"val").isNotNull).join(table("t2")).select(star()))
+
+    // unpivot the join result
+    assertEqual(
+      "SELECT * FROM t1 JOIN t2 UNPIVOT (val FOR col in (a, b))",
+      Unpivot(
+        None,
+        Some(Seq(Seq(UnresolvedAlias($"a")), Seq(UnresolvedAlias($"b")))),
+        None,
+        "col",
+        Seq("val"),
+        table("t1").join(table("t2"))
+      ).where(coalesce($"val").isNotNull).select(star()))
+
+    // unpivot the right table
+    assertEqual(
+      "SELECT * FROM t1 JOIN (t2 UNPIVOT (val FOR col in (a, b)))",
+      table("t1").join(
+        Unpivot(
+          None,
+          Some(Seq(Seq(UnresolvedAlias($"a")), Seq(UnresolvedAlias($"b")))),
+          None,
+          "col",
+          Seq("val"),
+          table("t2")
+        ).where(coalesce($"val").isNotNull)
+      ).select(star()))
+  }
+
+  test("unpivot - with implicit joins") {
+    // unpivot the left table
+    assertEqual(
+      "SELECT * FROM t1 UNPIVOT (val FOR col in (a, b)), t2",
+      Unpivot(
+        None,
+        Some(Seq(Seq(UnresolvedAlias($"a")), Seq(UnresolvedAlias($"b")))),
+        None,
+        "col",
+        Seq("val"),
+        table("t1")
+      ).where(coalesce($"val").isNotNull).join(table("t2")).select(star()))
+
+    // unpivot the join result
+    assertEqual(
+      "SELECT * FROM t1, t2 UNPIVOT (val FOR col in (a, b))",
+      Unpivot(
+        None,
+        Some(Seq(Seq(UnresolvedAlias($"a")), Seq(UnresolvedAlias($"b")))),
+        None,
+        "col",
+        Seq("val"),
+        table("t1").join(table("t2"))
+      ).where(coalesce($"val").isNotNull).select(star()))
+
+    // unpivot the right table - same SQL as above but with ANSI mode
+    withSQLConf(
+      SQLConf.ANSI_ENABLED.key -> "true",
+      SQLConf.ANSI_RELATION_PRECEDENCE.key -> "true") {
+      assertEqual(
+        "SELECT * FROM t1, t2 UNPIVOT (val FOR col in (a, b))",
+        table("t1").join(
+          Unpivot(
+            None,
+            Some(Seq(Seq(UnresolvedAlias($"a")), Seq(UnresolvedAlias($"b")))),
+            None,
+            "col",
+            Seq("val"),
+            table("t2")
+          ).where(coalesce($"val").isNotNull)
+        ).select(star()))
+    }
+
+    // unpivot the right table
+    assertEqual(
+      "SELECT * FROM t1, (t2 UNPIVOT (val FOR col in (a, b)))",
+      table("t1").join(
+        Unpivot(
+          None,
+          Some(Seq(Seq(UnresolvedAlias($"a")), Seq(UnresolvedAlias($"b")))),
+          None,
+          "col",
+          Seq("val"),
+          table("t2")
+        ).where(coalesce($"val").isNotNull)
+      ).select(star()))
+
+    // mixed with explicit joins
+    assertEqual(
+      // unpivot the join result of t1, t2 and t3
+      "SELECT * FROM t1, t2 JOIN t3 UNPIVOT (val FOR col in (a, b))",
+      Unpivot(
+        None,
+        Some(Seq(Seq(UnresolvedAlias($"a")), Seq(UnresolvedAlias($"b")))),
+        None,
+        "col",
+        Seq("val"),
+        table("t1").join(table("t2")).join(table("t3"))
+      ).where(coalesce($"val").isNotNull).select(star()))
+    withSQLConf(
+      SQLConf.ANSI_ENABLED.key -> "true",
+      SQLConf.ANSI_RELATION_PRECEDENCE.key -> "true") {
+      assertEqual(
+        // unpivot the join result of t2 and t3
+        "SELECT * FROM t1, t2 JOIN t3 UNPIVOT (val FOR col in (a, b))",
+        table("t1").join(
+          Unpivot(
+            None,
+            Some(Seq(Seq(UnresolvedAlias($"a")), Seq(UnresolvedAlias($"b")))),
+            None,
+            "col",
+            Seq("val"),
+            table("t2").join(table("t3"))
+          ).where(coalesce($"val").isNotNull)
+        ).select(star()))
+    }
+  }
+
+  test("unpivot - nested unpivot") {
+    assertEqual(
+      "SELECT * FROM t1 UNPIVOT (val FOR col in (a, b)) UNPIVOT (val FOR col in (a, b))",
+      Unpivot(
+        None,
+        Some(Seq(Seq(UnresolvedAlias($"a")), Seq(UnresolvedAlias($"b")))),
+        None,
+        "col",
+        Seq("val"),
+        Unpivot(
+          None,
+          Some(Seq(Seq(UnresolvedAlias($"a")), Seq(UnresolvedAlias($"b")))),
+          None,
+          "col",
+          Seq("val"),
+          table("t1")
+        ).where(coalesce($"val").isNotNull)
+      ).where(coalesce($"val").isNotNull).select(star()))
+  }
 }
