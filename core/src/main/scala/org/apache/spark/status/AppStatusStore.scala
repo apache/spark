@@ -775,9 +775,7 @@ private[spark] object AppStatusStore {
     val storePath = conf.get(LIVE_UI_LOCAL_STORE_DIR).map(new File(_))
     // For the disk-based KV store of live UI, let's simply make it ROCKSDB only for now,
     // instead of supporting both LevelDB and RocksDB. RocksDB is built based on LevelDB with
-    // improvements on writes and reads. Furthermore, we can reuse the RocksDBFileManager in
-    // streaming for replicating the local RocksDB file to DFS. The replication in DFS can be
-    // used for Spark history server.
+    // improvements on writes and reads.
     val kvStore = KVUtils.createKVStore(storePath, HybridStoreDiskBackend.ROCKSDB, conf)
     val store = new ElementTrackingStore(kvStore, conf)
     val listener = new AppStatusListener(store, conf, true, appStatusSource)
