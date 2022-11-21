@@ -705,6 +705,23 @@
       }
     }
   },
+  "INVALID_OPTIONS" : {
+    "message" : [
+      "Invalid options:"
+    ],
+    "subClass" : {
+      "NOT_MAP_FUNCTION" : {
+        "message" : [
+          "Must use a map() function for options."
+        ]
+      },
+      "NON_STRING_TYPE" : {
+        "message" : [
+          "A type of keys and values in map() must be string, but got <map>."
+        ]
+      }
+    }
+  },
   "INVALID_PANDAS_UDF_PLACEMENT" : {
     "message" : [
       "The group aggregate pandas UDF <functionList> cannot be invoked together with as other, non-pandas aggregate functions."
@@ -2158,16 +2175,6 @@
   "_LEGACY_ERROR_TEMP_1094" : {
     "message" : [
       "Schema should be struct type but got <dataType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1095" : {
-    "message" : [
-      "A type of keys and values in map() must be string, but got <map>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1096" : {
-    "message" : [
-      "Must use a map() function for options."
     ]
   },
   "_LEGACY_ERROR_TEMP_1097" : {

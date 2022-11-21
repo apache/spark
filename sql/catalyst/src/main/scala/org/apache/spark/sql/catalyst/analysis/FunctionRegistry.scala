@@ -153,7 +153,9 @@ object FunctionRegistryBase {
         } catch {
           // the exception is an invocation exception. To get a meaningful message, we need the
           // cause.
-          case e: Exception => throw new AnalysisException(e.getCause.getMessage)
+          case e: Exception => throw new AnalysisException(
+            message = e.getCause.getMessage,
+            cause = Some(e))
         }
       }
     }
