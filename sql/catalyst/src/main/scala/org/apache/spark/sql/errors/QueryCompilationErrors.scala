@@ -2233,7 +2233,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def failedFallbackParsingError(msg: String, e1: Throwable, e2: Throwable): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1227",
+      errorClass = "INVALID_DATA_TYPE_SCHEMA",
       messageParameters = Map("msg" -> msg, "e1" -> e1.getMessage, "e2" -> e2.getMessage),
       cause = Some(e1.getCause))
   }
