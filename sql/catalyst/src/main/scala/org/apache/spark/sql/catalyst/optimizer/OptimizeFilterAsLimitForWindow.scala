@@ -59,9 +59,8 @@ object OptimizeFilterAsLimitForWindow extends Rule[LogicalPlan] with PredicateHe
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsAllPatterns(FILTER, WINDOW), ruleId) {
     case filter @ Filter(condition,
-        window @ Window(windowExpressions, partitionSpec, orderSpec, _, _))
-      if window.groupLimit.isEmpty && supports(windowExpressions) &&
-        partitionSpec.nonEmpty && orderSpec.nonEmpty =>
+        window @ Window(windowExpressions, partitionSpec, orderSpec, _, None))
+      if supports(windowExpressions) && partitionSpec.nonEmpty && orderSpec.nonEmpty =>
       val limits = windowExpressions.collect {
         case alias: Alias => extractLimits(condition, alias.toAttribute)
       }.flatten
