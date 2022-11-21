@@ -89,7 +89,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       query: Dataset[_],
       tableName: Option[String] = None,
       storageLevel: StorageLevel = MEMORY_AND_DISK): Unit = {
-    cacheQuery(query.sparkSession, query.logicalPlan, tableName, storageLevel)
+    cacheQuery(query.sparkSession, query.queryExecution.normalized, tableName, storageLevel)
   }
 
   /**
@@ -143,7 +143,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   def uncacheQuery(
       query: Dataset[_],
       cascade: Boolean): Unit = {
-    uncacheQuery(query.sparkSession, query.logicalPlan, cascade)
+    uncacheQuery(query.sparkSession, query.queryExecution.normalized, cascade)
   }
 
   /**
@@ -281,7 +281,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 
   /** Optionally returns cached data for the given [[Dataset]] */
   def lookupCachedData(query: Dataset[_]): Option[CachedData] = {
-    lookupCachedData(query.logicalPlan)
+    lookupCachedData(query.queryExecution.normalized)
   }
 
   /** Optionally returns cached data for the given [[LogicalPlan]]. */

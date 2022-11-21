@@ -170,7 +170,18 @@ class PercentileSuite extends SparkFunSuite {
     invalidDataTypes.foreach { dataType =>
       val child = AttributeReference("a", dataType)()
       val percentile = new Percentile(child, percentage)
-      assert(percentile.checkInputDataTypes().isFailure)
+      assert(percentile.checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> "1",
+            "requiredType" -> ("(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" " +
+              "or \"INTERVAL YEAR TO MONTH\")"),
+            "inputSql" -> "\"a\"",
+            "inputType" -> toSQLType(dataType)
+          )
+        )
+      )
     }
 
     val invalidFrequencyDataTypes = Seq(FloatType, DoubleType, BooleanType,
@@ -182,7 +193,18 @@ class PercentileSuite extends SparkFunSuite {
       val child = AttributeReference("a", dataType)()
       val frq = AttributeReference("frq", frequencyType)()
       val percentile = new Percentile(child, percentage, frq)
-      assert(percentile.checkInputDataTypes().isFailure)
+      assert(percentile.checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> "1",
+            "requiredType" -> ("(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" " +
+              "or \"INTERVAL YEAR TO MONTH\")"),
+            "inputSql" -> "\"a\"",
+            "inputType" -> toSQLType(dataType)
+          )
+        )
+      )
     }
 
     for(dataType <- validDataTypes;
@@ -190,7 +212,17 @@ class PercentileSuite extends SparkFunSuite {
       val child = AttributeReference("a", dataType)()
       val frq = AttributeReference("frq", frequencyType)()
       val percentile = new Percentile(child, percentage, frq)
-      assert(percentile.checkInputDataTypes().isFailure)
+      assert(percentile.checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> "3",
+            "requiredType" -> "\"INTEGRAL\"",
+            "inputSql" -> "\"frq\"",
+            "inputType" -> toSQLType(frequencyType)
+          )
+        )
+      )
     }
   }
 
@@ -260,7 +292,17 @@ class PercentileSuite extends SparkFunSuite {
       val percentage = Literal.default(dataType)
       val percentile4 = new Percentile(child, percentage)
       val checkResult = percentile4.checkInputDataTypes()
-      assert(checkResult.isFailure)
+      assert(checkResult ==
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> "2",
+            "requiredType" -> "\"DOUBLE\"",
+            "inputSql" -> toSQLExpr(percentage),
+            "inputType" -> toSQLType(dataType)
+          )
+        )
+      )
     }
   }
 
@@ -300,7 +342,17 @@ class PercentileSuite extends SparkFunSuite {
       val wrongPercentage = new Percentile(
         AttributeReference("a", DoubleType)(),
         percentageExpression = percentageExpression)
-        assert(wrongPercentage.checkInputDataTypes().isFailure)
+        assert(wrongPercentage.checkInputDataTypes() ==
+          DataTypeMismatch(
+            errorSubClass = "UNEXPECTED_INPUT_TYPE",
+            messageParameters = Map(
+              "paramIndex" -> "2",
+              "requiredType" -> "\"ARRAY<DOUBLE>\"",
+              "inputSql" -> toSQLExpr(percentageExpression),
+              "inputType" -> "\"ARRAY<VOID>\""
+            )
+          )
+        )
     }
   }
 

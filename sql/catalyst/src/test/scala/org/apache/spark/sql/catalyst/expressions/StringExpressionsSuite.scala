@@ -64,10 +64,27 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       .checkInputDataTypes().isSuccess)
     assert(Concat(Literal.create("a".getBytes) :: Literal.create("b".getBytes) :: Nil)
       .checkInputDataTypes().isSuccess)
-    assert(Concat(Literal.create(1) :: Literal.create(2) :: Nil)
-      .checkInputDataTypes().isFailure)
+    assert(Concat(Literal.create(1) :: Literal.create(2) :: Nil).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "1",
+          "requiredType" -> "(\"STRING\" or \"BINARY\" or \"ARRAY\")",
+          "inputSql" -> "\"1\"",
+          "inputType" -> "\"INT\""
+        )
+      )
+    )
     assert(Concat(Literal.create("a") :: Literal.create("b".getBytes) :: Nil)
-      .checkInputDataTypes().isFailure)
+      .checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "DATA_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> "`concat`",
+          "dataType" -> "(\"STRING\" or \"BINARY\")"
+        )
+      )
+    )
   }
 
   test("concat_ws") {
@@ -132,10 +149,38 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     // type checking
-    assert(Elt(Seq.empty).checkInputDataTypes().isFailure)
-    assert(Elt(Seq(Literal(1))).checkInputDataTypes().isFailure)
+    assert(Elt(Seq.empty).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "WRONG_NUM_ARGS",
+        messageParameters = Map(
+          "functionName" -> "`elt`",
+          "expectedNum" -> "> 1",
+          "actualNum" -> "0"
+        )
+      )
+    )
+    assert(Elt(Seq(Literal(1))).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "WRONG_NUM_ARGS",
+        messageParameters = Map(
+          "functionName" -> "`elt`",
+          "expectedNum" -> "> 1",
+          "actualNum" -> "1"
+        )
+      )
+    )
     assert(Elt(Seq(Literal(1), Literal("A"))).checkInputDataTypes().isSuccess)
-    assert(Elt(Seq(Literal(1), Literal(2))).checkInputDataTypes().isFailure)
+    assert(Elt(Seq(Literal(1), Literal(2))).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "2...",
+          "requiredType" -> "\"STRING\" or \"BINARY\"",
+          "inputSql" -> "\"2\"",
+          "inputType" -> "\"INT\""
+        )
+      )
+    )
   }
 
   test("SPARK-22550: Elt should not generate codes beyond 64KB") {
@@ -553,9 +598,29 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create(7, IntegerType), Literal.create(0, IntegerType))
       .checkInputDataTypes().isSuccess)
     assert(new Overlay(Literal.create(1), Literal.create(2), Literal.create(0, IntegerType))
-      .checkInputDataTypes().isFailure)
+      .checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "1",
+          "requiredType" -> "(\"STRING\" or \"BINARY\")",
+          "inputSql" -> "\"1\"",
+          "inputType" -> "\"INT\""
+        )
+      )
+    )
     assert(Overlay(Literal("Spark SQL"), Literal.create(2), Literal.create(7, IntegerType),
-      Literal.create(0, IntegerType)).checkInputDataTypes().isFailure)
+      Literal.create(0, IntegerType)).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "2",
+          "requiredType" -> "(\"STRING\" or \"BINARY\")",
+          "inputSql" -> "\"2\"",
+          "inputType" -> "\"INT\""
+        )
+      )
+    )
   }
 
   test("translate") {

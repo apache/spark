@@ -35,6 +35,7 @@ if have_pandas:
     from pyspark.sql.connect.function_builder import udf
     from pyspark.sql.connect.functions import lit, col
 from pyspark.sql.dataframe import DataFrame
+from pyspark.sql.connect.dataframe import DataFrame as CDataFrame
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.utils import ReusedPySparkTestCase
@@ -305,6 +306,21 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         else:
             actualResult = pandasResult.values.tolist()
             self.assertEqual(len(expectResult), len(actualResult))
+
+    def test_simple_transform(self) -> None:
+        """SPARK-41203: Support DF.transform"""
+
+        def transform_df(input_df: CDataFrame) -> CDataFrame:
+            return input_df.select((col("id") + lit(10)).alias("id"))
+
+        df = self.connect.range(1, 100)
+        result_left = df.transform(transform_df).collect()
+        result_right = self.connect.range(11, 110).collect()
+        self.assertEqual(result_right, result_left)
+
+        # Check assertion.
+        with self.assertRaises(AssertionError):
+            df.transform(lambda x: 2)  # type: ignore
 
     def test_alias(self) -> None:
         """Testing supported and unsupported alias"""
