@@ -16,9 +16,10 @@
  */
 package org.apache.spark.sql.connect.planner
 
+import java.nio.file.{Files, Paths}
+
 import com.google.protobuf.ByteString
 
-import java.nio.file.{Files, Paths}
 import org.apache.spark.SparkClassNotFoundException
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Join.JoinType

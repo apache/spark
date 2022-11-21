@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.connect.planner
 
+import scala.collection.JavaConverters._
+
 import com.google.protobuf.ByteString
 
-import scala.collection.JavaConverters._
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression.UnresolvedStar
@@ -29,7 +30,8 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeProj
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Testing trait for SparkConnect tests with some helper methods to make it easier to create new
@@ -367,14 +369,59 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   }
 
   test("transform LocalRelation") {
-    val inputRows = (0 until 10).map(InternalRow(_))
-    val schema = StructType(Seq(StructField("int", IntegerType, nullable = true)))
-    val rows = inputRows.map { row =>
+    val rows = (0 until 10).map { i =>
+      InternalRow(i, UTF8String.fromString(s"str-$i"), InternalRow(i))
+    }
+
+    val schema = StructType(
+      Seq(
+        StructField("int", IntegerType),
+        StructField("str", StringType),
+        StructField("struct", StructType(Seq(StructField("inner", IntegerType))))))
+    val inputRows = rows.map { row =>
       val proj = UnsafeProjection.create(schema)
       proj(row).copy()
     }
 
-    val localRelation = createLocalRelationProto(schema.toAttributes, rows)
-    assertResult(10)(Dataset.ofRows(spark, transform(localRelation)).count())
+    val localRelation = createLocalRelationProto(schema.toAttributes, inputRows)
+    val df = Dataset.ofRows(spark, transform(localRelation))
+    val array = df.collect()
+    assertResult(10)(array.length)
+    assert(schema == df.schema)
+    for (i <- 0 until 10) {
+      assert(i == array(i).getInt(0))
+      assert(s"str-$i" == array(i).getString(1))
+      assert(i == array(i).getStruct(2).getInt(0))
+    }
+  }
+
+  test("Empty ArrowBatch") {
+    val schema = StructType(Seq(StructField("int", IntegerType)))
+    val data = ArrowConverters.createEmptyArrowBatch(schema, null)
+    val localRelation = proto.Relation
+      .newBuilder()
+      .setLocalRelation(
+        proto.LocalRelation
+          .newBuilder()
+          .setData(ByteString.copyFrom(data))
+          .build())
+      .build()
+    val df = Dataset.ofRows(spark, transform(localRelation))
+    assert(schema == df.schema)
+    assert(df.isEmpty)
+  }
+
+  test("Illegal LocalRelation data") {
+    intercept[Exception] {
+      transform(
+        proto.Relation
+          .newBuilder()
+          .setLocalRelation(
+            proto.LocalRelation
+              .newBuilder()
+              .setData(ByteString.copyFrom("illegal".getBytes()))
+              .build())
+          .build())
+    }
   }
 }
