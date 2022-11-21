@@ -25,6 +25,7 @@ from typing import (
     Union,
     TYPE_CHECKING,
     overload,
+    Callable,
     cast,
 )
 
@@ -755,6 +756,59 @@ class DataFrame(object):
                 raise Exception("Empty plan.")
         else:
             return self._schema
+
+    def transform(self, func: Callable[..., "DataFrame"], *args: Any, **kwargs: Any) -> "DataFrame":
+        """Returns a new :class:`DataFrame`. Concise syntax for chaining custom transformations.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        func : function
+            a function that takes and returns a :class:`DataFrame`.
+        *args
+            Positional arguments to pass to func.
+
+        **kwargs
+            Keyword arguments to pass to func.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Transformed DataFrame.
+
+        Examples
+        --------
+        >>> from pyspark.sql.connect.functions import col
+        >>> df = spark.createDataFrame([(1, 1.0), (2, 2.0)], ["int", "float"])
+        >>> def cast_all_to_int(input_df):
+        ...     return input_df.select([col(col_name).cast("int") for col_name in input_df.columns])
+        >>> def sort_columns_asc(input_df):
+        ...     return input_df.select(*sorted(input_df.columns))
+        >>> df.transform(cast_all_to_int).transform(sort_columns_asc).show()
+        +-----+---+
+        |float|int|
+        +-----+---+
+        |    1|  1|
+        |    2|  2|
+        +-----+---+
+
+        >>> def add_n(input_df, n):
+        ...     return input_df.select([(col(col_name) + n).alias(col_name)
+        ...                             for col_name in input_df.columns])
+        >>> df.transform(add_n, 1).transform(add_n, n=10).show()
+        +---+-----+
+        |int|float|
+        +---+-----+
+        | 12| 12.0|
+        | 13| 13.0|
+        +---+-----+
+        """
+        result = func(self, *args, **kwargs)
+        assert isinstance(
+            result, DataFrame
+        ), "Func returned an instance of type [%s], " "should have been DataFrame." % type(result)
+        return result
 
     def explain(
         self, extended: Optional[Union[bool, str]] = None, mode: Optional[str] = None
