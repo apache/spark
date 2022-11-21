@@ -40,6 +40,7 @@ import org.apache.spark.sql.execution.{ColumnarRule, SparkPlan}
  * <ul>
  * <li>Analyzer Rules.</li>
  * <li>Check Analysis Rules.</li>
+ * <li>Cache Plan Normalization Rules.</li>
  * <li>Optimizer Rules.</li>
  * <li>Pre CBO Rules.</li>
  * <li>Planning Strategies.</li>
@@ -215,6 +216,22 @@ class SparkSessionExtensions {
    */
   def injectCheckRule(builder: CheckRuleBuilder): Unit = {
     checkRuleBuilders += builder
+  }
+
+  private[this] val planNormalizationRules = mutable.Buffer.empty[RuleBuilder]
+
+  def buildPlanNormalizationRules(session: SparkSession): Seq[Rule[LogicalPlan]] = {
+    planNormalizationRules.map(_.apply(session)).toSeq
+  }
+
+  /**
+   * Inject a plan normalization `Rule` builder into the [[SparkSession]]. The injected rules will
+   * be executed just before query caching decisions are made. Such rules can be used to improve the
+   * cache hit rate by normalizing different plans to the same form. These rules should never modify
+   * the result of the LogicalPlan.
+   */
+  def injectPlanNormalizationRules(builder: RuleBuilder): Unit = {
+    planNormalizationRules += builder
   }
 
   private[this] val optimizerRules = mutable.Buffer.empty[RuleBuilder]
