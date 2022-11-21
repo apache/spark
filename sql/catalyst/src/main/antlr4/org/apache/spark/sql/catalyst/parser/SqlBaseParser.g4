@@ -924,7 +924,7 @@ primaryExpression
 
 constant
     : NULL                                                                                     #nullLiteral
-    | NAMED_PARAMETER                                                                          #unboundParameter
+    | PARAMETER                                                                                #parameterLiteral
     | interval                                                                                 #intervalLiteral
     | identifier stringLit                                                                     #typeConstructor
     | number                                                                                   #numericLiteral

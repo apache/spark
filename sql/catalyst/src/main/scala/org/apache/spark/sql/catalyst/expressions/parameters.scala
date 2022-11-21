@@ -23,20 +23,20 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCo
 import org.apache.spark.sql.types.{DataType, NullType}
 
 /**
- * The expression represents a named parameter that should be bound to a literal
- * with concrete value and type later.
+ * The expression represents a named parameter that should be bound later
+ * to a literal with concrete value and type.
  *
  * @param name The identifier of the parameter without the marker '@'.
  */
-case class UnboundParameter(name: String) extends LeafExpression {
+case class NamedParameter(name: String) extends LeafExpression {
   override def dataType: DataType = NullType
   override def nullable: Boolean = true
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    throw SparkException.internalError(s"Found an unbound parameter: $name")
+    throw SparkException.internalError(s"Found the unbound parameter: $name")
   }
 
   def eval(input: InternalRow): Any = {
-    throw SparkException.internalError(s"Found an unbound parameter: $name")
+    throw SparkException.internalError(s"Found the unbound parameter: $name")
   }
 }

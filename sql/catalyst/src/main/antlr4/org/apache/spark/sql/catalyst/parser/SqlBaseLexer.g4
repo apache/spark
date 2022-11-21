@@ -508,6 +508,6 @@ UNRECOGNIZED
     : .
     ;
 
-NAMED_PARAMETER
+PARAMETER
     : '@' IDENTIFIER
     ;
