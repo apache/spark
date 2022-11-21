@@ -22,7 +22,6 @@ import scala.collection.JavaConverters._
 import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver
 
-import org.apache.spark.SparkException
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanRequest, ExecutePlanResponse}
 import org.apache.spark.internal.Logging
@@ -56,68 +55,6 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
     val planner = new SparkConnectPlanner(session)
     val dataframe = Dataset.ofRows(session, planner.transformRelation(request.getPlan.getRoot))
     processAsArrowBatches(request.getClientId, dataframe)
-  }
-
-  def processAsJsonBatches(clientId: String, dataframe: DataFrame): Unit = {
-    // Only process up to 10MB of data.
-    val sb = new StringBuilder
-    var rowCount = 0
-    dataframe.toJSON
-      .collect()
-      .foreach(row => {
-
-        // There are a few cases to cover here.
-        // 1. The aggregated buffer size is larger than the MAX_BATCH_SIZE
-        //     -> send the current batch and reset.
-        // 2. The aggregated buffer size is smaller than the MAX_BATCH_SIZE
-        //     -> append the row to the buffer.
-        // 3. The row in question is larger than the MAX_BATCH_SIZE
-        //     -> fail the query.
-
-        // Case 3. - Fail
-        if (row.size > MAX_BATCH_SIZE) {
-          throw SparkException.internalError(
-            s"Serialized row is larger than MAX_BATCH_SIZE: ${row.size} > ${MAX_BATCH_SIZE}")
-        }
-
-        // Case 1 - FLush and send.
-        if (sb.size + row.size > MAX_BATCH_SIZE) {
-          val response = proto.ExecutePlanResponse.newBuilder().setClientId(clientId)
-          val batch = proto.ExecutePlanResponse.JSONBatch
-            .newBuilder()
-            .setData(ByteString.copyFromUtf8(sb.toString()))
-            .setRowCount(rowCount)
-            .build()
-          response.setJsonBatch(batch)
-          responseObserver.onNext(response.build())
-          sb.clear()
-          sb.append(row)
-          rowCount = 1
-        } else {
-          // Case 2 - Append.
-          // Make sure to put the newline delimiters only between items and not at the end.
-          if (rowCount > 0) {
-            sb.append("\n")
-          }
-          sb.append(row)
-          rowCount += 1
-        }
-      })
-
-    // If the last batch is not empty, send out the data to the client.
-    if (sb.size > 0) {
-      val response = proto.ExecutePlanResponse.newBuilder().setClientId(clientId)
-      val batch = proto.ExecutePlanResponse.JSONBatch
-        .newBuilder()
-        .setData(ByteString.copyFromUtf8(sb.toString()))
-        .setRowCount(rowCount)
-        .build()
-      response.setJsonBatch(batch)
-      responseObserver.onNext(response.build())
-    }
-
-    responseObserver.onNext(sendMetricsToResponse(clientId, dataframe))
-    responseObserver.onCompleted()
   }
 
   def processAsArrowBatches(clientId: String, dataframe: DataFrame): Unit = {

@@ -401,28 +401,6 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["data", b"data", "row_count", b"row_count"]
         ) -> None: ...
 
-    class JSONBatch(google.protobuf.message.Message):
-        """Message type when the result is returned as JSON. This is essentially a bulk wrapper
-        for the JSON result of a Spark DataFrame. All rows are returned in the JSON record format
-        of `{col -> row}`.
-        """
-
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        ROW_COUNT_FIELD_NUMBER: builtins.int
-        DATA_FIELD_NUMBER: builtins.int
-        row_count: builtins.int
-        data: builtins.bytes
-        def __init__(
-            self,
-            *,
-            row_count: builtins.int = ...,
-            data: builtins.bytes = ...,
-        ) -> None: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["data", b"data", "row_count", b"row_count"]
-        ) -> None: ...
-
     class Metrics(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -530,13 +508,10 @@ class ExecutePlanResponse(google.protobuf.message.Message):
 
     CLIENT_ID_FIELD_NUMBER: builtins.int
     ARROW_BATCH_FIELD_NUMBER: builtins.int
-    JSON_BATCH_FIELD_NUMBER: builtins.int
     METRICS_FIELD_NUMBER: builtins.int
     client_id: builtins.str
     @property
     def arrow_batch(self) -> global___ExecutePlanResponse.ArrowBatch: ...
-    @property
-    def json_batch(self) -> global___ExecutePlanResponse.JSONBatch: ...
     @property
     def metrics(self) -> global___ExecutePlanResponse.Metrics:
         """Metrics for the query execution. Typically, this field is only present in the last
@@ -547,39 +522,17 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         *,
         client_id: builtins.str = ...,
         arrow_batch: global___ExecutePlanResponse.ArrowBatch | None = ...,
-        json_batch: global___ExecutePlanResponse.JSONBatch | None = ...,
         metrics: global___ExecutePlanResponse.Metrics | None = ...,
     ) -> None: ...
     def HasField(
         self,
-        field_name: typing_extensions.Literal[
-            "arrow_batch",
-            b"arrow_batch",
-            "json_batch",
-            b"json_batch",
-            "metrics",
-            b"metrics",
-            "result_type",
-            b"result_type",
-        ],
+        field_name: typing_extensions.Literal["arrow_batch", b"arrow_batch", "metrics", b"metrics"],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "arrow_batch",
-            b"arrow_batch",
-            "client_id",
-            b"client_id",
-            "json_batch",
-            b"json_batch",
-            "metrics",
-            b"metrics",
-            "result_type",
-            b"result_type",
+            "arrow_batch", b"arrow_batch", "client_id", b"client_id", "metrics", b"metrics"
         ],
     ) -> None: ...
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["result_type", b"result_type"]
-    ) -> typing_extensions.Literal["arrow_batch", "json_batch"] | None: ...
 
 global___ExecutePlanResponse = ExecutePlanResponse
