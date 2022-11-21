@@ -750,6 +750,25 @@ private[spark] object Config extends Logging {
       .checkValue(value => value > 0, "Gracefully shutdown period must be a positive time value")
       .createWithDefaultString("20s")
 
+  val KUBERNETES_MAX_EXECUTOR_FAILURES =
+    ConfigBuilder("spark.kubernetes.executor.maxNumFailures")
+      .doc("Spark exit if the number of failed executors exceeds this threshold. This " +
+        s"configuration only take effect when ${KUBERNETES_ALLOCATION_PODS_ALLOCATOR.key} " +
+        s"is set to 'direct'.")
+      .version("3.4.0")
+      .intConf
+      .createOptional
+
+  val KUBERNETES_EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS =
+    ConfigBuilder("spark.kubernetes.executor.failuresValidityInterval")
+      .doc("Interval after which Executor failures will be considered independent and not " +
+        "accumulate towards the attempt count. This configuration is take effect when " +
+        s"${KUBERNETES_ALLOCATION_PODS_ALLOCATOR.key} is set to 'direct'.")
+      .version("3.4.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(value => value > 0, "failures validity interval should be positive")
+      .createOptional
+
   val KUBERNETES_DRIVER_LABEL_PREFIX = "spark.kubernetes.driver.label."
   val KUBERNETES_DRIVER_ANNOTATION_PREFIX = "spark.kubernetes.driver.annotation."
   val KUBERNETES_DRIVER_SERVICE_LABEL_PREFIX = "spark.kubernetes.driver.service.label."

@@ -36,7 +36,8 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT, DYN_ALLOCATION_MAX_EXECUTORS, EXECUTOR_INSTANCES}
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.cluster.SchedulerBackendUtils.DEFAULT_NUMBER_EXECUTORS
-import org.apache.spark.util.{Clock, Utils}
+import org.apache.spark.scheduler.cluster.k8s.ExecutorPodsAllocator.EXIT_MAX_EXECUTOR_FAILURES
+import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 class ExecutorPodsAllocator(
     conf: SparkConf,
@@ -70,6 +71,8 @@ class ExecutorPodsAllocator(
   protected val podAllocationDelay = conf.get(KUBERNETES_ALLOCATION_BATCH_DELAY)
 
   protected val maxPendingPods = conf.get(KUBERNETES_MAX_PENDING_PODS)
+
+  protected val maxNumExecutorFailuresOpt = conf.get(KUBERNETES_MAX_EXECUTOR_FAILURES)
 
   protected val podCreationTimeout = math.max(
     podAllocationDelay * 5,
@@ -117,6 +120,12 @@ class ExecutorPodsAllocator(
   // if they happen to come up before the deletion takes effect.
   @volatile protected var deletedExecutorIds = Set.empty[Long]
 
+  @volatile private var failedExecutorIds = Set.empty[Long]
+
+  private[k8s] val failureTracker = new FailureTracker(conf, clock)
+
+  def getNumExecutorsFailed: Int = failureTracker.numFailedExecutors
+
   def start(applicationId: String, schedulerBackend: KubernetesClusterSchedulerBackend): Unit = {
     appId = applicationId
     driverPod.foreach { pod =>
@@ -130,8 +139,14 @@ class ExecutorPodsAllocator(
           .waitUntilReady(driverPodReadinessTimeout, TimeUnit.SECONDS)
       }
     }
-    snapshotsStore.addSubscriber(podAllocationDelay) {
-      onNewSnapshots(applicationId, schedulerBackend, _)
+    snapshotsStore.addSubscriber(podAllocationDelay) { executorPodsSnapshot =>
+      onNewSnapshots(applicationId, schedulerBackend, executorPodsSnapshot)
+      maxNumExecutorFailuresOpt.foreach { maxNumExecutorFailures =>
+        if (failureTracker.numFailedExecutors > maxNumExecutorFailures) {
+          logError(s"Max number of executor failures ($maxNumExecutorFailures) reached")
+          stopApplication(EXIT_MAX_EXECUTOR_FAILURES)
+        }
+      }
     }
   }
 
@@ -147,6 +162,10 @@ class ExecutorPodsAllocator(
   }
 
   def isDeleted(executorId: String): Boolean = deletedExecutorIds.contains(executorId.toLong)
+
+  private[k8s] def stopApplication(exitCode: Int): Unit = {
+    sys.exit(exitCode)
+  }
 
   protected def onNewSnapshots(
       applicationId: String,
@@ -253,6 +272,21 @@ class ExecutorPodsAllocator(
         case PodRunning(_) => true
         case _ => false
       }
+
+      val currentFailedExecutorIds = podsForRpId.filter {
+        case (_, PodFailed(pod)) =>
+          pod.getSpec
+          true
+        case _ => false
+      }.keySet
+
+      val newFailedExecutorIds = currentFailedExecutorIds -- failedExecutorIds
+      if (newFailedExecutorIds.nonEmpty) {
+        logWarning(s"${newFailedExecutorIds.size} new failed executors.")
+      }
+      failedExecutorIds = failedExecutorIds ++ currentFailedExecutorIds
+
+      failureTracker.registerExecutorFailure(newFailedExecutorIds.toSet)
 
       val (schedulerKnownPendingExecsForRpId, currentPendingExecutorsForRpId) = podsForRpId.filter {
         case (_, PodPending(_)) => true
@@ -520,10 +554,46 @@ class ExecutorPodsAllocator(
 
 private[spark] object ExecutorPodsAllocator {
 
+  private[spark] val EXIT_MAX_EXECUTOR_FAILURES = 11
+
   // A utility function to split the available slots among the specified consumers
   def splitSlots[T](consumers: Seq[T], slots: Int): Seq[(T, Int)] = {
     val d = slots / consumers.size
     val r = slots % consumers.size
     consumers.take(r).map((_, d + 1)) ++ consumers.takeRight(consumers.size - r).map((_, d))
+  }
+}
+
+private[spark] class FailureTracker(
+  conf: SparkConf,
+  val clock: Clock = new SystemClock) extends Logging {
+
+  private val executorFailuresValidityIntervalOpt =
+    conf.get(KUBERNETES_EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS)
+
+  private val failedExecutorsTimestamps = new mutable.HashMap[Long, Long]()
+
+  private def updateAndCountFailures(
+      failedExecutorsWithTimestamps: mutable.HashMap[Long, Long]): Int = {
+    executorFailuresValidityIntervalOpt.foreach { validityInterval =>
+      if (failedExecutorsWithTimestamps.nonEmpty) {
+        val startTime = clock.getTimeMillis() - validityInterval
+        failedExecutorsWithTimestamps.foreach { case (podId, failedTime) =>
+          if (failedTime < startTime) {
+            failedExecutorsWithTimestamps.remove(podId)
+          }
+        }
+      }
+    }
+    failedExecutorsWithTimestamps.size
+  }
+
+  def numFailedExecutors: Int = synchronized {
+    updateAndCountFailures(failedExecutorsTimestamps)
+  }
+
+  def registerExecutorFailure(podIds: Set[Long]): Unit = synchronized {
+    val failedTime = clock.getTimeMillis()
+    podIds.foreach { podId => failedExecutorsTimestamps.put(podId, failedTime) }
   }
 }

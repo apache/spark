@@ -147,6 +147,46 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     when(persistentVolumeClaimList.getItems).thenReturn(Seq.empty[PersistentVolumeClaim].asJava)
   }
 
+  test("SPARK-41210: Window based executor failure tracking mechanism") {
+    var _exitCode = -1
+    val _conf = conf.clone
+      .set(KUBERNETES_MAX_EXECUTOR_FAILURES.key, "2")
+      .set(KUBERNETES_EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS.key, "2s")
+    podsAllocatorUnderTest = new ExecutorPodsAllocator(_conf, secMgr,
+      executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock) {
+      override private[spark] def stopApplication(exitCode: Int): Unit = {
+        _exitCode = exitCode
+      }
+    }
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 3))
+    podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
+    assert(podsAllocatorUnderTest.getNumExecutorsFailed === 0)
+
+    waitForExecutorPodsClock.advance(1000)
+    snapshotsStore.updatePod(failedExecutorWithoutDeletion(1))
+    snapshotsStore.updatePod(failedExecutorWithoutDeletion(2))
+    snapshotsStore.notifySubscribers()
+    assert(podsAllocatorUnderTest.getNumExecutorsFailed === 2)
+    assert(_exitCode === -1)
+
+    waitForExecutorPodsClock.advance(1000)
+    snapshotsStore.notifySubscribers()
+    assert(podsAllocatorUnderTest.getNumExecutorsFailed === 2)
+    assert(_exitCode === -1)
+
+    waitForExecutorPodsClock.advance(2000)
+    assert(podsAllocatorUnderTest.getNumExecutorsFailed === 0)
+    assert(_exitCode === -1)
+
+    waitForExecutorPodsClock.advance(1000)
+    snapshotsStore.updatePod(failedExecutorWithoutDeletion(3))
+    snapshotsStore.updatePod(failedExecutorWithoutDeletion(4))
+    snapshotsStore.updatePod(failedExecutorWithoutDeletion(5))
+    snapshotsStore.notifySubscribers()
+    assert(podsAllocatorUnderTest.getNumExecutorsFailed === 3)
+    assert(_exitCode === ExecutorPodsAllocator.EXIT_MAX_EXECUTOR_FAILURES)
+  }
+
   test("SPARK-36052: test splitSlots") {
     val seq1 = Seq("a")
     assert(ExecutorPodsAllocator.splitSlots(seq1, 0) === Seq(("a", 0)))
