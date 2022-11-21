@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, HintInfo, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{RUNTIME_FILTER_EXPRESSION, RUNTIME_FILTER_SUBQUERY, TreePattern}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.types.DataType
@@ -38,8 +38,9 @@ case class RuntimeFilterSubquery(
     buildPlan: LogicalPlan,
     joinKeys: Seq[Expression],
     broadcastKeyIndex: Int,
-    exprId: ExprId = NamedExpression.newExprId)
-  extends SubqueryExpression(buildPlan, Seq(filterApplicationSideExp), exprId)
+    exprId: ExprId = NamedExpression.newExprId,
+    hint: Option[HintInfo] = None)
+  extends SubqueryExpression(buildPlan, Seq(filterApplicationSideExp), exprId, Seq.empty, hint)
     with Unevaluable
     with UnaryLike[Expression] {
 
@@ -57,6 +58,8 @@ case class RuntimeFilterSubquery(
 
   override def withNewPlan(plan: LogicalPlan): RuntimeFilterSubquery =
     copy(buildPlan = plan)
+
+  override def withNewHint(hint: Option[HintInfo]): SubqueryExpression = copy(hint = hint)
 
   lazy val filterCreationSidePlan: LogicalPlan = {
     assert(buildPlan.isInstanceOf[Aggregate])
