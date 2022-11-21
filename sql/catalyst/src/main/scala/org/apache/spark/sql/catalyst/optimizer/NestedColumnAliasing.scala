@@ -84,17 +84,6 @@ import org.apache.spark.sql.types._
 object NestedColumnAliasing {
 
   def unapply(plan: LogicalPlan): Option[LogicalPlan] = plan match {
-    /**
-     * This pattern is needed to support [[Filter]] plan cases like
-     * [[Project]]->[[Filter]]->listed plan in [[canProjectPushThrough]] (e.g., [[Window]]).
-     * The reason why we don't simply add [[Filter]] in [[canProjectPushThrough]] is that
-     * the optimizer can hit an infinite loop during the [[PushDownPredicates]] rule.
-     */
-    case Project(projectList, Filter(condition, child)) if
-        SQLConf.get.nestedSchemaPruningEnabled && canProjectPushThrough(child) =>
-      rewritePlanIfSubsetFieldsUsed(
-        plan, projectList ++ Seq(condition) ++ child.expressions, child.producedAttributes.toSeq)
-
     case Project(projectList, child) if
         SQLConf.get.nestedSchemaPruningEnabled && canProjectPushThrough(child) =>
       rewritePlanIfSubsetFieldsUsed(
@@ -205,6 +194,7 @@ object NestedColumnAliasing {
    * Returns true for operators through which project can be pushed.
    */
   private def canProjectPushThrough(plan: LogicalPlan) = plan match {
+    case _: Filter => true
     case _: GlobalLimit => true
     case _: LocalLimit => true
     case _: Repartition => true
@@ -230,6 +220,9 @@ object NestedColumnAliasing {
                               _: MapKeys |
                               _: ExtractValue |
                               _: AttributeReference, _, _, _, _) => Seq(e)
+    // `SubqueryExpression.children` includes `joinCond`, which contains attributes from the
+    // subquery instead of the main query. We should only collect main query references here.
+    case s: SubqueryExpression => s.getOuterAttrs.flatMap(collectRootReferenceAndExtractValue)
     case es if es.children.nonEmpty => es.children.flatMap(collectRootReferenceAndExtractValue)
     case _ => Seq.empty
   }

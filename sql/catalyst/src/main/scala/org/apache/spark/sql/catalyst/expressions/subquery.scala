@@ -77,6 +77,7 @@ abstract class SubqueryExpression(
     exprId: ExprId,
     joinCond: Seq[Expression],
     hint: Option[HintInfo]) extends PlanExpression[LogicalPlan] {
+  def getOuterAttrs: Seq[Expression] = outerAttrs
   override lazy val resolved: Boolean = childrenResolved && plan.resolved
   override lazy val references: AttributeSet =
     AttributeSet.fromAttributeSets(outerAttrs.map(_.references))

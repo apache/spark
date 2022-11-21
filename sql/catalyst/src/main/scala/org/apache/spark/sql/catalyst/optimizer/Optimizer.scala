@@ -956,19 +956,32 @@ object ColumnPruning extends Rule[LogicalPlan] {
     }
 
   /**
-   * The Project before Filter is not necessary but conflict with PushPredicatesThroughProject,
-   * so remove it. Since the Projects have been added top-down, we need to remove in bottom-up
-   * order, otherwise lower Projects can be missed.
+   * Reference-only Project before Filter is not necessary but conflict with
+   * PushPredicatesThroughProject, so remove it. Since the Projects have been added top-down, we
+   * need to remove in bottom-up order, otherwise lower Projects can be missed.
    */
   private def removeProjectBeforeFilter(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case p1 @ Project(_, f @ Filter(e, p2 @ Project(_, child)))
       if p2.outputSet.subsetOf(child.outputSet) &&
-        // We only remove attribute-only project.
-        p2.projectList.forall(_.isInstanceOf[AttributeReference]) &&
+        // We only remove reference-only project.
+        p2.projectList.forall(isReference) &&
         // We can't remove project when the child has conflicting attributes
         // with the subquery in filter predicate
         !hasConflictingAttrsWithSubquery(e, child) =>
       p1.copy(child = f.copy(child = child))
+  }
+
+  private def isReference(e: Expression): Boolean = e match {
+    case _: AttributeReference => true
+    case a: Alias => isReference(a.child)
+    case g: GetStructField => isReference(g.child)
+    case g: GetArrayStructFields => isReference(g.child)
+    case g: GetMapValue if g.key.foldable => isReference(g.child)
+    case g: GetArrayItem if g.ordinal.foldable => isReference(g.child)
+    case e: ElementAt if e.right.foldable => isReference(e.left)
+    case m: MapKeys => isReference(m.child)
+    case m: MapValues => isReference(m.child)
+    case _ => false
   }
 
   private def hasConflictingAttrsWithSubquery(
