@@ -1082,7 +1082,7 @@ class FileBasedDataSourceSuite extends QueryTest
       Seq("parquet", "").foreach { useV1SourceList =>
         withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1SourceList) {
           val scan = spark.read.parquet(pathStr)
-          val df = scan.where($"id" > 5 && rand() > 0.5)
+          val df = scan.where(rand() > 0.5 && $"id" > 5)
           val filters = df.queryExecution.executedPlan.collect {
             case f: FileSourceScanLike => f.dataFilters
             case b: BatchScanExec => b.scan.asInstanceOf[FileScan].dataFilters
