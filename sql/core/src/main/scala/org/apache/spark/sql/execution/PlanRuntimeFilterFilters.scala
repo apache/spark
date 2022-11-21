@@ -39,7 +39,7 @@ case class PlanRuntimeFilterFilters(sparkSession: SparkSession) extends Rule[Spa
 
     plan.transformAllExpressionsWithPruning(_.containsPattern(RUNTIME_FILTER_SUBQUERY)) {
       case RuntimeFilterSubquery(
-        _, buildPlan, buildKeys, broadcastKeyIndex, exprId) =>
+        _, buildPlan, buildKeys, broadcastKeyIndex, exprId, _) =>
         val sparkPlan = QueryExecution.createSparkPlan(
           sparkSession, sparkSession.sessionState.planner, buildPlan)
         val filterCreationSidePlan = getFilterCreationSidePlan(sparkPlan)
