@@ -1073,7 +1073,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def literalTypeUnsupportedForSourceTypeError(field: String, source: Expression): Throwable = {
     new AnalysisException(
-      errorClass = "UNSUPPORTED_LITERAL_FOR_SOURCE_TYPE",
+      errorClass = "INVALID_EXTRACT_FIELD",
       messageParameters = Map(
         "field" -> toSQLId(field),
         "sourceDataType" -> toSQLType(source.dataType)))

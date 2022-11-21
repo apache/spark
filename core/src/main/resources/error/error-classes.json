@@ -656,6 +656,11 @@
     ],
     "sqlState" : "42000"
   },
+  "INVALID_EXTRACT_FIELD" : {
+    "message" : [
+      "Literals of the type <field> are currently not supported for the <sourceDataType> type."
+    ]
+  },
   "INVALID_FIELD_NAME" : {
     "message" : [
       "Field name <fieldName> is invalid: <path> is not a struct."
@@ -1324,11 +1329,6 @@
   "UNSUPPORTED_GROUPING_EXPRESSION" : {
     "message" : [
       "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup"
-    ]
-  },
-  "UNSUPPORTED_LITERAL_FOR_SOURCE_TYPE" : {
-    "message" : [
-      "Literals of the type <field> are currently not supported for the <sourceDataType> type."
     ]
   },
   "UNSUPPORTED_SAVE_MODE" : {
