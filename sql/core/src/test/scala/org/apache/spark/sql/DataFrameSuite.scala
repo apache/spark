@@ -3532,6 +3532,49 @@ class DataFrameSuite extends QueryTest
       }.isEmpty)
     }
   }
+
+  test("SPARK-41207: Fix BinaryArithmetic with negative scale") {
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      val data = Seq(Row(BigDecimal("-1.1"), BigDecimal("1.11111E+5")))
+      val simpleSchema = StructType(Array(
+        StructField("a", DecimalType(2, 1)),
+        StructField("b", DecimalType(1, -5))))
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(data), simpleSchema)
+      Seq(
+        (df.selectExpr("a + b"), Row(BigDecimal("99998.9"))),
+        (df.selectExpr("a - b"), Row(BigDecimal("-100001.1"))),
+        (df.selectExpr("a * b"), Row(BigDecimal("-1.1E+5"))),
+        (df.selectExpr("a / b"), Row(BigDecimal("-0.00001100"))),
+        (df.selectExpr("a div b"), Row(0)),
+        (df.selectExpr("a % b"), Row(BigDecimal("-1.1"))),
+        (df.selectExpr("pmod(a, b)"), Row(null))
+      ).foreach { case (df, res) =>
+        checkAnswer(df, res)
+      }
+    }
+  }
+
+  test("SPARK-41207: Fix BinaryArithmetic with negative scale - overflow") {
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      val data = Seq(Row(BigDecimal("-7.70892"),
+        BigDecimal("4.27138661282262736522411173299611831E+40")))
+      val simpleSchema = StructType(Array(
+        StructField("a", DecimalType(6, 5)),
+        StructField("b", DecimalType(36, -5))))
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(data), simpleSchema)
+      Seq(
+        (df.selectExpr("a + b"), Row(null)),
+        (df.selectExpr("a - b"), Row(null)),
+        (df.selectExpr("a * b"), Row(null)),
+        (df.selectExpr("a / b"), Row(0)),
+        (df.selectExpr("a div b"), Row(0)),
+        (df.selectExpr("a % b"), Row(BigDecimal("-7.70892"))),
+        (df.selectExpr("pmod(a, b)"), Row(null))
+      ).foreach { case (df, res) =>
+        checkAnswer(df, res)
+      }
+    }
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)

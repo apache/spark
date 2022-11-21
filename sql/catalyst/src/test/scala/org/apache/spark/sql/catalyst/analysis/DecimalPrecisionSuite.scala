@@ -276,9 +276,9 @@ class DecimalPrecisionSuite extends AnalysisTest with BeforeAndAfter {
       val a = AttributeReference("a", DecimalType(3, -10))()
       val b = AttributeReference("b", DecimalType(1, -1))()
       val c = AttributeReference("c", DecimalType(35, 1))()
-      checkType(Multiply(a, b), DecimalType(5, -11))
-      checkType(Multiply(a, c), DecimalType(38, -9))
-      checkType(Multiply(b, c), DecimalType(37, 0))
+      checkType(Multiply(a, b), DecimalType(16, 0))
+      checkType(Multiply(a, c), DecimalType(38, 1))
+      checkType(Multiply(b, c), DecimalType(38, 1))
     }
   }
 

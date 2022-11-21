@@ -234,7 +234,17 @@ abstract class BinaryArithmetic extends BinaryOperator
   }
 
   override def dataType: DataType = (left.dataType, right.dataType) match {
-    case (DecimalType.Fixed(p1, s1), DecimalType.Fixed(p2, s2)) =>
+    case (DecimalType.Fixed(lp, ls), DecimalType.Fixed(rp, rs)) =>
+      // compatible with negative scale
+      val (p1, s1, p2, s2) = if (ls < 0 && rs < 0) {
+        (lp - ls, 0, rp - rs, 0)
+      } else if (ls < 0) {
+        (lp - ls, 0, rp, rs)
+      } else if (rs < 0) {
+        (lp, ls, rp - rs, 0)
+      } else {
+        (lp, ls, rp, rs)
+      }
       resultDecimalType(p1, s1, p2, s2)
     case _ => left.dataType
   }
