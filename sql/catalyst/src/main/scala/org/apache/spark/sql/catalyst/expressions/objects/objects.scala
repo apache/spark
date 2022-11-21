@@ -346,7 +346,9 @@ case class StaticInvoke(
 
 /**
  * Calls the specified field (possibly, private) on an object. Used for the `$outer` field of a
- * local class. If the `targetObject` expression evaluates to null then null will be returned.
+ * local class.
+ *
+ * If the `targetObject` expression evaluates to null then null will be returned.
  *
  * In some cases, due to erasure, the schema may expect a primitive type when in fact the method
  * is returning java.lang.Object.  In this case, we will generate code that attempts to unbox the
