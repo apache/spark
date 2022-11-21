@@ -113,6 +113,9 @@ private[hive] trait HiveClient {
   /** Creates a table with the given metadata. */
   def createTable(table: CatalogTable, ignoreIfExists: Boolean): Unit
 
+  /** Get hive table properties. */
+  def hiveTableProps(rawHiveTable: RawHiveTable): Map[String, String]
+
   /** Drop the specified table. */
   def dropTable(dbName: String, tableName: String, ignoreIfNotExists: Boolean, purge: Boolean): Unit
 
@@ -127,8 +130,8 @@ private[hive] trait HiveClient {
    */
   def alterTable(dbName: String, tableName: String, table: CatalogTable): Unit
 
-  /** Alter a table stats */
-  def alterTableStats(dbName: String, tableName: String, stats: Map[String, String]): Unit
+  /** Alter a table properties */
+  def alterTableProps(rawHiveTable: RawHiveTable, newProps: Map[String, String]): Unit
 
   /**
    * Updates the given table with a new data schema and table properties, and keep everything else

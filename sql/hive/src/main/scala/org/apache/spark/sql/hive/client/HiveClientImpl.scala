@@ -62,7 +62,7 @@ import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.hive.HiveExternalCatalog
-import org.apache.spark.sql.hive.HiveExternalCatalog.{DATASOURCE_SCHEMA, STATISTICS_PREFIX}
+import org.apache.spark.sql.hive.HiveExternalCatalog.{DATASOURCE_SCHEMA}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{CircularBuffer, Utils}
@@ -580,6 +580,11 @@ private[hive] class HiveClientImpl(
       ignoredProperties = ignoredProperties.toMap)
   }
 
+  override def hiveTableProps(rawHiveTable: RawHiveTable): Map[String, String] = {
+    val hiveTable = rawHiveTable.rawTable.asInstanceOf[HiveTable]
+    hiveTable.getParameters.asScala.toMap.filterNot(kv => HiveStatisticsProperties.contains(kv._1))
+  }
+
   override def createTable(table: CatalogTable, ignoreIfExists: Boolean): Unit = withHiveState {
     verifyColumnDataType(table.dataSchema)
     shim.createTable(client, toHiveTable(table, Some(userName)), ignoreIfExists)
@@ -609,18 +614,14 @@ private[hive] class HiveClientImpl(
     shim.alterTable(client, qualifiedTableName, hiveTable)
   }
 
-  override def alterTableStats(
-      dbName: String,
-      tableName: String,
-      stats: Map[String, String]): Unit = withHiveState {
-    val hiveTable = getRawHiveTable(dbName, tableName).rawTable.asInstanceOf[HiveTable]
-    val newParameters = new JHashMap[String, String]()
-    hiveTable.getParameters.asScala.toMap.filterNot(_._1.startsWith(STATISTICS_PREFIX))
-      .map(kv => newParameters.put(kv._1, kv._2))
-
-    newParameters.putAll(stats.asJava)
-    hiveTable.getTTable.setParameters(newParameters)
-    shim.alterTable(client, s"$dbName.$tableName", hiveTable)
+  override def alterTableProps(
+      rawHiveTable: RawHiveTable,
+      newProps: Map[String, String]): Unit = withHiveState {
+    val hiveTable = rawHiveTable.rawTable.asInstanceOf[HiveTable]
+    val newPropsMap = new JHashMap[String, String]()
+    newPropsMap.putAll(newProps.asJava)
+    hiveTable.getTTable.setParameters(newPropsMap)
+    shim.alterTable(client, s"${hiveTable.getDbName}.${hiveTable.getTableName}", hiveTable)
   }
 
   override def alterTableDataSchema(
