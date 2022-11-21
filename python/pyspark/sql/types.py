@@ -1149,7 +1149,6 @@ _atomic_types: List[Type[DataType]] = [
     DateType,
     TimestampType,
     TimestampNTZType,
-    NullType,
 ]
 _all_atomic_types: Dict[str, Type[DataType]] = dict((t.typeName(), t) for t in _atomic_types)
 
@@ -1648,6 +1647,10 @@ def _merge_type(
         return a
     elif isinstance(a, TimestampNTZType) and isinstance(b, TimestampType):
         return b
+    elif isinstance(a, AtomicType) and isinstance(b, StringType):
+        return b
+    elif isinstance(a, StringType) and isinstance(b, AtomicType):
+        return a
     elif type(a) is not type(b):
         # TODO: type cast (such as int -> long)
         raise TypeError(new_msg("Can not merge type %s and %s" % (type(a), type(b))))
