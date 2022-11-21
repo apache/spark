@@ -89,6 +89,7 @@
     <module>tools</module>
     <module>streaming</module>
     <module>sql/catalyst</module>
+    <module>sql/catalyst-macros</module>
     <module>sql/core</module>
     <module>sql/hive</module>
     <module>assembly</module>

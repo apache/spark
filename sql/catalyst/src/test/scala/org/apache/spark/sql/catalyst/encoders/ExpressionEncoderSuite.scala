@@ -232,6 +232,68 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
 
   encodeDecodeTest(Array(Option(InnerClass(1))), "array of optional inner class")
 
+  // test product encoders for local (method-inner) classes
+  case class SerializableOuter() {
+    def runLocalTest(): Unit = {
+      case class Local(i: Int, s: String)
+
+      encodeDecodeTest(Local(1, "a"), "local class")(ExpressionEncoder.local[Local]())
+    }
+
+    def runGenericLocalTest(): Unit = {
+      case class GenericLocal[T](i: Int, s: String, t: T)
+
+      encodeDecodeTest(GenericLocal[Boolean](1, "a", true),
+        "generic local class")(ExpressionEncoder.local[GenericLocal[Boolean]]())
+
+      encodeDecodeTest(GenericLocal[GenericLocal[Boolean]](1, "a", GenericLocal(2, "b", true)),
+        "generic local class with local type argument")(
+        ExpressionEncoder.local[GenericLocal[GenericLocal[Boolean]]]())
+    }
+
+    // Scala runtime reflection doesn't support type aliases for local classes
+    def runAliasGenericLocalTest(): Unit = {
+      case class GenericLocal[T](i: Int, s: String, t: T)
+
+      type BoolGenLocal = GenericLocal[Boolean]
+      type GenGenLocal = GenericLocal[GenericLocal[Boolean]]
+
+      val m = intercept[AssertionError] {
+        encodeDecodeTest(
+          GenericLocal[Boolean](1, "a", true),
+          "ignored")(ExpressionEncoder.local[BoolGenLocal]()
+        )
+      }.getMessage
+      test("alias for generic local class") {
+        assert(m.contains(
+          "( List() ).length == ( List(ClassTagApplication(Boolean,List())) ).length"
+        ))
+      }
+
+      val m1 = intercept[AssertionError] {
+        encodeDecodeTest(
+          GenericLocal[BoolGenLocal](1, "a", GenericLocal(2, "b", true)),
+          "ignored")(
+          ExpressionEncoder.local[GenGenLocal]()
+        )
+      }.getMessage
+      test("alias for generic local class with local type argument") {
+        assert(
+          Seq(
+            "( List() ).length == ( List(ClassTagApplication(org.apache.spark.sql.catalyst" +
+              ".encoders.ExpressionEncoderSuite$SerializableOuter$GenericLocal$",
+            ",List(ClassTagApplication(Boolean,List())))) ).length"
+          ).forall(m1.contains)
+        )
+      }
+    }
+  }
+
+  val outer: SerializableOuter = SerializableOuter()
+  outer.runLocalTest()
+  outer.runGenericLocalTest()
+  outer.runAliasGenericLocalTest()
+
   // holder class to trigger Class.getSimpleName issue
   object MalformedClassObject extends Serializable {
     case class MalformedNameExample(x: Int)

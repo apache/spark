@@ -41,6 +41,9 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 class InvokeTargetClass extends Serializable {
+  private val privatePrimitiveField: Int = 1
+  private val privateField: Integer = 1
+  private val privateNullField: Integer = null
   def filterInt(e: Any): Any = e.asInstanceOf[Int] > 0
   def filterPrimitiveInt(e: Int): Boolean = e > 0
   def binOp(e1: Int, e2: Double): Double = e1 + e2
@@ -178,6 +181,18 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val inputInt = Seq(BoundReference(0, ObjectType(classOf[Any]), true))
     val inputPrimitiveInt = Seq(BoundReference(0, IntegerType, false))
     val inputSum = Seq(BoundReference(0, IntegerType, false), BoundReference(1, DoubleType, false))
+
+    checkObjectExprEvaluation(
+      PrivateFieldInvoke(funcObj, "privatePrimitiveField", IntegerType, false),
+      1, InternalRow.fromSeq(Seq()))
+
+    checkObjectExprEvaluation(
+      PrivateFieldInvoke(funcObj, "privateField", IntegerType, false),
+      Integer.valueOf(1), InternalRow.fromSeq(Seq()))
+
+    checkObjectExprEvaluation(
+      PrivateFieldInvoke(funcObj, "privateNullField", IntegerType, true),
+      null, InternalRow.fromSeq(Seq()))
 
     checkObjectExprEvaluation(
       Invoke(funcObj, "filterInt", ObjectType(classOf[Any]), inputInt),

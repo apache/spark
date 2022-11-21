@@ -603,8 +603,13 @@ object ScalaReflection extends ScalaReflection {
           // is necessary here. Because for a nullable nested inputObject with struct data
           // type, e.g. StructType(IntegerType, StringType), it will return nullable=true
           // for IntegerType without KnownNotNull. And that's what we do not expect to.
-          val fieldValue = Invoke(KnownNotNull(inputObject), fieldName, dataTypeFor(fieldType),
-            returnNullable = !fieldType.typeSymbol.asClass.isPrimitive)
+          val fieldValue = if (getClassFromType(tpe).isLocalClass && fieldName == "$outer") {
+            PrivateFieldInvoke(KnownNotNull(inputObject), fieldName, dataTypeFor(fieldType),
+              returnNullable = !fieldType.typeSymbol.asClass.isPrimitive)
+          } else {
+            Invoke(KnownNotNull(inputObject), fieldName, dataTypeFor(fieldType),
+              returnNullable = !fieldType.typeSymbol.asClass.isPrimitive)
+          }
           val clsName = getClassNameFromType(fieldType)
           val newPath = walkedTypePath.recordField(clsName, fieldName)
           (fieldName, serializerFor(fieldValue, fieldType, newPath, seenTypeSet + t))

@@ -19,9 +19,11 @@ package org.apache.spark.sql
 
 import scala.collection.Map
 import scala.language.implicitConversions
-import scala.reflect.runtime.universe.TypeTag
+import scala.reflect.ClassTag
+import scala.reflect.runtime.universe.{TypeTag, WeakTypeTag}
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.DeepClassTag
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 
 /**
@@ -259,8 +261,23 @@ abstract class SQLImplicits extends LowPrioritySQLImplicits {
  * Reasons for including specific implicits:
  * newProductEncoder - to disambiguate for `List`s which are both `Seq` and `Product`
  */
-trait LowPrioritySQLImplicits {
+trait LowPrioritySQLImplicits extends LowerPrioritySQLImplicits {
   /** @since 1.6.0 */
   implicit def newProductEncoder[T <: Product : TypeTag]: Encoder[T] = Encoders.product[T]
 
+}
+
+/**
+ * Lower priority implicit methods for converting objects of local classes into [[Dataset]]s.
+ * Conflicting implicits are placed here to disambiguate resolution.
+ *
+ * Reasons for including specific implicits:
+ * newLocalProductEncoder - to disambiguate for `T`s which have both `TypeTag` and `WeakTypeTag`.
+ *
+ * Doesn't work for type aliases of local classes.
+ */
+trait LowerPrioritySQLImplicits {
+  /** @since 3.4.0 */
+  implicit def newLocalProductEncoder[T <: Product : WeakTypeTag : ClassTag : DeepClassTag]:
+    Encoder[T] = Encoders.localProduct[T]
 }

@@ -20,8 +20,9 @@ package org.apache.spark.sql
 import java.lang.reflect.Modifier
 
 import scala.reflect.{classTag, ClassTag}
-import scala.reflect.runtime.universe.TypeTag
+import scala.reflect.runtime.universe.{TypeTag, WeakTypeTag}
 
+import org.apache.spark.sql.catalyst.DeepClassTag
 import org.apache.spark.sql.catalyst.analysis.GetColumnByOrdinal
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, Cast}
@@ -306,6 +307,13 @@ object Encoders {
    * @since 2.0.0
    */
   def product[T <: Product : TypeTag]: Encoder[T] = ExpressionEncoder()
+
+  /**
+   * An encoder for Scala's local product type (local case classes, etc).
+   * @since 3.4.0
+   */
+  def localProduct[T <: Product : WeakTypeTag : ClassTag : DeepClassTag]: Encoder[T] =
+    ExpressionEncoder.local()
 
   /**
    * An encoder for Scala's primitive int type.

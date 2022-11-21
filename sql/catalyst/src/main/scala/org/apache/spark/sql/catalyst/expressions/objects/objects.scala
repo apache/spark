@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql.catalyst.expressions.objects
 
-import java.lang.reflect.{Method, Modifier}
+import java.lang.reflect.{Field, Method, Modifier}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{Builder, WrappedArray}
 import scala.reflect.ClassTag
 import scala.util.{Properties, Try}
 
-import org.apache.commons.lang3.reflect.MethodUtils
+import org.apache.commons.lang3.reflect.{FieldUtils, MethodUtils}
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.serializer._
@@ -164,12 +164,26 @@ trait InvokeLike extends Expression with NonSQLExpression with ImplicitCastInput
     }
   }
 
+  def invokeField(obj: Any, field: Field): Any = {
+    val ret = field.get(obj)
+    boxingFn(ret)
+  }
+
   final def findMethod(cls: Class[_], functionName: String, argClasses: Seq[Class[_]]): Method = {
     val method = MethodUtils.getMatchingAccessibleMethod(cls, functionName, argClasses: _*)
     if (method == null) {
       throw QueryExecutionErrors.methodNotDeclaredError(functionName)
     } else {
       method
+    }
+  }
+
+  final def findDeclaredField(cls: Class[_], fieldName: String): Field = {
+    val field = FieldUtils.getDeclaredField(cls, fieldName, true)
+    if (field == null) {
+      throw QueryExecutionErrors.fieldNotDeclaredError(fieldName)
+    } else {
+      field
     }
   }
 }
@@ -328,6 +342,140 @@ case class StaticInvoke(
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     copy(arguments = newChildren)
+}
+
+/**
+ * Calls the specified field (possibly, private) on an object. Used for the `$outer` field of a
+ * local class. If the `targetObject` expression evaluates to null then null will be returned.
+ *
+ * In some cases, due to erasure, the schema may expect a primitive type when in fact the method
+ * is returning java.lang.Object.  In this case, we will generate code that attempts to unbox the
+ * value automatically.
+ *
+ * @param targetObject An expression that will return the object to call the field on.
+ * @param functionName The name of the field to call.
+ * @param dataType The expected return type of the field.
+ * @param returnNullable When false, indicating the invoked field will return non-null value.
+ */
+case class PrivateFieldInvoke(
+                               targetObject: Expression,
+                               fieldName: String,
+                               dataType: DataType,
+                               returnNullable : Boolean = true
+                             ) extends InvokeLike {
+  override def propagateNull: Boolean = true
+  override def arguments: Seq[Expression] = Nil
+
+  override def inputTypes: Seq[AbstractDataType] = Nil
+
+  override def nullable: Boolean = targetObject.nullable || returnNullable
+
+  private lazy val encodedFieldName = ScalaReflection.encodeFieldNameToIdentifier(fieldName)
+
+  @transient lazy val field = targetObject.dataType match {
+    case ObjectType(cls) =>
+      Some(findDeclaredField(cls, encodedFieldName))
+    case _ => None
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val obj = targetObject.eval(input)
+    if (obj == null) {
+      // return null if obj is null
+      null
+    } else {
+      val invField = if (field.isDefined) {
+        field.get
+      } else {
+        obj.getClass.getDeclaredField(fieldName)
+      }
+      invokeField(obj, invField)
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val javaType = CodeGenerator.javaType(dataType)
+    val obj = targetObject.genCode(ctx)
+
+    val returnPrimitive = field.isDefined && field.get.getType.isPrimitive
+
+    val fieldVal = ctx.freshName("field")
+    val fieldResult = ctx.freshName("fieldResult")
+
+    val reflectionCode =
+      s"""
+         |java.lang.reflect.Field $fieldVal =
+         |  ${obj.value}.getClass().getDeclaredField("$encodedFieldName");
+         |$fieldVal.setAccessible(true);
+         |$fieldResult = $fieldVal.get(${obj.value});
+         |""".stripMargin
+
+    val withTryCatch =
+      s"""
+          |try {
+          |  $reflectionCode
+          |} catch (Exception e) {
+          |  org.apache.spark.unsafe.Platform.throwException(e);
+          |}
+          |""".stripMargin
+
+    val assignResult0 = s"${ev.value} = (${CodeGenerator.boxedType(javaType)}) $fieldResult;"
+
+    val assignResult = if (returnPrimitive || returnNullable) {
+      s"""
+         |if ($fieldResult != null) {
+         |  $assignResult0
+         |} else {
+         |  ${ev.isNull} = true;
+         |}
+         |""".stripMargin
+    } else {
+      assignResult0
+    }
+
+    val evaluate =
+      s"""
+       |Object $fieldResult = null;
+       |$withTryCatch
+       |$assignResult
+       |""".stripMargin
+
+    val mainEvalCode =
+      code"""
+            |if (!${ev.isNull}) {
+            |  $evaluate
+            |}
+            |""".stripMargin
+
+    val evalWithNullCheck = if (targetObject.nullable) {
+      code"""
+            |if (!${obj.isNull}) {
+            |  $mainEvalCode
+            |}
+            |""".stripMargin
+    } else {
+      mainEvalCode
+    }
+
+    val code = obj.code +
+      code"""
+            |boolean ${ev.isNull} = false;
+            |$javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+            |$evalWithNullCheck
+            |""".stripMargin
+    ev.copy(code = code)
+  }
+
+  override def toString: String = s"$targetObject.$fieldName"
+
+  override def children: Seq[Expression] = Seq(targetObject)
+
+  override protected def withNewChildrenInternal(
+    newChildren: IndexedSeq[Expression]
+  ): PrivateFieldInvoke = {
+    assert(newChildren.length == 1, s"( $newChildren ).length == 1")
+    copy(targetObject = newChildren.head)
+  }
 }
 
 /**

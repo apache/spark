@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
-import scala.reflect.ClassTag
-import scala.reflect.runtime.universe.{typeTag, TypeTag}
+import scala.reflect.{classTag, ClassTag}
+import scala.reflect.runtime.universe.{typeTag, TypeTag, WeakTypeTag}
 
 import org.apache.spark.sql.Encoder
-import org.apache.spark.sql.catalyst.{InternalRow, JavaTypeInference, ScalaReflection}
+import org.apache.spark.sql.catalyst.{DeepClassTag, InternalRow, JavaTypeInference, LocalTypeImprover, ScalaReflection}
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, GetColumnByOrdinal, SimpleAnalyzer, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder.{Deserializer, Serializer}
 import org.apache.spark.sql.catalyst.expressions._
@@ -58,6 +58,18 @@ object ExpressionEncoder {
       serializer,
       deserializer,
       ClassTag[T](cls))
+  }
+
+  def local[T: WeakTypeTag : ClassTag : DeepClassTag](): ExpressionEncoder[T] = {
+    val tpe = LocalTypeImprover.improveStaticType[T]
+    val serializer = ScalaReflection.serializerForType(tpe)
+    val deserializer = ScalaReflection.deserializerForType(tpe)
+
+    new ExpressionEncoder[T](
+      serializer,
+      deserializer,
+      classTag[T]
+    )
   }
 
   // TODO: improve error message for java bean encoder.
