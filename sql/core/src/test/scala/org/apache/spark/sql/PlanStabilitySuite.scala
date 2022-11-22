@@ -372,6 +372,53 @@ class TPCDSModifiedPlanStabilityWithStatsSuite extends PlanStabilitySuite with T
 }
 
 @ExtendedSQLTest
+class TPCDSV1_4_V2PlanStabilitySuite extends PlanStabilitySuite with TPCDSBase {
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "")
+
+  override val goldenFilePath: String =
+    new File(baseResourcePath, s"approved-plans-v1_4").getAbsolutePath
+
+  val failingPlanStability = Set("q14a", "q14b", "q38", "q87")
+  tpcdsQueries.filterNot(failingPlanStability.contains).foreach { q =>
+    test(s"check simplified dsv2 (tpcds-v1.4/$q)") {
+      testQuery("tpcds", q, ".dsv2")
+    }
+  }
+}
+
+@ExtendedSQLTest
+class TPCDSV2_7_V2PlanStabilitySuite extends PlanStabilitySuite with TPCDSBase {
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "")
+
+  override val goldenFilePath: String =
+    new File(baseResourcePath, s"approved-plans-v2_7").getAbsolutePath
+
+  val failingPlanStability = Set("q14", "q14a")
+  tpcdsQueriesV2_7_0.filterNot(failingPlanStability.contains).foreach { q =>
+    test(s"check simplified dsv2 (tpcds-v2.7.0/$q)") {
+      testQuery("tpcds-v2.7.0", q, ".dsv2")
+    }
+  }
+}
+
+@ExtendedSQLTest
+class TPCDSModifiedV2PlanStabilitySuite extends PlanStabilitySuite with TPCDSBase {
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "")
+
+  override val goldenFilePath: String =
+    new File(baseResourcePath, s"approved-plans-modified").getAbsolutePath
+
+  modifiedTPCDSQueries.foreach { q =>
+    test(s"check simplified dsv2 (tpcds-modifiedQueries/$q)") {
+      testQuery("tpcds-modifiedQueries", q, ".dsv2")
+    }
+  }
+}
+
+@ExtendedSQLTest
 class TPCHPlanStabilitySuite extends PlanStabilitySuite with TPCHBase {
   override protected def sparkConf: SparkConf =
     super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
@@ -382,6 +429,21 @@ class TPCHPlanStabilitySuite extends PlanStabilitySuite with TPCHBase {
   tpchQueries.foreach { q =>
     test(s"check simplified (tpch/$q)") {
       testQuery("tpch", q)
+    }
+  }
+}
+
+@ExtendedSQLTest
+class TPCHV2PlanStabilitySuite extends PlanStabilitySuite with TPCHBase {
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "")
+
+  override def goldenFilePath: String = getWorkspaceFilePath(
+    "sql", "core", "src", "test", "resources", "tpch-plan-stability").toFile.getAbsolutePath
+
+  tpchQueries.foreach { q =>
+    test(s"check simplified dsv2 (tpch/$q)") {
+      testQuery("tpch", q, ".dsv2")
     }
   }
 }
