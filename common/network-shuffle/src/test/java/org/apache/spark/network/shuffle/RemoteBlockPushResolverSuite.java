@@ -28,12 +28,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
+import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadLocalRandom;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
-
 import org.apache.commons.io.FileUtils;
 import org.junit.After;
 import org.junit.Assert;
@@ -42,8 +44,11 @@ import org.junit.Test;
 import org.roaringbitmap.RoaringBitmap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
 
 import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
 import org.apache.spark.network.client.StreamCallbackWithID;
@@ -1147,9 +1152,21 @@ public class RemoteBlockPushResolverSuite {
     Semaphore closed = new Semaphore(0);
     pushResolver = new RemoteBlockPushResolver(conf, null) {
       @Override
-      void deleteCurrentOutDatedShufflePartitions(AppShuffleInfo shuffleInfo, Integer shuffleId,
-          AppAttemptShuffleMergeId higherShuffleMergeIdToClean) {
-        super.deleteCurrentOutDatedShufflePartitions(shuffleInfo, shuffleId, higherShuffleMergeIdToClean);
+      void closeAndDeleteOutdatedPartitions(
+          AppAttemptShuffleMergeId shuffleMergeId,
+          Map<Integer, AppShufflePartitionInfo> partitions,
+          Optional<AppAttemptShuffleMergeId> higherShuffleMergeId) {
+        super.closeAndDeleteOutdatedPartitions(shuffleMergeId, partitions, higherShuffleMergeId);
+        closed.release();
+      }
+      @VisibleForTesting
+      void deleteOutdatedFinalizedPartitions(
+          AppShuffleInfo shuffleInfo,
+          AppAttemptShuffleMergeId shuffleMergeId,
+          int[] outdatedFinalizedPartitions,
+          Optional<AppAttemptShuffleMergeId> higherShuffleMergeId) {
+        super.deleteOutdatedFinalizedPartitions(shuffleInfo, shuffleMergeId,
+            outdatedFinalizedPartitions, higherShuffleMergeId);
         closed.release();
       }
     };
