@@ -134,7 +134,7 @@ case class WindowExec(
       val numFrames = frames.length
 
       var count = 0
-      def addBuffer(): Unit
+      def fillBuffer(): Unit
 
       private[this] def fetchNextPartition(): Unit = {
         // Collect all the rows in the current partition.
@@ -145,8 +145,7 @@ case class WindowExec(
         buffer.clear()
 
         while (nextRowAvailable && nextGroup == currentGroup) {
-          addBuffer()
-          //            buffer.add(nextRow)
+          fillBuffer()
           fetchNextRow()
         }
         count = 0
@@ -205,14 +204,14 @@ case class WindowExec(
     }
 
     case class DefaultWindowIterator(stream: Iterator[InternalRow]) extends WindowIterator {
-      override def addBuffer(): Unit = {
+      override def fillBuffer(): Unit = {
         buffer.add(nextRow)
       }
     }
 
     case class SimpleGroupLimitIterator(
         stream: Iterator[InternalRow], groupLimit: Int) extends WindowIterator {
-      override def addBuffer(): Unit = {
+      override def fillBuffer(): Unit = {
         if (buffer.length < groupLimit) {
           buffer.add(nextRow)
         }
@@ -222,10 +221,10 @@ case class WindowExec(
     case class RankGroupLimitIterator(
         stream: Iterator[InternalRow], groupLimit: Int) extends WindowIterator {
       val ordering = GenerateOrdering.generate(orderSpec, output)
-
       var rank = 0
       var currentRank: UnsafeRow = null
-      override def addBuffer(): Unit = {
+
+      override def fillBuffer(): Unit = {
         if (count == 0) {
           rank = 0
           currentRank = nextRow.copy()
@@ -244,9 +243,9 @@ case class WindowExec(
     case class DenseRankGroupLimitIterator(
         stream: Iterator[InternalRow], groupLimit: Int) extends WindowIterator {
       val ordering = GenerateOrdering.generate(orderSpec, output)
-
       var currentRank: UnsafeRow = null
-      override def addBuffer(): Unit = {
+
+      override def fillBuffer(): Unit = {
         if (count == 0) {
           currentRank = nextRow.copy()
         }

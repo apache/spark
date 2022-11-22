@@ -178,7 +178,7 @@ Arguments: [s_state#14 ASC NULLS FIRST, _w2#18 DESC NULLS LAST], false, 0
 
 (26) Window
 Input [3]: [s_state#14, s_state#14, _w2#18]
-Arguments: [rank(_w2#18) windowspecdefinition(s_state#14, _w2#18 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS ranking#19], [s_state#14], [_w2#18 DESC NULLS LAST]
+Arguments: [rank(_w2#18) windowspecdefinition(s_state#14, _w2#18 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS ranking#19], [s_state#14], [_w2#18 DESC NULLS LAST], (5,rank(_w2#18))
 
 (27) Filter [codegen id : 6]
 Input [4]: [s_state#14, s_state#14, _w2#18, ranking#19]

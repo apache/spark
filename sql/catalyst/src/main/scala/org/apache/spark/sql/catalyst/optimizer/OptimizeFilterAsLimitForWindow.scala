@@ -77,21 +77,7 @@ object OptimizeFilterAsLimitForWindow extends Rule[LogicalPlan] with PredicateHe
           } else {
             LocalRelation(filter.output, data = Seq.empty, isStreaming = filter.isStreaming)
           }
-
         case _ => filter
       }
-//      if (limits.nonEmpty) {
-//        limits
-//        val limit = limits.min
-//        if (limit > 0) {
-//          val newWindow = window.copy(groupLimit = Some(limit))
-//          val newFilter = filter.withNewChildren(Seq(newWindow))
-//          newFilter
-//        } else {
-//          LocalRelation(filter.output, data = Seq.empty, isStreaming = filter.isStreaming)
-//        }
-//      } else {
-//        filter
-//      }
   }
 }
