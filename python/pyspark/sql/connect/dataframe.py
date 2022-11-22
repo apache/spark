@@ -125,6 +125,18 @@ class DataFrame(object):
         new_frame._plan = plan
         return new_frame
 
+    def isEmpty(self) -> bool:
+        """Returns ``True`` if this :class:`DataFrame` is empty.
+
+        .. versionadded:: 3.4.0
+
+        Returns
+        -------
+        bool
+            Whether it's empty DataFrame or not.
+        """
+        return len(self.take(1)) == 0
+
     def select(self, *cols: "ExpressionOrString") -> "DataFrame":
         return DataFrame.withPlan(plan.Project(self._plan, *cols), session=self._session)
 

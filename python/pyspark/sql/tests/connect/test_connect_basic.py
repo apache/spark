@@ -346,6 +346,11 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertEqual(1, len(pdf.columns))  # one column
         self.assertEqual("X", pdf.columns[0])
 
+    def test_is_empty(self):
+        # SPARK-41212: Test is empty
+        self.assertFalse(self.connect.sql("SELECT 1 AS X").isEmpty())
+        self.assertTrue(self.connect.sql("SELECT 1 AS X LIMIT 0").isEmpty())
+
     def test_session(self):
         self.assertEqual(self.connect, self.connect.sql("SELECT 1").sparkSession())
 
