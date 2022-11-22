@@ -39,8 +39,8 @@ object OptimizeFilterAsLimitForWindow extends Rule[LogicalPlan] with PredicateHe
   /**
    * Extract all the limit values from predicates.
    */
-  def extractLimits(condition: Expression, attr: Attribute): Seq[Int] =
-    splitConjunctivePredicates(condition).collect {
+  def extractLimits(condition: Expression, attr: Attribute): Option[Int] = {
+    val limits = splitConjunctivePredicates(condition).collect {
       case EqualTo(IntegerLiteral(limit), e) if e.semanticEquals(attr) => limit
       case EqualTo(e, IntegerLiteral(limit)) if e.semanticEquals(attr) => limit
       case LessThan(e, IntegerLiteral(limit)) if e.semanticEquals(attr) => limit - 1
@@ -48,6 +48,9 @@ object OptimizeFilterAsLimitForWindow extends Rule[LogicalPlan] with PredicateHe
       case LessThanOrEqual(e, IntegerLiteral(limit)) if e.semanticEquals(attr) => limit
       case GreaterThanOrEqual(IntegerLiteral(limit), e) if e.semanticEquals(attr) => limit
     }
+
+    if (limits.nonEmpty) Some(limits.min) else None
+  }
 
   private def supports(
       windowExpressions: Seq[NamedExpression]): Boolean = windowExpressions.forall {
@@ -62,19 +65,33 @@ object OptimizeFilterAsLimitForWindow extends Rule[LogicalPlan] with PredicateHe
         window @ Window(windowExpressions, partitionSpec, orderSpec, _, None))
       if supports(windowExpressions) && partitionSpec.nonEmpty && orderSpec.nonEmpty =>
       val limits = windowExpressions.collect {
-        case alias: Alias => extractLimits(condition, alias.toAttribute)
-      }.flatten
-      if (limits.nonEmpty) {
-        val limit = limits.min
-        if (limit > 0) {
-          val newWindow = window.copy(groupLimit = Some(limit))
-          val newFilter = filter.withNewChildren(Seq(newWindow))
-          newFilter
-        } else {
-          LocalRelation(filter.output, data = Seq.empty, isStreaming = filter.isStreaming)
-        }
-      } else {
-        filter
+        case alias @ Alias(WindowExpression(rankLikeFunc, _), _) =>
+          extractLimits(condition, alias.toAttribute).map((_, rankLikeFunc))
+      }.sortBy(_.get._1).head
+      limits match {
+        case Some((limit, _)) =>
+          if (limit > 0) {
+            val newWindow = window.copy(groupLimitInfo = limits)
+            val newFilter = filter.withNewChildren(Seq(newWindow))
+            newFilter
+          } else {
+            LocalRelation(filter.output, data = Seq.empty, isStreaming = filter.isStreaming)
+          }
+
+        case _ => filter
       }
+//      if (limits.nonEmpty) {
+//        limits
+//        val limit = limits.min
+//        if (limit > 0) {
+//          val newWindow = window.copy(groupLimit = Some(limit))
+//          val newFilter = filter.withNewChildren(Seq(newWindow))
+//          newFilter
+//        } else {
+//          LocalRelation(filter.output, data = Seq.empty, isStreaming = filter.isStreaming)
+//        }
+//      } else {
+//        filter
+//      }
   }
 }

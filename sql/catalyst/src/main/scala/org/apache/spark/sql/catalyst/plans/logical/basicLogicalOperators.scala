@@ -1178,7 +1178,7 @@ case class Window(
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
     child: LogicalPlan,
-    groupLimit: Option[Int] = None) extends UnaryNode {
+    groupLimitInfo: Option[(Int, Expression)] = None) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] =
     child.output ++ windowExpressions.map(_.toAttribute)

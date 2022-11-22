@@ -1275,29 +1275,42 @@ class DataFrameWindowFunctionsSuite extends QueryTest
       ("a", 2, "y", 3.0),
       ("a", 3, "z", -1.0),
       ("a", 4, "", 2.0),
+      ("a", 4, "", 2.0),
       ("b", 1, "h", Double.NaN),
       ("b", 1, "n", Double.PositiveInfinity),
       ("c", 1, "z", -2.0),
       ("c", 1, "a", -4.0),
       ("c", 2, nullStr, 5.0)).toDF("key", "value", "order", "value2")
 
-    val windowFunctions = Seq(
-      row_number(),
-      rank(),
-      dense_rank()
-    )
-
     val window = Window.partitionBy($"key").orderBy($"order".asc_nulls_first)
 
-    val conditions = Seq(
+    val conditions1 = Seq(
       $"rn" === 1,
       $"rn" < 2,
       $"rn" <= 1
     )
 
-    for (function <- windowFunctions; condition <- conditions) {
-      checkAnswer(df.withColumn("rn", function.over(window)).where(condition),
+    for (condition <- conditions1) {
+      checkAnswer(df.withColumn("rn", row_number().over(window)).where(condition),
         Seq(
+          Row("a", 4, "", 2.0, 1),
+          Row("b", 1, "h", Double.NaN, 1),
+          Row("c", 2, null, 5.0, 1)
+        )
+      )
+
+      checkAnswer(df.withColumn("rn", rank().over(window)).where(condition),
+        Seq(
+          Row("a", 4, "", 2.0, 1),
+          Row("a", 4, "", 2.0, 1),
+          Row("b", 1, "h", Double.NaN, 1),
+          Row("c", 2, null, 5.0, 1)
+        )
+      )
+
+      checkAnswer(df.withColumn("rn", dense_rank().over(window)).where(condition),
+        Seq(
+          Row("a", 4, "", 2.0, 1),
           Row("a", 4, "", 2.0, 1),
           Row("b", 1, "h", Double.NaN, 1),
           Row("c", 2, null, 5.0, 1)
@@ -1305,10 +1318,38 @@ class DataFrameWindowFunctionsSuite extends QueryTest
       )
     }
 
-    for (function <- windowFunctions) {
-      checkAnswer(df.withColumn("rn", function.over(window)).where($"rn" <= 2),
+    val conditions2 = Seq(
+      $"rn" < 3,
+      $"rn" <= 2
+    )
+
+    for (condition <- conditions2) {
+      checkAnswer(df.withColumn("rn", row_number().over(window)).where(condition),
+        Seq(
+          Row("a", 4, "", 2.0, 1),
+          Row("a", 4, "", 2.0, 2),
+          Row("b", 1, "h", Double.NaN, 1),
+          Row("b", 1, "n", Double.PositiveInfinity, 2),
+          Row("c", 1, "a", -4.0, 2),
+          Row("c", 2, null, 5.0, 1)
+        )
+      )
+
+      checkAnswer(df.withColumn("rn", rank().over(window)).where(condition),
+        Seq(
+          Row("a", 4, "", 2.0, 1),
+          Row("a", 4, "", 2.0, 1),
+          Row("b", 1, "h", Double.NaN, 1),
+          Row("b", 1, "n", Double.PositiveInfinity, 2),
+          Row("c", 1, "a", -4.0, 2),
+          Row("c", 2, null, 5.0, 1)
+        )
+      )
+
+      checkAnswer(df.withColumn("rn", dense_rank().over(window)).where(condition),
         Seq(
           Row("a", 0, "c", 1.0, 2),
+          Row("a", 4, "", 2.0, 1),
           Row("a", 4, "", 2.0, 1),
           Row("b", 1, "h", Double.NaN, 1),
           Row("b", 1, "n", Double.PositiveInfinity, 2),
@@ -1318,35 +1359,25 @@ class DataFrameWindowFunctionsSuite extends QueryTest
       )
     }
 
-    for (function <- windowFunctions) {
-      val condition = $"rn" === 2 && $"value2" > 0.5
-      checkAnswer(df.withColumn("rn", function.over(window)).where(condition),
-        Seq(
-          Row("a", 0, "c", 1.0, 2),
-          Row("b", 1, "n", Double.PositiveInfinity, 2)
-        )
+    val condition = $"rn" === 2 && $"value2" > 0.5
+    checkAnswer(df.withColumn("rn", row_number().over(window)).where(condition),
+      Seq(
+        Row("a", 4, "", 2.0, 2),
+        Row("b", 1, "n", Double.PositiveInfinity, 2)
       )
-    }
+    )
 
-    for (function <- windowFunctions) {
-      val condition = $"rn" < 2 && $"value2" < 0.01
-      checkAnswer(df.withColumn("rn", function.over(window)).where(condition),
-        Seq.empty
+    checkAnswer(df.withColumn("rn", rank().over(window)).where(condition),
+      Seq(
+        Row("b", 1, "n", Double.PositiveInfinity, 2)
       )
-    }
+    )
 
-    for (function <- windowFunctions) {
-      val condition = $"rn" <= 4 && $"value" + $"value2" > 2
-      checkAnswer(df.withColumn("rn", function.over(window)).where(condition),
-        Seq(
-          Row("a", 1, "x", 2.0, 3),
-          Row("a", 2, "y", 3.0, 4),
-          Row("a", 4, "", 2.0, 1),
-          Row("b", 1, "h", Double.NaN, 1),
-          Row("b", 1, "n", Double.PositiveInfinity, 2),
-          Row("c", 2, null, 5.0, 1)
-        )
+    checkAnswer(df.withColumn("rn", dense_rank().over(window)).where(condition),
+      Seq(
+        Row("a", 0, "c", 1.0, 2),
+        Row("b", 1, "n", Double.PositiveInfinity, 2)
       )
-    }
+    )
   }
 }

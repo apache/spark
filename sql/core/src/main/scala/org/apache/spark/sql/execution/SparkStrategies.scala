@@ -614,9 +614,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object Window extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case PhysicalWindow(
-        WindowFunctionType.SQL, windowExprs, partitionSpec, orderSpec, child, groupLimit) =>
+        WindowFunctionType.SQL, windowExprs, partitionSpec, orderSpec, child, groupLimitInfo) =>
         execution.window.WindowExec(
-          windowExprs, partitionSpec, orderSpec, planLater(child), groupLimit) :: Nil
+          windowExprs, partitionSpec, orderSpec, planLater(child), groupLimitInfo) :: Nil
 
       case PhysicalWindow(
         WindowFunctionType.Python, windowExprs, partitionSpec, orderSpec, child, _) =>

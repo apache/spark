@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.window
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
 import org.apache.spark.sql.execution.{ExternalAppendOnlyUnsafeRowArray, SparkPlan}
 
 /**
@@ -88,19 +89,8 @@ case class WindowExec(
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
     child: SparkPlan,
-    rankLimit: Option[Int] = None)
+    groupLimitInfo: Option[(Int, Expression)] = None)
   extends WindowExecBase {
-
-  val addBuffer = if (rankLimit.isDefined) {
-    val groupLimit = rankLimit.get
-    (buffer: ExternalAppendOnlyUnsafeRowArray, row: UnsafeRow) =>
-      if (buffer.length <= groupLimit) {
-        buffer.add(row)
-      }
-  } else {
-    (buffer: ExternalAppendOnlyUnsafeRowArray, row: UnsafeRow) =>
-      buffer.add(row)
-  }
 
   protected override def doExecute(): RDD[InternalRow] = {
     // Unwrap the window expressions and window frame factories from the map.
@@ -109,104 +99,185 @@ case class WindowExec(
     val inMemoryThreshold = conf.windowExecBufferInMemoryThreshold
     val spillThreshold = conf.windowExecBufferSpillThreshold
 
-    // Start processing.
-    child.execute().mapPartitions { stream =>
-      new Iterator[InternalRow] {
+    abstract class WindowIterator extends Iterator[InternalRow] {
 
-        // Get all relevant projections.
-        val result = createResultProjection(expressions)
-        val grouping = UnsafeProjection.create(partitionSpec, child.output)
+      def stream: Iterator[InternalRow]
 
-        // Manage the stream and the grouping.
-        var nextRow: UnsafeRow = null
-        var nextGroup: UnsafeRow = null
-        var nextRowAvailable: Boolean = false
-        private[this] def fetchNextRow(): Unit = {
-          nextRowAvailable = stream.hasNext
-          if (nextRowAvailable) {
-            nextRow = stream.next().asInstanceOf[UnsafeRow]
-            nextGroup = grouping(nextRow)
-          } else {
-            nextRow = null
-            nextGroup = null
-          }
+      // Get all relevant projections.
+      val result = createResultProjection(expressions)
+      val grouping = UnsafeProjection.create(partitionSpec, child.output)
+
+      // Manage the stream and the grouping.
+      var nextRow: UnsafeRow = null
+      var nextGroup: UnsafeRow = null
+      var nextRowAvailable: Boolean = false
+      private[this] def fetchNextRow(): Unit = {
+        nextRowAvailable = stream.hasNext
+        if (nextRowAvailable) {
+          nextRow = stream.next().asInstanceOf[UnsafeRow]
+          nextGroup = grouping(nextRow)
+        } else {
+          nextRow = null
+          nextGroup = null
         }
-        fetchNextRow()
+      }
+      fetchNextRow()
 
-        // Manage the current partition.
-        val buffer: ExternalAppendOnlyUnsafeRowArray =
-          new ExternalAppendOnlyUnsafeRowArray(inMemoryThreshold, spillThreshold)
+      // Manage the current partition.
+      val buffer: ExternalAppendOnlyUnsafeRowArray =
+        new ExternalAppendOnlyUnsafeRowArray(inMemoryThreshold, spillThreshold)
 
-        var bufferIterator: Iterator[UnsafeRow] = _
+      var bufferIterator: Iterator[UnsafeRow] = _
 
-        val windowFunctionResult = new SpecificInternalRow(expressions.map(_.dataType))
-        val frames = factories.map(_(windowFunctionResult))
-        val numFrames = frames.length
-        private[this] def fetchNextPartition(): Unit = {
-          // Collect all the rows in the current partition.
-          // Before we start to fetch new input rows, make a copy of nextGroup.
-          val currentGroup = nextGroup.copy()
+      val windowFunctionResult = new SpecificInternalRow(expressions.map(_.dataType))
+      val frames = factories.map(_(windowFunctionResult))
+      val numFrames = frames.length
 
-          // clear last partition
+      var count = 0
+      def addBuffer(): Unit
+
+      private[this] def fetchNextPartition(): Unit = {
+        // Collect all the rows in the current partition.
+        // Before we start to fetch new input rows, make a copy of nextGroup.
+        val currentGroup = nextGroup.copy()
+
+        // clear last partition
+        buffer.clear()
+
+        while (nextRowAvailable && nextGroup == currentGroup) {
+          addBuffer()
+          //            buffer.add(nextRow)
+          fetchNextRow()
+        }
+        count = 0
+
+        // Setup the frames.
+        var i = 0
+        while (i < numFrames) {
+          frames(i).prepare(buffer)
+          i += 1
+        }
+
+        // Setup iteration
+        rowIndex = 0
+        bufferIterator = buffer.generateIterator()
+      }
+
+      // Iteration
+      var rowIndex = 0
+
+      override final def hasNext: Boolean = {
+        val found = (bufferIterator != null && bufferIterator.hasNext) || nextRowAvailable
+        if (!found) {
+          // clear final partition
           buffer.clear()
+        }
+        found
+      }
 
-          while (nextRowAvailable && nextGroup == currentGroup) {
-            addBuffer(buffer, nextRow)
-            fetchNextRow()
-          }
+      val join = new JoinedRow
+      override final def next(): InternalRow = {
+        // Load the next partition if we need to.
+        if ((bufferIterator == null || !bufferIterator.hasNext) && nextRowAvailable) {
+          fetchNextPartition()
+        }
 
-          // Setup the frames.
+        if (bufferIterator.hasNext) {
+          val current = bufferIterator.next()
+
+          // Get the results for the window frames.
           var i = 0
           while (i < numFrames) {
-            frames(i).prepare(buffer)
+            frames(i).write(rowIndex, current)
             i += 1
           }
 
-          // Setup iteration
-          rowIndex = 0
-          bufferIterator = buffer.generateIterator()
-        }
+          // 'Merge' the input row with the window function result
+          join(current, windowFunctionResult)
+          rowIndex += 1
 
-        // Iteration
-        var rowIndex = 0
-
-        override final def hasNext: Boolean = {
-          val found = (bufferIterator != null && bufferIterator.hasNext) || nextRowAvailable
-          if (!found) {
-            // clear final partition
-            buffer.clear()
-          }
-          found
-        }
-
-        val join = new JoinedRow
-        override final def next(): InternalRow = {
-          // Load the next partition if we need to.
-          if ((bufferIterator == null || !bufferIterator.hasNext) && nextRowAvailable) {
-            fetchNextPartition()
-          }
-
-          if (bufferIterator.hasNext) {
-            val current = bufferIterator.next()
-
-            // Get the results for the window frames.
-            var i = 0
-            while (i < numFrames) {
-              frames(i).write(rowIndex, current)
-              i += 1
-            }
-
-            // 'Merge' the input row with the window function result
-            join(current, windowFunctionResult)
-            rowIndex += 1
-
-            // Return the projection.
-            result(join)
-          } else {
-            throw new NoSuchElementException
-          }
+          // Return the projection.
+          result(join)
+        } else {
+          throw new NoSuchElementException
         }
       }
+    }
+
+    case class DefaultWindowIterator(stream: Iterator[InternalRow]) extends WindowIterator {
+      override def addBuffer(): Unit = {
+        buffer.add(nextRow)
+      }
+    }
+
+    case class SimpleGroupLimitIterator(
+        stream: Iterator[InternalRow], groupLimit: Int) extends WindowIterator {
+      override def addBuffer(): Unit = {
+        if (buffer.length < groupLimit) {
+          buffer.add(nextRow)
+        }
+      }
+    }
+
+    case class RankGroupLimitIterator(
+        stream: Iterator[InternalRow], groupLimit: Int) extends WindowIterator {
+      val ordering = GenerateOrdering.generate(orderSpec, output)
+
+      var rank = 0
+      var currentRank: UnsafeRow = null
+      override def addBuffer(): Unit = {
+        if (count == 0) {
+          rank = 0
+          currentRank = nextRow.copy()
+        }
+        if (rank < groupLimit && ordering.compare(currentRank, nextRow) != 0) {
+          rank = count
+          currentRank = nextRow.copy()
+        }
+        if (rank < groupLimit) {
+          count += 1
+          buffer.add(nextRow)
+        }
+      }
+    }
+
+    case class DenseRankGroupLimitIterator(
+        stream: Iterator[InternalRow], groupLimit: Int) extends WindowIterator {
+      val ordering = GenerateOrdering.generate(orderSpec, output)
+
+      var currentRank: UnsafeRow = null
+      override def addBuffer(): Unit = {
+        if (count == 0) {
+          currentRank = nextRow.copy()
+        }
+        if (count < groupLimit && ordering.compare(currentRank, nextRow) != 0) {
+          count += 1
+          currentRank = nextRow.copy()
+        }
+        if (count < groupLimit) {
+          buffer.add(nextRow)
+        }
+      }
+    }
+
+    // Start processing.
+    groupLimitInfo match {
+      case Some((groupLimit, _: RowNumber)) =>
+        child.execute().mapPartitions { stream =>
+          SimpleGroupLimitIterator(stream, groupLimit)
+        }
+      case Some((groupLimit, _: Rank)) =>
+        child.execute().mapPartitions { stream =>
+          RankGroupLimitIterator(stream, groupLimit)
+        }
+      case Some((groupLimit, _: DenseRank)) =>
+        child.execute().mapPartitions { stream =>
+          DenseRankGroupLimitIterator(stream, groupLimit)
+        }
+      case _ =>
+        child.execute().mapPartitions { stream =>
+          DefaultWindowIterator(stream)
+        }
     }
   }
 
