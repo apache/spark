@@ -1,0 +1,255 @@
+== Physical Plan ==
+TakeOrderedAndProject (34)
++- * HashAggregate (33)
+   +- Exchange (32)
+      +- * HashAggregate (31)
+         +- * Project (30)
+            +- * BroadcastHashJoin Inner BuildRight (29)
+               :- * Project (24)
+               :  +- * BroadcastHashJoin Inner BuildRight (23)
+               :     :- * Project (18)
+               :     :  +- * BroadcastHashJoin Inner BuildRight (17)
+               :     :     :- * Project (12)
+               :     :     :  +- * SortMergeJoin Inner (11)
+               :     :     :     :- * Sort (5)
+               :     :     :     :  +- Exchange (4)
+               :     :     :     :     +- * Project (3)
+               :     :     :     :        +- * Filter (2)
+               :     :     :     :           +- BatchScan default.store_sales (1)
+               :     :     :     +- * Sort (10)
+               :     :     :        +- Exchange (9)
+               :     :     :           +- * Project (8)
+               :     :     :              +- * Filter (7)
+               :     :     :                 +- BatchScan default.store_returns (6)
+               :     :     +- BroadcastExchange (16)
+               :     :        +- * Project (15)
+               :     :           +- * Filter (14)
+               :     :              +- BatchScan default.store (13)
+               :     +- BroadcastExchange (22)
+               :        +- * Project (21)
+               :           +- * Filter (20)
+               :              +- BatchScan default.date_dim (19)
+               +- BroadcastExchange (28)
+                  +- * Project (27)
+                     +- * Filter (26)
+                        +- BatchScan default.date_dim (25)
+
+
+(1) BatchScan default.store_sales
+Output [5]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_sold_date_sk#5]
+DataFilters: [isnotnull(ss_ticket_number#4), isnotnull(ss_item_sk#1), isnotnull(ss_customer_sk#2), isnotnull(ss_store_sk#3)]
+Format: parquet
+Location [not included in comparison]/{warehouse_dir}/store_sales]
+PartitionFilters: [isnotnull(ss_sold_date_sk#5)]
+PushedFilters: [IsNotNull(ss_ticket_number), IsNotNull(ss_item_sk), IsNotNull(ss_customer_sk), IsNotNull(ss_store_sk)]
+ReadSchema: struct<ss_item_sk:int,ss_customer_sk:int,ss_store_sk:int,ss_ticket_number:int>
+
+(2) Filter [codegen id : 1]
+Input [5]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_sold_date_sk#5]
+Condition : (((isnotnull(ss_ticket_number#4) AND isnotnull(ss_item_sk#1)) AND isnotnull(ss_customer_sk#2)) AND isnotnull(ss_store_sk#3))
+
+(3) Project [codegen id : 1]
+Output [5]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_sold_date_sk#5]
+Input [5]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_sold_date_sk#5]
+
+(4) Exchange
+Input [5]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_sold_date_sk#5]
+Arguments: hashpartitioning(ss_ticket_number#4, ss_item_sk#1, ss_customer_sk#2, 5), ENSURE_REQUIREMENTS, [plan_id=1]
+
+(5) Sort [codegen id : 2]
+Input [5]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_sold_date_sk#5]
+Arguments: [ss_ticket_number#4 ASC NULLS FIRST, ss_item_sk#1 ASC NULLS FIRST, ss_customer_sk#2 ASC NULLS FIRST], false, 0
+
+(6) BatchScan default.store_returns
+Output [4]: [sr_item_sk#6, sr_customer_sk#7, sr_ticket_number#8, sr_returned_date_sk#9]
+DataFilters: [isnotnull(sr_ticket_number#8), isnotnull(sr_item_sk#6), isnotnull(sr_customer_sk#7)]
+Format: parquet
+Location [not included in comparison]/{warehouse_dir}/store_returns]
+PartitionFilters: [isnotnull(sr_returned_date_sk#9)]
+PushedFilters: [IsNotNull(sr_ticket_number), IsNotNull(sr_item_sk), IsNotNull(sr_customer_sk)]
+ReadSchema: struct<sr_item_sk:int,sr_customer_sk:int,sr_ticket_number:int>
+
+(7) Filter [codegen id : 3]
+Input [4]: [sr_item_sk#6, sr_customer_sk#7, sr_ticket_number#8, sr_returned_date_sk#9]
+Condition : (((isnotnull(sr_ticket_number#8) AND isnotnull(sr_item_sk#6)) AND isnotnull(sr_customer_sk#7)) AND might_contain(Subquery scalar-subquery#10, [id=#11], xxhash64(sr_returned_date_sk#9, 42)))
+
+(8) Project [codegen id : 3]
+Output [4]: [sr_item_sk#6, sr_customer_sk#7, sr_ticket_number#8, sr_returned_date_sk#9]
+Input [4]: [sr_item_sk#6, sr_customer_sk#7, sr_ticket_number#8, sr_returned_date_sk#9]
+
+(9) Exchange
+Input [4]: [sr_item_sk#6, sr_customer_sk#7, sr_ticket_number#8, sr_returned_date_sk#9]
+Arguments: hashpartitioning(sr_ticket_number#8, sr_item_sk#6, sr_customer_sk#7, 5), ENSURE_REQUIREMENTS, [plan_id=2]
+
+(10) Sort [codegen id : 4]
+Input [4]: [sr_item_sk#6, sr_customer_sk#7, sr_ticket_number#8, sr_returned_date_sk#9]
+Arguments: [sr_ticket_number#8 ASC NULLS FIRST, sr_item_sk#6 ASC NULLS FIRST, sr_customer_sk#7 ASC NULLS FIRST], false, 0
+
+(11) SortMergeJoin [codegen id : 8]
+Left keys [3]: [ss_ticket_number#4, ss_item_sk#1, ss_customer_sk#2]
+Right keys [3]: [sr_ticket_number#8, sr_item_sk#6, sr_customer_sk#7]
+Join type: Inner
+Join condition: None
+
+(12) Project [codegen id : 8]
+Output [3]: [ss_store_sk#3, ss_sold_date_sk#5, sr_returned_date_sk#9]
+Input [9]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_sold_date_sk#5, sr_item_sk#6, sr_customer_sk#7, sr_ticket_number#8, sr_returned_date_sk#9]
+
+(13) BatchScan default.store
+Output [11]: [s_store_sk#12, s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22]
+DataFilters: [isnotnull(s_store_sk#12)]
+Format: parquet
+Location [not included in comparison]/{warehouse_dir}/store]
+PushedFilters: [IsNotNull(s_store_sk)]
+ReadSchema: struct<s_store_sk:int,s_store_name:string,s_company_id:int,s_street_number:string,s_street_name:string,s_street_type:string,s_suite_number:string,s_city:string,s_county:string,s_state:string,s_zip:string>
+
+(14) Filter [codegen id : 5]
+Input [11]: [s_store_sk#12, s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22]
+Condition : isnotnull(s_store_sk#12)
+
+(15) Project [codegen id : 5]
+Output [11]: [s_store_sk#12, s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22]
+Input [11]: [s_store_sk#12, s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22]
+
+(16) BroadcastExchange
+Input [11]: [s_store_sk#12, s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=3]
+
+(17) BroadcastHashJoin [codegen id : 8]
+Left keys [1]: [ss_store_sk#3]
+Right keys [1]: [s_store_sk#12]
+Join type: Inner
+Join condition: None
+
+(18) Project [codegen id : 8]
+Output [12]: [ss_sold_date_sk#5, sr_returned_date_sk#9, s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22]
+Input [14]: [ss_store_sk#3, ss_sold_date_sk#5, sr_returned_date_sk#9, s_store_sk#12, s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22]
+
+(19) BatchScan default.date_dim
+Output [1]: [d_date_sk#23]
+DataFilters: [isnotnull(d_date_sk#23)]
+Format: parquet
+Location [not included in comparison]/{warehouse_dir}/date_dim]
+PushedFilters: [IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int>
+
+(20) Filter [codegen id : 6]
+Input [1]: [d_date_sk#23]
+Condition : isnotnull(d_date_sk#23)
+
+(21) Project [codegen id : 6]
+Output [1]: [d_date_sk#23]
+Input [1]: [d_date_sk#23]
+
+(22) BroadcastExchange
+Input [1]: [d_date_sk#23]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=4]
+
+(23) BroadcastHashJoin [codegen id : 8]
+Left keys [1]: [ss_sold_date_sk#5]
+Right keys [1]: [d_date_sk#23]
+Join type: Inner
+Join condition: None
+
+(24) Project [codegen id : 8]
+Output [12]: [ss_sold_date_sk#5, sr_returned_date_sk#9, s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22]
+Input [13]: [ss_sold_date_sk#5, sr_returned_date_sk#9, s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22, d_date_sk#23]
+
+(25) BatchScan default.date_dim
+Output [3]: [d_date_sk#24, d_year#25, d_moy#26]
+DataFilters: [isnotnull(d_year#25), isnotnull(d_moy#26), (d_year#25 = 2001), (d_moy#26 = 8), isnotnull(d_date_sk#24)]
+Format: parquet
+Location [not included in comparison]/{warehouse_dir}/date_dim]
+PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,2001), EqualTo(d_moy,8), IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
+
+(26) Filter [codegen id : 7]
+Input [3]: [d_date_sk#24, d_year#25, d_moy#26]
+Condition : ((((isnotnull(d_year#25) AND isnotnull(d_moy#26)) AND (d_year#25 = 2001)) AND (d_moy#26 = 8)) AND isnotnull(d_date_sk#24))
+
+(27) Project [codegen id : 7]
+Output [1]: [d_date_sk#24]
+Input [3]: [d_date_sk#24, d_year#25, d_moy#26]
+
+(28) BroadcastExchange
+Input [1]: [d_date_sk#24]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=5]
+
+(29) BroadcastHashJoin [codegen id : 8]
+Left keys [1]: [sr_returned_date_sk#9]
+Right keys [1]: [d_date_sk#24]
+Join type: Inner
+Join condition: None
+
+(30) Project [codegen id : 8]
+Output [12]: [ss_sold_date_sk#5, sr_returned_date_sk#9, s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22]
+Input [13]: [ss_sold_date_sk#5, sr_returned_date_sk#9, s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22, d_date_sk#24]
+
+(31) HashAggregate [codegen id : 8]
+Input [12]: [ss_sold_date_sk#5, sr_returned_date_sk#9, s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22]
+Keys [10]: [s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22]
+Functions [5]: [partial_sum(CASE WHEN ((sr_returned_date_sk#9 - ss_sold_date_sk#5) <= 30) THEN 1 ELSE 0 END), partial_sum(CASE WHEN (((sr_returned_date_sk#9 - ss_sold_date_sk#5) > 30) AND ((sr_returned_date_sk#9 - ss_sold_date_sk#5) <= 60)) THEN 1 ELSE 0 END), partial_sum(CASE WHEN (((sr_returned_date_sk#9 - ss_sold_date_sk#5) > 60) AND ((sr_returned_date_sk#9 - ss_sold_date_sk#5) <= 90)) THEN 1 ELSE 0 END), partial_sum(CASE WHEN (((sr_returned_date_sk#9 - ss_sold_date_sk#5) > 90) AND ((sr_returned_date_sk#9 - ss_sold_date_sk#5) <= 120)) THEN 1 ELSE 0 END), partial_sum(CASE WHEN ((sr_returned_date_sk#9 - ss_sold_date_sk#5) > 120) THEN 1 ELSE 0 END)]
+Aggregate Attributes [5]: [sum#27, sum#28, sum#29, sum#30, sum#31]
+Results [15]: [s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22, sum#32, sum#33, sum#34, sum#35, sum#36]
+
+(32) Exchange
+Input [15]: [s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22, sum#32, sum#33, sum#34, sum#35, sum#36]
+Arguments: hashpartitioning(s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22, 5), ENSURE_REQUIREMENTS, [plan_id=6]
+
+(33) HashAggregate [codegen id : 9]
+Input [15]: [s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22, sum#32, sum#33, sum#34, sum#35, sum#36]
+Keys [10]: [s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22]
+Functions [5]: [sum(CASE WHEN ((sr_returned_date_sk#9 - ss_sold_date_sk#5) <= 30) THEN 1 ELSE 0 END), sum(CASE WHEN (((sr_returned_date_sk#9 - ss_sold_date_sk#5) > 30) AND ((sr_returned_date_sk#9 - ss_sold_date_sk#5) <= 60)) THEN 1 ELSE 0 END), sum(CASE WHEN (((sr_returned_date_sk#9 - ss_sold_date_sk#5) > 60) AND ((sr_returned_date_sk#9 - ss_sold_date_sk#5) <= 90)) THEN 1 ELSE 0 END), sum(CASE WHEN (((sr_returned_date_sk#9 - ss_sold_date_sk#5) > 90) AND ((sr_returned_date_sk#9 - ss_sold_date_sk#5) <= 120)) THEN 1 ELSE 0 END), sum(CASE WHEN ((sr_returned_date_sk#9 - ss_sold_date_sk#5) > 120) THEN 1 ELSE 0 END)]
+Aggregate Attributes [5]: [sum(CASE WHEN ((sr_returned_date_sk#9 - ss_sold_date_sk#5) <= 30) THEN 1 ELSE 0 END)#37, sum(CASE WHEN (((sr_returned_date_sk#9 - ss_sold_date_sk#5) > 30) AND ((sr_returned_date_sk#9 - ss_sold_date_sk#5) <= 60)) THEN 1 ELSE 0 END)#38, sum(CASE WHEN (((sr_returned_date_sk#9 - ss_sold_date_sk#5) > 60) AND ((sr_returned_date_sk#9 - ss_sold_date_sk#5) <= 90)) THEN 1 ELSE 0 END)#39, sum(CASE WHEN (((sr_returned_date_sk#9 - ss_sold_date_sk#5) > 90) AND ((sr_returned_date_sk#9 - ss_sold_date_sk#5) <= 120)) THEN 1 ELSE 0 END)#40, sum(CASE WHEN ((sr_returned_date_sk#9 - ss_sold_date_sk#5) > 120) THEN 1 ELSE 0 END)#41]
+Results [15]: [s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22, sum(CASE WHEN ((sr_returned_date_sk#9 - ss_sold_date_sk#5) <= 30) THEN 1 ELSE 0 END)#37 AS 30 days #42, sum(CASE WHEN (((sr_returned_date_sk#9 - ss_sold_date_sk#5) > 30) AND ((sr_returned_date_sk#9 - ss_sold_date_sk#5) <= 60)) THEN 1 ELSE 0 END)#38 AS 31 - 60 days #43, sum(CASE WHEN (((sr_returned_date_sk#9 - ss_sold_date_sk#5) > 60) AND ((sr_returned_date_sk#9 - ss_sold_date_sk#5) <= 90)) THEN 1 ELSE 0 END)#39 AS 61 - 90 days #44, sum(CASE WHEN (((sr_returned_date_sk#9 - ss_sold_date_sk#5) > 90) AND ((sr_returned_date_sk#9 - ss_sold_date_sk#5) <= 120)) THEN 1 ELSE 0 END)#40 AS 91 - 120 days #45, sum(CASE WHEN ((sr_returned_date_sk#9 - ss_sold_date_sk#5) > 120) THEN 1 ELSE 0 END)#41 AS >120 days #46]
+
+(34) TakeOrderedAndProject
+Input [15]: [s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22, 30 days #42, 31 - 60 days #43, 61 - 90 days #44, 91 - 120 days #45, >120 days #46]
+Arguments: 100, [s_store_name#13 ASC NULLS FIRST, s_company_id#14 ASC NULLS FIRST, s_street_number#15 ASC NULLS FIRST, s_street_name#16 ASC NULLS FIRST, s_street_type#17 ASC NULLS FIRST, s_suite_number#18 ASC NULLS FIRST, s_city#19 ASC NULLS FIRST, s_county#20 ASC NULLS FIRST, s_state#21 ASC NULLS FIRST, s_zip#22 ASC NULLS FIRST], [s_store_name#13, s_company_id#14, s_street_number#15, s_street_name#16, s_street_type#17, s_suite_number#18, s_city#19, s_county#20, s_state#21, s_zip#22, 30 days #42, 31 - 60 days #43, 61 - 90 days #44, 91 - 120 days #45, >120 days #46]
+
+===== Subqueries =====
+
+Subquery:1 Hosting operator id = 7 Hosting Expression = Subquery scalar-subquery#10, [id=#11]
+ObjectHashAggregate (40)
++- Exchange (39)
+   +- ObjectHashAggregate (38)
+      +- * Project (37)
+         +- * Filter (36)
+            +- BatchScan default.date_dim (35)
+
+
+(35) BatchScan default.date_dim
+Output [3]: [d_date_sk#24, d_year#25, d_moy#26]
+DataFilters: [isnotnull(d_year#25), isnotnull(d_moy#26), (d_year#25 = 2001), (d_moy#26 = 8), isnotnull(d_date_sk#24)]
+Format: parquet
+Location [not included in comparison]/{warehouse_dir}/date_dim]
+PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,2001), EqualTo(d_moy,8), IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
+
+(36) Filter [codegen id : 1]
+Input [3]: [d_date_sk#24, d_year#25, d_moy#26]
+Condition : ((((isnotnull(d_year#25) AND isnotnull(d_moy#26)) AND (d_year#25 = 2001)) AND (d_moy#26 = 8)) AND isnotnull(d_date_sk#24))
+
+(37) Project [codegen id : 1]
+Output [1]: [d_date_sk#24]
+Input [3]: [d_date_sk#24, d_year#25, d_moy#26]
+
+(38) ObjectHashAggregate
+Input [1]: [d_date_sk#24]
+Keys: []
+Functions [1]: [partial_bloom_filter_agg(xxhash64(d_date_sk#24, 42), 1000000, 8388608, 0, 0)]
+Aggregate Attributes [1]: [buf#47]
+Results [1]: [buf#48]
+
+(39) Exchange
+Input [1]: [buf#48]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=7]
+
+(40) ObjectHashAggregate
+Input [1]: [buf#48]
+Keys: []
+Functions [1]: [bloom_filter_agg(xxhash64(d_date_sk#24, 42), 1000000, 8388608, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(d_date_sk#24, 42), 1000000, 8388608, 0, 0)#49]
+Results [1]: [bloom_filter_agg(xxhash64(d_date_sk#24, 42), 1000000, 8388608, 0, 0)#49 AS bloomFilter#50]
+
+

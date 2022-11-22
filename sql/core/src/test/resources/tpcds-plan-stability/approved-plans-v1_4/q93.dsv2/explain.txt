@@ -1,0 +1,174 @@
+== Physical Plan ==
+TakeOrderedAndProject (21)
++- * HashAggregate (20)
+   +- Exchange (19)
+      +- * HashAggregate (18)
+         +- * Project (17)
+            +- * BroadcastHashJoin Inner BuildRight (16)
+               :- * Project (11)
+               :  +- * SortMergeJoin Inner (10)
+               :     :- * Sort (4)
+               :     :  +- Exchange (3)
+               :     :     +- * Project (2)
+               :     :        +- BatchScan default.store_sales (1)
+               :     +- * Sort (9)
+               :        +- Exchange (8)
+               :           +- * Project (7)
+               :              +- * Filter (6)
+               :                 +- BatchScan default.store_returns (5)
+               +- BroadcastExchange (15)
+                  +- * Project (14)
+                     +- * Filter (13)
+                        +- BatchScan default.reason (12)
+
+
+(1) BatchScan default.store_sales
+Output [5]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#3, ss_quantity#4, ss_sales_price#5]
+Format: parquet
+Location [not included in comparison]/{warehouse_dir}/store_sales]
+ReadSchema: struct<ss_item_sk:int,ss_customer_sk:int,ss_ticket_number:int,ss_quantity:int,ss_sales_price:decimal(7,2)>
+
+(2) Project [codegen id : 1]
+Output [5]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#3, ss_quantity#4, ss_sales_price#5]
+Input [5]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#3, ss_quantity#4, ss_sales_price#5]
+
+(3) Exchange
+Input [5]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#3, ss_quantity#4, ss_sales_price#5]
+Arguments: hashpartitioning(ss_item_sk#1, ss_ticket_number#3, 5), ENSURE_REQUIREMENTS, [plan_id=1]
+
+(4) Sort [codegen id : 2]
+Input [5]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#3, ss_quantity#4, ss_sales_price#5]
+Arguments: [ss_item_sk#1 ASC NULLS FIRST, ss_ticket_number#3 ASC NULLS FIRST], false, 0
+
+(5) BatchScan default.store_returns
+Output [4]: [sr_item_sk#6, sr_reason_sk#7, sr_ticket_number#8, sr_return_quantity#9]
+DataFilters: [isnotnull(sr_item_sk#6), isnotnull(sr_ticket_number#8), isnotnull(sr_reason_sk#7)]
+Format: parquet
+Location [not included in comparison]/{warehouse_dir}/store_returns]
+PushedFilters: [IsNotNull(sr_item_sk), IsNotNull(sr_ticket_number), IsNotNull(sr_reason_sk)]
+ReadSchema: struct<sr_item_sk:int,sr_reason_sk:int,sr_ticket_number:int,sr_return_quantity:int>
+
+(6) Filter [codegen id : 3]
+Input [4]: [sr_item_sk#6, sr_reason_sk#7, sr_ticket_number#8, sr_return_quantity#9]
+Condition : (((isnotnull(sr_item_sk#6) AND isnotnull(sr_ticket_number#8)) AND isnotnull(sr_reason_sk#7)) AND might_contain(Subquery scalar-subquery#10, [id=#11], xxhash64(sr_reason_sk#7, 42)))
+
+(7) Project [codegen id : 3]
+Output [4]: [sr_item_sk#6, sr_reason_sk#7, sr_ticket_number#8, sr_return_quantity#9]
+Input [4]: [sr_item_sk#6, sr_reason_sk#7, sr_ticket_number#8, sr_return_quantity#9]
+
+(8) Exchange
+Input [4]: [sr_item_sk#6, sr_reason_sk#7, sr_ticket_number#8, sr_return_quantity#9]
+Arguments: hashpartitioning(sr_item_sk#6, sr_ticket_number#8, 5), ENSURE_REQUIREMENTS, [plan_id=2]
+
+(9) Sort [codegen id : 4]
+Input [4]: [sr_item_sk#6, sr_reason_sk#7, sr_ticket_number#8, sr_return_quantity#9]
+Arguments: [sr_item_sk#6 ASC NULLS FIRST, sr_ticket_number#8 ASC NULLS FIRST], false, 0
+
+(10) SortMergeJoin [codegen id : 6]
+Left keys [2]: [ss_item_sk#1, ss_ticket_number#3]
+Right keys [2]: [sr_item_sk#6, sr_ticket_number#8]
+Join type: Inner
+Join condition: None
+
+(11) Project [codegen id : 6]
+Output [5]: [ss_customer_sk#2, ss_quantity#4, ss_sales_price#5, sr_reason_sk#7, sr_return_quantity#9]
+Input [9]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#3, ss_quantity#4, ss_sales_price#5, sr_item_sk#6, sr_reason_sk#7, sr_ticket_number#8, sr_return_quantity#9]
+
+(12) BatchScan default.reason
+Output [2]: [r_reason_sk#12, r_reason_desc#13]
+DataFilters: [isnotnull(r_reason_desc#13), (r_reason_desc#13 = reason 28                                                                                           ), isnotnull(r_reason_sk#12)]
+Format: parquet
+Location [not included in comparison]/{warehouse_dir}/reason]
+PushedFilters: [IsNotNull(r_reason_desc), EqualTo(r_reason_desc,reason 28                                                                                           ), IsNotNull(r_reason_sk)]
+ReadSchema: struct<r_reason_sk:int,r_reason_desc:string>
+
+(13) Filter [codegen id : 5]
+Input [2]: [r_reason_sk#12, r_reason_desc#13]
+Condition : ((isnotnull(r_reason_desc#13) AND (r_reason_desc#13 = reason 28                                                                                           )) AND isnotnull(r_reason_sk#12))
+
+(14) Project [codegen id : 5]
+Output [1]: [r_reason_sk#12]
+Input [2]: [r_reason_sk#12, r_reason_desc#13]
+
+(15) BroadcastExchange
+Input [1]: [r_reason_sk#12]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=3]
+
+(16) BroadcastHashJoin [codegen id : 6]
+Left keys [1]: [sr_reason_sk#7]
+Right keys [1]: [r_reason_sk#12]
+Join type: Inner
+Join condition: None
+
+(17) Project [codegen id : 6]
+Output [2]: [ss_customer_sk#2, CASE WHEN isnotnull(sr_return_quantity#9) THEN (cast((ss_quantity#4 - sr_return_quantity#9) as decimal(10,0)) * ss_sales_price#5) ELSE (cast(ss_quantity#4 as decimal(10,0)) * ss_sales_price#5) END AS act_sales#14]
+Input [6]: [ss_customer_sk#2, ss_quantity#4, ss_sales_price#5, sr_reason_sk#7, sr_return_quantity#9, r_reason_sk#12]
+
+(18) HashAggregate [codegen id : 6]
+Input [2]: [ss_customer_sk#2, act_sales#14]
+Keys [1]: [ss_customer_sk#2]
+Functions [1]: [partial_sum(act_sales#14)]
+Aggregate Attributes [2]: [sum#15, isEmpty#16]
+Results [3]: [ss_customer_sk#2, sum#17, isEmpty#18]
+
+(19) Exchange
+Input [3]: [ss_customer_sk#2, sum#17, isEmpty#18]
+Arguments: hashpartitioning(ss_customer_sk#2, 5), ENSURE_REQUIREMENTS, [plan_id=4]
+
+(20) HashAggregate [codegen id : 7]
+Input [3]: [ss_customer_sk#2, sum#17, isEmpty#18]
+Keys [1]: [ss_customer_sk#2]
+Functions [1]: [sum(act_sales#14)]
+Aggregate Attributes [1]: [sum(act_sales#14)#19]
+Results [2]: [ss_customer_sk#2, sum(act_sales#14)#19 AS sumsales#20]
+
+(21) TakeOrderedAndProject
+Input [2]: [ss_customer_sk#2, sumsales#20]
+Arguments: 100, [sumsales#20 ASC NULLS FIRST, ss_customer_sk#2 ASC NULLS FIRST], [ss_customer_sk#2, sumsales#20]
+
+===== Subqueries =====
+
+Subquery:1 Hosting operator id = 6 Hosting Expression = Subquery scalar-subquery#10, [id=#11]
+ObjectHashAggregate (27)
++- Exchange (26)
+   +- ObjectHashAggregate (25)
+      +- * Project (24)
+         +- * Filter (23)
+            +- BatchScan default.reason (22)
+
+
+(22) BatchScan default.reason
+Output [2]: [r_reason_sk#12, r_reason_desc#13]
+DataFilters: [isnotnull(r_reason_desc#13), (r_reason_desc#13 = reason 28                                                                                           ), isnotnull(r_reason_sk#12)]
+Format: parquet
+Location [not included in comparison]/{warehouse_dir}/reason]
+PushedFilters: [IsNotNull(r_reason_desc), EqualTo(r_reason_desc,reason 28                                                                                           ), IsNotNull(r_reason_sk)]
+ReadSchema: struct<r_reason_sk:int,r_reason_desc:string>
+
+(23) Filter [codegen id : 1]
+Input [2]: [r_reason_sk#12, r_reason_desc#13]
+Condition : ((isnotnull(r_reason_desc#13) AND (r_reason_desc#13 = reason 28                                                                                           )) AND isnotnull(r_reason_sk#12))
+
+(24) Project [codegen id : 1]
+Output [1]: [r_reason_sk#12]
+Input [2]: [r_reason_sk#12, r_reason_desc#13]
+
+(25) ObjectHashAggregate
+Input [1]: [r_reason_sk#12]
+Keys: []
+Functions [1]: [partial_bloom_filter_agg(xxhash64(r_reason_sk#12, 42), 1000000, 8388608, 0, 0)]
+Aggregate Attributes [1]: [buf#21]
+Results [1]: [buf#22]
+
+(26) Exchange
+Input [1]: [buf#22]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=5]
+
+(27) ObjectHashAggregate
+Input [1]: [buf#22]
+Keys: []
+Functions [1]: [bloom_filter_agg(xxhash64(r_reason_sk#12, 42), 1000000, 8388608, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(r_reason_sk#12, 42), 1000000, 8388608, 0, 0)#23]
+Results [1]: [bloom_filter_agg(xxhash64(r_reason_sk#12, 42), 1000000, 8388608, 0, 0)#23 AS bloomFilter#24]
+
+

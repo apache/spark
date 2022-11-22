@@ -1,0 +1,79 @@
+== Physical Plan ==
+* HashAggregate (12)
++- Exchange (11)
+   +- * HashAggregate (10)
+      +- * Project (9)
+         +- * BroadcastHashJoin Inner BuildRight (8)
+            :- * Project (3)
+            :  +- * Filter (2)
+            :     +- BatchScan default.lineitem (1)
+            +- BroadcastExchange (7)
+               +- * Project (6)
+                  +- * Filter (5)
+                     +- BatchScan default.part (4)
+
+
+(1) BatchScan default.lineitem
+Output [4]: [l_partkey#1, l_extendedprice#2, l_discount#3, l_shipdate#4]
+DataFilters: [isnotnull(l_shipdate#4), (l_shipdate#4 >= 1995-09-01), (l_shipdate#4 < 1995-10-01), isnotnull(l_partkey#1)]
+Format: parquet
+Location [not included in comparison]/{warehouse_dir}/lineitem]
+PushedFilters: [IsNotNull(l_shipdate), GreaterThanOrEqual(l_shipdate,1995-09-01), LessThan(l_shipdate,1995-10-01), IsNotNull(l_partkey)]
+ReadSchema: struct<l_partkey:bigint,l_extendedprice:decimal(10,0),l_discount:decimal(10,0),l_shipdate:date>
+
+(2) Filter [codegen id : 2]
+Input [4]: [l_partkey#1, l_extendedprice#2, l_discount#3, l_shipdate#4]
+Condition : (((isnotnull(l_shipdate#4) AND (l_shipdate#4 >= 1995-09-01)) AND (l_shipdate#4 < 1995-10-01)) AND isnotnull(l_partkey#1))
+
+(3) Project [codegen id : 2]
+Output [3]: [l_partkey#1, l_extendedprice#2, l_discount#3]
+Input [4]: [l_partkey#1, l_extendedprice#2, l_discount#3, l_shipdate#4]
+
+(4) BatchScan default.part
+Output [2]: [p_partkey#5, p_type#6]
+DataFilters: [isnotnull(p_partkey#5)]
+Format: parquet
+Location [not included in comparison]/{warehouse_dir}/part]
+PushedFilters: [IsNotNull(p_partkey)]
+ReadSchema: struct<p_partkey:bigint,p_type:string>
+
+(5) Filter [codegen id : 1]
+Input [2]: [p_partkey#5, p_type#6]
+Condition : isnotnull(p_partkey#5)
+
+(6) Project [codegen id : 1]
+Output [2]: [p_partkey#5, p_type#6]
+Input [2]: [p_partkey#5, p_type#6]
+
+(7) BroadcastExchange
+Input [2]: [p_partkey#5, p_type#6]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=1]
+
+(8) BroadcastHashJoin [codegen id : 2]
+Left keys [1]: [l_partkey#1]
+Right keys [1]: [p_partkey#5]
+Join type: Inner
+Join condition: None
+
+(9) Project [codegen id : 2]
+Output [3]: [l_extendedprice#2, l_discount#3, p_type#6]
+Input [5]: [l_partkey#1, l_extendedprice#2, l_discount#3, p_partkey#5, p_type#6]
+
+(10) HashAggregate [codegen id : 2]
+Input [3]: [l_extendedprice#2, l_discount#3, p_type#6]
+Keys: []
+Functions [2]: [partial_sum(CASE WHEN StartsWith(p_type#6, PROMO) THEN (l_extendedprice#2 * (1 - l_discount#3)) ELSE 0 END), partial_sum((l_extendedprice#2 * (1 - l_discount#3)))]
+Aggregate Attributes [4]: [sum#7, isEmpty#8, sum#9, isEmpty#10]
+Results [4]: [sum#11, isEmpty#12, sum#13, isEmpty#14]
+
+(11) Exchange
+Input [4]: [sum#11, isEmpty#12, sum#13, isEmpty#14]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=2]
+
+(12) HashAggregate [codegen id : 3]
+Input [4]: [sum#11, isEmpty#12, sum#13, isEmpty#14]
+Keys: []
+Functions [2]: [sum(CASE WHEN StartsWith(p_type#6, PROMO) THEN (l_extendedprice#2 * (1 - l_discount#3)) ELSE 0 END), sum((l_extendedprice#2 * (1 - l_discount#3)))]
+Aggregate Attributes [2]: [sum(CASE WHEN StartsWith(p_type#6, PROMO) THEN (l_extendedprice#2 * (1 - l_discount#3)) ELSE 0 END)#15, sum((l_extendedprice#2 * (1 - l_discount#3)))#16]
+Results [1]: [((100.00 * sum(CASE WHEN StartsWith(p_type#6, PROMO) THEN (l_extendedprice#2 * (1 - l_discount#3)) ELSE 0 END)#15) / sum((l_extendedprice#2 * (1 - l_discount#3)))#16) AS promo_revenue#17]
+

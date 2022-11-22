@@ -1,0 +1,372 @@
+== Physical Plan ==
+* HashAggregate (39)
++- Exchange (38)
+   +- * HashAggregate (37)
+      +- * HashAggregate (36)
+         +- * HashAggregate (35)
+            +- * Project (34)
+               +- * BroadcastHashJoin Inner BuildRight (33)
+                  :- * Project (28)
+                  :  +- * BroadcastHashJoin Inner BuildRight (27)
+                  :     :- * Project (22)
+                  :     :  +- * BroadcastHashJoin Inner BuildRight (21)
+                  :     :     :- * SortMergeJoin LeftAnti (16)
+                  :     :     :  :- * Project (11)
+                  :     :     :  :  +- * SortMergeJoin LeftSemi (10)
+                  :     :     :  :     :- * Sort (5)
+                  :     :     :  :     :  +- Exchange (4)
+                  :     :     :  :     :     +- * Project (3)
+                  :     :     :  :     :        +- * Filter (2)
+                  :     :     :  :     :           +- BatchScan default.web_sales (1)
+                  :     :     :  :     +- * Sort (9)
+                  :     :     :  :        +- Exchange (8)
+                  :     :     :  :           +- * Project (7)
+                  :     :     :  :              +- BatchScan default.web_sales (6)
+                  :     :     :  +- * Sort (15)
+                  :     :     :     +- Exchange (14)
+                  :     :     :        +- * Project (13)
+                  :     :     :           +- BatchScan default.web_returns (12)
+                  :     :     +- BroadcastExchange (20)
+                  :     :        +- * Project (19)
+                  :     :           +- * Filter (18)
+                  :     :              +- BatchScan default.date_dim (17)
+                  :     +- BroadcastExchange (26)
+                  :        +- * Project (25)
+                  :           +- * Filter (24)
+                  :              +- BatchScan default.customer_address (23)
+                  +- BroadcastExchange (32)
+                     +- * Project (31)
+                        +- * Filter (30)
+                           +- BatchScan default.web_site (29)
+
+
+(1) BatchScan default.web_sales
+Output [7]: [ws_ship_date_sk#1, ws_ship_addr_sk#2, ws_web_site_sk#3, ws_warehouse_sk#4, ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7]
+DataFilters: [isnotnull(ws_ship_date_sk#1), isnotnull(ws_ship_addr_sk#2), isnotnull(ws_web_site_sk#3)]
+Format: parquet
+Location [not included in comparison]/{warehouse_dir}/web_sales]
+PushedFilters: [IsNotNull(ws_ship_date_sk), IsNotNull(ws_ship_addr_sk), IsNotNull(ws_web_site_sk)]
+ReadSchema: struct<ws_ship_date_sk:int,ws_ship_addr_sk:int,ws_web_site_sk:int,ws_warehouse_sk:int,ws_order_number:int,ws_ext_ship_cost:decimal(7,2),ws_net_profit:decimal(7,2)>
+
+(2) Filter [codegen id : 1]
+Input [7]: [ws_ship_date_sk#1, ws_ship_addr_sk#2, ws_web_site_sk#3, ws_warehouse_sk#4, ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7]
+Condition : (((((isnotnull(ws_ship_date_sk#1) AND isnotnull(ws_ship_addr_sk#2)) AND isnotnull(ws_web_site_sk#3)) AND might_contain(Subquery scalar-subquery#8, [id=#9], xxhash64(ws_ship_date_sk#1, 42))) AND might_contain(Subquery scalar-subquery#10, [id=#11], xxhash64(ws_ship_addr_sk#2, 42))) AND might_contain(Subquery scalar-subquery#12, [id=#13], xxhash64(ws_web_site_sk#3, 42)))
+
+(3) Project [codegen id : 1]
+Output [7]: [ws_ship_date_sk#1, ws_ship_addr_sk#2, ws_web_site_sk#3, ws_warehouse_sk#4, ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7]
+Input [7]: [ws_ship_date_sk#1, ws_ship_addr_sk#2, ws_web_site_sk#3, ws_warehouse_sk#4, ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7]
+
+(4) Exchange
+Input [7]: [ws_ship_date_sk#1, ws_ship_addr_sk#2, ws_web_site_sk#3, ws_warehouse_sk#4, ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7]
+Arguments: hashpartitioning(ws_order_number#5, 5), ENSURE_REQUIREMENTS, [plan_id=1]
+
+(5) Sort [codegen id : 2]
+Input [7]: [ws_ship_date_sk#1, ws_ship_addr_sk#2, ws_web_site_sk#3, ws_warehouse_sk#4, ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7]
+Arguments: [ws_order_number#5 ASC NULLS FIRST], false, 0
+
+(6) BatchScan default.web_sales
+Output [34]: [ws_sold_time_sk#14, ws_ship_date_sk#15, ws_item_sk#16, ws_bill_customer_sk#17, ws_bill_cdemo_sk#18, ws_bill_hdemo_sk#19, ws_bill_addr_sk#20, ws_ship_customer_sk#21, ws_ship_cdemo_sk#22, ws_ship_hdemo_sk#23, ws_ship_addr_sk#24, ws_web_page_sk#25, ws_web_site_sk#26, ws_ship_mode_sk#27, ws_warehouse_sk#28, ws_promo_sk#29, ws_order_number#30, ws_quantity#31, ws_wholesale_cost#32, ws_list_price#33, ws_sales_price#34, ws_ext_discount_amt#35, ws_ext_sales_price#36, ws_ext_wholesale_cost#37, ws_ext_list_price#38, ws_ext_tax#39, ws_coupon_amt#40, ws_ext_ship_cost#41, ws_net_paid#42, ws_net_paid_inc_tax#43, ws_net_paid_inc_ship#44, ws_net_paid_inc_ship_tax#45, ws_net_profit#46, ws_sold_date_sk#47]
+Format: parquet
+Location [not included in comparison]/{warehouse_dir}/web_sales]
+ReadSchema: struct<ws_sold_time_sk:int,ws_ship_date_sk:int,ws_item_sk:int,ws_bill_customer_sk:int,ws_bill_cdemo_sk:int,ws_bill_hdemo_sk:int,ws_bill_addr_sk:int,ws_ship_customer_sk:int,ws_ship_cdemo_sk:int,ws_ship_hdemo_sk:int,ws_ship_addr_sk:int,ws_web_page_sk:int,ws_web_site_sk:int,ws_ship_mode_sk:int,ws_warehouse_sk:int,ws_promo_sk:int,ws_order_number:int,ws_quantity:int,ws_wholesale_cost:decimal(7,2),ws_list_price:decimal(7,2),ws_sales_price:decimal(7,2),ws_ext_discount_amt:decimal(7,2),ws_ext_sales_price:decimal(7,2),ws_ext_wholesale_cost:decimal(7,2),ws_ext_list_price:decimal(7,2),ws_ext_tax:decimal(7,2),ws_coupon_amt:decimal(7,2),ws_ext_ship_cost:decimal(7,2),ws_net_paid:decimal(7,2),ws_net_paid_inc_tax:decimal(7,2),ws_net_paid_inc_ship:decimal(7,2),ws_net_paid_inc_ship_tax:decimal(7,2),ws_net_profit:decimal(7,2)>
+
+(7) Project [codegen id : 3]
+Output [2]: [ws_warehouse_sk#28, ws_order_number#30]
+Input [34]: [ws_sold_time_sk#14, ws_ship_date_sk#15, ws_item_sk#16, ws_bill_customer_sk#17, ws_bill_cdemo_sk#18, ws_bill_hdemo_sk#19, ws_bill_addr_sk#20, ws_ship_customer_sk#21, ws_ship_cdemo_sk#22, ws_ship_hdemo_sk#23, ws_ship_addr_sk#24, ws_web_page_sk#25, ws_web_site_sk#26, ws_ship_mode_sk#27, ws_warehouse_sk#28, ws_promo_sk#29, ws_order_number#30, ws_quantity#31, ws_wholesale_cost#32, ws_list_price#33, ws_sales_price#34, ws_ext_discount_amt#35, ws_ext_sales_price#36, ws_ext_wholesale_cost#37, ws_ext_list_price#38, ws_ext_tax#39, ws_coupon_amt#40, ws_ext_ship_cost#41, ws_net_paid#42, ws_net_paid_inc_tax#43, ws_net_paid_inc_ship#44, ws_net_paid_inc_ship_tax#45, ws_net_profit#46, ws_sold_date_sk#47]
+
+(8) Exchange
+Input [2]: [ws_warehouse_sk#28, ws_order_number#30]
+Arguments: hashpartitioning(ws_order_number#30, 5), ENSURE_REQUIREMENTS, [plan_id=2]
+
+(9) Sort [codegen id : 4]
+Input [2]: [ws_warehouse_sk#28, ws_order_number#30]
+Arguments: [ws_order_number#30 ASC NULLS FIRST], false, 0
+
+(10) SortMergeJoin [codegen id : 5]
+Left keys [1]: [ws_order_number#5]
+Right keys [1]: [ws_order_number#30]
+Join type: LeftSemi
+Join condition: NOT (ws_warehouse_sk#4 = ws_warehouse_sk#28)
+
+(11) Project [codegen id : 5]
+Output [6]: [ws_ship_date_sk#1, ws_ship_addr_sk#2, ws_web_site_sk#3, ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7]
+Input [7]: [ws_ship_date_sk#1, ws_ship_addr_sk#2, ws_web_site_sk#3, ws_warehouse_sk#4, ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7]
+
+(12) BatchScan default.web_returns
+Output [24]: [wr_returned_time_sk#48, wr_item_sk#49, wr_refunded_customer_sk#50, wr_refunded_cdemo_sk#51, wr_refunded_hdemo_sk#52, wr_refunded_addr_sk#53, wr_returning_customer_sk#54, wr_returning_cdemo_sk#55, wr_returning_hdemo_sk#56, wr_returning_addr_sk#57, wr_web_page_sk#58, wr_reason_sk#59, wr_order_number#60, wr_return_quantity#61, wr_return_amt#62, wr_return_tax#63, wr_return_amt_inc_tax#64, wr_fee#65, wr_return_ship_cost#66, wr_refunded_cash#67, wr_reversed_charge#68, wr_account_credit#69, wr_net_loss#70, wr_returned_date_sk#71]
+Format: parquet
+Location [not included in comparison]/{warehouse_dir}/web_returns]
+ReadSchema: struct<wr_returned_time_sk:int,wr_item_sk:int,wr_refunded_customer_sk:int,wr_refunded_cdemo_sk:int,wr_refunded_hdemo_sk:int,wr_refunded_addr_sk:int,wr_returning_customer_sk:int,wr_returning_cdemo_sk:int,wr_returning_hdemo_sk:int,wr_returning_addr_sk:int,wr_web_page_sk:int,wr_reason_sk:int,wr_order_number:int,wr_return_quantity:int,wr_return_amt:decimal(7,2),wr_return_tax:decimal(7,2),wr_return_amt_inc_tax:decimal(7,2),wr_fee:decimal(7,2),wr_return_ship_cost:decimal(7,2),wr_refunded_cash:decimal(7,2),wr_reversed_charge:decimal(7,2),wr_account_credit:decimal(7,2),wr_net_loss:decimal(7,2)>
+
+(13) Project [codegen id : 6]
+Output [1]: [wr_order_number#60]
+Input [24]: [wr_returned_time_sk#48, wr_item_sk#49, wr_refunded_customer_sk#50, wr_refunded_cdemo_sk#51, wr_refunded_hdemo_sk#52, wr_refunded_addr_sk#53, wr_returning_customer_sk#54, wr_returning_cdemo_sk#55, wr_returning_hdemo_sk#56, wr_returning_addr_sk#57, wr_web_page_sk#58, wr_reason_sk#59, wr_order_number#60, wr_return_quantity#61, wr_return_amt#62, wr_return_tax#63, wr_return_amt_inc_tax#64, wr_fee#65, wr_return_ship_cost#66, wr_refunded_cash#67, wr_reversed_charge#68, wr_account_credit#69, wr_net_loss#70, wr_returned_date_sk#71]
+
+(14) Exchange
+Input [1]: [wr_order_number#60]
+Arguments: hashpartitioning(wr_order_number#60, 5), ENSURE_REQUIREMENTS, [plan_id=3]
+
+(15) Sort [codegen id : 7]
+Input [1]: [wr_order_number#60]
+Arguments: [wr_order_number#60 ASC NULLS FIRST], false, 0
+
+(16) SortMergeJoin [codegen id : 11]
+Left keys [1]: [ws_order_number#5]
+Right keys [1]: [wr_order_number#60]
+Join type: LeftAnti
+Join condition: None
+
+(17) BatchScan default.date_dim
+Output [2]: [d_date_sk#72, d_date#73]
+DataFilters: [isnotnull(d_date#73), (d_date#73 >= 1999-02-01), (d_date#73 <= 1999-04-02), isnotnull(d_date_sk#72)]
+Format: parquet
+Location [not included in comparison]/{warehouse_dir}/date_dim]
+PushedFilters: [IsNotNull(d_date), GreaterThanOrEqual(d_date,1999-02-01), LessThanOrEqual(d_date,1999-04-02), IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int,d_date:date>
+
+(18) Filter [codegen id : 8]
+Input [2]: [d_date_sk#72, d_date#73]
+Condition : (((isnotnull(d_date#73) AND (d_date#73 >= 1999-02-01)) AND (d_date#73 <= 1999-04-02)) AND isnotnull(d_date_sk#72))
+
+(19) Project [codegen id : 8]
+Output [1]: [d_date_sk#72]
+Input [2]: [d_date_sk#72, d_date#73]
+
+(20) BroadcastExchange
+Input [1]: [d_date_sk#72]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=4]
+
+(21) BroadcastHashJoin [codegen id : 11]
+Left keys [1]: [ws_ship_date_sk#1]
+Right keys [1]: [d_date_sk#72]
+Join type: Inner
+Join condition: None
+
+(22) Project [codegen id : 11]
+Output [5]: [ws_ship_addr_sk#2, ws_web_site_sk#3, ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7]
+Input [7]: [ws_ship_date_sk#1, ws_ship_addr_sk#2, ws_web_site_sk#3, ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7, d_date_sk#72]
+
+(23) BatchScan default.customer_address
+Output [2]: [ca_address_sk#74, ca_state#75]
+DataFilters: [isnotnull(ca_state#75), (ca_state#75 = IL), isnotnull(ca_address_sk#74)]
+Format: parquet
+Location [not included in comparison]/{warehouse_dir}/customer_address]
+PushedFilters: [IsNotNull(ca_state), EqualTo(ca_state,IL), IsNotNull(ca_address_sk)]
+ReadSchema: struct<ca_address_sk:int,ca_state:string>
+
+(24) Filter [codegen id : 9]
+Input [2]: [ca_address_sk#74, ca_state#75]
+Condition : ((isnotnull(ca_state#75) AND (ca_state#75 = IL)) AND isnotnull(ca_address_sk#74))
+
+(25) Project [codegen id : 9]
+Output [1]: [ca_address_sk#74]
+Input [2]: [ca_address_sk#74, ca_state#75]
+
+(26) BroadcastExchange
+Input [1]: [ca_address_sk#74]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=5]
+
+(27) BroadcastHashJoin [codegen id : 11]
+Left keys [1]: [ws_ship_addr_sk#2]
+Right keys [1]: [ca_address_sk#74]
+Join type: Inner
+Join condition: None
+
+(28) Project [codegen id : 11]
+Output [4]: [ws_web_site_sk#3, ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7]
+Input [6]: [ws_ship_addr_sk#2, ws_web_site_sk#3, ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7, ca_address_sk#74]
+
+(29) BatchScan default.web_site
+Output [2]: [web_site_sk#76, web_company_name#77]
+DataFilters: [isnotnull(web_company_name#77), (web_company_name#77 = pri                                               ), isnotnull(web_site_sk#76)]
+Format: parquet
+Location [not included in comparison]/{warehouse_dir}/web_site]
+PushedFilters: [IsNotNull(web_company_name), EqualTo(web_company_name,pri                                               ), IsNotNull(web_site_sk)]
+ReadSchema: struct<web_site_sk:int,web_company_name:string>
+
+(30) Filter [codegen id : 10]
+Input [2]: [web_site_sk#76, web_company_name#77]
+Condition : ((isnotnull(web_company_name#77) AND (web_company_name#77 = pri                                               )) AND isnotnull(web_site_sk#76))
+
+(31) Project [codegen id : 10]
+Output [1]: [web_site_sk#76]
+Input [2]: [web_site_sk#76, web_company_name#77]
+
+(32) BroadcastExchange
+Input [1]: [web_site_sk#76]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=6]
+
+(33) BroadcastHashJoin [codegen id : 11]
+Left keys [1]: [ws_web_site_sk#3]
+Right keys [1]: [web_site_sk#76]
+Join type: Inner
+Join condition: None
+
+(34) Project [codegen id : 11]
+Output [3]: [ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7]
+Input [5]: [ws_web_site_sk#3, ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7, web_site_sk#76]
+
+(35) HashAggregate [codegen id : 11]
+Input [3]: [ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7]
+Keys [1]: [ws_order_number#5]
+Functions [2]: [partial_sum(UnscaledValue(ws_ext_ship_cost#6)), partial_sum(UnscaledValue(ws_net_profit#7))]
+Aggregate Attributes [2]: [sum(UnscaledValue(ws_ext_ship_cost#6))#78, sum(UnscaledValue(ws_net_profit#7))#79]
+Results [3]: [ws_order_number#5, sum#80, sum#81]
+
+(36) HashAggregate [codegen id : 11]
+Input [3]: [ws_order_number#5, sum#80, sum#81]
+Keys [1]: [ws_order_number#5]
+Functions [2]: [merge_sum(UnscaledValue(ws_ext_ship_cost#6)), merge_sum(UnscaledValue(ws_net_profit#7))]
+Aggregate Attributes [2]: [sum(UnscaledValue(ws_ext_ship_cost#6))#78, sum(UnscaledValue(ws_net_profit#7))#79]
+Results [3]: [ws_order_number#5, sum#80, sum#81]
+
+(37) HashAggregate [codegen id : 11]
+Input [3]: [ws_order_number#5, sum#80, sum#81]
+Keys: []
+Functions [3]: [merge_sum(UnscaledValue(ws_ext_ship_cost#6)), merge_sum(UnscaledValue(ws_net_profit#7)), partial_count(distinct ws_order_number#5)]
+Aggregate Attributes [3]: [sum(UnscaledValue(ws_ext_ship_cost#6))#78, sum(UnscaledValue(ws_net_profit#7))#79, count(ws_order_number#5)#82]
+Results [3]: [sum#80, sum#81, count#83]
+
+(38) Exchange
+Input [3]: [sum#80, sum#81, count#83]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=7]
+
+(39) HashAggregate [codegen id : 12]
+Input [3]: [sum#80, sum#81, count#83]
+Keys: []
+Functions [3]: [sum(UnscaledValue(ws_ext_ship_cost#6)), sum(UnscaledValue(ws_net_profit#7)), count(distinct ws_order_number#5)]
+Aggregate Attributes [3]: [sum(UnscaledValue(ws_ext_ship_cost#6))#78, sum(UnscaledValue(ws_net_profit#7))#79, count(ws_order_number#5)#82]
+Results [3]: [count(ws_order_number#5)#82 AS order count #84, MakeDecimal(sum(UnscaledValue(ws_ext_ship_cost#6))#78,17,2) AS total shipping cost #85, MakeDecimal(sum(UnscaledValue(ws_net_profit#7))#79,17,2) AS total net profit #86]
+
+===== Subqueries =====
+
+Subquery:1 Hosting operator id = 2 Hosting Expression = Subquery scalar-subquery#8, [id=#9]
+ObjectHashAggregate (45)
++- Exchange (44)
+   +- ObjectHashAggregate (43)
+      +- * Project (42)
+         +- * Filter (41)
+            +- BatchScan default.date_dim (40)
+
+
+(40) BatchScan default.date_dim
+Output [2]: [d_date_sk#72, d_date#73]
+DataFilters: [isnotnull(d_date#73), (d_date#73 >= 1999-02-01), (d_date#73 <= 1999-04-02), isnotnull(d_date_sk#72)]
+Format: parquet
+Location [not included in comparison]/{warehouse_dir}/date_dim]
+PushedFilters: [IsNotNull(d_date), GreaterThanOrEqual(d_date,1999-02-01), LessThanOrEqual(d_date,1999-04-02), IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int,d_date:date>
+
+(41) Filter [codegen id : 1]
+Input [2]: [d_date_sk#72, d_date#73]
+Condition : (((isnotnull(d_date#73) AND (d_date#73 >= 1999-02-01)) AND (d_date#73 <= 1999-04-02)) AND isnotnull(d_date_sk#72))
+
+(42) Project [codegen id : 1]
+Output [1]: [d_date_sk#72]
+Input [2]: [d_date_sk#72, d_date#73]
+
+(43) ObjectHashAggregate
+Input [1]: [d_date_sk#72]
+Keys: []
+Functions [1]: [partial_bloom_filter_agg(xxhash64(d_date_sk#72, 42), 1000000, 8388608, 0, 0)]
+Aggregate Attributes [1]: [buf#87]
+Results [1]: [buf#88]
+
+(44) Exchange
+Input [1]: [buf#88]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=8]
+
+(45) ObjectHashAggregate
+Input [1]: [buf#88]
+Keys: []
+Functions [1]: [bloom_filter_agg(xxhash64(d_date_sk#72, 42), 1000000, 8388608, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(d_date_sk#72, 42), 1000000, 8388608, 0, 0)#89]
+Results [1]: [bloom_filter_agg(xxhash64(d_date_sk#72, 42), 1000000, 8388608, 0, 0)#89 AS bloomFilter#90]
+
+Subquery:2 Hosting operator id = 2 Hosting Expression = Subquery scalar-subquery#10, [id=#11]
+ObjectHashAggregate (51)
++- Exchange (50)
+   +- ObjectHashAggregate (49)
+      +- * Project (48)
+         +- * Filter (47)
+            +- BatchScan default.customer_address (46)
+
+
+(46) BatchScan default.customer_address
+Output [2]: [ca_address_sk#74, ca_state#75]
+DataFilters: [isnotnull(ca_state#75), (ca_state#75 = IL), isnotnull(ca_address_sk#74)]
+Format: parquet
+Location [not included in comparison]/{warehouse_dir}/customer_address]
+PushedFilters: [IsNotNull(ca_state), EqualTo(ca_state,IL), IsNotNull(ca_address_sk)]
+ReadSchema: struct<ca_address_sk:int,ca_state:string>
+
+(47) Filter [codegen id : 1]
+Input [2]: [ca_address_sk#74, ca_state#75]
+Condition : ((isnotnull(ca_state#75) AND (ca_state#75 = IL)) AND isnotnull(ca_address_sk#74))
+
+(48) Project [codegen id : 1]
+Output [1]: [ca_address_sk#74]
+Input [2]: [ca_address_sk#74, ca_state#75]
+
+(49) ObjectHashAggregate
+Input [1]: [ca_address_sk#74]
+Keys: []
+Functions [1]: [partial_bloom_filter_agg(xxhash64(ca_address_sk#74, 42), 1000000, 8388608, 0, 0)]
+Aggregate Attributes [1]: [buf#91]
+Results [1]: [buf#92]
+
+(50) Exchange
+Input [1]: [buf#92]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=9]
+
+(51) ObjectHashAggregate
+Input [1]: [buf#92]
+Keys: []
+Functions [1]: [bloom_filter_agg(xxhash64(ca_address_sk#74, 42), 1000000, 8388608, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(ca_address_sk#74, 42), 1000000, 8388608, 0, 0)#93]
+Results [1]: [bloom_filter_agg(xxhash64(ca_address_sk#74, 42), 1000000, 8388608, 0, 0)#93 AS bloomFilter#94]
+
+Subquery:3 Hosting operator id = 2 Hosting Expression = Subquery scalar-subquery#12, [id=#13]
+ObjectHashAggregate (57)
++- Exchange (56)
+   +- ObjectHashAggregate (55)
+      +- * Project (54)
+         +- * Filter (53)
+            +- BatchScan default.web_site (52)
+
+
+(52) BatchScan default.web_site
+Output [2]: [web_site_sk#76, web_company_name#77]
+DataFilters: [isnotnull(web_company_name#77), (web_company_name#77 = pri                                               ), isnotnull(web_site_sk#76)]
+Format: parquet
+Location [not included in comparison]/{warehouse_dir}/web_site]
+PushedFilters: [IsNotNull(web_company_name), EqualTo(web_company_name,pri                                               ), IsNotNull(web_site_sk)]
+ReadSchema: struct<web_site_sk:int,web_company_name:string>
+
+(53) Filter [codegen id : 1]
+Input [2]: [web_site_sk#76, web_company_name#77]
+Condition : ((isnotnull(web_company_name#77) AND (web_company_name#77 = pri                                               )) AND isnotnull(web_site_sk#76))
+
+(54) Project [codegen id : 1]
+Output [1]: [web_site_sk#76]
+Input [2]: [web_site_sk#76, web_company_name#77]
+
+(55) ObjectHashAggregate
+Input [1]: [web_site_sk#76]
+Keys: []
+Functions [1]: [partial_bloom_filter_agg(xxhash64(web_site_sk#76, 42), 1000000, 8388608, 0, 0)]
+Aggregate Attributes [1]: [buf#95]
+Results [1]: [buf#96]
+
+(56) Exchange
+Input [1]: [buf#96]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=10]
+
+(57) ObjectHashAggregate
+Input [1]: [buf#96]
+Keys: []
+Functions [1]: [bloom_filter_agg(xxhash64(web_site_sk#76, 42), 1000000, 8388608, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(web_site_sk#76, 42), 1000000, 8388608, 0, 0)#97]
+Results [1]: [bloom_filter_agg(xxhash64(web_site_sk#76, 42), 1000000, 8388608, 0, 0)#97 AS bloomFilter#98]
+
+

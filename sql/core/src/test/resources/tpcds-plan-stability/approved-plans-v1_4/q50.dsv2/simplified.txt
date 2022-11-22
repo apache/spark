@@ -1,0 +1,65 @@
+TakeOrderedAndProject [s_store_name,s_company_id,s_street_number,s_street_name,s_street_type,s_suite_number,s_city,s_county,s_state,s_zip,30 days ,31 - 60 days ,61 - 90 days ,91 - 120 days ,>120 days ]
+  WholeStageCodegen (9)
+    HashAggregate [s_store_name,s_company_id,s_street_number,s_street_name,s_street_type,s_suite_number,s_city,s_county,s_state,s_zip,sum,sum,sum,sum,sum] [sum(CASE WHEN ((sr_returned_date_sk - ss_sold_date_sk) <= 30) THEN 1 ELSE 0 END),sum(CASE WHEN (((sr_returned_date_sk - ss_sold_date_sk) > 30) AND ((sr_returned_date_sk - ss_sold_date_sk) <= 60)) THEN 1 ELSE 0 END),sum(CASE WHEN (((sr_returned_date_sk - ss_sold_date_sk) > 60) AND ((sr_returned_date_sk - ss_sold_date_sk) <= 90)) THEN 1 ELSE 0 END),sum(CASE WHEN (((sr_returned_date_sk - ss_sold_date_sk) > 90) AND ((sr_returned_date_sk - ss_sold_date_sk) <= 120)) THEN 1 ELSE 0 END),sum(CASE WHEN ((sr_returned_date_sk - ss_sold_date_sk) > 120) THEN 1 ELSE 0 END),30 days ,31 - 60 days ,61 - 90 days ,91 - 120 days ,>120 days ,sum,sum,sum,sum,sum]
+      InputAdapter
+        Exchange [s_store_name,s_company_id,s_street_number,s_street_name,s_street_type,s_suite_number,s_city,s_county,s_state,s_zip] #1
+          WholeStageCodegen (8)
+            HashAggregate [s_store_name,s_company_id,s_street_number,s_street_name,s_street_type,s_suite_number,s_city,s_county,s_state,s_zip,sr_returned_date_sk,ss_sold_date_sk] [sum,sum,sum,sum,sum,sum,sum,sum,sum,sum]
+              Project [ss_sold_date_sk,sr_returned_date_sk,s_store_name,s_company_id,s_street_number,s_street_name,s_street_type,s_suite_number,s_city,s_county,s_state,s_zip]
+                BroadcastHashJoin [sr_returned_date_sk,d_date_sk]
+                  Project [ss_sold_date_sk,sr_returned_date_sk,s_store_name,s_company_id,s_street_number,s_street_name,s_street_type,s_suite_number,s_city,s_county,s_state,s_zip]
+                    BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                      Project [ss_sold_date_sk,sr_returned_date_sk,s_store_name,s_company_id,s_street_number,s_street_name,s_street_type,s_suite_number,s_city,s_county,s_state,s_zip]
+                        BroadcastHashJoin [ss_store_sk,s_store_sk]
+                          Project [ss_store_sk,ss_sold_date_sk,sr_returned_date_sk]
+                            SortMergeJoin [ss_ticket_number,ss_item_sk,ss_customer_sk,sr_ticket_number,sr_item_sk,sr_customer_sk]
+                              InputAdapter
+                                WholeStageCodegen (2)
+                                  Sort [ss_ticket_number,ss_item_sk,ss_customer_sk]
+                                    InputAdapter
+                                      Exchange [ss_ticket_number,ss_item_sk,ss_customer_sk] #2
+                                        WholeStageCodegen (1)
+                                          Project [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_sold_date_sk]
+                                            Filter [ss_ticket_number,ss_item_sk,ss_customer_sk,ss_store_sk]
+                                              InputAdapter
+                                                BatchScan default.store_sales [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_sold_date_sk]
+                              InputAdapter
+                                WholeStageCodegen (4)
+                                  Sort [sr_ticket_number,sr_item_sk,sr_customer_sk]
+                                    InputAdapter
+                                      Exchange [sr_ticket_number,sr_item_sk,sr_customer_sk] #3
+                                        WholeStageCodegen (3)
+                                          Project [sr_item_sk,sr_customer_sk,sr_ticket_number,sr_returned_date_sk]
+                                            Filter [sr_ticket_number,sr_item_sk,sr_customer_sk,sr_returned_date_sk]
+                                              Subquery #1
+                                                ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(d_date_sk, 42), 1000000, 8388608, 0, 0),bloomFilter,buf]
+                                                  Exchange #4
+                                                    ObjectHashAggregate [d_date_sk] [buf,buf]
+                                                      WholeStageCodegen (1)
+                                                        Project [d_date_sk]
+                                                          Filter [d_year,d_moy,d_date_sk]
+                                                            InputAdapter
+                                                              BatchScan default.date_dim [d_date_sk,d_year,d_moy]
+                                              InputAdapter
+                                                BatchScan default.store_returns [sr_item_sk,sr_customer_sk,sr_ticket_number,sr_returned_date_sk]
+                          InputAdapter
+                            BroadcastExchange #5
+                              WholeStageCodegen (5)
+                                Project [s_store_sk,s_store_name,s_company_id,s_street_number,s_street_name,s_street_type,s_suite_number,s_city,s_county,s_state,s_zip]
+                                  Filter [s_store_sk]
+                                    InputAdapter
+                                      BatchScan default.store [s_store_sk,s_store_name,s_company_id,s_street_number,s_street_name,s_street_type,s_suite_number,s_city,s_county,s_state,s_zip]
+                      InputAdapter
+                        BroadcastExchange #6
+                          WholeStageCodegen (6)
+                            Project [d_date_sk]
+                              Filter [d_date_sk]
+                                InputAdapter
+                                  BatchScan default.date_dim [d_date_sk]
+                  InputAdapter
+                    BroadcastExchange #7
+                      WholeStageCodegen (7)
+                        Project [d_date_sk]
+                          Filter [d_year,d_moy,d_date_sk]
+                            InputAdapter
+                              BatchScan default.date_dim [d_date_sk,d_year,d_moy]

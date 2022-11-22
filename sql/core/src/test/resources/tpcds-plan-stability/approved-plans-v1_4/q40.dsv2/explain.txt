@@ -1,0 +1,297 @@
+== Physical Plan ==
+TakeOrderedAndProject (34)
++- * HashAggregate (33)
+   +- Exchange (32)
+      +- * HashAggregate (31)
+         +- * Project (30)
+            +- * BroadcastHashJoin Inner BuildRight (29)
+               :- * Project (24)
+               :  +- * BroadcastHashJoin Inner BuildRight (23)
+               :     :- * Project (18)
+               :     :  +- * BroadcastHashJoin Inner BuildRight (17)
+               :     :     :- * Project (12)
+               :     :     :  +- * SortMergeJoin LeftOuter (11)
+               :     :     :     :- * Sort (5)
+               :     :     :     :  +- Exchange (4)
+               :     :     :     :     +- * Project (3)
+               :     :     :     :        +- * Filter (2)
+               :     :     :     :           +- BatchScan default.catalog_sales (1)
+               :     :     :     +- * Sort (10)
+               :     :     :        +- Exchange (9)
+               :     :     :           +- * Project (8)
+               :     :     :              +- * Filter (7)
+               :     :     :                 +- BatchScan default.catalog_returns (6)
+               :     :     +- BroadcastExchange (16)
+               :     :        +- * Project (15)
+               :     :           +- * Filter (14)
+               :     :              +- BatchScan default.warehouse (13)
+               :     +- BroadcastExchange (22)
+               :        +- * Project (21)
+               :           +- * Filter (20)
+               :              +- BatchScan default.item (19)
+               +- BroadcastExchange (28)
+                  +- * Project (27)
+                     +- * Filter (26)
+                        +- BatchScan default.date_dim (25)
+
+
+(1) BatchScan default.catalog_sales
+Output [5]: [cs_warehouse_sk#1, cs_item_sk#2, cs_order_number#3, cs_sales_price#4, cs_sold_date_sk#5]
+DataFilters: [isnotnull(cs_warehouse_sk#1), isnotnull(cs_item_sk#2)]
+Format: parquet
+Location [not included in comparison]/{warehouse_dir}/catalog_sales]
+PartitionFilters: [isnotnull(cs_sold_date_sk#5)]
+PushedFilters: [IsNotNull(cs_warehouse_sk), IsNotNull(cs_item_sk)]
+ReadSchema: struct<cs_warehouse_sk:int,cs_item_sk:int,cs_order_number:int,cs_sales_price:decimal(7,2)>
+
+(2) Filter [codegen id : 1]
+Input [5]: [cs_warehouse_sk#1, cs_item_sk#2, cs_order_number#3, cs_sales_price#4, cs_sold_date_sk#5]
+Condition : (((isnotnull(cs_warehouse_sk#1) AND isnotnull(cs_item_sk#2)) AND might_contain(Subquery scalar-subquery#6, [id=#7], xxhash64(cs_item_sk#2, 42))) AND might_contain(Subquery scalar-subquery#8, [id=#9], xxhash64(cs_sold_date_sk#5, 42)))
+
+(3) Project [codegen id : 1]
+Output [5]: [cs_warehouse_sk#1, cs_item_sk#2, cs_order_number#3, cs_sales_price#4, cs_sold_date_sk#5]
+Input [5]: [cs_warehouse_sk#1, cs_item_sk#2, cs_order_number#3, cs_sales_price#4, cs_sold_date_sk#5]
+
+(4) Exchange
+Input [5]: [cs_warehouse_sk#1, cs_item_sk#2, cs_order_number#3, cs_sales_price#4, cs_sold_date_sk#5]
+Arguments: hashpartitioning(cs_order_number#3, cs_item_sk#2, 5), ENSURE_REQUIREMENTS, [plan_id=1]
+
+(5) Sort [codegen id : 2]
+Input [5]: [cs_warehouse_sk#1, cs_item_sk#2, cs_order_number#3, cs_sales_price#4, cs_sold_date_sk#5]
+Arguments: [cs_order_number#3 ASC NULLS FIRST, cs_item_sk#2 ASC NULLS FIRST], false, 0
+
+(6) BatchScan default.catalog_returns
+Output [3]: [cr_item_sk#10, cr_order_number#11, cr_refunded_cash#12]
+DataFilters: [isnotnull(cr_order_number#11), isnotnull(cr_item_sk#10)]
+Format: parquet
+Location [not included in comparison]/{warehouse_dir}/catalog_returns]
+PushedFilters: [IsNotNull(cr_order_number), IsNotNull(cr_item_sk)]
+ReadSchema: struct<cr_item_sk:int,cr_order_number:int,cr_refunded_cash:decimal(7,2)>
+
+(7) Filter [codegen id : 3]
+Input [3]: [cr_item_sk#10, cr_order_number#11, cr_refunded_cash#12]
+Condition : (isnotnull(cr_order_number#11) AND isnotnull(cr_item_sk#10))
+
+(8) Project [codegen id : 3]
+Output [3]: [cr_item_sk#10, cr_order_number#11, cr_refunded_cash#12]
+Input [3]: [cr_item_sk#10, cr_order_number#11, cr_refunded_cash#12]
+
+(9) Exchange
+Input [3]: [cr_item_sk#10, cr_order_number#11, cr_refunded_cash#12]
+Arguments: hashpartitioning(cr_order_number#11, cr_item_sk#10, 5), ENSURE_REQUIREMENTS, [plan_id=2]
+
+(10) Sort [codegen id : 4]
+Input [3]: [cr_item_sk#10, cr_order_number#11, cr_refunded_cash#12]
+Arguments: [cr_order_number#11 ASC NULLS FIRST, cr_item_sk#10 ASC NULLS FIRST], false, 0
+
+(11) SortMergeJoin [codegen id : 8]
+Left keys [2]: [cs_order_number#3, cs_item_sk#2]
+Right keys [2]: [cr_order_number#11, cr_item_sk#10]
+Join type: LeftOuter
+Join condition: None
+
+(12) Project [codegen id : 8]
+Output [5]: [cs_warehouse_sk#1, cs_item_sk#2, cs_sales_price#4, cs_sold_date_sk#5, cr_refunded_cash#12]
+Input [8]: [cs_warehouse_sk#1, cs_item_sk#2, cs_order_number#3, cs_sales_price#4, cs_sold_date_sk#5, cr_item_sk#10, cr_order_number#11, cr_refunded_cash#12]
+
+(13) BatchScan default.warehouse
+Output [2]: [w_warehouse_sk#13, w_state#14]
+DataFilters: [isnotnull(w_warehouse_sk#13)]
+Format: parquet
+Location [not included in comparison]/{warehouse_dir}/warehouse]
+PushedFilters: [IsNotNull(w_warehouse_sk)]
+ReadSchema: struct<w_warehouse_sk:int,w_state:string>
+
+(14) Filter [codegen id : 5]
+Input [2]: [w_warehouse_sk#13, w_state#14]
+Condition : isnotnull(w_warehouse_sk#13)
+
+(15) Project [codegen id : 5]
+Output [2]: [w_warehouse_sk#13, w_state#14]
+Input [2]: [w_warehouse_sk#13, w_state#14]
+
+(16) BroadcastExchange
+Input [2]: [w_warehouse_sk#13, w_state#14]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=3]
+
+(17) BroadcastHashJoin [codegen id : 8]
+Left keys [1]: [cs_warehouse_sk#1]
+Right keys [1]: [w_warehouse_sk#13]
+Join type: Inner
+Join condition: None
+
+(18) Project [codegen id : 8]
+Output [5]: [cs_item_sk#2, cs_sales_price#4, cs_sold_date_sk#5, cr_refunded_cash#12, w_state#14]
+Input [7]: [cs_warehouse_sk#1, cs_item_sk#2, cs_sales_price#4, cs_sold_date_sk#5, cr_refunded_cash#12, w_warehouse_sk#13, w_state#14]
+
+(19) BatchScan default.item
+Output [3]: [i_item_sk#15, i_item_id#16, i_current_price#17]
+DataFilters: [isnotnull(i_current_price#17), (i_current_price#17 >= 0.99), (i_current_price#17 <= 1.49), isnotnull(i_item_sk#15)]
+Format: parquet
+Location [not included in comparison]/{warehouse_dir}/item]
+PushedFilters: [IsNotNull(i_current_price), GreaterThanOrEqual(i_current_price,0.99), LessThanOrEqual(i_current_price,1.49), IsNotNull(i_item_sk)]
+ReadSchema: struct<i_item_sk:int,i_item_id:string,i_current_price:decimal(7,2)>
+
+(20) Filter [codegen id : 6]
+Input [3]: [i_item_sk#15, i_item_id#16, i_current_price#17]
+Condition : (((isnotnull(i_current_price#17) AND (i_current_price#17 >= 0.99)) AND (i_current_price#17 <= 1.49)) AND isnotnull(i_item_sk#15))
+
+(21) Project [codegen id : 6]
+Output [2]: [i_item_sk#15, i_item_id#16]
+Input [3]: [i_item_sk#15, i_item_id#16, i_current_price#17]
+
+(22) BroadcastExchange
+Input [2]: [i_item_sk#15, i_item_id#16]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=4]
+
+(23) BroadcastHashJoin [codegen id : 8]
+Left keys [1]: [cs_item_sk#2]
+Right keys [1]: [i_item_sk#15]
+Join type: Inner
+Join condition: None
+
+(24) Project [codegen id : 8]
+Output [5]: [cs_sales_price#4, cs_sold_date_sk#5, cr_refunded_cash#12, w_state#14, i_item_id#16]
+Input [7]: [cs_item_sk#2, cs_sales_price#4, cs_sold_date_sk#5, cr_refunded_cash#12, w_state#14, i_item_sk#15, i_item_id#16]
+
+(25) BatchScan default.date_dim
+Output [2]: [d_date_sk#18, d_date#19]
+DataFilters: [isnotnull(d_date#19), (d_date#19 >= 2000-02-10), (d_date#19 <= 2000-04-10), isnotnull(d_date_sk#18)]
+Format: parquet
+Location [not included in comparison]/{warehouse_dir}/date_dim]
+PushedFilters: [IsNotNull(d_date), GreaterThanOrEqual(d_date,2000-02-10), LessThanOrEqual(d_date,2000-04-10), IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int,d_date:date>
+
+(26) Filter [codegen id : 7]
+Input [2]: [d_date_sk#18, d_date#19]
+Condition : (((isnotnull(d_date#19) AND (d_date#19 >= 2000-02-10)) AND (d_date#19 <= 2000-04-10)) AND isnotnull(d_date_sk#18))
+
+(27) Project [codegen id : 7]
+Output [2]: [d_date_sk#18, d_date#19]
+Input [2]: [d_date_sk#18, d_date#19]
+
+(28) BroadcastExchange
+Input [2]: [d_date_sk#18, d_date#19]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=5]
+
+(29) BroadcastHashJoin [codegen id : 8]
+Left keys [1]: [cs_sold_date_sk#5]
+Right keys [1]: [d_date_sk#18]
+Join type: Inner
+Join condition: None
+
+(30) Project [codegen id : 8]
+Output [5]: [cs_sales_price#4, cr_refunded_cash#12, w_state#14, i_item_id#16, d_date#19]
+Input [7]: [cs_sales_price#4, cs_sold_date_sk#5, cr_refunded_cash#12, w_state#14, i_item_id#16, d_date_sk#18, d_date#19]
+
+(31) HashAggregate [codegen id : 8]
+Input [5]: [cs_sales_price#4, cr_refunded_cash#12, w_state#14, i_item_id#16, d_date#19]
+Keys [2]: [w_state#14, i_item_id#16]
+Functions [2]: [partial_sum(CASE WHEN (d_date#19 < 2000-03-11) THEN (cs_sales_price#4 - coalesce(cast(cr_refunded_cash#12 as decimal(12,2)), 0.00)) ELSE 0.00 END), partial_sum(CASE WHEN (d_date#19 >= 2000-03-11) THEN (cs_sales_price#4 - coalesce(cast(cr_refunded_cash#12 as decimal(12,2)), 0.00)) ELSE 0.00 END)]
+Aggregate Attributes [4]: [sum#20, isEmpty#21, sum#22, isEmpty#23]
+Results [6]: [w_state#14, i_item_id#16, sum#24, isEmpty#25, sum#26, isEmpty#27]
+
+(32) Exchange
+Input [6]: [w_state#14, i_item_id#16, sum#24, isEmpty#25, sum#26, isEmpty#27]
+Arguments: hashpartitioning(w_state#14, i_item_id#16, 5), ENSURE_REQUIREMENTS, [plan_id=6]
+
+(33) HashAggregate [codegen id : 9]
+Input [6]: [w_state#14, i_item_id#16, sum#24, isEmpty#25, sum#26, isEmpty#27]
+Keys [2]: [w_state#14, i_item_id#16]
+Functions [2]: [sum(CASE WHEN (d_date#19 < 2000-03-11) THEN (cs_sales_price#4 - coalesce(cast(cr_refunded_cash#12 as decimal(12,2)), 0.00)) ELSE 0.00 END), sum(CASE WHEN (d_date#19 >= 2000-03-11) THEN (cs_sales_price#4 - coalesce(cast(cr_refunded_cash#12 as decimal(12,2)), 0.00)) ELSE 0.00 END)]
+Aggregate Attributes [2]: [sum(CASE WHEN (d_date#19 < 2000-03-11) THEN (cs_sales_price#4 - coalesce(cast(cr_refunded_cash#12 as decimal(12,2)), 0.00)) ELSE 0.00 END)#28, sum(CASE WHEN (d_date#19 >= 2000-03-11) THEN (cs_sales_price#4 - coalesce(cast(cr_refunded_cash#12 as decimal(12,2)), 0.00)) ELSE 0.00 END)#29]
+Results [4]: [w_state#14, i_item_id#16, sum(CASE WHEN (d_date#19 < 2000-03-11) THEN (cs_sales_price#4 - coalesce(cast(cr_refunded_cash#12 as decimal(12,2)), 0.00)) ELSE 0.00 END)#28 AS sales_before#30, sum(CASE WHEN (d_date#19 >= 2000-03-11) THEN (cs_sales_price#4 - coalesce(cast(cr_refunded_cash#12 as decimal(12,2)), 0.00)) ELSE 0.00 END)#29 AS sales_after#31]
+
+(34) TakeOrderedAndProject
+Input [4]: [w_state#14, i_item_id#16, sales_before#30, sales_after#31]
+Arguments: 100, [w_state#14 ASC NULLS FIRST, i_item_id#16 ASC NULLS FIRST], [w_state#14, i_item_id#16, sales_before#30, sales_after#31]
+
+===== Subqueries =====
+
+Subquery:1 Hosting operator id = 2 Hosting Expression = Subquery scalar-subquery#6, [id=#7]
+ObjectHashAggregate (40)
++- Exchange (39)
+   +- ObjectHashAggregate (38)
+      +- * Project (37)
+         +- * Filter (36)
+            +- BatchScan default.item (35)
+
+
+(35) BatchScan default.item
+Output [3]: [i_item_sk#15, i_item_id#16, i_current_price#17]
+DataFilters: [isnotnull(i_current_price#17), (i_current_price#17 >= 0.99), (i_current_price#17 <= 1.49), isnotnull(i_item_sk#15)]
+Format: parquet
+Location [not included in comparison]/{warehouse_dir}/item]
+PushedFilters: [IsNotNull(i_current_price), GreaterThanOrEqual(i_current_price,0.99), LessThanOrEqual(i_current_price,1.49), IsNotNull(i_item_sk)]
+ReadSchema: struct<i_item_sk:int,i_item_id:string,i_current_price:decimal(7,2)>
+
+(36) Filter [codegen id : 1]
+Input [3]: [i_item_sk#15, i_item_id#16, i_current_price#17]
+Condition : (((isnotnull(i_current_price#17) AND (i_current_price#17 >= 0.99)) AND (i_current_price#17 <= 1.49)) AND isnotnull(i_item_sk#15))
+
+(37) Project [codegen id : 1]
+Output [1]: [i_item_sk#15]
+Input [3]: [i_item_sk#15, i_item_id#16, i_current_price#17]
+
+(38) ObjectHashAggregate
+Input [1]: [i_item_sk#15]
+Keys: []
+Functions [1]: [partial_bloom_filter_agg(xxhash64(i_item_sk#15, 42), 1000000, 8388608, 0, 0)]
+Aggregate Attributes [1]: [buf#32]
+Results [1]: [buf#33]
+
+(39) Exchange
+Input [1]: [buf#33]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=7]
+
+(40) ObjectHashAggregate
+Input [1]: [buf#33]
+Keys: []
+Functions [1]: [bloom_filter_agg(xxhash64(i_item_sk#15, 42), 1000000, 8388608, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(i_item_sk#15, 42), 1000000, 8388608, 0, 0)#34]
+Results [1]: [bloom_filter_agg(xxhash64(i_item_sk#15, 42), 1000000, 8388608, 0, 0)#34 AS bloomFilter#35]
+
+Subquery:2 Hosting operator id = 2 Hosting Expression = Subquery scalar-subquery#8, [id=#9]
+ObjectHashAggregate (46)
++- Exchange (45)
+   +- ObjectHashAggregate (44)
+      +- * Project (43)
+         +- * Filter (42)
+            +- BatchScan default.date_dim (41)
+
+
+(41) BatchScan default.date_dim
+Output [2]: [d_date_sk#18, d_date#19]
+DataFilters: [isnotnull(d_date#19), (d_date#19 >= 2000-02-10), (d_date#19 <= 2000-04-10), isnotnull(d_date_sk#18)]
+Format: parquet
+Location [not included in comparison]/{warehouse_dir}/date_dim]
+PushedFilters: [IsNotNull(d_date), GreaterThanOrEqual(d_date,2000-02-10), LessThanOrEqual(d_date,2000-04-10), IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int,d_date:date>
+
+(42) Filter [codegen id : 1]
+Input [2]: [d_date_sk#18, d_date#19]
+Condition : (((isnotnull(d_date#19) AND (d_date#19 >= 2000-02-10)) AND (d_date#19 <= 2000-04-10)) AND isnotnull(d_date_sk#18))
+
+(43) Project [codegen id : 1]
+Output [1]: [d_date_sk#18]
+Input [2]: [d_date_sk#18, d_date#19]
+
+(44) ObjectHashAggregate
+Input [1]: [d_date_sk#18]
+Keys: []
+Functions [1]: [partial_bloom_filter_agg(xxhash64(d_date_sk#18, 42), 1000000, 8388608, 0, 0)]
+Aggregate Attributes [1]: [buf#36]
+Results [1]: [buf#37]
+
+(45) Exchange
+Input [1]: [buf#37]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=8]
+
+(46) ObjectHashAggregate
+Input [1]: [buf#37]
+Keys: []
+Functions [1]: [bloom_filter_agg(xxhash64(d_date_sk#18, 42), 1000000, 8388608, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(d_date_sk#18, 42), 1000000, 8388608, 0, 0)#38]
+Results [1]: [bloom_filter_agg(xxhash64(d_date_sk#18, 42), 1000000, 8388608, 0, 0)#38 AS bloomFilter#39]
+
+

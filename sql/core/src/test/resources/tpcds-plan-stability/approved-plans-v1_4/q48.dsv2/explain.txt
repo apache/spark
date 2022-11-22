@@ -1,0 +1,188 @@
+== Physical Plan ==
+* HashAggregate (30)
++- Exchange (29)
+   +- * HashAggregate (28)
+      +- * Project (27)
+         +- * BroadcastHashJoin Inner BuildRight (26)
+            :- * Project (21)
+            :  +- * BroadcastHashJoin Inner BuildRight (20)
+            :     :- * Project (15)
+            :     :  +- * BroadcastHashJoin Inner BuildRight (14)
+            :     :     :- * Project (9)
+            :     :     :  +- * BroadcastHashJoin Inner BuildRight (8)
+            :     :     :     :- * Project (3)
+            :     :     :     :  +- * Filter (2)
+            :     :     :     :     +- BatchScan default.store_sales (1)
+            :     :     :     +- BroadcastExchange (7)
+            :     :     :        +- * Project (6)
+            :     :     :           +- * Filter (5)
+            :     :     :              +- BatchScan default.store (4)
+            :     :     +- BroadcastExchange (13)
+            :     :        +- * Project (12)
+            :     :           +- * Filter (11)
+            :     :              +- BatchScan default.customer_demographics (10)
+            :     +- BroadcastExchange (19)
+            :        +- * Project (18)
+            :           +- * Filter (17)
+            :              +- BatchScan default.customer_address (16)
+            +- BroadcastExchange (25)
+               +- * Project (24)
+                  +- * Filter (23)
+                     +- BatchScan default.date_dim (22)
+
+
+(1) BatchScan default.store_sales
+Output [7]: [ss_cdemo_sk#1, ss_addr_sk#2, ss_store_sk#3, ss_quantity#4, ss_sales_price#5, ss_net_profit#6, ss_sold_date_sk#7]
+DataFilters: [isnotnull(ss_store_sk#3), isnotnull(ss_cdemo_sk#1), isnotnull(ss_addr_sk#2)]
+Format: parquet
+Location [not included in comparison]/{warehouse_dir}/store_sales]
+PartitionFilters: [isnotnull(ss_sold_date_sk#7)]
+PushedFilters: [IsNotNull(ss_store_sk), IsNotNull(ss_cdemo_sk), IsNotNull(ss_addr_sk)]
+ReadSchema: struct<ss_cdemo_sk:int,ss_addr_sk:int,ss_store_sk:int,ss_quantity:int,ss_sales_price:decimal(7,2),ss_net_profit:decimal(7,2)>
+
+(2) Filter [codegen id : 5]
+Input [7]: [ss_cdemo_sk#1, ss_addr_sk#2, ss_store_sk#3, ss_quantity#4, ss_sales_price#5, ss_net_profit#6, ss_sold_date_sk#7]
+Condition : ((((isnotnull(ss_store_sk#3) AND isnotnull(ss_cdemo_sk#1)) AND isnotnull(ss_addr_sk#2)) AND ((((ss_sales_price#5 >= 100.00) AND (ss_sales_price#5 <= 150.00)) OR ((ss_sales_price#5 >= 50.00) AND (ss_sales_price#5 <= 100.00))) OR ((ss_sales_price#5 >= 150.00) AND (ss_sales_price#5 <= 200.00)))) AND ((((ss_net_profit#6 >= 0.00) AND (ss_net_profit#6 <= 2000.00)) OR ((ss_net_profit#6 >= 150.00) AND (ss_net_profit#6 <= 3000.00))) OR ((ss_net_profit#6 >= 50.00) AND (ss_net_profit#6 <= 25000.00))))
+
+(3) Project [codegen id : 5]
+Output [7]: [ss_cdemo_sk#1, ss_addr_sk#2, ss_store_sk#3, ss_quantity#4, ss_sales_price#5, ss_net_profit#6, ss_sold_date_sk#7]
+Input [7]: [ss_cdemo_sk#1, ss_addr_sk#2, ss_store_sk#3, ss_quantity#4, ss_sales_price#5, ss_net_profit#6, ss_sold_date_sk#7]
+
+(4) BatchScan default.store
+Output [1]: [s_store_sk#8]
+DataFilters: [isnotnull(s_store_sk#8)]
+Format: parquet
+Location [not included in comparison]/{warehouse_dir}/store]
+PushedFilters: [IsNotNull(s_store_sk)]
+ReadSchema: struct<s_store_sk:int>
+
+(5) Filter [codegen id : 1]
+Input [1]: [s_store_sk#8]
+Condition : isnotnull(s_store_sk#8)
+
+(6) Project [codegen id : 1]
+Output [1]: [s_store_sk#8]
+Input [1]: [s_store_sk#8]
+
+(7) BroadcastExchange
+Input [1]: [s_store_sk#8]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=1]
+
+(8) BroadcastHashJoin [codegen id : 5]
+Left keys [1]: [ss_store_sk#3]
+Right keys [1]: [s_store_sk#8]
+Join type: Inner
+Join condition: None
+
+(9) Project [codegen id : 5]
+Output [6]: [ss_cdemo_sk#1, ss_addr_sk#2, ss_quantity#4, ss_sales_price#5, ss_net_profit#6, ss_sold_date_sk#7]
+Input [8]: [ss_cdemo_sk#1, ss_addr_sk#2, ss_store_sk#3, ss_quantity#4, ss_sales_price#5, ss_net_profit#6, ss_sold_date_sk#7, s_store_sk#8]
+
+(10) BatchScan default.customer_demographics
+Output [3]: [cd_demo_sk#9, cd_marital_status#10, cd_education_status#11]
+DataFilters: [isnotnull(cd_demo_sk#9), ((((cd_marital_status#10 = M) AND (cd_education_status#11 = 4 yr Degree         )) OR ((cd_marital_status#10 = D) AND (cd_education_status#11 = 2 yr Degree         ))) OR ((cd_marital_status#10 = S) AND (cd_education_status#11 = College             )))]
+Format: parquet
+Location [not included in comparison]/{warehouse_dir}/customer_demographics]
+PushedFilters: [IsNotNull(cd_demo_sk), Or(Or(And(EqualTo(cd_marital_status,M),EqualTo(cd_education_status,4 yr Degree         )),And(EqualTo(cd_marital_status,D),EqualTo(cd_education_status,2 yr Degree         ))),And(EqualTo(cd_marital_status,S),EqualTo(cd_education_status,College             )))]
+ReadSchema: struct<cd_demo_sk:int,cd_marital_status:string,cd_education_status:string>
+
+(11) Filter [codegen id : 2]
+Input [3]: [cd_demo_sk#9, cd_marital_status#10, cd_education_status#11]
+Condition : (isnotnull(cd_demo_sk#9) AND ((((cd_marital_status#10 = M) AND (cd_education_status#11 = 4 yr Degree         )) OR ((cd_marital_status#10 = D) AND (cd_education_status#11 = 2 yr Degree         ))) OR ((cd_marital_status#10 = S) AND (cd_education_status#11 = College             ))))
+
+(12) Project [codegen id : 2]
+Output [3]: [cd_demo_sk#9, cd_marital_status#10, cd_education_status#11]
+Input [3]: [cd_demo_sk#9, cd_marital_status#10, cd_education_status#11]
+
+(13) BroadcastExchange
+Input [3]: [cd_demo_sk#9, cd_marital_status#10, cd_education_status#11]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=2]
+
+(14) BroadcastHashJoin [codegen id : 5]
+Left keys [1]: [ss_cdemo_sk#1]
+Right keys [1]: [cd_demo_sk#9]
+Join type: Inner
+Join condition: ((((((cd_marital_status#10 = M) AND (cd_education_status#11 = 4 yr Degree         )) AND (ss_sales_price#5 >= 100.00)) AND (ss_sales_price#5 <= 150.00)) OR ((((cd_marital_status#10 = D) AND (cd_education_status#11 = 2 yr Degree         )) AND (ss_sales_price#5 >= 50.00)) AND (ss_sales_price#5 <= 100.00))) OR ((((cd_marital_status#10 = S) AND (cd_education_status#11 = College             )) AND (ss_sales_price#5 >= 150.00)) AND (ss_sales_price#5 <= 200.00)))
+
+(15) Project [codegen id : 5]
+Output [4]: [ss_addr_sk#2, ss_quantity#4, ss_net_profit#6, ss_sold_date_sk#7]
+Input [9]: [ss_cdemo_sk#1, ss_addr_sk#2, ss_quantity#4, ss_sales_price#5, ss_net_profit#6, ss_sold_date_sk#7, cd_demo_sk#9, cd_marital_status#10, cd_education_status#11]
+
+(16) BatchScan default.customer_address
+Output [3]: [ca_address_sk#12, ca_state#13, ca_country#14]
+DataFilters: [isnotnull(ca_country#14), (ca_country#14 = United States), isnotnull(ca_address_sk#12), ((ca_state#13 IN (CO,OH,TX) OR ca_state#13 IN (OR,MN,KY)) OR ca_state#13 IN (VA,CA,MS))]
+Format: parquet
+Location [not included in comparison]/{warehouse_dir}/customer_address]
+PushedFilters: [IsNotNull(ca_country), EqualTo(ca_country,United States), IsNotNull(ca_address_sk), Or(Or(In(ca_state, [CO,OH,TX]),In(ca_state, [KY,MN,OR])),In(ca_state, [CA,MS,VA]))]
+ReadSchema: struct<ca_address_sk:int,ca_state:string,ca_country:string>
+
+(17) Filter [codegen id : 3]
+Input [3]: [ca_address_sk#12, ca_state#13, ca_country#14]
+Condition : (((isnotnull(ca_country#14) AND (ca_country#14 = United States)) AND isnotnull(ca_address_sk#12)) AND ((ca_state#13 IN (CO,OH,TX) OR ca_state#13 IN (OR,MN,KY)) OR ca_state#13 IN (VA,CA,MS)))
+
+(18) Project [codegen id : 3]
+Output [2]: [ca_address_sk#12, ca_state#13]
+Input [3]: [ca_address_sk#12, ca_state#13, ca_country#14]
+
+(19) BroadcastExchange
+Input [2]: [ca_address_sk#12, ca_state#13]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=3]
+
+(20) BroadcastHashJoin [codegen id : 5]
+Left keys [1]: [ss_addr_sk#2]
+Right keys [1]: [ca_address_sk#12]
+Join type: Inner
+Join condition: ((((ca_state#13 IN (CO,OH,TX) AND (ss_net_profit#6 >= 0.00)) AND (ss_net_profit#6 <= 2000.00)) OR ((ca_state#13 IN (OR,MN,KY) AND (ss_net_profit#6 >= 150.00)) AND (ss_net_profit#6 <= 3000.00))) OR ((ca_state#13 IN (VA,CA,MS) AND (ss_net_profit#6 >= 50.00)) AND (ss_net_profit#6 <= 25000.00)))
+
+(21) Project [codegen id : 5]
+Output [2]: [ss_quantity#4, ss_sold_date_sk#7]
+Input [6]: [ss_addr_sk#2, ss_quantity#4, ss_net_profit#6, ss_sold_date_sk#7, ca_address_sk#12, ca_state#13]
+
+(22) BatchScan default.date_dim
+Output [2]: [d_date_sk#15, d_year#16]
+DataFilters: [isnotnull(d_year#16), (d_year#16 = 2001), isnotnull(d_date_sk#15)]
+Format: parquet
+Location [not included in comparison]/{warehouse_dir}/date_dim]
+PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2001), IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int,d_year:int>
+
+(23) Filter [codegen id : 4]
+Input [2]: [d_date_sk#15, d_year#16]
+Condition : ((isnotnull(d_year#16) AND (d_year#16 = 2001)) AND isnotnull(d_date_sk#15))
+
+(24) Project [codegen id : 4]
+Output [1]: [d_date_sk#15]
+Input [2]: [d_date_sk#15, d_year#16]
+
+(25) BroadcastExchange
+Input [1]: [d_date_sk#15]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=4]
+
+(26) BroadcastHashJoin [codegen id : 5]
+Left keys [1]: [ss_sold_date_sk#7]
+Right keys [1]: [d_date_sk#15]
+Join type: Inner
+Join condition: None
+
+(27) Project [codegen id : 5]
+Output [1]: [ss_quantity#4]
+Input [3]: [ss_quantity#4, ss_sold_date_sk#7, d_date_sk#15]
+
+(28) HashAggregate [codegen id : 5]
+Input [1]: [ss_quantity#4]
+Keys: []
+Functions [1]: [partial_sum(ss_quantity#4)]
+Aggregate Attributes [1]: [sum#17]
+Results [1]: [sum#18]
+
+(29) Exchange
+Input [1]: [sum#18]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=5]
+
+(30) HashAggregate [codegen id : 6]
+Input [1]: [sum#18]
+Keys: []
+Functions [1]: [sum(ss_quantity#4)]
+Aggregate Attributes [1]: [sum(ss_quantity#4)#19]
+Results [1]: [sum(ss_quantity#4)#19 AS sum(ss_quantity)#20]
+
