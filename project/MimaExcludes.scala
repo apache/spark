@@ -55,11 +55,7 @@ object MimaExcludes {
     // [SPARK-37831][CORE] Add task partition id in TaskInfo and Task Metrics
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.TaskData.this"),
 
-    // [SPARK-37600][BUILD] Upgrade to Hadoop 3.3.2
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.hadoop.shaded.net.jpountz.lz4.LZ4Compressor"),
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.hadoop.shaded.net.jpountz.lz4.LZ4Factory"),
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.hadoop.shaded.net.jpountz.lz4.LZ4SafeDecompressor"),
-
+    
     // [SPARK-37377][SQL] Initial implementation of Storage-Partitioned Join
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.connector.read.partitioning.ClusteredDistribution"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.connector.read.partitioning.Distribution"),
