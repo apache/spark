@@ -96,7 +96,7 @@ object SQLExecution {
         var ex: Option[Throwable] = None
         val startTime = System.nanoTime()
         try {
-          val event = SparkListenerSQLExecutionStart(
+          sc.listenerBus.post(SparkListenerSQLExecutionStart(
             executionId = executionId,
             description = desc,
             details = callSite.longForm,
@@ -105,9 +105,7 @@ object SQLExecution {
             // will be caught and reported in the `SparkListenerSQLExecutionEnd`
             sparkPlanInfo = SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan),
             time = System.currentTimeMillis(),
-            redactedConfigs)
-          event.qe = queryExecution
-          sc.listenerBus.post(event)
+            redactedConfigs))
           body
         } catch {
           case e: Throwable =>

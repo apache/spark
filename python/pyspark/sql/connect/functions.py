@@ -14,15 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect.column import ColumnRef, LiteralExpression
+from pyspark.sql.connect.column import Column, LiteralExpression
 
 from typing import Any
 
 # TODO(SPARK-40538) Add support for the missing PySpark functions.
 
 
-def col(x: str) -> ColumnRef:
-    return ColumnRef(x)
+def col(x: str) -> Column:
+    return Column(x)
 
 
 def lit(x: Any) -> LiteralExpression:

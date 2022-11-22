@@ -31,6 +31,7 @@ import org.apache.commons.io.FileUtils
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, Hex}
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression, Sort}
@@ -3713,12 +3714,25 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         exception = intercept[AnalysisException] {
           sql("SELECT s LIKE 'm%@ca' ESCAPE '%' FROM df").collect()
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1216",
+        errorClass = "INVALID_LIKE_PATTERN.ESC_IN_THE_MIDDLE",
         parameters = Map(
-          "pattern" -> "'m%@ca'",
-          "message" -> "the escape character is not allowed to precede '@'"))
+          "pattern" -> toSQLValue("m%@ca", StringType),
+          "char" -> toSQLValue("@", StringType)))
 
       checkAnswer(sql("SELECT s LIKE 'm@@ca' ESCAPE '@' FROM df"), Row(true))
+    }
+  }
+
+  test("the escape character is not allowed to end with") {
+    withTempView("df") {
+      Seq("jialiuping").toDF("a").createOrReplaceTempView("df")
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT a LIKE 'jialiuping%' ESCAPE '%' FROM df").collect()
+        },
+        errorClass = "INVALID_LIKE_PATTERN.ESC_AT_THE_END",
+        parameters = Map("pattern" -> toSQLValue("jialiuping%", StringType)))
     }
   }
 
@@ -3813,10 +3827,16 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           s"default.$functionName" -> false,
           functionName -> true) {
           // create temporary function without class
-          val e = intercept[AnalysisException] {
-            sql(s"CREATE TEMPORARY FUNCTION $functionName AS '$sumFuncClass'")
-          }.getMessage
-          assert(e.contains("Can not load class 'org.apache.spark.examples.sql.Spark33084"))
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"CREATE TEMPORARY FUNCTION $functionName AS '$sumFuncClass'")
+            },
+            errorClass = "CANNOT_LOAD_FUNCTION_CLASS",
+            parameters = Map(
+              "className" -> "org.apache.spark.examples.sql.Spark33084",
+              "functionName" -> "`test_udf`"
+            )
+          )
           sql("ADD JAR ivy://org.apache.spark:SPARK-33084:1.0")
           sql(s"CREATE TEMPORARY FUNCTION $functionName AS '$sumFuncClass'")
           // create a view using a function in 'default' database
@@ -4530,6 +4550,14 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     withTable(tableName) {
       sql(s"create table $tableName(a decimal(12, 5), b decimal(12, 6)) using orc")
       checkAnswer(sql(s"select sum(coalesce(a + b + 1.75, a)) from $tableName"), Row(null))
+    }
+  }
+
+  test("SPARK-41144: Unresolved hint should not cause query failure") {
+    withTable("t1", "t2") {
+      sql("CREATE TABLE t1(c1 bigint) USING PARQUET")
+      sql("CREATE TABLE t2(c2 bigint) USING PARQUET")
+      sql("SELECT /*+ hash(t2) */ * FROM t1 join t2 on c1 = c2")
     }
   }
 }

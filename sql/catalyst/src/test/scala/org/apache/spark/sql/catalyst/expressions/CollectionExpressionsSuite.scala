@@ -28,6 +28,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{outstandingZoneIds, LA, UTC}
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
@@ -99,6 +100,17 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
   }
 
   test("MapContainsKey") {
+    val left = Literal.create(Map("a" -> "1", "b" -> "2"), MapType(StringType, StringType))
+    val right = Literal.create(null, NullType)
+    assert(MapContainsKey(left, right).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "NULL_TYPE",
+        messageParameters = Map("functionName" -> "`map_contains_key`")
+      )
+    )
+  }
+
+  test("ArrayContains") {
     val m0 = Literal.create(Map("a" -> "1", "b" -> "2"), MapType(StringType, StringType))
     val m1 = Literal.create(null, MapType(StringType, StringType))
     checkEvaluation(ArrayContains(MapKeys(m0), Literal("a")), true)
@@ -220,8 +232,24 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     // argument checking
     assert(MapConcat(Seq(m0, m1)).checkInputDataTypes().isSuccess)
     assert(MapConcat(Seq(m5, m6)).checkInputDataTypes().isSuccess)
-    assert(MapConcat(Seq(m0, m5)).checkInputDataTypes().isFailure)
-    assert(MapConcat(Seq(m0, Literal(12))).checkInputDataTypes().isFailure)
+    assert(MapConcat(Seq(m0, m5)).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "DATA_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> "`map_concat`",
+          "dataType" -> "(\"MAP<STRING, STRING>\" or \"MAP<STRING, INT>\")"
+        )
+      )
+    )
+    assert(MapConcat(Seq(m0, Literal(12))).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "MAP_CONCAT_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> "`map_concat`",
+          "dataType" -> "[\"MAP<STRING, STRING>\", \"INT\"]"
+        )
+      )
+    )
     assert(MapConcat(Seq(m0, m1)).dataType.keyType == StringType)
     assert(MapConcat(Seq(m0, m1)).dataType.valueType == StringType)
     assert(!MapConcat(Seq(m0, m1)).dataType.valueContainsNull)
@@ -346,6 +374,20 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
         assert(errorSubClass === "INVALID_MAP_KEY_TYPE")
         assert(messageParameters === Map("keyType" -> "\"MAP<INT, INT>\""))
     }
+
+    // accepts only arrays of pair structs
+    val mapWrongType = MapFromEntries(Literal(1))
+    assert(mapWrongType.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "1",
+          "inputSql" -> "\"1\"",
+          "inputType" -> "\"INT\"",
+          "requiredType" -> "\"ARRAY\" of pair \"STRUCT\""
+        )
+      )
+    )
   }
 
   test("Sort Array") {
@@ -1512,7 +1554,17 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val m1 = Literal.create(Map[String, String](), MapType(StringType, StringType))
     val m2 = Literal.create(null, MapType(StringType, StringType))
 
-    assert(ElementAt(m0, Literal(1.0)).checkInputDataTypes().isFailure)
+    assert(ElementAt(m0, Literal(1.0)).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "MAP_FUNCTION_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> "`element_at`",
+          "dataType" -> "\"MAP\"",
+          "leftType" -> "\"MAP<STRING, STRING>\"",
+          "rightType" -> "\"DOUBLE\""
+        )
+      )
+    )
 
     withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
       checkEvaluation(ElementAt(m0, Literal("d")), null)

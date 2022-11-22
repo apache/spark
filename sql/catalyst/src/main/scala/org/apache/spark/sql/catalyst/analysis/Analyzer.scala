@@ -43,7 +43,7 @@ import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils, StringUtils}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.connector.catalog._
+import org.apache.spark.sql.connector.catalog.{View => _, _}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.{After, ColumnPosition}
 import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction => V2AggregateFunction, ScalarFunction, UnboundFunction}
@@ -113,9 +113,9 @@ object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog {
  * @param nestedViewDepth The nested depth in the view resolution, this enables us to limit the
  *                        depth of nested views.
  * @param maxNestedViewDepth The maximum allowed depth of nested view resolution.
- * @param relationCache A mapping from qualified table names to resolved relations. This can ensure
- *                      that the table is resolved only once if a table is used multiple times
- *                      in a query.
+ * @param relationCache A mapping from qualified table names and time travel spec to resolved
+ *                      relations. This can ensure that the table is resolved only once if a table
+ *                      is used multiple times in a query.
  * @param referredTempViewNames All the temp view names referred by the current view we are
  *                              resolving. It's used to make sure the relation resolution is
  *                              consistent between view creation and view resolution. For example,
@@ -129,7 +129,8 @@ case class AnalysisContext(
     catalogAndNamespace: Seq[String] = Nil,
     nestedViewDepth: Int = 0,
     maxNestedViewDepth: Int = -1,
-    relationCache: mutable.Map[Seq[String], LogicalPlan] = mutable.Map.empty,
+    relationCache: mutable.Map[(Seq[String], Option[TimeTravelSpec]), LogicalPlan] =
+      mutable.Map.empty,
     referredTempViewNames: Seq[Seq[String]] = Seq.empty,
     // 1. If we are resolving a view, this field will be restored from the view metadata,
     //    by calling `AnalysisContext.withAnalysisContext(viewDesc)`.
@@ -966,6 +967,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsDownWithPruning(
       AlwaysProcess.fn, ruleId) {
+      case hint: UnresolvedHint => hint
       // Add metadata output to all node types
       case node if node.children.nonEmpty && node.resolved && hasMetadataCol(node) =>
         val inputAttrs = AttributeSet(node.children.flatMap(_.output))
@@ -1238,7 +1240,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       resolveTempView(u.multipartIdentifier, u.isStreaming, timeTravelSpec.isDefined).orElse {
         expandIdentifier(u.multipartIdentifier) match {
           case CatalogAndIdentifier(catalog, ident) =>
-            val key = catalog.name +: ident.namespace :+ ident.name
+            val key = ((catalog.name +: ident.namespace :+ ident.name).toSeq, timeTravelSpec)
             AnalysisContext.get.relationCache.get(key).map(_.transform {
               case multi: MultiInstanceRelation =>
                 val newRelation = multi.newInstance()
@@ -2553,17 +2555,17 @@ class Analyzer(override val catalogManager: CatalogManager)
      */
     private def resolveSubQueries(plan: LogicalPlan, outer: LogicalPlan): LogicalPlan = {
       plan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION), ruleId) {
-        case s @ ScalarSubquery(sub, _, exprId, _) if !sub.resolved =>
+        case s @ ScalarSubquery(sub, _, exprId, _, _) if !sub.resolved =>
           resolveSubQuery(s, outer)(ScalarSubquery(_, _, exprId))
-        case e @ Exists(sub, _, exprId, _) if !sub.resolved =>
+        case e @ Exists(sub, _, exprId, _, _) if !sub.resolved =>
           resolveSubQuery(e, outer)(Exists(_, _, exprId))
-        case InSubquery(values, l @ ListQuery(_, _, exprId, _, _))
+        case InSubquery(values, l @ ListQuery(_, _, exprId, _, _, _))
             if values.forall(_.resolved) && !l.resolved =>
           val expr = resolveSubQuery(l, outer)((plan, exprs) => {
             ListQuery(plan, exprs, exprId, plan.output)
           })
           InSubquery(values, expr.asInstanceOf[ListQuery])
-        case s @ LateralSubquery(sub, _, exprId, _) if !sub.resolved =>
+        case s @ LateralSubquery(sub, _, exprId, _, _) if !sub.resolved =>
           resolveSubQuery(s, outer)(LateralSubquery(_, _, exprId))
       }
     }

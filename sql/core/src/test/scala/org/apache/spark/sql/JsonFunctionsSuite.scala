@@ -24,6 +24,8 @@ import java.util.Locale
 import collection.JavaConverters._
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Literal, StructsToJson}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -95,6 +97,18 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.selectExpr("key", "json_tuple(jstring, 'f1', 'f2', 'f3', 'f4', 'f5')"),
       expected)
+
+    val nonStringDF = Seq(1, 2).toDF("a")
+    checkError(
+      exception = intercept[AnalysisException] {
+        nonStringDF.select(json_tuple($"a", "1")).collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.NON_STRING_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"json_tuple(a, 1)\"",
+        "funcName" -> "`json_tuple`"
+      )
+    )
   }
 
   test("json_tuple filter and group") {
@@ -1096,5 +1110,23 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         from_json($"json", StructType(StructField("key", TimestampNTZType) :: Nil)) as "value")
       .selectExpr("value['key']")
     checkAnswer(fromJsonDF, Row(localDT))
+  }
+
+  test("to_json: unable to convert column of ObjectType to JSON") {
+    val df = Seq(1).toDF("a")
+    val schema = StructType(StructField("b", ObjectType(classOf[java.lang.Integer])) :: Nil)
+    val row = InternalRow.fromSeq(Seq(Integer.valueOf(1)))
+    val structData = Literal.create(row, schema)
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select($"a").withColumn("c", Column(StructsToJson(Map.empty, structData))).collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.CANNOT_CONVERT_TO_JSON",
+      parameters = Map(
+        "sqlExpr" -> "\"to_json(NAMED_STRUCT('b', 1))\"",
+        "name" -> "`b`",
+        "type" -> "\"JAVA.LANG.INTEGER\""
+      )
+    )
   }
 }

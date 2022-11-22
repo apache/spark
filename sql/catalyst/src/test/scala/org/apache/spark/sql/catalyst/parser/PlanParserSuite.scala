@@ -193,7 +193,7 @@ class PlanParserSuite extends AnalysisTest {
                   |""".stripMargin
     checkError(
       exception = parseException(query),
-      errorClass = "_LEGACY_ERROR_TEMP_0055",
+      errorClass = "UNCLOSED_BRACKETED_COMMENT",
       parameters = Map.empty)
   }
 
@@ -211,7 +211,7 @@ class PlanParserSuite extends AnalysisTest {
                   |""".stripMargin
     checkError(
       exception = parseException(query),
-      errorClass = "_LEGACY_ERROR_TEMP_0055",
+      errorClass = "UNCLOSED_BRACKETED_COMMENT",
       parameters = Map.empty)
   }
 
@@ -703,6 +703,32 @@ class PlanParserSuite extends AnalysisTest {
         .join(table("t3"))
         .join(table("t2"), Inner, Option($"t1.col1" === $"t2.col2"))
         .select(star()))
+
+    assertEqual(
+      "select * from t1 JOIN t2, t3 join t2 on t1.col1 = t2.col2",
+      table("t1")
+        .join(table("t2"))
+        .join(table("t3"))
+        .join(table("t2"), Inner, Option($"t1.col1" === $"t2.col2"))
+        .select(star()))
+
+    // Implicit joins - ANSI mode
+    withSQLConf(
+      SQLConf.ANSI_ENABLED.key -> "true",
+      SQLConf.ANSI_RELATION_PRECEDENCE.key -> "true") {
+
+      assertEqual(
+        "select * from t1, t3 join t2 on t1.col1 = t2.col2",
+        table("t1").join(
+          table("t3").join(table("t2"), Inner, Option($"t1.col1" === $"t2.col2")))
+          .select(star()))
+
+      assertEqual(
+        "select * from t1 JOIN t2, t3 join t2 on t1.col1 = t2.col2",
+        table("t1").join(table("t2")).join(
+          table("t3").join(table("t2"), Inner, Option($"t1.col1" === $"t2.col2")))
+          .select(star()))
+    }
 
     // Test lateral join with join conditions
     assertEqual(

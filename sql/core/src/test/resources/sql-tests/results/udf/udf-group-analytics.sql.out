@@ -208,7 +208,14 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2445"
+  "errorClass" : "_LEGACY_ERROR_TEMP_2445",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 27,
+    "stopIndex" : 42,
+    "fragment" : "GROUPING(course)"
+  } ]
 }
 
 
@@ -219,7 +226,14 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2407"
+  "errorClass" : "_LEGACY_ERROR_TEMP_2407",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 27,
+    "stopIndex" : 51,
+    "fragment" : "GROUPING_ID(course, year)"
+  } ]
 }
 
 

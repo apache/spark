@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -763,6 +763,60 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
         errorSubClass = "HASH_MAP_TYPE",
         messageParameters = Map("functionName" -> toSQLId(murmur3Hash.prettyName))
       )
+    )
+  }
+
+  test("check types for Lag") {
+    val lag = Lag(Literal(1), NonFoldableLiteral(10), Literal(null), true)
+    assert(lag.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> "offset",
+          "inputType" -> "\"INT\"",
+          "inputExpr" -> "\"(- nonfoldableliteral())\""
+        )
+      ))
+  }
+
+  test("check types for SpecifiedWindowFrame") {
+    val swf1 = SpecifiedWindowFrame(RangeFrame, Literal(10.0), Literal(2147483648L))
+    assert(swf1.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "SPECIFIED_WINDOW_FRAME_DIFF_TYPES",
+        messageParameters = Map(
+          "lower" -> "\"10.0\"",
+          "upper" -> "\"2147483648\"",
+          "lowerType" -> "\"DOUBLE\"",
+          "upperType" -> "\"BIGINT\""
+        )
+      )
+    )
+
+    val swf2 = SpecifiedWindowFrame(RangeFrame, NonFoldableLiteral(10.0), Literal(2147483648L))
+    assert(swf2.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "SPECIFIED_WINDOW_FRAME_WITHOUT_FOLDABLE",
+        messageParameters = Map(
+          "location" -> "lower",
+          "expression" -> "\"nonfoldableliteral()\""
+        )
+      )
+    )
+  }
+
+  test("check types for WindowSpecDefinition") {
+    val wsd = WindowSpecDefinition(
+      UnresolvedAttribute("a") :: Nil,
+      SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
+      UnspecifiedFrame)
+    checkError(
+      exception = intercept[SparkException] {
+        wsd.checkInputDataTypes()
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> ("Cannot use an UnspecifiedFrame. " +
+        "This should have been converted during analysis."))
     )
   }
 }

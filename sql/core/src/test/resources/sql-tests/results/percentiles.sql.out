@@ -182,7 +182,14 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "_LEGACY_ERROR_TEMP_2411",
   "messageParameters" : {
     "aggFunc" : "percentile_cont"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 59,
+    "stopIndex" : 157,
+    "fragment" : "percentile_cont(0.25) WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department ORDER BY salary)"
+  } ]
 }
 
 
@@ -203,7 +210,14 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "_LEGACY_ERROR_TEMP_2411",
   "messageParameters" : {
     "aggFunc" : "percentile_disc"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 59,
+    "stopIndex" : 157,
+    "fragment" : "percentile_disc(0.25) WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department ORDER BY salary)"
+  } ]
 }
 
 
@@ -223,7 +237,14 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "_LEGACY_ERROR_TEMP_2411",
   "messageParameters" : {
     "aggFunc" : "median"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 59,
+    "stopIndex" : 119,
+    "fragment" : "median(salary) OVER (PARTITION BY department ORDER BY salary)"
+  } ]
 }
 
 
@@ -244,7 +265,14 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "_LEGACY_ERROR_TEMP_2411",
   "messageParameters" : {
     "aggFunc" : "percentile_cont"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 59,
+    "stopIndex" : 190,
+    "fragment" : "percentile_cont(0.25) WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)"
+  } ]
 }
 
 
@@ -265,7 +293,14 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "_LEGACY_ERROR_TEMP_2411",
   "messageParameters" : {
     "aggFunc" : "percentile_disc"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 59,
+    "stopIndex" : 190,
+    "fragment" : "percentile_disc(0.25) WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)"
+  } ]
 }
 
 
@@ -285,7 +320,14 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "_LEGACY_ERROR_TEMP_2411",
   "messageParameters" : {
     "aggFunc" : "median"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 59,
+    "stopIndex" : 152,
+    "fragment" : "median(salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)"
+  } ]
 }
 
 
@@ -370,7 +412,14 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "_LEGACY_ERROR_TEMP_2411",
   "messageParameters" : {
     "aggFunc" : "percentile_cont"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 59,
+    "stopIndex" : 117,
+    "fragment" : "percentile_cont(0.25) WITHIN GROUP (ORDER BY salary) OVER w"
+  } ]
 }
 
 
@@ -392,7 +441,14 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "_LEGACY_ERROR_TEMP_2411",
   "messageParameters" : {
     "aggFunc" : "percentile_disc"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 59,
+    "stopIndex" : 117,
+    "fragment" : "percentile_disc(0.25) WITHIN GROUP (ORDER BY salary) OVER w"
+  } ]
 }
 
 
@@ -413,7 +469,14 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "_LEGACY_ERROR_TEMP_2411",
   "messageParameters" : {
     "aggFunc" : "median"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 59,
+    "stopIndex" : 79,
+    "fragment" : "median(salary) OVER w"
+  } ]
 }
 
 
@@ -435,7 +498,14 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "_LEGACY_ERROR_TEMP_2411",
   "messageParameters" : {
     "aggFunc" : "percentile_cont"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 59,
+    "stopIndex" : 117,
+    "fragment" : "percentile_cont(0.25) WITHIN GROUP (ORDER BY salary) OVER w"
+  } ]
 }
 
 
@@ -457,7 +527,14 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "_LEGACY_ERROR_TEMP_2411",
   "messageParameters" : {
     "aggFunc" : "percentile_disc"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 59,
+    "stopIndex" : 117,
+    "fragment" : "percentile_disc(0.25) WITHIN GROUP (ORDER BY salary) OVER w"
+  } ]
 }
 
 
@@ -478,7 +555,14 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "_LEGACY_ERROR_TEMP_2411",
   "messageParameters" : {
     "aggFunc" : "median"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 59,
+    "stopIndex" : 79,
+    "fragment" : "median(salary) OVER w"
+  } ]
 }
 
 

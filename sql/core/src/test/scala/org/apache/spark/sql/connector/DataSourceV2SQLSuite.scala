@@ -2676,7 +2676,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
         exception = intercept[SparkException] {
           sql(s"SELECT * FROM t TIMESTAMP AS OF ($subquery4)").collect()
         },
-        errorClass = "MULTI_VALUE_SUBQUERY_ERROR",
+        errorClass = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
         parameters = Map.empty,
         ExpectedContext(
           fragment = "(SELECT * FROM VALUES (1), (2))",
@@ -2686,7 +2686,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
         exception = intercept[SparkException] {
           sql(s"SELECT * FROM t TIMESTAMP AS OF (SELECT ($subquery4))").collect()
         },
-        errorClass = "MULTI_VALUE_SUBQUERY_ERROR",
+        errorClass = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
         parameters = Map.empty,
         ExpectedContext(
           fragment = "(SELECT * FROM VALUES (1), (2))",
@@ -2726,6 +2726,69 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
       assert(properties.get(s"${TableCatalog.OPTION_PREFIX}to") == "1")
       assert(properties.get("prop1") == "1")
       assert(properties.get("prop2") == "2")
+    }
+  }
+
+  test("Overwrite: overwrite by expression: True") {
+    val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
+    df.createOrReplaceTempView("source")
+    val df2 = spark.createDataFrame(Seq((4L, "d"), (5L, "e"), (6L, "f"))).toDF("id", "data")
+    df2.createOrReplaceTempView("source2")
+
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(
+        s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      spark.sql(s"INSERT INTO TABLE $t SELECT * FROM source")
+
+      checkAnswer(
+        spark.table(s"$t"),
+        Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
+
+      spark.sql(s"INSERT INTO $t REPLACE WHERE TRUE SELECT * FROM source2")
+      checkAnswer(
+        spark.table(s"$t"),
+        Seq(Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
+    }
+  }
+
+  test("Overwrite: overwrite by expression: id = 3") {
+    val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
+    df.createOrReplaceTempView("source")
+    val df2 = spark.createDataFrame(Seq((4L, "d"), (5L, "e"), (6L, "f"))).toDF("id", "data")
+    df2.createOrReplaceTempView("source2")
+
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(
+        s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      spark.sql(s"INSERT INTO TABLE $t SELECT * FROM source")
+
+      checkAnswer(
+        spark.table(s"$t"),
+        Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
+
+      spark.sql(s"INSERT INTO $t REPLACE WHERE id = 3 SELECT * FROM source2")
+      checkAnswer(
+        spark.table(s"$t"),
+        Seq(Row(1L, "a"), Row(2L, "b"), Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
+    }
+  }
+
+  test("SPARK-41154: Incorrect relation caching for queries with time travel spec") {
+    sql("use testcat")
+    val t1 = "testcat.t1"
+    val t2 = "testcat.t2"
+    withTable(t1, t2) {
+      sql(s"CREATE TABLE $t1 USING foo AS SELECT 1 as c")
+      sql(s"CREATE TABLE $t2 USING foo AS SELECT 2 as c")
+      assert(
+        sql("""
+              |SELECT * FROM t VERSION AS OF '1'
+              |UNION ALL
+              |SELECT * FROM t VERSION AS OF '2'
+              |""".stripMargin
+        ).collect() === Array(Row(1), Row(2)))
     }
   }
 
