@@ -102,7 +102,6 @@ private[spark] object KVUtils extends Logging {
       val dbPath = Files.createDirectories(new File(path, dir).toPath()).toFile()
       Utils.chmod700(dbPath)
 
-
       val metadata = FsHistoryProviderMetadata(
         FsHistoryProvider.CURRENT_LISTING_VERSION,
         AppStatusStore.CURRENT_VERSION,
