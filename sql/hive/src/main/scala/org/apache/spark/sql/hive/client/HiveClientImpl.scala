@@ -112,7 +112,7 @@ private[hive] class HiveClientImpl(
       if (containsStats) {
         parameters
       } else {
-        parameters.filterKeys(!HiveStatisticsProperties.contains(_)).toMap
+        parameters.filterNot(kv => HiveStatisticsProperties.contains(kv._1))
       }
     }
   }
