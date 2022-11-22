@@ -776,7 +776,6 @@ private[spark] class ExecutorAllocationManager(
             removeStageFromResourceProfileIfUnused(stageAttempt)
           }
         }
-
         if (taskEnd.taskInfo.speculative) {
           stageAttemptToSpeculativeTaskIndices.get(stageAttempt).foreach(_.remove(taskIndex))
         }
