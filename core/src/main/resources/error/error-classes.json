@@ -104,6 +104,11 @@
     ],
     "sqlState" : "22005"
   },
+  "COLUMN_ALREADY_EXISTS" : {
+    "message" : [
+      "The column <columnName> already exists. Consider to choose another name or rename the existing column."
+    ]
+  },
   "COLUMN_NOT_IN_GROUP_BY_CLAUSE" : {
     "message" : [
       "The expression <expression> is neither present in the group by, nor is it an aggregate function. Add to group by or wrap in `first()` (or `first_value()`) if you don't care which value you get."
@@ -2851,11 +2856,6 @@
   "_LEGACY_ERROR_TEMP_1232" : {
     "message" : [
       "Partition spec is invalid. The spec (<specKeys>) must match the partition spec (<partitionColumnNames>) defined in table '<tableName>'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1233" : {
-    "message" : [
-      "Found duplicate column(s) <colType>: <duplicateCol>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1234" : {

@@ -25,11 +25,12 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.connector.catalog.Table
+import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-trait AlterTableTests extends SharedSparkSession {
+trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
 
   protected def getTableMetadata(tableName: String): Table
 
@@ -431,10 +432,12 @@ trait AlterTableTests extends SharedSparkSession {
     val t = s"${catalogAndNamespace}table_name"
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
-      val e = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t ADD COLUMNS (data string, data1 string, data string)")
-      }
-      assert(e.message.contains("Found duplicate column(s) in the user specified columns: `data`"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $t ADD COLUMNS (data string, data1 string, data string)")
+        },
+        errorClass = "COLUMN_ALREADY_EXISTS",
+        parameters = Map("columnName" -> "`data`"))
     }
   }
 
@@ -442,11 +445,12 @@ trait AlterTableTests extends SharedSparkSession {
     val t = s"${catalogAndNamespace}table_name"
     withTable(t) {
       sql(s"CREATE TABLE $t (id int, point struct<x: double, y: double>) USING $v2Format")
-      val e = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t ADD COLUMNS (point.z double, point.z double, point.xx double)")
-      }
-      assert(e.message.contains(
-        "Found duplicate column(s) in the user specified columns: `point.z`"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $t ADD COLUMNS (point.z double, point.z double, point.xx double)")
+        },
+        errorClass = "COLUMN_ALREADY_EXISTS",
+        parameters = Map("columnName" -> toSQLId("point.z")))
     }
   }
 
@@ -1221,10 +1225,12 @@ trait AlterTableTests extends SharedSparkSession {
     val t = s"${catalogAndNamespace}table_name"
     withTable(t) {
       sql(s"CREATE TABLE $t (data string) USING $v2Format")
-      val e = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t REPLACE COLUMNS (data string, data1 string, data string)")
-      }
-      assert(e.message.contains("Found duplicate column(s) in the user specified columns: `data`"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $t REPLACE COLUMNS (data string, data1 string, data string)")
+        },
+        errorClass = "COLUMN_ALREADY_EXISTS",
+        parameters = Map("columnName" -> "`data`"))
     }
   }
 }
