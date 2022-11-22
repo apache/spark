@@ -853,12 +853,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       }
     }
 
-    // Skip subquery aliases added by the Analyzer.
+    // Skip subquery aliases added by the Analyzer as well as hints.
     // For projects, do the necessary mapping and skip to its child.
     @scala.annotation.tailrec
     def cleanQueryInScalarSubquery(p: LogicalPlan): LogicalPlan = p match {
       case s: SubqueryAlias => cleanQueryInScalarSubquery(s.child)
       case p: Project => cleanQueryInScalarSubquery(p.child)
+      case h: ResolvedHint => cleanQueryInScalarSubquery(h.child)
       case child => child
     }
 
@@ -892,7 +893,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     checkOuterReference(plan, expr)
 
     expr match {
-      case ScalarSubquery(query, outerAttrs, _, _) =>
+      case ScalarSubquery(query, outerAttrs, _, _, _) =>
         // Scalar subquery must return one column as output.
         if (query.output.size != 1) {
           expr.failAnalysis(

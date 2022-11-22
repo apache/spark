@@ -2775,6 +2775,23 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
     }
   }
 
+  test("SPARK-41154: Incorrect relation caching for queries with time travel spec") {
+    sql("use testcat")
+    val t1 = "testcat.t1"
+    val t2 = "testcat.t2"
+    withTable(t1, t2) {
+      sql(s"CREATE TABLE $t1 USING foo AS SELECT 1 as c")
+      sql(s"CREATE TABLE $t2 USING foo AS SELECT 2 as c")
+      assert(
+        sql("""
+              |SELECT * FROM t VERSION AS OF '1'
+              |UNION ALL
+              |SELECT * FROM t VERSION AS OF '2'
+              |""".stripMargin
+        ).collect() === Array(Row(1), Row(2)))
+    }
+  }
+
   private def testNotSupportedV2Command(sqlCommand: String, sqlParams: String): Unit = {
     checkError(
       exception = intercept[AnalysisException] {

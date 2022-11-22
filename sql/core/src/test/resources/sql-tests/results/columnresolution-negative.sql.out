@@ -69,7 +69,20 @@ SELECT i1 FROM t1, mydb1.t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Reference 'i1' is ambiguous, could be: spark_catalog.mydb1.t1.i1, spark_catalog.mydb1.t1.i1.; line 1 pos 7
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "messageParameters" : {
+    "name" : "`i1`",
+    "referenceNames" : "[`spark_catalog`.`mydb1`.`t1`.`i1`, `spark_catalog`.`mydb1`.`t1`.`i1`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 9,
+    "fragment" : "i1"
+  } ]
+}
 
 
 -- !query
@@ -78,7 +91,20 @@ SELECT t1.i1 FROM t1, mydb1.t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Reference 't1.i1' is ambiguous, could be: spark_catalog.mydb1.t1.i1, spark_catalog.mydb1.t1.i1.; line 1 pos 7
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "messageParameters" : {
+    "name" : "`t1`.`i1`",
+    "referenceNames" : "[`spark_catalog`.`mydb1`.`t1`.`i1`, `spark_catalog`.`mydb1`.`t1`.`i1`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 12,
+    "fragment" : "t1.i1"
+  } ]
+}
 
 
 -- !query
@@ -87,7 +113,20 @@ SELECT mydb1.t1.i1 FROM t1, mydb1.t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Reference 'mydb1.t1.i1' is ambiguous, could be: spark_catalog.mydb1.t1.i1, spark_catalog.mydb1.t1.i1.; line 1 pos 7
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "messageParameters" : {
+    "name" : "`mydb1`.`t1`.`i1`",
+    "referenceNames" : "[`spark_catalog`.`mydb1`.`t1`.`i1`, `spark_catalog`.`mydb1`.`t1`.`i1`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 18,
+    "fragment" : "mydb1.t1.i1"
+  } ]
+}
 
 
 -- !query
@@ -96,7 +135,20 @@ SELECT i1 FROM t1, mydb2.t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Reference 'i1' is ambiguous, could be: spark_catalog.mydb1.t1.i1, spark_catalog.mydb2.t1.i1.; line 1 pos 7
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "messageParameters" : {
+    "name" : "`i1`",
+    "referenceNames" : "[`spark_catalog`.`mydb1`.`t1`.`i1`, `spark_catalog`.`mydb2`.`t1`.`i1`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 9,
+    "fragment" : "i1"
+  } ]
+}
 
 
 -- !query
@@ -105,7 +157,20 @@ SELECT t1.i1 FROM t1, mydb2.t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Reference 't1.i1' is ambiguous, could be: spark_catalog.mydb1.t1.i1, spark_catalog.mydb2.t1.i1.; line 1 pos 7
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "messageParameters" : {
+    "name" : "`t1`.`i1`",
+    "referenceNames" : "[`spark_catalog`.`mydb1`.`t1`.`i1`, `spark_catalog`.`mydb2`.`t1`.`i1`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 12,
+    "fragment" : "t1.i1"
+  } ]
+}
 
 
 -- !query
@@ -122,7 +187,20 @@ SELECT i1 FROM t1, mydb1.t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Reference 'i1' is ambiguous, could be: spark_catalog.mydb2.t1.i1, spark_catalog.mydb1.t1.i1.; line 1 pos 7
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "messageParameters" : {
+    "name" : "`i1`",
+    "referenceNames" : "[`spark_catalog`.`mydb1`.`t1`.`i1`, `spark_catalog`.`mydb2`.`t1`.`i1`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 9,
+    "fragment" : "i1"
+  } ]
+}
 
 
 -- !query
@@ -131,7 +209,20 @@ SELECT t1.i1 FROM t1, mydb1.t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Reference 't1.i1' is ambiguous, could be: spark_catalog.mydb2.t1.i1, spark_catalog.mydb1.t1.i1.; line 1 pos 7
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "messageParameters" : {
+    "name" : "`t1`.`i1`",
+    "referenceNames" : "[`spark_catalog`.`mydb1`.`t1`.`i1`, `spark_catalog`.`mydb2`.`t1`.`i1`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 12,
+    "fragment" : "t1.i1"
+  } ]
+}
 
 
 -- !query
@@ -140,7 +231,20 @@ SELECT i1 FROM t1, mydb2.t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Reference 'i1' is ambiguous, could be: spark_catalog.mydb2.t1.i1, spark_catalog.mydb2.t1.i1.; line 1 pos 7
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "messageParameters" : {
+    "name" : "`i1`",
+    "referenceNames" : "[`spark_catalog`.`mydb2`.`t1`.`i1`, `spark_catalog`.`mydb2`.`t1`.`i1`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 9,
+    "fragment" : "i1"
+  } ]
+}
 
 
 -- !query
@@ -149,7 +253,20 @@ SELECT t1.i1 FROM t1, mydb2.t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Reference 't1.i1' is ambiguous, could be: spark_catalog.mydb2.t1.i1, spark_catalog.mydb2.t1.i1.; line 1 pos 7
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "messageParameters" : {
+    "name" : "`t1`.`i1`",
+    "referenceNames" : "[`spark_catalog`.`mydb2`.`t1`.`i1`, `spark_catalog`.`mydb2`.`t1`.`i1`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 12,
+    "fragment" : "t1.i1"
+  } ]
+}
 
 
 -- !query

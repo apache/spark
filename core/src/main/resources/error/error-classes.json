@@ -5,6 +5,11 @@
     ],
     "sqlState" : "42000"
   },
+  "AMBIGUOUS_REFERENCE" : {
+    "message" : [
+      "Reference <name> is ambiguous, could be: <referenceNames>."
+    ]
+  },
   "ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<message>.<alternative> If necessary set <config> to \"false\" to bypass this error."
@@ -47,6 +52,11 @@
       "Cannot decode url : <url>."
     ],
     "sqlState" : "42000"
+  },
+  "CANNOT_LOAD_FUNCTION_CLASS" : {
+    "message" : [
+      "Cannot load class <className> when registering the function <functionName>, please make sure it is on the classpath."
+    ]
   },
   "CANNOT_LOAD_PROTOBUF_CLASS" : {
     "message" : [
@@ -838,6 +848,11 @@
       "The comparison result is null. If you want to handle null as 0 (equal), you can set \"spark.sql.legacy.allowNullComparisonResultInArraySort\" to \"true\"."
     ]
   },
+  "NUMERIC_OUT_OF_SUPPORTED_RANGE" : {
+    "message" : [
+      "The value <value> cannot be interpreted as a numeric since it has more than 38 digits."
+    ]
+  },
   "NUMERIC_VALUE_OUT_OF_RANGE" : {
     "message" : [
       "<value> cannot be represented as Decimal(<precision>, <scale>). If necessary set <config> to \"false\" to bypass this error, and return NULL instead."
@@ -854,11 +869,6 @@
       "ORDER BY position <index> is not in select list (valid range is [1, <size>])."
     ],
     "sqlState" : "42000"
-  },
-  "OUT_OF_DECIMAL_TYPE_RANGE" : {
-    "message" : [
-      "Out of decimal type range: <value>."
-    ]
   },
   "PARSE_EMPTY_STATEMENT" : {
     "message" : [
@@ -2073,11 +2083,6 @@
   "_LEGACY_ERROR_TEMP_1076" : {
     "message" : [
       "Partition spec is invalid. <details>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1078" : {
-    "message" : [
-      "Can not load class '<className>' when registering the function '<func>', please make sure it is on the classpath."
     ]
   },
   "_LEGACY_ERROR_TEMP_1079" : {

@@ -527,7 +527,7 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val s6 = Literal("a=1&b=2&c=3")
     val m6 = Map("a" -> "1", "b" -> "2", "c" -> "3")
-    checkEvaluation(new StringToMap(s6, NonFoldableLiteral("&"), NonFoldableLiteral("=")), m6)
+    checkEvaluation(StringToMap(s6, NonFoldableLiteral("&"), NonFoldableLiteral("=")), m6)
 
     checkExceptionInExpression[RuntimeException](
       new StringToMap(Literal("a:1,b:2,a:3")), "Duplicate map key")
@@ -540,11 +540,51 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // arguments checking
     assert(new StringToMap(Literal("a:1,b:2,c:3")).checkInputDataTypes().isSuccess)
-    assert(new StringToMap(Literal(null)).checkInputDataTypes().isFailure)
-    assert(new StringToMap(Literal("a:1,b:2,c:3"), Literal(null)).checkInputDataTypes().isFailure)
-    assert(StringToMap(Literal("a:1,b:2,c:3"), Literal(null), Literal(null))
-      .checkInputDataTypes().isFailure)
-    assert(new StringToMap(Literal(null), Literal(null)).checkInputDataTypes().isFailure)
+    assert(new StringToMap(Literal(null)).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "1",
+          "requiredType" -> "\"STRING\"",
+          "inputSql" -> "\"NULL\"",
+          "inputType" -> "\"VOID\""
+        )
+      )
+    )
+    assert(new StringToMap(Literal("a:1,b:2,c:3"), Literal(null)).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "2",
+          "requiredType" -> "\"STRING\"",
+          "inputSql" -> "\"NULL\"",
+          "inputType" -> "\"VOID\""
+        )
+      )
+    )
+    assert(StringToMap(Literal("a:1,b:2,c:3"), Literal(null),
+      Literal(null)).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "2",
+          "requiredType" -> "\"STRING\"",
+          "inputSql" -> "\"NULL\"",
+          "inputType" -> "\"VOID\""
+        )
+      )
+    )
+    assert(new StringToMap(Literal(null), Literal(null)).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "1",
+          "requiredType" -> "\"STRING\"",
+          "inputSql" -> "\"NULL\"",
+          "inputType" -> "\"VOID\""
+        )
+      )
+    )
   }
 
   test("SPARK-22693: CreateNamedStruct should not use global variables") {

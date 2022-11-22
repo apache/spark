@@ -26,6 +26,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.dsl.MockRemoteSession
 import org.apache.spark.sql.connect.dsl.plans._
 import org.apache.spark.sql.connect.service.SparkConnectService
+import org.apache.spark.sql.execution.ExplainMode
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.ThreadUtils
 
@@ -51,7 +52,8 @@ class SparkConnectServiceSuite extends SharedSparkSession {
             .build())
         .build()
 
-      val response = instance.handleAnalyzePlanRequest(relation, spark)
+      val response =
+        instance.handleAnalyzePlanRequest(relation, spark, ExplainMode.fromString("simple"))
 
       assert(response.getSchema.hasStruct)
       val schema = response.getSchema.getStruct
@@ -76,7 +78,7 @@ class SparkConnectServiceSuite extends SharedSparkSession {
     session.udf.register("insta_kill", instaKill)
 
     val connect = new MockRemoteSession()
-    val context = proto.Request.UserContext
+    val context = proto.UserContext
       .newBuilder()
       .setUserId("c1")
       .build()
@@ -84,23 +86,68 @@ class SparkConnectServiceSuite extends SharedSparkSession {
       .newBuilder()
       .setRoot(connect.sql("select insta_kill(id) from range(10)"))
       .build()
-    val request = proto.Request
+    val request = proto.ExecutePlanRequest
       .newBuilder()
       .setPlan(plan)
       .setUserContext(context)
       .build()
 
-    val promise = Promise[Seq[proto.Response]]
+    val promise = Promise[Seq[proto.ExecutePlanResponse]]
     instance.executePlan(
       request,
-      new StreamObserver[proto.Response] {
-        private val responses = Seq.newBuilder[proto.Response]
-        override def onNext(v: proto.Response): Unit = responses += v
+      new StreamObserver[proto.ExecutePlanResponse] {
+        private val responses = Seq.newBuilder[proto.ExecutePlanResponse]
+
+        override def onNext(v: proto.ExecutePlanResponse): Unit = responses += v
+
         override def onError(throwable: Throwable): Unit = promise.failure(throwable)
+
         override def onCompleted(): Unit = promise.success(responses.result())
       })
     intercept[SparkException] {
       ThreadUtils.awaitResult(promise.future, 2.seconds)
+    }
+  }
+
+  test("Test explain mode in analyze response") {
+    withTable("test") {
+      spark.sql("""
+          | CREATE TABLE test (col1 INT, col2 STRING)
+          | USING parquet
+          |""".stripMargin)
+      val instance = new SparkConnectService(false)
+      val relation = proto.Relation
+        .newBuilder()
+        .setProject(
+          proto.Project
+            .newBuilder()
+            .addExpressions(
+              proto.Expression
+                .newBuilder()
+                .setUnresolvedFunction(
+                  proto.Expression.UnresolvedFunction
+                    .newBuilder()
+                    .addParts("abs")
+                    .addArguments(proto.Expression
+                      .newBuilder()
+                      .setLiteral(proto.Expression.Literal.newBuilder().setI32(-1)))))
+            .setInput(
+              proto.Relation
+                .newBuilder()
+                .setRead(proto.Read
+                  .newBuilder()
+                  .setNamedTable(
+                    proto.Read.NamedTable.newBuilder.setUnparsedIdentifier("test").build()))))
+        .build()
+
+      val response =
+        instance
+          .handleAnalyzePlanRequest(relation, spark, ExplainMode.fromString("extended"))
+          .build()
+      assert(response.getExplainString.contains("Parsed Logical Plan"))
+      assert(response.getExplainString.contains("Analyzed Logical Plan"))
+      assert(response.getExplainString.contains("Optimized Logical Plan"))
+      assert(response.getExplainString.contains("Physical Plan"))
     }
   }
 }

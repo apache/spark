@@ -67,8 +67,6 @@ import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 case class ConcatWs(children: Seq[Expression])
   extends Expression with ImplicitCastInputTypes {
 
-  require(children.nonEmpty, s"$prettyName requires at least one argument.")
-
   override def prettyName: String = "concat_ws"
 
   /** The 1st child (separator) is str, and rest are either str or array of str. */
@@ -81,6 +79,21 @@ case class ConcatWs(children: Seq[Expression])
 
   override def nullable: Boolean = children.head.nullable
   override def foldable: Boolean = children.forall(_.foldable)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.isEmpty) {
+      DataTypeMismatch(
+        errorSubClass = "WRONG_NUM_ARGS",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName),
+          "expectedNum" -> "> 0",
+          "actualNum" -> children.length.toString
+        )
+      )
+    } else {
+      super.checkInputDataTypes()
+    }
+  }
 
   override def eval(input: InternalRow): Any = {
     val flatInputs = children.flatMap { child =>
@@ -1662,8 +1675,7 @@ case class StringRPad(str: Expression, len: Expression, pad: Expression = Litera
 // scalastyle:on line.size.limit
 case class FormatString(children: Expression*) extends Expression with ImplicitCastInputTypes {
 
-  require(children.nonEmpty, s"$prettyName() should take at least 1 argument")
-  if (!SQLConf.get.getConf(SQLConf.ALLOW_ZERO_INDEX_IN_FORMAT_STRING)) {
+  if (children.nonEmpty && !SQLConf.get.getConf(SQLConf.ALLOW_ZERO_INDEX_IN_FORMAT_STRING)) {
     checkArgumentIndexNotZero(children(0))
   }
 
@@ -1674,6 +1686,21 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
 
   override def inputTypes: Seq[AbstractDataType] =
     StringType :: List.fill(children.size - 1)(AnyDataType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.isEmpty) {
+      DataTypeMismatch(
+        errorSubClass = "WRONG_NUM_ARGS",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName),
+          "expectedNum" -> "> 0",
+          "actualNum" -> children.length.toString
+        )
+      )
+    } else {
+      super.checkInputDataTypes()
+    }
+  }
 
   override def eval(input: InternalRow): Any = {
     val pattern = children(0).eval(input)
