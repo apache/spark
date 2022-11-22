@@ -239,27 +239,12 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
 
       // extra Project node: wrap flat metadata columns to a metadata struct
       val withMetadataProjections = metadataStructOpt.map { metadataStruct =>
-<<<<<<< HEAD
-        val metadataAlias =
-          Alias(CreateStruct(metadataColumns), METADATA_NAME)(exprId = metadataStruct.exprId)
-=======
-        val structColumns = metadataColumns.map { col => col.name match {
-            case FileFormat.FILE_PATH | FileFormat.FILE_NAME | FileFormat.FILE_SIZE |
-                 FileFormat.FILE_MODIFICATION_TIME =>
-              col
-            case FileFormat.ROW_INDEX =>
-              fileFormatReaderGeneratedMetadataColumns
-                .find(_.name == FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME)
-                .get.withName(FileFormat.ROW_INDEX)
-          }
-        }
         // SPARK-41151: metadata column is not nullable for file sources.
         // Here, we *explicitly* enforce the not null to `CreateStruct(structColumns)`
         // to avoid any risk of inconsistent schema nullability
         val metadataAlias =
-          Alias(KnownNotNull(CreateStruct(structColumns)),
+          Alias(KnownNotNull(CreateStruct(metadataColumns)),
             METADATA_NAME)(exprId = metadataStruct.exprId)
->>>>>>> 77a8fb445c ([SPARK-41151][SQL] Keep built-in file `_metadata` column nullable value consistent)
         execution.ProjectExec(
           scan.output.dropRight(metadataColumns.length) :+ metadataAlias, scan)
       }.getOrElse(scan)
