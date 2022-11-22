@@ -273,10 +273,21 @@ class DataFrame(object):
         )
 
     def drop(self, *cols: "ColumnOrString") -> "DataFrame":
-        all_cols = self.columns
-        dropped = set([c.name() if isinstance(c, Column) else self[c].name() for c in cols])
-        dropped_cols = filter(lambda x: x in dropped, all_cols)
-        return DataFrame.withPlan(plan.Project(self._plan, *dropped_cols), session=self._session)
+        _cols = list(cols)
+        if any(not isinstance(c, (str, Column)) for c in _cols):
+            raise TypeError(
+                f"'cols' must contains strings or Columns, but got {type(cols).__name__}"
+            )
+        if len(_cols) == 0:
+            raise ValueError("'cols' must be non-empty")
+
+        return DataFrame.withPlan(
+            plan.Drop(
+                child=self._plan,
+                columns=_cols,
+            ),
+            session=self._session,
+        )
 
     def filter(self, condition: Expression) -> "DataFrame":
         return DataFrame.withPlan(

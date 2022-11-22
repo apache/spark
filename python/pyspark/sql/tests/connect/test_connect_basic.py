@@ -188,6 +188,33 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         df2 = self.connect.read.table(self.tbl_name_empty)
         self.assertEqual(0, len(df2.take(5)))
 
+    def test_drop(self):
+        # SPARK-41169: test drop
+        query = """
+            SELECT * FROM VALUES
+            (false, 1, NULL), (false, NULL, 2), (NULL, 3, 3)
+            AS tab(a, b, c)
+            """
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+        self.assert_eq(
+            cdf.drop("a").toPandas(),
+            sdf.drop("a").toPandas(),
+        )
+        self.assert_eq(
+            cdf.drop("a", "b").toPandas(),
+            sdf.drop("a", "b").toPandas(),
+        )
+        self.assert_eq(
+            cdf.drop("a", "x").toPandas(),
+            sdf.drop("a", "x").toPandas(),
+        )
+        self.assert_eq(
+            cdf.drop(cdf.a, cdf.x).toPandas(),
+            sdf.drop("a", "x").toPandas(),
+        )
+
     def test_subquery_alias(self) -> None:
         # SPARK-40938: test subquery alias.
         plan_text = (
