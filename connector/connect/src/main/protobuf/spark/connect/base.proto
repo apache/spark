@@ -139,11 +139,7 @@ message ExecutePlanRequest {
 message ExecutePlanResponse {
   string client_id = 1;
 
-  // Result type
-  oneof result_type {
-    ArrowBatch arrow_batch = 2;
-    JSONBatch json_batch = 3;
-  }
+  ArrowBatch arrow_batch = 2;
 
   // Metrics for the query execution. Typically, this field is only present in the last
   // batch of results and then represent the overall state of the query execution.
@@ -151,14 +147,6 @@ message ExecutePlanResponse {
 
   // Batch results of metrics.
   message ArrowBatch {
-    int64 row_count = 1;
-    bytes data = 2;
-  }
-
-  // Message type when the result is returned as JSON. This is essentially a bulk wrapper
-  // for the JSON result of a Spark DataFrame. All rows are returned in the JSON record format
-  // of `{col -> row}`.
-  message JSONBatch {
     int64 row_count = 1;
     bytes data = 2;
   }

@@ -18,12 +18,10 @@
 package org.apache.spark.sql.connect.service
 
 import scala.collection.JavaConverters._
-import scala.util.control.NonFatal
 
 import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver
 
-import org.apache.spark.SparkException
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanRequest, ExecutePlanResponse}
 import org.apache.spark.internal.Logging
@@ -34,7 +32,6 @@ import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, QueryStageExec}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.ThreadUtils
 
 class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResponse])
     extends Logging {
@@ -57,75 +54,7 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
     // Extract the plan from the request and convert it to a logical plan
     val planner = new SparkConnectPlanner(session)
     val dataframe = Dataset.ofRows(session, planner.transformRelation(request.getPlan.getRoot))
-    try {
-      processAsArrowBatches(request.getClientId, dataframe)
-    } catch {
-      case e: Exception =>
-        logWarning(e.getMessage)
-        processAsJsonBatches(request.getClientId, dataframe)
-    }
-  }
-
-  def processAsJsonBatches(clientId: String, dataframe: DataFrame): Unit = {
-    // Only process up to 10MB of data.
-    val sb = new StringBuilder
-    var rowCount = 0
-    dataframe.toJSON
-      .collect()
-      .foreach(row => {
-
-        // There are a few cases to cover here.
-        // 1. The aggregated buffer size is larger than the MAX_BATCH_SIZE
-        //     -> send the current batch and reset.
-        // 2. The aggregated buffer size is smaller than the MAX_BATCH_SIZE
-        //     -> append the row to the buffer.
-        // 3. The row in question is larger than the MAX_BATCH_SIZE
-        //     -> fail the query.
-
-        // Case 3. - Fail
-        if (row.size > MAX_BATCH_SIZE) {
-          throw SparkException.internalError(
-            s"Serialized row is larger than MAX_BATCH_SIZE: ${row.size} > ${MAX_BATCH_SIZE}")
-        }
-
-        // Case 1 - FLush and send.
-        if (sb.size + row.size > MAX_BATCH_SIZE) {
-          val response = proto.ExecutePlanResponse.newBuilder().setClientId(clientId)
-          val batch = proto.ExecutePlanResponse.JSONBatch
-            .newBuilder()
-            .setData(ByteString.copyFromUtf8(sb.toString()))
-            .setRowCount(rowCount)
-            .build()
-          response.setJsonBatch(batch)
-          responseObserver.onNext(response.build())
-          sb.clear()
-          sb.append(row)
-          rowCount = 1
-        } else {
-          // Case 2 - Append.
-          // Make sure to put the newline delimiters only between items and not at the end.
-          if (rowCount > 0) {
-            sb.append("\n")
-          }
-          sb.append(row)
-          rowCount += 1
-        }
-      })
-
-    // If the last batch is not empty, send out the data to the client.
-    if (sb.size > 0) {
-      val response = proto.ExecutePlanResponse.newBuilder().setClientId(clientId)
-      val batch = proto.ExecutePlanResponse.JSONBatch
-        .newBuilder()
-        .setData(ByteString.copyFromUtf8(sb.toString()))
-        .setRowCount(rowCount)
-        .build()
-      response.setJsonBatch(batch)
-      responseObserver.onNext(response.build())
-    }
-
-    responseObserver.onNext(sendMetricsToResponse(clientId, dataframe))
-    responseObserver.onCompleted()
+    processAsArrowBatches(request.getClientId, dataframe)
   }
 
   def processAsArrowBatches(clientId: String, dataframe: DataFrame): Unit = {
@@ -142,83 +71,20 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
       var numSent = 0
 
       if (numPartitions > 0) {
-        type Batch = (Array[Byte], Long)
-
         val batches = rows.mapPartitionsInternal(
           SparkConnectStreamHandler
             .rowToArrowConverter(schema, maxRecordsPerBatch, maxBatchSize, timeZoneId))
 
-        val signal = new Object
-        val partitions = collection.mutable.Map.empty[Int, Array[Batch]]
-        var error: Throwable = null
-
-        val processPartition = (iter: Iterator[Batch]) => iter.toArray
-
-        // This callback is executed by the DAGScheduler thread.
-        // After fetching a partition, it inserts the partition into the Map, and then
-        // wakes up the main thread.
-        val resultHandler = (partitionId: Int, partition: Array[Batch]) => {
-          signal.synchronized {
-            partitions(partitionId) = partition
-            signal.notify()
-          }
-          ()
-        }
-
-        val future = spark.sparkContext.submitJob(
-          rdd = batches,
-          processPartition = processPartition,
-          partitions = Seq.range(0, numPartitions),
-          resultHandler = resultHandler,
-          resultFunc = () => ())
-
-        // Collect errors and propagate them to the main thread.
-        future.onComplete { result =>
-          result.failed.foreach { throwable =>
-            signal.synchronized {
-              error = throwable
-              signal.notify()
-            }
-          }
-        }(ThreadUtils.sameThread)
-
-        // The main thread will wait until 0-th partition is available,
-        // then send it to client and wait for the next partition.
-        // Different from the implementation of [[Dataset#collectAsArrowToPython]], it sends
-        // the arrow batches in main thread to avoid DAGScheduler thread been blocked for
-        // tasks not related to scheduling. This is particularly important if there are
-        // multiple users or clients running code at the same time.
-        var currentPartitionId = 0
-        while (currentPartitionId < numPartitions) {
-          val partition = signal.synchronized {
-            var result = partitions.remove(currentPartitionId)
-            while (result.isEmpty && error == null) {
-              signal.wait()
-              result = partitions.remove(currentPartitionId)
-            }
-            error match {
-              case NonFatal(e) =>
-                responseObserver.onError(error)
-                logError("Error while processing query.", e)
-                return
-              case fatal: Throwable => throw fatal
-              case null => result.get
-            }
-          }
-
-          partition.foreach { case (bytes, count) =>
-            val response = proto.ExecutePlanResponse.newBuilder().setClientId(clientId)
-            val batch = proto.ExecutePlanResponse.ArrowBatch
-              .newBuilder()
-              .setRowCount(count)
-              .setData(ByteString.copyFrom(bytes))
-              .build()
-            response.setArrowBatch(batch)
-            responseObserver.onNext(response.build())
-            numSent += 1
-          }
-
-          currentPartitionId += 1
+        batches.collect().foreach { case (bytes, count) =>
+          val response = proto.ExecutePlanResponse.newBuilder().setClientId(clientId)
+          val batch = proto.ExecutePlanResponse.ArrowBatch
+            .newBuilder()
+            .setRowCount(count)
+            .setData(ByteString.copyFrom(bytes))
+            .build()
+          response.setArrowBatch(batch)
+          responseObserver.onNext(response.build())
+          numSent += 1
         }
       }
 
