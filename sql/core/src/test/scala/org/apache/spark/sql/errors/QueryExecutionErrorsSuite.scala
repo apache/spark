@@ -663,7 +663,32 @@ class QueryExecutionErrorsSuite
   }
 
   test("FAILED_RENAME_PATH: rename when destination path already exists") {
-    // TODO: adapt code above
+    // TODO TNT: get this test code to run
+    var srcPath: Path = null
+    val e = intercept[SparkFileAlreadyExistsException](
+      withTempPath { p =>
+        val conf = new Configuration()
+        //conf.set("fs.test.impl", classOf[RenameReturnsFalseFileSystem].getName)
+        conf.set("fs.defaultFS", "test:///")
+        val basePath = new Path(p.getAbsolutePath)
+        val fm = new FileSystemBasedCheckpointFileManager(basePath, conf)
+        srcPath = new Path(s"$basePath/file")
+        assert(!fm.exists(srcPath))
+        fm.createAtomic(srcPath, overwriteIfPossible = true).close()
+        assert(fm.exists(srcPath))
+        val dstPath = new Path(s"$basePath/new_file")
+        assert(!fm.exists(dstPath))
+        fm.createAtomic(dstPath, overwriteIfPossible = true).close()
+        assert(fm.exists(dstPath))
+        fm.renameTempFile(srcPath, dstPath, false)
+      }
+    )
+    checkError(
+      exception = e,
+      errorClass = "RENAME_SRC_PATH_NOT_FOUND",
+      parameters = Map(
+        "sourcePath" -> s"$srcPath"
+      ))
   }
 
   test("UNSUPPORTED_FEATURE.JDBC_TRANSACTION: the target JDBC server does not support " +
