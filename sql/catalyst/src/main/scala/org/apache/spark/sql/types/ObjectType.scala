@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.types
 
+import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalObjectType}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 
 object ObjectType extends AbstractDataType {
@@ -36,6 +37,8 @@ object ObjectType extends AbstractDataType {
  */
 case class ObjectType(cls: Class[_]) extends DataType {
   override def defaultSize: Int = 4096
+
+  override def physicalDataType: PhysicalDataType = PhysicalObjectType(cls)
 
   def asNullable: DataType = this
 
