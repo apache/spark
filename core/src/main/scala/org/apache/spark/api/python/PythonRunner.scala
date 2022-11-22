@@ -135,13 +135,6 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     val execCoresProp = Option(context.getLocalProperty(EXECUTOR_CORES_LOCAL_PROPERTY))
     val memoryMb = Option(context.getLocalProperty(PYSPARK_MEMORY_LOCAL_PROPERTY)).map(_.toLong)
     val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")
-    // if OMP_NUM_THREADS is not explicitly set, override it with the number of cores
-    if (conf.getOption("spark.executorEnv.OMP_NUM_THREADS").isEmpty) {
-      // SPARK-28843: limit the OpenMP thread pool to the number of cores assigned to this executor
-      // this avoids high memory consumption with pandas/numpy because of a large OpenMP thread pool
-      // see https://github.com/numpy/numpy/issues/10455
-      execCoresProp.foreach(envVars.put("OMP_NUM_THREADS", _))
-    }
     envVars.put("SPARK_LOCAL_DIRS", localdir) // it's also used in monitor thread
     if (reuseWorker) {
       envVars.put("SPARK_REUSE_WORKER", "1")

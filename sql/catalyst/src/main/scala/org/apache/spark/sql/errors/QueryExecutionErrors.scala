@@ -1279,7 +1279,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def outOfDecimalTypeRangeError(str: UTF8String): SparkArithmeticException = {
     new SparkArithmeticException(
-      errorClass = "OUT_OF_DECIMAL_TYPE_RANGE",
+      errorClass = "NUMERIC_OUT_OF_SUPPORTED_RANGE",
       messageParameters = Map(
         "value" -> str.toString),
       context = Array.empty,
