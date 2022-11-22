@@ -789,7 +789,7 @@ class DataFrame(object):
         else:
             return []
 
-    def toPandas(self) -> Optional["pandas.DataFrame"]:
+    def toPandas(self) -> "pandas.DataFrame":
         if self._plan is None:
             raise Exception("Cannot collect on empty plan.")
         if self._session is None:

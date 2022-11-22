@@ -300,7 +300,7 @@ class RemoteSparkSession(object):
         req = self._execute_plan_request_with_metadata()
         req.plan.command.create_function.CopyFrom(fun)
 
-        self._execute_and_fetch(req)
+        self._execute(req)
         return name
 
     def _build_metrics(self, metrics: "pb2.ExecutePlanResponse.Metrics") -> List[PlanMetrics]:
@@ -350,7 +350,7 @@ class RemoteSparkSession(object):
             Range(start=start, end=end, step=step, num_partitions=numPartitions), self
         )
 
-    def _to_pandas(self, plan: pb2.Plan) -> Optional[pandas.DataFrame]:
+    def _to_pandas(self, plan: pb2.Plan) -> "pandas.DataFrame":
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
         return self._execute_and_fetch(req)
@@ -398,7 +398,7 @@ class RemoteSparkSession(object):
         if self._user_id:
             req.user_context.user_id = self._user_id
         req.plan.command.CopyFrom(command)
-        self._execute_and_fetch(req)
+        self._execute(req)
         return
 
     def _execute_plan_request_with_metadata(self) -> pb2.ExecutePlanRequest:
@@ -439,13 +439,16 @@ class RemoteSparkSession(object):
         resp = self._stub.AnalyzePlan(req, metadata=self._builder.metadata())
         return AnalyzeResult.fromProto(resp)
 
-    def _process_batch(self, b: pb2.ExecutePlanResponse) -> Optional[pandas.DataFrame]:
-        if b.arrow_batch is not None and len(b.arrow_batch.data) > 0:
-            with pa.ipc.open_stream(b.arrow_batch.data) as rd:
-                return rd.read_pandas()
-        return None
+    def _process_batch(self, arrow_batch: pb2.ExecutePlanResponse.ArrowBatch) -> "pandas.DataFrame":
+        with pa.ipc.open_stream(arrow_batch.data) as rd:
+            return rd.read_pandas()
 
-    def _execute_and_fetch(self, req: pb2.ExecutePlanRequest) -> Optional[pandas.DataFrame]:
+    def _execute(self, req: pb2.ExecutePlanRequest) -> None:
+        for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
+            continue
+        return
+
+    def _execute_and_fetch(self, req: pb2.ExecutePlanRequest) -> "pandas.DataFrame":
         import pandas as pd
 
         m: Optional[pb2.ExecutePlanResponse.Metrics] = None
@@ -454,23 +457,21 @@ class RemoteSparkSession(object):
         for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
             if b.metrics is not None:
                 m = b.metrics
-
-            pb = self._process_batch(b)
-            if pb is not None:
+            if b.HasField("arrow_batch"):
+                pb = self._process_batch(b.arrow_batch)
                 result_dfs.append(pb)
 
-        if len(result_dfs) > 0:
-            df = pd.concat(result_dfs)
+        assert len(result_dfs) > 0
 
-            # pd.concat generates non-consecutive index like:
-            #   Int64Index([0, 1, 0, 1, 2, 0, 1, 0, 1, 2], dtype='int64')
-            # set it to RangeIndex to be consistent with pyspark
-            n = len(df)
-            df.set_index(pd.RangeIndex(start=0, stop=n, step=1), inplace=True)
+        df = pd.concat(result_dfs)
 
-            # Attach the metrics to the DataFrame attributes.
-            if m is not None:
-                df.attrs["metrics"] = self._build_metrics(m)
-            return df
-        else:
-            return None
+        # pd.concat generates non-consecutive index like:
+        #   Int64Index([0, 1, 0, 1, 2, 0, 1, 0, 1, 2], dtype='int64')
+        # set it to RangeIndex to be consistent with pyspark
+        n = len(df)
+        df.set_index(pd.RangeIndex(start=0, stop=n, step=1), inplace=True)
+
+        # Attach the metrics to the DataFrame attributes.
+        if m is not None:
+            df.attrs["metrics"] = self._build_metrics(m)
+        return df
