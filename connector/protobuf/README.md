@@ -5,13 +5,13 @@
 ### Build
 
 ```bash
-./build/mvn -Phive clean package
+./build/mvn clean package
 ```
 
 or
 
 ```bash
-./build/sbt -Phive clean package
+./build/sbt clean package
 ```
 
 ### Build with user-defined `protoc`
