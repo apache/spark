@@ -243,10 +243,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "AMBIGUOUS_REFERENCE",
   "messageParameters" : {
-    "message" : "Reference 'b' is ambiguous, could be: x.b, y.b.; line 3 pos 14"
-  }
+    "name" : "`b`",
+    "referenceNames" : "[`x`.`b`, `y`.`b`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 113,
+    "stopIndex" : 113,
+    "fragment" : "b"
+  } ]
 }
 
 
@@ -438,10 +446,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "AMBIGUOUS_REFERENCE",
   "messageParameters" : {
-    "message" : "Reference 'b' is ambiguous, could be: x.b, y.b.; line 3 pos 14"
-  }
+    "name" : "`b`",
+    "referenceNames" : "[`x`.`b`, `y`.`b`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 120,
+    "stopIndex" : 120,
+    "fragment" : "b"
+  } ]
 }
 
 
@@ -468,10 +484,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "AMBIGUOUS_REFERENCE",
   "messageParameters" : {
-    "message" : "Reference 'b' is ambiguous, could be: x.b, y.b.; line 1 pos 21"
-  }
+    "name" : "`b`",
+    "referenceNames" : "[`x`.`b`, `y`.`b`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 22,
+    "stopIndex" : 22,
+    "fragment" : "b"
+  } ]
 }
 
 

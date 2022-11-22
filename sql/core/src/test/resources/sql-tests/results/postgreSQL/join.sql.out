@@ -547,10 +547,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "AMBIGUOUS_REFERENCE",
   "messageParameters" : {
-    "message" : "Reference 'i' is ambiguous, could be: spark_catalog.default.j1_tbl.i, spark_catalog.default.j2_tbl.i.; line 1 pos 20"
-  }
+    "name" : "`i`",
+    "referenceNames" : "[`spark_catalog`.`default`.`j1_tbl`.`i`, `spark_catalog`.`default`.`j2_tbl`.`i`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 21,
+    "stopIndex" : 21,
+    "fragment" : "i"
+  } ]
 }
 
 
@@ -3241,10 +3249,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "AMBIGUOUS_REFERENCE",
   "messageParameters" : {
-    "message" : "Reference 'f1' is ambiguous, could be: j.f1, j.f1.; line 2 pos 63"
-  }
+    "name" : "`f1`",
+    "referenceNames" : "[`j`.`f1`, `j`.`f1`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 78,
+    "stopIndex" : 79,
+    "fragment" : "f1"
+  } ]
 }
 
 

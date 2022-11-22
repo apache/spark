@@ -6,10 +6,20 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
   "messageParameters" : {
-    "message" : "requirement failed: concat_ws requires at least one argument.; line 1 pos 7"
-  }
+    "actualNum" : "0",
+    "expectedNum" : "> 0",
+    "functionName" : "`concat_ws`",
+    "sqlExpr" : "\"concat_ws()\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 18,
+    "fragment" : "concat_ws()"
+  } ]
 }
 
 
@@ -20,10 +30,20 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
   "messageParameters" : {
-    "message" : "requirement failed: format_string() should take at least 1 argument; line 1 pos 7"
-  }
+    "actualNum" : "0",
+    "expectedNum" : "> 0",
+    "functionName" : "`format_string`",
+    "sqlExpr" : "\"format_string()\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 22,
+    "fragment" : "format_string()"
+  } ]
 }
 
 
@@ -1590,10 +1610,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1100",
   "messageParameters" : {
-    "message" : "The 'format' parameter of function 'to_binary' needs to be a string literal.; line 1 pos 7"
-  }
+    "argName" : "format",
+    "funcName" : "to_binary",
+    "requiredType" : "string"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 26,
+    "fragment" : "to_binary('abc', 1)"
+  } ]
 }
 
 

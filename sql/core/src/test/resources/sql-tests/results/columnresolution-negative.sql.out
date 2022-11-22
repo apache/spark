@@ -70,10 +70,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "AMBIGUOUS_REFERENCE",
   "messageParameters" : {
-    "message" : "Reference 'i1' is ambiguous, could be: spark_catalog.mydb1.t1.i1, spark_catalog.mydb1.t1.i1.; line 1 pos 7"
-  }
+    "name" : "`i1`",
+    "referenceNames" : "[`spark_catalog`.`mydb1`.`t1`.`i1`, `spark_catalog`.`mydb1`.`t1`.`i1`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 9,
+    "fragment" : "i1"
+  } ]
 }
 
 
@@ -84,10 +92,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "AMBIGUOUS_REFERENCE",
   "messageParameters" : {
-    "message" : "Reference 't1.i1' is ambiguous, could be: spark_catalog.mydb1.t1.i1, spark_catalog.mydb1.t1.i1.; line 1 pos 7"
-  }
+    "name" : "`t1`.`i1`",
+    "referenceNames" : "[`spark_catalog`.`mydb1`.`t1`.`i1`, `spark_catalog`.`mydb1`.`t1`.`i1`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 12,
+    "fragment" : "t1.i1"
+  } ]
 }
 
 
@@ -98,10 +114,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "AMBIGUOUS_REFERENCE",
   "messageParameters" : {
-    "message" : "Reference 'mydb1.t1.i1' is ambiguous, could be: spark_catalog.mydb1.t1.i1, spark_catalog.mydb1.t1.i1.; line 1 pos 7"
-  }
+    "name" : "`mydb1`.`t1`.`i1`",
+    "referenceNames" : "[`spark_catalog`.`mydb1`.`t1`.`i1`, `spark_catalog`.`mydb1`.`t1`.`i1`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 18,
+    "fragment" : "mydb1.t1.i1"
+  } ]
 }
 
 
@@ -112,10 +136,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "AMBIGUOUS_REFERENCE",
   "messageParameters" : {
-    "message" : "Reference 'i1' is ambiguous, could be: spark_catalog.mydb1.t1.i1, spark_catalog.mydb2.t1.i1.; line 1 pos 7"
-  }
+    "name" : "`i1`",
+    "referenceNames" : "[`spark_catalog`.`mydb1`.`t1`.`i1`, `spark_catalog`.`mydb2`.`t1`.`i1`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 9,
+    "fragment" : "i1"
+  } ]
 }
 
 
@@ -126,10 +158,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "AMBIGUOUS_REFERENCE",
   "messageParameters" : {
-    "message" : "Reference 't1.i1' is ambiguous, could be: spark_catalog.mydb1.t1.i1, spark_catalog.mydb2.t1.i1.; line 1 pos 7"
-  }
+    "name" : "`t1`.`i1`",
+    "referenceNames" : "[`spark_catalog`.`mydb1`.`t1`.`i1`, `spark_catalog`.`mydb2`.`t1`.`i1`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 12,
+    "fragment" : "t1.i1"
+  } ]
 }
 
 
@@ -148,10 +188,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "AMBIGUOUS_REFERENCE",
   "messageParameters" : {
-    "message" : "Reference 'i1' is ambiguous, could be: spark_catalog.mydb2.t1.i1, spark_catalog.mydb1.t1.i1.; line 1 pos 7"
-  }
+    "name" : "`i1`",
+    "referenceNames" : "[`spark_catalog`.`mydb1`.`t1`.`i1`, `spark_catalog`.`mydb2`.`t1`.`i1`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 9,
+    "fragment" : "i1"
+  } ]
 }
 
 
@@ -162,10 +210,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "AMBIGUOUS_REFERENCE",
   "messageParameters" : {
-    "message" : "Reference 't1.i1' is ambiguous, could be: spark_catalog.mydb2.t1.i1, spark_catalog.mydb1.t1.i1.; line 1 pos 7"
-  }
+    "name" : "`t1`.`i1`",
+    "referenceNames" : "[`spark_catalog`.`mydb1`.`t1`.`i1`, `spark_catalog`.`mydb2`.`t1`.`i1`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 12,
+    "fragment" : "t1.i1"
+  } ]
 }
 
 
@@ -176,10 +232,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "AMBIGUOUS_REFERENCE",
   "messageParameters" : {
-    "message" : "Reference 'i1' is ambiguous, could be: spark_catalog.mydb2.t1.i1, spark_catalog.mydb2.t1.i1.; line 1 pos 7"
-  }
+    "name" : "`i1`",
+    "referenceNames" : "[`spark_catalog`.`mydb2`.`t1`.`i1`, `spark_catalog`.`mydb2`.`t1`.`i1`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 9,
+    "fragment" : "i1"
+  } ]
 }
 
 
@@ -190,10 +254,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LEGACY",
+  "errorClass" : "AMBIGUOUS_REFERENCE",
   "messageParameters" : {
-    "message" : "Reference 't1.i1' is ambiguous, could be: spark_catalog.mydb2.t1.i1, spark_catalog.mydb2.t1.i1.; line 1 pos 7"
-  }
+    "name" : "`t1`.`i1`",
+    "referenceNames" : "[`spark_catalog`.`mydb2`.`t1`.`i1`, `spark_catalog`.`mydb2`.`t1`.`i1`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 12,
+    "fragment" : "t1.i1"
+  } ]
 }
 
 
