@@ -1118,7 +1118,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       // Make sure the format string contains at least one digit.
       ("454", "$") -> InvalidFormat(
         errorSubClass = "WRONG_NUM_DIGIT",
-        messageParameters = Map.empty),
+        messageParameters = Map("format" -> "'$'")),
       // Make sure the format string contains at most one decimal point.
       ("454", "99.99.99") ->
         InvalidFormat(
@@ -1159,7 +1159,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         ),
       ("-$54", "MI$99MI") ->
         InvalidFormat(
-          errorSubClass = "_WRONG_NUM_TOKEN",
+          errorSubClass = "WRONG_NUM_TOKEN",
           messageParameters = Map(
             "token" -> "MI",
             "format" -> toSQLValue("MI$99MI", StringType))
