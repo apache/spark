@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, TableSpec}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.connector.catalog.{Identifier, SupportsWrite, Table, TableCatalog, TableProvider, V1Table, V2TableWithV1Fallback}
+import org.apache.spark.sql.connector.catalog.{Identifier, SupportsWrite, Table, TableCatalog, TableProvider, V1Table, V2TableWithOptionalV1Fallback, V2TableWithV1Fallback}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
@@ -327,6 +327,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         startQuery(t, extraOptions, catalogAndIdent = Some(catalog.asTableCatalog, identifier))
       case t: V2TableWithV1Fallback =>
         writeToV1Table(t.v1Table)
+      case t: V2TableWithOptionalV1Fallback if t.v1Table.isDefined =>
+        writeToV1Table(t.v1Table.get)
       case t: V1Table =>
         writeToV1Table(t.v1Table)
       case t => throw QueryCompilationErrors.tableNotSupportStreamingWriteError(tableName, t)

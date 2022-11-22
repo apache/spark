@@ -20,6 +20,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.read.ScanBuilder
@@ -41,6 +42,10 @@ class DummyReadOnlyFileDataSourceV2 extends FileDataSourceV2 {
   override def shortName(): String = "parquet"
 
   override def getTable(options: CaseInsensitiveStringMap): Table = {
+    new DummyReadOnlyFileTable
+  }
+
+  override def getTable(catalogTable: CatalogTable): Table = {
     new DummyReadOnlyFileTable
   }
 }
@@ -65,6 +70,10 @@ class DummyWriteOnlyFileDataSourceV2 extends FileDataSourceV2 {
   override def shortName(): String = "parquet"
 
   override def getTable(options: CaseInsensitiveStringMap): Table = {
+    new DummyWriteOnlyFileTable
+  }
+
+  override def getTable(catalogTable: CatalogTable): Table = {
     new DummyWriteOnlyFileTable
   }
 }

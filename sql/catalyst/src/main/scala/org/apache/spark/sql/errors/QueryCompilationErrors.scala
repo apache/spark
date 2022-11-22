@@ -773,12 +773,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map.empty)
   }
 
-  def alterColumnCannotFindColumnInV1TableError(colName: String, v1Table: V1Table): Throwable = {
+  def alterColumnCannotFindColumnInV1TableError(colName: String, schema: StructType): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1054",
       messageParameters = Map(
         "colName" -> colName,
-        "fieldNames" -> v1Table.schema.fieldNames.mkString(", ")))
+        "fieldNames" -> schema.fieldNames.mkString(", ")))
   }
 
   def invalidDatabaseNameError(quoted: String): Throwable = {

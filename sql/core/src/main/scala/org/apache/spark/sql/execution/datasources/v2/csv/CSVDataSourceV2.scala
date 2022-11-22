@@ -16,7 +16,8 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.csv
 
-import org.apache.spark.sql.connector.catalog.Table
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Implicits, Table}
 import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
@@ -41,5 +42,18 @@ class CSVDataSourceV2 extends FileDataSourceV2 {
     val tableName = getTableName(options, paths)
     val optionsWithoutPaths = getOptionsWithoutPaths(options)
     CSVTable(tableName, sparkSession, optionsWithoutPaths, paths, Some(schema), fallbackFileFormat)
+  }
+
+  override def getTable(catalogTable: CatalogTable): CSVTable = {
+    import CatalogV2Implicits._
+
+    CSVTable(
+      catalogTable.identifier.quoted,
+      sparkSession,
+      CaseInsensitiveStringMap.empty(),
+      catalogTable.storage.locationUri.toSeq.map(CatalogUtils.URIToString),
+      if (catalogTable.schema.isEmpty) None else Some(catalogTable.schema),
+      fallbackFileFormat,
+      Some(catalogTable))
   }
 }

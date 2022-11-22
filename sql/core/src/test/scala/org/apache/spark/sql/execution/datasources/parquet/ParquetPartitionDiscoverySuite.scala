@@ -1137,15 +1137,6 @@ abstract class ParquetPartitionDiscoverySuite
       checkAnswer(res, Seq(Row(1, 2, 3, 4.0f)))
     }
   }
-}
-
-class ParquetV1PartitionDiscoverySuite extends ParquetPartitionDiscoverySuite {
-  import testImplicits._
-
-  override protected def sparkConf: SparkConf =
-    super
-      .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
 
   test("read partitioned table - partition key included in Parquet file") {
     withTempDir { base =>
@@ -1227,6 +1218,26 @@ class ParquetV1PartitionDiscoverySuite extends ParquetPartitionDiscoverySuite {
     }
   }
 
+  test("SPARK-18108 Parquet reader fails when data column types conflict with partition ones") {
+    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        val df = Seq((1L, 2.0)).toDF("a", "b")
+        df.write.parquet(s"$path/a=1")
+        checkAnswer(spark.read.parquet(s"$path"), Seq(Row(1, 2.0)))
+      }
+    }
+  }
+}
+
+class ParquetV1PartitionDiscoverySuite extends ParquetPartitionDiscoverySuite {
+  import testImplicits._
+
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
+
   test("SPARK-7749 Non-partitioned table should have empty partition spec") {
     withTempPath { dir =>
       (1 to 10).map(i => (i, i.toString)).toDF("a", "b").write.parquet(dir.getCanonicalPath)
@@ -1237,17 +1248,6 @@ class ParquetV1PartitionDiscoverySuite extends ParquetPartitionDiscoverySuite {
           assert(location.partitionSpec() === PartitionSpec.emptySpec)
       }.getOrElse {
         fail(s"Expecting a matching HadoopFsRelation, but got:\n$queryExecution")
-      }
-    }
-  }
-
-  test("SPARK-18108 Parquet reader fails when data column types conflict with partition ones") {
-    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
-      withTempPath { dir =>
-        val path = dir.getCanonicalPath
-        val df = Seq((1L, 2.0)).toDF("a", "b")
-        df.write.parquet(s"$path/a=1")
-        checkAnswer(spark.read.parquet(s"$path"), Seq(Row(1, 2.0)))
       }
     }
   }
@@ -1309,106 +1309,16 @@ class ParquetV2PartitionDiscoverySuite extends ParquetPartitionDiscoverySuite {
     assert(s"p_int=${ExternalCatalogUtils.DEFAULT_PARTITION_NAME}" === path)
   }
 
-  test("read partitioned table - partition key included in Parquet file") {
-    withTempDir { base =>
-      for {
-        pi <- Seq(1, 2)
-        ps <- Seq("foo", "bar")
-      } {
-        makeParquetFile(
-          (1 to 10).map(i => ParquetDataWithKey(i, pi, i.toString, ps)),
-          makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
-      }
-
-      spark.read.parquet(base.getCanonicalPath).createOrReplaceTempView("t")
-
-      withTempView("t") {
-        checkAnswer(
-          sql("SELECT * FROM t"),
-          for {
-            i <- 1 to 10
-            pi <- Seq(1, 2)
-            ps <- Seq("foo", "bar")
-          } yield Row(i, i.toString, pi, ps))
-
-        checkAnswer(
-          sql("SELECT intField, pi FROM t"),
-          for {
-            i <- 1 to 10
-            pi <- Seq(1, 2)
-            _ <- Seq("foo", "bar")
-          } yield Row(i, pi))
-
-        checkAnswer(
-          sql("SELECT * FROM t WHERE pi = 1"),
-          for {
-            i <- 1 to 10
-            ps <- Seq("foo", "bar")
-          } yield Row(i, i.toString, 1, ps))
-
-        checkAnswer(
-          sql("SELECT * FROM t WHERE ps = 'foo'"),
-          for {
-            i <- 1 to 10
-            pi <- Seq(1, 2)
-          } yield Row(i, i.toString, pi, "foo"))
-      }
-    }
-  }
-
-  test("read partitioned table - with nulls and partition keys are included in Parquet file") {
-    withTempDir { base =>
-      for {
-        pi <- Seq(1, 2)
-        ps <- Seq("foo", null.asInstanceOf[String])
-      } {
-        makeParquetFile(
-          (1 to 10).map(i => ParquetDataWithKey(i, pi, i.toString, ps)),
-          makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
-      }
-
-      val parquetRelation = spark.read.format("parquet").load(base.getCanonicalPath)
-      parquetRelation.createOrReplaceTempView("t")
-
-      withTempView("t") {
-        checkAnswer(
-          sql("SELECT * FROM t"),
-          for {
-            i <- 1 to 10
-            pi <- Seq(1, 2)
-            ps <- Seq("foo", null.asInstanceOf[String])
-          } yield Row(i, i.toString, pi, ps))
-
-        checkAnswer(
-          sql("SELECT * FROM t WHERE ps IS NULL"),
-          for {
-            i <- 1 to 10
-            pi <- Seq(1, 2)
-          } yield Row(i, i.toString, pi, null))
-      }
-    }
-  }
-
   test("SPARK-7749 Non-partitioned table should have empty partition spec") {
     withTempPath { dir =>
       (1 to 10).map(i => (i, i.toString)).toDF("a", "b").write.parquet(dir.getCanonicalPath)
       val queryExecution = spark.read.parquet(dir.getCanonicalPath).queryExecution
       queryExecution.analyzed.collectFirst {
         case DataSourceV2Relation(fileTable: FileTable, _, _, _, _) =>
-          assert(fileTable.fileIndex.partitionSpec() === PartitionSpec.emptySpec)
+          assert(fileTable.fileIndex.asInstanceOf[PartitioningAwareFileIndex].partitionSpec() ===
+            PartitionSpec.emptySpec)
       }.getOrElse {
         fail(s"Expecting a matching DataSourceV2Relation, but got:\n$queryExecution")
-      }
-    }
-  }
-
-  test("SPARK-18108 Parquet reader fails when data column types conflict with partition ones") {
-    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
-      withTempPath { dir =>
-        val path = dir.getCanonicalPath
-        val df = Seq((1L, 2.0)).toDF("a", "b")
-        df.write.parquet(s"$path/a=1")
-        checkAnswer(spark.read.parquet(s"$path"), Seq(Row(2.0, 1)))
       }
     }
   }

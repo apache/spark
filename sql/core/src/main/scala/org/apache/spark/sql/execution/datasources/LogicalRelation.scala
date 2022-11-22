@@ -94,9 +94,13 @@ object LogicalRelation {
   }
 
   def apply(relation: BaseRelation, table: CatalogTable): LogicalRelation = {
+    apply(relation, Some(table))
+  }
+
+  def apply(relation: BaseRelation, table: Option[CatalogTable]): LogicalRelation = {
     // The v1 source may return schema containing char/varchar type. We replace char/varchar
     // with "annotated" string type here as the query engine doesn't support char/varchar yet.
     val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(relation.schema)
-    LogicalRelation(relation, schema.toAttributes, Some(table), false)
+    LogicalRelation(relation, schema.toAttributes, table, false)
   }
 }

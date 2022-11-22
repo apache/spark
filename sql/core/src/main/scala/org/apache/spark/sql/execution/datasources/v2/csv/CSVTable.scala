@@ -16,11 +16,14 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.csv
 
+import java.util.Objects
+
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.FileStatus
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.csv.CSVOptions
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, Write, WriteBuilder}
 import org.apache.spark.sql.execution.datasources.FileFormat
@@ -32,13 +35,15 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 case class CSVTable(
     name: String,
     sparkSession: SparkSession,
-    options: CaseInsensitiveStringMap,
-    paths: Seq[String],
-    userSpecifiedSchema: Option[StructType],
-    fallbackFileFormat: Class[_ <: FileFormat])
-  extends FileTable(sparkSession, options, paths, userSpecifiedSchema) {
+    override val options: CaseInsensitiveStringMap,
+    override val paths: Seq[String],
+    override val userSpecifiedSchema: Option[StructType],
+    fallbackFileFormat: Class[_ <: FileFormat],
+    override val v1Table: Option[CatalogTable] = None)
+  extends FileTable(sparkSession, options, paths, userSpecifiedSchema, v1Table) {
   override def newScanBuilder(options: CaseInsensitiveStringMap): CSVScanBuilder =
-    CSVScanBuilder(sparkSession, fileIndex, schema, dataSchema, options)
+    CSVScanBuilder(sparkSession, fileIndex, schema, dataSchema,
+      new CaseInsensitiveStringMap(allOptions.asJava))
 
   override def inferSchema(files: Seq[FileStatus]): Option[StructType] = {
     val parsedOptions = new CSVOptions(
@@ -65,4 +70,16 @@ case class CSVTable(
   }
 
   override def formatName: String = "CSV"
+
+  override def toString: String = s"CSVTable($name)"
+
+  override def equals(obj: Any): Boolean = obj match {
+    case p: CSVTable =>
+      super.equals(p) && name == p.name && fallbackFileFormat == p.fallbackFileFormat
+
+    case _ => false
+  }
+
+  override def hashCode(): Int =
+    Objects.hash(options, paths, userSpecifiedSchema, name, fallbackFileFormat)
 }

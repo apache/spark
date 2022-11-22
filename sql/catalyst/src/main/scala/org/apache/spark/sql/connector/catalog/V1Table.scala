@@ -48,20 +48,7 @@ private[sql] case class V1Table(v1Table: CatalogTable) extends Table {
 
   override lazy val schema: StructType = v1Table.schema
 
-  override lazy val partitioning: Array[Transform] = {
-    import CatalogV2Implicits._
-    val partitions = new mutable.ArrayBuffer[Transform]()
-
-    v1Table.partitionColumnNames.foreach { col =>
-      partitions += LogicalExpressions.identity(LogicalExpressions.reference(Seq(col)))
-    }
-
-    v1Table.bucketSpec.foreach { spec =>
-      partitions += spec.asTransform
-    }
-
-    partitions.toArray
-  }
+  override lazy val partitioning: Array[Transform] = V1Table.toV2Partitioning(v1Table)
 
   override def name: String = v1Table.identifier.quoted
 
@@ -86,6 +73,27 @@ private[sql] object V1Table {
       (if (external) Some(TableCatalog.PROP_EXTERNAL -> "true") else None) ++
       Some(TableCatalog.PROP_OWNER -> v1Table.owner)
   }
+
+  def toV2Partitioning(v1Table: CatalogTable): Array[Transform] = {
+    import CatalogV2Implicits._
+    val partitions = new mutable.ArrayBuffer[Transform]()
+
+    v1Table.partitionColumnNames.foreach { col =>
+      partitions += LogicalExpressions.identity(LogicalExpressions.reference(Seq(col)))
+    }
+
+    v1Table.bucketSpec.foreach { spec =>
+      partitions += spec.asTransform
+    }
+
+    partitions.toArray
+  }
+
+  def toOptions(properties: Map[String, String]): Map[String, String] = {
+    properties.filterKeys(_.startsWith(TableCatalog.OPTION_PREFIX)).map {
+      case (key, value) => key.drop(TableCatalog.OPTION_PREFIX.length) -> value
+    }.toMap
+  }
 }
 
 /**
@@ -94,4 +102,19 @@ private[sql] object V1Table {
  */
 private[sql] trait V2TableWithV1Fallback extends Table {
   def v1Table: CatalogTable
+}
+
+/**
+ * A V2 table with optional V1 fallback support. `FileTable` implementations use this to support V2
+ * in select queries but remain using V1 in commands and DML.
+ */
+private[sql] trait V2TableWithOptionalV1Fallback extends Table {
+  def v1Table: Option[CatalogTable]
+}
+
+/**
+ * A table whose metadata can be refreshed.
+ */
+private[sql] trait Refreshable extends Table {
+  def refresh(): Unit
 }

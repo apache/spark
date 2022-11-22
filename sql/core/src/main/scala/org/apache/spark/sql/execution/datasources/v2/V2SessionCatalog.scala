@@ -23,6 +23,7 @@ import java.util
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTableType, CatalogUtils, SessionCatalog}
@@ -31,6 +32,7 @@ import org.apache.spark.sql.connector.catalog.NamespaceChange.RemoveProperty
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.V1Function
@@ -63,8 +65,13 @@ class V2SessionCatalog(catalog: SessionCatalog)
     }
   }
 
+  lazy val sparkSession = SparkSession.active
+
   override def loadTable(ident: Identifier): Table = {
-    V1Table(catalog.getTableMetadata(ident.asTableIdentifier))
+    val catalogTable = catalog.getTableMetadata(ident.asTableIdentifier)
+    catalogTable.provider.flatMap(DataSource.lookupDataSourceV2(_, conf)).collect {
+      case ds: FileDataSourceV2 => ds.getTable(catalogTable)
+    }.getOrElse(V1Table(catalogTable))
   }
 
   override def loadTable(ident: Identifier, timestamp: Long): Table = {
@@ -111,7 +118,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
     val provider = properties.getOrDefault(TableCatalog.PROP_PROVIDER, conf.defaultDataSourceName)
     val tableProperties = properties.asScala
     val location = Option(properties.get(TableCatalog.PROP_LOCATION))
-    val storage = DataSource.buildStorageFormatFromOptions(toOptions(tableProperties.toMap))
+    val storage = DataSource.buildStorageFormatFromOptions(V1Table.toOptions(tableProperties.toMap))
         .copy(locationUri = location.map(CatalogUtils.stringToURI))
     val isExternal = properties.containsKey(TableCatalog.PROP_EXTERNAL)
     val tableType = if (isExternal || location.isDefined) {
@@ -120,17 +127,25 @@ class V2SessionCatalog(catalog: SessionCatalog)
       CatalogTableType.MANAGED
     }
 
+    val partitionSchema = partitionColumns.map { partCol =>
+      schema.find(_.name == partCol).get
+    }
+    val reorderedSchema =
+      StructType(schema.filterNot(partitionSchema.contains) ++ partitionSchema)
+
     val tableDesc = CatalogTable(
       identifier = ident.asTableIdentifier,
       tableType = tableType,
       storage = storage,
-      schema = schema,
+      schema = reorderedSchema,
       provider = Some(provider),
       partitionColumnNames = partitionColumns,
       bucketSpec = maybeBucketSpec,
       properties = tableProperties.toMap,
       tracksPartitionsInCatalog = conf.manageFilesourcePartitions,
       comment = Option(properties.get(TableCatalog.PROP_COMMENT)))
+
+    DDLUtils.checkTableColumns(tableDesc)
 
     try {
       catalog.createTable(tableDesc, ignoreIfExists = false)
@@ -140,12 +155,6 @@ class V2SessionCatalog(catalog: SessionCatalog)
     }
 
     loadTable(ident)
-  }
-
-  private def toOptions(properties: Map[String, String]): Map[String, String] = {
-    properties.filterKeys(_.startsWith(TableCatalog.OPTION_PREFIX)).map {
-      case (key, value) => key.drop(TableCatalog.OPTION_PREFIX.length) -> value
-    }.toMap
   }
 
   override def alterTable(

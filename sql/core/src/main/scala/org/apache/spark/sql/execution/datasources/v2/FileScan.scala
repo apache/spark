@@ -47,7 +47,7 @@ trait FileScan extends Scan
 
   def sparkSession: SparkSession
 
-  def fileIndex: PartitioningAwareFileIndex
+  def fileIndex: FileIndex
 
   def dataSchema: StructType
 
@@ -129,7 +129,7 @@ trait FileScan extends Scan
       "Location" -> locationDesc)
   }
 
-  protected def partitions: Seq[FilePartition] = {
+  private lazy val partitions: Seq[FilePartition] = {
     val selectedPartitions = fileIndex.listFiles(partitionFilters, dataFilters)
     val maxSplitBytes = FilePartition.maxSplitBytes(sparkSession, selectedPartitions)
     val partitionAttributes = fileIndex.partitionSchema.toAttributes

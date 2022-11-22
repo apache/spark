@@ -17,7 +17,8 @@
 package org.apache.spark.sql.v2.avro
 
 import org.apache.spark.sql.avro.AvroFileFormat
-import org.apache.spark.sql.connector.catalog.Table
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Implicits, Table}
 import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.types.StructType
@@ -41,5 +42,18 @@ class AvroDataSourceV2 extends FileDataSourceV2 {
     val tableName = getTableName(options, paths)
     val optionsWithoutPaths = getOptionsWithoutPaths(options)
     AvroTable(tableName, sparkSession, optionsWithoutPaths, paths, Some(schema), fallbackFileFormat)
+  }
+
+  override def getTable(catalogTable: CatalogTable): AvroTable = {
+    import CatalogV2Implicits._
+
+    AvroTable(
+      catalogTable.identifier.quoted,
+      sparkSession,
+      CaseInsensitiveStringMap.empty(),
+      catalogTable.storage.locationUri.toSeq.map(CatalogUtils.URIToString),
+      if (catalogTable.schema.isEmpty) None else Some(catalogTable.schema),
+      fallbackFileFormat,
+      Some(catalogTable))
   }
 }

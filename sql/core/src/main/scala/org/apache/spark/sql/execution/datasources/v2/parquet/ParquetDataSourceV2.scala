@@ -16,7 +16,8 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.parquet
 
-import org.apache.spark.sql.connector.catalog.Table
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Implicits, Table}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.datasources.v2._
@@ -43,5 +44,17 @@ class ParquetDataSourceV2 extends FileDataSourceV2 {
     ParquetTable(
       tableName, sparkSession, optionsWithoutPaths, paths, Some(schema), fallbackFileFormat)
   }
-}
 
+  override def getTable(catalogTable: CatalogTable): ParquetTable = {
+    import CatalogV2Implicits._
+
+    ParquetTable(
+      catalogTable.identifier.quoted,
+      sparkSession,
+      CaseInsensitiveStringMap.empty(),
+      catalogTable.storage.locationUri.toSeq.map(CatalogUtils.URIToString),
+      if (catalogTable.schema.isEmpty) None else Some(catalogTable.schema),
+      fallbackFileFormat,
+      Some(catalogTable))
+  }
+}

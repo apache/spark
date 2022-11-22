@@ -26,6 +26,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.connector.catalog.{Table, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -113,6 +114,8 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
       getTable(new CaseInsensitiveStringMap(properties), schema)
     }
   }
+
+  def getTable(catalogTable: CatalogTable): Table
 }
 
 private object FileDataSourceV2 {

@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Expression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharUtils}
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, MetadataColumn, Refreshable, SupportsMetadataColumns, Table, TableCapability, V1Table, V2TableWithOptionalV1Fallback, V2TableWithV1Fallback}
 import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -80,13 +81,7 @@ case class DataSourceV2Relation(
         s"BUG: computeStats called before pushdown on DSv2 relation: $name")
     } else {
       // when not testing, return stats because bad stats are better than failing a query
-      table.asReadable.newScanBuilder(options).build() match {
-        case r: SupportsReportStatistics =>
-          val statistics = r.estimateStatistics()
-          DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes, output)
-        case _ =>
-          Statistics(sizeInBytes = conf.defaultSizeInBytes)
-      }
+      DataSourceV2Relation.getStats(table, output, table.asReadable.newScanBuilder(options).build())
     }
   }
 
@@ -101,6 +96,13 @@ case class DataSourceV2Relation(
     } else {
       this
     }
+  }
+
+  override def refresh(): Unit = {
+    (table match {
+      case t: Refreshable => Some(t)
+      case _ => None
+    }).map(_.refresh())
   }
 }
 
@@ -132,13 +134,14 @@ case class DataSourceV2ScanRelation(
   }
 
   override def computeStats(): Statistics = {
-    scan match {
-      case r: SupportsReportStatistics =>
-        val statistics = r.estimateStatistics()
-        DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes, output)
-      case _ =>
-        Statistics(sizeInBytes = conf.defaultSizeInBytes)
-    }
+    DataSourceV2Relation.getStats(relation.table, output, scan)
+  }
+
+  override def refresh(): Unit = {
+    (relation.table match {
+      case t: Refreshable => Some(t)
+      case _ => None
+    }).map(_.refresh())
   }
 }
 
@@ -183,7 +186,7 @@ case class StreamingDataSourceV2Relation(
   override protected def stringArgs: Iterator[Any] = stringArgsVal.iterator
 }
 
-object DataSourceV2Relation {
+object DataSourceV2Relation extends SQLConfHelper {
   def create(
       table: Table,
       catalog: Option[CatalogPlugin],
@@ -255,5 +258,25 @@ object DataSourceV2Relation {
       sizeInBytes = v2Statistics.sizeInBytes().orElse(defaultSizeInBytes),
       rowCount = numRows,
       attributeStats = AttributeMap(colStats))
+  }
+
+  def getStats(table: Table, output: Seq[Attribute], scan: Scan): Statistics = {
+    val catalogTable = table match {
+      case t: V1Table => Some(t.v1Table)
+      case t: V2TableWithV1Fallback => Some(t.v1Table)
+      case t: V2TableWithOptionalV1Fallback => t.v1Table
+      case _ => None
+    }
+    catalogTable
+      .flatMap(_.stats.map(_.toPlanStats(output, conf.cboEnabled || conf.planStatsEnabled)))
+      .getOrElse(
+        scan match {
+          case r: SupportsReportStatistics =>
+            val statistics = r.estimateStatistics()
+            DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes, output)
+          case _ =>
+            Statistics(sizeInBytes = conf.defaultSizeInBytes)
+        }
+      )
   }
 }

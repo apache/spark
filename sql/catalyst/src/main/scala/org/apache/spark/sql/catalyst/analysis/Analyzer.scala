@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util
 import java.util.Locale
+import java.util.concurrent.Callable
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable
@@ -1245,6 +1246,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             val v1Fallback = table match {
               case withFallback: V2TableWithV1Fallback =>
                 Some(UnresolvedCatalogRelation(withFallback.v1Table, isStreaming = true))
+              case withFallback: V2TableWithOptionalV1Fallback if withFallback.v1Table.isDefined =>
+                Some(UnresolvedCatalogRelation(withFallback.v1Table.get, isStreaming = true))
               case _ => None
             }
             SubqueryAlias(
@@ -1252,9 +1255,25 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               StreamingRelationV2(None, table.name, table, options, table.columns.toAttributes,
                 Some(catalog), Some(ident), v1Fallback))
           } else {
-            SubqueryAlias(
-              catalog.name +: ident.asMultipartIdentifier,
-              DataSourceV2Relation.create(table, Some(catalog), Some(ident), options))
+            val createRelation: Callable[LogicalPlan] = () => {
+              SubqueryAlias(
+                catalog.name +: ident.asMultipartIdentifier,
+                DataSourceV2Relation.create(table, Some(catalog), Some(ident), options))
+            }
+
+            val v1Table = if (CatalogV2Util.isSessionCatalog(catalog)) {
+              table match {
+                case t: V2TableWithV1Fallback => Some(t.v1Table)
+                case t: V2TableWithOptionalV1Fallback => t.v1Table
+                case _ => None
+              }
+            } else {
+              None
+            }
+            v1Table.map { t =>
+              val qualifiedTableName = QualifiedTableName(t.database, t.identifier.table)
+              v1SessionCatalog.getCachedPlan(qualifiedTableName, createRelation)
+            }.getOrElse(createRelation.call())
           }
       }
     }
