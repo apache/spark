@@ -657,6 +657,16 @@
           "The number format string cannot be empty."
         ]
       },
+      "ESC_AT_THE_END" : {
+        "message" : [
+          "The escape character is not allowed to end with."
+        ]
+      },
+      "ESC_IN_THE_MIDDLE" : {
+        "message" : [
+          "The escape character is not allowed to precede <char>."
+        ]
+      },
       "THOUSANDS_SEPS_MUST_BEFORE_DEC" : {
         "message" : [
           "Thousands separators (, or G) may not appear after the decimal point in the number format."
@@ -664,7 +674,7 @@
       },
       "UNEXPECTED_TOKEN" : {
         "message" : [
-          "Unexpected <token> found in the format string <format>; the structure of the format string must match: [MI|S] [$] [0|9|G|,]* [.|D] [0|9]* [$] [PR|MI|S]."
+          "Found the unexpected <token> in the format string; the structure of the format string must match: [MI|S] [$] [0|9|G|,]* [.|D] [0|9]* [$] [PR|MI|S]."
         ]
       },
       "WRONG_NUM_DIGIT" : {
@@ -699,23 +709,6 @@
     "message" : [
       "The <joinType> JOIN with LATERAL correlation is not allowed because an OUTER subquery cannot correlate to its join partner. Remove the LATERAL correlation or use an INNER JOIN, or LEFT OUTER JOIN instead."
     ]
-  },
-  "INVALID_LIKE_PATTERN" : {
-    "message" : [
-      "The pattern <pattern> is invalid."
-    ],
-    "subClass" : {
-      "ESC_AT_THE_END" : {
-        "message" : [
-          "the escape character is not allowed to end with."
-        ]
-      },
-      "ESC_IN_THE_MIDDLE" : {
-        "message" : [
-          "the escape character is not allowed to precede <char>."
-        ]
-      }
-    }
   },
   "INVALID_PANDAS_UDF_PLACEMENT" : {
     "message" : [
