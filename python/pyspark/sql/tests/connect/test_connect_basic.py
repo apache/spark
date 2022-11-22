@@ -221,7 +221,60 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             with self.assertRaises(_MultiThreadedRendezvous):
                 self.connect.sql("SELECT 1 AS X LIMIT 0").createGlobalTempView("view_1")
 
-    @unittest.skip("test_fill_na is flaky")
+    def test_to_pandas(self):
+        # SPARK-41005: Test to pandas
+        query = """
+            SELECT * FROM VALUES
+            (false, 1, NULL),
+            (false, NULL, float(2.0)),
+            (NULL, 3, float(3.0))
+            AS tab(a, b, c)
+            """
+
+        self.assert_eq(
+            self.connect.sql(query).toPandas(),
+            self.spark.sql(query).toPandas(),
+        )
+
+        query = """
+            SELECT * FROM VALUES
+            (1, 1, NULL),
+            (2, NULL, float(2.0)),
+            (3, 3, float(3.0))
+            AS tab(a, b, c)
+            """
+
+        self.assert_eq(
+            self.connect.sql(query).toPandas(),
+            self.spark.sql(query).toPandas(),
+        )
+
+        query = """
+            SELECT * FROM VALUES
+            (double(1.0), 1, "1"),
+            (NULL, NULL, NULL),
+            (double(2.0), 3, "3")
+            AS tab(a, b, c)
+            """
+
+        self.assert_eq(
+            self.connect.sql(query).toPandas(),
+            self.spark.sql(query).toPandas(),
+        )
+
+        query = """
+            SELECT * FROM VALUES
+            (float(1.0), double(1.0), 1, "1"),
+            (float(2.0), double(2.0), 2, "2"),
+            (float(3.0), double(3.0), 3, "3")
+            AS tab(a, b, c, d)
+            """
+
+        self.assert_eq(
+            self.connect.sql(query).toPandas(),
+            self.spark.sql(query).toPandas(),
+        )
+
     def test_fill_na(self):
         # SPARK-41128: Test fill na
         query = """
