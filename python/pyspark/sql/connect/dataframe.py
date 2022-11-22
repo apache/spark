@@ -132,9 +132,7 @@ class DataFrame(object):
         bool
             Whether it's empty DataFrame or not.
         """
-        if "is_empty" not in self._cache:
-            self._cache["is_empty"] = len(self.take(1)) == 0
-        return bool(self._cache["is_empty"])
+        return len(self.take(1)) == 0
 
     def select(self, *cols: "ExpressionOrString") -> "DataFrame":
         return DataFrame.withPlan(plan.Project(self._plan, *cols), session=self._session)
