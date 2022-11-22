@@ -115,6 +115,9 @@ class DataFrame(object):
         self._cache: Dict[str, Any] = {}
         self._session: "RemoteSparkSession" = session
 
+    def __repr__(self) -> str:
+        return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
+
     @classmethod
     def withPlan(cls, plan: plan.LogicalPlan, session: "RemoteSparkSession") -> "DataFrame":
         """Main initialization method used to construct a new data frame with a child plan."""
@@ -138,12 +141,25 @@ class DataFrame(object):
         ...
 
     @property
+    def dtypes(self) -> List[Tuple[str, str]]:
+        """Returns all column names and their data types as a list.
+
+        .. versionadded:: 3.4.0
+
+        Returns
+        -------
+        list
+            List of columns as tuple pairs.
+        """
+        return [(str(f.name), f.dataType.simpleString()) for f in self.schema.fields]
+
+    @property
     def columns(self) -> List[str]:
         """Returns the list of columns of the current data frame."""
         if self._plan is None:
             return []
 
-        return self.schema().names
+        return self.schema.names
 
     def sparkSession(self) -> "RemoteSparkSession":
         """Returns Spark session that created this :class:`DataFrame`.
@@ -736,6 +752,7 @@ class DataFrame(object):
         query = self._plan.to_proto(self._session)
         return self._session._to_pandas(query)
 
+    @property
     def schema(self) -> StructType:
         """Returns the schema of this :class:`DataFrame` as a :class:`pyspark.sql.types.StructType`.
 

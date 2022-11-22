@@ -137,7 +137,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertGreater(len(result), 0)
 
     def test_schema(self):
-        schema = self.connect.read.table(self.tbl_name).schema()
+        schema = self.connect.read.table(self.tbl_name).schema
         self.assertEqual(
             StructType(
                 [StructField("id", LongType(), True), StructField("name", StringType(), True)]
@@ -333,6 +333,14 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         expected = "+---+---+\n|  X|  Y|\n+---+---+\n|  1|  2|\n+---+---+\n"
         self.assertEqual(show_str, expected)
 
+    def test_repr(self):
+        # SPARK-41213: Test the __repr__ method
+        query = """SELECT * FROM VALUES (1L, NULL), (3L, "Z") AS tab(a, b)"""
+        self.assertEqual(
+            self.connect.sql(query).__repr__(),
+            self.spark.sql(query).__repr__(),
+        )
+
     def test_explain_string(self):
         # SPARK-41122: test explain API.
         plan_str = self.connect.sql("SELECT 1").explain(extended=True)
@@ -380,8 +388,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         col0 = (
             self.connect.range(1, 10)
             .select(col("id").alias("name", metadata={"max": 99}))
-            .schema()
-            .names[0]
+            .schema.names[0]
         )
         self.assertEqual("name", col0)
 
