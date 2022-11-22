@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkThrowableHelper
+import org.apache.spark.{SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, Star, TableAlreadyExistsException, UnresolvedRegex}
@@ -2281,12 +2281,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "tableName" -> tableName))
   }
 
-  def foundDuplicateColumnError(colType: String, duplicateCol: Seq[String]): Throwable = {
+  def columnAlreadyExistsError(columnName: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1233",
-      messageParameters = Map(
-        "colType" -> colType,
-        "duplicateCol" -> duplicateCol.sorted.mkString(", ")))
+      errorClass = "COLUMN_ALREADY_EXISTS",
+      messageParameters = Map("columnName" -> toSQLId(columnName)))
   }
 
   def noSuchTableError(db: String, table: String): Throwable = {
@@ -3391,5 +3389,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map(
         "unsupported" -> unsupported.toString,
         "class" -> unsupported.getClass.toString))
+  }
+
+  def funcBuildError(funcName: String, cause: Exception): Throwable = {
+    cause.getCause match {
+      case st: SparkThrowable with Throwable => st
+      case other =>
+        new AnalysisException(
+          errorClass = "FAILED_FUNCTION_CALL",
+          messageParameters = Map("funcName" -> toSQLId(funcName)),
+          cause = Option(other))
+    }
   }
 }

@@ -137,7 +137,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertGreater(len(result), 0)
 
     def test_schema(self):
-        schema = self.connect.read.table(self.tbl_name).schema()
+        schema = self.connect.read.table(self.tbl_name).schema
         self.assertEqual(
             StructType(
                 [StructField("id", LongType(), True), StructField("name", StringType(), True)]
@@ -187,6 +187,33 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertEqual(5, len(df.take(5)))
         df2 = self.connect.read.table(self.tbl_name_empty)
         self.assertEqual(0, len(df2.take(5)))
+
+    def test_drop(self):
+        # SPARK-41169: test drop
+        query = """
+            SELECT * FROM VALUES
+            (false, 1, NULL), (false, NULL, 2), (NULL, 3, 3)
+            AS tab(a, b, c)
+            """
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+        self.assert_eq(
+            cdf.drop("a").toPandas(),
+            sdf.drop("a").toPandas(),
+        )
+        self.assert_eq(
+            cdf.drop("a", "b").toPandas(),
+            sdf.drop("a", "b").toPandas(),
+        )
+        self.assert_eq(
+            cdf.drop("a", "x").toPandas(),
+            sdf.drop("a", "x").toPandas(),
+        )
+        self.assert_eq(
+            cdf.drop(cdf.a, cdf.x).toPandas(),
+            sdf.drop("a", "x").toPandas(),
+        )
 
     def test_subquery_alias(self) -> None:
         # SPARK-40938: test subquery alias.
@@ -319,6 +346,11 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertEqual(1, len(pdf.columns))  # one column
         self.assertEqual("X", pdf.columns[0])
 
+    def test_is_empty(self):
+        # SPARK-41212: Test is empty
+        self.assertFalse(self.connect.sql("SELECT 1 AS X").isEmpty())
+        self.assertTrue(self.connect.sql("SELECT 1 AS X LIMIT 0").isEmpty())
+
     def test_session(self):
         self.assertEqual(self.connect, self.connect.sql("SELECT 1").sparkSession())
 
@@ -332,6 +364,14 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         # +---+---+
         expected = "+---+---+\n|  X|  Y|\n+---+---+\n|  1|  2|\n+---+---+\n"
         self.assertEqual(show_str, expected)
+
+    def test_repr(self):
+        # SPARK-41213: Test the __repr__ method
+        query = """SELECT * FROM VALUES (1L, NULL), (3L, "Z") AS tab(a, b)"""
+        self.assertEqual(
+            self.connect.sql(query).__repr__(),
+            self.spark.sql(query).__repr__(),
+        )
 
     def test_explain_string(self):
         # SPARK-41122: test explain API.
@@ -380,14 +420,13 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         col0 = (
             self.connect.range(1, 10)
             .select(col("id").alias("name", metadata={"max": 99}))
-            .schema()
-            .names[0]
+            .schema.names[0]
         )
         self.assertEqual("name", col0)
 
         with self.assertRaises(grpc.RpcError) as exc:
             self.connect.range(1, 10).select(col("id").alias("this", "is", "not")).collect()
-        self.assertIn("Buffer(this, is, not)", str(exc.exception))
+        self.assertIn("(this, is, not)", str(exc.exception))
 
 
 class ChannelBuilderTests(ReusedPySparkTestCase):

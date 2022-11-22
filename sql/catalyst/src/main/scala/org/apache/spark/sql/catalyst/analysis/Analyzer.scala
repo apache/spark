@@ -3505,8 +3505,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     private def resolveUserSpecifiedColumns(i: InsertIntoStatement): Seq[NamedExpression] = {
-      SchemaUtils.checkColumnNameDuplication(
-        i.userSpecifiedCols, "in the column list", resolver)
+      SchemaUtils.checkColumnNameDuplication(i.userSpecifiedCols, resolver)
 
       i.userSpecifiedCols.map { col =>
         i.table.resolve(Seq(col), resolver).getOrElse {

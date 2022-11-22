@@ -371,10 +371,12 @@ abstract class FileStreamSinkSuite extends StreamTest {
           }
         }
 
-        val errorMsg = intercept[AnalysisException] {
-          spark.read.schema(s"$c0 INT, $c1 INT").json(outputDir).as[(Int, Int)]
-        }.getMessage
-        assert(errorMsg.contains("Found duplicate column(s) in the data schema: "))
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.read.schema(s"$c0 INT, $c1 INT").json(outputDir).as[(Int, Int)]
+          },
+          errorClass = "COLUMN_ALREADY_EXISTS",
+          parameters = Map("columnName" -> s"`${c1.toLowerCase(Locale.ROOT)}`"))
       }
     }
   }

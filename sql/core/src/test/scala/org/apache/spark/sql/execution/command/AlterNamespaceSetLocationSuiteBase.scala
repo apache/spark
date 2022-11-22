@@ -51,8 +51,8 @@ trait AlterNamespaceSetLocationSuiteBase extends QueryTest with DDLCommandTestUt
         exception = intercept[SparkIllegalArgumentException] {
           sql(sqlText)
         },
-        errorClass = "UNSUPPORTED_EMPTY_LOCATION",
-        parameters = Map.empty)
+        errorClass = "INVALID_EMPTY_LOCATION",
+        parameters = Map("location" -> ""))
     }
   }
 
