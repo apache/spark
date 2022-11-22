@@ -752,7 +752,7 @@ private[spark] class ExecutorAllocationManager(
           stageAttemptToSpeculativeTaskIndices
             .getOrElseUpdate(stageAttempt, new mutable.HashSet[Int]).add(taskIndex)
           stageAttemptToUnsubmittedSpeculativeTasks
-            .getOrElseUpdate(stageAttempt, new mutable.HashSet[Int]).remove(taskIndex)
+            .get(stageAttempt).foreach(_.remove(taskIndex))
         } else {
           stageAttemptToTaskIndices.getOrElseUpdate(stageAttempt,
             new mutable.HashSet[Int]) += taskIndex
