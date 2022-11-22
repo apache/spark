@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{EvalMode, _}
 import org.apache.spark.sql.catalyst.trees.{SQLQueryContext, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{SUM, TreePattern}
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, TypeUtils}
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -220,7 +220,7 @@ object TrySumExpressionBuilder extends ExpressionBuilder {
       Sum(expressions.head, EvalMode.TRY)
     } else {
       throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
-        expressions.map(toPrettySQL(_)).mkString(","), Seq(1, 2), funcName, numArgs)
+        expressions, Seq(1, 2), funcName, numArgs)
     }
   }
 }

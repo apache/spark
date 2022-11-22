@@ -637,7 +637,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def invalidFunctionArgumentsError(
-      sqlExpr: Seq[Expression], name: String, expectedInfo: String, actualNumber: Int): Throwable = {
+      sqlExpr: Seq[Expression],
+      name: String,
+      expectedInfo: String,
+      actualNumber: Int): Throwable = {
     new AnalysisException(
       errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
       messageParameters = Map(
