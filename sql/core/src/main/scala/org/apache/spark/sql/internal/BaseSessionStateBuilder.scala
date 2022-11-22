@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{ColumnarRule, CommandExecutionMode, QueryExecution, SparkOptimizer, SparkPlanner, SparkSqlParser}
@@ -415,7 +414,7 @@ class SparkUDFExpressionBuilder extends FunctionExpressionBuilder {
       // Check input argument size
       if (expr.inputTypes.size != input.size) {
         throw QueryCompilationErrors.invalidFunctionArgumentsError(
-          toPrettySQL(expr), name, expr.inputTypes.size.toString, input.size)
+          Seq(expr), name, expr.inputTypes.size.toString, input.size)
       }
       expr
     } else {
