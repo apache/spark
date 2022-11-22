@@ -580,9 +580,16 @@ private[hive] class HiveClientImpl(
       ignoredProperties = ignoredProperties.toMap)
   }
 
-  override def hiveTableProps(rawHiveTable: RawHiveTable): Map[String, String] = {
+  override def hiveTableProps(
+      rawHiveTable: RawHiveTable,
+      containsStats: Boolean): Map[String, String] = {
     val hiveTable = rawHiveTable.rawTable.asInstanceOf[HiveTable]
-    hiveTable.getParameters.asScala.toMap.filterNot(kv => HiveStatisticsProperties.contains(kv._1))
+    val parameters = hiveTable.getParameters.asScala.toMap
+    if (containsStats) {
+      parameters
+    } else {
+      parameters.filterKeys(!HiveStatisticsProperties.contains(_))
+    }
   }
 
   override def createTable(table: CatalogTable, ignoreIfExists: Boolean): Unit = withHiveState {

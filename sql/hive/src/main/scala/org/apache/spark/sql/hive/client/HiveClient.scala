@@ -114,7 +114,7 @@ private[hive] trait HiveClient {
   def createTable(table: CatalogTable, ignoreIfExists: Boolean): Unit
 
   /** Get hive table properties. */
-  def hiveTableProps(rawHiveTable: RawHiveTable): Map[String, String]
+  def hiveTableProps(rawHiveTable: RawHiveTable, containsStats: Boolean): Map[String, String]
 
   /** Drop the specified table. */
   def dropTable(dbName: String, tableName: String, ignoreIfNotExists: Boolean, purge: Boolean): Unit
