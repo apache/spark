@@ -31,7 +31,7 @@ private[hive] trait RawHiveTable {
   def toCatalogTable: CatalogTable
 
   /** Get hive table properties. */
-  def hiveTableProps(containsStats: Boolean): Map[String, String]
+  def hiveTableProps(): Map[String, String]
 }
 
 /**

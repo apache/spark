@@ -63,7 +63,6 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.HiveExternalCatalog.DATASOURCE_SCHEMA
-import org.apache.spark.sql.hive.client.HiveClientImpl.HiveStatisticsProperties
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{CircularBuffer, Utils}
@@ -107,13 +106,8 @@ private[hive] class HiveClientImpl(
   private class RawHiveTableImpl(override val rawTable: HiveTable) extends RawHiveTable {
     override lazy val toCatalogTable = convertHiveTableToCatalogTable(rawTable)
 
-    override def hiveTableProps(containsStats: Boolean): Map[String, String] = {
-      val parameters = rawTable.getParameters.asScala.toMap
-      if (containsStats) {
-        parameters
-      } else {
-        parameters.filterNot(kv => HiveStatisticsProperties.contains(kv._1))
-      }
+    override def hiveTableProps(): Map[String, String] = {
+      rawTable.getParameters.asScala.toMap
     }
   }
 

@@ -722,9 +722,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       stats: Option[CatalogStatistics]): Unit = withClient {
     requireTableExists(db, table)
     val rawHiveTable = client.getRawHiveTable(db, table)
-    val oldProps =
-      rawHiveTable.hiveTableProps(containsStats = false)
-        .filterNot(_._1.startsWith(STATISTICS_PREFIX))
+    val oldProps = rawHiveTable.hiveTableProps().filterNot(_._1.startsWith(STATISTICS_PREFIX))
     val newProps =
       if (stats.isDefined) {
         oldProps ++ statsToProperties(stats.get)
