@@ -643,6 +643,9 @@ private[spark] class ExecutorAllocationManager(
     // Should be 0 when no stages are active.
     private val stageAttemptToNumRunningTask = new mutable.HashMap[StageAttempt, Int]
     private val stageAttemptToTaskIndices = new mutable.HashMap[StageAttempt, mutable.HashSet[Int]]
+    // Number of speculative tasks running in each stageAttempt
+    private val stageAttemptToSpeculativeTaskIndices =
+      new mutable.HashMap[StageAttempt, mutable.HashSet[Int]]()
     // Number of speculative tasks pending in each stageAttempt
     private val stageAttemptToUnsubmittedSpeculativeTasks =
       new mutable.HashMap[StageAttempt, mutable.HashSet[Int]]
@@ -746,6 +749,8 @@ private[spark] class ExecutorAllocationManager(
           stageAttemptToNumRunningTask.getOrElse(stageAttempt, 0) + 1
         // If this is the last pending task, mark the scheduler queue as empty
         if (taskStart.taskInfo.speculative) {
+          stageAttemptToSpeculativeTaskIndices
+            .getOrElseUpdate(stageAttempt, new mutable.HashSet[Int]).add(taskIndex)
           stageAttemptToUnsubmittedSpeculativeTasks
             .getOrElseUpdate(stageAttempt, new mutable.HashSet[Int]).remove(taskIndex)
         } else {
@@ -770,6 +775,10 @@ private[spark] class ExecutorAllocationManager(
             stageAttemptToNumRunningTask -= stageAttempt
             removeStageFromResourceProfileIfUnused(stageAttempt)
           }
+        }
+
+        if (taskEnd.taskInfo.speculative) {
+          stageAttemptToSpeculativeTaskIndices.get(stageAttempt).foreach(_.remove(taskIndex))
         }
 
         taskEnd.reason match {
@@ -836,6 +845,7 @@ private[spark] class ExecutorAllocationManager(
     def removeStageFromResourceProfileIfUnused(stageAttempt: StageAttempt): Unit = {
       if (!stageAttemptToNumRunningTask.contains(stageAttempt) &&
           !stageAttemptToNumTasks.contains(stageAttempt) &&
+          !stageAttemptToSpeculativeTaskIndices.contains(stageAttempt) &&
           !stageAttemptToUnsubmittedSpeculativeTasks.contains(stageAttempt) &&
           !stageAttemptToTaskIndices.contains(stageAttempt)
       ) {
