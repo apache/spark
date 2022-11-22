@@ -967,7 +967,7 @@ class SubquerySuite extends QueryTest
       checkError(
         exception1,
         errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
-        parameters = Map("sqlExprs" -> "explode(outer(t2.arr_c2))"),
+        parameters = Map("sqlExprs" -> "explode(outer(arr_c2#259))"),
         context = ExpectedContext(
           fragment = "LATERAL VIEW explode(t2.arr_c2) q AS c2",
           start = 68,
