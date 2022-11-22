@@ -884,7 +884,7 @@ class TypesTests(ReusedSQLTestCase):
                 StructType([StructField("f1", StructType([StructField("f2", LongType())]))]),
                 StructType([StructField("f1", StructType([StructField("f2", StringType())]))]),
             ),
-            StructType([StructField("f1", StructType([StructField("f2", StringType())]))])
+            StructType([StructField("f1", StructType([StructField("f2", StringType())]))]),
         )
 
         self.assertEqual(
@@ -958,7 +958,7 @@ class TypesTests(ReusedSQLTestCase):
                 StructType([StructField("f1", ArrayType(MapType(StringType(), LongType())))]),
                 StructType([StructField("f1", ArrayType(MapType(DoubleType(), LongType())))]),
             ),
-            StructType([StructField("f1", ArrayType(MapType(StringType(), LongType())))])
+            StructType([StructField("f1", ArrayType(MapType(StringType(), LongType())))]),
         )
 
     # test for SPARK-16542
