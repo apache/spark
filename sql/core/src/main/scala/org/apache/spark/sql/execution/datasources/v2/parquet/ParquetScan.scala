@@ -26,7 +26,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.PartitionReaderFactory
-import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, PartitioningAwareFileIndex, RowIndexUtil}
+import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, FileIndex, RowIndexUtil}
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetOptions, ParquetReadSupport, ParquetWriteSupport}
 import org.apache.spark.sql.execution.datasources.v2.FileScan
 import org.apache.spark.sql.internal.SQLConf
@@ -38,7 +38,7 @@ import org.apache.spark.util.SerializableConfiguration
 case class ParquetScan(
     sparkSession: SparkSession,
     hadoopConf: Configuration,
-    fileIndex: PartitioningAwareFileIndex,
+    fileIndex: FileIndex,
     dataSchema: StructType,
     readDataSchema: StructType,
     readPartitionSchema: StructType,

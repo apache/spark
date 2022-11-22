@@ -41,9 +41,9 @@ class FallBackFileSourceV2(sparkSession: SparkSession) extends Rule[LogicalPlan]
         table.fileIndex,
         table.fileIndex.partitionSchema,
         table.schema,
-        None,
+        table.v1Table.flatMap(_.bucketSpec),
         v1FileFormat,
-        d.options.asScala.toMap)(sparkSession)
-      i.copy(table = LogicalRelation(relation))
+        d.options.asScala.toMap ++ table.allOptions)(sparkSession)
+      i.copy(table = LogicalRelation(relation, table.v1Table))
   }
 }

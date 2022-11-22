@@ -27,12 +27,12 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, ResolveDefaultColumns => DefaultCols}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, LookupCatalog, SupportsNamespaces, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Identifier, LookupCatalog, SupportsNamespaces, Table, TableCatalog, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1, DataSource}
-import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
+import org.apache.spark.sql.execution.datasources.v2.{FileDataSourceV2, FileTable}
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types.{MetadataBuilder, StructField, StructType}
@@ -50,7 +50,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-    case AddColumns(ResolvedV1TableIdentifier(ident), cols) =>
+    case AddColumns(ResolvedV1TableOrV2FileTableIdentifier(ident), cols) =>
       cols.foreach { c =>
         if (c.name.length > 1) {
           throw QueryCompilationErrors.unsupportedTableOperationError(
@@ -62,10 +62,11 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       }
       AlterTableAddColumnsCommand(ident, cols.map(convertToStructField))
 
-    case ReplaceColumns(ResolvedV1TableIdentifier(ident), _) =>
+    case ReplaceColumns(ResolvedV1TableOrV2FileTableIdentifier(ident), _) =>
       throw QueryCompilationErrors.unsupportedTableOperationError(ident, "REPLACE COLUMNS")
 
-    case a @ AlterColumn(ResolvedTable(catalog, ident, table: V1Table, _), _, _, _, _, _, _)
+    case a @ AlterColumn(ResolvedCatalogTable(catalog, ident, table, catalogTable),
+        _, _, _, _, _, _)
         if isSessionCatalog(catalog) =>
       if (a.column.name.length > 1) {
         throw QueryCompilationErrors.unsupportedTableOperationError(
@@ -87,7 +88,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
           .map(_._2.dataType)
           .getOrElse {
             throw QueryCompilationErrors.alterColumnCannotFindColumnInV1TableError(
-              quoteIfNeeded(colName), table)
+              quoteIfNeeded(colName), table.schema)
           }
       }
       // Add the current default column value string (if any) to the column metadata.
@@ -97,18 +98,18 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         dataType,
         nullable = true,
         builder.build())
-      AlterTableChangeColumnCommand(table.catalogTable.identifier, colName, newColumn)
+      AlterTableChangeColumnCommand(catalogTable.identifier, colName, newColumn)
 
-    case RenameColumn(ResolvedV1TableIdentifier(ident), _, _) =>
+    case RenameColumn(ResolvedV1TableOrV2FileTableIdentifier(ident), _, _) =>
       throw QueryCompilationErrors.unsupportedTableOperationError(ident, "RENAME COLUMN")
 
-    case DropColumns(ResolvedV1TableIdentifier(ident), _, _) =>
+    case DropColumns(ResolvedV1TableOrV2FileTableIdentifier(ident), _, _) =>
       throw QueryCompilationErrors.unsupportedTableOperationError(ident, "DROP COLUMN")
 
-    case SetTableProperties(ResolvedV1TableIdentifier(ident), props) =>
+    case SetTableProperties(ResolvedV1TableOrV2FileTableIdentifier(ident), props) =>
       AlterTableSetPropertiesCommand(ident, props, isView = false)
 
-    case UnsetTableProperties(ResolvedV1TableIdentifier(ident), keys, ifExists) =>
+    case UnsetTableProperties(ResolvedV1TableOrV2FileTableIdentifier(ident), keys, ifExists) =>
       AlterTableUnsetPropertiesCommand(ident, keys, ifExists, isView = false)
 
     case SetViewProperties(ResolvedViewIdentifier(ident), props) =>
@@ -129,12 +130,12 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       }
       AlterDatabaseSetLocationCommand(db, location)
 
-    case RenameTable(ResolvedV1TableOrViewIdentifier(oldIdent), newName, isView) =>
+    case RenameTable(ResolvedV1TableOrV2FileTableOrViewIdentifier(oldIdent), newName, isView) =>
       AlterTableRenameCommand(oldIdent, newName.asTableIdentifier, isView)
 
     // Use v1 command to describe (temp) view, as v2 catalog doesn't support view yet.
     case DescribeRelation(
-         ResolvedV1TableOrViewIdentifier(ident), partitionSpec, isExtended, output) =>
+         ResolvedV1TableOrV2FileTableOrViewIdentifier(ident), partitionSpec, isExtended, output) =>
       DescribeTableCommand(ident, partitionSpec, isExtended, output)
 
     case DescribeColumn(
@@ -143,7 +144,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       // `ResolvedView` stores only the identifier.
       DescribeColumnCommand(ident, column.nameParts, isExtended, output)
 
-    case DescribeColumn(ResolvedV1TableIdentifier(ident), column, isExtended, output) =>
+    case DescribeColumn(ResolvedV1TableOrV2FileTableIdentifier(ident), column, isExtended,
+        output) =>
       column match {
         case u: UnresolvedAttribute =>
           throw QueryCompilationErrors.columnNotFoundError(u.name)
@@ -184,7 +186,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         c
       }
 
-    case RefreshTable(ResolvedV1TableIdentifier(ident)) =>
+    case RefreshTable(ResolvedV1TableOrV2FileTableIdentifier(ident)) =>
       RefreshTableCommand(ident)
 
     case RefreshTable(ResolvedViewIdentifier(ident)) =>
@@ -257,7 +259,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       ShowTablesCommand(Some(db), Some(pattern), newOutput, true, tablePartitionSpec)
 
     // ANALYZE TABLE works on permanent views if the views are cached.
-    case AnalyzeTable(ResolvedV1TableOrViewIdentifier(ident), partitionSpec, noScan) =>
+    case AnalyzeTable(ResolvedV1TableOrV2FileTableOrViewIdentifier(ident), partitionSpec, noScan) =>
       if (partitionSpec.isEmpty) {
         AnalyzeTableCommand(ident, noScan)
       } else {
@@ -267,13 +269,16 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case AnalyzeTables(DatabaseInSessionCatalog(db), noScan) =>
       AnalyzeTablesCommand(Some(db), noScan)
 
-    case AnalyzeColumn(ResolvedV1TableOrViewIdentifier(ident), columnNames, allColumns) =>
+    case AnalyzeColumn(ResolvedV1TableOrV2FileTableOrViewIdentifier(ident), columnNames,
+        allColumns) =>
       AnalyzeColumnCommand(ident, columnNames, allColumns)
 
-    case RepairTable(ResolvedV1TableIdentifier(ident), addPartitions, dropPartitions) =>
+    case RepairTable(ResolvedV1TableOrV2FileTableIdentifier(ident), addPartitions,
+        dropPartitions) =>
       RepairTableCommand(ident, addPartitions, dropPartitions)
 
-    case LoadData(ResolvedV1TableIdentifier(ident), path, isLocal, isOverwrite, partition) =>
+    case LoadData(ResolvedV1TableOrV2FileTableIdentifier(ident), path, isLocal, isOverwrite,
+        partition) =>
       LoadDataCommand(
         ident,
         path,
@@ -281,37 +286,38 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         isOverwrite,
         partition)
 
-    case ShowCreateTable(ResolvedV1TableOrViewIdentifier(ident), asSerde, output) if asSerde =>
+    case ShowCreateTable(ResolvedV1TableOrV2FileTableOrViewIdentifier(ident), asSerde, output)
+      if asSerde =>
       ShowCreateTableAsSerdeCommand(ident, output)
 
     // If target is view, force use v1 command
     case ShowCreateTable(ResolvedViewIdentifier(ident), _, output) =>
       ShowCreateTableCommand(ident, output)
 
-    case ShowCreateTable(ResolvedV1TableIdentifier(ident), _, output)
+    case ShowCreateTable(ResolvedV1TableOrV2FileTableIdentifier(ident), _, output)
       if conf.useV1Command => ShowCreateTableCommand(ident, output)
 
-    case ShowCreateTable(ResolvedTable(catalog, _, table: V1Table, _), _, output)
-        if isSessionCatalog(catalog) && DDLUtils.isHiveTable(table.catalogTable) =>
-      ShowCreateTableCommand(table.catalogTable.identifier, output)
+    case ShowCreateTable(ResolvedCatalogTable(catalog, _, _, catalogTable), _, output)
+        if isSessionCatalog(catalog) && DDLUtils.isHiveTable(catalogTable) =>
+      ShowCreateTableCommand(catalogTable.identifier, output)
 
-    case TruncateTable(ResolvedV1TableIdentifier(ident)) =>
+    case TruncateTable(ResolvedV1TableOrV2FileTableIdentifier(ident)) =>
       TruncateTableCommand(ident, None)
 
-    case TruncatePartition(ResolvedV1TableIdentifier(ident), partitionSpec) =>
+    case TruncatePartition(ResolvedV1TableOrV2FileTableIdentifier(ident), partitionSpec) =>
       TruncateTableCommand(
         ident,
         Seq(partitionSpec).asUnresolvedPartitionSpecs.map(_.spec).headOption)
 
     case ShowPartitions(
-        ResolvedV1TableOrViewIdentifier(ident),
+        ResolvedV1TableOrV2FileTableOrViewIdentifier(ident),
         pattern @ (None | Some(UnresolvedPartitionSpec(_, _))), output) =>
       ShowPartitionsCommand(
         ident,
         output,
         pattern.map(_.asInstanceOf[UnresolvedPartitionSpec].spec))
 
-    case ShowColumns(ResolvedV1TableOrViewIdentifier(ident), ns, output) =>
+    case ShowColumns(ResolvedV1TableOrV2FileTableOrViewIdentifier(ident), ns, output) =>
       val v1TableName = ident
       val resolver = conf.resolver
       val db = ns match {
@@ -321,27 +327,28 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       }
       ShowColumnsCommand(db, v1TableName, output)
 
-    case RecoverPartitions(ResolvedV1TableIdentifier(ident)) =>
+    case RecoverPartitions(ResolvedV1TableOrV2FileTableIdentifier(ident)) =>
       RepairTableCommand(
         ident,
         enableAddPartitions = true,
         enableDropPartitions = false,
         "ALTER TABLE RECOVER PARTITIONS")
 
-    case AddPartitions(ResolvedV1TableIdentifier(ident), partSpecsAndLocs, ifNotExists) =>
+    case AddPartitions(ResolvedV1TableOrV2FileTableIdentifier(ident), partSpecsAndLocs,
+        ifNotExists) =>
       AlterTableAddPartitionCommand(
         ident,
         partSpecsAndLocs.asUnresolvedPartitionSpecs.map(spec => (spec.spec, spec.location)),
         ifNotExists)
 
     case RenamePartitions(
-        ResolvedV1TableIdentifier(ident),
+        ResolvedV1TableOrV2FileTableIdentifier(ident),
         UnresolvedPartitionSpec(from, _),
         UnresolvedPartitionSpec(to, _)) =>
       AlterTableRenamePartitionCommand(ident, from, to)
 
     case DropPartitions(
-        ResolvedV1TableIdentifier(ident), specs, ifExists, purge) =>
+        ResolvedV1TableOrV2FileTableIdentifier(ident), specs, ifExists, purge) =>
       AlterTableDropPartitionCommand(
         ident,
         specs.asUnresolvedPartitionSpecs.map(_.spec),
@@ -350,7 +357,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         retainData = false)
 
     case SetTableSerDeProperties(
-        ResolvedV1TableIdentifier(ident),
+        ResolvedV1TableOrV2FileTableIdentifier(ident),
         serdeClassName,
         serdeProperties,
         partitionSpec) =>
@@ -360,7 +367,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         serdeProperties,
         partitionSpec)
 
-    case SetTableLocation(ResolvedV1TableIdentifier(ident), partitionSpec, location) =>
+    case SetTableLocation(ResolvedV1TableOrV2FileTableIdentifier(ident), partitionSpec, location) =>
       AlterTableSetLocationCommand(ident, partitionSpec, location)
 
     case AlterViewAs(ResolvedViewIdentifier(ident), originalText, query) =>
@@ -393,7 +400,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case ShowTableProperties(ResolvedViewIdentifier(ident), propertyKey, output) =>
       ShowTablePropertiesCommand(ident, propertyKey, output)
 
-    case ShowTableProperties(ResolvedV1TableIdentifier(ident), propertyKey, output)
+    case ShowTableProperties(ResolvedV1TableOrV2FileTableIdentifier(ident), propertyKey, output)
         if conf.useV1Command =>
       ShowTablePropertiesCommand(ident, propertyKey, output)
 
@@ -561,17 +568,33 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     }
   }
 
-  object ResolvedV1TableIdentifier {
+  object ResolvedCatalogTable {
+    def unapply(resolved: LogicalPlan): Option[(TableCatalog, Identifier, Table, CatalogTable)] = {
+      resolved match {
+        case ResolvedTable(catalog, identifier, t: V1Table, _) if isSessionCatalog(catalog) =>
+          Some(catalog, identifier, t, t.catalogTable)
+        case ResolvedTable(catalog, identifier, t: FileTable, _)
+          if isSessionCatalog(catalog) && t.v1Table.isDefined =>
+          Some(catalog, identifier, t, t.v1Table.get)
+        case _ => None
+      }
+    }
+  }
+
+  object ResolvedV1TableOrV2FileTableIdentifier {
     def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
       case ResolvedTable(catalog, _, t: V1Table, _) if isSessionCatalog(catalog) =>
         Some(t.catalogTable.identifier)
+      case ResolvedTable(catalog, _, t: FileTable, _)
+        if isSessionCatalog(catalog) && t.v1Table.isDefined =>
+        Some(t.v1Table.get.identifier)
       case _ => None
     }
   }
 
-  object ResolvedV1TableOrViewIdentifier {
+  object ResolvedV1TableOrV2FileTableOrViewIdentifier {
     def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
-      case ResolvedV1TableIdentifier(ident) => Some(ident)
+      case ResolvedV1TableOrV2FileTableIdentifier(ident) => Some(ident)
       case ResolvedViewIdentifier(ident) => Some(ident)
       case _ => None
     }

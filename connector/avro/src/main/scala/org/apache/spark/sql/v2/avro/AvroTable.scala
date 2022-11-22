@@ -16,12 +16,15 @@
  */
 package org.apache.spark.sql.v2.avro
 
+import java.util.Objects
+
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.FileStatus
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.avro.AvroUtils
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, Write, WriteBuilder}
 import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.datasources.v2.FileTable
@@ -31,13 +34,15 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 case class AvroTable(
     name: String,
     sparkSession: SparkSession,
-    options: CaseInsensitiveStringMap,
-    paths: Seq[String],
-    userSpecifiedSchema: Option[StructType],
-    fallbackFileFormat: Class[_ <: FileFormat])
-  extends FileTable(sparkSession, options, paths, userSpecifiedSchema) {
+    override val options: CaseInsensitiveStringMap,
+    override val paths: Seq[String],
+    override val userSpecifiedSchema: Option[StructType],
+    fallbackFileFormat: Class[_ <: FileFormat],
+    override val v1Table: Option[CatalogTable] = None)
+  extends FileTable(sparkSession, options, paths, userSpecifiedSchema, v1Table) {
   override def newScanBuilder(options: CaseInsensitiveStringMap): AvroScanBuilder =
-    new AvroScanBuilder(sparkSession, fileIndex, schema, dataSchema, options)
+    AvroScanBuilder(sparkSession, fileIndex, schema, dataSchema,
+      new CaseInsensitiveStringMap(allOptions.asJava))
 
   override def inferSchema(files: Seq[FileStatus]): Option[StructType] =
     AvroUtils.inferSchema(sparkSession, options.asScala.toMap, files)
@@ -50,4 +55,16 @@ case class AvroTable(
   override def supportsDataType(dataType: DataType): Boolean = AvroUtils.supportsDataType(dataType)
 
   override def formatName: String = "AVRO"
+
+  override def toString: String = s"AvroTable($name)"
+
+  override def equals(obj: Any): Boolean = obj match {
+    case p: AvroTable =>
+      super.equals(p) && name == p.name && fallbackFileFormat == p.fallbackFileFormat
+
+    case _ => false
+  }
+
+  override def hashCode(): Int =
+    Objects.hash(options, paths, userSpecifiedSchema, name, fallbackFileFormat)
 }

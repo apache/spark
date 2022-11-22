@@ -39,6 +39,7 @@ import org.apache.spark.sql.execution.{SparkPlanInfo, TestUncaughtExceptionHandl
 import org.apache.spark.sql.execution.adaptive.{DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.command.{InsertIntoDataSourceDirCommand, LoadDataCommand}
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileTable}
 import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
@@ -410,6 +411,19 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
         userSpecifiedLocation match {
           case Some(location) =>
             assert(r.options("path") === location)
+          case None => // OK.
+        }
+        assert(catalogTable.provider.get === format)
+
+      case DataSourceV2Relation(t: FileTable, _, _, _, _) =>
+        if (!isDataSourceTable) {
+          fail(
+            s"${classOf[HiveTableRelation].getCanonicalName} is expected, but found " +
+              s"${DataSourceV2Relation.getClass.getCanonicalName}.")
+        }
+        userSpecifiedLocation match {
+          case Some(location) =>
+            assert(t.paths.head === location)
           case None => // OK.
         }
         assert(catalogTable.provider.get === format)

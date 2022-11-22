@@ -166,99 +166,6 @@ abstract class OrcPartitionDiscoveryTest extends OrcTest {
       assert(spark.read.options(extraOptions).orc(path).count() === 2)
     }
   }
-}
-
-class OrcPartitionDiscoverySuite extends OrcPartitionDiscoveryTest with SharedSparkSession {
-  override protected def sparkConf: SparkConf = super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "")
-
-  test("read partitioned table - partition key included in orc file") {
-    withTempDir { base =>
-      for {
-        pi <- Seq(1, 2)
-        ps <- Seq("foo", "bar")
-      } {
-        makeOrcFile(
-          (1 to 10).map(i => OrcParDataWithKey(i, pi, i.toString, ps)),
-          makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
-      }
-
-      spark.read.orc(base.getCanonicalPath).createOrReplaceTempView("t")
-
-      withTempTable("t") {
-        checkAnswer(
-          sql("SELECT * FROM t"),
-          for {
-            i <- 1 to 10
-            pi <- Seq(1, 2)
-            ps <- Seq("foo", "bar")
-          } yield Row(i, i.toString, pi, ps))
-
-        checkAnswer(
-          sql("SELECT intField, pi FROM t"),
-          for {
-            i <- 1 to 10
-            pi <- Seq(1, 2)
-            _ <- Seq("foo", "bar")
-          } yield Row(i, pi))
-
-        checkAnswer(
-          sql("SELECT * FROM t WHERE pi = 1"),
-          for {
-            i <- 1 to 10
-            ps <- Seq("foo", "bar")
-          } yield Row(i, i.toString, 1, ps))
-
-        checkAnswer(
-          sql("SELECT * FROM t WHERE ps = 'foo'"),
-          for {
-            i <- 1 to 10
-            pi <- Seq(1, 2)
-          } yield Row(i, i.toString, pi, "foo"))
-      }
-    }
-  }
-
-  test("read partitioned table - with nulls and partition keys are included in Orc file") {
-    withTempDir { base =>
-      for {
-        pi <- Seq(1, 2)
-        ps <- Seq("foo", null.asInstanceOf[String])
-      } {
-        makeOrcFile(
-          (1 to 10).map(i => OrcParDataWithKey(i, pi, i.toString, ps)),
-          makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
-      }
-
-      spark.read
-        .option("hive.exec.default.partition.name", defaultPartitionName)
-        .orc(base.getCanonicalPath)
-        .createOrReplaceTempView("t")
-
-      withTempTable("t") {
-        checkAnswer(
-          sql("SELECT * FROM t"),
-          for {
-            i <- 1 to 10
-            pi <- Seq(1, 2)
-            ps <- Seq("foo", null.asInstanceOf[String])
-          } yield Row(i, i.toString, pi, ps))
-
-        checkAnswer(
-          sql("SELECT * FROM t WHERE ps IS NULL"),
-          for {
-            i <- 1 to 10
-            pi <- Seq(1, 2)
-          } yield Row(i, i.toString, pi, null))
-      }
-    }
-  }
-}
-
-class OrcV1PartitionDiscoverySuite extends OrcPartitionDiscoveryTest with SharedSparkSession {
-  override protected def sparkConf: SparkConf =
-    super
-      .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_LIST, "orc")
 
   test("read partitioned table - partition key included in orc file") {
     withTempDir { base =>
@@ -341,4 +248,13 @@ class OrcV1PartitionDiscoverySuite extends OrcPartitionDiscoveryTest with Shared
       }
     }
   }
+}
+
+class OrcPartitionDiscoverySuite extends OrcPartitionDiscoveryTest with SharedSparkSession {
+  override protected def sparkConf: SparkConf = super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "")
+}
+
+class OrcV1PartitionDiscoverySuite extends OrcPartitionDiscoveryTest with SharedSparkSession {
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "orc")
 }

@@ -17,91 +17,125 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import java.util
+import java.util.Objects
 
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.{FileStatus, Path}
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
+import org.apache.spark.sql.connector.catalog.{Refreshable, SupportsRead, SupportsWrite, TableCapability, V1Table, V2TableWithOptionalV1Fallback}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.streaming.{FileStreamSink, MetadataLogFileIndex}
 import org.apache.spark.sql.types.{DataType, StructType}
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
 
 abstract class FileTable(
     sparkSession: SparkSession,
-    options: CaseInsensitiveStringMap,
-    paths: Seq[String],
-    userSpecifiedSchema: Option[StructType])
-  extends Table with SupportsRead with SupportsWrite {
+    val options: CaseInsensitiveStringMap,
+    val paths: Seq[String],
+    val userSpecifiedSchema: Option[StructType],
+    override val v1Table: Option[CatalogTable] = None)
+  extends V2TableWithOptionalV1Fallback with SupportsRead with SupportsWrite with Refreshable {
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
-  lazy val fileIndex: PartitioningAwareFileIndex = {
-    val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
-    // Hadoop Configurations are case sensitive.
-    val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
-    if (FileStreamSink.hasMetadata(paths, hadoopConf, sparkSession.sessionState.conf)) {
-      // We are reading from the results of a streaming query. We will load files from
-      // the metadata log instead of listing them using HDFS APIs.
-      new MetadataLogFileIndex(sparkSession, new Path(paths.head),
-        options.asScala.toMap, userSpecifiedSchema)
+  lazy val allOptions = options.asScala.toMap ++
+    v1Table.map(t => V1Table.toOptions(V1Table.addV2TableProperties(t))).getOrElse(Map.empty)
+
+  lazy val useCatalogFileIndex = sparkSession.sqlContext.conf.manageFilesourcePartitions &&
+    v1Table.isDefined && v1Table.get.tracksPartitionsInCatalog &&
+    v1Table.get.partitionColumnNames.nonEmpty
+
+  lazy val fileIndex: FileIndex = {
+    if (useCatalogFileIndex) {
+      val defaultTableSize = sparkSession.sessionState.conf.defaultSizeInBytes
+      new CatalogFileIndex(
+        sparkSession,
+        v1Table.get,
+        v1Table.get.stats.map(_.sizeInBytes.toLong).getOrElse(defaultTableSize))
     } else {
-      // This is a non-streaming file based datasource.
-      val rootPathsSpecified = DataSource.checkAndGlobPathIfNecessary(paths, hadoopConf,
-        checkEmptyGlobPath = true, checkFilesExist = true, enableGlobbing = globPaths)
-      val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
-      new InMemoryFileIndex(
-        sparkSession, rootPathsSpecified, caseSensitiveMap, userSpecifiedSchema, fileStatusCache)
+      val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
+      // Hadoop Configurations are case sensitive.
+      val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
+      if (FileStreamSink.hasMetadata(paths, hadoopConf, sparkSession.sessionState.conf)) {
+        // We are reading from the results of a streaming query. We will load files from
+        // the metadata log instead of listing them using HDFS APIs.
+        new MetadataLogFileIndex(sparkSession, new Path(paths.head),
+          options.asScala.toMap, userSpecifiedSchema)
+      } else {
+        // This is a non-streaming file based datasource.
+        val rootPathsSpecified = DataSource.checkAndGlobPathIfNecessary(paths, hadoopConf,
+          checkEmptyGlobPath = true, checkFilesExist = v1Table.isEmpty, enableGlobbing = globPaths)
+        val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
+        new InMemoryFileIndex(
+          sparkSession, rootPathsSpecified, caseSensitiveMap, userSpecifiedSchema, fileStatusCache)
+      }
     }
   }
 
   lazy val dataSchema: StructType = {
-    val schema = userSpecifiedSchema.map { schema =>
-      val partitionSchema = fileIndex.partitionSchema
-      val resolver = sparkSession.sessionState.conf.resolver
-      StructType(schema.filterNot(f => partitionSchema.exists(p => resolver(p.name, f.name))))
-    }.orElse {
-      inferSchema(fileIndex.allFiles())
-    }.getOrElse {
-      throw QueryCompilationErrors.dataSchemaNotSpecifiedError(formatName)
-    }
-    fileIndex match {
-      case _: MetadataLogFileIndex => schema
-      case _ => schema.asNullable
+    if (useCatalogFileIndex) {
+      v1Table.get.dataSchema
+    } else {
+      val schema = userSpecifiedSchema.map { schema =>
+        val partitionSchema = fileIndex.partitionSchema
+        val resolver = sparkSession.sessionState.conf.resolver
+        StructType(schema.filterNot(f => partitionSchema.exists(p => resolver(p.name, f.name))))
+      }.orElse {
+        inferSchema(fileIndex.asInstanceOf[PartitioningAwareFileIndex].allFiles())
+      }.getOrElse {
+        throw QueryCompilationErrors.dataSchemaNotSpecifiedError(formatName)
+      }
+      fileIndex match {
+        case _: MetadataLogFileIndex => schema
+        case _ => schema.asNullable
+      }
     }
   }
 
   override lazy val schema: StructType = {
-    val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
-    SchemaUtils.checkSchemaColumnNameDuplication(dataSchema, caseSensitive)
-    dataSchema.foreach { field =>
-      if (!supportsDataType(field.dataType)) {
-        throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError(formatName, field)
+    if (useCatalogFileIndex) {
+      v1Table.get.schema
+    } else {
+      val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
+      SchemaUtils.checkSchemaColumnNameDuplication(dataSchema, caseSensitive)
+      dataSchema.foreach { field =>
+        if (!supportsDataType(field.dataType)) {
+          throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError(formatName, field)
+        }
       }
-    }
-    val partitionSchema = fileIndex.partitionSchema
-    SchemaUtils.checkSchemaColumnNameDuplication(partitionSchema, caseSensitive)
-    val partitionNameSet: Set[String] =
-      partitionSchema.fields.map(PartitioningUtils.getColName(_, caseSensitive)).toSet
+      val partitionSchema = fileIndex.partitionSchema
+      SchemaUtils.checkSchemaColumnNameDuplication(partitionSchema, caseSensitive)
 
-    // When data and partition schemas have overlapping columns,
-    // tableSchema = dataSchema - overlapSchema + partitionSchema
-    val fields = dataSchema.fields.filterNot { field =>
-      val colName = PartitioningUtils.getColName(field, caseSensitive)
-      partitionNameSet.contains(colName)
-    } ++ partitionSchema.fields
-    StructType(fields)
+      val partitionNameMap =
+        partitionSchema.fields.map(f => PartitioningUtils.getColName(f, caseSensitive) -> f).toMap
+      val dataNameSet = dataSchema.fields.map(PartitioningUtils.getColName(_, caseSensitive)).toSet
+      // When data and partition schemas have overlapping columns,
+      // tableSchema = dataSchema + (partitionSchema - overlapSchema)
+      val fields = dataSchema.fields.map { field =>
+          val colName = PartitioningUtils.getColName(field, caseSensitive)
+          partitionNameMap.getOrElse(colName, field)
+        } ++ partitionSchema.fields.filterNot { field =>
+          val colName = PartitioningUtils.getColName(field, caseSensitive)
+          dataNameSet.contains(colName)
+        }
+      StructType(fields)
+    }
   }
 
-  override def partitioning: Array[Transform] = fileIndex.partitionSchema.names.toSeq.asTransforms
+  override def partitioning: Array[Transform] = {
+    v1Table.map(V1Table.toV2Partitioning)
+      .getOrElse(fileIndex.partitionSchema.names.toSeq.asTransforms)
+  }
 
-  override def properties: util.Map[String, String] = options.asCaseSensitiveMap
+  override def properties: util.Map[String, String] =
+    v1Table.map(t => V1Table.addV2TableProperties(t).asJava)
+      .getOrElse(options.asCaseSensitiveMap())
 
   override def capabilities: java.util.Set[TableCapability] = FileTable.CAPABILITIES
 
@@ -144,6 +178,20 @@ abstract class FileTable(
     val entry = options.get(DataSource.GLOB_PATHS_KEY)
     Option(entry).map(_ == "true").getOrElse(true)
   }
+
+  override def refresh: Unit = {
+    fileIndex.refresh()
+  }
+
+  override def equals(obj: Any): Boolean = obj match {
+    case f: FileTable =>
+      options == f.options && paths == f.paths &&
+        userSpecifiedSchema == f.userSpecifiedSchema
+
+    case _ => false
+  }
+
+  override def hashCode(): Int = Objects.hash(options, paths, userSpecifiedSchema)
 }
 
 object FileTable {

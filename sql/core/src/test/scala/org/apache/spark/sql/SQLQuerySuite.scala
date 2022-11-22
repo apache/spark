@@ -42,7 +42,7 @@ import org.apache.spark.sql.execution.aggregate._
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCommand, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
@@ -57,8 +57,7 @@ import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.ResetSystemProperties
 
-@ExtendedSQLTest
-class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper
+trait SQLQuerySuiteBase extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper
     with ResetSystemProperties {
   import testImplicits._
 
@@ -3062,91 +3061,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("SPARK-27699 Validate pushed down filters") {
-    def checkPushedFilters(format: String, df: DataFrame, filters: Array[sources.Filter]): Unit = {
-      val scan = df.queryExecution.sparkPlan
-        .find(_.isInstanceOf[BatchScanExec]).get.asInstanceOf[BatchScanExec]
-        .scan
-      format match {
-        case "orc" =>
-          assert(scan.isInstanceOf[OrcScan])
-          assert(scan.asInstanceOf[OrcScan].pushedFilters === filters)
-        case "parquet" =>
-          assert(scan.isInstanceOf[ParquetScan])
-          assert(scan.asInstanceOf[ParquetScan].pushedFilters === filters)
-        case _ =>
-          fail(s"unknown format $format")
-      }
-    }
-
-    Seq("orc", "parquet").foreach { format =>
-      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "",
-        SQLConf.PARQUET_FILTER_PUSHDOWN_STRING_PREDICATE_ENABLED.key -> "false") {
-        withTempPath { dir =>
-          spark.range(10).map(i => (i, i.toString)).toDF("id", "s")
-            .write
-            .format(format)
-            .save(dir.getCanonicalPath)
-          val df = spark.read.format(format).load(dir.getCanonicalPath)
-          checkPushedFilters(
-            format,
-            df.where(($"id" < 2 and $"s".contains("foo")) or
-              ($"id" > 10 and $"s".contains("bar"))),
-            Array(sources.Or(sources.LessThan("id", 2), sources.GreaterThan("id", 10))))
-          checkPushedFilters(
-            format,
-            df.where($"s".contains("foo") or
-              ($"id" > 10 and $"s".contains("bar"))),
-            Array.empty)
-          checkPushedFilters(
-            format,
-            df.where($"id" < 2 and not($"id" > 10 and $"s".contains("bar"))),
-            Array(sources.IsNotNull("id"), sources.LessThan("id", 2)))
-        }
-      }
-    }
-  }
-
-  test("SPARK-26709: OptimizeMetadataOnlyQuery does not handle empty records correctly") {
-    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
-      Seq(true, false).foreach { enableOptimizeMetadataOnlyQuery =>
-        withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key ->
-          enableOptimizeMetadataOnlyQuery.toString) {
-          withTable("t") {
-            sql("CREATE TABLE t (col1 INT, p1 INT) USING PARQUET PARTITIONED BY (p1)")
-            sql("INSERT INTO TABLE t PARTITION (p1 = 5) SELECT ID FROM range(1, 1)")
-            if (enableOptimizeMetadataOnlyQuery) {
-              // The result is wrong if we enable the configuration.
-              checkAnswer(sql("SELECT MAX(p1) FROM t"), Row(5))
-            } else {
-              checkAnswer(sql("SELECT MAX(p1) FROM t"), Row(null))
-            }
-            checkAnswer(sql("SELECT MAX(col1) FROM t"), Row(null))
-          }
-
-          withTempPath { path =>
-            val tabLocation = path.getCanonicalPath
-            val partLocation1 = tabLocation + "/p=3"
-            val partLocation2 = tabLocation + "/p=1"
-            // SPARK-23271 empty RDD when saved should write a metadata only file
-            val df = spark.emptyDataFrame.select(lit(1).as("col"))
-            df.write.parquet(partLocation1)
-            val df2 = spark.range(10).toDF("col")
-            df2.write.parquet(partLocation2)
-            val readDF = spark.read.parquet(tabLocation)
-            if (enableOptimizeMetadataOnlyQuery) {
-              // The result is wrong if we enable the configuration.
-              checkAnswer(readDF.selectExpr("max(p)"), Row(3))
-            } else {
-              checkAnswer(readDF.selectExpr("max(p)"), Row(1))
-            }
-            checkAnswer(readDF.selectExpr("max(col)"), Row(9))
-          }
-        }
-      }
-    }
-  }
-
   test("reset command should not fail with cache") {
     withTable("tbl") {
       val provider = spark.sessionState.conf.defaultDataSourceName
@@ -3854,44 +3768,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     })
   }
 
-  test("SPARK-33084: Add jar support Ivy URI in SQL -- jar contains udf class") {
-    val sumFuncClass = "org.apache.spark.examples.sql.Spark33084"
-    val functionName = "test_udf"
-    withTempDir { dir =>
-      System.setProperty("ivy.home", dir.getAbsolutePath)
-      val sourceJar = new File(Thread.currentThread().getContextClassLoader
-        .getResource("SPARK-33084.jar").getFile)
-      val targetCacheJarDir = new File(dir.getAbsolutePath +
-        "/local/org.apache.spark/SPARK-33084/1.0/jars/")
-      targetCacheJarDir.mkdir()
-      // copy jar to local cache
-      FileUtils.copyFileToDirectory(sourceJar, targetCacheJarDir)
-      withTempView("v1") {
-        withUserDefinedFunction(
-          s"default.$functionName" -> false,
-          functionName -> true) {
-          // create temporary function without class
-          checkError(
-            exception = intercept[AnalysisException] {
-              sql(s"CREATE TEMPORARY FUNCTION $functionName AS '$sumFuncClass'")
-            },
-            errorClass = "CANNOT_LOAD_FUNCTION_CLASS",
-            parameters = Map(
-              "className" -> "org.apache.spark.examples.sql.Spark33084",
-              "functionName" -> "`test_udf`"
-            )
-          )
-          sql("ADD JAR ivy://org.apache.spark:SPARK-33084:1.0")
-          sql(s"CREATE TEMPORARY FUNCTION $functionName AS '$sumFuncClass'")
-          // create a view using a function in 'default' database
-          sql(s"CREATE TEMPORARY VIEW v1 AS SELECT $functionName(col1) FROM VALUES (1), (2), (3)")
-          // view v1 should still using function defined in `default` database
-          checkAnswer(sql("SELECT * FROM v1"), Seq(Row(2.0)))
-        }
-      }
-    }
-  }
-
   test("SPARK-33964: Combine distinct unions that have noop project between them") {
     val df = sql("""
       |SELECT a, b FROM (
@@ -4005,7 +3881,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       spark.range(5).repartition(1).write.saveAsTable("t2")
       val df = spark.sql("SELECT * FROM t1 CROSS JOIN t2 LIMIT 3")
       val pushedLocalLimits = df.queryExecution.optimizedPlan.collect {
-        case l @ LocalLimit(_, _: LogicalRelation) => l
+        case l @ LocalLimit(_, _: LogicalRelation | _: DataSourceV2ScanRelation) => l
       }
       assert(pushedLocalLimits.length === 2)
       checkAnswer(df, Row(0, 0) :: Row(0, 1) :: Row(0, 2) :: Nil)
@@ -4025,9 +3901,10 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
         Seq(joinWithNonEmptyRightDf, joinWithEmptyRightDf).foreach { df =>
           val pushedLocalLimits = df.queryExecution.optimizedPlan.collect {
-            case l @ LocalLimit(_, _: LogicalRelation) => l
+            case l @ LocalLimit(_, _: LogicalRelation | Project(_, _: LogicalRelation) |
+              _: DataSourceV2ScanRelation) => l
           }
-          assert(pushedLocalLimits.length === 1)
+          assert(pushedLocalLimits.length === 2)
         }
 
         val expectedAnswer = Seq(Row(0), Row(1), Row(2))
@@ -4093,29 +3970,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("SPARK-33482: Fix FileScan canonicalization") {
-    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
-      withTempPath { path =>
-        spark.range(5).toDF().write.mode("overwrite").parquet(path.toString)
-        withTempView("t") {
-          spark.read.parquet(path.toString).createOrReplaceTempView("t")
-          val df = sql(
-            """
-              |SELECT *
-              |FROM t AS t1
-              |JOIN t AS t2 ON t2.id = t1.id
-              |JOIN t AS t3 ON t3.id = t2.id
-              |""".stripMargin)
-          df.collect()
-          val reusedExchanges = collect(df.queryExecution.executedPlan) {
-            case r: ReusedExchangeExec => r
-          }
-          assert(reusedExchanges.size == 1)
-        }
-      }
-    }
-  }
-
   test("SPARK-40247: Fix BitSet equals") {
     withTable("td") {
       testData
@@ -4138,36 +3992,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         case r: ReusedExchangeExec => r
       }
       assert(reusedExchanges.size == 1)
-    }
-  }
-
-  test("SPARK-40245: Fix FileScan canonicalization when partition or data filter columns are not " +
-    "read") {
-    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
-      withTempPath { path =>
-        spark.range(5)
-          .withColumn("p", $"id" % 2)
-          .write
-          .mode("overwrite")
-          .partitionBy("p")
-          .parquet(path.toString)
-        withTempView("t") {
-          spark.read.parquet(path.toString).createOrReplaceTempView("t")
-          val df = sql(
-            """
-              |SELECT t1.id, t2.id, t3.id
-              |FROM t AS t1
-              |JOIN t AS t2 ON t2.id = t1.id
-              |JOIN t AS t3 ON t3.id = t2.id
-              |WHERE t1.p = 1 AND t2.p = 1 AND t3.p = 1
-              |""".stripMargin)
-          df.collect()
-          val reusedExchanges = collect(df.queryExecution.executedPlan) {
-            case r: ReusedExchangeExec => r
-          }
-          assert(reusedExchanges.size == 1)
-        }
-      }
     }
   }
 
@@ -4313,39 +4137,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
            |select * from start S join end E on S.c1 = E.c1
            |""".stripMargin),
         Row(1, 2, 1, 2) :: Nil)
-    }
-  }
-
-  test("SPARK-36093: RemoveRedundantAliases should not change expression's name") {
-    withTable("t1", "t2") {
-      withView("t1_v") {
-        sql("CREATE TABLE t1(cal_dt DATE) USING PARQUET")
-        sql(
-          """
-            |INSERT INTO t1 VALUES
-            |(date'2021-06-27'),
-            |(date'2021-06-28'),
-            |(date'2021-06-29'),
-            |(date'2021-06-30')""".stripMargin)
-        sql("CREATE VIEW t1_v AS SELECT * FROM t1")
-        sql(
-          """
-            |CREATE TABLE t2(FLAG INT, CAL_DT DATE)
-            |USING PARQUET
-            |PARTITIONED BY (CAL_DT)""".stripMargin)
-        val insert = sql(
-          """
-            |INSERT INTO t2 SELECT 2 AS FLAG,CAL_DT FROM t1_v
-            |WHERE CAL_DT BETWEEN '2021-06-29' AND '2021-06-30'""".stripMargin)
-        insert.queryExecution.executedPlan.collectFirst {
-          case CommandResultExec(_, DataWritingCommandExec(
-            i: InsertIntoHadoopFsRelationCommand, _), _) => i
-        }.get.partitionColumns.map(_.name).foreach(name => assert(name == "CAL_DT"))
-        checkAnswer(sql("SELECT FLAG, CAST(CAL_DT as STRING) FROM t2 "),
-            Row(2, "2021-06-29") :: Row(2, "2021-06-30") :: Nil)
-        checkAnswer(sql("SHOW PARTITIONS t2"),
-            Row("CAL_DT=2021-06-29") :: Row("CAL_DT=2021-06-30") :: Nil)
-      }
     }
   }
 
@@ -4646,6 +4437,223 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       sql("CREATE TABLE t1(c1 bigint) USING PARQUET")
       sql("CREATE TABLE t2(c2 bigint) USING PARQUET")
       sql("SELECT /*+ hash(t2) */ * FROM t1 join t2 on c1 = c2")
+    }
+  }
+}
+
+@ExtendedSQLTest
+class V1SQLQuerySuite extends SQLQuerySuiteBase {
+  override protected def sparkConf =
+    super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST.key, "avro,csv,json,kafka,orc,parquet,text")
+
+  test("SPARK-26709: OptimizeMetadataOnlyQuery does not handle empty records correctly") {
+    Seq(true, false).foreach { enableOptimizeMetadataOnlyQuery =>
+      withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key ->
+        enableOptimizeMetadataOnlyQuery.toString) {
+        withTable("t") {
+          sql("CREATE TABLE t (col1 INT, p1 INT) USING PARQUET PARTITIONED BY (p1)")
+          sql("INSERT INTO TABLE t PARTITION (p1 = 5) SELECT ID FROM range(1, 1)")
+          if (enableOptimizeMetadataOnlyQuery) {
+            // The result is wrong if we enable the configuration.
+            checkAnswer(sql("SELECT MAX(p1) FROM t"), Row(5))
+          } else {
+            checkAnswer(sql("SELECT MAX(p1) FROM t"), Row(null))
+          }
+          checkAnswer(sql("SELECT MAX(col1) FROM t"), Row(null))
+        }
+
+        withTempPath { path =>
+          val tabLocation = path.getCanonicalPath
+          val partLocation1 = tabLocation + "/p=3"
+          val partLocation2 = tabLocation + "/p=1"
+          // SPARK-23271 empty RDD when saved should write a metadata only file
+          val df = spark.emptyDataFrame.select(lit(1).as("col"))
+          df.write.parquet(partLocation1)
+          val df2 = spark.range(10).toDF("col")
+          df2.write.parquet(partLocation2)
+          val readDF = spark.read.parquet(tabLocation)
+          if (enableOptimizeMetadataOnlyQuery) {
+            // The result is wrong if we enable the configuration.
+            checkAnswer(readDF.selectExpr("max(p)"), Row(3))
+          } else {
+            checkAnswer(readDF.selectExpr("max(p)"), Row(1))
+          }
+          checkAnswer(readDF.selectExpr("max(col)"), Row(9))
+        }
+      }
+    }
+  }
+
+  test("SPARK-33084: Add jar support Ivy URI in SQL -- jar contains udf class") {
+    val sumFuncClass = "org.apache.spark.examples.sql.Spark33084"
+    val functionName = "test_udf"
+    withTempDir { dir =>
+      System.setProperty("ivy.home", dir.getAbsolutePath)
+      val sourceJar = new File(Thread.currentThread().getContextClassLoader
+        .getResource("SPARK-33084.jar").getFile)
+      val targetCacheJarDir = new File(dir.getAbsolutePath +
+        "/local/org.apache.spark/SPARK-33084/1.0/jars/")
+      targetCacheJarDir.mkdir()
+      // copy jar to local cache
+      FileUtils.copyFileToDirectory(sourceJar, targetCacheJarDir)
+      withTempView("v1") {
+        withUserDefinedFunction(
+          s"default.$functionName" -> false,
+          functionName -> true) {
+          // create temporary function without class
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"CREATE TEMPORARY FUNCTION $functionName AS '$sumFuncClass'")
+            },
+            errorClass = "CANNOT_LOAD_FUNCTION_CLASS",
+            parameters = Map(
+              "className" -> "org.apache.spark.examples.sql.Spark33084",
+              "functionName" -> "`test_udf`"
+            )
+          )
+          sql("ADD JAR ivy://org.apache.spark:SPARK-33084:1.0")
+          sql(s"CREATE TEMPORARY FUNCTION $functionName AS '$sumFuncClass'")
+          // create a view using a function in 'default' database
+          sql(s"CREATE TEMPORARY VIEW v1 AS SELECT $functionName(col1) FROM VALUES (1), (2), (3)")
+          // view v1 should still using function defined in `default` database
+          checkAnswer(sql("SELECT * FROM v1"), Seq(Row(2.0)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-36093: RemoveRedundantAliases should not change expression's name") {
+    // SHOW PARTITIONS is not supported with DSv2
+    withTable("t1", "t2") {
+      withView("t1_v") {
+        sql("CREATE TABLE t1(cal_dt DATE) USING PARQUET")
+        sql(
+          """
+            |INSERT INTO t1 VALUES
+            |(date'2021-06-27'),
+            |(date'2021-06-28'),
+            |(date'2021-06-29'),
+            |(date'2021-06-30')""".stripMargin)
+        sql("CREATE VIEW t1_v AS SELECT * FROM t1")
+        sql(
+          """
+            |CREATE TABLE t2(FLAG INT, CAL_DT DATE)
+            |USING PARQUET
+            |PARTITIONED BY (CAL_DT)""".stripMargin)
+        val insert = sql(
+          """
+            |INSERT INTO t2 SELECT 2 AS FLAG,CAL_DT FROM t1_v
+            |WHERE CAL_DT BETWEEN '2021-06-29' AND '2021-06-30'""".stripMargin)
+        insert.queryExecution.executedPlan.collectFirst {
+          case CommandResultExec(_, DataWritingCommandExec(
+          i: InsertIntoHadoopFsRelationCommand, _), _) => i
+        }.get.partitionColumns.map(_.name).foreach(name => assert(name == "CAL_DT"))
+        checkAnswer(sql("SELECT FLAG, CAST(CAL_DT as STRING) FROM t2 "),
+          Row(2, "2021-06-29") :: Row(2, "2021-06-30") :: Nil)
+        checkAnswer(sql("SHOW PARTITIONS t2"),
+          Row("CAL_DT=2021-06-29") :: Row("CAL_DT=2021-06-30") :: Nil)
+      }
+    }
+  }
+}
+
+@ExtendedSQLTest
+class V2SQLQuerySuite extends SQLQuerySuiteBase {
+  import testImplicits._
+
+  override protected def sparkConf =
+    super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST.key, "")
+
+  test("SPARK-27699 Validate pushed down filters") {
+    def checkPushedFilters(format: String, df: DataFrame, filters: Array[sources.Filter]): Unit = {
+      val scan = df.queryExecution.sparkPlan
+        .find(_.isInstanceOf[BatchScanExec]).get.asInstanceOf[BatchScanExec]
+        .scan
+      format match {
+        case "orc" =>
+          assert(scan.isInstanceOf[OrcScan])
+          assert(scan.asInstanceOf[OrcScan].pushedFilters === filters)
+        case "parquet" =>
+          assert(scan.isInstanceOf[ParquetScan])
+          assert(scan.asInstanceOf[ParquetScan].pushedFilters === filters)
+        case _ =>
+          fail(s"unknown format $format")
+      }
+    }
+
+    Seq("orc", "parquet").foreach { format =>
+      withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_STRING_PREDICATE_ENABLED.key -> "false") {
+        withTempPath { dir =>
+          spark.range(10).map(i => (i, i.toString)).toDF("id", "s")
+            .write
+            .format(format)
+            .save(dir.getCanonicalPath)
+          val df = spark.read.format(format).load(dir.getCanonicalPath)
+          checkPushedFilters(
+            format,
+            df.where(($"id" < 2 and $"s".contains("foo")) or
+              ($"id" > 10 and $"s".contains("bar"))),
+            Array(sources.Or(sources.LessThan("id", 2), sources.GreaterThan("id", 10))))
+          checkPushedFilters(
+            format,
+            df.where($"s".contains("foo") or
+              ($"id" > 10 and $"s".contains("bar"))),
+            Array.empty)
+          checkPushedFilters(
+            format,
+            df.where($"id" < 2 and not($"id" > 10 and $"s".contains("bar"))),
+            Array(sources.IsNotNull("id"), sources.LessThan("id", 2)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-33482: Fix FileScan canonicalization") {
+    withTempPath { path =>
+      spark.range(5).toDF().write.mode("overwrite").parquet(path.toString)
+      withTempView("t") {
+        spark.read.parquet(path.toString).createOrReplaceTempView("t")
+        val df = sql(
+          """
+            |SELECT *
+            |FROM t AS t1
+            |JOIN t AS t2 ON t2.id = t1.id
+            |JOIN t AS t3 ON t3.id = t2.id
+            |""".stripMargin)
+        df.collect()
+        val reusedExchanges = collect(df.queryExecution.executedPlan) {
+          case r: ReusedExchangeExec => r
+        }
+        assert(reusedExchanges.size == 1)
+      }
+    }
+  }
+
+  test("SPARK-40245: Fix FileScan canonicalization when partition or data filter columns are not " +
+    "read") {
+    withTempPath { path =>
+      spark.range(5)
+        .withColumn("p", $"id" % 2)
+        .write
+        .mode("overwrite")
+        .partitionBy("p")
+        .parquet(path.toString)
+      withTempView("t") {
+        spark.read.parquet(path.toString).createOrReplaceTempView("t")
+        val df = sql(
+          """
+            |SELECT t1.id, t2.id, t3.id
+            |FROM t AS t1
+            |JOIN t AS t2 ON t2.id = t1.id
+            |JOIN t AS t3 ON t3.id = t2.id
+            |WHERE t1.p = 1 AND t2.p = 1 AND t3.p = 1
+            |""".stripMargin)
+        df.collect()
+        val reusedExchanges = collect(df.queryExecution.executedPlan) {
+          case r: ReusedExchangeExec => r
+        }
+        assert(reusedExchanges.size == 1)
+      }
     }
   }
 }

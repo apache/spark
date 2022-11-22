@@ -22,14 +22,14 @@ import org.apache.spark.sql.{sources, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{ScanBuilder, SupportsPushDownRequiredColumns}
-import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, DataSourceUtils, PartitioningAwareFileIndex, PartitioningUtils}
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, DataSourceUtils, FileIndex, PartitioningUtils}
 import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 
 abstract class FileScanBuilder(
     sparkSession: SparkSession,
-    fileIndex: PartitioningAwareFileIndex,
+    fileIndex: FileIndex,
     dataSchema: StructType)
   extends ScanBuilder
     with SupportsPushDownRequiredColumns

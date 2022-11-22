@@ -16,7 +16,8 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.text
 
-import org.apache.spark.sql.connector.catalog.Table
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Implicits, Table}
 import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
@@ -42,5 +43,17 @@ class TextDataSourceV2 extends FileDataSourceV2 {
     val optionsWithoutPaths = getOptionsWithoutPaths(options)
     TextTable(tableName, sparkSession, optionsWithoutPaths, paths, Some(schema), fallbackFileFormat)
   }
-}
 
+  override def getTable(catalogTable: CatalogTable): TextTable = {
+    import CatalogV2Implicits._
+
+    TextTable(
+      catalogTable.identifier.quoted,
+      sparkSession,
+      CaseInsensitiveStringMap.empty(),
+      catalogTable.storage.locationUri.toSeq.map(CatalogUtils.URIToString),
+      if (catalogTable.schema.isEmpty) None else Some(catalogTable.schema),
+      fallbackFileFormat,
+      Some(catalogTable))
+  }
+}

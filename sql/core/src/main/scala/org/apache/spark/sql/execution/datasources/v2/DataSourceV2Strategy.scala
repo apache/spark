@@ -72,6 +72,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
   }
 
   private def refreshCache(r: DataSourceV2Relation)(): Unit = {
+    r.refresh()
     session.sharedState.cacheManager.recacheByPlan(session, r)
   }
 

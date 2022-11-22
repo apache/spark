@@ -16,11 +16,14 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.json
 
+import java.util.Objects
+
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.FileStatus
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.json.JSONOptionsInRead
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, Write, WriteBuilder}
 import org.apache.spark.sql.execution.datasources.FileFormat
@@ -32,13 +35,15 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 case class JsonTable(
     name: String,
     sparkSession: SparkSession,
-    options: CaseInsensitiveStringMap,
-    paths: Seq[String],
-    userSpecifiedSchema: Option[StructType],
-    fallbackFileFormat: Class[_ <: FileFormat])
-  extends FileTable(sparkSession, options, paths, userSpecifiedSchema) {
+    override val options: CaseInsensitiveStringMap,
+    override val paths: Seq[String],
+    override val userSpecifiedSchema: Option[StructType],
+    fallbackFileFormat: Class[_ <: FileFormat],
+    override val v1Table: Option[CatalogTable] = None)
+  extends FileTable(sparkSession, options, paths, userSpecifiedSchema, v1Table) {
   override def newScanBuilder(options: CaseInsensitiveStringMap): JsonScanBuilder =
-    new JsonScanBuilder(sparkSession, fileIndex, schema, dataSchema, options)
+    JsonScanBuilder(sparkSession, fileIndex, schema, dataSchema,
+      new CaseInsensitiveStringMap(allOptions.asJava))
 
   override def inferSchema(files: Seq[FileStatus]): Option[StructType] = {
     val parsedOptions = new JSONOptionsInRead(
@@ -72,4 +77,16 @@ case class JsonTable(
   }
 
   override def formatName: String = "JSON"
+
+  override def toString: String = s"JsonTable($name)"
+
+  override def equals(obj: Any): Boolean = obj match {
+    case p: JsonTable =>
+      super.equals(p) && name == p.name && fallbackFileFormat == p.fallbackFileFormat
+
+    case _ => false
+  }
+
+  override def hashCode(): Int =
+    Objects.hash(options, paths, userSpecifiedSchema, name, fallbackFileFormat)
 }

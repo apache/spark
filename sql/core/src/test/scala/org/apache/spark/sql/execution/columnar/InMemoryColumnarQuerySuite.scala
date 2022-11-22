@@ -552,13 +552,18 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSparkSession {
             // stats is calculated
             assert(inMemoryRelation2.computeStats().sizeInBytes === getLocalDirSize(workDir))
 
-            // InMemoryRelation's stats should be updated after calculating stats of the table
-            // clear cache to simulate a fresh environment
-            dfFromTable.unpersist(blocking = true)
-            spark.sql("ANALYZE TABLE table1 COMPUTE STATISTICS")
-            val inMemoryRelation3 = spark.read.table("table1").cache().queryExecution.optimizedPlan.
-              collect { case plan: InMemoryRelation => plan }.head
-            assert(inMemoryRelation3.computeStats().sizeInBytes === 48)
+            // Analyze table doesn't work with V2
+            if (useV1SourceReaderList == "orc") {
+              // InMemoryRelation's stats should be updated after calculating stats of the table
+              // clear cache to simulate a fresh environment
+              dfFromTable.unpersist(blocking = true)
+              spark.sql("ANALYZE TABLE table1 COMPUTE STATISTICS")
+              val inMemoryRelation3 =
+                spark.read.table("table1").cache().queryExecution.optimizedPlan.collect {
+                  case plan: InMemoryRelation => plan
+                }.head
+              assert(inMemoryRelation3.computeStats().sizeInBytes === 48)
+            }
           }
         }
       }
