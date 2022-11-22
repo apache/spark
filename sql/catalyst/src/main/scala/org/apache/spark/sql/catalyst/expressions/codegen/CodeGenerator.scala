@@ -38,6 +38,7 @@ import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData, SQLOrderingUtil}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -1622,17 +1623,19 @@ object CodeGenerator extends Logging {
   def getValue(input: String, dataType: DataType, ordinal: String): String = {
     val jt = javaType(dataType)
     dataType match {
-      case _ if isPrimitiveType(jt) => s"$input.get${primitiveTypeName(jt)}($ordinal)"
-      case t: DecimalType => s"$input.getDecimal($ordinal, ${t.precision}, ${t.scale})"
-      case StringType => s"$input.getUTF8String($ordinal)"
-      case BinaryType => s"$input.getBinary($ordinal)"
-      case CalendarIntervalType => s"$input.getInterval($ordinal)"
-      case t: StructType => s"$input.getStruct($ordinal, ${t.size})"
-      case _: ArrayType => s"$input.getArray($ordinal)"
-      case _: MapType => s"$input.getMap($ordinal)"
-      case NullType => "null"
       case udt: UserDefinedType[_] => getValue(input, udt.sqlType, ordinal)
-      case _ => s"($jt)$input.get($ordinal, null)"
+      case _ if isPrimitiveType(jt) => s"$input.get${primitiveTypeName(jt)}($ordinal)"
+      case _ => dataType.physicalDataType match {
+        case _: PhysicalArrayType => s"$input.getArray($ordinal)"
+        case _: PhysicalBinaryType => s"$input.getBinary($ordinal)"
+        case _: PhysicalCalendarIntervalType => s"$input.getInterval($ordinal)"
+        case t: PhysicalDecimalType => s"$input.getDecimal($ordinal, ${t.precision}, ${t.scale})"
+        case _: PhysicalMapType => s"$input.getMap($ordinal)"
+        case _: PhysicalNullType => "null"
+        case _: PhysicalStringType => s"$input.getUTF8String($ordinal)"
+        case t: PhysicalStructType => s"$input.getStruct($ordinal, ${t.fields.size})"
+        case _ => s"($jt)$input.get($ordinal, null)"
+      }
     }
   }
 
@@ -1901,24 +1904,27 @@ object CodeGenerator extends Logging {
    * Returns the Java type for a DataType.
    */
   def javaType(dt: DataType): String = dt match {
-    case BooleanType => JAVA_BOOLEAN
-    case ByteType => JAVA_BYTE
-    case ShortType => JAVA_SHORT
-    case IntegerType | DateType | _: YearMonthIntervalType => JAVA_INT
-    case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType => JAVA_LONG
-    case FloatType => JAVA_FLOAT
-    case DoubleType => JAVA_DOUBLE
-    case _: DecimalType => "Decimal"
-    case BinaryType => "byte[]"
-    case StringType => "UTF8String"
-    case CalendarIntervalType => "CalendarInterval"
-    case _: StructType => "InternalRow"
-    case _: ArrayType => "ArrayData"
-    case _: MapType => "MapData"
     case udt: UserDefinedType[_] => javaType(udt.sqlType)
-    case ObjectType(cls) if cls.isArray => s"${javaType(ObjectType(cls.getComponentType))}[]"
-    case ObjectType(cls) => cls.getName
-    case _ => "Object"
+    case _ => dt.physicalDataType match {
+      case _: PhysicalArrayType => "ArrayData"
+      case _: PhysicalBinaryType => "byte[]"
+      case _: PhysicalBooleanType => JAVA_BOOLEAN
+      case _: PhysicalByteType => JAVA_BYTE
+      case _: PhysicalCalendarIntervalType => "CalendarInterval"
+      case _: PhysicalIntegerType => JAVA_INT
+      case _: PhysicalDecimalType => "Decimal"
+      case _: PhysicalDoubleType => JAVA_DOUBLE
+      case _: PhysicalFloatType => JAVA_FLOAT
+      case _: PhysicalLongType => JAVA_LONG
+      case _: PhysicalMapType => "MapData"
+      case PhysicalObjectType(cls) if cls.isArray =>
+        s"${javaType(ObjectType(cls.getComponentType))}[]"
+      case PhysicalObjectType(cls) => cls.getName
+      case _: PhysicalShortType => JAVA_SHORT
+      case _: PhysicalStringType => "UTF8String"
+      case _: PhysicalStructType => "InternalRow"
+      case _ => "Object"
+    }
   }
 
   @tailrec

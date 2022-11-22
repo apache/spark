@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
 import org.apache.spark.sql.catalyst.trees.Origin
+import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalStructType}
 import org.apache.spark.sql.catalyst.util.{truncatedString, StringUtils}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
@@ -430,6 +431,8 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    * The default size of a value of the StructType is the total default sizes of all field types.
    */
   override def defaultSize: Int = fields.map(_.dataType.defaultSize).sum
+
+  override def physicalDataType: PhysicalDataType = PhysicalStructType(fields)
 
   override def simpleString: String = {
     val fieldTypes = fields.view.map(field => s"${field.name}:${field.dataType.simpleString}").toSeq
