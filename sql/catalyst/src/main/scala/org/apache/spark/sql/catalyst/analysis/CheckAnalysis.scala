@@ -1295,7 +1295,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     def checkColumnNameDuplication(colsToAdd: Seq[QualifiedColType]): Unit = {
       SchemaUtils.checkColumnNameDuplication(
         colsToAdd.map(_.name.quoted),
-        "in the user specified columns",
         alter.conf.resolver)
     }
 

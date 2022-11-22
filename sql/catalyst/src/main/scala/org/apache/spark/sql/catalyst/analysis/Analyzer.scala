@@ -113,9 +113,9 @@ object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog {
  * @param nestedViewDepth The nested depth in the view resolution, this enables us to limit the
  *                        depth of nested views.
  * @param maxNestedViewDepth The maximum allowed depth of nested view resolution.
- * @param relationCache A mapping from qualified table names to resolved relations. This can ensure
- *                      that the table is resolved only once if a table is used multiple times
- *                      in a query.
+ * @param relationCache A mapping from qualified table names and time travel spec to resolved
+ *                      relations. This can ensure that the table is resolved only once if a table
+ *                      is used multiple times in a query.
  * @param referredTempViewNames All the temp view names referred by the current view we are
  *                              resolving. It's used to make sure the relation resolution is
  *                              consistent between view creation and view resolution. For example,
@@ -129,7 +129,8 @@ case class AnalysisContext(
     catalogAndNamespace: Seq[String] = Nil,
     nestedViewDepth: Int = 0,
     maxNestedViewDepth: Int = -1,
-    relationCache: mutable.Map[Seq[String], LogicalPlan] = mutable.Map.empty,
+    relationCache: mutable.Map[(Seq[String], Option[TimeTravelSpec]), LogicalPlan] =
+      mutable.Map.empty,
     referredTempViewNames: Seq[Seq[String]] = Seq.empty,
     // 1. If we are resolving a view, this field will be restored from the view metadata,
     //    by calling `AnalysisContext.withAnalysisContext(viewDesc)`.
@@ -1239,7 +1240,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       resolveTempView(u.multipartIdentifier, u.isStreaming, timeTravelSpec.isDefined).orElse {
         expandIdentifier(u.multipartIdentifier) match {
           case CatalogAndIdentifier(catalog, ident) =>
-            val key = catalog.name +: ident.namespace :+ ident.name
+            val key = ((catalog.name +: ident.namespace :+ ident.name).toSeq, timeTravelSpec)
             AnalysisContext.get.relationCache.get(key).map(_.transform {
               case multi: MultiInstanceRelation =>
                 val newRelation = multi.newInstance()
@@ -3504,8 +3505,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     private def resolveUserSpecifiedColumns(i: InsertIntoStatement): Seq[NamedExpression] = {
-      SchemaUtils.checkColumnNameDuplication(
-        i.userSpecifiedCols, "in the column list", resolver)
+      SchemaUtils.checkColumnNameDuplication(i.userSpecifiedCols, resolver)
 
       i.userSpecifiedCols.map { col =>
         i.table.resolve(Seq(col), resolver).getOrElse {

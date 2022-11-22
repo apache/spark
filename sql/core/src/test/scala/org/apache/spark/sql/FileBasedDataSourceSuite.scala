@@ -30,10 +30,10 @@ import org.apache.hadoop.fs.{LocalFileSystem, Path}
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.TestingUDT.{IntervalUDT, NullData, NullUDT}
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GreaterThan, Literal}
 import org.apache.spark.sql.catalyst.expressions.IntegralLiteralTestUtils.{negativeInt, positiveInt}
 import org.apache.spark.sql.catalyst.plans.logical.Filter
-import org.apache.spark.sql.execution.SimpleMode
+import org.apache.spark.sql.execution.{FileSourceScanLike, SimpleMode}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.FilePartition
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, FileScan}
@@ -1072,6 +1072,24 @@ class FileBasedDataSourceSuite extends QueryTest
       val df = spark.read.option("header", true).csv(pathStr)
         .where($"a / b".isNotNull and $"`a``b`".isNotNull)
       checkAnswer(df, Row("v1", "v2"))
+    }
+  }
+
+  test("SPARK-41017: filter pushdown with nondeterministic predicates") {
+    withTempPath { path =>
+      val pathStr = path.getCanonicalPath
+      spark.range(10).write.parquet(pathStr)
+      Seq("parquet", "").foreach { useV1SourceList =>
+        withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1SourceList) {
+          val scan = spark.read.parquet(pathStr)
+          val df = scan.where(rand() > 0.5 && $"id" > 5)
+          val filters = df.queryExecution.executedPlan.collect {
+            case f: FileSourceScanLike => f.dataFilters
+            case b: BatchScanExec => b.scan.asInstanceOf[FileScan].dataFilters
+          }.flatten
+          assert(filters.contains(GreaterThan(scan.logicalPlan.output.head, Literal(5L))))
+        }
+      }
     }
   }
 }

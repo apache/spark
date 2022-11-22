@@ -688,11 +688,13 @@ class DataFrameSuite extends QueryTest
     assert(
       err.getMessage.contains("The size of column names: 1 isn't equal to the size of columns: 2"))
 
-    val err2 = intercept[AnalysisException] {
-      testData.toDF().withColumns(Seq("newCol1", "newCOL1"),
-        Seq(col("key") + 1, col("key") + 2))
-    }
-    assert(err2.getMessage.contains("Found duplicate column(s)"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        testData.toDF().withColumns(Seq("newCol1", "newCOL1"),
+          Seq(col("key") + 1, col("key") + 2))
+      },
+      errorClass = "COLUMN_ALREADY_EXISTS",
+      parameters = Map("columnName" -> "`newcol1`"))
   }
 
   test("withColumns: internal method, case sensitive") {
@@ -706,11 +708,13 @@ class DataFrameSuite extends QueryTest
         }.toSeq)
       assert(df.schema.map(_.name) === Seq("key", "value", "newCol1", "newCOL1"))
 
-      val err = intercept[AnalysisException] {
-        testData.toDF().withColumns(Seq("newCol1", "newCol1"),
-          Seq(col("key") + 1, col("key") + 2))
-      }
-      assert(err.getMessage.contains("Found duplicate column(s)"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          testData.toDF().withColumns(Seq("newCol1", "newCol1"),
+            Seq(col("key") + 1, col("key") + 2))
+        },
+        errorClass = "COLUMN_ALREADY_EXISTS",
+        parameters = Map("columnName" -> "`newCol1`"))
     }
   }
 
@@ -923,12 +927,12 @@ class DataFrameSuite extends QueryTest
   }
 
   test("SPARK-40311: withColumnsRenamed duplicate column names simple") {
-    val e = intercept[AnalysisException] {
-      person.withColumnsRenamed(Map("id" -> "renamed", "name" -> "renamed"))
-    }
-    assert(e.getMessage.contains("Found duplicate column(s)"))
-    assert(e.getMessage.contains("in given column names for withColumnsRenamed:"))
-    assert(e.getMessage.contains("`renamed`"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        person.withColumnsRenamed(Map("id" -> "renamed", "name" -> "renamed"))
+      },
+      errorClass = "COLUMN_ALREADY_EXISTS",
+      parameters = Map("columnName" -> "`renamed`"))
   }
 
   test("SPARK-40311: withColumnsRenamed duplicate column names simple case sensitive") {
@@ -939,12 +943,12 @@ class DataFrameSuite extends QueryTest
   }
 
   test("SPARK-40311: withColumnsRenamed duplicate column names indirect") {
-    val e = intercept[AnalysisException] {
-      person.withColumnsRenamed(Map("id" -> "renamed1", "renamed1" -> "age"))
-    }
-    assert(e.getMessage.contains("Found duplicate column(s)"))
-    assert(e.getMessage.contains("in given column names for withColumnsRenamed:"))
-    assert(e.getMessage.contains("`age`"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        person.withColumnsRenamed(Map("id" -> "renamed1", "renamed1" -> "age"))
+      },
+      errorClass = "COLUMN_ALREADY_EXISTS",
+      parameters = Map("columnName" -> "`age`"))
   }
 
   test("SPARK-20384: Value class filter") {
@@ -1759,24 +1763,25 @@ class DataFrameSuite extends QueryTest
 
   test("SPARK-8072: Better Exception for Duplicate Columns") {
     // only one duplicate column present
-    val e = intercept[org.apache.spark.sql.AnalysisException] {
+    val e = intercept[AnalysisException] {
       Seq((1, 2, 3), (2, 3, 4), (3, 4, 5)).toDF("column1", "column2", "column1")
         .write.format("parquet").save("temp")
     }
-    assert(e.getMessage.contains("Found duplicate column(s) when inserting into"))
-    assert(e.getMessage.contains("column1"))
-    assert(!e.getMessage.contains("column2"))
+    checkError(
+      exception = e,
+      errorClass = "COLUMN_ALREADY_EXISTS",
+      parameters = Map("columnName" -> "`column1`"))
 
     // multiple duplicate columns present
-    val f = intercept[org.apache.spark.sql.AnalysisException] {
+    val f = intercept[AnalysisException] {
       Seq((1, 2, 3, 4, 5), (2, 3, 4, 5, 6), (3, 4, 5, 6, 7))
         .toDF("column1", "column2", "column3", "column1", "column3")
         .write.format("json").save("temp")
     }
-    assert(f.getMessage.contains("Found duplicate column(s) when inserting into"))
-    assert(f.getMessage.contains("column1"))
-    assert(f.getMessage.contains("column3"))
-    assert(!f.getMessage.contains("column2"))
+    checkError(
+      exception = f,
+      errorClass = "COLUMN_ALREADY_EXISTS",
+      parameters = Map("columnName" -> "`column1`"))
   }
 
   test("SPARK-6941: Better error message for inserting into RDD-based Table") {

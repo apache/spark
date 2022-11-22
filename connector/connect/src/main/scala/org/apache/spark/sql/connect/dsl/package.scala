@@ -510,6 +510,28 @@ package object dsl {
           .build()
       }
 
+      def drop(columns: String*): Relation = {
+        assert(columns.nonEmpty)
+
+        val cols = columns.map(col =>
+          Expression.newBuilder
+            .setUnresolvedAttribute(
+              Expression.UnresolvedAttribute.newBuilder
+                .setUnparsedIdentifier(col)
+                .build())
+            .build())
+
+        Relation
+          .newBuilder()
+          .setDrop(
+            Drop
+              .newBuilder()
+              .setInput(logicalPlan)
+              .addAllCols(cols.asJava)
+              .build())
+          .build()
+      }
+
       def groupBy(groupingExprs: Expression*)(aggregateExprs: Expression*): Relation = {
         val agg = Aggregate.newBuilder()
         agg.setInput(logicalPlan)

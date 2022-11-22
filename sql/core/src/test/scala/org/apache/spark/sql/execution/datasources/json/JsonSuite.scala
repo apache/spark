@@ -3032,10 +3032,12 @@ abstract class JsonSuite
             checkAnswer(readback.filter($"AAA" === 0 && $"bbb" === 1), Seq(Row(0, 1)))
             checkAnswer(readback.filter($"AAA" === 2 && $"bbb" === 3), Seq())
             // Schema inferring
-            val errorMsg = intercept[AnalysisException] {
-              spark.read.json(path.getCanonicalPath).collect()
-            }.getMessage
-            assert(errorMsg.contains("Found duplicate column(s) in the data schema"))
+            checkError(
+              exception = intercept[AnalysisException] {
+                spark.read.json(path.getCanonicalPath).collect()
+              },
+              errorClass = "COLUMN_ALREADY_EXISTS",
+              parameters = Map("columnName" -> "`aaa`"))
           }
           withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
             val readback = spark.read.schema("aaa integer, BBB integer")

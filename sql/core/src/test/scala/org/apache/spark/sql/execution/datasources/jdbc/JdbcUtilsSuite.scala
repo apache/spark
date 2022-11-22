@@ -49,8 +49,10 @@ class JdbcUtilsSuite extends SparkFunSuite {
       JdbcUtils.getCustomSchema(tableSchema, "c1 DATE, c1 STRING", caseInsensitive) ===
         StructType(Seq(StructField("c1", DateType, false), StructField("c1", StringType, false)))
     }
-    assert(duplicate.getMessage.contains(
-      "Found duplicate column(s) in the customSchema option value"))
+    checkError(
+      exception = duplicate,
+      errorClass = "COLUMN_ALREADY_EXISTS",
+      parameters = Map("columnName" -> "`c1`"))
 
     // Throw ParseException
     checkError(
