@@ -464,6 +464,49 @@ class Sort(LogicalPlan):
         """
 
 
+class Drop(LogicalPlan):
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        columns: List[Union[Column, str]],
+    ) -> None:
+        super().__init__(child)
+        assert len(columns) > 0 and all(isinstance(c, (Column, str)) for c in columns)
+        self.columns = columns
+
+    def _convert_to_expr(
+        self, col: Union[Column, str], session: "RemoteSparkSession"
+    ) -> proto.Expression:
+        expr = proto.Expression()
+        if isinstance(col, Column):
+            expr.CopyFrom(col.to_plan(session))
+        else:
+            expr.CopyFrom(self.unresolved_attr(col))
+        return expr
+
+    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
+        assert self._child is not None
+        plan = proto.Relation()
+        plan.drop.input.CopyFrom(self._child.plan(session))
+        plan.drop.cols.extend([self._convert_to_expr(c, session) for c in self.columns])
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
+        return f"{' ' * indent}<Drop columns={self.columns}>\n{c_buf}"
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+            <li>
+                <b>Drop</b><br />
+                columns: {self.columns} <br />
+                {self._child_repr_()}
+            </li>
+        </uL>
+        """
+
+
 class Sample(LogicalPlan):
     def __init__(
         self,

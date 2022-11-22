@@ -25,7 +25,7 @@ import com.google.common.collect.{Lists, Maps}
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.WriteOperation
-import org.apache.spark.sql.{Dataset, SparkSession}
+import org.apache.spark.sql.{Column, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.AliasIdentifier
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.expressions
@@ -69,6 +69,7 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Relation.RelTypeCase.DEDUPLICATE => transformDeduplicate(rel.getDeduplicate)
       case proto.Relation.RelTypeCase.SET_OP => transformSetOperation(rel.getSetOp)
       case proto.Relation.RelTypeCase.SORT => transformSort(rel.getSort)
+      case proto.Relation.RelTypeCase.DROP => transformDrop(rel.getDrop)
       case proto.Relation.RelTypeCase.AGGREGATE => transformAggregate(rel.getAggregate)
       case proto.Relation.RelTypeCase.SQL => transformSql(rel.getSql)
       case proto.Relation.RelTypeCase.LOCAL_RELATION =>
@@ -521,6 +522,19 @@ class SparkConnectPlanner(session: SparkSession) {
         case _ => expressions.NullsFirst
       },
       sameOrderExpressions = Seq.empty)
+  }
+
+  private def transformDrop(rel: proto.Drop): LogicalPlan = {
+    assert(rel.getColsCount > 0, s"cols must contains at least 1 item!")
+
+    val cols = rel.getColsList.asScala.toArray.map { expr =>
+      Column(transformExpression(expr))
+    }
+
+    Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .drop(cols.head, cols.tail: _*)
+      .logicalPlan
   }
 
   private def transformAggregate(rel: proto.Aggregate): LogicalPlan = {

@@ -484,6 +484,11 @@
       "Failed to execute user defined function (<functionName>: (<signature>) => <result>)"
     ]
   },
+  "FAILED_FUNCTION_CALL" : {
+    "message" : [
+      "Failed preparing of the function <funcName> for call. Please, double check function's arguments."
+    ]
+  },
   "FAILED_RENAME_PATH" : {
     "message" : [
       "Failed to rename <sourcePath> to <targetPath> as destination already exists"
