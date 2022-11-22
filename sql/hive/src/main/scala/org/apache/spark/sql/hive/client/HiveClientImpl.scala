@@ -62,7 +62,8 @@ import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.hive.HiveExternalCatalog
-import org.apache.spark.sql.hive.HiveExternalCatalog.{DATASOURCE_SCHEMA}
+import org.apache.spark.sql.hive.HiveExternalCatalog.DATASOURCE_SCHEMA
+import org.apache.spark.sql.hive.client.HiveClientImpl.HiveStatisticsProperties
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{CircularBuffer, Utils}
@@ -105,6 +106,15 @@ private[hive] class HiveClientImpl(
 
   private class RawHiveTableImpl(override val rawTable: HiveTable) extends RawHiveTable {
     override lazy val toCatalogTable = convertHiveTableToCatalogTable(rawTable)
+
+    override def hiveTableProps(containsStats: Boolean): Map[String, String] = {
+      val parameters = rawTable.getParameters.asScala.toMap
+      if (containsStats) {
+        parameters
+      } else {
+        parameters.filterKeys(!HiveStatisticsProperties.contains(_)).toMap
+      }
+    }
   }
 
   import HiveClientImpl._
@@ -578,18 +588,6 @@ private[hive] class HiveClientImpl(
       viewText = Option(h.getViewExpandedText),
       unsupportedFeatures = unsupportedFeatures.toSeq,
       ignoredProperties = ignoredProperties.toMap)
-  }
-
-  override def hiveTableProps(
-      rawHiveTable: RawHiveTable,
-      containsStats: Boolean): Map[String, String] = {
-    val hiveTable = rawHiveTable.rawTable.asInstanceOf[HiveTable]
-    val parameters = hiveTable.getParameters.asScala.toMap
-    if (containsStats) {
-      parameters
-    } else {
-      parameters.filterKeys(!HiveStatisticsProperties.contains(_))
-    }
   }
 
   override def createTable(table: CatalogTable, ignoreIfExists: Boolean): Unit = withHiveState {

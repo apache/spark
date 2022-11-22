@@ -29,6 +29,9 @@ import org.apache.spark.sql.types.StructType
 private[hive] trait RawHiveTable {
   def rawTable: Object
   def toCatalogTable: CatalogTable
+
+  /** Get hive table properties. */
+  def hiveTableProps(containsStats: Boolean): Map[String, String]
 }
 
 /**
@@ -112,9 +115,6 @@ private[hive] trait HiveClient {
 
   /** Creates a table with the given metadata. */
   def createTable(table: CatalogTable, ignoreIfExists: Boolean): Unit
-
-  /** Get hive table properties. */
-  def hiveTableProps(rawHiveTable: RawHiveTable, containsStats: Boolean): Map[String, String]
 
   /** Drop the specified table. */
   def dropTable(dbName: String, tableName: String, ignoreIfNotExists: Boolean, purge: Boolean): Unit
