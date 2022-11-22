@@ -318,6 +318,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               errorClass = "_LEGACY_ERROR_TEMP_2413",
               messageParameters = Map("argName" -> e.prettyName))
 
+          case p: NamedParameter =>
+            p.failAnalysis(
+              errorClass = "UNBOUND_PARAMETER",
+              messageParameters = Map("name" -> p.name))
+
           case _ =>
         })
 

@@ -1054,6 +1054,11 @@
       "Unable to convert SQL type <toType> to Protobuf type <protobufType>."
     ]
   },
+  "UNBOUND_PARAMETER" : {
+    "message" : [
+      "Found the unbound parameter: <name>. Use `bind()` to substitute the parameter by a literal."
+    ]
+  },
   "UNCLOSED_BRACKETED_COMMENT" : {
     "message" : [
       "Found an unclosed bracketed comment. Please, append */ at the end of the comment."

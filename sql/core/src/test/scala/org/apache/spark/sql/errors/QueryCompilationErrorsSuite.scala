@@ -667,6 +667,19 @@ class QueryCompilationErrorsSuite
       errorClass = "DATATYPE_MISMATCH.INVALID_JSON_SCHEMA",
       parameters = Map("schema" -> "\"INT\"", "sqlExpr" -> "\"from_json(a)\""))
   }
+
+  test("UNBOUND_PARAMETER: named parameters should be substituted") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("select @abc").collect()
+      },
+      errorClass = "UNBOUND_PARAMETER",
+      parameters = Map("name" -> "abc"),
+      context = ExpectedContext(
+        fragment = "@abc",
+        start = 7,
+        stop = 10))
+  }
 }
 
 class MyCastToString extends SparkUserDefinedFunction(

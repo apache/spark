@@ -33,10 +33,10 @@ case class NamedParameter(name: String) extends LeafExpression {
   override def nullable: Boolean = true
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    throw SparkException.internalError(s"Found the unbound parameter: $name")
+    throw SparkException.internalError(s"Found the unbound parameter: $name.")
   }
 
   def eval(input: InternalRow): Any = {
-    throw SparkException.internalError(s"Found the unbound parameter: $name")
+    throw SparkException.internalError(s"Found the unbound parameter: $name.")
   }
 }
