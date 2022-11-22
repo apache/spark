@@ -28,6 +28,8 @@ import java.util.concurrent.Future;
 
 import com.codahale.metrics.MetricSet;
 import com.google.common.collect.Lists;
+import static org.apache.spark.network.util.PushBasedShuffleUtils.DEFAUT_APP_ATTEMPT_ID;
+import static org.apache.spark.network.util.PushBasedShuffleUtils.DELETE_CURRENT_MERGED_SHUFFLE_ID;
 
 import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.buffer.ManagedBuffer;
@@ -38,7 +40,14 @@ import org.apache.spark.network.client.TransportClientBootstrap;
 import org.apache.spark.network.crypto.AuthClientBootstrap;
 import org.apache.spark.network.sasl.SecretKeyHolder;
 import org.apache.spark.network.server.NoOpRpcHandler;
-import org.apache.spark.network.shuffle.protocol.*;
+import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
+import org.apache.spark.network.shuffle.protocol.BlocksRemoved;
+import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
+import org.apache.spark.network.shuffle.protocol.FinalizeShuffleMerge;
+import org.apache.spark.network.shuffle.protocol.MergeStatuses;
+import org.apache.spark.network.shuffle.protocol.RegisterExecutor;
+import org.apache.spark.network.shuffle.protocol.RemoveBlocks;
+import org.apache.spark.network.shuffle.protocol.RemoveShuffleMerge;
 import org.apache.spark.network.util.TransportConf;
 
 /**
@@ -52,10 +61,8 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
   private final boolean authEnabled;
   private final SecretKeyHolder secretKeyHolder;
   private final long registrationTimeoutMs;
-  // Push based shuffle requires a comparable Id to distinguish the shuffle data among multiple
-  // application attempts. This variable is derived from the String typed appAttemptId. If no
-  // appAttemptId is set, the default comparableAppAttemptId is -1.
-  private int comparableAppAttemptId = -1;
+
+  private int comparableAppAttemptId = DEFAUT_APP_ATTEMPT_ID;
 
   /**
    * Creates an external shuffle client, with SASL optionally enabled. If SASL is not enabled,
@@ -313,6 +320,22 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
       }
     });
     return numRemovedBlocksFuture;
+  }
+
+  public Boolean removeShuffleMerge(String host, int port, int shuffleId) {
+    try {
+      checkInit();
+      TransportClient client = clientFactory.createClient(host, port);
+      String appAttemptId = getAppAttemptId() == null ? String.valueOf(DEFAUT_APP_ATTEMPT_ID) : getAppAttemptId();
+      ByteBuffer removeMessage = new RemoveShuffleMerge(appId, appAttemptId, shuffleId,
+          DELETE_CURRENT_MERGED_SHUFFLE_ID).toByteBuffer();
+      client.send(removeMessage);
+    } catch (Throwable e) {
+      logger.error("Error while sending RemoveShuffleMerge request to {}:{}",
+          host, port, e);
+      return false;
+    }
+    return true;
   }
 
   @Override

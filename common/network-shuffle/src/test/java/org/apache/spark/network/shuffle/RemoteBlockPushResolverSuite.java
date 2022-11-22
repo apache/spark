@@ -28,7 +28,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
-import java.util.Map;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -1148,10 +1147,9 @@ public class RemoteBlockPushResolverSuite {
     Semaphore closed = new Semaphore(0);
     pushResolver = new RemoteBlockPushResolver(conf, null) {
       @Override
-      void closeAndDeleteOutdatedPartitions(
-          AppAttemptShuffleMergeId appAttemptShuffleMergeId,
-          Map<Integer, AppShufflePartitionInfo> partitions) {
-        super.closeAndDeleteOutdatedPartitions(appAttemptShuffleMergeId, partitions);
+      void deleteCurrentOutDatedShufflePartitions(AppShuffleInfo shuffleInfo, Integer shuffleId,
+          AppAttemptShuffleMergeId higherShuffleMergeIdToClean) {
+        super.deleteCurrentOutDatedShufflePartitions(shuffleInfo, shuffleId, higherShuffleMergeIdToClean);
         closed.release();
       }
     };

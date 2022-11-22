@@ -327,43 +327,52 @@ class BlockManagerMasterEndpoint(
       }
     }.toSeq
 
-    // Find all shuffle blocks on executors that are no longer running
-    val blocksToDeleteByShuffleService =
-      new mutable.HashMap[BlockManagerId, mutable.HashSet[BlockId]]
+    var removeShuffleFromShuffleServicesFutures = Seq.empty[Future[Boolean]]
     if (externalShuffleServiceRemoveShuffleEnabled) {
-      mapOutputTracker.shuffleStatuses.get(shuffleId).foreach { shuffleStatus =>
-        shuffleStatus.withMapStatuses { mapStatuses =>
-          mapStatuses.foreach { mapStatus =>
-            // Check if the executor has been deallocated
-            if (!blockManagerIdByExecutor.contains(mapStatus.location.executorId)) {
-              val blocksToDel =
-                shuffleManager.shuffleBlockResolver.getBlocksForShuffle(shuffleId, mapStatus.mapId)
-              if (blocksToDel.nonEmpty) {
-                val blocks = blocksToDeleteByShuffleService.getOrElseUpdate(mapStatus.location,
-                  new mutable.HashSet[BlockId])
-                blocks ++= blocksToDel
+      val shuffleClient = externalBlockStoreClient.get
+      // Find all shuffle blocks on executors that are no longer running
+      val blocksToDelete = new mutable.HashMap[BlockManagerId, mutable.HashSet[BlockId]]
+      mapOutputTracker.shuffleStatuses.get(shuffleId) match {
+        case Some(shuffleStatus) =>
+          shuffleStatus.withMapStatuses { mapStatuses =>
+            mapStatuses.foreach { mapStatus =>
+              // Check if the executor has been deallocated
+              if (!blockManagerIdByExecutor.contains(mapStatus.location.executorId)) {
+                val blocksToDel = shuffleManager.shuffleBlockResolver
+                  .getBlocksForShuffle(shuffleId, mapStatus.mapId)
+                if (blocksToDel.nonEmpty) {
+                  val blocks = blocksToDelete.getOrElseUpdate(mapStatus.location,
+                    new mutable.HashSet[BlockId])
+                  blocks ++= blocksToDel
+                }
               }
             }
           }
-        }
+          removeShuffleFromShuffleServicesFutures ++= blocksToDelete.map { case (bmId, blockIds) =>
+            Future[Boolean] {
+              val numRemovedBlocks = shuffleClient.removeBlocks(
+                bmId.host,
+                bmId.port,
+                bmId.executorId,
+                blockIds.map(_.toString).toArray)
+              numRemovedBlocks.get(defaultRpcTimeout.duration.toSeconds,
+                TimeUnit.SECONDS) == blockIds.size
+            }
+          }.toSeq
+        case None =>
+          logError(s"Asked to remove shuffle blocks from " +
+            s"shuffle service for unknown shuffle ${shuffleId}")
       }
     }
-
-    val removeShuffleFromShuffleServicesFutures =
-      externalBlockStoreClient.map { shuffleClient =>
-        blocksToDeleteByShuffleService.map { case (bmId, blockIds) =>
-          Future[Boolean] {
-            val numRemovedBlocks = shuffleClient.removeBlocks(
-              bmId.host,
-              bmId.port,
-              bmId.executorId,
-              blockIds.map(_.toString).toArray)
-            numRemovedBlocks.get(defaultRpcTimeout.duration.toSeconds,
-              TimeUnit.SECONDS) == blockIds.size
-          }
+    if (pushBasedShuffleEnabled && externalBlockStoreClient.isDefined) {
+      val shuffleClient = externalBlockStoreClient.get
+      val shuffleMergerLocations = mapOutputTracker.getShufflePushMergerLocations(shuffleId)
+      removeShuffleFromShuffleServicesFutures ++= shuffleMergerLocations.map(bmId => {
+        Future[Boolean] {
+          shuffleClient.removeShuffleMerge(bmId.host, bmId.port, shuffleId)
         }
-      }.getOrElse(Seq.empty)
-
+      })
+    }
     Future.sequence(removeShuffleFromExecutorsFutures ++
       removeShuffleFromShuffleServicesFutures)
   }
