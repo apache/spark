@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeRef
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, Join, LogicalPlan, SerdeInfo, Window}
 import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
-import org.apache.spark.sql.catalyst.util.{quoteIdentifier, FailFastMode, ParseMode, PermissiveMode}
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, FailFastMode, ParseMode, PermissiveMode, quoteIdentifier}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, UnboundFunction}
@@ -637,18 +637,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def invalidFunctionArgumentsError(
-      sqlExpr: String, name: String, expectedInfo: String, actualNumber: Int): Throwable = {
+      sqlExpr: Seq[Expression], name: String, expectedInfo: String, actualNumber: Int): Throwable = {
     new AnalysisException(
       errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
       messageParameters = Map(
-        "sqlExpr" -> sqlExpr,
+        "sqlExpr" -> sqlExpr.map(toPrettySQL(_)).mkString(","),
         "functionName" -> name,
         "expectedNum" -> expectedInfo,
         "actualNum" -> actualNumber.toString))
   }
 
   def invalidFunctionArgumentNumberError(
-      sqlExpr: String,
+      sqlExpr: Seq[Expression],
       validParametersCount: Seq[Int],
       name: String,
       actualNumber: Int): Throwable = {
