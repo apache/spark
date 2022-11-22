@@ -3257,14 +3257,6 @@ private[spark] object Utils extends Logging {
       case _ => math.max(sortedSize(len / 2), 1)
     }
   }
-
-  def closeAll(closeables: AutoCloseable*): Unit = {
-    for (closeable <- closeables) {
-      if (closeable != null) {
-        closeable.close()
-      }
-    }
-  }
 }
 
 private[util] object CallerContext extends Logging {

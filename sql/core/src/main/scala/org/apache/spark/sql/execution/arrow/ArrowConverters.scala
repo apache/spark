@@ -21,6 +21,7 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, FileInputStream, Ou
 import java.nio.channels.{Channels, ReadableByteChannel}
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.arrow.flatbuf.MessageHeader
 import org.apache.arrow.memory.BufferAllocator
@@ -213,6 +214,83 @@ private[sql] object ArrowConverters extends Logging {
     }.next()
   }
 
+  private[sql] abstract class InternalRowIterator(
+      arrowBatchIter: Iterator[Array[Byte]],
+      context: TaskContext)
+      extends Iterator[InternalRow] {
+    // Keep all the resources we have opened in order, should be closed in reverse order finally.
+    val resources = new ArrayBuffer[AutoCloseable]()
+    protected val allocator: BufferAllocator = ArrowUtils.rootAllocator.newChildAllocator(
+      s"to${this.getClass.getSimpleName}",
+      0,
+      Long.MaxValue)
+    resources.append(allocator)
+
+    private var rowIterAndSchema =
+      if (arrowBatchIter.hasNext) nextBatch() else (Iterator.empty, null)
+    // We will ensure schemas parsed from every batch are the same
+    val schema: StructType = rowIterAndSchema._2
+
+    if (context != null) context.addTaskCompletionListener[Unit] { _ =>
+      closeAll(resources.reverse: _*)
+    }
+
+    override def hasNext: Boolean = rowIterAndSchema._1.hasNext || {
+      if (arrowBatchIter.hasNext) {
+        rowIterAndSchema = nextBatch()
+        if (schema != rowIterAndSchema._2) {
+          throw new IllegalArgumentException(
+            s"ArrowBatch iterator contain 2 batches with" +
+              s" different schema: $schema and ${rowIterAndSchema._2}")
+        }
+        rowIterAndSchema._1.hasNext
+      } else {
+        closeAll(resources.reverse: _*)
+        false
+      }
+    }
+
+    override def next(): InternalRow = rowIterAndSchema._1.next()
+
+    def nextBatch(): (Iterator[InternalRow], StructType)
+  }
+
+  private[sql] class InternalRowIteratorWithoutSchema(
+      arrowBatchIter: Iterator[Array[Byte]],
+      schema: StructType,
+      timeZoneId: String,
+      context: TaskContext)
+      extends InternalRowIterator(arrowBatchIter, context) {
+
+    override def nextBatch(): (Iterator[InternalRow], StructType) = {
+      val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
+      val root = VectorSchemaRoot.create(arrowSchema, allocator)
+      resources.append(root)
+      val arrowRecordBatch = ArrowConverters.loadBatch(arrowBatchIter.next(), allocator)
+      val vectorLoader = new VectorLoader(root)
+      vectorLoader.load(arrowRecordBatch)
+      arrowRecordBatch.close()
+      (vectorSchemaRootToIter(root), schema)
+    }
+  }
+
+  private[sql] class InternalRowIteratorWithSchema(
+      arrowBatchIter: Iterator[Array[Byte]],
+      context: TaskContext)
+      extends InternalRowIterator(arrowBatchIter, context) {
+    override def nextBatch(): (Iterator[InternalRow], StructType) = {
+      val reader =
+        new ArrowStreamReader(new ByteArrayInputStream(arrowBatchIter.next()), allocator)
+      val root = if (reader.loadNextBatch()) reader.getVectorSchemaRoot else null
+      resources.append(reader, root)
+      if (root == null) {
+        (Iterator.empty, null)
+      } else {
+        (vectorSchemaRootToIter(root), ArrowUtils.fromArrowSchema(root.getSchema))
+      }
+    }
+  }
+
   /**
    * Maps iterator from serialized ArrowRecordBatches to InternalRows.
    */
@@ -220,43 +298,9 @@ private[sql] object ArrowConverters extends Logging {
       arrowBatchIter: Iterator[Array[Byte]],
       schema: StructType,
       timeZoneId: String,
-      context: TaskContext): Iterator[InternalRow] = {
-    val allocator =
-      ArrowUtils.rootAllocator.newChildAllocator("fromBatchIterator", 0, Long.MaxValue)
-
-    val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
-    val root = VectorSchemaRoot.create(arrowSchema, allocator)
-
-    new Iterator[InternalRow] {
-      private var rowIter = if (arrowBatchIter.hasNext) nextBatch() else Iterator.empty
-
-      if (context != null) context.addTaskCompletionListener[Unit] { _ =>
-        root.close()
-        allocator.close()
-      }
-
-      override def hasNext: Boolean = rowIter.hasNext || {
-        if (arrowBatchIter.hasNext) {
-          rowIter = nextBatch()
-          true
-        } else {
-          root.close()
-          allocator.close()
-          false
-        }
-      }
-
-      override def next(): InternalRow = rowIter.next()
-
-      private def nextBatch(): Iterator[InternalRow] = {
-        val arrowRecordBatch = ArrowConverters.loadBatch(arrowBatchIter.next(), allocator)
-        val vectorLoader = new VectorLoader(root)
-        vectorLoader.load(arrowRecordBatch)
-        arrowRecordBatch.close()
-        vectorSchemaRootToIter(root)
-      }
-    }
-  }
+      context: TaskContext): Iterator[InternalRow] = new InternalRowIteratorWithoutSchema(
+    arrowBatchIter, schema, timeZoneId, context
+  )
 
   /**
    * Maps iterator from serialized ArrowRecordBatches to InternalRows. Different from
@@ -265,72 +309,8 @@ private[sql] object ArrowConverters extends Logging {
   private[sql] def fromBatchWithSchemaIterator(
       arrowBatchIter: Iterator[Array[Byte]],
       context: TaskContext): (Iterator[InternalRow], StructType) = {
-    var structType: StructType = null
-    val allocator =
-      ArrowUtils.rootAllocator.newChildAllocator("fromBatchWithSchemaIterator", 0, Long.MaxValue)
-
-    val iter = new Iterator[InternalRow] {
-      private var rowIter = if (arrowBatchIter.hasNext) nextBatch() else Iterator.empty
-
-      if (context != null) context.addTaskCompletionListener[Unit] { _ =>
-        allocator.close()
-      }
-
-      override def hasNext: Boolean = rowIter.hasNext || {
-        if (arrowBatchIter.hasNext) {
-          rowIter = nextBatch()
-          rowIter.hasNext
-        } else {
-          Utils.closeAll(allocator)
-          false
-        }
-      }
-
-      override def next(): InternalRow = {
-        rowIter.next()
-      }
-
-      private def nextBatch(): Iterator[InternalRow] = {
-        val rowsAndType = fromBatchWithSchemaBuffer(arrowBatchIter.next(), allocator, context)
-        if (structType == null) {
-          structType = rowsAndType._2
-        } else if (structType != rowsAndType._2) {
-          throw new IllegalArgumentException(s"ArrowBatch iterator contain 2 batches with" +
-            s" different schema: $structType and ${rowsAndType._2}")
-        }
-        rowsAndType._1
-      }
-    }
-    (iter, structType)
-  }
-
-  private def fromBatchWithSchemaBuffer(
-      arrowBuffer: Array[Byte],
-      allocator: BufferAllocator,
-      context: TaskContext): (Iterator[InternalRow], StructType) = {
-    val reader = new ArrowStreamReader(new ByteArrayInputStream(arrowBuffer), allocator)
-
-    val root = if (reader.loadNextBatch()) reader.getVectorSchemaRoot else null
-    val structType =
-      if (root == null) new StructType() else ArrowUtils.fromArrowSchema(root.getSchema)
-
-    if (context != null) context.addTaskCompletionListener[Unit] { _ =>
-      Utils.closeAll(root, reader)
-    }
-    val inner = vectorSchemaRootToIter(root)
-    val iter = new Iterator[InternalRow] {
-      override def hasNext: Boolean = {
-        if (inner.hasNext) {
-          true
-        } else {
-          Utils.closeAll(root, reader)
-          false
-        }
-      }
-
-      override def next(): InternalRow = inner.next()
-    }
-    (iter, structType)
+    val iterator = new InternalRowIteratorWithSchema(arrowBatchIter, context)
+    (iterator, iterator.schema)
   }
 
   private def vectorSchemaRootToIter(root: VectorSchemaRoot): Iterator[InternalRow] = {
@@ -466,6 +446,14 @@ private[sql] object ArrowConverters extends Logging {
           // Proceed to next message
           readNextBatch()
         }
+      }
+    }
+  }
+
+  private def closeAll(closeables: AutoCloseable*): Unit = {
+    for (closeable <- closeables) {
+      if (closeable != null) {
+        closeable.close()
       }
     }
   }

@@ -48,17 +48,17 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   lazy val connectTestRelation =
     createLocalRelationProto(
       Seq(AttributeReference("id", IntegerType)(), AttributeReference("name", StringType)()),
-      Seq())
+      Seq.empty)
 
   lazy val connectTestRelation2 =
     createLocalRelationProto(
       Seq(AttributeReference("id", IntegerType)(), AttributeReference("name", StringType)()),
-      Seq())
+      Seq.empty)
 
   lazy val connectTestRelationMap =
     createLocalRelationProto(
       Seq(AttributeReference("id", MapType(StringType, StringType))()),
-      Seq())
+      Seq.empty)
 
   lazy val sparkTestRelation: DataFrame =
     spark.createDataFrame(
@@ -76,7 +76,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       StructType(Seq(StructField("id", MapType(StringType, StringType)))))
 
   lazy val localRelation =
-    createLocalRelationProto(Seq(AttributeReference("id", IntegerType)()), Seq())
+    createLocalRelationProto(Seq(AttributeReference("id", IntegerType)()), Seq.empty)
 
   test("Basic select") {
     val connectPlan = connectTestRelation.select("id".protoAttr)
