@@ -709,8 +709,8 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     (0 to 4).foreach { i => onExecutorRemoved(manager, i.toString)}
 
     // 5 original tasks (30 - 34) finished before speculative task start,
-    // the speculative task will not be scheduled
-    // executors needed = (5 + 10) / 4 + 1
+    // the speculative task will be removed from pending tasks
+    // executors needed = (5 + 5) / 4 + 1
     (30 to 34).map { i =>
       createTaskInfo(i, i, executorId = s"${i / 4}")}
       .foreach { info => post(
