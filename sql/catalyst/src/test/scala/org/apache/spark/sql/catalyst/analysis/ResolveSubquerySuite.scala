@@ -19,18 +19,15 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
-import org.junit.Assert
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{AttributeSet, Cos, CreateArray, Exists, Expression, GetStructField, InSubquery, LateralSubquery, ListQuery, OuterReference, ScalarSubquery, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{AttributeSet, Cos, CreateArray, Exists, Expression, GetStructField, InSubquery, LateralSubquery, ListQuery, Literal, OuterReference, ScalarSubquery, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateFunction, Count}
 import org.apache.spark.sql.catalyst.optimizer.{PropagateEmptyRelation, SimpleTestOptimizer}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
-
 
 /**
  * Unit tests for [[ResolveSubquery]].
@@ -294,7 +291,6 @@ class ResolveSubquerySuite extends AnalysisTest {
         t1.select($"a", $"b").
           having($"b")(Cos(sum($"a")))(Exists(t2.select($"c").
             where($"d" === Cos(sum($"a"))))) -> 1,
-
         t1.select($"a", $"b").
           having($"b")(sum($"a"))(Exists(t2.select($"c").
             where($"d" === Cos(sum($"a"))))) -> 1,
@@ -303,7 +299,10 @@ class ResolveSubquerySuite extends AnalysisTest {
             where($"d" === sum($"a")))) -> 2,
         t1.select($"a", $"b").
           having($"b")(sum($"a"), Cos(sum($"b")))(Exists(t2.select($"c").
-            where($"d" === Cos(sum($"a")) + sum($"a") + sum($"b") + Cos(sum($"b"))))) -> 3
+            where($"d" === Cos(sum($"a")) + sum($"a") + sum($"b") + Cos(sum($"b"))))) -> 3,
+        t1.select($"a", $"b").
+          having($"b")(Literal(1) + sum($"a"), Cos(sum($"b")))(Exists(t2.select($"c").
+            where($"d" === (Literal(1) + sum($"a"))))) -> 2
       )
 
       plansToTest.foreach {
@@ -313,9 +312,9 @@ class ResolveSubquerySuite extends AnalysisTest {
 
       def assertAnalysis(logicalPlan: LogicalPlan, expectedAggregateFunctions: Int): Unit = {
         val analyzedQuery = logicalPlan.analyze
-        Assert.assertTrue(analyzedQuery.analyzed)
+        assert(analyzedQuery.analyzed)
         val optimizedQuery = optimizer.execute(analyzedQuery)
-        Assert.assertTrue(optimizedQuery.resolved)
+        assert(optimizedQuery.resolved)
         // the analyzed query should contain only one aggregate function
         val buff = mutable.ArrayBuffer[AggregateFunction]()
         analyzedQuery.transformAllExpressions {
@@ -323,7 +322,7 @@ class ResolveSubquerySuite extends AnalysisTest {
             aggFunc
         }
 
-        Assert.assertEquals(expectedAggregateFunctions, buff.size)
+        assert(expectedAggregateFunctions == buff.size)
 
         val aggAttribs = AttributeSet(analyzedQuery.collect {
           case agg: Aggregate => agg
@@ -335,7 +334,7 @@ class ResolveSubquerySuite extends AnalysisTest {
             case _ => false
           }
         }.flatMap(_.map(_.asInstanceOf[SubqueryExpression]))
-        Assert.assertTrue(allSubqueryExprs.forall(sq => sq.references.subsetOf(aggAttribs)))
+        assert(allSubqueryExprs.forall(sq => sq.references.subsetOf(aggAttribs)))
       }
     }
   }

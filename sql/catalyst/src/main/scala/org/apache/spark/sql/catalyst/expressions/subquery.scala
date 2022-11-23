@@ -221,15 +221,21 @@ object SubExprUtils extends PredicateHelper {
           // expression is dependent on more than 1 refs.
           true
         }
-      case u: UnaryExpression => collectOutRefs(u.child)
-      case OuterReference(e) =>
-        outerExpressions += e
+      case OuterReference(e) => outerExpressions += e
         false
-      case _ =>
-        input.children.foreach(child => if (collectOutRefs(child)) {
+      case p: Predicate => p.children.foreach(child => if (collectOutRefs(child)) {
           outerExpressions += stripOuterReference(child)
         })
         false
+      case _ => val childrenWithOuterRef = input.children.filter(collectOutRefs(_))
+        if (childrenWithOuterRef.isEmpty) {
+          false
+        } else if (childrenWithOuterRef.size == 1) {
+          true
+        } else {
+          childrenWithOuterRef.foreach(outerExpressions += stripOuterReference(_))
+          false
+        }
     }
 
     if (collectOutRefs(expr)) {
