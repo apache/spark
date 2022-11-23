@@ -952,7 +952,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
               sql("SELECT * FROM v3")
             }
             checkError(e,
-              errorClass = "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
+              errorClass = "MISSING_AGGREGATION",
               parameters = Map(
                 "expression" -> "\"c1\""))
           }
