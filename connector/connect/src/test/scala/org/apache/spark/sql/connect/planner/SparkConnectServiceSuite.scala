@@ -106,7 +106,7 @@ class SparkConnectServiceSuite extends SharedSparkSession {
 
     // Make sure the last response is metrics only
     val last = responses.last
-    assert(last.hasMetrics && !(last.hasArrowBatch || last.hasJsonBatch))
+    assert(last.hasMetrics && !last.hasArrowBatch)
 
     val allocator = new RootAllocator()
 

@@ -120,9 +120,10 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
         var currentPartitionId = 0
         while (currentPartitionId < numPartitions) {
           val partition = signal.synchronized {
-            val result = partitions(currentPartitionId)
+            var result = partitions(currentPartitionId)
             while (result != null && error.isEmpty) {
               signal.wait()
+              result = partitions(currentPartitionId)
             }
             partitions(currentPartitionId) = null
 
