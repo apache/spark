@@ -984,6 +984,30 @@ class DataFrame(object):
     def localCheckpoint(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("localCheckpoint() is not implemented.")
 
+    def to_pandas_on_spark(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("to_pandas_on_spark() is not implemented.")
+
+    def pandas_api(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("pandas_api() is not implemented.")
+
+    def registerTempTable(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("registerTempTable() is not implemented.")
+
+    def storageLevel(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("storageLevel() is not implemented.")
+
+    def mapInPandas(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("mapInPandas() is not implemented.")
+
+    def mapInArrow(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("mapInArrow() is not implemented.")
+
+    def writeStream(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("writeStream() is not implemented.")
+
+    def toJSON(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("toJSON() is not implemented.")
+
 
 class DataFrameNaFunctions:
     """Functionality for working with missing data in :class:`DataFrame`.
