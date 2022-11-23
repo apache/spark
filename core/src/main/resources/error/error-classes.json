@@ -1132,7 +1132,7 @@
   },
   "UNRESOLVED_MAP_KEY" : {
     "message" : [
-      "Cannot resolve column <objectName> as a map key. If the key is a string literal, add single quotes around it: '<objectName>'."
+      "Cannot resolve column <objectName> as a map key. If the key is a string literal, add the single quotes '' around it."
     ],
     "subClass" : {
       "WITHOUT_SUGGESTION" : {
