@@ -317,6 +317,10 @@ abstract class BaseSessionStateBuilder(
       extensions.buildRuntimeOptimizerRules(session))
   }
 
+  protected def planNormalizationRules: Seq[Rule[LogicalPlan]] = {
+    extensions.buildPlanNormalizationRules(session)
+  }
+
   /**
    * Create a query execution object.
    */
@@ -371,7 +375,8 @@ abstract class BaseSessionStateBuilder(
       createQueryExecution,
       createClone,
       columnarRules,
-      adaptiveRulesHolder)
+      adaptiveRulesHolder,
+      planNormalizationRules)
   }
 }
 

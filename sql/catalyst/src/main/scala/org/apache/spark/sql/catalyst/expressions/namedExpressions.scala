@@ -464,8 +464,9 @@ object FileSourceMetadataAttribute {
 
   val FILE_SOURCE_METADATA_COL_ATTR_KEY = "__file_source_metadata_col"
 
-  def apply(name: String, dataType: DataType, nullable: Boolean = true): AttributeReference =
-    AttributeReference(name, dataType, nullable,
+  def apply(name: String, dataType: DataType): AttributeReference =
+    // Metadata column for file sources is always not nullable.
+    AttributeReference(name, dataType, nullable = false,
       new MetadataBuilder()
         .putBoolean(METADATA_COL_ATTR_KEY, value = true)
         .putBoolean(FILE_SOURCE_METADATA_COL_ATTR_KEY, value = true).build())()

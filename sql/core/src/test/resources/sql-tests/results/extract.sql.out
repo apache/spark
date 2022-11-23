@@ -317,7 +317,20 @@ select extract(not_supported from c) from t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[INVALID_EXTRACT_FIELD] Literals of the type `not_supported` are currently not supported for the "STRING" type.; line 1 pos 7
+{
+  "errorClass" : "INVALID_EXTRACT_FIELD",
+  "messageParameters" : {
+    "expr" : "\"c\"",
+    "field" : "`not_supported`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 36,
+    "fragment" : "extract(not_supported from c)"
+  } ]
+}
 
 
 -- !query
@@ -326,7 +339,20 @@ select extract(not_supported from i) from t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[INVALID_EXTRACT_FIELD] Literals of the type `not_supported` are currently not supported for the "INTERVAL YEAR TO MONTH" type.; line 1 pos 7
+{
+  "errorClass" : "INVALID_EXTRACT_FIELD",
+  "messageParameters" : {
+    "expr" : "\"i\"",
+    "field" : "`not_supported`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 36,
+    "fragment" : "extract(not_supported from i)"
+  } ]
+}
 
 
 -- !query
@@ -335,7 +361,20 @@ select extract(not_supported from j) from t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[INVALID_EXTRACT_FIELD] Literals of the type `not_supported` are currently not supported for the "INTERVAL DAY TO SECOND" type.; line 1 pos 7
+{
+  "errorClass" : "INVALID_EXTRACT_FIELD",
+  "messageParameters" : {
+    "expr" : "\"j\"",
+    "field" : "`not_supported`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 36,
+    "fragment" : "extract(not_supported from j)"
+  } ]
+}
 
 -- !query
 select date_part('year', c), date_part('year', ntz), date_part('year', i) from t
@@ -650,8 +689,8 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_EXTRACT_FIELD",
   "messageParameters" : {
-    "field" : "`not_supported`",
-    "sourceDataType" : "\"STRING\""
+    "expr" : "\"c\"",
+    "field" : "`not_supported`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -923,7 +962,20 @@ select extract(DAY from interval '2-1' YEAR TO MONTH)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[INVALID_EXTRACT_FIELD] Literals of the type `DAY` are currently not supported for the "INTERVAL YEAR TO MONTH" type.; line 1 pos 7
+{
+  "errorClass" : "INVALID_EXTRACT_FIELD",
+  "messageParameters" : {
+    "expr" : "\"INTERVAL '2-1' YEAR TO MONTH\"",
+    "field" : "`DAY`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 53,
+    "fragment" : "extract(DAY from interval '2-1' YEAR TO MONTH)"
+  } ]
+}
 
 
 -- !query
@@ -935,8 +987,8 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_EXTRACT_FIELD",
   "messageParameters" : {
-    "field" : "`DAY`",
-    "sourceDataType" : "\"INTERVAL YEAR TO MONTH\""
+    "expr" : "\"INTERVAL '2-1' YEAR TO MONTH\"",
+    "field" : "`DAY`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -957,8 +1009,8 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_EXTRACT_FIELD",
   "messageParameters" : {
-    "field" : "`not_supported`",
-    "sourceDataType" : "\"INTERVAL YEAR TO MONTH\""
+    "expr" : "\"INTERVAL '2-1' YEAR TO MONTH\"",
+    "field" : "`not_supported`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1080,7 +1132,20 @@ select extract(MONTH from interval '123 12:34:56.789123123' DAY TO SECOND)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[INVALID_EXTRACT_FIELD] Literals of the type `MONTH` are currently not supported for the "INTERVAL DAY TO SECOND" type.; line 1 pos 7
+{
+  "errorClass" : "INVALID_EXTRACT_FIELD",
+  "messageParameters" : {
+    "expr" : "\"INTERVAL '123 12:34:56.789123' DAY TO SECOND\"",
+    "field" : "`MONTH`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 74,
+    "fragment" : "extract(MONTH from interval '123 12:34:56.789123123' DAY TO SECOND)"
+  } ]
+}
 
 -- !query
 select date_part('not_supported', interval '123 12:34:56.789123123' DAY TO SECOND)
@@ -1091,8 +1156,8 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_EXTRACT_FIELD",
   "messageParameters" : {
-    "field" : "`not_supported`",
-    "sourceDataType" : "\"INTERVAL DAY TO SECOND\""
+    "expr" : "\"INTERVAL '123 12:34:56.789123' DAY TO SECOND\"",
+    "field" : "`not_supported`"
   },
   "queryContext" : [ {
     "objectType" : "",

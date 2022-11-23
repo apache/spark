@@ -25,6 +25,7 @@ from typing import (
     Union,
     TYPE_CHECKING,
     overload,
+    Callable,
     cast,
 )
 
@@ -35,6 +36,7 @@ from pyspark.sql.connect.column import (
     Column,
     Expression,
     LiteralExpression,
+    SQLExpression,
 )
 from pyspark.sql.types import (
     StructType,
@@ -114,6 +116,9 @@ class DataFrame(object):
         self._cache: Dict[str, Any] = {}
         self._session: "RemoteSparkSession" = session
 
+    def __repr__(self) -> str:
+        return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
+
     @classmethod
     def withPlan(cls, plan: plan.LogicalPlan, session: "RemoteSparkSession") -> "DataFrame":
         """Main initialization method used to construct a new data frame with a child plan."""
@@ -121,8 +126,43 @@ class DataFrame(object):
         new_frame._plan = plan
         return new_frame
 
+    def isEmpty(self) -> bool:
+        """Returns ``True`` if this :class:`DataFrame` is empty.
+
+        .. versionadded:: 3.4.0
+
+        Returns
+        -------
+        bool
+            Whether it's empty DataFrame or not.
+        """
+        return len(self.take(1)) == 0
+
     def select(self, *cols: "ExpressionOrString") -> "DataFrame":
         return DataFrame.withPlan(plan.Project(self._plan, *cols), session=self._session)
+
+    def selectExpr(self, *expr: Union[str, List[str]]) -> "DataFrame":
+        """Projects a set of SQL expressions and returns a new :class:`DataFrame`.
+
+        This is a variant of :func:`select` that accepts SQL expressions.
+
+        .. versionadded:: 3.4.0
+
+        Returns
+        -------
+        :class:`DataFrame`
+            A DataFrame with new/old columns transformed by expressions.
+        """
+        sql_expr = []
+        if len(expr) == 1 and isinstance(expr[0], list):
+            expr = expr[0]  # type: ignore[assignment]
+        for element in expr:
+            if isinstance(element, str):
+                sql_expr.append(SQLExpression(element))
+            else:
+                sql_expr.extend([SQLExpression(e) for e in element])
+
+        return DataFrame.withPlan(plan.Project(self._plan, *sql_expr), session=self._session)
 
     def agg(self, exprs: Optional[GroupingFrame.MeasuresType]) -> "DataFrame":
         return self.groupBy().agg(exprs)
@@ -137,12 +177,25 @@ class DataFrame(object):
         ...
 
     @property
+    def dtypes(self) -> List[Tuple[str, str]]:
+        """Returns all column names and their data types as a list.
+
+        .. versionadded:: 3.4.0
+
+        Returns
+        -------
+        list
+            List of columns as tuple pairs.
+        """
+        return [(str(f.name), f.dataType.simpleString()) for f in self.schema.fields]
+
+    @property
     def columns(self) -> List[str]:
         """Returns the list of columns of the current data frame."""
         if self._plan is None:
             return []
 
-        return self.schema().names
+        return self.schema.names
 
     def sparkSession(self) -> "RemoteSparkSession":
         """Returns Spark session that created this :class:`DataFrame`.
@@ -256,10 +309,21 @@ class DataFrame(object):
         )
 
     def drop(self, *cols: "ColumnOrString") -> "DataFrame":
-        all_cols = self.columns
-        dropped = set([c.name() if isinstance(c, Column) else self[c].name() for c in cols])
-        dropped_cols = filter(lambda x: x in dropped, all_cols)
-        return DataFrame.withPlan(plan.Project(self._plan, *dropped_cols), session=self._session)
+        _cols = list(cols)
+        if any(not isinstance(c, (str, Column)) for c in _cols):
+            raise TypeError(
+                f"'cols' must contains strings or Columns, but got {type(cols).__name__}"
+            )
+        if len(_cols) == 0:
+            raise ValueError("'cols' must be non-empty")
+
+        return DataFrame.withPlan(
+            plan.Drop(
+                child=self._plan,
+                columns=_cols,
+            ),
+            session=self._session,
+        )
 
     def filter(self, condition: Expression) -> "DataFrame":
         return DataFrame.withPlan(
@@ -735,6 +799,7 @@ class DataFrame(object):
         query = self._plan.to_proto(self._session)
         return self._session._to_pandas(query)
 
+    @property
     def schema(self) -> StructType:
         """Returns the schema of this :class:`DataFrame` as a :class:`pyspark.sql.types.StructType`.
 
@@ -755,6 +820,59 @@ class DataFrame(object):
                 raise Exception("Empty plan.")
         else:
             return self._schema
+
+    def transform(self, func: Callable[..., "DataFrame"], *args: Any, **kwargs: Any) -> "DataFrame":
+        """Returns a new :class:`DataFrame`. Concise syntax for chaining custom transformations.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        func : function
+            a function that takes and returns a :class:`DataFrame`.
+        *args
+            Positional arguments to pass to func.
+
+        **kwargs
+            Keyword arguments to pass to func.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Transformed DataFrame.
+
+        Examples
+        --------
+        >>> from pyspark.sql.connect.functions import col
+        >>> df = spark.createDataFrame([(1, 1.0), (2, 2.0)], ["int", "float"])
+        >>> def cast_all_to_int(input_df):
+        ...     return input_df.select([col(col_name).cast("int") for col_name in input_df.columns])
+        >>> def sort_columns_asc(input_df):
+        ...     return input_df.select(*sorted(input_df.columns))
+        >>> df.transform(cast_all_to_int).transform(sort_columns_asc).show()
+        +-----+---+
+        |float|int|
+        +-----+---+
+        |    1|  1|
+        |    2|  2|
+        +-----+---+
+
+        >>> def add_n(input_df, n):
+        ...     return input_df.select([(col(col_name) + n).alias(col_name)
+        ...                             for col_name in input_df.columns])
+        >>> df.transform(add_n, 1).transform(add_n, n=10).show()
+        +---+-----+
+        |int|float|
+        +---+-----+
+        | 12| 12.0|
+        | 13| 13.0|
+        +---+-----+
+        """
+        result = func(self, *args, **kwargs)
+        assert isinstance(
+            result, DataFrame
+        ), "Func returned an instance of type [%s], " "should have been DataFrame." % type(result)
+        return result
 
     def explain(
         self, extended: Optional[Union[bool, str]] = None, mode: Optional[str] = None
