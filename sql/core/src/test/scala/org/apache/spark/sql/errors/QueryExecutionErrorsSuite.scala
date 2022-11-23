@@ -23,7 +23,7 @@ import java.sql.{Connection, Driver, DriverManager, PreparedStatement, ResultSet
 import java.util.{Locale, Properties, ServiceConfigurationError}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{LocalFileSystem, Path, RawLocalFileSystem}
+import org.apache.hadoop.fs.{LocalFileSystem, Path}
 import org.apache.hadoop.fs.permission.FsPermission
 import org.mockito.Mockito.{mock, spy, when}
 
@@ -669,7 +669,7 @@ class QueryExecutionErrorsSuite
     val e = intercept[SparkFileAlreadyExistsException](
       withTempPath { p =>
         val conf = new Configuration()
-        conf.set("fs.test.impl", classOf[RawLocalFileSystem].getName)
+        conf.set("fs.test.impl", classOf[LocalFileSystem].getName)
         conf.set("fs.defaultFS", "test:///")
         val basePath = new Path(p.getAbsolutePath)
         val fm = new FileSystemBasedCheckpointFileManager(basePath, conf)
