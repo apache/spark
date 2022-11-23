@@ -80,7 +80,7 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
             .rowToArrowConverter(schema, maxRecordsPerBatch, maxBatchSize, timeZoneId))
 
         val signal = new Object
-        val partitions = new Array[Array[Batch]](numPartitions - 1)
+        val partitions = new Array[Array[Batch]](numPartitions)
         var error: Option[Throwable] = None
 
         // This callback is executed by the DAGScheduler thread.
@@ -119,25 +119,21 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
         // multiple users or clients running code at the same time.
         var currentPartitionId = 0
         while (currentPartitionId < numPartitions) {
-          val partition = signal.synchronized {
-            var result = partitions(currentPartitionId)
-            while (result != null && error.isEmpty) {
+          signal.synchronized {
+            while (partitions(currentPartitionId) == null && error.isEmpty) {
               signal.wait()
-              result = partitions(currentPartitionId)
             }
-            partitions(currentPartitionId) = null
 
-            error match {
-              case None => result
-              case Some(NonFatal(e)) =>
+            error.foreach {
+              case NonFatal(e) =>
                 responseObserver.onError(e)
                 logError("Error while processing query.", e)
                 return
-              case Some(other) => throw other
+              case other => throw other
             }
           }
 
-          partition.foreach { case (bytes, count) =>
+          partitions(currentPartitionId).foreach { case (bytes, count) =>
             val response = proto.ExecutePlanResponse.newBuilder().setClientId(clientId)
             val batch = proto.ExecutePlanResponse.ArrowBatch
               .newBuilder()
@@ -149,6 +145,7 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
             numSent += 1
           }
 
+          partitions(currentPartitionId) = null
           currentPartitionId += 1
         }
       }
