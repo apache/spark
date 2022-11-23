@@ -15,7 +15,13 @@
 # limitations under the License.
 #
 
-from typing_extensions import Protocol
+import sys
+
+if sys.version_info >= (3, 8):
+    from typing import Protocol
+else:
+    from typing_extensions import Protocol
+
 from typing import Union, Optional
 import datetime
 import decimal
