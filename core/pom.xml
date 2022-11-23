@@ -32,7 +32,6 @@
 
   <properties>
     <sbt.project.name>core</sbt.project.name>
-    <protobuf.version>3.21.9</protobuf.version>
   </properties>
   
   <dependencies>

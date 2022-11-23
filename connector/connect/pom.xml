@@ -32,7 +32,6 @@
   <url>https://spark.apache.org/</url>
   <properties>
     <sbt.project.name>connect</sbt.project.name>
-    <protobuf.version>3.21.1</protobuf.version>
     <guava.version>31.0.1-jre</guava.version>
     <guava.failureaccess.version>1.0.1</guava.failureaccess.version>
     <io.grpc.version>1.47.0</io.grpc.version>
