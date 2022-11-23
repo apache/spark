@@ -23,7 +23,7 @@ import java.sql.{Connection, Driver, DriverManager, PreparedStatement, ResultSet
 import java.util.{Locale, Properties, ServiceConfigurationError}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{LocalFileSystem, Path}
+import org.apache.hadoop.fs.{LocalFileSystem, Path, RawLocalFileSystem}
 import org.apache.hadoop.fs.permission.FsPermission
 import org.mockito.Mockito.{mock, spy, when}
 
@@ -663,31 +663,31 @@ class QueryExecutionErrorsSuite
   }
 
   test("FAILED_RENAME_PATH: rename when destination path already exists") {
-    // TODO TNT: get this test code to run
     var srcPath: Path = null
+    var dstPath: Path = null
+
     val e = intercept[SparkFileAlreadyExistsException](
       withTempPath { p =>
         val conf = new Configuration()
-        //conf.set("fs.test.impl", classOf[RenameReturnsFalseFileSystem].getName)
+        conf.set("fs.test.impl", classOf[RawLocalFileSystem].getName)
         conf.set("fs.defaultFS", "test:///")
         val basePath = new Path(p.getAbsolutePath)
         val fm = new FileSystemBasedCheckpointFileManager(basePath, conf)
         srcPath = new Path(s"$basePath/file")
-        assert(!fm.exists(srcPath))
         fm.createAtomic(srcPath, overwriteIfPossible = true).close()
-        assert(fm.exists(srcPath))
-        val dstPath = new Path(s"$basePath/new_file")
-        assert(!fm.exists(dstPath))
+        dstPath = new Path(s"$basePath/new_file")
         fm.createAtomic(dstPath, overwriteIfPossible = true).close()
-        assert(fm.exists(dstPath))
+
         fm.renameTempFile(srcPath, dstPath, false)
       }
     )
+
     checkError(
       exception = e,
-      errorClass = "RENAME_SRC_PATH_NOT_FOUND",
+      errorClass = "FAILED_RENAME_PATH",
       parameters = Map(
-        "sourcePath" -> s"$srcPath"
+        "sourcePath" -> s"$srcPath",
+        "targetPath" -> s"$dstPath"
       ))
   }
 
