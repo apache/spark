@@ -637,31 +637,6 @@ class QueryExecutionErrorsSuite
       sqlState = "0A000")
   }
 
-  test("RENAME_SRC_PATH_NOT_FOUND: rename the file which source path does not exist") {
-    var srcPath: Path = null
-    val e = intercept[SparkFileNotFoundException](
-      withTempPath { p =>
-        val conf = new Configuration()
-        conf.set("fs.test.impl", classOf[RenameReturnsFalseFileSystem].getName)
-        conf.set("fs.defaultFS", "test:///")
-        val basePath = new Path(p.getAbsolutePath)
-        val fm = new FileSystemBasedCheckpointFileManager(basePath, conf)
-        srcPath = new Path(s"$basePath/file")
-        assert(!fm.exists(srcPath))
-        fm.createAtomic(srcPath, overwriteIfPossible = true).cancel()
-        assert(!fm.exists(srcPath))
-        val dstPath = new Path(s"$basePath/new_file")
-        fm.renameTempFile(srcPath, dstPath, true)
-      }
-    )
-    checkError(
-      exception = e,
-      errorClass = "RENAME_SRC_PATH_NOT_FOUND",
-      parameters = Map(
-        "sourcePath" -> s"$srcPath"
-      ))
-  }
-
   test("FAILED_RENAME_PATH: rename when destination path already exists") {
     var srcPath: Path = null
     var dstPath: Path = null
@@ -689,6 +664,31 @@ class QueryExecutionErrorsSuite
       parameters = Map(
         "sourcePath" -> s"$srcPath",
         "targetPath" -> s"$dstPath"
+      ))
+  }
+
+  test("RENAME_SRC_PATH_NOT_FOUND: rename the file which source path does not exist") {
+    var srcPath: Path = null
+    val e = intercept[SparkFileNotFoundException](
+      withTempPath { p =>
+        val conf = new Configuration()
+        conf.set("fs.test.impl", classOf[RenameReturnsFalseFileSystem].getName)
+        conf.set("fs.defaultFS", "test:///")
+        val basePath = new Path(p.getAbsolutePath)
+        val fm = new FileSystemBasedCheckpointFileManager(basePath, conf)
+        srcPath = new Path(s"$basePath/file")
+        assert(!fm.exists(srcPath))
+        fm.createAtomic(srcPath, overwriteIfPossible = true).cancel()
+        assert(!fm.exists(srcPath))
+        val dstPath = new Path(s"$basePath/new_file")
+        fm.renameTempFile(srcPath, dstPath, true)
+      }
+    )
+    checkError(
+      exception = e,
+      errorClass = "RENAME_SRC_PATH_NOT_FOUND",
+      parameters = Map(
+        "sourcePath" -> s"$srcPath"
       ))
   }
 
