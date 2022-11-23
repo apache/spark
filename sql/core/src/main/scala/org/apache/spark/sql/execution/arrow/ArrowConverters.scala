@@ -214,6 +214,10 @@ private[sql] object ArrowConverters extends Logging {
     }.next()
   }
 
+  /**
+   * An InternalRow iterator which parse data from serialized ArrowRecordBatches, subclass should
+   * implement [[nextBatch]] to parse data from binary records.
+   */
   private[sql] abstract class InternalRowIterator(
       arrowBatchIter: Iterator[Array[Byte]],
       context: TaskContext)
@@ -228,11 +232,11 @@ private[sql] object ArrowConverters extends Logging {
 
     private var rowIterAndSchema =
       if (arrowBatchIter.hasNext) nextBatch() else (Iterator.empty, null)
-    // We will ensure schemas parsed from every batch are the same
+    // We will ensure schemas parsed from every batch are the same.
     val schema: StructType = rowIterAndSchema._2
 
     if (context != null) context.addTaskCompletionListener[Unit] { _ =>
-      closeAll(resources.reverse: _*)
+      closeAll(resources.toSeq.reverse: _*)
     }
 
     override def hasNext: Boolean = rowIterAndSchema._1.hasNext || {
@@ -245,7 +249,7 @@ private[sql] object ArrowConverters extends Logging {
         }
         rowIterAndSchema._1.hasNext
       } else {
-        closeAll(resources.reverse: _*)
+        closeAll(resources.toSeq.reverse: _*)
         false
       }
     }
@@ -255,6 +259,10 @@ private[sql] object ArrowConverters extends Logging {
     def nextBatch(): (Iterator[InternalRow], StructType)
   }
 
+  /**
+   * Parse data from serialized ArrowRecordBatches, the [[arrowBatchIter]] only contains serialized
+   * arrow batch records, the schema is passed in through [[schema]].
+   */
   private[sql] class InternalRowIteratorWithoutSchema(
       arrowBatchIter: Iterator[Array[Byte]],
       schema: StructType,
@@ -274,6 +282,10 @@ private[sql] object ArrowConverters extends Logging {
     }
   }
 
+  /**
+   * Parse data from serialized ArrowRecordBatches, the arrowBatch in [[arrowBatchIter]] starts with
+   * the schema so we should parse schema from it first.
+   */
   private[sql] class InternalRowIteratorWithSchema(
       arrowBatchIter: Iterator[Array[Byte]],
       context: TaskContext)
@@ -313,6 +325,9 @@ private[sql] object ArrowConverters extends Logging {
     (iterator, iterator.schema)
   }
 
+  /**
+   * Convert an arrow batch container into an iterator of InternalRow.
+   */
   private def vectorSchemaRootToIter(root: VectorSchemaRoot): Iterator[InternalRow] = {
     val columns = root.getFieldVectors.asScala.map { vector =>
       new ArrowColumnVector(vector).asInstanceOf[ColumnVector]
