@@ -325,7 +325,6 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             .toPandas(),
         )
 
-    @unittest.skip("test_fill_na is flaky")
     def test_fill_na(self):
         # SPARK-41128: Test fill na
         query = """
