@@ -50,6 +50,7 @@ message Relation {
     RenameColumnsBySameLengthNames rename_columns_by_same_length_names = 18;
     RenameColumnsByNameToNameMap rename_columns_by_name_to_name_map = 19;
     ShowString show_string = 20;
+    Drop drop = 21;
 
     // NA functions
     NAFill fill_na = 90;
@@ -251,6 +252,19 @@ message Sort {
     SORT_NULLS_LAST = 2;
   }
 }
+
+
+// Drop specified columns.
+message Drop {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) columns to drop.
+  //
+  // Should contain at least 1 item.
+  repeated Expression cols = 2;
+}
+
 
 // Relation of type [[Deduplicate]] which have duplicate rows removed, could consider either only
 // the subset of columns or all the columns.

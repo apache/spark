@@ -63,10 +63,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1078",
+  "errorClass" : "CANNOT_LOAD_FUNCTION_CLASS",
   "messageParameters" : {
     "className" : "test.non.existent.udaf",
-    "func" : "spark_catalog.default.udaf1"
+    "functionName" : "`spark_catalog`.`default`.`udaf1`"
   },
   "queryContext" : [ {
     "objectType" : "",

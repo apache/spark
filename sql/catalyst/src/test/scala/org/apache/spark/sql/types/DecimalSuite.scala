@@ -325,7 +325,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
       checkError(
         exception = intercept[SparkArithmeticException](
           Decimal.fromStringANSI(UTF8String.fromString(string))),
-        errorClass = "OUT_OF_DECIMAL_TYPE_RANGE",
+        errorClass = "NUMERIC_OUT_OF_SUPPORTED_RANGE",
         parameters = Map("value" -> string))
     }
 
@@ -373,7 +373,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
       checkError(
         exception = intercept[SparkArithmeticException](
           Decimal.fromStringANSI(UTF8String.fromString(string))),
-        errorClass = "OUT_OF_DECIMAL_TYPE_RANGE",
+        errorClass = "NUMERIC_OUT_OF_SUPPORTED_RANGE",
         parameters = Map("value" -> string))
     }
 

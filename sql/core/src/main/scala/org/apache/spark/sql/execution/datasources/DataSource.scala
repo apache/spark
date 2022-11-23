@@ -130,10 +130,8 @@ case class DataSource(
   }
 
   bucketSpec.foreach { bucket =>
-    SchemaUtils.checkColumnNameDuplication(
-      bucket.bucketColumnNames, "in the bucket definition", equality)
-    SchemaUtils.checkColumnNameDuplication(
-      bucket.sortColumnNames, "in the sort definition", equality)
+    SchemaUtils.checkColumnNameDuplication(bucket.bucketColumnNames, equality)
+    SchemaUtils.checkColumnNameDuplication(bucket.sortColumnNames, equality)
   }
 
   /**
@@ -220,7 +218,6 @@ case class DataSource(
     try {
       SchemaUtils.checkColumnNameDuplication(
         (dataSchema ++ partitionSchema).map(_.name),
-        "in the data schema and the partition schema",
         equality)
     } catch {
       case e: AnalysisException => logWarning(e.getMessage)
@@ -428,17 +425,14 @@ case class DataSource(
       case hs: HadoopFsRelation =>
         SchemaUtils.checkSchemaColumnNameDuplication(
           hs.dataSchema,
-          "in the data schema",
           equality)
         SchemaUtils.checkSchemaColumnNameDuplication(
           hs.partitionSchema,
-          "in the partition schema",
           equality)
         DataSourceUtils.verifySchema(hs.fileFormat, hs.dataSchema)
       case _ =>
         SchemaUtils.checkSchemaColumnNameDuplication(
           relation.schema,
-          "in the data schema",
           equality)
     }
 

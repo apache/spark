@@ -1380,6 +1380,15 @@ Apart from these, the following properties are also available, and may be useful
   <td>1.1.1</td>
 </tr>
 <tr>
+  <td><code>spark.ui.store.path</code></td>
+  <td>None</td>
+  <td>
+    Local directory where to cache application information for live UI.
+    By default this is not set, meaning all application information will be kept in memory.
+  </td>
+  <td>3.4.0</td>
+</tr>
+<tr>
   <td><code>spark.ui.killEnabled</code></td>
   <td>true</td>
   <td>
