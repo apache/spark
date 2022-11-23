@@ -696,6 +696,8 @@ class Join(LogicalPlan):
             join_type = proto.Join.JoinType.JOIN_TYPE_LEFT_SEMI
         elif how in ["leftanti", "anti"]:
             join_type = proto.Join.JoinType.JOIN_TYPE_LEFT_ANTI
+        elif how == "cross":
+            join_type = proto.Join.JoinType.JOIN_TYPE_CROSS
         else:
             raise NotImplementedError(
                 """
