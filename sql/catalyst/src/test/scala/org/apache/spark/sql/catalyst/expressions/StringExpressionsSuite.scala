@@ -1256,6 +1256,21 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     )
   }
 
+  test("ToBinary: fails analysis if fmt is not foldable") {
+    val wrongFmt = AttributeReference("invalidFormat", StringType)()
+    val toBinaryExpr = ToBinary(Literal("abc"), Some(wrongFmt))
+    assert(toBinaryExpr.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> "fmt",
+          "inputType" -> toSQLType(wrongFmt.dataType),
+          "inputExpr" -> toSQLExpr(wrongFmt)
+        )
+      )
+    )
+  }
+
   test("ToNumber: negative tests (the input string does not match the format string)") {
     Seq(
       // The input contained more thousands separators than the format string.
