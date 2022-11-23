@@ -275,7 +275,7 @@ class SparkConnectPlanner(session: SparkSession) {
 
   private def transformLocalRelation(rel: proto.LocalRelation): LogicalPlan = {
     val (rows, structType) = ArrowConverters.fromBatchWithSchemaIterator(
-      Seq(rel.getData.toByteArray).iterator,
+      Iterator(rel.getData.toByteArray),
       TaskContext.get())
     val attributes = structType.toAttributes
     val proj = UnsafeProjection.create(attributes, attributes)
