@@ -423,7 +423,13 @@ case class PrivateFieldInvoke(
 
     val assignResult0 = s"${ev.value} = (${CodeGenerator.boxedType(javaType)}) $fieldResult;"
 
-    val assignResult = if (returnPrimitive || returnNullable) {
+    val assignResult = if (returnPrimitive) {
+      s"""
+         |if ($fieldResult != null) {
+         |  $assignResult0
+         |}
+         |""".stripMargin
+    } else if (returnNullable) {
       s"""
          |if ($fieldResult != null) {
          |  $assignResult0
