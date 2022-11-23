@@ -2636,7 +2636,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       },
       errorClass = "FUNCTION_WRONG_NUM_ARGS",
       parameters = Map(
-        "functionName" -> "nvl",
+        "functionName" -> toSQLId("nvl"),
         "expectedNum" -> "2",
         "actualNum" -> "3"
       ),

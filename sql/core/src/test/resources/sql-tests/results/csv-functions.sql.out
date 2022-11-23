@@ -109,7 +109,7 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "actualNum" : "0",
     "expectedNum" : "[2, 3]",
-    "functionName" : "from_csv"
+    "functionName" : "`from_csv`"
   },
   "queryContext" : [ {
     "objectType" : "",

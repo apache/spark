@@ -757,7 +757,7 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "actualNum" : "0",
     "expectedNum" : "2",
-    "functionName" : "decode"
+    "functionName" : "`decode`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -780,7 +780,7 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "actualNum" : "1",
     "expectedNum" : "2",
-    "functionName" : "decode"
+    "functionName" : "`decode`"
   },
   "queryContext" : [ {
     "objectType" : "",

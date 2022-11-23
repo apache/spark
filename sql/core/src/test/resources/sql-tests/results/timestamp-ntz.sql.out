@@ -50,7 +50,7 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "actualNum" : "7",
     "expectedNum" : "6",
-    "functionName" : "make_timestamp_ntz"
+    "functionName" : "`make_timestamp_ntz`"
   },
   "queryContext" : [ {
     "objectType" : "",

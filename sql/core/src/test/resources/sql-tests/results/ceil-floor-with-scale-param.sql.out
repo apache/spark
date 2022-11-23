@@ -144,7 +144,7 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "actualNum" : "3",
     "expectedNum" : "2",
-    "functionName" : "ceil"
+    "functionName" : "`ceil`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -301,7 +301,7 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "actualNum" : "3",
     "expectedNum" : "2",
-    "functionName" : "floor"
+    "functionName" : "`floor`"
   },
   "queryContext" : [ {
     "objectType" : "",

@@ -641,7 +641,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "FUNCTION_WRONG_NUM_ARGS",
       messageParameters = Map(
-        "functionName" -> name,
+        "functionName" -> toSQLId(name),
         "expectedNum" -> expectedNum,
         "actualNum" -> actualNum.toString))
   }
