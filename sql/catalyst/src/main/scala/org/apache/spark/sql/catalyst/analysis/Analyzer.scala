@@ -25,6 +25,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Random, Success, Try}
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.catalog._
@@ -182,6 +183,164 @@ object AnalysisContext {
   }
 }
 
+object Analyzer extends Logging {
+  // support CURRENT_DATE, CURRENT_TIMESTAMP, and grouping__id
+  private val literalFunctions: Seq[(String, () => Expression, Expression => String)] = Seq(
+    (CurrentDate().prettyName, () => CurrentDate(), toPrettySQL(_)),
+    (CurrentTimestamp().prettyName, () => CurrentTimestamp(), toPrettySQL(_)),
+    (CurrentUser().prettyName, () => CurrentUser(), toPrettySQL),
+    ("user", () => CurrentUser(), toPrettySQL),
+    (VirtualColumn.hiveGroupingIdName, () => GroupingID(Nil), _ => VirtualColumn.hiveGroupingIdName)
+  )
+
+  /**
+   * Literal functions do not require the user to specify braces when calling them
+   * When an attributes is not resolvable, we try to resolve it as a literal function.
+   */
+  private def resolveLiteralFunction(nameParts: Seq[String]): Option[NamedExpression] = {
+    if (nameParts.length != 1) return None
+    val name = nameParts.head
+    literalFunctions.find(func => caseInsensitiveResolution(func._1, name)).map {
+      case (_, getFuncExpr, getAliasName) =>
+        val funcExpr = getFuncExpr()
+        Alias(funcExpr, getAliasName(funcExpr))()
+    }
+  }
+
+  /**
+   * Resolves `UnresolvedAttribute`, `GetColumnByOrdinal` and extract value expressions(s) by
+   * traversing the input expression in top-down manner. It must be top-down because we need to
+   * skip over unbound lambda function expression. The lambda expressions are resolved in a
+   * different place [[ResolveLambdaVariables]].
+   *
+   * Example :
+   * SELECT transform(array(1, 2, 3), (x, i) -> x + i)"
+   *
+   * In the case above, x and i are resolved as lambda variables in [[ResolveLambdaVariables]].
+   */
+  private def resolveExpression(
+      expr: Expression,
+      resolveColumnByName: Seq[String] => Option[Expression],
+      getAttrCandidates: () => Seq[Attribute],
+      resolver: Resolver,
+      throws: Boolean): Expression = {
+    def innerResolve(e: Expression, isTopLevel: Boolean): Expression = {
+      if (e.resolved) return e
+      e match {
+        case f: LambdaFunction if !f.bound => f
+
+        case GetColumnByOrdinal(ordinal, _) =>
+          val attrCandidates = getAttrCandidates()
+          assert(ordinal >= 0 && ordinal < attrCandidates.length)
+          attrCandidates(ordinal)
+
+        case GetViewColumnByNameAndOrdinal(
+        viewName, colName, ordinal, expectedNumCandidates, viewDDL) =>
+          val attrCandidates = getAttrCandidates()
+          val matched = attrCandidates.filter(a => resolver(a.name, colName))
+          if (matched.length != expectedNumCandidates) {
+            throw QueryCompilationErrors.incompatibleViewSchemaChange(
+              viewName, colName, expectedNumCandidates, matched, viewDDL)
+          }
+          matched(ordinal)
+
+        case u @ UnresolvedAttribute(nameParts) =>
+          val result = withPosition(u) {
+            resolveColumnByName(nameParts).orElse(resolveLiteralFunction(nameParts)).map {
+              // We trim unnecessary alias here. Note that, we cannot trim the alias at top-level,
+              // as we should resolve `UnresolvedAttribute` to a named expression. The caller side
+              // can trim the top-level alias if it's safe to do so. Since we will call
+              // CleanupAliases later in Analyzer, trim non top-level unnecessary alias is safe.
+              case Alias(child, _) if !isTopLevel => child
+              case other => other
+            }.getOrElse(u)
+          }
+          logDebug(s"Resolving $u to $result")
+          result
+
+        case u @ UnresolvedExtractValue(child, fieldName) =>
+          val newChild = innerResolve(child, isTopLevel = false)
+          if (newChild.resolved) {
+            withOrigin(u.origin) {
+              ExtractValue(newChild, fieldName, resolver)
+            }
+          } else {
+            u.copy(child = newChild)
+          }
+
+        case _ => e.mapChildren(innerResolve(_, isTopLevel = false))
+      }
+    }
+
+    try {
+      innerResolve(expr, isTopLevel = true)
+    } catch {
+      case ae: AnalysisException if !throws =>
+        logDebug(ae.getMessage)
+        expr
+    }
+  }
+
+  /**
+   * Resolves `UnresolvedAttribute`, `GetColumnByOrdinal` and extract value expressions(s) by the
+   * input plan's output attributes. In order to resolve the nested fields correctly, this function
+   * makes use of `throws` parameter to control when to raise an AnalysisException.
+   *
+   * Example :
+   * SELECT * FROM t ORDER BY a.b
+   *
+   * In the above example, after `a` is resolved to a struct-type column, we may fail to resolve `b`
+   * if there is no such nested field named "b". We should not fail and wait for other rules to
+   * resolve it if possible.
+   */
+  def resolveExpressionByPlanOutput(
+      expr: Expression,
+      plan: LogicalPlan,
+      resolver: Resolver,
+      throws: Boolean = false): Expression = {
+    resolveExpression(
+      expr,
+      resolveColumnByName = nameParts => {
+        plan.resolve(nameParts, resolver)
+      },
+      getAttrCandidates = () => plan.output,
+      resolver = resolver,
+      throws = throws)
+  }
+
+
+  /**
+   * Resolves `UnresolvedAttribute`, `GetColumnByOrdinal` and extract value expressions(s) by the
+   * input plan's children output attributes.
+   *
+   * @param e The expression need to be resolved.
+   * @param q The LogicalPlan whose children are used to resolve expression's attribute.
+   * @return resolved Expression.
+   */
+  def resolveExpressionByPlanChildren(
+      e: Expression,
+      q: LogicalPlan,
+      resolver: Resolver): Expression = {
+    resolveExpression(
+      e,
+      resolveColumnByName = nameParts => {
+        q.resolveChildren(nameParts, resolver)
+      },
+      getAttrCandidates = () => {
+        assert(q.children.length == 1)
+        q.children.head.output
+      },
+      resolver = resolver,
+      throws = true)
+  }
+
+  /**
+   * Returns true if `exprs` contains a [[Star]].
+   */
+  def containsStar(exprs: Seq[Expression]): Boolean =
+    exprs.exists(_.collect { case _: Star => true }.nonEmpty)
+}
+
 /**
  * Provides a logical query plan analyzer, which translates [[UnresolvedAttribute]]s and
  * [[UnresolvedRelation]]s into fully typed objects using information in a [[SessionCatalog]].
@@ -256,6 +415,17 @@ class Analyzer(override val catalogManager: CatalogManager)
     AnsiTypeCoercion.typeCoercionRules
   } else {
     TypeCoercion.typeCoercionRules
+  }
+
+  private def resolveExpressionByPlanOutput(
+      expr: Expression,
+      plan: LogicalPlan,
+      throws: Boolean = false): Expression = {
+    Analyzer.resolveExpressionByPlanOutput(expr, plan, resolver, throws)
+  }
+
+  private def resolveExpressionByPlanChildren(e: Expression, q: LogicalPlan): Expression = {
+    Analyzer.resolveExpressionByPlanChildren(e, q, resolver)
   }
 
   override def batches: Seq[Batch] = Seq(
@@ -1386,6 +1556,7 @@ class Analyzer(override val catalogManager: CatalogManager)
    * a logical plan node's children.
    */
   object ResolveReferences extends Rule[LogicalPlan] {
+    import org.apache.spark.sql.catalyst.analysis.Analyzer.containsStar
 
     /** Return true if there're conflicting attributes among children's outputs of a plan */
     def hasConflictingAttrs(p: LogicalPlan): Boolean = {
@@ -1698,12 +1869,6 @@ class Analyzer(override val catalogManager: CatalogManager)
       }.map(_.asInstanceOf[NamedExpression])
     }
 
-    /**
-     * Returns true if `exprs` contains a [[Star]].
-     */
-    def containsStar(exprs: Seq[Expression]): Boolean =
-      exprs.exists(_.collect { case _: Star => true }.nonEmpty)
-
     private def extractStar(exprs: Seq[Expression]): Seq[Star] =
       exprs.flatMap(_.collect { case s: Star => s })
 
@@ -1762,150 +1927,6 @@ class Analyzer(override val catalogManager: CatalogManager)
 
   private def containsDeserializer(exprs: Seq[Expression]): Boolean = {
     exprs.exists(_.exists(_.isInstanceOf[UnresolvedDeserializer]))
-  }
-
-  // support CURRENT_DATE, CURRENT_TIMESTAMP, and grouping__id
-  private val literalFunctions: Seq[(String, () => Expression, Expression => String)] = Seq(
-    (CurrentDate().prettyName, () => CurrentDate(), toPrettySQL(_)),
-    (CurrentTimestamp().prettyName, () => CurrentTimestamp(), toPrettySQL(_)),
-    (CurrentUser().prettyName, () => CurrentUser(), toPrettySQL),
-    ("user", () => CurrentUser(), toPrettySQL),
-    (VirtualColumn.hiveGroupingIdName, () => GroupingID(Nil), _ => VirtualColumn.hiveGroupingIdName)
-  )
-
-  /**
-   * Literal functions do not require the user to specify braces when calling them
-   * When an attributes is not resolvable, we try to resolve it as a literal function.
-   */
-  private def resolveLiteralFunction(nameParts: Seq[String]): Option[NamedExpression] = {
-    if (nameParts.length != 1) return None
-    val name = nameParts.head
-    literalFunctions.find(func => caseInsensitiveResolution(func._1, name)).map {
-      case (_, getFuncExpr, getAliasName) =>
-        val funcExpr = getFuncExpr()
-        Alias(funcExpr, getAliasName(funcExpr))()
-    }
-  }
-
-  /**
-   * Resolves `UnresolvedAttribute`, `GetColumnByOrdinal` and extract value expressions(s) by
-   * traversing the input expression in top-down manner. It must be top-down because we need to
-   * skip over unbound lambda function expression. The lambda expressions are resolved in a
-   * different place [[ResolveLambdaVariables]].
-   *
-   * Example :
-   * SELECT transform(array(1, 2, 3), (x, i) -> x + i)"
-   *
-   * In the case above, x and i are resolved as lambda variables in [[ResolveLambdaVariables]].
-   */
-  private def resolveExpression(
-      expr: Expression,
-      resolveColumnByName: Seq[String] => Option[Expression],
-      getAttrCandidates: () => Seq[Attribute],
-      throws: Boolean): Expression = {
-    def innerResolve(e: Expression, isTopLevel: Boolean): Expression = {
-      if (e.resolved) return e
-      e match {
-        case f: LambdaFunction if !f.bound => f
-
-        case GetColumnByOrdinal(ordinal, _) =>
-          val attrCandidates = getAttrCandidates()
-          assert(ordinal >= 0 && ordinal < attrCandidates.length)
-          attrCandidates(ordinal)
-
-        case GetViewColumnByNameAndOrdinal(
-            viewName, colName, ordinal, expectedNumCandidates, viewDDL) =>
-          val attrCandidates = getAttrCandidates()
-          val matched = attrCandidates.filter(a => resolver(a.name, colName))
-          if (matched.length != expectedNumCandidates) {
-            throw QueryCompilationErrors.incompatibleViewSchemaChange(
-              viewName, colName, expectedNumCandidates, matched, viewDDL)
-          }
-          matched(ordinal)
-
-        case u @ UnresolvedAttribute(nameParts) =>
-          val result = withPosition(u) {
-            resolveColumnByName(nameParts).orElse(resolveLiteralFunction(nameParts)).map {
-              // We trim unnecessary alias here. Note that, we cannot trim the alias at top-level,
-              // as we should resolve `UnresolvedAttribute` to a named expression. The caller side
-              // can trim the top-level alias if it's safe to do so. Since we will call
-              // CleanupAliases later in Analyzer, trim non top-level unnecessary alias is safe.
-              case Alias(child, _) if !isTopLevel => child
-              case other => other
-            }.getOrElse(u)
-          }
-          logDebug(s"Resolving $u to $result")
-          result
-
-        case u @ UnresolvedExtractValue(child, fieldName) =>
-          val newChild = innerResolve(child, isTopLevel = false)
-          if (newChild.resolved) {
-            withOrigin(u.origin) {
-              ExtractValue(newChild, fieldName, resolver)
-            }
-          } else {
-            u.copy(child = newChild)
-          }
-
-        case _ => e.mapChildren(innerResolve(_, isTopLevel = false))
-      }
-    }
-
-    try {
-      innerResolve(expr, isTopLevel = true)
-    } catch {
-      case ae: AnalysisException if !throws =>
-        logDebug(ae.getMessage)
-        expr
-    }
-  }
-
-  /**
-   * Resolves `UnresolvedAttribute`, `GetColumnByOrdinal` and extract value expressions(s) by the
-   * input plan's output attributes. In order to resolve the nested fields correctly, this function
-   * makes use of `throws` parameter to control when to raise an AnalysisException.
-   *
-   * Example :
-   * SELECT * FROM t ORDER BY a.b
-   *
-   * In the above example, after `a` is resolved to a struct-type column, we may fail to resolve `b`
-   * if there is no such nested field named "b". We should not fail and wait for other rules to
-   * resolve it if possible.
-   */
-  def resolveExpressionByPlanOutput(
-      expr: Expression,
-      plan: LogicalPlan,
-      throws: Boolean = false): Expression = {
-    resolveExpression(
-      expr,
-      resolveColumnByName = nameParts => {
-        plan.resolve(nameParts, resolver)
-      },
-      getAttrCandidates = () => plan.output,
-      throws = throws)
-  }
-
-  /**
-   * Resolves `UnresolvedAttribute`, `GetColumnByOrdinal` and extract value expressions(s) by the
-   * input plan's children output attributes.
-   *
-   * @param e The expression need to be resolved.
-   * @param q The LogicalPlan whose children are used to resolve expression's attribute.
-   * @return resolved Expression.
-   */
-  def resolveExpressionByPlanChildren(
-      e: Expression,
-      q: LogicalPlan): Expression = {
-    resolveExpression(
-      e,
-      resolveColumnByName = nameParts => {
-        q.resolveChildren(nameParts, resolver)
-      },
-      getAttrCandidates = () => {
-        assert(q.children.length == 1)
-        q.children.head.output
-      },
-      throws = true)
   }
 
   /**
