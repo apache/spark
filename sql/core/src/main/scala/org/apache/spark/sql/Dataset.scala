@@ -3948,7 +3948,7 @@ class Dataset[T] private[sql](
    */
   @Experimental
   def bind(args: Map[String, (Any, DataType)]): Dataset[T] = withTypedPlan {
-    Bind(args.mapValues { case (v, dt) => Literal.create(v, dt) }, logicalPlan)
+    Bind(args.mapValues { case (v, dt) => Literal.create(v, dt) }.toMap, logicalPlan)
   }
 
   /**

@@ -691,7 +691,7 @@ case class CoGroup(
       newLeft: LogicalPlan, newRight: LogicalPlan): CoGroup = copy(left = newLeft, right = newRight)
 }
 
-case class Bind(args: Map[String, Expression], child: LogicalPlan) extends UnaryNode {
+case class Bind(args: Map[String, Literal], child: LogicalPlan) extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output
 
