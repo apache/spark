@@ -125,7 +125,8 @@ public interface MergedShuffleFileManager {
   /**
    * Remove shuffle merge data files.
    *
-   * @param removeShuffleMerge Remove shuffle merge RPC
+   * @param removeShuffleMerge contains shuffle details (appId, shuffleId, etc) to uniquely
+   * identify a shuffle to be removed
    */
   void removeShuffleMerge(RemoveShuffleMerge removeShuffleMerge);
 

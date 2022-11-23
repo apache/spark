@@ -88,6 +88,6 @@ public class NoOpMergedShuffleFileManager implements MergedShuffleFileManager {
 
   @Override
   public void removeShuffleMerge(RemoveShuffleMerge removeShuffleMerge) {
-    throw new UnsupportedOperationException("Cannot handle shuffle block merge");
+    throw new UnsupportedOperationException("Cannot handle merged shuffle remove");
   }
 }
