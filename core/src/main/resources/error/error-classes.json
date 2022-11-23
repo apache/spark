@@ -5,6 +5,12 @@
     ],
     "sqlState" : "42000"
   },
+  "AMBIGUOUS_LATERAL_COLUMN_ALIAS" : {
+    "message" : [
+      "Lateral column alias <name> is ambiguous and has <n> matches."
+    ],
+    "sqlState" : "42000"
+  },
   "AMBIGUOUS_REFERENCE" : {
     "message" : [
       "Reference <name> is ambiguous, could be: <referenceNames>."

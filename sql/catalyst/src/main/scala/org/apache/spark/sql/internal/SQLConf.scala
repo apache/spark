@@ -4027,6 +4027,14 @@ object SQLConf {
     .checkValues(ErrorMessageFormat.values.map(_.toString))
     .createWithDefault(ErrorMessageFormat.PRETTY.toString)
 
+  val LATERAL_COLUMN_ALIAS_ENABLED =
+    buildConf("spark.sql.lateralColumnAlias.enabled")
+      .internal()
+      .doc("Enable lateral column alias in analyzer")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
