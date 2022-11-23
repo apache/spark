@@ -1583,3 +1583,43 @@ org.apache.spark.sql.AnalysisException
     "fragment" : "to_binary('abc', 'invalidFormat')"
   } ]
 }
+
+
+-- !query
+CREATE TEMPORARY VIEW fmtTable(fmtField) AS SELECT * FROM VALUES ('invalidFormat')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT to_binary('abc', fmtField) FROM fmtTable
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "messageParameters" : {
+    "inputExpr" : "\"fmtField\"",
+    "inputName" : "fmt",
+    "inputType" : "\"STRING\"",
+    "sqlExpr" : "\"to_binary(abc, fmtField)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 33,
+    "fragment" : "to_binary('abc', fmtField)"
+  } ]
+}
+
+
+-- !query
+DROP VIEW IF EXISTS fmtTable
+-- !query schema
+struct<>
+-- !query output
+

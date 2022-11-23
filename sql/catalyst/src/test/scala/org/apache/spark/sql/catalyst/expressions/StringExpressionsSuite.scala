@@ -432,6 +432,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     GenerateUnsafeProjection.generate(StringDecode(b, Literal("\"quote")) :: Nil)
   }
 
+
   test("initcap unit test") {
     checkEvaluation(InitCap(Literal.create(null, StringType)), null)
     checkEvaluation(InitCap(Literal("a b")), "A B")
@@ -1251,6 +1252,21 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           "inputName" -> "`attributereference`",
           "inputType" -> toSQLType(right.dataType),
           "inputExpr" -> toSQLExpr(right)
+        )
+      )
+    )
+  }
+
+  test("ToBinary: fails analysis if fmt is not foldable") {
+    val wrongFmt = AttributeReference("invalidFormat", StringType)()
+    val toCharacterExpr = ToBinary(Literal("abc"), Some(wrongFmt))
+    assert(toCharacterExpr.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> "fmt",
+          "inputType" -> toSQLType(wrongFmt.dataType),
+          "inputExpr" -> toSQLExpr(wrongFmt)
         )
       )
     )
