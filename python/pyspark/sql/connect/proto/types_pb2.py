@@ -30,7 +30,7 @@ _sym_db = _symbol_database.Default()
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
-    b'\n\x19spark/connect/types.proto\x12\rspark.connect"\xc1\x1c\n\x08\x44\x61taType\x12\x35\n\x04\x62ool\x18\x01 \x01(\x0b\x32\x1f.spark.connect.DataType.BooleanH\x00R\x04\x62ool\x12,\n\x02i8\x18\x02 \x01(\x0b\x32\x1a.spark.connect.DataType.I8H\x00R\x02i8\x12/\n\x03i16\x18\x03 \x01(\x0b\x32\x1b.spark.connect.DataType.I16H\x00R\x03i16\x12/\n\x03i32\x18\x05 \x01(\x0b\x32\x1b.spark.connect.DataType.I32H\x00R\x03i32\x12/\n\x03i64\x18\x07 \x01(\x0b\x32\x1b.spark.connect.DataType.I64H\x00R\x03i64\x12\x32\n\x04\x66p32\x18\n \x01(\x0b\x32\x1c.spark.connect.DataType.FP32H\x00R\x04\x66p32\x12\x32\n\x04\x66p64\x18\x0b \x01(\x0b\x32\x1c.spark.connect.DataType.FP64H\x00R\x04\x66p64\x12\x38\n\x06string\x18\x0c \x01(\x0b\x32\x1e.spark.connect.DataType.StringH\x00R\x06string\x12\x38\n\x06\x62inary\x18\r \x01(\x0b\x32\x1e.spark.connect.DataType.BinaryH\x00R\x06\x62inary\x12\x41\n\ttimestamp\x18\x0e \x01(\x0b\x32!.spark.connect.DataType.TimestampH\x00R\ttimestamp\x12\x32\n\x04\x64\x61te\x18\x10 \x01(\x0b\x32\x1c.spark.connect.DataType.DateH\x00R\x04\x64\x61te\x12\x32\n\x04time\x18\x11 \x01(\x0b\x32\x1c.spark.connect.DataType.TimeH\x00R\x04time\x12K\n\rinterval_year\x18\x13 \x01(\x0b\x32$.spark.connect.DataType.IntervalYearH\x00R\x0cintervalYear\x12H\n\x0cinterval_day\x18\x14 \x01(\x0b\x32#.spark.connect.DataType.IntervalDayH\x00R\x0bintervalDay\x12H\n\x0ctimestamp_tz\x18\x1d \x01(\x0b\x32#.spark.connect.DataType.TimestampTZH\x00R\x0btimestampTz\x12\x32\n\x04uuid\x18  \x01(\x0b\x32\x1c.spark.connect.DataType.UUIDH\x00R\x04uuid\x12\x42\n\nfixed_char\x18\x15 \x01(\x0b\x32!.spark.connect.DataType.FixedCharH\x00R\tfixedChar\x12;\n\x07varchar\x18\x16 \x01(\x0b\x32\x1f.spark.connect.DataType.VarCharH\x00R\x07varchar\x12H\n\x0c\x66ixed_binary\x18\x17 \x01(\x0b\x32#.spark.connect.DataType.FixedBinaryH\x00R\x0b\x66ixedBinary\x12;\n\x07\x64\x65\x63imal\x18\x18 \x01(\x0b\x32\x1f.spark.connect.DataType.DecimalH\x00R\x07\x64\x65\x63imal\x12\x38\n\x06struct\x18\x19 \x01(\x0b\x32\x1e.spark.connect.DataType.StructH\x00R\x06struct\x12\x32\n\x04list\x18\x1b \x01(\x0b\x32\x1c.spark.connect.DataType.ListH\x00R\x04list\x12/\n\x03map\x18\x1c \x01(\x0b\x32\x1b.spark.connect.DataType.MapH\x00R\x03map\x12?\n\x1buser_defined_type_reference\x18\x1f \x01(\rH\x00R\x18userDefinedTypeReference\x1a\x43\n\x07\x42oolean\x12\x38\n\x18type_variation_reference\x18\x01 \x01(\rR\x16typeVariationReference\x1a>\n\x02I8\x12\x38\n\x18type_variation_reference\x18\x01 \x01(\rR\x16typeVariationReference\x1a?\n\x03I16\x12\x38\n\x18type_variation_reference\x18\x01 \x01(\rR\x16typeVariationReference\x1a?\n\x03I32\x12\x38\n\x18type_variation_reference\x18\x01 \x01(\rR\x16typeVariationReference\x1a?\n\x03I64\x12\x38\n\x18type_variation_reference\x18\x01 \x01(\rR\x16typeVariationReference\x1a@\n\x04\x46P32\x12\x38\n\x18type_variation_reference\x18\x01 \x01(\rR\x16typeVariationReference\x1a@\n\x04\x46P64\x12\x38\n\x18type_variation_reference\x18\x01 \x01(\rR\x16typeVariationReference\x1a\x42\n\x06String\x12\x38\n\x18type_variation_reference\x18\x01 \x01(\rR\x16typeVariationReference\x1a\x42\n\x06\x42inary\x12\x38\n\x18type_variation_reference\x18\x01 \x01(\rR\x16typeVariationReference\x1a\x45\n\tTimestamp\x12\x38\n\x18type_variation_reference\x18\x01 \x01(\rR\x16typeVariationReference\x1a@\n\x04\x44\x61te\x12\x38\n\x18type_variation_reference\x18\x01 \x01(\rR\x16typeVariationReference\x1a@\n\x04Time\x12\x38\n\x18type_variation_reference\x18\x01 \x01(\rR\x16typeVariationReference\x1aG\n\x0bTimestampTZ\x12\x38\n\x18type_variation_reference\x18\x01 \x01(\rR\x16typeVariationReference\x1aH\n\x0cIntervalYear\x12\x38\n\x18type_variation_reference\x18\x01 \x01(\rR\x16typeVariationReference\x1aG\n\x0bIntervalDay\x12\x38\n\x18type_variation_reference\x18\x01 \x01(\rR\x16typeVariationReference\x1a@\n\x04UUID\x12\x38\n\x18type_variation_reference\x18\x01 \x01(\rR\x16typeVariationReference\x1a]\n\tFixedChar\x12\x16\n\x06length\x18\x01 \x01(\x05R\x06length\x12\x38\n\x18type_variation_reference\x18\x02 \x01(\rR\x16typeVariationReference\x1a[\n\x07VarChar\x12\x16\n\x06length\x18\x01 \x01(\x05R\x06length\x12\x38\n\x18type_variation_reference\x18\x02 \x01(\rR\x16typeVariationReference\x1a_\n\x0b\x46ixedBinary\x12\x16\n\x06length\x18\x01 \x01(\x05R\x06length\x12\x38\n\x18type_variation_reference\x18\x02 \x01(\rR\x16typeVariationReference\x1aw\n\x07\x44\x65\x63imal\x12\x14\n\x05scale\x18\x01 \x01(\x05R\x05scale\x12\x1c\n\tprecision\x18\x02 \x01(\x05R\tprecision\x12\x38\n\x18type_variation_reference\x18\x03 \x01(\rR\x16typeVariationReference\x1a\xf6\x01\n\x0bStructField\x12+\n\x04type\x18\x01 \x01(\x0b\x32\x17.spark.connect.DataTypeR\x04type\x12\x12\n\x04name\x18\x02 \x01(\tR\x04name\x12\x1a\n\x08nullable\x18\x03 \x01(\x08R\x08nullable\x12M\n\x08metadata\x18\x04 \x03(\x0b\x32\x31.spark.connect.DataType.StructField.MetadataEntryR\x08metadata\x1a;\n\rMetadataEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x02\x38\x01\x1a\x7f\n\x06Struct\x12;\n\x06\x66ields\x18\x01 \x03(\x0b\x32#.spark.connect.DataType.StructFieldR\x06\x66ields\x12\x38\n\x18type_variation_reference\x18\x02 \x01(\rR\x16typeVariationReference\x1a\xa0\x01\n\x04List\x12\x33\n\x08\x44\x61taType\x18\x01 \x01(\x0b\x32\x17.spark.connect.DataTypeR\x08\x44\x61taType\x12\x38\n\x18type_variation_reference\x18\x02 \x01(\rR\x16typeVariationReference\x12)\n\x10\x65lement_nullable\x18\x03 \x01(\x08R\x0f\x65lementNullable\x1a\xc0\x01\n\x03Map\x12)\n\x03key\x18\x01 \x01(\x0b\x32\x17.spark.connect.DataTypeR\x03key\x12-\n\x05value\x18\x02 \x01(\x0b\x32\x17.spark.connect.DataTypeR\x05value\x12\x38\n\x18type_variation_reference\x18\x03 \x01(\rR\x16typeVariationReference\x12%\n\x0evalue_nullable\x18\x04 \x01(\x08R\rvalueNullableB\x06\n\x04kindB"\n\x1eorg.apache.spark.connect.protoP\x01\x62\x06proto3'
+    b'\n\x19spark/connect/types.proto\x12\rspark.connect"\xc8"\n\x08\x44\x61taType\x12\x32\n\x04null\x18\x01 \x01(\x0b\x32\x1c.spark.connect.DataType.NULLH\x00R\x04null\x12\x38\n\x06\x62inary\x18\x02 \x01(\x0b\x32\x1e.spark.connect.DataType.BinaryH\x00R\x06\x62inary\x12;\n\x07\x62oolean\x18\x03 \x01(\x0b\x32\x1f.spark.connect.DataType.BooleanH\x00R\x07\x62oolean\x12,\n\x02i8\x18\x04 \x01(\x0b\x32\x1a.spark.connect.DataType.I8H\x00R\x02i8\x12/\n\x03i16\x18\x05 \x01(\x0b\x32\x1b.spark.connect.DataType.I16H\x00R\x03i16\x12/\n\x03i32\x18\x06 \x01(\x0b\x32\x1b.spark.connect.DataType.I32H\x00R\x03i32\x12/\n\x03i64\x18\x07 \x01(\x0b\x32\x1b.spark.connect.DataType.I64H\x00R\x03i64\x12\x32\n\x04\x66p32\x18\x08 \x01(\x0b\x32\x1c.spark.connect.DataType.FP32H\x00R\x04\x66p32\x12\x32\n\x04\x66p64\x18\t \x01(\x0b\x32\x1c.spark.connect.DataType.FP64H\x00R\x04\x66p64\x12;\n\x07\x64\x65\x63imal\x18\n \x01(\x0b\x32\x1f.spark.connect.DataType.DecimalH\x00R\x07\x64\x65\x63imal\x12\x38\n\x06string\x18\x0b \x01(\x0b\x32\x1e.spark.connect.DataType.StringH\x00R\x06string\x12\x32\n\x04\x63har\x18\x0c \x01(\x0b\x32\x1c.spark.connect.DataType.CharH\x00R\x04\x63har\x12<\n\x08var_char\x18\r \x01(\x0b\x32\x1f.spark.connect.DataType.VarCharH\x00R\x07varChar\x12\x32\n\x04\x64\x61te\x18\x0e \x01(\x0b\x32\x1c.spark.connect.DataType.DateH\x00R\x04\x64\x61te\x12\x41\n\ttimestamp\x18\x0f \x01(\x0b\x32!.spark.connect.DataType.TimestampH\x00R\ttimestamp\x12K\n\rtimestamp_ntz\x18\x10 \x01(\x0b\x32$.spark.connect.DataType.TimestampNTZH\x00R\x0ctimestampNtz\x12W\n\x11\x63\x61lendar_interval\x18\x11 \x01(\x0b\x32(.spark.connect.DataType.CalendarIntervalH\x00R\x10\x63\x61lendarInterval\x12[\n\x13year_month_interval\x18\x12 \x01(\x0b\x32).spark.connect.DataType.YearMonthIntervalH\x00R\x11yearMonthInterval\x12U\n\x11\x64\x61y_time_interval\x18\x13 \x01(\x0b\x32\'.spark.connect.DataType.DayTimeIntervalH\x00R\x0f\x64\x61yTimeInterval\x12\x35\n\x05\x61rray\x18\x14 \x01(\x0b\x32\x1d.spark.connect.DataType.ArrayH\x00R\x05\x61rray\x12\x38\n\x06struct\x18\x15 \x01(\x0b\x32\x1e.spark.connect.DataType.StructH\x00R\x06struct\x12/\n\x03map\x18\x16 \x01(\x0b\x32\x1b.spark.connect.DataType.MapH\x00R\x03map\x12K\n\rinterval_year\x18\x17 \x01(\x0b\x32$.spark.connect.DataType.IntervalYearH\x00R\x0cintervalYear\x12H\n\x0cinterval_day\x18\x18 \x01(\x0b\x32#.spark.connect.DataType.IntervalDayH\x00R\x0bintervalDay\x12\x32\n\x04uuid\x18\x19 \x01(\x0b\x32\x1c.spark.connect.DataType.UUIDH\x00R\x04uuid\x12H\n\x0c\x66ixed_binary\x18\x1a \x01(\x0b\x32#.spark.connect.DataType.FixedBinaryH\x00R\x0b\x66ixedBinary\x12?\n\x1buser_defined_type_reference\x18\x1f \x01(\rH\x00R\x18userDefinedTypeReference\x1a\x43\n\x07\x42oolean\x12\x38\n\x18type_variation_reference\x18\x01 \x01(\rR\x16typeVariationReference\x1a>\n\x02I8\x12\x38\n\x18type_variation_reference\x18\x01 \x01(\rR\x16typeVariationReference\x1a?\n\x03I16\x12\x38\n\x18type_variation_reference\x18\x01 \x01(\rR\x16typeVariationReference\x1a?\n\x03I32\x12\x38\n\x18type_variation_reference\x18\x01 \x01(\rR\x16typeVariationReference\x1a?\n\x03I64\x12\x38\n\x18type_variation_reference\x18\x01 \x01(\rR\x16typeVariationReference\x1a@\n\x04\x46P32\x12\x38\n\x18type_variation_reference\x18\x01 \x01(\rR\x16typeVariationReference\x1a@\n\x04\x46P64\x12\x38\n\x18type_variation_reference\x18\x01 \x01(\rR\x16typeVariationReference\x1a\x42\n\x06String\x12\x38\n\x18type_variation_reference\x18\x01 \x01(\rR\x16typeVariationReference\x1a\x42\n\x06\x42inary\x12\x38\n\x18type_variation_reference\x18\x01 \x01(\rR\x16typeVariationReference\x1a@\n\x04NULL\x12\x38\n\x18type_variation_reference\x18\x01 \x01(\rR\x16typeVariationReference\x1a\x45\n\tTimestamp\x12\x38\n\x18type_variation_reference\x18\x01 \x01(\rR\x16typeVariationReference\x1a@\n\x04\x44\x61te\x12\x38\n\x18type_variation_reference\x18\x01 \x01(\rR\x16typeVariationReference\x1aH\n\x0cTimestampNTZ\x12\x38\n\x18type_variation_reference\x18\x01 \x01(\rR\x16typeVariationReference\x1aH\n\x0cIntervalYear\x12\x38\n\x18type_variation_reference\x18\x01 \x01(\rR\x16typeVariationReference\x1aG\n\x0bIntervalDay\x12\x38\n\x18type_variation_reference\x18\x01 \x01(\rR\x16typeVariationReference\x1aL\n\x10\x43\x61lendarInterval\x12\x38\n\x18type_variation_reference\x18\x01 \x01(\rR\x16typeVariationReference\x1a\xb3\x01\n\x11YearMonthInterval\x12$\n\x0bstart_field\x18\x01 \x01(\x05H\x00R\nstartField\x88\x01\x01\x12 \n\tend_field\x18\x02 \x01(\x05H\x01R\x08\x65ndField\x88\x01\x01\x12\x38\n\x18type_variation_reference\x18\x03 \x01(\rR\x16typeVariationReferenceB\x0e\n\x0c_start_fieldB\x0c\n\n_end_field\x1a\xb1\x01\n\x0f\x44\x61yTimeInterval\x12$\n\x0bstart_field\x18\x01 \x01(\x05H\x00R\nstartField\x88\x01\x01\x12 \n\tend_field\x18\x02 \x01(\x05H\x01R\x08\x65ndField\x88\x01\x01\x12\x38\n\x18type_variation_reference\x18\x03 \x01(\rR\x16typeVariationReferenceB\x0e\n\x0c_start_fieldB\x0c\n\n_end_field\x1a@\n\x04UUID\x12\x38\n\x18type_variation_reference\x18\x01 \x01(\rR\x16typeVariationReference\x1aX\n\x04\x43har\x12\x16\n\x06length\x18\x01 \x01(\x05R\x06length\x12\x38\n\x18type_variation_reference\x18\x02 \x01(\rR\x16typeVariationReference\x1a[\n\x07VarChar\x12\x16\n\x06length\x18\x01 \x01(\x05R\x06length\x12\x38\n\x18type_variation_reference\x18\x02 \x01(\rR\x16typeVariationReference\x1a_\n\x0b\x46ixedBinary\x12\x16\n\x06length\x18\x01 \x01(\x05R\x06length\x12\x38\n\x18type_variation_reference\x18\x02 \x01(\rR\x16typeVariationReference\x1a\x99\x01\n\x07\x44\x65\x63imal\x12\x19\n\x05scale\x18\x01 \x01(\x05H\x00R\x05scale\x88\x01\x01\x12!\n\tprecision\x18\x02 \x01(\x05H\x01R\tprecision\x88\x01\x01\x12\x38\n\x18type_variation_reference\x18\x03 \x01(\rR\x16typeVariationReferenceB\x08\n\x06_scaleB\x0c\n\n_precision\x1a\xff\x01\n\x0bStructField\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x34\n\tdata_type\x18\x02 \x01(\x0b\x32\x17.spark.connect.DataTypeR\x08\x64\x61taType\x12\x1a\n\x08nullable\x18\x03 \x01(\x08R\x08nullable\x12M\n\x08metadata\x18\x04 \x03(\x0b\x32\x31.spark.connect.DataType.StructField.MetadataEntryR\x08metadata\x1a;\n\rMetadataEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x02\x38\x01\x1a\x7f\n\x06Struct\x12;\n\x06\x66ields\x18\x01 \x03(\x0b\x32#.spark.connect.DataType.StructFieldR\x06\x66ields\x12\x38\n\x18type_variation_reference\x18\x02 \x01(\rR\x16typeVariationReference\x1a\xa2\x01\n\x05\x41rray\x12:\n\x0c\x65lement_type\x18\x01 \x01(\x0b\x32\x17.spark.connect.DataTypeR\x0b\x65lementType\x12#\n\rcontains_null\x18\x02 \x01(\x08R\x0c\x63ontainsNull\x12\x38\n\x18type_variation_reference\x18\x03 \x01(\rR\x16typeVariationReference\x1a\xdb\x01\n\x03Map\x12\x32\n\x08key_type\x18\x01 \x01(\x0b\x32\x17.spark.connect.DataTypeR\x07keyType\x12\x36\n\nvalue_type\x18\x02 \x01(\x0b\x32\x17.spark.connect.DataTypeR\tvalueType\x12.\n\x13value_contains_null\x18\x03 \x01(\x08R\x11valueContainsNull\x12\x38\n\x18type_variation_reference\x18\x04 \x01(\rR\x16typeVariationReferenceB\x06\n\x04kindB"\n\x1eorg.apache.spark.connect.protoP\x01\x62\x06proto3'
 )
 
 
@@ -44,21 +44,24 @@ _DATATYPE_FP32 = _DATATYPE.nested_types_by_name["FP32"]
 _DATATYPE_FP64 = _DATATYPE.nested_types_by_name["FP64"]
 _DATATYPE_STRING = _DATATYPE.nested_types_by_name["String"]
 _DATATYPE_BINARY = _DATATYPE.nested_types_by_name["Binary"]
+_DATATYPE_NULL = _DATATYPE.nested_types_by_name["NULL"]
 _DATATYPE_TIMESTAMP = _DATATYPE.nested_types_by_name["Timestamp"]
 _DATATYPE_DATE = _DATATYPE.nested_types_by_name["Date"]
-_DATATYPE_TIME = _DATATYPE.nested_types_by_name["Time"]
-_DATATYPE_TIMESTAMPTZ = _DATATYPE.nested_types_by_name["TimestampTZ"]
+_DATATYPE_TIMESTAMPNTZ = _DATATYPE.nested_types_by_name["TimestampNTZ"]
 _DATATYPE_INTERVALYEAR = _DATATYPE.nested_types_by_name["IntervalYear"]
 _DATATYPE_INTERVALDAY = _DATATYPE.nested_types_by_name["IntervalDay"]
+_DATATYPE_CALENDARINTERVAL = _DATATYPE.nested_types_by_name["CalendarInterval"]
+_DATATYPE_YEARMONTHINTERVAL = _DATATYPE.nested_types_by_name["YearMonthInterval"]
+_DATATYPE_DAYTIMEINTERVAL = _DATATYPE.nested_types_by_name["DayTimeInterval"]
 _DATATYPE_UUID = _DATATYPE.nested_types_by_name["UUID"]
-_DATATYPE_FIXEDCHAR = _DATATYPE.nested_types_by_name["FixedChar"]
+_DATATYPE_CHAR = _DATATYPE.nested_types_by_name["Char"]
 _DATATYPE_VARCHAR = _DATATYPE.nested_types_by_name["VarChar"]
 _DATATYPE_FIXEDBINARY = _DATATYPE.nested_types_by_name["FixedBinary"]
 _DATATYPE_DECIMAL = _DATATYPE.nested_types_by_name["Decimal"]
 _DATATYPE_STRUCTFIELD = _DATATYPE.nested_types_by_name["StructField"]
 _DATATYPE_STRUCTFIELD_METADATAENTRY = _DATATYPE_STRUCTFIELD.nested_types_by_name["MetadataEntry"]
 _DATATYPE_STRUCT = _DATATYPE.nested_types_by_name["Struct"]
-_DATATYPE_LIST = _DATATYPE.nested_types_by_name["List"]
+_DATATYPE_ARRAY = _DATATYPE.nested_types_by_name["Array"]
 _DATATYPE_MAP = _DATATYPE.nested_types_by_name["Map"]
 DataType = _reflection.GeneratedProtocolMessageType(
     "DataType",
@@ -145,6 +148,15 @@ DataType = _reflection.GeneratedProtocolMessageType(
                 # @@protoc_insertion_point(class_scope:spark.connect.DataType.Binary)
             },
         ),
+        "NULL": _reflection.GeneratedProtocolMessageType(
+            "NULL",
+            (_message.Message,),
+            {
+                "DESCRIPTOR": _DATATYPE_NULL,
+                "__module__": "spark.connect.types_pb2"
+                # @@protoc_insertion_point(class_scope:spark.connect.DataType.NULL)
+            },
+        ),
         "Timestamp": _reflection.GeneratedProtocolMessageType(
             "Timestamp",
             (_message.Message,),
@@ -163,22 +175,13 @@ DataType = _reflection.GeneratedProtocolMessageType(
                 # @@protoc_insertion_point(class_scope:spark.connect.DataType.Date)
             },
         ),
-        "Time": _reflection.GeneratedProtocolMessageType(
-            "Time",
+        "TimestampNTZ": _reflection.GeneratedProtocolMessageType(
+            "TimestampNTZ",
             (_message.Message,),
             {
-                "DESCRIPTOR": _DATATYPE_TIME,
+                "DESCRIPTOR": _DATATYPE_TIMESTAMPNTZ,
                 "__module__": "spark.connect.types_pb2"
-                # @@protoc_insertion_point(class_scope:spark.connect.DataType.Time)
-            },
-        ),
-        "TimestampTZ": _reflection.GeneratedProtocolMessageType(
-            "TimestampTZ",
-            (_message.Message,),
-            {
-                "DESCRIPTOR": _DATATYPE_TIMESTAMPTZ,
-                "__module__": "spark.connect.types_pb2"
-                # @@protoc_insertion_point(class_scope:spark.connect.DataType.TimestampTZ)
+                # @@protoc_insertion_point(class_scope:spark.connect.DataType.TimestampNTZ)
             },
         ),
         "IntervalYear": _reflection.GeneratedProtocolMessageType(
@@ -199,6 +202,33 @@ DataType = _reflection.GeneratedProtocolMessageType(
                 # @@protoc_insertion_point(class_scope:spark.connect.DataType.IntervalDay)
             },
         ),
+        "CalendarInterval": _reflection.GeneratedProtocolMessageType(
+            "CalendarInterval",
+            (_message.Message,),
+            {
+                "DESCRIPTOR": _DATATYPE_CALENDARINTERVAL,
+                "__module__": "spark.connect.types_pb2"
+                # @@protoc_insertion_point(class_scope:spark.connect.DataType.CalendarInterval)
+            },
+        ),
+        "YearMonthInterval": _reflection.GeneratedProtocolMessageType(
+            "YearMonthInterval",
+            (_message.Message,),
+            {
+                "DESCRIPTOR": _DATATYPE_YEARMONTHINTERVAL,
+                "__module__": "spark.connect.types_pb2"
+                # @@protoc_insertion_point(class_scope:spark.connect.DataType.YearMonthInterval)
+            },
+        ),
+        "DayTimeInterval": _reflection.GeneratedProtocolMessageType(
+            "DayTimeInterval",
+            (_message.Message,),
+            {
+                "DESCRIPTOR": _DATATYPE_DAYTIMEINTERVAL,
+                "__module__": "spark.connect.types_pb2"
+                # @@protoc_insertion_point(class_scope:spark.connect.DataType.DayTimeInterval)
+            },
+        ),
         "UUID": _reflection.GeneratedProtocolMessageType(
             "UUID",
             (_message.Message,),
@@ -208,13 +238,13 @@ DataType = _reflection.GeneratedProtocolMessageType(
                 # @@protoc_insertion_point(class_scope:spark.connect.DataType.UUID)
             },
         ),
-        "FixedChar": _reflection.GeneratedProtocolMessageType(
-            "FixedChar",
+        "Char": _reflection.GeneratedProtocolMessageType(
+            "Char",
             (_message.Message,),
             {
-                "DESCRIPTOR": _DATATYPE_FIXEDCHAR,
+                "DESCRIPTOR": _DATATYPE_CHAR,
                 "__module__": "spark.connect.types_pb2"
-                # @@protoc_insertion_point(class_scope:spark.connect.DataType.FixedChar)
+                # @@protoc_insertion_point(class_scope:spark.connect.DataType.Char)
             },
         ),
         "VarChar": _reflection.GeneratedProtocolMessageType(
@@ -271,13 +301,13 @@ DataType = _reflection.GeneratedProtocolMessageType(
                 # @@protoc_insertion_point(class_scope:spark.connect.DataType.Struct)
             },
         ),
-        "List": _reflection.GeneratedProtocolMessageType(
-            "List",
+        "Array": _reflection.GeneratedProtocolMessageType(
+            "Array",
             (_message.Message,),
             {
-                "DESCRIPTOR": _DATATYPE_LIST,
+                "DESCRIPTOR": _DATATYPE_ARRAY,
                 "__module__": "spark.connect.types_pb2"
-                # @@protoc_insertion_point(class_scope:spark.connect.DataType.List)
+                # @@protoc_insertion_point(class_scope:spark.connect.DataType.Array)
             },
         ),
         "Map": _reflection.GeneratedProtocolMessageType(
@@ -304,21 +334,24 @@ _sym_db.RegisterMessage(DataType.FP32)
 _sym_db.RegisterMessage(DataType.FP64)
 _sym_db.RegisterMessage(DataType.String)
 _sym_db.RegisterMessage(DataType.Binary)
+_sym_db.RegisterMessage(DataType.NULL)
 _sym_db.RegisterMessage(DataType.Timestamp)
 _sym_db.RegisterMessage(DataType.Date)
-_sym_db.RegisterMessage(DataType.Time)
-_sym_db.RegisterMessage(DataType.TimestampTZ)
+_sym_db.RegisterMessage(DataType.TimestampNTZ)
 _sym_db.RegisterMessage(DataType.IntervalYear)
 _sym_db.RegisterMessage(DataType.IntervalDay)
+_sym_db.RegisterMessage(DataType.CalendarInterval)
+_sym_db.RegisterMessage(DataType.YearMonthInterval)
+_sym_db.RegisterMessage(DataType.DayTimeInterval)
 _sym_db.RegisterMessage(DataType.UUID)
-_sym_db.RegisterMessage(DataType.FixedChar)
+_sym_db.RegisterMessage(DataType.Char)
 _sym_db.RegisterMessage(DataType.VarChar)
 _sym_db.RegisterMessage(DataType.FixedBinary)
 _sym_db.RegisterMessage(DataType.Decimal)
 _sym_db.RegisterMessage(DataType.StructField)
 _sym_db.RegisterMessage(DataType.StructField.MetadataEntry)
 _sym_db.RegisterMessage(DataType.Struct)
-_sym_db.RegisterMessage(DataType.List)
+_sym_db.RegisterMessage(DataType.Array)
 _sym_db.RegisterMessage(DataType.Map)
 
 if _descriptor._USE_C_DESCRIPTORS == False:
@@ -328,55 +361,61 @@ if _descriptor._USE_C_DESCRIPTORS == False:
     _DATATYPE_STRUCTFIELD_METADATAENTRY._options = None
     _DATATYPE_STRUCTFIELD_METADATAENTRY._serialized_options = b"8\001"
     _DATATYPE._serialized_start = 45
-    _DATATYPE._serialized_end = 3694
-    _DATATYPE_BOOLEAN._serialized_start = 1461
-    _DATATYPE_BOOLEAN._serialized_end = 1528
-    _DATATYPE_I8._serialized_start = 1530
-    _DATATYPE_I8._serialized_end = 1592
-    _DATATYPE_I16._serialized_start = 1594
-    _DATATYPE_I16._serialized_end = 1657
-    _DATATYPE_I32._serialized_start = 1659
-    _DATATYPE_I32._serialized_end = 1722
-    _DATATYPE_I64._serialized_start = 1724
-    _DATATYPE_I64._serialized_end = 1787
-    _DATATYPE_FP32._serialized_start = 1789
-    _DATATYPE_FP32._serialized_end = 1853
-    _DATATYPE_FP64._serialized_start = 1855
-    _DATATYPE_FP64._serialized_end = 1919
-    _DATATYPE_STRING._serialized_start = 1921
-    _DATATYPE_STRING._serialized_end = 1987
-    _DATATYPE_BINARY._serialized_start = 1989
-    _DATATYPE_BINARY._serialized_end = 2055
-    _DATATYPE_TIMESTAMP._serialized_start = 2057
-    _DATATYPE_TIMESTAMP._serialized_end = 2126
-    _DATATYPE_DATE._serialized_start = 2128
-    _DATATYPE_DATE._serialized_end = 2192
-    _DATATYPE_TIME._serialized_start = 2194
-    _DATATYPE_TIME._serialized_end = 2258
-    _DATATYPE_TIMESTAMPTZ._serialized_start = 2260
-    _DATATYPE_TIMESTAMPTZ._serialized_end = 2331
-    _DATATYPE_INTERVALYEAR._serialized_start = 2333
-    _DATATYPE_INTERVALYEAR._serialized_end = 2405
-    _DATATYPE_INTERVALDAY._serialized_start = 2407
-    _DATATYPE_INTERVALDAY._serialized_end = 2478
-    _DATATYPE_UUID._serialized_start = 2480
-    _DATATYPE_UUID._serialized_end = 2544
-    _DATATYPE_FIXEDCHAR._serialized_start = 2546
-    _DATATYPE_FIXEDCHAR._serialized_end = 2639
-    _DATATYPE_VARCHAR._serialized_start = 2641
-    _DATATYPE_VARCHAR._serialized_end = 2732
-    _DATATYPE_FIXEDBINARY._serialized_start = 2734
-    _DATATYPE_FIXEDBINARY._serialized_end = 2829
-    _DATATYPE_DECIMAL._serialized_start = 2831
-    _DATATYPE_DECIMAL._serialized_end = 2950
-    _DATATYPE_STRUCTFIELD._serialized_start = 2953
-    _DATATYPE_STRUCTFIELD._serialized_end = 3199
-    _DATATYPE_STRUCTFIELD_METADATAENTRY._serialized_start = 3140
-    _DATATYPE_STRUCTFIELD_METADATAENTRY._serialized_end = 3199
-    _DATATYPE_STRUCT._serialized_start = 3201
-    _DATATYPE_STRUCT._serialized_end = 3328
-    _DATATYPE_LIST._serialized_start = 3331
-    _DATATYPE_LIST._serialized_end = 3491
-    _DATATYPE_MAP._serialized_start = 3494
-    _DATATYPE_MAP._serialized_end = 3686
+    _DATATYPE._serialized_end = 4469
+    _DATATYPE_BOOLEAN._serialized_start = 1727
+    _DATATYPE_BOOLEAN._serialized_end = 1794
+    _DATATYPE_I8._serialized_start = 1796
+    _DATATYPE_I8._serialized_end = 1858
+    _DATATYPE_I16._serialized_start = 1860
+    _DATATYPE_I16._serialized_end = 1923
+    _DATATYPE_I32._serialized_start = 1925
+    _DATATYPE_I32._serialized_end = 1988
+    _DATATYPE_I64._serialized_start = 1990
+    _DATATYPE_I64._serialized_end = 2053
+    _DATATYPE_FP32._serialized_start = 2055
+    _DATATYPE_FP32._serialized_end = 2119
+    _DATATYPE_FP64._serialized_start = 2121
+    _DATATYPE_FP64._serialized_end = 2185
+    _DATATYPE_STRING._serialized_start = 2187
+    _DATATYPE_STRING._serialized_end = 2253
+    _DATATYPE_BINARY._serialized_start = 2255
+    _DATATYPE_BINARY._serialized_end = 2321
+    _DATATYPE_NULL._serialized_start = 2323
+    _DATATYPE_NULL._serialized_end = 2387
+    _DATATYPE_TIMESTAMP._serialized_start = 2389
+    _DATATYPE_TIMESTAMP._serialized_end = 2458
+    _DATATYPE_DATE._serialized_start = 2460
+    _DATATYPE_DATE._serialized_end = 2524
+    _DATATYPE_TIMESTAMPNTZ._serialized_start = 2526
+    _DATATYPE_TIMESTAMPNTZ._serialized_end = 2598
+    _DATATYPE_INTERVALYEAR._serialized_start = 2600
+    _DATATYPE_INTERVALYEAR._serialized_end = 2672
+    _DATATYPE_INTERVALDAY._serialized_start = 2674
+    _DATATYPE_INTERVALDAY._serialized_end = 2745
+    _DATATYPE_CALENDARINTERVAL._serialized_start = 2747
+    _DATATYPE_CALENDARINTERVAL._serialized_end = 2823
+    _DATATYPE_YEARMONTHINTERVAL._serialized_start = 2826
+    _DATATYPE_YEARMONTHINTERVAL._serialized_end = 3005
+    _DATATYPE_DAYTIMEINTERVAL._serialized_start = 3008
+    _DATATYPE_DAYTIMEINTERVAL._serialized_end = 3185
+    _DATATYPE_UUID._serialized_start = 3187
+    _DATATYPE_UUID._serialized_end = 3251
+    _DATATYPE_CHAR._serialized_start = 3253
+    _DATATYPE_CHAR._serialized_end = 3341
+    _DATATYPE_VARCHAR._serialized_start = 3343
+    _DATATYPE_VARCHAR._serialized_end = 3434
+    _DATATYPE_FIXEDBINARY._serialized_start = 3436
+    _DATATYPE_FIXEDBINARY._serialized_end = 3531
+    _DATATYPE_DECIMAL._serialized_start = 3534
+    _DATATYPE_DECIMAL._serialized_end = 3687
+    _DATATYPE_STRUCTFIELD._serialized_start = 3690
+    _DATATYPE_STRUCTFIELD._serialized_end = 3945
+    _DATATYPE_STRUCTFIELD_METADATAENTRY._serialized_start = 3886
+    _DATATYPE_STRUCTFIELD_METADATAENTRY._serialized_end = 3945
+    _DATATYPE_STRUCT._serialized_start = 3947
+    _DATATYPE_STRUCT._serialized_end = 4074
+    _DATATYPE_ARRAY._serialized_start = 4077
+    _DATATYPE_ARRAY._serialized_end = 4239
+    _DATATYPE_MAP._serialized_start = 4242
+    _DATATYPE_MAP._serialized_end = 4461
 # @@protoc_insertion_point(module_scope)
