@@ -1266,7 +1266,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest
     )
   }
 
-  test("SPARK-37099: Optimize the filter based on rank-like window function") {
+  test("SPARK-37099: Extract group limit for rank-like window function from filter") {
 
     val nullStr: String = null
     val df = Seq(
@@ -1284,13 +1284,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest
 
     val window = Window.partitionBy($"key").orderBy($"order".asc_nulls_first)
 
-    val conditions1 = Seq(
-      $"rn" === 1,
-      $"rn" < 2,
-      $"rn" <= 1
-    )
-
-    for (condition <- conditions1) {
+    Seq($"rn" === 1, $"rn" < 2, $"rn" <= 1).foreach { condition =>
       checkAnswer(df.withColumn("rn", row_number().over(window)).where(condition),
         Seq(
           Row("a", 4, "", 2.0, 1),
@@ -1318,12 +1312,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest
       )
     }
 
-    val conditions2 = Seq(
-      $"rn" < 3,
-      $"rn" <= 2
-    )
-
-    for (condition <- conditions2) {
+    Seq($"rn" < 3, $"rn" <= 2).foreach { condition =>
       checkAnswer(df.withColumn("rn", row_number().over(window)).where(condition),
         Seq(
           Row("a", 4, "", 2.0, 1),

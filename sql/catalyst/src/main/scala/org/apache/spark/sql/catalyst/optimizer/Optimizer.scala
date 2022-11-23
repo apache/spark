@@ -89,7 +89,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         PushLeftSemiLeftAntiThroughJoin,
         LimitPushDown,
         LimitPushDownThroughWindow,
-        OptimizeFilterAsLimitForWindow,
+        ExtractWindowGroupLimitFromFilter,
         ColumnPruning,
         GenerateOptimization,
         // Operator combine

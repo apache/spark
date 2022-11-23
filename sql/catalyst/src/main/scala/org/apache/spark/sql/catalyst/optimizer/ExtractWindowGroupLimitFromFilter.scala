@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{FILTER, WINDOW}
  *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE 5 >= rn
  * }}}
  */
-object OptimizeFilterAsLimitForWindow extends Rule[LogicalPlan] with PredicateHelper {
+object ExtractWindowGroupLimitFromFilter extends Rule[LogicalPlan] with PredicateHelper {
 
   /**
    * Extract all the limit values from predicates.
@@ -67,17 +67,24 @@ object OptimizeFilterAsLimitForWindow extends Rule[LogicalPlan] with PredicateHe
       val limits = windowExpressions.collect {
         case alias @ Alias(WindowExpression(rankLikeFunc, _), _) =>
           extractLimits(condition, alias.toAttribute).map((_, rankLikeFunc))
-      }.sortBy(_.get._1).head
-      limits match {
+      }
+
+      // multiple different rank-like unsupported.
+      if (limits.filter(_.isDefined).groupBy(_.get._2).size > 1) {
+        return filter
+      }
+      val maxLimit = limits.sortBy(_.get._1).last
+      maxLimit match {
         case Some((limit, _)) =>
           if (limit > 0) {
-            val newWindow = window.copy(groupLimitInfo = limits)
+            val newWindow = window.copy(groupLimitInfo = maxLimit)
             val newFilter = filter.withNewChildren(Seq(newWindow))
             newFilter
           } else {
             LocalRelation(filter.output, data = Seq.empty, isStreaming = filter.isStreaming)
           }
-        case _ => filter
+        case _ =>
+          filter
       }
   }
 }

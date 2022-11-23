@@ -133,7 +133,7 @@ case class WindowExec(
       val frames = factories.map(_(windowFunctionResult))
       val numFrames = frames.length
 
-      var count = 0
+      def clearBuffer(): Unit
       def fillBuffer(): Unit
 
       private[this] def fetchNextPartition(): Unit = {
@@ -142,13 +142,12 @@ case class WindowExec(
         val currentGroup = nextGroup.copy()
 
         // clear last partition
-        buffer.clear()
+        clearBuffer()
 
         while (nextRowAvailable && nextGroup == currentGroup) {
           fillBuffer()
           fetchNextRow()
         }
-        count = 0
 
         // Setup the frames.
         var i = 0
@@ -204,6 +203,10 @@ case class WindowExec(
     }
 
     case class DefaultWindowIterator(stream: Iterator[InternalRow]) extends WindowIterator {
+      override def clearBuffer(): Unit = {
+        buffer.clear()
+      }
+
       override def fillBuffer(): Unit = {
         buffer.add(nextRow)
       }
@@ -211,6 +214,10 @@ case class WindowExec(
 
     case class SimpleGroupLimitIterator(
         stream: Iterator[InternalRow], groupLimit: Int) extends WindowIterator {
+      override def clearBuffer(): Unit = {
+        buffer.clear()
+      }
+
       override def fillBuffer(): Unit = {
         if (buffer.length < groupLimit) {
           buffer.add(nextRow)
@@ -221,40 +228,64 @@ case class WindowExec(
     case class RankGroupLimitIterator(
         stream: Iterator[InternalRow], groupLimit: Int) extends WindowIterator {
       val ordering = GenerateOrdering.generate(orderSpec, output)
+      var count = 0
       var rank = 0
       var currentRank: UnsafeRow = null
 
+      override def clearBuffer(): Unit = {
+        count = 0
+        rank = 0
+        currentRank = null
+        buffer.clear()
+      }
+
       override def fillBuffer(): Unit = {
+        if (rank >= groupLimit) {
+          return
+        }
         if (count == 0) {
-          rank = 0
           currentRank = nextRow.copy()
-        }
-        if (rank < groupLimit && ordering.compare(currentRank, nextRow) != 0) {
-          rank = count
-          currentRank = nextRow.copy()
-        }
-        if (rank < groupLimit) {
-          count += 1
           buffer.add(nextRow)
+        } else {
+          if (ordering.compare(currentRank, nextRow) != 0) {
+            rank = count
+            currentRank = nextRow.copy()
+          }
+          if (rank < groupLimit) {
+            buffer.add(nextRow)
+          }
         }
+        count += 1
       }
     }
 
     case class DenseRankGroupLimitIterator(
         stream: Iterator[InternalRow], groupLimit: Int) extends WindowIterator {
       val ordering = GenerateOrdering.generate(orderSpec, output)
+      var rank = 0
       var currentRank: UnsafeRow = null
 
+      override def clearBuffer(): Unit = {
+        rank = 0
+        currentRank = null
+        buffer.clear()
+      }
+
       override def fillBuffer(): Unit = {
-        if (count == 0) {
-          currentRank = nextRow.copy()
+        if (rank >= groupLimit) {
+          return
         }
-        if (count < groupLimit && ordering.compare(currentRank, nextRow) != 0) {
-          count += 1
+        if (rank == 0) {
           currentRank = nextRow.copy()
-        }
-        if (count < groupLimit) {
           buffer.add(nextRow)
+        } else {
+          if (ordering.compare(currentRank, nextRow) != 0) {
+            rank += 1
+            currentRank = nextRow.copy()
+          }
+          if (rank < groupLimit) {
+            buffer.add(nextRow)
+          }
         }
       }
     }
