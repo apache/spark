@@ -451,6 +451,11 @@
     ],
     "sqlState" : "42000"
   },
+  "DATA_TYPE_NOT_SUPPORTED" : {
+    "message" : [
+      "DataType <dataType> is not supported."
+    ]
+  },
   "DATETIME_OVERFLOW" : {
     "message" : [
       "Datetime operation overflow: <operation>."
@@ -1581,11 +1586,6 @@
   "_LEGACY_ERROR_TEMP_0029" : {
     "message" : [
       "Cannot mix year-month and day-time fields: <literal>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0030" : {
-    "message" : [
-      "DataType <dataType> is not supported."
     ]
   },
   "_LEGACY_ERROR_TEMP_0031" : {

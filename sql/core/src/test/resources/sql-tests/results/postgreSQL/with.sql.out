@@ -360,7 +360,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0030",
+  "errorClass" : "DATA_TYPE_NOT_SUPPORTED",
   "messageParameters" : {
     "dataType" : "baz"
   },
@@ -381,7 +381,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0030",
+  "errorClass" : "DATA_TYPE_NOT_SUPPORTED",
   "messageParameters" : {
     "dataType" : "ordinality"
   },
