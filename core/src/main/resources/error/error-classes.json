@@ -682,7 +682,7 @@
     ]
   },
   "INVALID_EXTRACT_FIELD" : {
-    "message": [
+    "message" : [
       "Cannot extract <field> from <expr>."
     ]
   },
