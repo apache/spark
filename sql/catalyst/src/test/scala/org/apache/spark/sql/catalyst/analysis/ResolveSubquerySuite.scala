@@ -56,7 +56,8 @@ class ResolveSubquerySuite extends AnalysisTest {
         SimpleAnalyzer.checkAnalysis(SimpleAnalyzer.ResolveSubquery(expr))
       },
       errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
-      parameters = Map("sqlExprs" -> "outer(a#4151672)")
+      parameters = Map("sqlExprs" -> "outer\\(a#.*"),
+      matchPVals = true
     )
   }
 

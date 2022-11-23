@@ -964,14 +964,16 @@ class SubquerySuite extends QueryTest
             |               WHERE t1.c1 = t2.c1)
           """.stripMargin)
       }
-      checkError(
+      checkErrorMatchPVals(
         exception1,
         errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
-        parameters = Map("sqlExprs" -> "outer(arr_c2#427264)"),
+        sqlState = None,
+        parameters = Map("sqlExprs" -> "explode\\(outer\\(arr_c2#.*"),
         context = ExpectedContext(
           fragment = "LATERAL VIEW explode(t2.arr_c2) q AS c2",
           start = 68,
-          stop = 106))
+          stop = 106)
+      )
     }
   }
 
