@@ -685,6 +685,7 @@ class QueryExecutionErrorsSuite
     checkError(
       exception = e,
       errorClass = "FAILED_RENAME_PATH",
+      sqlState = "22023",
       parameters = Map(
         "sourcePath" -> s"$srcPath",
         "targetPath" -> s"$dstPath"
