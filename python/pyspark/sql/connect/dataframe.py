@@ -44,10 +44,8 @@ from pyspark.sql.types import (
 )
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect.typing import ColumnOrString, ExpressionOrString, LiteralType
+    from pyspark.sql.connect._typing import ColumnOrName, ExpressionOrString, LiteralType
     from pyspark.sql.connect.client import RemoteSparkSession
-
-ColumnOrName = Union[Column, str]
 
 
 class GroupingFrame(object):
@@ -308,7 +306,7 @@ class DataFrame(object):
             plan.Deduplicate(child=self._plan, all_columns_as_keys=True), session=self._session
         )
 
-    def drop(self, *cols: "ColumnOrString") -> "DataFrame":
+    def drop(self, *cols: "ColumnOrName") -> "DataFrame":
         _cols = list(cols)
         if any(not isinstance(c, (str, Column)) for c in _cols):
             raise TypeError(
@@ -342,7 +340,7 @@ class DataFrame(object):
         """
         return self.head()
 
-    def groupBy(self, *cols: "ColumnOrString") -> GroupingFrame:
+    def groupBy(self, *cols: "ColumnOrName") -> GroupingFrame:
         return GroupingFrame(self, *cols)
 
     @overload
@@ -414,13 +412,13 @@ class DataFrame(object):
     def offset(self, n: int) -> "DataFrame":
         return DataFrame.withPlan(plan.Offset(child=self._plan, offset=n), session=self._session)
 
-    def sort(self, *cols: "ColumnOrString") -> "DataFrame":
+    def sort(self, *cols: "ColumnOrName") -> "DataFrame":
         """Sort by a specific column"""
         return DataFrame.withPlan(
             plan.Sort(self._plan, columns=list(cols), is_global=True), session=self._session
         )
 
-    def sortWithinPartitions(self, *cols: "ColumnOrString") -> "DataFrame":
+    def sortWithinPartitions(self, *cols: "ColumnOrName") -> "DataFrame":
         """Sort within each partition by a specific column"""
         return DataFrame.withPlan(
             plan.Sort(self._plan, columns=list(cols), is_global=False), session=self._session

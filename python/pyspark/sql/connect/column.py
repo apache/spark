@@ -15,14 +15,15 @@
 # limitations under the License.
 #
 import uuid
-from typing import cast, get_args, TYPE_CHECKING, Callable, Any
+from typing import cast, TYPE_CHECKING, Callable, Any
 
 import json
 import decimal
 import datetime
 
 import pyspark.sql.connect.proto as proto
-from pyspark.sql.connect._typing import PrimitiveType
+
+primitive_types = (bool, float, int, str)
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.client import RemoteSparkSession
@@ -33,7 +34,7 @@ def _bin_op(
     name: str, doc: str = "binary function", reverse: bool = False
 ) -> Callable[["Column", Any], "Expression"]:
     def _(self: "Column", other: Any) -> "Expression":
-        if isinstance(other, get_args(PrimitiveType)):
+        if isinstance(other, primitive_types):
             other = LiteralExpression(other)
         if not reverse:
             return ScalarFunctionExpression(name, self, other)
@@ -70,7 +71,7 @@ class Expression(object):
         """Returns a binary expression with the current column as the left
         side and the other expression as the right side.
         """
-        if isinstance(other, get_args(PrimitiveType)):
+        if isinstance(other, primitive_types):
             other = LiteralExpression(other)
         return ScalarFunctionExpression("==", self, other)
 
