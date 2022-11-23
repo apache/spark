@@ -28,7 +28,7 @@ import scala.util.control.NonFatal
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.TaskContext
-import org.apache.spark.annotation.{DeveloperApi, Stable, Unstable}
+import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
 import org.apache.spark.api.python.{PythonRDD, SerDeUtil}
@@ -3938,6 +3938,17 @@ class Dataset[T] private[sql](
         table.fileIndex.inputFiles
     }.flatten
     files.toSet.toArray
+  }
+
+  /**
+   * Bind query parameters to literal values.
+   *
+   * @param args A map of parameter names to their values and types.
+   * @since 3.4.0
+   */
+  @Experimental
+  def bind(args: Map[String, (Any, DataType)]): Dataset[T] = withTypedPlan {
+    Bind(args.mapValues { case (v, dt) => Literal.create(v, dt) }, logicalPlan)
   }
 
   /**
