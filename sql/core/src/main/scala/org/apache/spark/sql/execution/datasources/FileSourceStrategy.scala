@@ -234,7 +234,8 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
                 " is a reserved column name that cannot be read in combination with " +
                 s"${FileFormat.METADATA_NAME}.${FileFormat.ROW_INDEX} column.")
             }
-            Some(AttributeReference(FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME, LongType)())
+            Some(AttributeReference(
+              FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME, LongType, nullable = false)())
           case _ => None
         }
 
