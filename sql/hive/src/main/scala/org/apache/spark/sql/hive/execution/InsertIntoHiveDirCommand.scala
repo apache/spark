@@ -61,7 +61,6 @@ case class InsertIntoHiveDirCommand(
     assert(storage.locationUri.nonEmpty)
     SchemaUtils.checkColumnNameDuplication(
       outputColumnNames,
-      s"when inserting into ${storage.locationUri.get}",
       sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
     val table = CatalogTable(

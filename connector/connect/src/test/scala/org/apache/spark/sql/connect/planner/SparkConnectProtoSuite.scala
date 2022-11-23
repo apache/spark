@@ -148,6 +148,23 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(connectPlan2, sparkPlan2)
   }
 
+  test("SPARK-41169: Test drop") {
+    // single column
+    val connectPlan = connectTestRelation.drop("id")
+    val sparkPlan = sparkTestRelation.drop("id")
+    comparePlans(connectPlan, sparkPlan)
+
+    // all columns
+    val connectPlan2 = connectTestRelation.drop("id", "name")
+    val sparkPlan2 = sparkTestRelation.drop("id", "name")
+    comparePlans(connectPlan2, sparkPlan2)
+
+    // non-existing column
+    val connectPlan3 = connectTestRelation.drop("id2", "name")
+    val sparkPlan3 = sparkTestRelation.drop("id2", "name")
+    comparePlans(connectPlan3, sparkPlan3)
+  }
+
   test("SPARK-40809: column alias") {
     // Simple Test.
     val connectPlan = connectTestRelation.select("id".protoAttr.as("id2"))
@@ -346,10 +363,14 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       connectTestRelation.withColumnsRenamed(Map("id" -> "id1", "id" -> "id2")),
       sparkTestRelation.withColumnsRenamed(Map("id" -> "id1", "id" -> "id2")))
 
-    val e = intercept[AnalysisException](
-      transform(connectTestRelation.withColumnsRenamed(
-        Map("id" -> "duplicatedCol", "name" -> "duplicatedCol"))))
-    assert(e.getMessage.contains("Found duplicate column(s)"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        transform(
+          connectTestRelation.withColumnsRenamed(
+            Map("id" -> "duplicatedCol", "name" -> "duplicatedCol")))
+      },
+      errorClass = "COLUMN_ALREADY_EXISTS",
+      parameters = Map("columnName" -> "`duplicatedcol`"))
   }
 
   test("Writes fails without path or table") {

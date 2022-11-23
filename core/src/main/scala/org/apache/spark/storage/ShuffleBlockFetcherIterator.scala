@@ -782,7 +782,7 @@ final class ShuffleBlockFetcherIterator(
             logDebug("Number of requests in flight " + reqsInFlight)
           }
 
-          if (buf.size == 0) {
+          val in = if (buf.size == 0) {
             // We will never legitimately receive a zero-size block. All blocks with zero records
             // have zero size and all zero-size blocks have no records (and hence should never
             // have been requested in the first place). This statement relies on behaviors of the
@@ -798,38 +798,52 @@ final class ShuffleBlockFetcherIterator(
             // since the last call.
             val msg = s"Received a zero-size buffer for block $blockId from $address " +
               s"(expectedApproxSize = $size, isNetworkReqDone=$isNetworkReqDone)"
-            throwFetchFailedException(blockId, mapIndex, address, new IOException(msg))
+            if (blockId.isShuffleChunk) {
+              // Zero-size block may come from nodes with hardware failures, For shuffle chunks,
+              // the original shuffle blocks that belong to that zero-size shuffle chunk is
+              // available and we can opt to fallback immediately.
+              logWarning(msg)
+              pushBasedFetchHelper.initiateFallbackFetchForPushMergedBlock(blockId, address)
+              // Set result to null to trigger another iteration of the while loop to get either.
+              result = null
+              null
+            } else {
+              throwFetchFailedException(blockId, mapIndex, address, new IOException(msg))
+            }
+          } else {
+            try {
+              val bufIn = buf.createInputStream()
+              if (checksumEnabled) {
+                val checksum = ShuffleChecksumHelper.getChecksumByAlgorithm(checksumAlgorithm)
+                checkedIn = new CheckedInputStream(bufIn, checksum)
+                checkedIn
+              } else {
+                bufIn
+              }
+            } catch {
+              // The exception could only be throwed by local shuffle block
+              case e: IOException =>
+                assert(buf.isInstanceOf[FileSegmentManagedBuffer])
+                e match {
+                  case ce: ClosedByInterruptException =>
+                    logError("Failed to create input stream from local block, " +
+                      ce.getMessage)
+                  case e: IOException =>
+                    logError("Failed to create input stream from local block", e)
+                }
+                buf.release()
+                if (blockId.isShuffleChunk) {
+                  pushBasedFetchHelper.initiateFallbackFetchForPushMergedBlock(blockId, address)
+                  // Set result to null to trigger another iteration of the while loop to get
+                  // either.
+                  result = null
+                  null
+                } else {
+                  throwFetchFailedException(blockId, mapIndex, address, e)
+                }
+            }
           }
 
-          val in = try {
-            val bufIn = buf.createInputStream()
-            if (checksumEnabled) {
-              val checksum = ShuffleChecksumHelper.getChecksumByAlgorithm(checksumAlgorithm)
-              checkedIn = new CheckedInputStream(bufIn, checksum)
-              checkedIn
-            } else {
-              bufIn
-            }
-          } catch {
-            // The exception could only be throwed by local shuffle block
-            case e: IOException =>
-              assert(buf.isInstanceOf[FileSegmentManagedBuffer])
-              e match {
-                case ce: ClosedByInterruptException =>
-                  logError("Failed to create input stream from local block, " +
-                    ce.getMessage)
-                case e: IOException => logError("Failed to create input stream from local block", e)
-              }
-              buf.release()
-              if (blockId.isShuffleChunk) {
-                pushBasedFetchHelper.initiateFallbackFetchForPushMergedBlock(blockId, address)
-                // Set result to null to trigger another iteration of the while loop to get either.
-                result = null
-                null
-              } else {
-                throwFetchFailedException(blockId, mapIndex, address, e)
-              }
-          }
           if (in != null) {
             try {
               input = streamWrapper(blockId, in)
