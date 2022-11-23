@@ -643,14 +643,11 @@ class QueryExecutionErrorsSuite
 
     val e = intercept[SparkFileAlreadyExistsException](
       withTempPath { p =>
-        val conf = new Configuration()
-        conf.set("fs.test.impl", classOf[LocalFileSystem].getName)
-        conf.set("fs.defaultFS", "test:///")
         val basePath = new Path(p.getAbsolutePath)
-        val fm = new FileSystemBasedCheckpointFileManager(basePath, conf)
-        srcPath = new Path(s"$basePath/file")
+        val fm = new FileSystemBasedCheckpointFileManager(basePath, new Configuration())
+        srcPath = new Path(s"$basePath/src")
         fm.createAtomic(srcPath, overwriteIfPossible = true).close()
-        dstPath = new Path(s"$basePath/new_file")
+        dstPath = new Path(s"$basePath/dst")
         fm.createAtomic(dstPath, overwriteIfPossible = true).close()
 
         fm.renameTempFile(srcPath, dstPath, false)
