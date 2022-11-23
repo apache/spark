@@ -229,46 +229,6 @@
           "Input to <functionName> should all be the same type, but it's <dataType>."
         ]
       },
-      "FORMAT_CONT_THOUSANDS_SEPS" : {
-        "message" : [
-          "Thousands separators (, or G) must have digits in between them in the number format: <format>."
-        ]
-      },
-      "FORMAT_CUR_MUST_BEFORE_DEC" : {
-        "message" : [
-          "Currency characters must appear before any decimal point in the number format: <format>."
-        ]
-      },
-      "FORMAT_CUR_MUST_BEFORE_DIGIT" : {
-        "message" : [
-          "Currency characters must appear before digits in the number format: <format>."
-        ]
-      },
-      "FORMAT_EMPTY" : {
-        "message" : [
-          "The number format string cannot be empty."
-        ]
-      },
-      "FORMAT_THOUSANDS_SEPS_MUST_BEFORE_DEC" : {
-        "message" : [
-          "Thousands separators (, or G) may not appear after the decimal point in the number format: <format>."
-        ]
-      },
-      "FORMAT_UNEXPECTED_TOKEN" : {
-        "message" : [
-          "Unexpected <token> found in the format string <format>; the structure of the format string must match: [MI|S] [$] [0|9|G|,]* [.|D] [0|9]* [$] [PR|MI|S]."
-        ]
-      },
-      "FORMAT_WRONG_NUM_DIGIT" : {
-        "message" : [
-          "The format string requires at least one number digit."
-        ]
-      },
-      "FORMAT_WRONG_NUM_TOKEN" : {
-        "message" : [
-          "At most one <token> is allowed in the number format: <format>."
-        ]
-      },
       "HASH_MAP_TYPE" : {
         "message" : [
           "Input to the function <functionName> cannot contain elements of the \"MAP\" type. In Spark, same maps may have different hashcode, thus hash expressions are prohibited on \"MAP\" elements. To restore previous behavior set \"spark.sql.legacy.allowHashOnMapType\" to \"true\"."
@@ -687,6 +647,63 @@
     ],
     "sqlState" : "42000"
   },
+  "INVALID_FORMAT" : {
+    "message" : [
+      "The format is invalid: <format>."
+    ],
+    "subClass" : {
+      "CONT_THOUSANDS_SEPS" : {
+        "message" : [
+          "Thousands separators (, or G) must have digits in between them in the number format."
+        ]
+      },
+      "CUR_MUST_BEFORE_DEC" : {
+        "message" : [
+          "Currency characters must appear before any decimal point in the number format."
+        ]
+      },
+      "CUR_MUST_BEFORE_DIGIT" : {
+        "message" : [
+          "Currency characters must appear before digits in the number format."
+        ]
+      },
+      "EMPTY" : {
+        "message" : [
+          "The number format string cannot be empty."
+        ]
+      },
+      "ESC_AT_THE_END" : {
+        "message" : [
+          "The escape character is not allowed to end with."
+        ]
+      },
+      "ESC_IN_THE_MIDDLE" : {
+        "message" : [
+          "The escape character is not allowed to precede <char>."
+        ]
+      },
+      "THOUSANDS_SEPS_MUST_BEFORE_DEC" : {
+        "message" : [
+          "Thousands separators (, or G) may not appear after the decimal point in the number format."
+        ]
+      },
+      "UNEXPECTED_TOKEN" : {
+        "message" : [
+          "Found the unexpected <token> in the format string; the structure of the format string must match: [MI|S] [$] [0|9|G|,]* [.|D] [0|9]* [$] [PR|MI|S]."
+        ]
+      },
+      "WRONG_NUM_DIGIT" : {
+        "message" : [
+          "The format string requires at least one number digit."
+        ]
+      },
+      "WRONG_NUM_TOKEN" : {
+        "message" : [
+          "At most one <token> is allowed in the number format."
+        ]
+      }
+    }
+  },
   "INVALID_FRACTION_OF_SECOND" : {
     "message" : [
       "The fraction of sec must be zero. Valid range is [0, 60]. If necessary set <ansiConfig> to \"false\" to bypass this error."
@@ -707,23 +724,6 @@
     "message" : [
       "The <joinType> JOIN with LATERAL correlation is not allowed because an OUTER subquery cannot correlate to its join partner. Remove the LATERAL correlation or use an INNER JOIN, or LEFT OUTER JOIN instead."
     ]
-  },
-  "INVALID_LIKE_PATTERN" : {
-    "message" : [
-      "The pattern <pattern> is invalid."
-    ],
-    "subClass" : {
-      "ESC_AT_THE_END" : {
-        "message" : [
-          "the escape character is not allowed to end with."
-        ]
-      },
-      "ESC_IN_THE_MIDDLE" : {
-        "message" : [
-          "the escape character is not allowed to precede <char>."
-        ]
-      }
-    }
   },
   "INVALID_PANDAS_UDF_PLACEMENT" : {
     "message" : [

@@ -3714,9 +3714,9 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         exception = intercept[AnalysisException] {
           sql("SELECT s LIKE 'm%@ca' ESCAPE '%' FROM df").collect()
         },
-        errorClass = "INVALID_LIKE_PATTERN.ESC_IN_THE_MIDDLE",
+        errorClass = "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
         parameters = Map(
-          "pattern" -> toSQLValue("m%@ca", StringType),
+          "format" -> toSQLValue("m%@ca", StringType),
           "char" -> toSQLValue("@", StringType)))
 
       checkAnswer(sql("SELECT s LIKE 'm@@ca' ESCAPE '@' FROM df"), Row(true))
@@ -3731,8 +3731,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         exception = intercept[AnalysisException] {
           sql("SELECT a LIKE 'jialiuping%' ESCAPE '%' FROM df").collect()
         },
-        errorClass = "INVALID_LIKE_PATTERN.ESC_AT_THE_END",
-        parameters = Map("pattern" -> toSQLValue("jialiuping%", StringType)))
+        errorClass = "INVALID_FORMAT.ESC_AT_THE_END",
+        parameters = Map("format" -> toSQLValue("jialiuping%", StringType)))
     }
   }
 
