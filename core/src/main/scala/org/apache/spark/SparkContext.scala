@@ -2570,10 +2570,23 @@ class SparkContext(config: SparkConf) extends Logging {
 
   private[spark] def newShuffleId(): Int = nextShuffleId.getAndIncrement()
 
-  private val nextRddId = new AtomicInteger(0)
+  private var nextRddId = new AtomicInteger(0)
 
   /** Register a new RDD, returning its RDD ID */
-  private[spark] def newRddId(): Int = nextRddId.getAndIncrement()
+  private[spark] def newRddId(): Int = {
+    var id = nextRddId.getAndIncrement()
+    if (id >= 0) {
+        return id
+    }
+    this.synchronized {
+      id = nextRddId.getAndIncrement()
+      if (id < 0) {
+        nextRddId = new AtomicInteger(0)
+        id = nextRddId.getAndIncrement()
+      }
+    }
+    id
+  }
 
   /**
    * Registers listeners specified in spark.extraListeners, then starts the listener bus.
