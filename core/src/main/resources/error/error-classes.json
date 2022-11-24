@@ -1473,6 +1473,11 @@
     ],
     "sqlState" : "42000"
   },
+  "WRONG_NUM_ARGS" : {
+    "message" : [
+      "The <functionName> requires <expectedNum> parameters but the actual number is <actualNum>."
+    ]
+  },
   "_LEGACY_ERROR_TEMP_0001" : {
     "message" : [
       "Invalid InsertIntoContext"
@@ -1953,11 +1958,6 @@
   "_LEGACY_ERROR_TEMP_1041" : {
     "message" : [
       "Undefined function <name>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1042" : {
-    "message" : [
-      "Invalid number of arguments for function <name>. Expected: <expectedInfo>; Found: <actualNumber>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1043" : {

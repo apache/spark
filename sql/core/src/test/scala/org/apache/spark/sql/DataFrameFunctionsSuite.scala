@@ -28,6 +28,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions.{Alias, ArraysZip, AttributeReference, Expression, NamedExpression, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, UTC}
@@ -4847,14 +4848,34 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       (Seq.empty, Seq("x", "z"), 3),
       (null, Seq("x", "z"), 4)
     ).toDF("a1", "a2", "i")
-    val ex1 = intercept[AnalysisException] {
-      df.selectExpr("zip_with(a1, a2, x -> x)")
-    }
-    assert(ex1.getMessage.contains("The number of lambda function arguments '1' does not match"))
-    val ex2 = intercept[AnalysisException] {
-      df.selectExpr("zip_with(a1, a2, (acc, x) -> x, (acc, x) -> x)")
-    }
-    assert(ex2.getMessage.contains("Invalid number of arguments for function zip_with"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("zip_with(a1, a2, x -> x)")
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2300",
+      parameters = Map(
+        "namesSize" -> "1",
+        "argInfoSize" -> "2"),
+      context = ExpectedContext(
+        fragment = "x -> x",
+        start = 17,
+        stop = 22)
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("zip_with(a1, a2, (acc, x) -> x, (acc, x) -> x)")
+      },
+      errorClass = "WRONG_NUM_ARGS",
+      parameters = Map(
+        "functionName" -> toSQLId("zip_with"),
+        "expectedNum" -> "3",
+        "actualNum" -> "4"),
+      context = ExpectedContext(
+        fragment = "zip_with(a1, a2, (acc, x) -> x, (acc, x) -> x)",
+        start = 0,
+        stop = 45)
+    )
 
     checkError(
       exception = intercept[AnalysisException] {
