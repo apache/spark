@@ -155,7 +155,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "_LEGACY_ERROR_TEMP_1179",
   "messageParameters" : {
     "arguments" : "integer, integer, integer",
-    "details" : "requirement failed: step (0) cannot be 0",
+    "details" : "[FAILED_FUNCTION_CALL] Failed preparing of the function `range` for call. Please, double check function's arguments.",
     "name" : "range",
     "usage" : "\n    range(start: long, end: long, step: long, numSlices: integer)\n    range(start: long, end: long, step: long)\n    range(start: long, end: long)\n    range(end: long)"
   },

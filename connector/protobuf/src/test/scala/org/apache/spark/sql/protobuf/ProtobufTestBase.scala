@@ -15,24 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.command
+package org.apache.spark.sql.protobuf
 
-import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.sql.test.SQLTestUtils
 
-/**
- * Checks legitimization of various execution commands.
- */
-object CommandCheck extends (LogicalPlan => Unit) with SQLConfHelper {
+trait ProtobufTestBase extends SQLTestUtils {
 
-  override def apply(plan: LogicalPlan): Unit = {
-    plan.foreach {
-      case AnalyzeColumnCommand(_, colsOpt, allColumns) if !allColumns =>
-        colsOpt.foreach(SchemaUtils.checkColumnNameDuplication(
-          _, conf.caseSensitiveAnalysis))
-
-      case _ =>
+  /**
+   * Returns full path to the given file in the resource folder,
+   * if the first choice throw NPE, try to return the full path of alternative.
+   * The result path doesn't contain the `file:/` protocol part.
+   */
+  protected def testFile(fileName: String, alternateFileName: String): String = {
+    val ret = try {
+      testFile(fileName)
+    } catch {
+      case _: NullPointerException => testFile(alternateFileName)
     }
+    ret.replace("file:/", "/")
   }
 }

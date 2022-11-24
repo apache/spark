@@ -1279,7 +1279,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def outOfDecimalTypeRangeError(str: UTF8String): SparkArithmeticException = {
     new SparkArithmeticException(
-      errorClass = "OUT_OF_DECIMAL_TYPE_RANGE",
+      errorClass = "NUMERIC_OUT_OF_SUPPORTED_RANGE",
       messageParameters = Map(
         "value" -> str.toString),
       context = Array.empty,
@@ -2806,10 +2806,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "size" -> elementSize.toString))
   }
 
-  def unsupportedEmptyLocationError(): SparkIllegalArgumentException = {
+  def invalidEmptyLocationError(location: String): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
-      errorClass = "UNSUPPORTED_EMPTY_LOCATION",
-      messageParameters = Map.empty)
+      errorClass = "INVALID_EMPTY_LOCATION",
+      messageParameters = Map("location" -> location))
   }
 
   def malformedProtobufMessageDetectedInMessageParsingError(e: Throwable): Throwable = {

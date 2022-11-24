@@ -27,7 +27,7 @@ plugins:
   - remote: buf.build/protocolbuffers/plugins/ruby:v21.2.0-1
     out: gen/proto/ruby
    # Building the Python build and building the mypy interfaces.
-  - remote: buf.build/protocolbuffers/plugins/python:v3.20.0-1
+  - remote: buf.build/protocolbuffers/plugins/python:v3.19.3-1
     out: gen/proto/python
   - remote: buf.build/grpc/plugins/python:v1.47.0-1
     out: gen/proto/python

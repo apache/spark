@@ -317,7 +317,20 @@ select extract(not_supported from c) from t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Literals of type 'not_supported' are currently not supported for the string type.; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1102",
+  "messageParameters" : {
+    "field" : "not_supported",
+    "srcDataType" : "string"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 36,
+    "fragment" : "extract(not_supported from c)"
+  } ]
+}
 
 
 -- !query
@@ -326,7 +339,20 @@ select extract(not_supported from i) from t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Literals of type 'not_supported' are currently not supported for the interval year to month type.; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1102",
+  "messageParameters" : {
+    "field" : "not_supported",
+    "srcDataType" : "interval year to month"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 36,
+    "fragment" : "extract(not_supported from i)"
+  } ]
+}
 
 
 -- !query
@@ -335,7 +361,20 @@ select extract(not_supported from j) from t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Literals of type 'not_supported' are currently not supported for the interval day to second type.; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1102",
+  "messageParameters" : {
+    "field" : "not_supported",
+    "srcDataType" : "interval day to second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 36,
+    "fragment" : "extract(not_supported from j)"
+  } ]
+}
 
 
 -- !query
@@ -924,7 +963,20 @@ select extract(DAY from interval '2-1' YEAR TO MONTH)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Literals of type 'DAY' are currently not supported for the interval year to month type.; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1102",
+  "messageParameters" : {
+    "field" : "DAY",
+    "srcDataType" : "interval year to month"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 53,
+    "fragment" : "extract(DAY from interval '2-1' YEAR TO MONTH)"
+  } ]
+}
 
 
 -- !query
@@ -1081,7 +1133,20 @@ select extract(MONTH from interval '123 12:34:56.789123123' DAY TO SECOND)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Literals of type 'MONTH' are currently not supported for the interval day to second type.; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1102",
+  "messageParameters" : {
+    "field" : "MONTH",
+    "srcDataType" : "interval day to second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 74,
+    "fragment" : "extract(MONTH from interval '123 12:34:56.789123123' DAY TO SECOND)"
+  } ]
+}
 
 
 -- !query

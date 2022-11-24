@@ -792,15 +792,18 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
           s"(caseSensitivity=$caseSensitivity, format=$format)") {
           withTempDir { dir =>
             withSQLConf(SQLConf.CASE_SENSITIVE.key -> s"$caseSensitivity") {
-              val m = intercept[AnalysisException] {
+              val e = intercept[AnalysisException] {
                 sql(
                   s"""
                      |INSERT OVERWRITE $local DIRECTORY '${dir.toURI}'
                      |STORED AS $format
                      |SELECT 'id', 'id2' ${if (caseSensitivity) "id" else "ID"}
                    """.stripMargin)
-              }.getMessage
-              assert(m.contains("Found duplicate column(s) when inserting into"))
+              }
+              checkError(
+                exception = e,
+                errorClass = "COLUMN_ALREADY_EXISTS",
+                parameters = Map("columnName" -> "`id`"))
             }
           }
         }

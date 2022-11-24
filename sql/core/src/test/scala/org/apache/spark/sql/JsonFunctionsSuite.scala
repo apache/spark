@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql
 
-import java.lang.reflect.InvocationTargetException
 import java.text.SimpleDateFormat
 import java.time.{Duration, LocalDateTime, Period}
 import java.util.Locale
@@ -425,19 +424,17 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         "from_json(value, 'time Timestamp', map('timestampFormat', 'dd/MM/yyyy HH:mm'))"),
       Row(Row(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0"))))
 
-    val e1 = intercept[AnalysisException] {
-      df3.selectExpr("from_json(value, 1)")
-    }
-    assert(e1.isInstanceOf[AnalysisException])
-    val e2 = e1.getCause
-    assert(e2.isInstanceOf[InvocationTargetException])
-    val e3 = e2.getCause
-    assert(e3.isInstanceOf[AnalysisException])
-    val e4 = e3.asInstanceOf[AnalysisException]
     checkError(
-      exception = e4,
+      exception = intercept[AnalysisException] {
+        df3.selectExpr("from_json(value, 1)")
+      },
       errorClass = "INVALID_SCHEMA",
-      parameters = Map("expression" -> "\"1\"")
+      parameters = Map("expr" -> "\"1\""),
+      context = ExpectedContext(
+        fragment = "from_json(value, 1)",
+        start = 0,
+        stop = 18
+      )
     )
 
     val errMsg2 = intercept[AnalysisException] {
