@@ -292,8 +292,8 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
 
   def dataTypeUnsupportedError(dataType: String, ctx: PrimitiveDataTypeContext): Throwable = {
     new ParseException(
-      errorClass = "DATA_TYPE_NOT_SUPPORTED",
-      messageParameters = Map("dataType" -> dataType),
+      errorClass = "UNSUPPORTED_DATATYPE",
+      messageParameters = Map("typeName" -> dataType),
       ctx)
   }
 

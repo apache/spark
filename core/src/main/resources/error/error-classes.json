@@ -451,11 +451,6 @@
     ],
     "sqlState" : "42000"
   },
-  "DATA_TYPE_NOT_SUPPORTED" : {
-    "message" : [
-      "DataType <dataType> is not supported."
-    ]
-  },
   "DATETIME_OVERFLOW" : {
     "message" : [
       "Datetime operation overflow: <operation>."

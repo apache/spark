@@ -1187,7 +1187,7 @@ class DDLParserSuite extends AnalysisTest {
     checkError(
       exception = parseException(sql),
       errorClass = "DATA_TYPE_NOT_SUPPORTED",
-      parameters = Map("dataType" -> "bad_type"),
+      parameters = Map("typeName" -> "bad_type"),
       context = ExpectedContext(
         fragment = fragment,
         start = 47,

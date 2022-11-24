@@ -360,9 +360,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "DATA_TYPE_NOT_SUPPORTED",
+  "errorClass" : "UNSUPPORTED_DATATYPE",
   "messageParameters" : {
-    "dataType" : "baz"
+    "typeName" : "baz"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -381,9 +381,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "DATA_TYPE_NOT_SUPPORTED",
+  "errorClass" : "UNSUPPORTED_DATATYPE",
   "messageParameters" : {
-    "dataType" : "ordinality"
+    "typeName" : "ordinality"
   },
   "queryContext" : [ {
     "objectType" : "",
