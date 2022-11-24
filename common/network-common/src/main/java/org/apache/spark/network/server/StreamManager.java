@@ -100,4 +100,10 @@ public abstract class StreamManager {
    */
   public void streamSent(String streamId) { }
 
+  /**
+   * Number of opening streams
+   */
+  public int numStreamStates() {
+    return 0;
+  }
 }

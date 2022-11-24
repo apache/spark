@@ -243,6 +243,10 @@ public class TransportContext implements Closeable {
     return registeredConnections;
   }
 
+  public int getNumOpenStream() {
+    return rpcHandler.getStreamManager().numStreamStates();
+  }
+
   @Override
   public void close() {
     if (chunkFetchWorkers != null) {

@@ -91,6 +91,8 @@ class BlockTransferServiceSuite extends SparkFunSuite with TimeLimits {
         // This method is unused in this test
         throw new UnsupportedOperationException("uploadBlock")
       }
+
+      override def numPendingBlockFetches(): Int = 0
     }
 
     val e = intercept[SparkException] {

@@ -1956,6 +1956,10 @@ private[spark] class BlockManager(
     decommissioner.map(_.lastMigrationInfo()).getOrElse((0, false))
   }
 
+  private[spark] def getNumPendingBlockFetches(): Int = {
+    blockTransferService.numPendingBlockFetches()
+  }
+
   private[storage] def getMigratableRDDBlocks(): Seq[ReplicateBlock] =
     master.getReplicateInfoForRDDBlocks(blockManagerId)
 

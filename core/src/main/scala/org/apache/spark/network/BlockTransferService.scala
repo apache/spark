@@ -121,4 +121,6 @@ abstract class BlockTransferService extends BlockStoreClient {
     val future = uploadBlock(hostname, port, execId, blockId, blockData, level, classTag)
     ThreadUtils.awaitResult(future, Duration.Inf)
   }
+
+  def numPendingBlockFetches(): Int
 }
