@@ -721,10 +721,12 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         withTable(table) {
           sql(s"CREATE TABLE $table (value string, name string) USING PARQUET")
           val dupCol = if (caseSensitive) "value" else "VaLuE"
-          val errorMsg = intercept[AnalysisException] {
-            sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS value, name, $dupCol")
-          }.getMessage
-          assert(errorMsg.contains("Found duplicate column(s)"))
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS value, name, $dupCol")
+            },
+            errorClass = "COLUMN_ALREADY_EXISTS",
+            parameters = Map("columnName" -> "`value`"))
         }
       }
     }

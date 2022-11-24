@@ -16,7 +16,6 @@
 #
 
 
-import io
 import logging
 import os
 import typing
@@ -446,13 +445,9 @@ class RemoteSparkSession(object):
         return AnalyzeResult.fromProto(resp)
 
     def _process_batch(self, b: pb2.ExecutePlanResponse) -> Optional[pandas.DataFrame]:
-        import pandas as pd
-
         if b.arrow_batch is not None and len(b.arrow_batch.data) > 0:
             with pa.ipc.open_stream(b.arrow_batch.data) as rd:
                 return rd.read_pandas()
-        elif b.json_batch is not None and len(b.json_batch.data) > 0:
-            return pd.read_json(io.BytesIO(b.json_batch.data), lines=True)
         return None
 
     def _execute_and_fetch(self, req: pb2.ExecutePlanRequest) -> typing.Optional[pandas.DataFrame]:

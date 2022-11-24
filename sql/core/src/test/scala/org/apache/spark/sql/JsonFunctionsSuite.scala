@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql
 
-import java.lang.reflect.InvocationTargetException
 import java.text.SimpleDateFormat
 import java.time.{Duration, LocalDateTime, Period}
 import java.util.Locale
@@ -396,32 +395,30 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       df2.selectExpr("to_json(a, map('timestampFormat', 'dd/MM/yyyy HH:mm'))"),
       Row("""{"_1":"26/08/2015 18:00"}""") :: Nil)
 
-    val e1 = intercept[AnalysisException] {
-      df2.selectExpr("to_json(a, named_struct('a', 1))")
-    }
-    val e2 = e1.getCause
-    assert(e2.isInstanceOf[InvocationTargetException])
-    val e3 = e2.getCause
-    assert(e3.isInstanceOf[AnalysisException])
-    val e4 = e3.asInstanceOf[AnalysisException]
     checkError(
-      exception = e4,
+      exception = intercept[AnalysisException] {
+        df2.selectExpr("to_json(a, named_struct('a', 1))")
+      },
       errorClass = "INVALID_OPTIONS.NOT_MAP_FUNCTION",
-      parameters = Map.empty
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "to_json(a, named_struct('a', 1))",
+        start = 0,
+        stop = 31
+      )
     )
 
-    val e5 = intercept[AnalysisException] {
-      df2.selectExpr("to_json(a, map('a', 1))")
-    }
-    val e6 = e5.getCause
-    assert(e6.isInstanceOf[InvocationTargetException])
-    val e7 = e6.getCause
-    assert(e7.isInstanceOf[AnalysisException])
-    val e8 = e7.asInstanceOf[AnalysisException]
     checkError(
-      exception = e8,
+      exception = intercept[AnalysisException] {
+        df2.selectExpr("to_json(a, map('a', 1))")
+      },
       errorClass = "INVALID_OPTIONS.NON_STRING_TYPE",
-      parameters = Map("map" -> "\"MAP<STRING, INT>\"")
+      parameters = Map("map" -> "\"MAP<STRING, INT>\""),
+      context = ExpectedContext(
+        fragment = "to_json(a, map('a', 1))",
+        start = 0,
+        stop = 22
+      )
     )
   }
 
@@ -450,32 +447,29 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       df3.selectExpr("""from_json(value, 'time InvalidType')""")
     }
     assert(errMsg2.getMessage.contains("DataType invalidtype is not supported"))
-    val e1 = intercept[AnalysisException] {
-      df3.selectExpr("from_json(value, 'time Timestamp', named_struct('a', 1))")
-    }
-    val e2 = e1.getCause
-    assert(e2.isInstanceOf[InvocationTargetException])
-    val e3 = e2.getCause
-    assert(e3.isInstanceOf[AnalysisException])
-    val e4 = e3.asInstanceOf[AnalysisException]
     checkError(
-      exception = e4,
+      exception = intercept[AnalysisException] {
+        df3.selectExpr("from_json(value, 'time Timestamp', named_struct('a', 1))")
+      },
       errorClass = "INVALID_OPTIONS.NOT_MAP_FUNCTION",
-      parameters = Map.empty
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "from_json(value, 'time Timestamp', named_struct('a', 1))",
+        start = 0,
+        stop = 55
+      )
     )
-
-    val e5 = intercept[AnalysisException] {
-      df3.selectExpr("from_json(value, 'time Timestamp', map('a', 1))")
-    }
-    val e6 = e5.getCause
-    assert(e6.isInstanceOf[InvocationTargetException])
-    val e7 = e6.getCause
-    assert(e7.isInstanceOf[AnalysisException])
-    val e8 = e7.asInstanceOf[AnalysisException]
     checkError(
-      exception = e8,
+      exception = intercept[AnalysisException] {
+        df3.selectExpr("from_json(value, 'time Timestamp', map('a', 1))")
+      },
       errorClass = "INVALID_OPTIONS.NON_STRING_TYPE",
-      parameters = Map("map" -> "\"MAP<STRING, INT>\"")
+      parameters = Map("map" -> "\"MAP<STRING, INT>\""),
+      context = ExpectedContext(
+        fragment = "from_json(value, 'time Timestamp', map('a', 1))",
+        start = 0,
+        stop = 46
+      )
     )
   }
 

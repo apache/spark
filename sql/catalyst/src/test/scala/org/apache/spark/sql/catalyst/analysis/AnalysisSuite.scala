@@ -681,7 +681,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("SPARK-34741: Avoid ambiguous reference in MergeIntoTable") {
     val cond = $"a" > 1
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       MergeIntoTable(
         testRelation,
         testRelation,
@@ -690,7 +690,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         Nil,
         Nil
       ),
-      "Reference 'a' is ambiguous" :: Nil)
+      "AMBIGUOUS_REFERENCE",
+      Map("name" -> "`a`", "referenceNames" -> "[`a`, `a`]"))
   }
 
   test("SPARK-24488 Generator with multiple aliases") {

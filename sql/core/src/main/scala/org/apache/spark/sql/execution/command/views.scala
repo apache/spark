@@ -470,8 +470,7 @@ object ViewHelper extends SQLConfHelper with Logging {
 
     // Generate the query column names, throw an AnalysisException if there exists duplicate column
     // names.
-    SchemaUtils.checkColumnNameDuplication(
-      fieldNames, "in the view definition", conf.resolver)
+    SchemaUtils.checkColumnNameDuplication(fieldNames, conf.resolver)
 
     // Generate the view default catalog and namespace, as well as captured SQL configs.
     val manager = session.sessionState.catalogManager

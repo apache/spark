@@ -5,6 +5,11 @@
     ],
     "sqlState" : "42000"
   },
+  "AMBIGUOUS_REFERENCE" : {
+    "message" : [
+      "Reference <name> is ambiguous, could be: <referenceNames>."
+    ]
+  },
   "ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<message>.<alternative> If necessary set <config> to \"false\" to bypass this error."
@@ -98,6 +103,11 @@
       "Fail to insert a value of <sourceType> type into the <targetType> type column <columnName> due to an overflow. Use `try_cast` on the input value to tolerate overflow and return NULL instead."
     ],
     "sqlState" : "22005"
+  },
+  "COLUMN_ALREADY_EXISTS" : {
+    "message" : [
+      "The column <columnName> already exists. Consider to choose another name or rename the existing column."
+    ]
   },
   "COLUMN_NOT_IN_GROUP_BY_CLAUSE" : {
     "message" : [
@@ -479,6 +489,11 @@
       "Failed to execute user defined function (<functionName>: (<signature>) => <result>)"
     ]
   },
+  "FAILED_FUNCTION_CALL" : {
+    "message" : [
+      "Failed preparing of the function <funcName> for call. Please, double check function's arguments."
+    ]
+  },
   "FAILED_RENAME_PATH" : {
     "message" : [
       "Failed to rename <sourcePath> to <targetPath> as destination already exists"
@@ -660,6 +675,11 @@
       "Column or field <name> is of type <type> while it's required to be <expectedType>."
     ],
     "sqlState" : "42000"
+  },
+  "INVALID_EMPTY_LOCATION" : {
+    "message" : [
+      "The location name cannot be empty string, but `<location>` was given."
+    ]
   },
   "INVALID_FIELD_NAME" : {
     "message" : [
@@ -908,6 +928,11 @@
       "To tolerate the error on drop use ALTER TABLE … DROP IF EXISTS PARTITION."
     ],
     "sqlState" : "42000"
+  },
+  "PATH_NOT_FOUND" : {
+    "message" : [
+      "Path does not exist: <path>."
+    ]
   },
   "PIVOT_VALUE_DATA_TYPE_MISMATCH" : {
     "message" : [
@@ -1182,11 +1207,6 @@
         ]
       }
     }
-  },
-  "UNSUPPORTED_EMPTY_LOCATION" : {
-    "message" : [
-      "Unsupported empty location."
-    ]
   },
   "UNSUPPORTED_FEATURE" : {
     "message" : [
@@ -2324,11 +2344,6 @@
       "Unable to infer schema for <format>. It must be specified manually."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1130" : {
-    "message" : [
-      "Path does not exist: <path>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1131" : {
     "message" : [
       "Data source <className> does not support <outputMode> output mode."
@@ -2848,11 +2863,6 @@
   "_LEGACY_ERROR_TEMP_1232" : {
     "message" : [
       "Partition spec is invalid. The spec (<specKeys>) must match the partition spec (<partitionColumnNames>) defined in table '<tableName>'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1233" : {
-    "message" : [
-      "Found duplicate column(s) <colType>: <duplicateCol>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1234" : {

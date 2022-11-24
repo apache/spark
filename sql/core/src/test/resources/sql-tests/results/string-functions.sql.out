@@ -1541,7 +1541,21 @@ select to_binary('abc', 1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The 'format' parameter of function 'to_binary' needs to be a string literal.; line 1 pos 7
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1100",
+  "messageParameters" : {
+    "argName" : "format",
+    "funcName" : "to_binary",
+    "requiredType" : "string"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 26,
+    "fragment" : "to_binary('abc', 1)"
+  } ]
+}
 
 
 -- !query

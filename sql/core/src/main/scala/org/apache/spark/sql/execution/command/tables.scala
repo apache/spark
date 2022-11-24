@@ -238,7 +238,6 @@ case class AlterTableAddColumnsCommand(
 
     SchemaUtils.checkColumnNameDuplication(
       (colsWithProcessedDefaults ++ catalogTable.schema).map(_.name),
-      "in the table definition of " + table.identifier,
       conf.caseSensitiveAnalysis)
     DDLUtils.checkTableColumns(catalogTable, StructType(colsWithProcessedDefaults))
 

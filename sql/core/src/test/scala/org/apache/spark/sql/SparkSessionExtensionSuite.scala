@@ -192,6 +192,23 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper {
     testInjectColumnar(false)
   }
 
+  test("inject plan normalization rules") {
+    val extensions = create { extensions =>
+      extensions.injectPlanNormalizationRules { session =>
+        org.apache.spark.sql.catalyst.optimizer.PushDownPredicates
+      }
+    }
+    withSession(extensions) { session =>
+      import session.implicits._
+      val df = Seq((1, "a"), (2, "b")).toDF("i", "s")
+      df.select("i").filter($"i" > 1).cache()
+      assert(df.filter($"i" > 1).select("i").queryExecution.executedPlan.find {
+        case _: org.apache.spark.sql.execution.columnar.InMemoryTableScanExec => true
+        case _ => false
+      }.isDefined)
+    }
+  }
+
   test("SPARK-39991: AQE should retain column statistics from completed query stages") {
     val extensions = create { extensions =>
       extensions.injectColumnar(_ =>

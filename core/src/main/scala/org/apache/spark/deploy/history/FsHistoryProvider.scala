@@ -19,7 +19,6 @@ package org.apache.spark.deploy.history
 
 import java.io.{File, FileNotFoundException, IOException}
 import java.lang.{Long => JLong}
-import java.nio.file.Files
 import java.util.{Date, NoSuchElementException, ServiceLoader}
 import java.util.concurrent.{ConcurrentHashMap, ExecutorService, TimeUnit}
 import java.util.zip.ZipOutputStream
@@ -36,15 +35,12 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.hdfs.DistributedFileSystem
 import org.apache.hadoop.hdfs.protocol.HdfsConstants
 import org.apache.hadoop.security.AccessControlException
-import org.fusesource.leveldbjni.internal.NativeDB
-import org.rocksdb.RocksDBException
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.History._
-import org.apache.spark.internal.config.History.HybridStoreDiskBackend._
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.internal.config.UI._
@@ -136,34 +132,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     HybridStoreDiskBackend.withName(conf.get(History.HYBRID_STORE_DISK_BACKEND))
 
   // Visible for testing.
-  private[history] val listing: KVStore = storePath.map { path =>
-    val dir = hybridStoreDiskBackend match {
-      case LEVELDB => "listing.ldb"
-      case ROCKSDB => "listing.rdb"
-    }
-    val dbPath = Files.createDirectories(new File(path, dir).toPath()).toFile()
-    Utils.chmod700(dbPath)
-
-    val metadata = FsHistoryProviderMetadata(CURRENT_LISTING_VERSION,
-      AppStatusStore.CURRENT_VERSION, logDir)
-
-    try {
-      open(dbPath, metadata, conf)
-    } catch {
-      // If there's an error, remove the listing database and any existing UI database
-      // from the store directory, since it's extremely likely that they'll all contain
-      // incompatible information.
-      case _: UnsupportedStoreVersionException | _: MetadataMismatchException =>
-        logInfo("Detected incompatible DB versions, deleting...")
-        path.listFiles().foreach(Utils.deleteRecursively)
-        open(dbPath, metadata, conf)
-      case dbExc @ (_: NativeDB.DBException | _: RocksDBException) =>
-        // Get rid of the corrupted data and re-create it.
-        logWarning(s"Failed to load disk store $dbPath :", dbExc)
-        Utils.deleteRecursively(dbPath)
-        open(dbPath, metadata, conf)
-    }
-  }.getOrElse(new InMemoryStore())
+  private[history] val listing: KVStore = {
+    KVUtils.createKVStore(storePath, hybridStoreDiskBackend, conf)
+  }
 
   private val diskManager = storePath.map { path =>
     new HistoryServerDiskManager(conf, path, listing, clock)
@@ -1444,7 +1415,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   }
 }
 
-private[history] object FsHistoryProvider {
+private[spark] object FsHistoryProvider {
 
   private val APPL_START_EVENT_PREFIX = "{\"Event\":\"SparkListenerApplicationStart\""
 
@@ -1459,10 +1430,10 @@ private[history] object FsHistoryProvider {
    * db, if the version does not match this value, the FsHistoryProvider will throw away
    * all data and re-generate the listing data from the event logs.
    */
-  private[history] val CURRENT_LISTING_VERSION = 1L
+  val CURRENT_LISTING_VERSION = 1L
 }
 
-private[history] case class FsHistoryProviderMetadata(
+private[spark] case class FsHistoryProviderMetadata(
     version: Long,
     uiVersion: Long,
     logDir: String)
