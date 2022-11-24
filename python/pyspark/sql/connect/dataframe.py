@@ -45,7 +45,7 @@ from pyspark.sql.types import (
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName, ExpressionOrString, LiteralType
-    from pyspark.sql.connect.client import RemoteSparkSession
+    from pyspark.sql.connect.session import SparkSession
 
 
 class GroupingFrame(object):
@@ -104,7 +104,7 @@ class DataFrame(object):
 
     def __init__(
         self,
-        session: "RemoteSparkSession",
+        session: "SparkSession",
         data: Optional[List[Any]] = None,
         schema: Optional[StructType] = None,
     ):
@@ -112,13 +112,13 @@ class DataFrame(object):
         self._schema = schema
         self._plan: Optional[plan.LogicalPlan] = None
         self._cache: Dict[str, Any] = {}
-        self._session: "RemoteSparkSession" = session
+        self._session: "SparkSession" = session
 
     def __repr__(self) -> str:
         return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
 
     @classmethod
-    def withPlan(cls, plan: plan.LogicalPlan, session: "RemoteSparkSession") -> "DataFrame":
+    def withPlan(cls, plan: plan.LogicalPlan, session: "SparkSession") -> "DataFrame":
         """Main initialization method used to construct a new data frame with a child plan."""
         new_frame = DataFrame(session=session)
         new_frame._plan = plan
@@ -195,14 +195,14 @@ class DataFrame(object):
 
         return self.schema.names
 
-    def sparkSession(self) -> "RemoteSparkSession":
+    def sparkSession(self) -> "SparkSession":
         """Returns Spark session that created this :class:`DataFrame`.
 
         .. versionadded:: 3.4.0
 
         Returns
         -------
-        :class:`RemoteSparkSession`
+        :class:`SparkSession`
         """
         return self._session
 
@@ -811,7 +811,7 @@ class DataFrame(object):
             if self._plan is not None:
                 query = self._plan.to_proto(self._session)
                 if self._session is None:
-                    raise Exception("Cannot analyze without RemoteSparkSession.")
+                    raise Exception("Cannot analyze without SparkSession.")
                 self._schema = self._session.schema(query)
                 return self._schema
             else:
@@ -934,7 +934,7 @@ class DataFrame(object):
         if self._plan is not None:
             query = self._plan.to_proto(self._session)
             if self._session is None:
-                raise Exception("Cannot analyze without RemoteSparkSession.")
+                raise Exception("Cannot analyze without SparkSession.")
             return self._session.explain_string(query, explain_mode)
         else:
             return ""

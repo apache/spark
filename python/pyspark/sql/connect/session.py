@@ -20,6 +20,7 @@ import logging
 import os
 import urllib.parse
 import uuid
+from threading import RLock
 
 import grpc  # type: ignore
 import pyarrow as pa
@@ -34,9 +35,50 @@ from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.connect.plan import SQL, Range
 from pyspark.sql.types import DataType, StructType, StructField, LongType, StringType
 
-from typing import Iterable, Optional, Any, Union, List, Tuple, Dict
+from typing import Iterable, Optional, Any, Union, List, Tuple, Dict, cast, overload
+
+from pyspark.sql.utils import to_str
 
 logging.basicConfig(level=logging.INFO)
+
+
+# TODO(SPARK-38912): This method can be dropped once support for Python 3.8 is dropped
+# In Python 3.9, the @property decorator has been made compatible with the
+# @classmethod decorator (https://docs.python.org/3.9/library/functions.html#classmethod)
+#
+# @classmethod + @property is also affected by a bug in Python's docstring which was backported
+# to Python 3.9.6 (https://github.com/python/cpython/pull/28838)
+class classproperty(property):
+    """Same as Python's @property decorator, but for class attributes.
+
+    Examples
+    --------
+    >>> class Builder:
+    ...    def build(self):
+    ...        return MyClass()
+    ...
+    >>> class MyClass:
+    ...     @classproperty
+    ...     def builder(cls):
+    ...         print("instantiating new builder")
+    ...         return Builder()
+    ...
+    >>> c1 = MyClass.builder
+    instantiating new builder
+    >>> c2 = MyClass.builder
+    instantiating new builder
+    >>> c1 == c2
+    False
+    >>> isinstance(c1.build(), MyClass)
+    True
+    """
+
+    def __get__(self, instance: Any, owner: Any = None) -> "SparkSession.Builder":
+        # The "type: ignore" below silences the following error from mypy:
+        # error: Argument 1 to "classmethod" has incompatible
+        # type "Optional[Callable[[Any], Any]]";
+        # expected "Callable[..., Any]"  [arg-type]
+        return classmethod(self.fget).__get__(None, owner)()  # type: ignore
 
 
 class ChannelBuilder:
@@ -253,12 +295,128 @@ class AnalyzeResult:
         return AnalyzeResult(pb.schema, pb.explain_string)
 
 
-class RemoteSparkSession(object):
+class SparkSession(object):
     """Conceptually the remote spark session that communicates with the server"""
 
-    def __init__(self, connectionString: str = "sc://localhost", userId: Optional[str] = None):
+    class Builder:
+        """Builder for :class:`SparkSession`."""
+
+        _lock = RLock()
+
+        def __init__(self) -> None:
+            self._options: Dict[str, Any] = {}
+
+        @overload
+        def config(self, key: str, value: Any) -> "SparkSession.Builder":
+            ...
+
+        @overload
+        def config(self, *, map: Dict[str, "OptionalPrimitiveType"]) -> "SparkSession.Builder":
+            ...
+
+        def config(
+            self,
+            key: Optional[str] = None,
+            value: Optional[Any] = None,
+            *,
+            map: Optional[Dict[str, "OptionalPrimitiveType"]] = None,
+        ) -> "SparkSession.Builder":
+            """Sets a config option. Options set using this method are automatically propagated to
+            both :class:`SparkConf` and :class:`SparkSession`'s own configuration.
+
+            .. versionadded:: 2.0.0
+
+            Parameters
+            ----------
+            key : str, optional
+                a key name string for configuration property
+            value : str, optional
+                a value for configuration property
+            map: dictionary, optional
+                a dictionary of configurations to set
+
+                .. versionadded:: 3.4.0
+
+            Returns
+            -------
+            :class:`SparkSession.Builder`
+
+            Examples
+            --------
+            For a (key, value) pair, you can omit parameter names.
+
+            >>> SparkSession.builder.config("spark.some.config.option", "some-value")
+            <pyspark.sql.session.SparkSession.Builder...
+
+            Additionally, you can pass a dictionary of configurations to set.
+
+            >>> SparkSession.builder.config(
+            ...     map={"spark.some.config.number": 123, "spark.some.config.float": 0.123})
+            <pyspark.sql.session.SparkSession.Builder...
+            """
+            with self._lock:
+                if map is not None:
+                    for k, v in map.items():  # type: ignore[assignment]
+                        self._options[k] = to_str(v)
+                else:
+                    self._options[cast(str, key)] = to_str(value)
+                return self
+
+        def master(self, master: str) -> "SparkSession.Builder":
+            return self
+
+        def appName(self, name: str) -> "SparkSession.Builder":
+            """Sets a name for the application, which will be shown in the Spark web UI.
+
+            If no application name is set, a randomly generated name will be used.
+
+            .. versionadded:: 2.0.0
+
+            Parameters
+            ----------
+            name : str
+                an application name
+
+            Returns
+            -------
+            :class:`SparkSession.Builder`
+
+            Examples
+            --------
+            >>> SparkSession.builder.appName("My app")
+            <pyspark.sql.session.SparkSession.Builder...
+            """
+            return self.config("spark.app.name", name)
+
+        def remote(self, location: str = "sc://localhost") -> "SparkSession.Builder":
+            return self.config("spark.connect.location", location)
+
+        def enableHiveSupport(self) -> "SparkSession.Builder":
+            raise NotImplementedError("enableHiveSupport not  implemented for Spark Connect")
+
+        def getOrCreate(self) -> "SparkSession":
+            """Creates a new instance."""
+            return SparkSession(
+                connectionString=self._options["spark.connect.location"],
+                userId=self._options["spark.app.name"],
+            )
+
+    # TODO(SPARK-38912): Replace @classproperty with @classmethod + @property once support for
+    # Python 3.8 is dropped.
+    #
+    # In Python 3.9, the @property decorator has been made compatible with the
+    # @classmethod decorator (https://docs.python.org/3.9/library/functions.html#classmethod)
+    #
+    # @classmethod + @property is also affected by a bug in Python's docstring which was backported
+    # to Python 3.9.6 (https://github.com/python/cpython/pull/28838)
+    @classproperty
+    def builder(cls) -> Builder:
+        """Creates a :class:`Builder` for constructing a :class:`SparkSession`."""
+        return cls.Builder()
+
+    def __init__(self, connectionString: str, userId: Optional[str] = None):
         """
-        Creates a new RemoteSparkSession for the Spark Connect interface.
+        Creates a new SparkSession for the Spark Connect interface.
 
         Parameters
         ----------
