@@ -55,6 +55,7 @@ package object dsl {
           val structField = DataType.StructField.newBuilder()
           structField.setName(attr.getName)
           structField.setDataType(attr.getType)
+          structField.setNullable(true)
           structExpr.addFields(structField)
         }
         Expression.QualifiedAttribute
