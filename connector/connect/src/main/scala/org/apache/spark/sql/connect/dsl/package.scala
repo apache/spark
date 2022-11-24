@@ -67,7 +67,7 @@ package object dsl {
 
       /** Creates a new AttributeReference of type int */
       def int: Expression.QualifiedAttribute = protoQualifiedAttrWithType(
-        DataType.newBuilder().setI32(DataType.I32.newBuilder()).build())
+        DataType.newBuilder().setInteger(DataType.Integer.newBuilder()).build())
 
       private def protoQualifiedAttrWithType(dataType: DataType): Expression.QualifiedAttribute =
         Expression.QualifiedAttribute

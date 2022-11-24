@@ -72,7 +72,7 @@ class DataType(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    class I8(google.protobuf.message.Message):
+    class Byte(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
@@ -89,7 +89,7 @@ class DataType(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    class I16(google.protobuf.message.Message):
+    class Short(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
@@ -106,7 +106,7 @@ class DataType(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    class I32(google.protobuf.message.Message):
+    class Integer(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
@@ -123,7 +123,7 @@ class DataType(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    class I64(google.protobuf.message.Message):
+    class Long(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
@@ -140,7 +140,7 @@ class DataType(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    class FP32(google.protobuf.message.Message):
+    class Float(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
@@ -157,7 +157,7 @@ class DataType(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    class FP64(google.protobuf.message.Message):
+    class Double(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
@@ -260,40 +260,6 @@ class DataType(google.protobuf.message.Message):
         ) -> None: ...
 
     class TimestampNTZ(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        type_variation_reference: builtins.int
-        def __init__(
-            self,
-            *,
-            type_variation_reference: builtins.int = ...,
-        ) -> None: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "type_variation_reference", b"type_variation_reference"
-            ],
-        ) -> None: ...
-
-    class IntervalYear(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        type_variation_reference: builtins.int
-        def __init__(
-            self,
-            *,
-            type_variation_reference: builtins.int = ...,
-        ) -> None: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "type_variation_reference", b"type_variation_reference"
-            ],
-        ) -> None: ...
-
-    class IntervalDay(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
@@ -723,12 +689,12 @@ class DataType(google.protobuf.message.Message):
     NULL_FIELD_NUMBER: builtins.int
     BINARY_FIELD_NUMBER: builtins.int
     BOOLEAN_FIELD_NUMBER: builtins.int
-    I8_FIELD_NUMBER: builtins.int
-    I16_FIELD_NUMBER: builtins.int
-    I32_FIELD_NUMBER: builtins.int
-    I64_FIELD_NUMBER: builtins.int
-    FP32_FIELD_NUMBER: builtins.int
-    FP64_FIELD_NUMBER: builtins.int
+    BYTE_FIELD_NUMBER: builtins.int
+    SHORT_FIELD_NUMBER: builtins.int
+    INTEGER_FIELD_NUMBER: builtins.int
+    LONG_FIELD_NUMBER: builtins.int
+    FLOAT_FIELD_NUMBER: builtins.int
+    DOUBLE_FIELD_NUMBER: builtins.int
     DECIMAL_FIELD_NUMBER: builtins.int
     STRING_FIELD_NUMBER: builtins.int
     CHAR_FIELD_NUMBER: builtins.int
@@ -742,8 +708,6 @@ class DataType(google.protobuf.message.Message):
     ARRAY_FIELD_NUMBER: builtins.int
     STRUCT_FIELD_NUMBER: builtins.int
     MAP_FIELD_NUMBER: builtins.int
-    INTERVAL_YEAR_FIELD_NUMBER: builtins.int
-    INTERVAL_DAY_FIELD_NUMBER: builtins.int
     UUID_FIELD_NUMBER: builtins.int
     FIXED_BINARY_FIELD_NUMBER: builtins.int
     USER_DEFINED_TYPE_REFERENCE_FIELD_NUMBER: builtins.int
@@ -754,37 +718,37 @@ class DataType(google.protobuf.message.Message):
     @property
     def boolean(self) -> global___DataType.Boolean: ...
     @property
-    def i8(self) -> global___DataType.I8:
-        """Numeric"""
+    def byte(self) -> global___DataType.Byte:
+        """Numeric types"""
     @property
-    def i16(self) -> global___DataType.I16: ...
+    def short(self) -> global___DataType.Short: ...
     @property
-    def i32(self) -> global___DataType.I32: ...
+    def integer(self) -> global___DataType.Integer: ...
     @property
-    def i64(self) -> global___DataType.I64: ...
+    def long(self) -> global___DataType.Long: ...
     @property
-    def fp32(self) -> global___DataType.FP32: ...
+    def float(self) -> global___DataType.Float: ...
     @property
-    def fp64(self) -> global___DataType.FP64: ...
+    def double(self) -> global___DataType.Double: ...
     @property
     def decimal(self) -> global___DataType.Decimal: ...
     @property
     def string(self) -> global___DataType.String:
-        """String"""
+        """String types"""
     @property
     def char(self) -> global___DataType.Char: ...
     @property
     def var_char(self) -> global___DataType.VarChar: ...
     @property
     def date(self) -> global___DataType.Date:
-        """Datatime"""
+        """Datatime types"""
     @property
     def timestamp(self) -> global___DataType.Timestamp: ...
     @property
     def timestamp_ntz(self) -> global___DataType.TimestampNTZ: ...
     @property
     def calendar_interval(self) -> global___DataType.CalendarInterval:
-        """Interval"""
+        """Interval types"""
     @property
     def year_month_interval(self) -> global___DataType.YearMonthInterval: ...
     @property
@@ -797,10 +761,6 @@ class DataType(google.protobuf.message.Message):
     @property
     def map(self) -> global___DataType.Map: ...
     @property
-    def interval_year(self) -> global___DataType.IntervalYear: ...
-    @property
-    def interval_day(self) -> global___DataType.IntervalDay: ...
-    @property
     def uuid(self) -> global___DataType.UUID: ...
     @property
     def fixed_binary(self) -> global___DataType.FixedBinary: ...
@@ -811,12 +771,12 @@ class DataType(google.protobuf.message.Message):
         null: global___DataType.NULL | None = ...,
         binary: global___DataType.Binary | None = ...,
         boolean: global___DataType.Boolean | None = ...,
-        i8: global___DataType.I8 | None = ...,
-        i16: global___DataType.I16 | None = ...,
-        i32: global___DataType.I32 | None = ...,
-        i64: global___DataType.I64 | None = ...,
-        fp32: global___DataType.FP32 | None = ...,
-        fp64: global___DataType.FP64 | None = ...,
+        byte: global___DataType.Byte | None = ...,
+        short: global___DataType.Short | None = ...,
+        integer: global___DataType.Integer | None = ...,
+        long: global___DataType.Long | None = ...,
+        float: global___DataType.Float | None = ...,
+        double: global___DataType.Double | None = ...,
         decimal: global___DataType.Decimal | None = ...,
         string: global___DataType.String | None = ...,
         char: global___DataType.Char | None = ...,
@@ -830,8 +790,6 @@ class DataType(google.protobuf.message.Message):
         array: global___DataType.Array | None = ...,
         struct: global___DataType.Struct | None = ...,
         map: global___DataType.Map | None = ...,
-        interval_year: global___DataType.IntervalYear | None = ...,
-        interval_day: global___DataType.IntervalDay | None = ...,
         uuid: global___DataType.UUID | None = ...,
         fixed_binary: global___DataType.FixedBinary | None = ...,
         user_defined_type_reference: builtins.int = ...,
@@ -845,6 +803,8 @@ class DataType(google.protobuf.message.Message):
             b"binary",
             "boolean",
             b"boolean",
+            "byte",
+            b"byte",
             "calendar_interval",
             b"calendar_interval",
             "char",
@@ -855,30 +815,24 @@ class DataType(google.protobuf.message.Message):
             b"day_time_interval",
             "decimal",
             b"decimal",
+            "double",
+            b"double",
             "fixed_binary",
             b"fixed_binary",
-            "fp32",
-            b"fp32",
-            "fp64",
-            b"fp64",
-            "i16",
-            b"i16",
-            "i32",
-            b"i32",
-            "i64",
-            b"i64",
-            "i8",
-            b"i8",
-            "interval_day",
-            b"interval_day",
-            "interval_year",
-            b"interval_year",
+            "float",
+            b"float",
+            "integer",
+            b"integer",
             "kind",
             b"kind",
+            "long",
+            b"long",
             "map",
             b"map",
             "null",
             b"null",
+            "short",
+            b"short",
             "string",
             b"string",
             "struct",
@@ -906,6 +860,8 @@ class DataType(google.protobuf.message.Message):
             b"binary",
             "boolean",
             b"boolean",
+            "byte",
+            b"byte",
             "calendar_interval",
             b"calendar_interval",
             "char",
@@ -916,30 +872,24 @@ class DataType(google.protobuf.message.Message):
             b"day_time_interval",
             "decimal",
             b"decimal",
+            "double",
+            b"double",
             "fixed_binary",
             b"fixed_binary",
-            "fp32",
-            b"fp32",
-            "fp64",
-            b"fp64",
-            "i16",
-            b"i16",
-            "i32",
-            b"i32",
-            "i64",
-            b"i64",
-            "i8",
-            b"i8",
-            "interval_day",
-            b"interval_day",
-            "interval_year",
-            b"interval_year",
+            "float",
+            b"float",
+            "integer",
+            b"integer",
             "kind",
             b"kind",
+            "long",
+            b"long",
             "map",
             b"map",
             "null",
             b"null",
+            "short",
+            b"short",
             "string",
             b"string",
             "struct",
@@ -964,12 +914,12 @@ class DataType(google.protobuf.message.Message):
         "null",
         "binary",
         "boolean",
-        "i8",
-        "i16",
-        "i32",
-        "i64",
-        "fp32",
-        "fp64",
+        "byte",
+        "short",
+        "integer",
+        "long",
+        "float",
+        "double",
         "decimal",
         "string",
         "char",
@@ -983,8 +933,6 @@ class DataType(google.protobuf.message.Message):
         "array",
         "struct",
         "map",
-        "interval_year",
-        "interval_day",
         "uuid",
         "fixed_binary",
         "user_defined_type_reference",

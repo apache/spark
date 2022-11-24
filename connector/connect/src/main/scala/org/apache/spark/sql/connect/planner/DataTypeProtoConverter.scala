@@ -35,13 +35,13 @@ object DataTypeProtoConverter {
 
       case proto.DataType.KindCase.BOOLEAN => BooleanType
 
-      case proto.DataType.KindCase.I8 => ByteType
-      case proto.DataType.KindCase.I16 => ShortType
-      case proto.DataType.KindCase.I32 => IntegerType
-      case proto.DataType.KindCase.I64 => LongType
+      case proto.DataType.KindCase.BYTE => ByteType
+      case proto.DataType.KindCase.SHORT => ShortType
+      case proto.DataType.KindCase.INTEGER => IntegerType
+      case proto.DataType.KindCase.LONG => LongType
 
-      case proto.DataType.KindCase.FP32 => FloatType
-      case proto.DataType.KindCase.FP64 => DoubleType
+      case proto.DataType.KindCase.FLOAT => FloatType
+      case proto.DataType.KindCase.DOUBLE => DoubleType
       case proto.DataType.KindCase.DECIMAL => toCatalystDecimalType(t.getDecimal)
 
       case proto.DataType.KindCase.STRING => StringType
@@ -127,33 +127,33 @@ object DataTypeProtoConverter {
       case ByteType =>
         proto.DataType
           .newBuilder()
-          .setI8(proto.DataType.I8.getDefaultInstance)
+          .setByte(proto.DataType.Byte.getDefaultInstance)
           .build()
       case ShortType =>
         proto.DataType
           .newBuilder()
-          .setI16(proto.DataType.I16.getDefaultInstance)
+          .setShort(proto.DataType.Short.getDefaultInstance)
           .build()
       case IntegerType =>
         proto.DataType
           .newBuilder()
-          .setI32(proto.DataType.I32.getDefaultInstance)
+          .setInteger(proto.DataType.Integer.getDefaultInstance)
           .build()
       case LongType =>
         proto.DataType
           .newBuilder()
-          .setI64(proto.DataType.I64.getDefaultInstance)
+          .setLong(proto.DataType.Long.getDefaultInstance)
           .build()
 
       case FloatType =>
         proto.DataType
           .newBuilder()
-          .setFp32(proto.DataType.FP32.getDefaultInstance)
+          .setFloat(proto.DataType.Float.getDefaultInstance)
           .build()
       case DoubleType =>
         proto.DataType
           .newBuilder()
-          .setFp64(proto.DataType.FP64.getDefaultInstance)
+          .setDouble(proto.DataType.Double.getDefaultInstance)
           .build()
       case DecimalType.Fixed(precision, scale) =>
         proto.DataType

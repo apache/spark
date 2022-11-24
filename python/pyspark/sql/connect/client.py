@@ -384,17 +384,17 @@ class RemoteSparkSession(object):
             return BooleanType()
         elif schema.HasField("binary"):
             return BinaryType()
-        elif schema.HasField("i8"):
+        elif schema.HasField("byte"):
             return ByteType()
-        elif schema.HasField("i16"):
+        elif schema.HasField("short"):
             return ShortType()
-        elif schema.HasField("i32"):
+        elif schema.HasField("integer"):
             return IntegerType()
-        elif schema.HasField("i64"):
+        elif schema.HasField("long"):
             return LongType()
-        elif schema.HasField("fp32"):
+        elif schema.HasField("float"):
             return FloatType()
-        elif schema.HasField("fp64"):
+        elif schema.HasField("double"):
             return DoubleType()
         elif schema.HasField("decimal"):
             p = schema.decimal.precision if schema.decimal.HasField("precision") else 10

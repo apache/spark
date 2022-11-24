@@ -32,27 +32,27 @@ message DataType {
 
     Boolean boolean = 3;
 
-    // Numeric
-    I8 i8 = 4;
-    I16 i16 = 5;
-    I32 i32 = 6;
-    I64 i64 = 7;
+    // Numeric types
+    Byte byte = 4;
+    Short short = 5;
+    Integer integer = 6;
+    Long long = 7;
 
-    FP32 fp32 = 8;
-    FP64 fp64 = 9;
+    Float float = 8;
+    Double double = 9;
     Decimal decimal = 10;
 
-    // String
+    // String types
     String string = 11;
     Char char = 12;
     VarChar var_char = 13;
 
-    // Datatime
+    // Datatime types
     Date date = 14;
     Timestamp timestamp = 15;
     TimestampNTZ timestamp_ntz = 16;
 
-    // Interval
+    // Interval types
     CalendarInterval calendar_interval = 17;
     YearMonthInterval year_month_interval = 18;
     DayTimeInterval day_time_interval = 19;
@@ -62,8 +62,6 @@ message DataType {
     Struct struct = 21;
     Map map = 22;
 
-    IntervalYear interval_year = 23;
-    IntervalDay interval_day = 24;
 
     UUID uuid = 25;
 
@@ -76,27 +74,27 @@ message DataType {
     uint32 type_variation_reference = 1;
   }
 
-  message I8 {
+  message Byte {
     uint32 type_variation_reference = 1;
   }
 
-  message I16 {
+  message Short {
     uint32 type_variation_reference = 1;
   }
 
-  message I32 {
+  message Integer {
     uint32 type_variation_reference = 1;
   }
 
-  message I64 {
+  message Long {
     uint32 type_variation_reference = 1;
   }
 
-  message FP32 {
+  message Float {
     uint32 type_variation_reference = 1;
   }
 
-  message FP64 {
+  message Double {
     uint32 type_variation_reference = 1;
   }
 
@@ -121,14 +119,6 @@ message DataType {
   }
 
   message TimestampNTZ {
-    uint32 type_variation_reference = 1;
-  }
-
-  message IntervalYear {
-    uint32 type_variation_reference = 1;
-  }
-
-  message IntervalDay {
     uint32 type_variation_reference = 1;
   }
 
