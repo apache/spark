@@ -1378,7 +1378,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def dataPathNotExistError(path: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1130",
+      errorClass = "PATH_NOT_FOUND",
       messageParameters = Map("path" -> path))
   }
 
@@ -2143,17 +2143,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def escapeCharacterInTheMiddleError(pattern: String, char: String): Throwable = {
     new AnalysisException(
-      errorClass = "INVALID_LIKE_PATTERN.ESC_IN_THE_MIDDLE",
+      errorClass = "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
       messageParameters = Map(
-        "pattern" -> toSQLValue(pattern, StringType),
+        "format" -> toSQLValue(pattern, StringType),
         "char" -> toSQLValue(char, StringType)))
   }
 
   def escapeCharacterAtTheEndError(pattern: String): Throwable = {
     new AnalysisException(
-      errorClass = "INVALID_LIKE_PATTERN.ESC_AT_THE_END",
-      messageParameters = Map(
-        "pattern" -> toSQLValue(pattern, StringType)))
+      errorClass = "INVALID_FORMAT.ESC_AT_THE_END",
+      messageParameters = Map("format" -> toSQLValue(pattern, StringType)))
   }
 
   def tableIdentifierExistsError(tableIdentifier: TableIdentifier): Throwable = {
@@ -2282,12 +2281,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "tableName" -> tableName))
   }
 
-  def foundDuplicateColumnError(colType: String, duplicateCol: Seq[String]): Throwable = {
+  def columnAlreadyExistsError(columnName: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1233",
-      messageParameters = Map(
-        "colType" -> colType,
-        "duplicateCol" -> duplicateCol.sorted.mkString(", ")))
+      errorClass = "COLUMN_ALREADY_EXISTS",
+      messageParameters = Map("columnName" -> toSQLId(columnName)))
   }
 
   def noSuchTableError(db: String, table: String): Throwable = {

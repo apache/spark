@@ -196,11 +196,9 @@ object ResolveUnion extends Rule[LogicalPlan] {
 
     SchemaUtils.checkColumnNameDuplication(
       leftOutputAttrs.map(_.name),
-      "in the left attributes",
       caseSensitiveAnalysis)
     SchemaUtils.checkColumnNameDuplication(
       rightOutputAttrs.map(_.name),
-      "in the right attributes",
       caseSensitiveAnalysis)
   }
 

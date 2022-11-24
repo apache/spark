@@ -2620,45 +2620,80 @@ case class ToBinary(
     nullOnInvalidFormat: Boolean = false) extends RuntimeReplaceable
     with ImplicitCastInputTypes {
 
-  override lazy val replacement: Expression = format.map { f =>
-    assert(f.foldable && (f.dataType == StringType || f.dataType == NullType))
+  @transient lazy val fmt: String = format.map { f =>
     val value = f.eval()
     if (value == null) {
-      Literal(null, BinaryType)
+      null
     } else {
-      value.asInstanceOf[UTF8String].toString.toLowerCase(Locale.ROOT) match {
-        case "hex" => Unhex(expr, failOnError = true)
-        case "utf-8" | "utf8" => Encode(expr, Literal("UTF-8"))
-        case "base64" => UnBase64(expr, failOnError = true)
-        case _ if nullOnInvalidFormat => Literal(null, BinaryType)
-        case other => throw QueryCompilationErrors.invalidStringLiteralParameter(
-              "to_binary",
-              "format",
-              other,
-              Some(
-                "The value has to be a case-insensitive string literal of " +
-                "'hex', 'utf-8', 'utf8', or 'base64'."))
-      }
+      value.asInstanceOf[UTF8String].toString.toLowerCase(Locale.ROOT)
     }
-  }.getOrElse(Unhex(expr, failOnError = true))
+  }.getOrElse("hex")
+
+  override lazy val replacement: Expression = if (fmt == null) {
+    Literal(null, BinaryType)
+  } else {
+    fmt match {
+      case "hex" => Unhex(expr, failOnError = true)
+      case "utf-8" | "utf8" => Encode(expr, Literal("UTF-8"))
+      case "base64" => UnBase64(expr, failOnError = true)
+      case _ => Literal(null, BinaryType)
+    }
+  }
 
   def this(expr: Expression) = this(expr, None, false)
 
   def this(expr: Expression, format: Expression) =
-    this(expr, Some({
-      // We perform this check in the constructor to make it eager and not go through type coercion.
-      if (format.foldable && (format.dataType == StringType || format.dataType == NullType)) {
-        format
-      } else {
-        throw QueryCompilationErrors.requireLiteralParameter("to_binary", "format", "string")
-      }
-    }), false)
+    this(expr, Some(format), false)
 
   override def prettyName: String = "to_binary"
 
   override def children: Seq[Expression] = expr +: format.toSeq
 
   override def inputTypes: Seq[AbstractDataType] = children.map(_ => StringType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    def isValidFormat: Boolean = {
+      fmt == null || Set("hex", "utf-8", "utf8", "base64").contains(fmt)
+    }
+    format match {
+      case Some(f) =>
+        if (f.foldable && (f.dataType == StringType || f.dataType == NullType)) {
+          if (isValidFormat || nullOnInvalidFormat) {
+            super.checkInputDataTypes()
+          } else {
+            DataTypeMismatch(
+              errorSubClass = "INVALID_ARG_VALUE",
+              messageParameters = Map(
+                "inputName" -> "fmt",
+                "requireType" -> s"case-insensitive ${toSQLType(StringType)}",
+                "validValues" -> "'hex', 'utf-8', 'utf8', or 'base64'",
+                "inputValue" -> toSQLValue(fmt, StringType)
+              )
+            )
+          }
+        } else if (!f.foldable) {
+          DataTypeMismatch(
+            errorSubClass = "NON_FOLDABLE_INPUT",
+            messageParameters = Map(
+              "inputName" -> "fmt",
+              "inputType" -> toSQLType(StringType),
+              "inputExpr" -> toSQLExpr(f)
+            )
+          )
+        } else {
+          DataTypeMismatch(
+            errorSubClass = "INVALID_ARG_VALUE",
+            messageParameters = Map(
+              "inputName" -> "fmt",
+              "requireType" -> s"case-insensitive ${toSQLType(StringType)}",
+              "validValues" -> "'hex', 'utf-8', 'utf8', or 'base64'",
+              "inputValue" -> toSQLValue(f.eval(), f.dataType)
+            )
+          )
+        }
+      case _ => super.checkInputDataTypes()
+    }
+  }
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): Expression = {

@@ -20,7 +20,6 @@ import shutil
 import tempfile
 
 import grpc  # type: ignore
-from grpc._channel import _MultiThreadedRendezvous  # type: ignore
 
 from pyspark.testing.sqlutils import have_pandas, SQLTestUtils
 
@@ -245,7 +244,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
 
             # Test when creating a view which is alreayd exists but
             self.assertTrue(self.spark.catalog.tableExists("global_temp.view_1"))
-            with self.assertRaises(_MultiThreadedRendezvous):
+            with self.assertRaises(grpc.RpcError):
                 self.connect.sql("SELECT 1 AS X LIMIT 0").createGlobalTempView("view_1")
 
     def test_to_pandas(self):
@@ -302,6 +301,30 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             self.spark.sql(query).toPandas(),
         )
 
+    def test_select_expr(self):
+        # SPARK-41201: test selectExpr API.
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name).selectExpr("id * 2").toPandas(),
+            self.spark.read.table(self.tbl_name).selectExpr("id * 2").toPandas(),
+        )
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name)
+            .selectExpr(["id * 2", "cast(name as long) as name"])
+            .toPandas(),
+            self.spark.read.table(self.tbl_name)
+            .selectExpr(["id * 2", "cast(name as long) as name"])
+            .toPandas(),
+        )
+
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name)
+            .selectExpr("id * 2", "cast(name as long) as name")
+            .toPandas(),
+            self.spark.read.table(self.tbl_name)
+            .selectExpr("id * 2", "cast(name as long) as name")
+            .toPandas(),
+        )
+
     def test_fill_na(self):
         # SPARK-41128: Test fill na
         query = """
@@ -345,6 +368,11 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertEqual(0, len(pdf))  # empty dataset
         self.assertEqual(1, len(pdf.columns))  # one column
         self.assertEqual("X", pdf.columns[0])
+
+    def test_is_empty(self):
+        # SPARK-41212: Test is empty
+        self.assertFalse(self.connect.sql("SELECT 1 AS X").isEmpty())
+        self.assertTrue(self.connect.sql("SELECT 1 AS X LIMIT 0").isEmpty())
 
     def test_session(self):
         self.assertEqual(self.connect, self.connect.sql("SELECT 1").sparkSession())
