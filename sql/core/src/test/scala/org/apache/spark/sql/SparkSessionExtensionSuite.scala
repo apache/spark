@@ -194,7 +194,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper {
 
   test("inject plan normalization rules") {
     val extensions = create { extensions =>
-      extensions.injectPlanNormalizationRules { session =>
+      extensions.injectPlanNormalizationRule { session =>
         org.apache.spark.sql.catalyst.optimizer.PushDownPredicates
       }
     }
