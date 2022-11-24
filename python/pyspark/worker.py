@@ -167,49 +167,22 @@ def verify_pandas_result(result, return_type, assign_cols_by_name):
             and any(isinstance(name, str) for name in result.columns)
             and column_names != field_names
         ):
-            limit = 5
-
-            # limit missing columns to at most $limit
             missing = sorted(list(field_names.difference(column_names)))
-            if len(missing) > limit:
-                missing = f"  Missing (first {limit} of {len(missing)}): " + ", ".join(
-                    missing[:limit]
-                )
-            elif missing:
-                missing = "  Missing: " + (", ".join(missing))
-            else:
-                missing = ""
+            missing = ("  Missing: " + (", ".join(missing))) if missing else ""
 
-            # limit unexpected columns to at most $limit
             extra = sorted(list(column_names.difference(field_names)))
-            if len(extra) > limit:
-                extra = f"  Unexpected (first {limit} of {len(extra)}): " + ", ".join(extra[:limit])
-            elif extra:
-                extra = "  Unexpected: " + (", ".join(extra))
-            else:
-                extra = ""
-
-            # limit schema in error message to 1024 characters, insert ... in the middle
-            schema = ", ".join(field.name for field in return_type.fields)
-            if len(schema) > 1024:
-                schema = schema[:510] + "..." + schema[-511:]
+            extra = ("  Unexpected: " + (", ".join(extra))) if extra else ""
 
             raise RuntimeError(
                 "Column names of the returned pandas.DataFrame do not match specified schema."
-                "{}{}  Schema: {}".format(missing, extra, schema)
+                "{}{}".format(missing, extra)
             )
         # otherwise the number of columns of result have to match the return type
         elif len(result.columns) != len(return_type):
-            schema = ", ".join(field.name for field in return_type.fields)
             raise RuntimeError(
                 "Number of columns of the returned pandas.DataFrame "
                 "doesn't match specified schema.  "
-                "Expected: {}  Actual: {}  Schema: {}".format(
-                    len(return_type),
-                    len(result.columns),
-                    # limit schema in error message to 1024 characters, insert ... in the middle
-                    schema if len(schema) <= 1024 else schema[:510] + "..." + schema[-511:],
-                )
+                "Expected: {}  Actual: {}".format(len(return_type), len(result.columns))
             )
 
 

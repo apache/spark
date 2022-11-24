@@ -308,7 +308,7 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
             with self.assertRaisesRegex(
                 PythonException,
                 "Column names of the returned pandas.DataFrame do not match specified schema.  "
-                "Missing: mean  Unexpected: median, std  Schema: id, mean\n",
+                "Missing: mean  Unexpected: median, std\n",
             ):
                 self._test_apply_in_pandas(
                     lambda key, pdf: pd.DataFrame(
@@ -316,85 +316,15 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
                     )
                 )
 
-            # with very large schema, missing and unexpected is limited to 5
-            # and the schema is abbreviated in the error message
-            with self.assertRaisesRegex(
-                PythonException,
-                "Column names of the returned pandas\\.DataFrame do not match specified schema\\.  "
-                "Missing \\(first 5 of 35\\): column_with_long_column_name_0,"
-                " column_with_long_column_name_1, column_with_long_column_name_10,"
-                " column_with_long_column_name_11, column_with_long_column_name_12  "
-                "Unexpected \\(first 5 of 7\\): extra_column_0 integer, extra_column_1 integer,"
-                " extra_column_2 integer, extra_column_3 integer, extra_column_4 integer  "
-                "Schema: id, mean, column_with_long_column_name_0, column_with_long_column_name_1,"
-                " column_with_long_column_name_2, column_with_long_column_name_3,"
-                " column_with_long_column_name_4, column_with_long_column_name_5,"
-                " column_with_long_column_name_6, column_with_long_column_name_7,"
-                " column_with_long_column_name_8, column_with_long_column_name_9,"
-                " column_with_long_column_name_10, column_with_long_column_name_11,"
-                " column_with_long_column_name_12, column_with_long_column_name_13,"
-                " column_with_long_column_name_14, column_with_lon\\.\\.\\.g_column_name_19,"
-                " column_with_long_column_name_20, column_with_long_column_name_21,"
-                " column_with_long_column_name_22, column_with_long_column_name_23,"
-                " column_with_long_column_name_24, column_with_long_column_name_25,"
-                " column_with_long_column_name_26, column_with_long_column_name_27,"
-                " column_with_long_column_name_28, column_with_long_column_name_29,"
-                " column_with_long_column_name_30, column_with_long_column_name_31,"
-                " column_with_long_column_name_32, column_with_long_column_name_33,"
-                " column_with_long_column_name_34\n",
-            ):
-                # the schema will be cut off at 1024 characters, this will be slightly longer
-                schema = "id long, mean double, " + ", ".join(
-                    f"column_with_long_column_name_{no} integer" for no in range(35)
-                )
-                self._test_apply_in_pandas(
-                    lambda key, pdf: pd.DataFrame(
-                        [key + (pdf.v.mean(),) + tuple(pdf.v.mean() for _ in range(7))],
-                        columns=["id", "mean"] + [f"extra_column_{no} integer" for no in range(7)],
-                    ),
-                    output_schema=schema,
-                )
-
     def test_apply_in_pandas_returning_no_column_names_and_wrong_amount(self):
         with QuietTest(self.sc):
             with self.assertRaisesRegex(
                 PythonException,
                 "Number of columns of the returned pandas.DataFrame doesn't match "
-                "specified schema.  Expected: 2  Actual: 3  Schema: id, mean\n",
+                "specified schema.  Expected: 2  Actual: 3\n",
             ):
                 self._test_apply_in_pandas(
                     lambda key, pdf: pd.DataFrame([key + (pdf.v.mean(), pdf.v.std())])
-                )
-
-            # with very large schema the schema is abbreviated in the error message
-            with self.assertRaisesRegex(
-                PythonException,
-                "Number of columns of the returned pandas\\.DataFrame "
-                "doesn't match specified schema\\.  Expected: 37  Actual: 2  "
-                "Schema: id, mean, column_with_long_column_name_0, column_with_long_column_name_1,"
-                " column_with_long_column_name_2, column_with_long_column_name_3,"
-                " column_with_long_column_name_4, column_with_long_column_name_5,"
-                " column_with_long_column_name_6, column_with_long_column_name_7,"
-                " column_with_long_column_name_8, column_with_long_column_name_9,"
-                " column_with_long_column_name_10, column_with_long_column_name_11,"
-                " column_with_long_column_name_12, column_with_long_column_name_13,"
-                " column_with_long_column_name_14, column_with_lon\\.\\.\\.g_column_name_19,"
-                " column_with_long_column_name_20, column_with_long_column_name_21,"
-                " column_with_long_column_name_22, column_with_long_column_name_23,"
-                " column_with_long_column_name_24, column_with_long_column_name_25,"
-                " column_with_long_column_name_26, column_with_long_column_name_27,"
-                " column_with_long_column_name_28, column_with_long_column_name_29,"
-                " column_with_long_column_name_30, column_with_long_column_name_31,"
-                " column_with_long_column_name_32, column_with_long_column_name_33,"
-                " column_with_long_column_name_34\n",
-            ):
-                # the schema will be cut off at 1024 characters, this will be slightly longer
-                schema = "id long, mean double, " + ", ".join(
-                    f"column_with_long_column_name_{no} integer" for no in range(35)
-                )
-                self._test_apply_in_pandas(
-                    lambda key, pdf: pd.DataFrame([key + (pdf.v.mean(),)]),
-                    output_schema=schema,
                 )
 
     def test_apply_in_pandas_returning_empty_dataframe(self):
@@ -661,7 +591,7 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
                 with self.assertRaisesRegex(
                     PythonException,
                     "RuntimeError: Column names of the returned pandas.DataFrame do not match "
-                    "specified schema.  Missing: id  Unexpected: iid  Schema: id, v\n",
+                    "specified schema.  Missing: id  Unexpected: iid\n",
                 ):
                     grouped_df.apply(column_name_typo).collect()
                 with self.assertRaisesRegex(Exception, "[D|d]ecimal.*got.*date"):

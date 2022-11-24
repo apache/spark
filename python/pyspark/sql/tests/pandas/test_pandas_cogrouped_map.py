@@ -189,51 +189,7 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
             fn=merge_pandas,
             error_class=PythonException,
             error_message_regex="Column names of the returned pandas.DataFrame "
-            "do not match specified schema.  Unexpected: add, more  Schema: id, k, v, v2\n",
-        )
-
-        # with very large schema, missing and unexpected is limited to 5
-        # and the schema is abbreviated in the error message
-        schema = "id long, k long, mean double, " + ", ".join(
-            f"column_with_long_column_name_{no} integer" for no in range(35)
-        )
-        self._test_merge_error(
-            fn=lambda lft, rgt: pd.DataFrame(
-                [
-                    (
-                        lft.id,
-                        lft.k,
-                        lft.v.mean(),
-                    )
-                    + tuple(lft.v.mean() for _ in range(7))
-                ],
-                columns=["id", "k", "mean"] + [f"extra_column_{no} integer" for no in range(7)],
-            ),
-            output_schema=schema,
-            error_class=PythonException,
-            error_message_regex="Column names of the returned pandas\\.DataFrame "
-            "do not match specified schema\\.  "
-            "Missing \\(first 5 of 35\\): column_with_long_column_name_0,"
-            " column_with_long_column_name_1, column_with_long_column_name_10,"
-            " column_with_long_column_name_11, column_with_long_column_name_12  "
-            "Unexpected \\(first 5 of 7\\): extra_column_0 integer, extra_column_1 integer,"
-            " extra_column_2 integer, extra_column_3 integer, extra_column_4 integer  "
-            "Schema: id, k, mean, column_with_long_column_name_0, column_with_long_column_name_1,"
-            " column_with_long_column_name_2, column_with_long_column_name_3,"
-            " column_with_long_column_name_4, column_with_long_column_name_5,"
-            " column_with_long_column_name_6, column_with_long_column_name_7,"
-            " column_with_long_column_name_8, column_with_long_column_name_9,"
-            " column_with_long_column_name_10, column_with_long_column_name_11,"
-            " column_with_long_column_name_12, column_with_long_column_name_13,"
-            " column_with_long_column_name_14, column_with_\\.\\.\\.g_column_name_19,"
-            " column_with_long_column_name_20, column_with_long_column_name_21,"
-            " column_with_long_column_name_22, column_with_long_column_name_23,"
-            " column_with_long_column_name_24, column_with_long_column_name_25,"
-            " column_with_long_column_name_26, column_with_long_column_name_27,"
-            " column_with_long_column_name_28, column_with_long_column_name_29,"
-            " column_with_long_column_name_30, column_with_long_column_name_31,"
-            " column_with_long_column_name_32, column_with_long_column_name_33,"
-            " column_with_long_column_name_34\n",
+            "do not match specified schema.  Unexpected: add, more\n",
         )
 
     def test_apply_in_pandas_returning_no_column_names_and_wrong_amount(self):
@@ -250,41 +206,7 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
             fn=merge_pandas,
             error_class=PythonException,
             error_message_regex="Number of columns of the returned pandas.DataFrame "
-            "doesn't match specified schema.  Expected: 4  Actual: 6  Schema: id, k, v, v2\n",
-        )
-
-        # with very large schema the schema is abbreviated in the error message
-        schema = "id long, k long, mean double, " + ", ".join(
-            f"column_with_long_column_name_{no} integer" for no in range(35)
-        )
-
-        def fn(lft, _):
-            # remove column names from lft DataFrame
-            lft.columns = range(lft.columns.size)
-            return lft
-
-        self._test_merge_error(
-            fn=fn,
-            output_schema=schema,
-            error_class=PythonException,
-            error_message_regex="Number of columns of the returned pandas\\.DataFrame "
-            "doesn't match specified schema\\.  Expected: 38  Actual: 3  "
-            "Schema: id, k, mean, column_with_long_column_name_0, column_with_long_column_name_1,"
-            " column_with_long_column_name_2, column_with_long_column_name_3,"
-            " column_with_long_column_name_4, column_with_long_column_name_5,"
-            " column_with_long_column_name_6, column_with_long_column_name_7,"
-            " column_with_long_column_name_8, column_with_long_column_name_9,"
-            " column_with_long_column_name_10, column_with_long_column_name_11,"
-            " column_with_long_column_name_12, column_with_long_column_name_13,"
-            " column_with_long_column_name_14, column_with_\\.\\.\\.g_column_name_19,"
-            " column_with_long_column_name_20, column_with_long_column_name_21,"
-            " column_with_long_column_name_22, column_with_long_column_name_23,"
-            " column_with_long_column_name_24, column_with_long_column_name_25,"
-            " column_with_long_column_name_26, column_with_long_column_name_27,"
-            " column_with_long_column_name_28, column_with_long_column_name_29,"
-            " column_with_long_column_name_30, column_with_long_column_name_31,"
-            " column_with_long_column_name_32, column_with_long_column_name_33,"
-            " column_with_long_column_name_34\n",
+            "doesn't match specified schema.  Expected: 4  Actual: 6\n",
         )
 
     def test_apply_in_pandas_returning_empty_dataframe(self):
