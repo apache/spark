@@ -641,15 +641,15 @@
     ],
     "sqlState" : "42000"
   },
-  "INVALID_EMPTY_LOCATION" : {
-    "message" : [
-      "The location name cannot be empty string, but `<location>` was given."
-    ]
-  },
   "INVALID_DATA_TYPE_SCHEMA" : {
     "message" : [
       "<msg><e1>",
       "Failed fallback parsing: <e2>"
+    ]
+  },
+  "INVALID_EMPTY_LOCATION" : {
+    "message" : [
+      "The location name cannot be empty string, but `<location>` was given."
     ]
   },
   "INVALID_FIELD_NAME" : {
