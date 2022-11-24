@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "pyspark-connect"
+version = "0.1.0"
+description = ""
+authors = ["Martin Grund <martin.grund@databricks.com>"]
+readme = "README.md"
+packages = [{include = "pyspark"}]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+grpcio = "1.48.1"
+protobuf = "3.19.4"
+pandas = "^1.5.2"
+pyarrow = "^10.0.1"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
