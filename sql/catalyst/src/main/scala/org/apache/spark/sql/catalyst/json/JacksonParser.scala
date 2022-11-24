@@ -96,6 +96,8 @@ class JacksonParser(
           options.dateFormatInRead.isEmpty
       }
 
+  private val enablePartialResults = SQLConf.get.jsonEnablePartialResults
+
   /**
    * Create a converter which converts the JSON documents held by the `JsonParser`
    * to a value according to a desired schema. This is a wrapper for the method
@@ -456,7 +458,7 @@ class JacksonParser(
             schema.existenceDefaultsBitmask(index) = false
           } catch {
             case e: SparkUpgradeException => throw e
-            case NonFatal(e) =>
+            case NonFatal(e) if isRoot || enablePartialResults =>
               badRecordException = badRecordException.orElse(Some(e))
               parser.skipChildren()
           }
@@ -489,10 +491,10 @@ class JacksonParser(
       try {
         values += fieldConverter.apply(parser)
       } catch {
-        case PartialResultException(row, cause) =>
+        case PartialResultException(row, cause) if enablePartialResults =>
           badRecordException = badRecordException.orElse(Some(cause))
           values += row
-        case NonFatal(e) =>
+        case NonFatal(e) if enablePartialResults =>
           badRecordException = badRecordException.orElse(Some(e))
           parser.skipChildren()
       }
@@ -525,7 +527,7 @@ class JacksonParser(
         if (isRoot && v == null) throw QueryExecutionErrors.rootConverterReturnNullError()
         values += v
       } catch {
-        case PartialResultException(row, cause) =>
+        case PartialResultException(row, cause) if enablePartialResults =>
           badRecordException = badRecordException.orElse(Some(cause))
           values += row
       }
