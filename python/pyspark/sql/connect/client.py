@@ -18,7 +18,6 @@
 
 import logging
 import os
-import typing
 import urllib.parse
 import uuid
 
@@ -35,9 +34,7 @@ from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.connect.plan import SQL, Range
 from pyspark.sql.types import DataType, StructType, StructField, LongType, StringType
 
-from typing import Optional, Any, Union
-
-NumericType = typing.Union[int, float]
+from typing import Iterable, Optional, Any, Union, List, Tuple, Dict
 
 logging.basicConfig(level=logging.INFO)
 
@@ -74,7 +71,7 @@ class ChannelBuilder:
         # Python's built-in parser.
         tmp_url = "http" + url[2:]
         self.url = urllib.parse.urlparse(tmp_url)
-        self.params: typing.Dict[str, str] = {}
+        self.params: Dict[str, str] = {}
         if len(self.url.path) > 0 and self.url.path != "/":
             raise AttributeError(
                 f"Path component for connection URI must be empty: {self.url.path}"
@@ -102,7 +99,7 @@ class ChannelBuilder:
                 f"Target destination {self.url.netloc} does not match '<host>:<port>' pattern"
             )
 
-    def metadata(self) -> typing.Iterable[typing.Tuple[str, str]]:
+    def metadata(self) -> Iterable[Tuple[str, str]]:
         """
         Builds the GRPC specific metadata list to be injected into the request. All
         parameters will be converted to metadata except ones that are explicitly used
@@ -198,7 +195,7 @@ class ChannelBuilder:
 
 
 class MetricValue:
-    def __init__(self, name: str, value: NumericType, type: str):
+    def __init__(self, name: str, value: Union[int, float], type: str):
         self._name = name
         self._type = type
         self._value = value
@@ -211,7 +208,7 @@ class MetricValue:
         return self._name
 
     @property
-    def value(self) -> NumericType:
+    def value(self) -> Union[int, float]:
         return self._value
 
     @property
@@ -220,7 +217,7 @@ class MetricValue:
 
 
 class PlanMetrics:
-    def __init__(self, name: str, id: int, parent: int, metrics: typing.List[MetricValue]):
+    def __init__(self, name: str, id: int, parent: int, metrics: List[MetricValue]):
         self._name = name
         self._id = id
         self._parent_id = parent
@@ -242,7 +239,7 @@ class PlanMetrics:
         return self._parent_id
 
     @property
-    def metrics(self) -> typing.List[MetricValue]:
+    def metrics(self) -> List[MetricValue]:
         return self._metrics
 
 
@@ -252,7 +249,7 @@ class AnalyzeResult:
         self.explain_string = explain
 
     @classmethod
-    def fromProto(cls, pb: typing.Any) -> "AnalyzeResult":
+    def fromProto(cls, pb: Any) -> "AnalyzeResult":
         return AnalyzeResult(pb.schema, pb.explain_string)
 
 
@@ -306,9 +303,7 @@ class RemoteSparkSession(object):
         self._execute_and_fetch(req)
         return name
 
-    def _build_metrics(
-        self, metrics: "pb2.ExecutePlanResponse.Metrics"
-    ) -> typing.List[PlanMetrics]:
+    def _build_metrics(self, metrics: "pb2.ExecutePlanResponse.Metrics") -> List[PlanMetrics]:
         return [
             PlanMetrics(
                 x.name,
@@ -450,7 +445,7 @@ class RemoteSparkSession(object):
                 return rd.read_pandas()
         return None
 
-    def _execute_and_fetch(self, req: pb2.ExecutePlanRequest) -> typing.Optional[pandas.DataFrame]:
+    def _execute_and_fetch(self, req: pb2.ExecutePlanRequest) -> Optional[pandas.DataFrame]:
         import pandas as pd
 
         m: Optional[pb2.ExecutePlanResponse.Metrics] = None
