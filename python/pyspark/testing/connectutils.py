@@ -102,7 +102,7 @@ class PlanOnlyTestFixture(unittest.TestCase):
     @classmethod
     def setUpClass(cls: Any) -> None:
         cls.connect = MockRemoteSession()
-        cls.session = SparkSession()
+        cls.session = SparkSession.builder.remote().getOrCreate()
         cls.tbl_name = "test_connect_plan_only_table_1"
 
         cls.connect.set_hook("register_udf", cls._udf_mock)

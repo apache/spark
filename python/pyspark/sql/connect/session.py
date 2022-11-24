@@ -397,8 +397,7 @@ class SparkSession(object):
         def getOrCreate(self) -> "SparkSession":
             """Creates a new instance."""
             return SparkSession(
-                connectionString=self._options["spark.connect.location"],
-                userId=self._options["spark.app.name"],
+                connectionString=self._options["spark.connect.location"]
             )
 
     # TODO(SPARK-38912): Replace @classproperty with @classmethod + @property once support for
