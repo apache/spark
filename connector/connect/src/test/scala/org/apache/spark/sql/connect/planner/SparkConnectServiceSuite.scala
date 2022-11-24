@@ -65,6 +65,15 @@ class SparkConnectServiceSuite extends SharedSparkSession {
       assert(
         schema.getFields(1).getName == "col2"
           && schema.getFields(1).getDataType.getKindCase == proto.DataType.KindCase.STRING)
+
+      assert(!response.getIsLocal)
+      assert(!response.getIsLocal)
+
+      assert(response.getTreeString.contains("root"))
+      assert(response.getTreeString.contains("|-- col1: integer (nullable = true)"))
+      assert(response.getTreeString.contains("|-- col2: string (nullable = true)"))
+
+      assert(response.getInputFilesCount === 0)
     }
   }
 

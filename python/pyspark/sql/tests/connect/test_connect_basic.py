@@ -211,6 +211,46 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             self.connect.sql(query).schema.__repr__(),
         )
 
+    def test_print_schema(self):
+        # SPARK-41216: Test print schema
+        tree_str = self.connect.sql("SELECT 1 AS X, 2 AS Y")._tree_string()
+        # root
+        #  |-- X: integer (nullable = false)
+        #  |-- Y: integer (nullable = false)
+        expected = "root\n |-- X: integer (nullable = false)\n |-- Y: integer (nullable = false)\n"
+        self.assertEqual(tree_str, expected)
+
+    def test_is_local(self):
+        # SPARK-41216: Test is local
+        self.assertTrue(self.connect.sql("SHOW DATABASES").isLocal)
+        self.assertFalse(self.connect.read.table(self.tbl_name).isLocal)
+
+    def test_is_streaming(self):
+        # SPARK-41216: Test is streaming
+        self.assertFalse(self.connect.read.table(self.tbl_name).isStreaming)
+        self.assertFalse(self.connect.sql("SELECT 1 AS X LIMIT 0").isStreaming)
+
+    def test_input_files(self):
+        # SPARK-41216: Test input files
+        tmpPath = tempfile.mkdtemp()
+        shutil.rmtree(tmpPath)
+        try:
+            self.df_text.write.text(tmpPath)
+
+            input_files_list1 = (
+                self.spark.read.format("text").schema("id STRING").load(path=tmpPath).inputFiles()
+            )
+            input_files_list2 = (
+                self.connect.read.format("text").schema("id STRING").load(path=tmpPath).inputFiles()
+            )
+
+            self.assertTrue(len(input_files_list1) > 0)
+            self.assertEqual(len(input_files_list1), len(input_files_list2))
+            for file_path in input_files_list2:
+                self.assertTrue(file_path in input_files_list1)
+        finally:
+            shutil.rmtree(tmpPath)
+
     def test_simple_binary_expressions(self):
         """Test complex expression"""
         df = self.connect.read.table(self.tbl_name)

@@ -283,17 +283,38 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
     CLIENT_ID_FIELD_NUMBER: builtins.int
     SCHEMA_FIELD_NUMBER: builtins.int
     EXPLAIN_STRING_FIELD_NUMBER: builtins.int
+    TREE_STRING_FIELD_NUMBER: builtins.int
+    IS_LOCAL_FIELD_NUMBER: builtins.int
+    IS_STREAMING_FIELD_NUMBER: builtins.int
+    INPUT_FILES_FIELD_NUMBER: builtins.int
     client_id: builtins.str
     @property
     def schema(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
     explain_string: builtins.str
     """The extended explain string as produced by Spark."""
+    tree_string: builtins.str
+    """Get the tree string of the schema."""
+    is_local: builtins.bool
+    """Whether the 'collect' and 'take' methods can be run locally."""
+    is_streaming: builtins.bool
+    """Whether this plan contains one or more sources that continuously
+    return data as it arrives.
+    """
+    @property
+    def input_files(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """A best-effort snapshot of the files that compose this Dataset"""
     def __init__(
         self,
         *,
         client_id: builtins.str = ...,
         schema: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
         explain_string: builtins.str = ...,
+        tree_string: builtins.str = ...,
+        is_local: builtins.bool = ...,
+        is_streaming: builtins.bool = ...,
+        input_files: collections.abc.Iterable[builtins.str] | None = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["schema", b"schema"]
@@ -301,7 +322,20 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "client_id", b"client_id", "explain_string", b"explain_string", "schema", b"schema"
+            "client_id",
+            b"client_id",
+            "explain_string",
+            b"explain_string",
+            "input_files",
+            b"input_files",
+            "is_local",
+            b"is_local",
+            "is_streaming",
+            b"is_streaming",
+            "schema",
+            b"schema",
+            "tree_string",
+            b"tree_string",
         ],
     ) -> None: ...
 
