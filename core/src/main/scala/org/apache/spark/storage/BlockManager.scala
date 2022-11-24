@@ -302,8 +302,7 @@ private[spark] class BlockManager(
     val shuffleBlock = blockId.asInstanceOf[ShuffleBlockId]
     val resolver = shuffleManager.shuffleBlockResolver.asInstanceOf[IndexShuffleBlockResolver]
     val checksumFile =
-      resolver.getChecksumFile(shuffleBlock.shuffleId, shuffleBlock.mapId, algorithm,
-        needCreate = false)
+      resolver.getChecksumFile(shuffleBlock.shuffleId, shuffleBlock.mapId, algorithm)
     val reduceId = shuffleBlock.reduceId
     ShuffleChecksumHelper.diagnoseCorruption(
       algorithm, checksumFile, reduceId, resolver.getBlockData(shuffleBlock), checksumByReader)
