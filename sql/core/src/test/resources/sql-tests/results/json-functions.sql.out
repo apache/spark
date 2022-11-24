@@ -109,11 +109,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1042",
+  "errorClass" : "WRONG_NUM_ARGS",
   "messageParameters" : {
-    "actualNumber" : "0",
-    "expectedInfo" : "one of 1 and 2",
-    "name" : "to_json"
+    "actualNum" : "0",
+    "expectedNum" : "[1, 2]",
+    "functionName" : "`to_json`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -148,9 +148,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1092",
+  "errorClass" : "INVALID_SCHEMA",
   "messageParameters" : {
-    "expr" : "1"
+    "expr" : "\"1\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -231,11 +231,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1042",
+  "errorClass" : "WRONG_NUM_ARGS",
   "messageParameters" : {
-    "actualNumber" : "0",
-    "expectedInfo" : "one of 2 and 3",
-    "name" : "from_json"
+    "actualNum" : "0",
+    "expectedNum" : "[2, 3]",
+    "functionName" : "`from_json`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -572,11 +572,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1042",
+  "errorClass" : "WRONG_NUM_ARGS",
   "messageParameters" : {
-    "actualNumber" : "0",
-    "expectedInfo" : "1",
-    "name" : "json_array_length"
+    "actualNum" : "0",
+    "expectedNum" : "1",
+    "functionName" : "`json_array_length`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -659,11 +659,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1042",
+  "errorClass" : "WRONG_NUM_ARGS",
   "messageParameters" : {
-    "actualNumber" : "0",
-    "expectedInfo" : "1",
-    "name" : "json_object_keys"
+    "actualNum" : "0",
+    "expectedNum" : "1",
+    "functionName" : "`json_object_keys`"
   },
   "queryContext" : [ {
     "objectType" : "",
