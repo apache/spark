@@ -27,8 +27,6 @@ def _install_sparkconnect_finder():
         },
     }
 
-    #erased_set = {v["erases"] for v in namespace_map.values()}
-
     class SparkConnectPathFinder(MetaPathFinder):
         def find_spec(
             self, fullname: str, path: Optional[Sequence[str]], target
@@ -44,14 +42,12 @@ def _install_sparkconnect_finder():
                     )
                 loader = SourceFileLoader(fullname, filepath)
                 spec = ModuleSpec(fullname, loader, origin=filepath, is_package=True)
-                print("Loading sparkconnect root with spec {}".format(spec))
                 return spec
 
 
             parts = fullname.rsplit(".", 1)
             if len(parts) < 2:
                 # not in a package
-                print("Not replacing: {}".format(fullname))
                 return None
 
 
@@ -65,7 +61,6 @@ def _install_sparkconnect_finder():
                 package_filepath = os.path.join(modulepath, "__init__.py")
                 if os.path.exists(package_filepath):
                     # This is a package and is not in the namespace_map
-                    print("Package {} is not overridden (I don't know how we got here)".format(fullname))
                     return None
 
                 is_package = False
@@ -75,7 +70,6 @@ def _install_sparkconnect_finder():
                     loader = SourceFileLoader(fullname, filepath)
                     spec = ModuleSpec(fullname, loader, origin=filepath, is_package=is_package)
                     spec = spec_from_file_location(fullname, filepath)
-                    print("Loading {} from spark-connect, spec is: {}".format(fullname, spec))
                     return spec
 
 
@@ -86,7 +80,6 @@ def _install_sparkconnect_finder():
             if os.path.exists(module_path):
                 loader = SourceFileLoader(fullname, module_path)
                 spec = ModuleSpec(fullname, loader, origin=module_path, is_package=True)
-                print("Loading regular package with spec {}".format(spec))
                 return spec
 
 
@@ -94,10 +87,7 @@ def _install_sparkconnect_finder():
             if os.path.exists(filepath):
                 loader = SourceFileLoader(fullname, filepath)
                 spec = ModuleSpec(fullname, loader, origin=filepath, is_package=False)
-                print("Loading regular package with spec {}".format(spec))
                 return spec
-
-            print("Not replacing: {}".format(fullname))
             return None
 
     sys.meta_path.insert(0, SparkConnectPathFinder())
