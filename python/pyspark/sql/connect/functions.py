@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect.column import Column, LiteralExpression
+from pyspark.sql.connect.column import Column, LiteralExpression, ColumnReference
 
 from typing import Any
 
@@ -22,8 +22,8 @@ from typing import Any
 
 
 def col(x: str) -> Column:
-    return Column(x)
+    return Column(ColumnReference(x))
 
 
-def lit(x: Any) -> LiteralExpression:
-    return LiteralExpression(x)
+def lit(x: Any) -> Column:
+    return Column(LiteralExpression(x))

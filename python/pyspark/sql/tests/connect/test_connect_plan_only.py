@@ -23,6 +23,7 @@ from pyspark.testing.sqlutils import have_pandas, pandas_requirement_message
 
 if have_pandas:
     import pyspark.sql.connect.proto as proto
+    from pyspark.sql.connect.column import Column
     from pyspark.sql.connect.readwriter import DataFrameReader
     from pyspark.sql.connect.function_builder import UserDefinedFunction, udf
     from pyspark.sql.types import StringType
@@ -278,7 +279,8 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         u = udf(lambda x: "Martin", StringType())
         self.assertIsNotNone(u)
         expr = u("ThisCol", "ThatCol", "OtherCol")
-        self.assertTrue(isinstance(expr, UserDefinedFunction))
+        self.assertTrue(isinstance(expr, Column))
+        self.assertTrue(isinstance(cast(Column, expr)._expr, UserDefinedFunction))
         u_plan = expr.to_plan(self.connect)
         self.assertIsNotNone(u_plan)
 
