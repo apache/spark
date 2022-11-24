@@ -119,10 +119,13 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
         // multiple users or clients running code at the same time.
         var currentPartitionId = 0
         while (currentPartitionId < numPartitions) {
-          signal.synchronized {
-            while (partitions(currentPartitionId) == null && error.isEmpty) {
+          val partition = signal.synchronized {
+            var part = partitions(currentPartitionId)
+            while (part == null && error.isEmpty) {
               signal.wait()
+              part = partitions(currentPartitionId)
             }
+            partitions(currentPartitionId) = null
 
             error.foreach {
               case NonFatal(e) =>
@@ -131,9 +134,10 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
                 return
               case other => throw other
             }
+            part
           }
 
-          partitions(currentPartitionId).foreach { case (bytes, count) =>
+          partition.foreach { case (bytes, count) =>
             val response = proto.ExecutePlanResponse.newBuilder().setClientId(clientId)
             val batch = proto.ExecutePlanResponse.ArrowBatch
               .newBuilder()
@@ -145,7 +149,6 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
             numSent += 1
           }
 
-          partitions(currentPartitionId) = null
           currentPartitionId += 1
         }
       }
