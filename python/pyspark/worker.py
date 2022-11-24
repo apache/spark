@@ -425,26 +425,8 @@ def wrap_grouped_map_arrow_udf(f, return_type, argspec, runner_conf):
                 )
 
                 if missing or extra:
-                    # limit missing columns to at most $limit
-                    limit = 5
-                    if len(missing) > limit:
-                        missing = f"  Missing (first {limit} of {len(missing)}): " + ", ".join(
-                            missing[:limit]
-                        )
-                    elif missing:
-                        missing = "  Missing: " + (", ".join(missing))
-                    else:
-                        missing = ""
-
-                    # limit unexpected columns to at most $limit
-                    if len(extra) > limit:
-                        extra = f"  Unexpected (first {limit} of {len(extra)}): " + ", ".join(
-                            extra[:limit]
-                        )
-                    elif extra:
-                        extra = "  Unexpected: " + (", ".join(extra))
-                    else:
-                        extra = ""
+                    missing = "  Missing: " + (", ".join(missing)) if missing else ""
+                    extra = "  Unexpected: " + (", ".join(extra)) if extra else ""
 
                     raise RuntimeError(
                         "Column names of the returned pyarrow.Table do not match specified schema."
