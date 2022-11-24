@@ -363,7 +363,8 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     createOrReplaceQueue(name = "queue0", cpu = Some("0.001"))
     createOrReplaceQueue(name = "queue1")
     // Submit jobs into disabled queue0 and enabled queue1
-    val jobNum = 2
+    // Due to GA resource limited, only submit one job in each queue
+    val jobNum = if (sys.env.contains("GITHUB_ACTIONS")) 2 else 4
     (1 to jobNum).foreach { i =>
       Future {
         val queueName = s"queue${i % 2}"
@@ -385,7 +386,8 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     // Enable all queues
     createOrReplaceQueue(name = "queue1")
     createOrReplaceQueue(name = "queue0")
-    val jobNum = 2
+    // Due to GA resource limited, only submit one job in each queue
+    val jobNum = if (sys.env.contains("GITHUB_ACTIONS")) 2 else 4
     // Submit jobs into these two queues
     (1 to jobNum).foreach { i =>
       Future {
