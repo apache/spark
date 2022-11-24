@@ -1072,10 +1072,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def literalTypeUnsupportedForSourceTypeError(field: String, source: Expression): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1102",
+      errorClass = "INVALID_EXTRACT_FIELD",
       messageParameters = Map(
-        "field" -> field,
-        "srcDataType" -> source.dataType.catalogString))
+        "field" -> toSQLId(field),
+        "expr" -> toSQLExpr(source)))
   }
 
   def arrayComponentTypeUnsupportedError(clz: Class[_]): Throwable = {

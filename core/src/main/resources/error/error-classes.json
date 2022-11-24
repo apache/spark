@@ -646,6 +646,11 @@
       "The location name cannot be empty string, but `<location>` was given."
     ]
   },
+  "INVALID_EXTRACT_FIELD" : {
+    "message" : [
+      "Cannot extract <field> from <expr>."
+    ]
+  },
   "INVALID_FIELD_NAME" : {
     "message" : [
       "Field name <fieldName> is invalid: <path> is not a struct."
@@ -2218,11 +2223,6 @@
   "_LEGACY_ERROR_TEMP_1101" : {
     "message" : [
       "Invalid value for the '<argName>' parameter of function '<funcName>': <invalidValue>.<endingMsg>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1102" : {
-    "message" : [
-      "Literals of type '<field>' are currently not supported for the <srcDataType> type."
     ]
   },
   "_LEGACY_ERROR_TEMP_1103" : {
