@@ -364,7 +364,7 @@
       },
       "UNEXPECTED_INPUT_TYPE" : {
         "message" : [
-          "parameter <paramIndex> requires <requiredType> type, however, <inputSql> is of <inputType> type."
+          "Parameter <paramIndex> requires the <requiredType> type, however <inputSql> has the type <inputType>."
         ]
       },
       "UNEXPECTED_NULL" : {
