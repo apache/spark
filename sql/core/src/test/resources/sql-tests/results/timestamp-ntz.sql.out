@@ -46,7 +46,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "FUNCTION_WRONG_NUM_ARGS",
+  "errorClass" : "WRONG_NUM_ARGS",
   "messageParameters" : {
     "actualNum" : "7",
     "expectedNum" : "6",

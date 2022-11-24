@@ -510,11 +510,6 @@
       "The operation <statement> is not allowed on the <objectType>: <objectName>"
     ]
   },
-  "FUNCTION_WRONG_NUM_ARGS" : {
-    "message" : [
-      "The <functionName> requires <expectedNum> parameters but the actual number is <actualNum>."
-    ]
-  },
   "GRAPHITE_SINK_INVALID_PROTOCOL" : {
     "message" : [
       "Invalid Graphite protocol: <protocol>"
@@ -1472,6 +1467,11 @@
       "To tolerate the error on drop use DROP VIEW IF EXISTS."
     ],
     "sqlState" : "42000"
+  },
+  "WRONG_NUM_ARGS" : {
+    "message" : [
+      "The <functionName> requires <expectedNum> parameters but the actual number is <actualNum>."
+    ]
   },
   "_LEGACY_ERROR_TEMP_0001" : {
     "message" : [
