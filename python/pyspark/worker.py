@@ -394,8 +394,8 @@ def verify_arrow_table_schema(table, assign_cols_by_name, expected_cols_and_type
             )
 
             if missing or extra:
-                missing = "  Missing: " + (", ".join(missing)) if missing else ""
-                extra = "  Unexpected: " + (", ".join(extra)) if extra else ""
+                missing = f" Missing: {', '.join(missing)}." if missing else ""
+                extra = f" Unexpected: {', '.join(extra)}." if extra else ""
 
                 raise RuntimeError(
                     "Column names of the returned pyarrow.Table do not match specified schema."
