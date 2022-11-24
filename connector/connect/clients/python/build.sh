@@ -31,14 +31,12 @@ mkdir -p $RELEASE_PATH/pyspark/sql
 # Copy Spark Connect
 cp -R $SPARK_HOME/python/pyspark/sql/connect $RELEASE_PATH/pyspark/sql/
 
-# Copy Type Support
-cp -R $SPARK_HOME/python/pyspark/sql/types.py $RELEASE_PATH/pyspark/sql/
-
 #Cloudpickle
 cp -R $SPARK_HOME/python/pyspark/cloudpickle $RELEASE_PATH/pyspark/
 
+#################################################################################################
 # The below files are manually copied and must be synced manually to remove unavailable imports.
-
 #cp -R $SPARK_HOME/python/pyspark/serializers.py $RELEASE_PATH/pyspark/
 #cp -R $SPARK_HOME/python/pyspark/util.py $RELEASE_PATH/pyspark/
 #cp -R $SPARK_HOME/python/pyspark/sql/utils.py $RELEASE_PATH/pyspark/sql/
+# cp -R $SPARK_HOME/python/pyspark/sql/types.py $RELEASE_PATH/pyspark/sql/
