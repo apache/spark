@@ -1295,4 +1295,13 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
     assertAnalysisSuccess(finalPlan)
   }
+
+  test("bind named parameters to literals") {
+    val plan = Bind(
+      args = Map("limitA" -> Literal(10)),
+      parsePlan("SELECT * FROM a LIMIT @limitA"))
+    comparePlans(
+      BindParameters.apply(plan),
+      parsePlan("SELECT * FROM a LIMIT 10"))
+  }
 }

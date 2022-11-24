@@ -267,7 +267,8 @@ class Analyzer(override val catalogManager: CatalogManager)
       CTESubstitution,
       WindowsSubstitution,
       EliminateUnions,
-      SubstituteUnresolvedOrdinals),
+      SubstituteUnresolvedOrdinals,
+      BindParameters),
     Batch("Disable Hints", Once,
       new ResolveHints.DisableHints),
     Batch("Hints", fixedPoint,
@@ -4123,5 +4124,21 @@ object RemoveTempResolvedColumn extends Rule[LogicalPlan] {
 
   def restoreTempResolvedColumn(t: TempResolvedColumn): Expression = {
     CurrentOrigin.withOrigin(t.origin)(UnresolvedAttribute(t.nameParts))
+  }
+}
+
+/**
+ * The rule `BindParameters` in the `Substitution` batch substitutes named parameters by
+ * theirs linked literals.
+ */
+object BindParameters extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    plan.resolveOperatorsUpWithPruning(_.containsPattern(BIND), ruleId) {
+      case Bind(args, child) =>
+        child.transformAllExpressionsWithPruning(_.containsPattern(PARAMETER), ruleId) {
+          case NamedParameter(name) if args.contains(name) =>
+            args(name)
+        }
+    }
   }
 }

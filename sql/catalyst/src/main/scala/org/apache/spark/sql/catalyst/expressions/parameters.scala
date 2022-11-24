@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{PARAMETER, TreePattern}
 import org.apache.spark.sql.types.{DataType, NullType}
 
 /**
@@ -31,6 +32,8 @@ import org.apache.spark.sql.types.{DataType, NullType}
 case class NamedParameter(name: String) extends LeafExpression {
   override def dataType: DataType = NullType
   override def nullable: Boolean = true
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(PARAMETER)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     throw SparkException.internalError(s"Found the unbound parameter: $name.")
