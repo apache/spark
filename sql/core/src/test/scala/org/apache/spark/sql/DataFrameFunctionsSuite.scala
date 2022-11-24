@@ -5200,6 +5200,23 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row(Map("a" -> Map("a" -> 6, "b" -> 8), "b" -> Map("a" -> 8, "b" -> 10))))
     )
   }
+
+  test("from_json - invalid schema string") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("select from_json('{\"a\":1}', 1)")
+      },
+      errorClass = "INVALID_SCHEMA",
+      parameters = Map(
+        "expr" -> "\"1\""
+      ),
+      context = ExpectedContext(
+        fragment = "from_json('{\"a\":1}', 1)",
+        start = 7,
+        stop = 29
+      )
+    )
+  }
 }
 
 object DataFrameFunctionsSuite {

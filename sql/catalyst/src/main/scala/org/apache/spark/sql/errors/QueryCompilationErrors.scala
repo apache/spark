@@ -995,8 +995,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def invalidSchemaStringError(exp: Expression): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1092",
-      messageParameters = Map("expr" -> exp.sql))
+      errorClass = "INVALID_SCHEMA",
+      messageParameters = Map("expr" -> toSQLExpr(exp)))
   }
 
   def schemaNotFoldableError(exp: Expression): Throwable = {

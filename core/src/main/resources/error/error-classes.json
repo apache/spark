@@ -756,6 +756,11 @@
       "<protobufClassName> is not a Protobuf message type"
     ]
   },
+  "INVALID_SCHEMA" : {
+    "message" : [
+      "The expression <expr> is not a valid schema string."
+    ]
+  },
   "INVALID_SQL_SYNTAX" : {
     "message" : [
       "Invalid SQL syntax: <inputString>"
@@ -2168,11 +2173,6 @@
   "_LEGACY_ERROR_TEMP_1091" : {
     "message" : [
       "Cannot read table property '<key>' as it's corrupted.<details>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1092" : {
-    "message" : [
-      "The expression '<expr>' is not a valid schema string."
     ]
   },
   "_LEGACY_ERROR_TEMP_1093" : {
