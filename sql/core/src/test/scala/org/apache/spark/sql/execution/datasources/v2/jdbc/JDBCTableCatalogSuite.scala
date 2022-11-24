@@ -284,7 +284,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         exception = intercept[ParseException] {
           sql(s"ALTER TABLE $tableName ALTER COLUMN id TYPE bad_type")
         },
-        errorClass = "DATA_TYPE_NOT_SUPPORTED",
+        errorClass = "UNSUPPORTED_DATATYPE",
         parameters = Map("typeName" -> "bad_type"),
         context = ExpectedContext("bad_type", 51, 58))
     }

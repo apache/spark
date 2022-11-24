@@ -502,7 +502,7 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
           .option("createTableColumnTypes", "name CLOB(2000)")
           .jdbc(url1, "TEST.USERDBTYPETEST", properties)
       },
-      errorClass = "DATA_TYPE_NOT_SUPPORTED",
+      errorClass = "UNSUPPORTED_DATATYPE",
       parameters = Map("typeName" -> "clob(2000)"))
   }
 
