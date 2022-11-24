@@ -318,10 +318,19 @@ def wrap_arrow_batch_iter_udf(f, return_type):
     )
 
 
-def wrap_cogrouped_map_arrow_udf(f, return_type, argspec):
-    def wrapped(left_key_table, left_value_table, right_key_table, right_value_table):
-        import pyarrow as pa
+def wrap_cogrouped_map_arrow_udf(f, return_type, argspec, runner_conf):
+    _assign_cols_by_name = assign_cols_by_name(runner_conf)
 
+    if _assign_cols_by_name:
+        expected_cols_and_types = {
+            col.name: to_arrow_type(col.dataType) for col in return_type.fields
+        }
+    else:
+        expected_cols_and_types = [
+            (col.name, to_arrow_type(col.dataType)) for col in return_type.fields
+        ]
+
+    def wrapped(left_key_table, left_value_table, right_key_table, right_value_table):
         if len(argspec.args) == 2:
             result = f(left_value_table, right_value_table)
         elif len(argspec.args) == 3:
@@ -329,24 +338,7 @@ def wrap_cogrouped_map_arrow_udf(f, return_type, argspec):
             key = tuple(c[0] for c in key_table.columns)
             result = f(key, left_value_table, right_value_table)
 
-        if not isinstance(result, pa.Table):
-            raise TypeError(
-                "Return type of the user-defined function should be "
-                "pyarrow.Table, but is {}".format(type(result))
-            )
-
-        # the number of columns of result have to match the return type
-        # but it is fine for result to have no columns at all if it is empty
-        if not (
-            len(result.columns) == len(return_type)
-            or len(result.columns) == 0
-            and result.num_rows == 0
-        ):
-            raise RuntimeError(
-                "Number of columns of the returned pyarrow.BatchRecord "
-                "doesn't match specified schema. "
-                "Expected: {} Actual: {}".format(len(return_type), len(result.columns))
-            )
+        verify_arrow_table_schema(result, _assign_cols_by_name, expected_cols_and_types)
 
         return result.to_batches()
 
@@ -377,6 +369,71 @@ def wrap_cogrouped_map_pandas_udf(f, return_type, argspec, runner_conf):
     return lambda kl, vl, kr, vr: [(wrapped(kl, vl, kr, vr), to_arrow_type(return_type))]
 
 
+def verify_arrow_table_schema(table, assign_cols_by_name, expected_cols_and_types):
+    import pyarrow as pa
+
+    if not isinstance(table, pa.Table):
+        raise TypeError(
+            "Return type of the user-defined function should be "
+            "pyarrow.Table, but is {}".format(type(table))
+        )
+
+    # the types of the fields have to be identical to return type
+    # an empty table can have no columns; if there are columns, they have to match
+    if len(table.columns) != 0 or table.num_rows != 0:
+        # columns are either mapped by name or position
+        if assign_cols_by_name:
+            actual_cols_and_types = {
+                name: dataType for name, dataType in zip(table.schema.names, table.schema.types)
+            }
+            missing = sorted(
+                list(set(expected_cols_and_types.keys()).difference(actual_cols_and_types.keys()))
+            )
+            extra = sorted(
+                list(set(actual_cols_and_types.keys()).difference(expected_cols_and_types.keys()))
+            )
+
+            if missing or extra:
+                missing = "  Missing: " + (", ".join(missing)) if missing else ""
+                extra = "  Unexpected: " + (", ".join(extra)) if extra else ""
+
+                raise RuntimeError(
+                    "Column names of the returned pyarrow.Table do not match specified schema."
+                    "{}{}".format(missing, extra)
+                )
+
+            column_types = [
+                (name, expected_cols_and_types[name], actual_cols_and_types[name])
+                for name in sorted(expected_cols_and_types.keys())
+            ]
+        else:
+            actual_cols_and_types = [
+                (name, dataType) for name, dataType in zip(table.schema.names, table.schema.types)
+            ]
+            column_types = [
+                (expected_name, expected_type, actual_type)
+                for (expected_name, expected_type), (actual_name, actual_type) in zip(
+                    expected_cols_and_types, actual_cols_and_types
+                )
+            ]
+
+        type_mismatch = [
+            (name, expected, actual)
+            for name, expected, actual in column_types
+            if actual != expected
+        ]
+
+        if type_mismatch:
+            raise RuntimeError(
+                "Columns do not match in their data type: {}".format(
+                    ", ".join(
+                        "column '{}' (expected {}, actual {})".format(name, expected, actual)
+                        for name, expected, actual in type_mismatch
+                    )
+                )
+            )
+
+
 def wrap_grouped_map_arrow_udf(f, return_type, argspec, runner_conf):
     _assign_cols_by_name = assign_cols_by_name(runner_conf)
 
@@ -390,79 +447,13 @@ def wrap_grouped_map_arrow_udf(f, return_type, argspec, runner_conf):
         ]
 
     def wrapped(key_table, value_table):
-        import pyarrow as pa
-
         if len(argspec.args) == 1:
             result = f(value_table)
         elif len(argspec.args) == 2:
             key = tuple(c[0] for c in key_table.columns)
             result = f(key, value_table)
 
-        if not isinstance(result, pa.Table):
-            raise TypeError(
-                "Return type of the user-defined function should be "
-                "pyarrow.Table, but is {}".format(type(result))
-            )
-
-        # the types of the fields have to be identical to return type
-        # an empty table can have no columns; if there are columns, they have to match
-        if len(result.columns) != 0 or result.num_rows != 0:
-            # columns are either mapped by name or position
-            if _assign_cols_by_name:
-                actual_cols_and_types = {
-                    name: dataType
-                    for name, dataType in zip(result.schema.names, result.schema.types)
-                }
-                missing = sorted(
-                    list(
-                        set(expected_cols_and_types.keys()).difference(actual_cols_and_types.keys())
-                    )
-                )
-                extra = sorted(
-                    list(
-                        set(actual_cols_and_types.keys()).difference(expected_cols_and_types.keys())
-                    )
-                )
-
-                if missing or extra:
-                    missing = "  Missing: " + (", ".join(missing)) if missing else ""
-                    extra = "  Unexpected: " + (", ".join(extra)) if extra else ""
-
-                    raise RuntimeError(
-                        "Column names of the returned pyarrow.Table do not match specified schema."
-                        "{}{}".format(missing, extra)
-                    )
-
-                column_types = [
-                    (name, expected_cols_and_types[name], actual_cols_and_types[name])
-                    for name in sorted(expected_cols_and_types.keys())
-                ]
-            else:
-                actual_cols_and_types = [
-                    (name, dataType)
-                    for name, dataType in zip(result.schema.names, result.schema.types)
-                ]
-                column_types = [
-                    (expected_name, expected_type, actual_type)
-                    for (expected_name, expected_type), (actual_name, actual_type) in zip(
-                        expected_cols_and_types, actual_cols_and_types
-                    )
-                ]
-
-            type_mismatch = [
-                (name, expected, actual)
-                for name, expected, actual in column_types
-                if actual != expected
-            ]
-            if type_mismatch:
-                raise RuntimeError(
-                    "Columns do not match in their data type: {}".format(
-                        ", ".join(
-                            "column '{}' (expected {}, actual {})".format(name, expected, actual)
-                            for name, expected, actual in type_mismatch
-                        )
-                    )
-                )
+        verify_arrow_table_schema(result, _assign_cols_by_name, expected_cols_and_types)
 
         return result.to_batches()
 
@@ -766,7 +757,7 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
         return args_offsets, wrap_cogrouped_map_pandas_udf(func, return_type, argspec, runner_conf)
     elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF:
         argspec = getfullargspec(chained_func)  # signature was lost when wrapping it
-        return arg_offsets, wrap_cogrouped_map_arrow_udf(func, return_type, argspec)
+        return arg_offsets, wrap_cogrouped_map_arrow_udf(func, return_type, argspec, runner_conf)
     elif eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
         return wrap_grouped_agg_pandas_udf(func, args_offsets, kwargs_offsets, return_type)
     elif eval_type == PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF:

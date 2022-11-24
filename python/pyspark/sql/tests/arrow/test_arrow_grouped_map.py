@@ -228,21 +228,10 @@ class GroupedMapInArrowTests(ReusedSQLTestCase):
                     {"id": [key[0].as_py()], "m": [pc.mean(table.column("v")).as_py()]}
                 )
 
-        expected_ids = {row[0] for row in self.data.collect() if row[0] % 2 != 0}
-
-        result = (
-            df.groupby("id")
-            .applyInArrow(odd_means, schema="id long, m double")
-            .sort("id", "m")
-            .collect()
-        )
-
-        actual_ids = {row[0] for row in result}
-        self.assertSetEqual(expected_ids, actual_ids)
-
-        self.assertEqual(len(expected_ids), len(result))
-        for row in result:
-            self.assertEqual(24.5, row[1])
+        schema = "id long, m double"
+        actual = df.groupby("id").applyInArrow(odd_means, schema=schema).sort("id").collect()
+        expected = [Row(id=id, m=24.5) for id in range(1, 10, 2)]
+        self.assertEqual(expected, actual)
 
     def test_apply_in_arrow_returning_empty_dataframe_and_wrong_column_names(self):
         df = self.data
