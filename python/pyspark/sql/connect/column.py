@@ -263,6 +263,22 @@ class Column(Expression):
         return f"Column({self._unparsed_identifier})"
 
 
+class SQLExpression(Expression):
+    """Returns Expression which contains a string which is a SQL expression
+    and server side will parse it by Catalyst
+    """
+
+    def __init__(self, expr: str) -> None:
+        super().__init__()
+        self._expr: str = expr
+
+    def to_plan(self, session: "RemoteSparkSession") -> proto.Expression:
+        """Returns the Proto representation of the SQL expression."""
+        expr = proto.Expression()
+        expr.expression_string.expression = self._expr
+        return expr
+
+
 class SortOrder(Expression):
     def __init__(self, col: Column, ascending: bool = True, nullsLast: bool = True) -> None:
         super().__init__()

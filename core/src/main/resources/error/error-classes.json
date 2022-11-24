@@ -229,49 +229,14 @@
           "Input to <functionName> should all be the same type, but it's <dataType>."
         ]
       },
-      "FORMAT_CONT_THOUSANDS_SEPS" : {
-        "message" : [
-          "Thousands separators (, or G) must have digits in between them in the number format: <format>."
-        ]
-      },
-      "FORMAT_CUR_MUST_BEFORE_DEC" : {
-        "message" : [
-          "Currency characters must appear before any decimal point in the number format: <format>."
-        ]
-      },
-      "FORMAT_CUR_MUST_BEFORE_DIGIT" : {
-        "message" : [
-          "Currency characters must appear before digits in the number format: <format>."
-        ]
-      },
-      "FORMAT_EMPTY" : {
-        "message" : [
-          "The number format string cannot be empty."
-        ]
-      },
-      "FORMAT_THOUSANDS_SEPS_MUST_BEFORE_DEC" : {
-        "message" : [
-          "Thousands separators (, or G) may not appear after the decimal point in the number format: <format>."
-        ]
-      },
-      "FORMAT_UNEXPECTED_TOKEN" : {
-        "message" : [
-          "Unexpected <token> found in the format string <format>; the structure of the format string must match: [MI|S] [$] [0|9|G|,]* [.|D] [0|9]* [$] [PR|MI|S]."
-        ]
-      },
-      "FORMAT_WRONG_NUM_DIGIT" : {
-        "message" : [
-          "The format string requires at least one number digit."
-        ]
-      },
-      "FORMAT_WRONG_NUM_TOKEN" : {
-        "message" : [
-          "At most one <token> is allowed in the number format: <format>."
-        ]
-      },
       "HASH_MAP_TYPE" : {
         "message" : [
           "Input to the function <functionName> cannot contain elements of the \"MAP\" type. In Spark, same maps may have different hashcode, thus hash expressions are prohibited on \"MAP\" elements. To restore previous behavior set \"spark.sql.legacy.allowHashOnMapType\" to \"true\"."
+        ]
+      },
+      "INVALID_ARG_VALUE" : {
+        "message" : [
+          "The <inputName> value must to be a <requireType> literal of <validValues>, but got <inputValue>."
         ]
       },
       "INVALID_JSON_MAP_KEY_TYPE" : {
@@ -676,11 +641,73 @@
     ],
     "sqlState" : "42000"
   },
+  "INVALID_EMPTY_LOCATION" : {
+    "message" : [
+      "The location name cannot be empty string, but `<location>` was given."
+    ]
+  },
   "INVALID_FIELD_NAME" : {
     "message" : [
       "Field name <fieldName> is invalid: <path> is not a struct."
     ],
     "sqlState" : "42000"
+  },
+  "INVALID_FORMAT" : {
+    "message" : [
+      "The format is invalid: <format>."
+    ],
+    "subClass" : {
+      "CONT_THOUSANDS_SEPS" : {
+        "message" : [
+          "Thousands separators (, or G) must have digits in between them in the number format."
+        ]
+      },
+      "CUR_MUST_BEFORE_DEC" : {
+        "message" : [
+          "Currency characters must appear before any decimal point in the number format."
+        ]
+      },
+      "CUR_MUST_BEFORE_DIGIT" : {
+        "message" : [
+          "Currency characters must appear before digits in the number format."
+        ]
+      },
+      "EMPTY" : {
+        "message" : [
+          "The number format string cannot be empty."
+        ]
+      },
+      "ESC_AT_THE_END" : {
+        "message" : [
+          "The escape character is not allowed to end with."
+        ]
+      },
+      "ESC_IN_THE_MIDDLE" : {
+        "message" : [
+          "The escape character is not allowed to precede <char>."
+        ]
+      },
+      "THOUSANDS_SEPS_MUST_BEFORE_DEC" : {
+        "message" : [
+          "Thousands separators (, or G) may not appear after the decimal point in the number format."
+        ]
+      },
+      "UNEXPECTED_TOKEN" : {
+        "message" : [
+          "Found the unexpected <token> in the format string; the structure of the format string must match: [MI|S] [$] [0|9|G|,]* [.|D] [0|9]* [$] [PR|MI|S]."
+        ]
+      },
+      "WRONG_NUM_DIGIT" : {
+        "message" : [
+          "The format string requires at least one number digit."
+        ]
+      },
+      "WRONG_NUM_TOKEN" : {
+        "message" : [
+          "At most one <token> is allowed in the number format."
+        ]
+      }
+    }
   },
   "INVALID_FRACTION_OF_SECOND" : {
     "message" : [
@@ -702,23 +729,6 @@
     "message" : [
       "The <joinType> JOIN with LATERAL correlation is not allowed because an OUTER subquery cannot correlate to its join partner. Remove the LATERAL correlation or use an INNER JOIN, or LEFT OUTER JOIN instead."
     ]
-  },
-  "INVALID_LIKE_PATTERN" : {
-    "message" : [
-      "The pattern <pattern> is invalid."
-    ],
-    "subClass" : {
-      "ESC_AT_THE_END" : {
-        "message" : [
-          "the escape character is not allowed to end with."
-        ]
-      },
-      "ESC_IN_THE_MIDDLE" : {
-        "message" : [
-          "the escape character is not allowed to precede <char>."
-        ]
-      }
-    }
   },
   "INVALID_PANDAS_UDF_PLACEMENT" : {
     "message" : [
@@ -906,6 +916,11 @@
       "To tolerate the error on drop use ALTER TABLE … DROP IF EXISTS PARTITION."
     ],
     "sqlState" : "42000"
+  },
+  "PATH_NOT_FOUND" : {
+    "message" : [
+      "Path does not exist: <path>."
+    ]
   },
   "PIVOT_VALUE_DATA_TYPE_MISMATCH" : {
     "message" : [
@@ -1142,7 +1157,7 @@
   },
   "UNRESOLVED_MAP_KEY" : {
     "message" : [
-      "Cannot resolve column <objectName> as a map key. If the key is a string literal, please add single quotes around it."
+      "Cannot resolve column <objectName> as a map key. If the key is a string literal, add the single quotes '' around it."
     ],
     "subClass" : {
       "WITHOUT_SUGGESTION" : {
@@ -1180,11 +1195,6 @@
         ]
       }
     }
-  },
-  "UNSUPPORTED_EMPTY_LOCATION" : {
-    "message" : [
-      "Unsupported empty location."
-    ]
   },
   "UNSUPPORTED_FEATURE" : {
     "message" : [
@@ -2330,11 +2340,6 @@
   "_LEGACY_ERROR_TEMP_1129" : {
     "message" : [
       "Unable to infer schema for <format>. It must be specified manually."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1130" : {
-    "message" : [
-      "Path does not exist: <path>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1131" : {

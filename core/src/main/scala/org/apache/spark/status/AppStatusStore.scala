@@ -17,17 +17,20 @@
 
 package org.apache.spark.status
 
+import java.io.File
 import java.util.{List => JList}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.{JobExecutionStatus, SparkConf, SparkContext}
+import org.apache.spark.internal.config.History.HybridStoreDiskBackend
+import org.apache.spark.internal.config.Status.LIVE_UI_LOCAL_STORE_DIR
 import org.apache.spark.status.api.v1
 import org.apache.spark.storage.FallbackStorage.FALLBACK_BLOCK_MANAGER_ID
 import org.apache.spark.ui.scope._
 import org.apache.spark.util.Utils
-import org.apache.spark.util.kvstore.{InMemoryStore, KVStore}
+import org.apache.spark.util.kvstore.KVStore
 
 /**
  * A wrapper around a KVStore that provides methods for accessing the API data stored within.
@@ -769,7 +772,12 @@ private[spark] object AppStatusStore {
   def createLiveStore(
       conf: SparkConf,
       appStatusSource: Option[AppStatusSource] = None): AppStatusStore = {
-    val store = new ElementTrackingStore(new InMemoryStore(), conf)
+    val storePath = conf.get(LIVE_UI_LOCAL_STORE_DIR).map(new File(_))
+    // For the disk-based KV store of live UI, let's simply make it ROCKSDB only for now,
+    // instead of supporting both LevelDB and RocksDB. RocksDB is built based on LevelDB with
+    // improvements on writes and reads.
+    val kvStore = KVUtils.createKVStore(storePath, HybridStoreDiskBackend.ROCKSDB, conf)
+    val store = new ElementTrackingStore(kvStore, conf)
     val listener = new AppStatusListener(store, conf, true, appStatusSource)
     new AppStatusStore(store, listener = Some(listener))
   }
