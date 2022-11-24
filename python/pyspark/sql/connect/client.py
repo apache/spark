@@ -18,7 +18,6 @@
 
 import logging
 import os
-import typing
 import urllib.parse
 import uuid
 
@@ -35,9 +34,7 @@ from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.connect.plan import SQL, Range
 from pyspark.sql.types import DataType, StructType, StructField, LongType, StringType
 
-from typing import Optional, Any, Union
-
-NumericType = typing.Union[int, float]
+from typing import Iterable, Optional, Any, Union, List, Tuple, Dict
 
 logging.basicConfig(level=logging.INFO)
 
@@ -74,7 +71,7 @@ class ChannelBuilder:
         # Python's built-in parser.
         tmp_url = "http" + url[2:]
         self.url = urllib.parse.urlparse(tmp_url)
-        self.params: typing.Dict[str, str] = {}
+        self.params: Dict[str, str] = {}
         if len(self.url.path) > 0 and self.url.path != "/":
             raise AttributeError(
                 f"Path component for connection URI must be empty: {self.url.path}"
@@ -102,7 +99,7 @@ class ChannelBuilder:
                 f"Target destination {self.url.netloc} does not match '<host>:<port>' pattern"
             )
 
-    def metadata(self) -> typing.Iterable[typing.Tuple[str, str]]:
+    def metadata(self) -> Iterable[Tuple[str, str]]:
         """
         Builds the GRPC specific metadata list to be injected into the request. All
         parameters will be converted to metadata except ones that are explicitly used
@@ -198,7 +195,7 @@ class ChannelBuilder:
 
 
 class MetricValue:
-    def __init__(self, name: str, value: NumericType, type: str):
+    def __init__(self, name: str, value: Union[int, float], type: str):
         self._name = name
         self._type = type
         self._value = value
@@ -211,7 +208,7 @@ class MetricValue:
         return self._name
 
     @property
-    def value(self) -> NumericType:
+    def value(self) -> Union[int, float]:
         return self._value
 
     @property
@@ -220,7 +217,7 @@ class MetricValue:
 
 
 class PlanMetrics:
-    def __init__(self, name: str, id: int, parent: int, metrics: typing.List[MetricValue]):
+    def __init__(self, name: str, id: int, parent: int, metrics: List[MetricValue]):
         self._name = name
         self._id = id
         self._parent_id = parent
@@ -242,7 +239,7 @@ class PlanMetrics:
         return self._parent_id
 
     @property
-    def metrics(self) -> typing.List[MetricValue]:
+    def metrics(self) -> List[MetricValue]:
         return self._metrics
 
 
@@ -252,7 +249,7 @@ class AnalyzeResult:
         self.explain_string = explain
 
     @classmethod
-    def fromProto(cls, pb: typing.Any) -> "AnalyzeResult":
+    def fromProto(cls, pb: Any) -> "AnalyzeResult":
         return AnalyzeResult(pb.schema, pb.explain_string)
 
 
@@ -303,12 +300,10 @@ class RemoteSparkSession(object):
         req = self._execute_plan_request_with_metadata()
         req.plan.command.create_function.CopyFrom(fun)
 
-        self._execute_and_fetch(req)
+        self._execute(req)
         return name
 
-    def _build_metrics(
-        self, metrics: "pb2.ExecutePlanResponse.Metrics"
-    ) -> typing.List[PlanMetrics]:
+    def _build_metrics(self, metrics: "pb2.ExecutePlanResponse.Metrics") -> List[PlanMetrics]:
         return [
             PlanMetrics(
                 x.name,
@@ -355,7 +350,7 @@ class RemoteSparkSession(object):
             Range(start=start, end=end, step=step, num_partitions=numPartitions), self
         )
 
-    def _to_pandas(self, plan: pb2.Plan) -> Optional[pandas.DataFrame]:
+    def _to_pandas(self, plan: pb2.Plan) -> "pandas.DataFrame":
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
         return self._execute_and_fetch(req)
@@ -403,7 +398,7 @@ class RemoteSparkSession(object):
         if self._user_id:
             req.user_context.user_id = self._user_id
         req.plan.command.CopyFrom(command)
-        self._execute_and_fetch(req)
+        self._execute(req)
         return
 
     def _execute_plan_request_with_metadata(self) -> pb2.ExecutePlanRequest:
@@ -444,13 +439,16 @@ class RemoteSparkSession(object):
         resp = self._stub.AnalyzePlan(req, metadata=self._builder.metadata())
         return AnalyzeResult.fromProto(resp)
 
-    def _process_batch(self, b: pb2.ExecutePlanResponse) -> Optional[pandas.DataFrame]:
-        if b.arrow_batch is not None and len(b.arrow_batch.data) > 0:
-            with pa.ipc.open_stream(b.arrow_batch.data) as rd:
-                return rd.read_pandas()
-        return None
+    def _process_batch(self, arrow_batch: pb2.ExecutePlanResponse.ArrowBatch) -> "pandas.DataFrame":
+        with pa.ipc.open_stream(arrow_batch.data) as rd:
+            return rd.read_pandas()
 
-    def _execute_and_fetch(self, req: pb2.ExecutePlanRequest) -> typing.Optional[pandas.DataFrame]:
+    def _execute(self, req: pb2.ExecutePlanRequest) -> None:
+        for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
+            continue
+        return
+
+    def _execute_and_fetch(self, req: pb2.ExecutePlanRequest) -> "pandas.DataFrame":
         import pandas as pd
 
         m: Optional[pb2.ExecutePlanResponse.Metrics] = None
@@ -459,23 +457,21 @@ class RemoteSparkSession(object):
         for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
             if b.metrics is not None:
                 m = b.metrics
-
-            pb = self._process_batch(b)
-            if pb is not None:
+            if b.HasField("arrow_batch"):
+                pb = self._process_batch(b.arrow_batch)
                 result_dfs.append(pb)
 
-        if len(result_dfs) > 0:
-            df = pd.concat(result_dfs)
+        assert len(result_dfs) > 0
 
-            # pd.concat generates non-consecutive index like:
-            #   Int64Index([0, 1, 0, 1, 2, 0, 1, 0, 1, 2], dtype='int64')
-            # set it to RangeIndex to be consistent with pyspark
-            n = len(df)
-            df.set_index(pd.RangeIndex(start=0, stop=n, step=1), inplace=True)
+        df = pd.concat(result_dfs)
 
-            # Attach the metrics to the DataFrame attributes.
-            if m is not None:
-                df.attrs["metrics"] = self._build_metrics(m)
-            return df
-        else:
-            return None
+        # pd.concat generates non-consecutive index like:
+        #   Int64Index([0, 1, 0, 1, 2, 0, 1, 0, 1, 2], dtype='int64')
+        # set it to RangeIndex to be consistent with pyspark
+        n = len(df)
+        df.set_index(pd.RangeIndex(start=0, stop=n, step=1), inplace=True)
+
+        # Attach the metrics to the DataFrame attributes.
+        if m is not None:
+            df.attrs["metrics"] = self._build_metrics(m)
+        return df

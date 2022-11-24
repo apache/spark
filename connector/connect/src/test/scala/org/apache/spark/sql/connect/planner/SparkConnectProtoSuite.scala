@@ -18,6 +18,8 @@ package org.apache.spark.sql.connect.planner
 
 import java.nio.file.{Files, Paths}
 
+import com.google.protobuf.ByteString
+
 import org.apache.spark.SparkClassNotFoundException
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Join.JoinType
@@ -31,6 +33,7 @@ import org.apache.spark.sql.connect.dsl.MockRemoteSession
 import org.apache.spark.sql.connect.dsl.commands._
 import org.apache.spark.sql.connect.dsl.expressions._
 import org.apache.spark.sql.connect.dsl.plans._
+import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{IntegerType, MapType, Metadata, StringType, StructField, StructType}
 
@@ -44,14 +47,18 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
 
   lazy val connectTestRelation =
     createLocalRelationProto(
-      Seq(AttributeReference("id", IntegerType)(), AttributeReference("name", StringType)()))
+      Seq(AttributeReference("id", IntegerType)(), AttributeReference("name", StringType)()),
+      Seq.empty)
 
   lazy val connectTestRelation2 =
     createLocalRelationProto(
-      Seq(AttributeReference("id", IntegerType)(), AttributeReference("name", StringType)()))
+      Seq(AttributeReference("id", IntegerType)(), AttributeReference("name", StringType)()),
+      Seq.empty)
 
   lazy val connectTestRelationMap =
-    createLocalRelationProto(Seq(AttributeReference("id", MapType(StringType, StringType))()))
+    createLocalRelationProto(
+      Seq(AttributeReference("id", MapType(StringType, StringType))()),
+      Seq.empty)
 
   lazy val sparkTestRelation: DataFrame =
     spark.createDataFrame(
@@ -68,7 +75,8 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       new java.util.ArrayList[Row](),
       StructType(Seq(StructField("id", MapType(StringType, StringType)))))
 
-  lazy val localRelation = createLocalRelationProto(Seq(AttributeReference("id", IntegerType)()))
+  lazy val localRelation =
+    createLocalRelationProto(Seq(AttributeReference("id", IntegerType)()), Seq.empty)
 
   test("Basic select") {
     val connectPlan = connectTestRelation.select("id".protoAttr)
@@ -500,10 +508,21 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   private def createLocalRelationProtoByQualifiedAttributes(
       attrs: Seq[proto.Expression.QualifiedAttribute]): proto.Relation = {
     val localRelationBuilder = proto.LocalRelation.newBuilder()
-    for (attr <- attrs) {
-      localRelationBuilder.addAttributes(attr)
-    }
-    proto.Relation.newBuilder().setLocalRelation(localRelationBuilder.build()).build()
+
+    val attributes = attrs.map(exp =>
+      AttributeReference(exp.getName, DataTypeProtoConverter.toCatalystType(exp.getType))())
+    val buffer = ArrowConverters
+      .toBatchWithSchemaIterator(
+        Iterator.empty,
+        StructType.fromAttributes(attributes),
+        Long.MaxValue,
+        Long.MaxValue,
+        null)
+      .next()
+    proto.Relation
+      .newBuilder()
+      .setLocalRelation(localRelationBuilder.setData(ByteString.copyFrom(buffer)).build())
+      .build()
   }
 
   // This is a function for testing only. This is used when the plan is ready and it only waits

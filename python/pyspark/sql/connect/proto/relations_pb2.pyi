@@ -1075,27 +1075,17 @@ class LocalRelation(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    ATTRIBUTES_FIELD_NUMBER: builtins.int
-    @property
-    def attributes(
-        self,
-    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-        pyspark.sql.connect.proto.expressions_pb2.Expression.QualifiedAttribute
-    ]:
-        """(Optional) A list qualified attributes.
-        TODO: support local data.
-        """
+    DATA_FIELD_NUMBER: builtins.int
+    data: builtins.bytes
+    """Local collection data serialized into Arrow IPC streaming format which contains
+    the schema of the data.
+    """
     def __init__(
         self,
         *,
-        attributes: collections.abc.Iterable[
-            pyspark.sql.connect.proto.expressions_pb2.Expression.QualifiedAttribute
-        ]
-        | None = ...,
+        data: builtins.bytes = ...,
     ) -> None: ...
-    def ClearField(
-        self, field_name: typing_extensions.Literal["attributes", b"attributes"]
-    ) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["data", b"data"]) -> None: ...
 
 global___LocalRelation = LocalRelation
 

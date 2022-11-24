@@ -313,6 +313,25 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
             df.repartition(-1)._plan.to_proto(self.connect)
         self.assertTrue("numPartitions must be positive" in str(context.exception))
 
+    def test_unsupported_functions(self):
+        # SPARK-41225: Disable unsupported functions.
+        df = self.connect.readTable(table_name=self.tbl_name)
+        for f in (
+            "rdd",
+            "unpersist",
+            "cache",
+            "persist",
+            "withWatermark",
+            "observe",
+            "foreach",
+            "foreachPartition",
+            "toLocalIterator",
+            "checkpoint",
+            "localCheckpoint",
+        ):
+            with self.assertRaises(NotImplementedError):
+                getattr(df, f)()
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.test_connect_plan_only import *  # noqa: F401
