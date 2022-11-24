@@ -24,7 +24,7 @@ import com.google.protobuf.ByteString
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression.UnresolvedStar
-import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.{AnalysisException, Dataset}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical
@@ -421,6 +421,29 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
               .newBuilder()
               .setData(ByteString.copyFrom("illegal".getBytes()))
               .build())
+          .build())
+    }
+  }
+
+  test("Test duplicated names in WithColumns") {
+    intercept[AnalysisException] {
+      transform(
+        proto.Relation
+          .newBuilder()
+          .setWithColumns(
+            proto.WithColumns
+              .newBuilder()
+              .setInput(readRel)
+              .addNameExprList(proto.Expression.Alias
+                .newBuilder()
+                .addName("test")
+                .setExpr(proto.Expression.newBuilder
+                  .setLiteral(proto.Expression.Literal.newBuilder.setI32(32))))
+              .addNameExprList(proto.Expression.Alias
+                .newBuilder()
+                .addName("test")
+                .setExpr(proto.Expression.newBuilder
+                  .setLiteral(proto.Expression.Literal.newBuilder.setI32(32)))))
           .build())
     }
   }

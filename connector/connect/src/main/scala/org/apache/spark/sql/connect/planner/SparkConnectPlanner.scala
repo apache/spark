@@ -91,6 +91,7 @@ class SparkConnectPlanner(session: SparkSession) {
         transformRenameColumnsBySamelenghtNames(rel.getRenameColumnsBySameLengthNames)
       case proto.Relation.RelTypeCase.RENAME_COLUMNS_BY_NAME_TO_NAME_MAP =>
         transformRenameColumnsByNameToNameMap(rel.getRenameColumnsByNameToNameMap)
+      case proto.Relation.RelTypeCase.WITH_COLUMNS => transformWithColumns(rel.getWithColumns)
       case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
         throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
       case _ => throw InvalidPlanInput(s"${rel.getUnknown} not supported.")
@@ -258,6 +259,17 @@ class SparkConnectPlanner(session: SparkSession) {
     Dataset
       .ofRows(session, transformRelation(rel.getInput))
       .withColumnsRenamed(rel.getRenameColumnsMap)
+      .logicalPlan
+  }
+
+  private def transformWithColumns(rel: proto.WithColumns): LogicalPlan = {
+    val (names, cols) =
+      rel.getNameExprListList.asScala
+        .map(e => (e.getName(0), Column(transformExpression(e.getExpr))))
+        .unzip
+    Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .withColumns(names.toSeq, cols.toSeq)
       .logicalPlan
   }
 

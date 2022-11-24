@@ -306,6 +306,40 @@ class Project(LogicalPlan):
         """
 
 
+class WithColumns(LogicalPlan):
+    """Logical plan object for a withColumns operation."""
+
+    def __init__(self, child: Optional["LogicalPlan"], cols_map: Mapping[str, Expression]) -> None:
+        super().__init__(child)
+        self._cols_map = cols_map
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+        plan = proto.Relation()
+        plan.with_columns.input.CopyFrom(self._child.plan(session))
+        for k, v in self._cols_map.items():
+            name_expr = proto.Expression.Alias()
+            name_expr.name.append(k)
+            name_expr.expr.CopyFrom(v.to_plan(session))
+            plan.with_columns.name_expr_list.append(name_expr)
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
+        return f"{' ' * indent}<WithColumns cols={self._cols_map}>\n{c_buf}"
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+            <li>
+                <b>WithColumns</b><br />
+                Column Map: {self._cols_map}
+                {self._child._repr_html_() if self._child is not None else ""}
+            </li>
+        </uL>
+        """
+
+
 class Filter(LogicalPlan):
     def __init__(self, child: Optional["LogicalPlan"], filter: Expression) -> None:
         super().__init__(child)

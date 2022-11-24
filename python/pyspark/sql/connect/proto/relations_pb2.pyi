@@ -81,6 +81,7 @@ class Relation(google.protobuf.message.Message):
     SHOW_STRING_FIELD_NUMBER: builtins.int
     DROP_FIELD_NUMBER: builtins.int
     TAIL_FIELD_NUMBER: builtins.int
+    WITH_COLUMNS_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     SUMMARY_FIELD_NUMBER: builtins.int
@@ -131,6 +132,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def tail(self) -> global___Tail: ...
     @property
+    def with_columns(self) -> global___WithColumns: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -167,6 +170,7 @@ class Relation(google.protobuf.message.Message):
         show_string: global___ShowString | None = ...,
         drop: global___Drop | None = ...,
         tail: global___Tail | None = ...,
+        with_columns: global___WithColumns | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         summary: global___StatSummary | None = ...,
@@ -232,6 +236,8 @@ class Relation(google.protobuf.message.Message):
             b"tail",
             "unknown",
             b"unknown",
+            "with_columns",
+            b"with_columns",
         ],
     ) -> builtins.bool: ...
     def ClearField(
@@ -293,6 +299,8 @@ class Relation(google.protobuf.message.Message):
             b"tail",
             "unknown",
             b"unknown",
+            "with_columns",
+            b"with_columns",
         ],
     ) -> None: ...
     def WhichOneof(
@@ -319,6 +327,7 @@ class Relation(google.protobuf.message.Message):
         "show_string",
         "drop",
         "tail",
+        "with_columns",
         "fill_na",
         "drop_na",
         "summary",
@@ -1714,3 +1723,50 @@ class RenameColumnsByNameToNameMap(google.protobuf.message.Message):
     ) -> None: ...
 
 global___RenameColumnsByNameToNameMap = RenameColumnsByNameToNameMap
+
+class WithColumns(google.protobuf.message.Message):
+    """Adding columns or replacing the existing columns that have the same names."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    NAME_EXPR_LIST_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    @property
+    def name_expr_list(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.expressions_pb2.Expression.Alias
+    ]:
+        """(Required)
+
+        Given a column name, apply the corresponding expression on the column. If column
+        name exists in the input relation, then replace the column. If the column name
+        does not exist in the input relation, then adds it as a new column.
+
+        Only one name part is expected from each Expression.Alias.
+
+        An exception is thrown when duplicated names are present in the mapping.
+        """
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        name_expr_list: collections.abc.Iterable[
+            pyspark.sql.connect.proto.expressions_pb2.Expression.Alias
+        ]
+        | None = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "input", b"input", "name_expr_list", b"name_expr_list"
+        ],
+    ) -> None: ...
+
+global___WithColumns = WithColumns

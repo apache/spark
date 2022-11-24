@@ -645,6 +645,19 @@ package object dsl {
           .build()
       }
 
+      def withColumns(colsMap: Map[String, Expression]): Relation = {
+        Relation
+          .newBuilder()
+          .setWithColumns(
+            WithColumns
+              .newBuilder()
+              .setInput(logicalPlan)
+              .addAllNameExprList(colsMap.map { case (k, v) =>
+                Expression.Alias.newBuilder().addName(k).setExpr(v).build()
+              }.asJava))
+          .build()
+      }
+
       private def createSetOperation(
           left: Relation,
           right: Relation,
