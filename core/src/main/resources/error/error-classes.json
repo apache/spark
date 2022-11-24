@@ -234,6 +234,11 @@
           "Input to the function <functionName> cannot contain elements of the \"MAP\" type. In Spark, same maps may have different hashcode, thus hash expressions are prohibited on \"MAP\" elements. To restore previous behavior set \"spark.sql.legacy.allowHashOnMapType\" to \"true\"."
         ]
       },
+      "INVALID_ARG_VALUE" : {
+        "message" : [
+          "The <inputName> value must to be a <requireType> literal of <validValues>, but got <inputValue>."
+        ]
+      },
       "INVALID_JSON_MAP_KEY_TYPE" : {
         "message" : [
           "Input schema <schema> can only contain STRING as a key type for a MAP."
@@ -359,7 +364,7 @@
       },
       "UNEXPECTED_INPUT_TYPE" : {
         "message" : [
-          "parameter <paramIndex> requires <requiredType> type, however, <inputSql> is of <inputType> type."
+          "Parameter <paramIndex> requires the <requiredType> type, however <inputSql> has the type <inputType>."
         ]
       },
       "UNEXPECTED_NULL" : {
@@ -641,6 +646,11 @@
       "The location name cannot be empty string, but `<location>` was given."
     ]
   },
+  "INVALID_EXTRACT_FIELD" : {
+    "message" : [
+      "Cannot extract <field> from <expr>."
+    ]
+  },
   "INVALID_FIELD_NAME" : {
     "message" : [
       "Field name <fieldName> is invalid: <path> is not a struct."
@@ -749,6 +759,11 @@
   "INVALID_PROTOBUF_MESSAGE_TYPE" : {
     "message" : [
       "<protobufClassName> is not a Protobuf message type"
+    ]
+  },
+  "INVALID_SCHEMA" : {
+    "message" : [
+      "The expression <expr> is not a valid schema string."
     ]
   },
   "INVALID_SQL_SYNTAX" : {
@@ -1152,7 +1167,7 @@
   },
   "UNRESOLVED_MAP_KEY" : {
     "message" : [
-      "Cannot resolve column <objectName> as a map key. If the key is a string literal, please add single quotes around it."
+      "Cannot resolve column <objectName> as a map key. If the key is a string literal, add the single quotes '' around it."
     ],
     "subClass" : {
       "WITHOUT_SUGGESTION" : {
@@ -1467,6 +1482,11 @@
       "To tolerate the error on drop use DROP VIEW IF EXISTS."
     ],
     "sqlState" : "42000"
+  },
+  "WRONG_NUM_ARGS" : {
+    "message" : [
+      "The <functionName> requires <expectedNum> parameters but the actual number is <actualNum>."
+    ]
   },
   "_LEGACY_ERROR_TEMP_0001" : {
     "message" : [
@@ -1950,11 +1970,6 @@
       "Undefined function <name>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1042" : {
-    "message" : [
-      "Invalid number of arguments for function <name>. Expected: <expectedInfo>; Found: <actualNumber>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1043" : {
     "message" : [
       "Invalid arguments for function <name>."
@@ -2165,11 +2180,6 @@
       "Cannot read table property '<key>' as it's corrupted.<details>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1092" : {
-    "message" : [
-      "The expression '<expr>' is not a valid schema string."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1093" : {
     "message" : [
       "Schema should be specified in DDL format as a string literal or output of the schema_of_json/schema_of_csv functions instead of <expr>."
@@ -2213,11 +2223,6 @@
   "_LEGACY_ERROR_TEMP_1101" : {
     "message" : [
       "Invalid value for the '<argName>' parameter of function '<funcName>': <invalidValue>.<endingMsg>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1102" : {
-    "message" : [
-      "Literals of type '<field>' are currently not supported for the <srcDataType> type."
     ]
   },
   "_LEGACY_ERROR_TEMP_1103" : {

@@ -285,9 +285,9 @@ message Deduplicate {
 
 // A relation that does not need to be qualified by name.
 message LocalRelation {
-  // (Optional) A list qualified attributes.
-  repeated Expression.QualifiedAttribute attributes = 1;
-  // TODO: support local data.
+  // Local collection data serialized into Arrow IPC streaming format which contains
+  // the schema of the data.
+  bytes data = 1;
 }
 
 // Relation of type [[Sample]] that samples a fraction of the dataset.

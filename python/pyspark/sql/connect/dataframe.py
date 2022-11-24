@@ -44,10 +44,8 @@ from pyspark.sql.types import (
 )
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect.typing import ColumnOrString, ExpressionOrString, LiteralType
+    from pyspark.sql.connect._typing import ColumnOrName, ExpressionOrString, LiteralType
     from pyspark.sql.connect.client import RemoteSparkSession
-
-ColumnOrName = Union[Column, str]
 
 
 class GroupingFrame(object):
@@ -308,7 +306,7 @@ class DataFrame(object):
             plan.Deduplicate(child=self._plan, all_columns_as_keys=True), session=self._session
         )
 
-    def drop(self, *cols: "ColumnOrString") -> "DataFrame":
+    def drop(self, *cols: "ColumnOrName") -> "DataFrame":
         _cols = list(cols)
         if any(not isinstance(c, (str, Column)) for c in _cols):
             raise TypeError(
@@ -342,7 +340,7 @@ class DataFrame(object):
         """
         return self.head()
 
-    def groupBy(self, *cols: "ColumnOrString") -> GroupingFrame:
+    def groupBy(self, *cols: "ColumnOrName") -> GroupingFrame:
         return GroupingFrame(self, *cols)
 
     @overload
@@ -414,13 +412,13 @@ class DataFrame(object):
     def offset(self, n: int) -> "DataFrame":
         return DataFrame.withPlan(plan.Offset(child=self._plan, offset=n), session=self._session)
 
-    def sort(self, *cols: "ColumnOrString") -> "DataFrame":
+    def sort(self, *cols: "ColumnOrName") -> "DataFrame":
         """Sort by a specific column"""
         return DataFrame.withPlan(
             plan.Sort(self._plan, columns=list(cols), is_global=True), session=self._session
         )
 
-    def sortWithinPartitions(self, *cols: "ColumnOrString") -> "DataFrame":
+    def sortWithinPartitions(self, *cols: "ColumnOrName") -> "DataFrame":
         """Sort within each partition by a specific column"""
         return DataFrame.withPlan(
             plan.Sort(self._plan, columns=list(cols), is_global=False), session=self._session
@@ -791,7 +789,7 @@ class DataFrame(object):
         else:
             return []
 
-    def toPandas(self) -> Optional["pandas.DataFrame"]:
+    def toPandas(self) -> "pandas.DataFrame":
         if self._plan is None:
             raise Exception("Cannot collect on empty plan.")
         if self._session is None:
@@ -974,6 +972,63 @@ class DataFrame(object):
             child=self._plan, name=name, is_global=True, replace=True
         ).command(session=self._session)
         self._session.execute_command(command)
+
+    def rdd(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("RDD Support for Spark Connect is not implemented.")
+
+    def unpersist(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("unpersist() is not implemented.")
+
+    def cache(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("cache() is not implemented.")
+
+    def persist(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("persist() is not implemented.")
+
+    def withWatermark(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("withWatermark() is not implemented.")
+
+    def observe(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("observe() is not implemented.")
+
+    def foreach(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("foreach() is not implemented.")
+
+    def foreachPartition(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("foreachPartition() is not implemented.")
+
+    def toLocalIterator(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("toLocalIterator() is not implemented.")
+
+    def checkpoint(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("checkpoint() is not implemented.")
+
+    def localCheckpoint(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("localCheckpoint() is not implemented.")
+
+    def to_pandas_on_spark(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("to_pandas_on_spark() is not implemented.")
+
+    def pandas_api(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("pandas_api() is not implemented.")
+
+    def registerTempTable(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("registerTempTable() is not implemented.")
+
+    def storageLevel(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("storageLevel() is not implemented.")
+
+    def mapInPandas(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("mapInPandas() is not implemented.")
+
+    def mapInArrow(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("mapInArrow() is not implemented.")
+
+    def writeStream(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("writeStream() is not implemented.")
+
+    def toJSON(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("toJSON() is not implemented.")
 
 
 class DataFrameNaFunctions:

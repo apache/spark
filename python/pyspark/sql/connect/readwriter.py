@@ -18,17 +18,14 @@
 
 from typing import Dict, Optional
 
-from pyspark.sql.connect.column import PrimitiveType
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.connect.plan import Read, DataSource
 from pyspark.sql.utils import to_str
 
-
-OptionalPrimitiveType = Optional[PrimitiveType]
-
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from pyspark.sql.connect._typing import OptionalPrimitiveType
     from pyspark.sql.connect.client import RemoteSparkSession
 
 

@@ -230,7 +230,7 @@ class SparkSessionExtensions {
    * cache hit rate by normalizing different plans to the same form. These rules should never modify
    * the result of the LogicalPlan.
    */
-  def injectPlanNormalizationRules(builder: RuleBuilder): Unit = {
+  def injectPlanNormalizationRule(builder: RuleBuilder): Unit = {
     planNormalizationRules += builder
   }
 

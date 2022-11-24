@@ -22,9 +22,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1092",
+  "errorClass" : "INVALID_SCHEMA",
   "messageParameters" : {
-    "expr" : "1"
+    "expr" : "\"1\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -105,11 +105,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1042",
+  "errorClass" : "WRONG_NUM_ARGS",
   "messageParameters" : {
-    "actualNumber" : "0",
-    "expectedInfo" : "one of 2 and 3",
-    "name" : "from_csv"
+    "actualNum" : "0",
+    "expectedNum" : "[2, 3]",
+    "functionName" : "`from_csv`"
   },
   "queryContext" : [ {
     "objectType" : "",
