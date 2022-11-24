@@ -47,8 +47,8 @@ public class RemoveShuffleMerge extends BlockTransferMessage {
 
   @Override
   public int hashCode() {
-    return com.google.common.base.Objects.
-        hashCode(appId, appAttemptId, shuffleId, shuffleMergeId);
+    return com.google.common.base.Objects
+        .hashCode(appId, appAttemptId, shuffleId, shuffleMergeId);
   }
 
   @Override

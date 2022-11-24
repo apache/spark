@@ -20,9 +20,9 @@ package org.apache.spark.network.util;
 public class PushBasedShuffleUtils {
 
   /**
-   * Push based shuffle requires a comparable Id to distinguish the shuffle data among multiple application attempts.
-   * This variable is derived from the String typed appAttemptId. If no appAttemptId is set, the default
-   * comparableAppAttemptId is -1.
+   * Push based shuffle requires a comparable Id to distinguish the shuffle data among multiple
+   * application attempts. This variable is derived from the String typed appAttemptId.
+   * If no appAttemptId is set, the default comparableAppAttemptId is -1.
    */
   public static final int DEFAUT_APP_ATTEMPT_ID = -1;
 

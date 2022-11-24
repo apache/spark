@@ -319,15 +319,23 @@ class BlockManagerMasterEndpoint(
   }
 
   private def removeShuffle(shuffleId: Int): Future[Seq[Boolean]] = {
-    val removeMsg = RemoveShuffle(shuffleId)
-    val removeShuffleFromExecutorsFutures = blockManagerInfo.values.map { bm =>
-      bm.storageEndpoint.ask[Boolean](removeMsg).recover {
-        // use false as default value means no shuffle data were removed
-        handleBlockRemovalFailure("shuffle", shuffleId.toString, bm.blockManagerId, false)
-      }
-    }.toSeq
-
     var removeShuffleFromShuffleServicesFutures = Seq.empty[Future[Boolean]]
+    if (pushBasedShuffleEnabled && externalBlockStoreClient.isDefined) {
+      val shuffleClient = externalBlockStoreClient.get
+      mapOutputTracker.shuffleStatuses.get(shuffleId) match {
+        case Some(shuffleStatus) =>
+          val shuffleMergerLocations = shuffleStatus.getShufflePushMergerLocations
+          removeShuffleFromShuffleServicesFutures ++= shuffleMergerLocations.map(bmId => {
+            Future[Boolean] {
+              shuffleClient.removeShuffleMerge(bmId.host, bmId.port, shuffleId)
+            }
+          })
+        case None =>
+          logWarning(s"Asked to remove merge shuffle blocks from " +
+            s"shuffle service for unknown shuffle ${shuffleId}")
+      }
+    }
+
     if (externalShuffleServiceRemoveShuffleEnabled) {
       val shuffleClient = externalBlockStoreClient.get
       // Find all shuffle blocks on executors that are no longer running
@@ -360,19 +368,19 @@ class BlockManagerMasterEndpoint(
             }
           }.toSeq
         case None =>
-          logError(s"Asked to remove shuffle blocks from " +
+          logDebug(s"Asked to remove shuffle blocks from " +
             s"shuffle service for unknown shuffle ${shuffleId}")
       }
     }
-    if (pushBasedShuffleEnabled && externalBlockStoreClient.isDefined) {
-      val shuffleClient = externalBlockStoreClient.get
-      val shuffleMergerLocations = mapOutputTracker.getShufflePushMergerLocations(shuffleId)
-      removeShuffleFromShuffleServicesFutures ++= shuffleMergerLocations.map(bmId => {
-        Future[Boolean] {
-          shuffleClient.removeShuffleMerge(bmId.host, bmId.port, shuffleId)
-        }
-      })
-    }
+    // It needs to be invoked at last to avoid cleaning up shuffleStatuses in mapOutputTracker
+    // too early before used by [[removeShuffleFromShuffleServicesFutures]]
+    val removeMsg = RemoveShuffle(shuffleId)
+    val removeShuffleFromExecutorsFutures = blockManagerInfo.values.map { bm =>
+      bm.storageEndpoint.ask[Boolean](removeMsg).recover {
+        // use false as default value means no shuffle data were removed
+        handleBlockRemovalFailure("shuffle", shuffleId.toString, bm.blockManagerId, false)
+      }
+    }.toSeq
     Future.sequence(removeShuffleFromExecutorsFutures ++
       removeShuffleFromShuffleServicesFutures)
   }

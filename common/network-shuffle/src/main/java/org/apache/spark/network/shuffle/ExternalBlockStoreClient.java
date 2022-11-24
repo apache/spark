@@ -326,7 +326,8 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
     try {
       checkInit();
       TransportClient client = clientFactory.createClient(host, port);
-      String appAttemptId = getAppAttemptId() == null ? String.valueOf(DEFAUT_APP_ATTEMPT_ID) : getAppAttemptId();
+      String appAttemptId =
+          getAppAttemptId() == null ? String.valueOf(DEFAUT_APP_ATTEMPT_ID) : getAppAttemptId();
       ByteBuffer removeMessage = new RemoveShuffleMerge(appId, appAttemptId, shuffleId,
           DELETE_CURRENT_MERGED_SHUFFLE_ID).toByteBuffer();
       client.send(removeMessage);
