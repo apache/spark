@@ -618,13 +618,11 @@ object Core {
     // of these dependendencies that we need to shade later on.
     libraryDependencies ++= {
       Seq(
-        "io.grpc" % "protoc-gen-grpc-java" % BuildCommons.gprcVersion asProtocPlugin(),
         "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
       )
     },
     (Compile / PB.targets) := Seq(
-      PB.gens.java -> (Compile / sourceManaged).value,
-      PB.gens.plugin("grpc-java") -> (Compile / sourceManaged).value
+      PB.gens.java -> (Compile / sourceManaged).value
     ),
     (Compile / resourceGenerators) += Def.task {
       val buildScript = baseDirectory.value + "/../build/spark-build-info"

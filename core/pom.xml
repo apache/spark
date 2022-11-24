@@ -647,10 +647,9 @@
         <groupId>com.github.os72</groupId>
         <artifactId>protoc-jar-maven-plugin</artifactId>
         <version>3.11.4</version>
-        <!-- Generates Java classes for tests. TODO(Raghu): Generate descriptor files too. -->
         <executions>
           <execution>
-            <phase>generate-test-sources</phase>
+            <phase>generate-sources</phase>
             <goals>
               <goal>run</goal>
             </goals>
@@ -660,7 +659,6 @@
               <inputDirectories>
                 <include>src/main/protobuf</include>
               </inputDirectories>
-              <addSources>test</addSources>
             </configuration>
           </execution>
         </executions>

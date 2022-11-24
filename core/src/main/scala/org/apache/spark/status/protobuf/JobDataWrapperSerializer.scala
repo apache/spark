@@ -101,7 +101,7 @@ object JobDataWrapperSerializer {
       description = description,
       submissionTime = submissionTime,
       completionTime = completionTime,
-      stageIds = info.getStageIdsList.asScala.map(_.toInt),
+      stageIds = info.getStageIdsList.asScala.map(_.toInt).toSeq,
       jobGroup = jobGroup,
       status = status,
       numTasks = info.getNumTasks,
