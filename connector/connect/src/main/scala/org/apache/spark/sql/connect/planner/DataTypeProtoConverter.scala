@@ -95,8 +95,14 @@ object DataTypeProtoConverter {
   }
 
   private def toCatalystStructType(t: proto.DataType.Struct): StructType = {
-    val fields = t.getFieldsList.toSeq.map(f =>
-      StructField(f.getName, toCatalystType(f.getDataType), f.getNullable))
+    // TODO: support metadata
+    val fields = t.getFieldsList.toSeq.map { protoField =>
+      StructField(
+        name = protoField.getName,
+        dataType = toCatalystType(protoField.getDataType),
+        nullable = protoField.getNullable,
+        metadata = Metadata.empty)
+    }
     StructType.apply(fields)
   }
 
@@ -129,16 +135,19 @@ object DataTypeProtoConverter {
           .newBuilder()
           .setByte(proto.DataType.Byte.getDefaultInstance)
           .build()
+
       case ShortType =>
         proto.DataType
           .newBuilder()
           .setShort(proto.DataType.Short.getDefaultInstance)
           .build()
+
       case IntegerType =>
         proto.DataType
           .newBuilder()
           .setInteger(proto.DataType.Integer.getDefaultInstance)
           .build()
+
       case LongType =>
         proto.DataType
           .newBuilder()
@@ -150,11 +159,13 @@ object DataTypeProtoConverter {
           .newBuilder()
           .setFloat(proto.DataType.Float.getDefaultInstance)
           .build()
+
       case DoubleType =>
         proto.DataType
           .newBuilder()
           .setDouble(proto.DataType.Double.getDefaultInstance)
           .build()
+
       case DecimalType.Fixed(precision, scale) =>
         proto.DataType
           .newBuilder()
@@ -167,11 +178,13 @@ object DataTypeProtoConverter {
           .newBuilder()
           .setString(proto.DataType.String.getDefaultInstance)
           .build()
+
       case CharType(length) =>
         proto.DataType
           .newBuilder()
           .setChar(proto.DataType.Char.newBuilder().setLength(length).build())
           .build()
+
       case VarcharType(length) =>
         proto.DataType
           .newBuilder()
@@ -183,11 +196,13 @@ object DataTypeProtoConverter {
           .newBuilder()
           .setDate(proto.DataType.Date.getDefaultInstance)
           .build()
+
       case TimestampType =>
         proto.DataType
           .newBuilder()
           .setTimestamp(proto.DataType.Timestamp.getDefaultInstance)
           .build()
+
       case TimestampNTZType =>
         proto.DataType
           .newBuilder()
@@ -199,6 +214,7 @@ object DataTypeProtoConverter {
           .newBuilder()
           .setCalendarInterval(proto.DataType.CalendarInterval.getDefaultInstance)
           .build()
+
       case YearMonthIntervalType(startField, endField) =>
         proto.DataType
           .newBuilder()
@@ -209,6 +225,7 @@ object DataTypeProtoConverter {
               .setEndField(endField)
               .build())
           .build()
+
       case DayTimeIntervalType(startField, endField) =>
         proto.DataType
           .newBuilder()
@@ -232,8 +249,13 @@ object DataTypeProtoConverter {
           .build()
 
       case StructType(fields: Array[StructField]) =>
-        val protoFields = fields.map {
-          case StructField(name: String, dataType: DataType, nullable: Boolean, _) =>
+        // TODO: support metadata
+        val protoFields = fields.toSeq.map {
+          case StructField(
+                name: String,
+                dataType: DataType,
+                nullable: Boolean,
+                metadata: Metadata) =>
             proto.DataType.StructField
               .newBuilder()
               .setName(name)
@@ -246,7 +268,7 @@ object DataTypeProtoConverter {
           .setStruct(
             proto.DataType.Struct
               .newBuilder()
-              .addAllFields(protoFields.toSeq)
+              .addAllFields(protoFields)
               .build())
           .build()
 
