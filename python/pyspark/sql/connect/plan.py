@@ -36,7 +36,7 @@ from pyspark.sql.connect.column import (
 
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect.typing import ColumnOrString, ExpressionOrString
+    from pyspark.sql.connect._typing import ColumnOrName, ExpressionOrString
     from pyspark.sql.connect.client import RemoteSparkSession
 
 
@@ -58,7 +58,7 @@ class LogicalPlan(object):
         return exp
 
     def to_attr_or_expression(
-        self, col: "ColumnOrString", session: "RemoteSparkSession"
+        self, col: "ColumnOrName", session: "RemoteSparkSession"
     ) -> proto.Expression:
         """Returns either an instance of an unresolved attribute or the serialized
         expression value of the column."""
