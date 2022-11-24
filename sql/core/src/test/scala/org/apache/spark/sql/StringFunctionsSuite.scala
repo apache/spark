@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-
 
 class StringFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -579,12 +579,13 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.selectExpr("sentences()")
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+      errorClass = "WRONG_NUM_ARGS",
       parameters = Map(
         "sqlExpr" -> "",
-        "functionName" -> "sentences",
-        "expectedNum" -> "one of 1, 2 and 3",
-        "actualNum" -> "0"),
+        "functionName" -> toSQLId("sentences"),
+        "expectedNum" -> "[1, 2, 3]",
+        "actualNum" -> "0"
+      ),
       context = ExpectedContext(
         fragment = "sentences()",
         start = 0,

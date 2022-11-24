@@ -1477,6 +1477,21 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       assert(
         catalog.lookupFunction(
           FunctionIdentifier("temp1"), arguments) === Literal(arguments.length))
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          catalog.registerFunction(
+            CatalogFunction(FunctionIdentifier("temp2", None),
+              "function_class_cannot_load", Seq.empty[FunctionResource]),
+            overrideIfExists = false,
+            None)
+        },
+        errorClass = "CANNOT_LOAD_FUNCTION_CLASS",
+        parameters = Map(
+          "className" -> "function_class_cannot_load",
+          "functionName" -> "`temp2`"
+        )
+      )
     }
   }
 

@@ -29,6 +29,7 @@ import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo
 import test.org.apache.spark.sql.MyDoubleAvg
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.ObjectHashAggregateExec
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -174,10 +175,10 @@ class HiveUDAFSuite extends QueryTest
         exception = intercept[AnalysisException] {
           sql(s"SELECT $functionName(100)")
         },
-        errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+        errorClass = "WRONG_NUM_ARGS",
         parameters = Map(
           "sqlExpr" -> "longProductSum(100)",
-          "functionName" -> "longProductSum",
+          "functionName" -> toSQLId("longProductSum"),
           "expectedNum" -> "2",
           "actualNum" -> "1"),
         context = ExpectedContext(

@@ -137,11 +137,22 @@ object ScanOperation extends OperationHelper {
     val alwaysInline = SQLConf.get.getConf(SQLConf.COLLAPSE_PROJECT_ALWAYS_INLINE)
     val (fields, filters, child, _) = collectProjectsAndFilters(plan, alwaysInline)
     // `collectProjectsAndFilters` transforms the plan bottom-up, so the bottom-most filter are
-    // placed at the beginning of `filters` list. According to the SQL semantic, we can only
-    // push down the bottom deterministic filters.
-    val filtersCanPushDown = filters.takeWhile(_.deterministic).flatMap(splitConjunctivePredicates)
-    val filtersStayUp = filters.dropWhile(_.deterministic)
-    Some((fields.getOrElse(child.output), filtersStayUp, filtersCanPushDown, child))
+    // placed at the beginning of `filters` list. According to the SQL semantic, we cannot merge
+    // Filters if one or more of them are nondeterministic. This means we can only push down the
+    // bottom-most Filter, or more following deterministic Filters if the bottom-most Filter is
+    // also deterministic.
+    if (filters.isEmpty) {
+      Some((fields.getOrElse(child.output), Nil, Nil, child))
+    } else if (filters.head.deterministic) {
+      val filtersCanPushDown = filters.takeWhile(_.deterministic)
+        .flatMap(splitConjunctivePredicates)
+      val filtersStayUp = filters.dropWhile(_.deterministic)
+      Some((fields.getOrElse(child.output), filtersStayUp, filtersCanPushDown, child))
+    } else {
+      val filtersCanPushDown = splitConjunctivePredicates(filters.head)
+      val filtersStayUp = filters.drop(1)
+      Some((fields.getOrElse(child.output), filtersStayUp, filtersCanPushDown, child))
+    }
   }
 }
 

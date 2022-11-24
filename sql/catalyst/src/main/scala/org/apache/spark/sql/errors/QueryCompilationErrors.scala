@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkThrowableHelper
+import org.apache.spark.{SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, Star, TableAlreadyExistsException, UnresolvedRegex}
@@ -637,17 +637,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def invalidFunctionArgumentsError(
-      sqlExpr: Seq[Expression],
-      name: String,
-      expectedInfo: String,
-      actualNumber: Int): Throwable = {
+      sqlExpr: Seq[Expression], name: String, expectedNum: String, actualNum: Int): Throwable = {
     new AnalysisException(
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+      errorClass = "WRONG_NUM_ARGS",
       messageParameters = Map(
         "sqlExpr" -> sqlExpr.map(toPrettySQL(_)).mkString(","),
-        "functionName" -> name,
-        "expectedNum" -> expectedInfo,
-        "actualNum" -> actualNumber.toString))
+        "functionName" -> toSQLId(name),
+        "expectedNum" -> expectedNum,
+        "actualNum" -> actualNum.toString))
   }
 
   def invalidFunctionArgumentNumberError(
@@ -663,8 +660,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       val expectedNumberOfParameters = if (validParametersCount.length == 1) {
         validParametersCount.head.toString
       } else {
-        validParametersCount.init.mkString("one of ", ", ", " and ") +
-          validParametersCount.last
+        validParametersCount.mkString("[", ", ", "]")
       }
       invalidFunctionArgumentsError(sqlExpr, name, expectedNumberOfParameters, actualNumber)
     }
@@ -906,10 +902,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def cannotLoadClassWhenRegisteringFunctionError(
       className: String, func: FunctionIdentifier): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1078",
+      errorClass = "CANNOT_LOAD_FUNCTION_CLASS",
       messageParameters = Map(
         "className" -> className,
-        "func" -> func.toString))
+        "functionName" -> toSQLId(func.toString)))
   }
 
   def resourceTypeNotSupportedError(resourceType: String): Throwable = {
@@ -1385,7 +1381,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def dataPathNotExistError(path: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1130",
+      errorClass = "PATH_NOT_FOUND",
       messageParameters = Map("path" -> path))
   }
 
@@ -1841,6 +1837,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "n" -> numMatches.toString))
   }
 
+  def ambiguousReferenceError(name: String, ambiguousReferences: Seq[Attribute]): Throwable = {
+    new AnalysisException(
+      errorClass = "AMBIGUOUS_REFERENCE",
+      messageParameters = Map(
+        "name" -> toSQLId(name),
+        "referenceNames" ->
+          ambiguousReferences.map(ar => toSQLId(ar.qualifiedName)).sorted.mkString("[", ", ", "]")))
+  }
+
   def cannotUseIntervalTypeInTableSchemaError(): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1183",
@@ -2141,17 +2146,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def escapeCharacterInTheMiddleError(pattern: String, char: String): Throwable = {
     new AnalysisException(
-      errorClass = "INVALID_LIKE_PATTERN.ESC_IN_THE_MIDDLE",
+      errorClass = "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
       messageParameters = Map(
-        "pattern" -> toSQLValue(pattern, StringType),
+        "format" -> toSQLValue(pattern, StringType),
         "char" -> toSQLValue(char, StringType)))
   }
 
   def escapeCharacterAtTheEndError(pattern: String): Throwable = {
     new AnalysisException(
-      errorClass = "INVALID_LIKE_PATTERN.ESC_AT_THE_END",
-      messageParameters = Map(
-        "pattern" -> toSQLValue(pattern, StringType)))
+      errorClass = "INVALID_FORMAT.ESC_AT_THE_END",
+      messageParameters = Map("format" -> toSQLValue(pattern, StringType)))
   }
 
   def tableIdentifierExistsError(tableIdentifier: TableIdentifier): Throwable = {
@@ -2280,12 +2284,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "tableName" -> tableName))
   }
 
-  def foundDuplicateColumnError(colType: String, duplicateCol: Seq[String]): Throwable = {
+  def columnAlreadyExistsError(columnName: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1233",
-      messageParameters = Map(
-        "colType" -> colType,
-        "duplicateCol" -> duplicateCol.sorted.mkString(", ")))
+      errorClass = "COLUMN_ALREADY_EXISTS",
+      messageParameters = Map("columnName" -> toSQLId(columnName)))
   }
 
   def noSuchTableError(db: String, table: String): Throwable = {
@@ -3390,5 +3392,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map(
         "unsupported" -> unsupported.toString,
         "class" -> unsupported.getClass.toString))
+  }
+
+  def funcBuildError(funcName: String, cause: Exception): Throwable = {
+    cause.getCause match {
+      case st: SparkThrowable with Throwable => st
+      case other =>
+        new AnalysisException(
+          errorClass = "FAILED_FUNCTION_CALL",
+          messageParameters = Map("funcName" -> toSQLId(funcName)),
+          cause = Option(other))
+    }
   }
 }

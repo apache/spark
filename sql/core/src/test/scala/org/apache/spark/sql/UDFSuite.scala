@@ -29,6 +29,7 @@ import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, OuterScopes}
 import org.apache.spark.sql.catalyst.expressions.{Literal, ScalaUDF}
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.{QueryExecution, SimpleMode}
@@ -104,12 +105,13 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.selectExpr("substr('abcd', 2, 3, 4)")
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+      errorClass = "WRONG_NUM_ARGS",
       parameters = Map(
         "sqlExpr" -> "abcd,2,3,4",
-        "functionName" -> "substr",
-        "expectedNum" -> "one of 2 and 3",
-        "actualNum" -> "4"),
+        "functionName" -> toSQLId("substr"),
+        "expectedNum" -> "[2, 3]",
+        "actualNum" -> "4"
+      ),
       context = ExpectedContext(
         fragment = "substr('abcd', 2, 3, 4)",
         start = 0,
@@ -124,12 +126,13 @@ class UDFSuite extends QueryTest with SharedSparkSession {
         spark.udf.register("foo", (_: String).length)
         df.selectExpr("foo(2, 3, 4)")
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+      errorClass = "WRONG_NUM_ARGS",
       parameters = Map(
         "sqlExpr" -> "2,3,4",
-        "functionName" -> "foo",
+        "functionName" -> toSQLId("foo"),
         "expectedNum" -> "1",
-        "actualNum" -> "3"),
+        "actualNum" -> "3"
+      ),
       context = ExpectedContext(
         fragment = "foo(2, 3, 4)",
         start = 0,

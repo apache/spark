@@ -2631,17 +2631,21 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
   test("RuntimeReplaceable functions should not take extra parameters") {
     checkError(
-      exception = intercept[AnalysisException](sql("SELECT nvl(1, 2, 3)")),
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+      exception = intercept[AnalysisException] {
+        sql("SELECT nvl(1, 2, 3)")
+      },
+      errorClass = "WRONG_NUM_ARGS",
       parameters = Map(
         "sqlExpr" -> "1,2,3",
-        "functionName" -> "nvl",
+        "functionName" -> toSQLId("nvl"),
         "expectedNum" -> "2",
-        "actualNum" -> "3"),
+        "actualNum" -> "3"
+      ),
       context = ExpectedContext(
-        fragment = "nvl(1, 2, 3)",
         start = 7,
-        stop = 18)
+        stop = 18,
+        fragment = "nvl(1, 2, 3)"
+      )
     )
   }
 
@@ -3725,9 +3729,9 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         exception = intercept[AnalysisException] {
           sql("SELECT s LIKE 'm%@ca' ESCAPE '%' FROM df").collect()
         },
-        errorClass = "INVALID_LIKE_PATTERN.ESC_IN_THE_MIDDLE",
+        errorClass = "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
         parameters = Map(
-          "pattern" -> toSQLValue("m%@ca", StringType),
+          "format" -> toSQLValue("m%@ca", StringType),
           "char" -> toSQLValue("@", StringType)))
 
       checkAnswer(sql("SELECT s LIKE 'm@@ca' ESCAPE '@' FROM df"), Row(true))
@@ -3742,8 +3746,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         exception = intercept[AnalysisException] {
           sql("SELECT a LIKE 'jialiuping%' ESCAPE '%' FROM df").collect()
         },
-        errorClass = "INVALID_LIKE_PATTERN.ESC_AT_THE_END",
-        parameters = Map("pattern" -> toSQLValue("jialiuping%", StringType)))
+        errorClass = "INVALID_FORMAT.ESC_AT_THE_END",
+        parameters = Map("format" -> toSQLValue("jialiuping%", StringType)))
     }
   }
 
@@ -3838,10 +3842,16 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           s"default.$functionName" -> false,
           functionName -> true) {
           // create temporary function without class
-          val e = intercept[AnalysisException] {
-            sql(s"CREATE TEMPORARY FUNCTION $functionName AS '$sumFuncClass'")
-          }.getMessage
-          assert(e.contains("Can not load class 'org.apache.spark.examples.sql.Spark33084"))
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"CREATE TEMPORARY FUNCTION $functionName AS '$sumFuncClass'")
+            },
+            errorClass = "CANNOT_LOAD_FUNCTION_CLASS",
+            parameters = Map(
+              "className" -> "org.apache.spark.examples.sql.Spark33084",
+              "functionName" -> "`test_udf`"
+            )
+          )
           sql("ADD JAR ivy://org.apache.spark:SPARK-33084:1.0")
           sql(s"CREATE TEMPORARY FUNCTION $functionName AS '$sumFuncClass'")
           // create a view using a function in 'default' database
