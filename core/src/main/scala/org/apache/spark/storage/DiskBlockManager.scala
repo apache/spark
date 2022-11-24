@@ -91,10 +91,6 @@ private[spark] class DiskBlockManager(
   // This method should be kept in sync with
   // org.apache.spark.network.shuffle.ExecutorDiskUtils#getFilePath().
   def getFile(filename: String): File = {
-    getFile(filename, true)
-  }
-
-  def getFile(filename: String, needCreate: Boolean = true): File = {
     // Figure out which local directory it hashes to, and which subdirectory in that
     val hash = Utils.nonNegativeHash(filename)
     val dirId = hash % localDirs.length
@@ -107,7 +103,7 @@ private[spark] class DiskBlockManager(
         old
       } else {
         val newDir = new File(localDirs(dirId), "%02x".format(subDirId))
-        if (!newDir.exists() && needCreate) {
+        if (!newDir.exists()) {
           val path = newDir.toPath
           Files.createDirectory(path)
           if (permissionChangingRequired) {
@@ -119,9 +115,7 @@ private[spark] class DiskBlockManager(
             Files.setPosixFilePermissions(path, currentPerms)
           }
         }
-        if (newDir.exists()) {
-          subDirs(dirId)(subDirId) = newDir
-        }
+        subDirs(dirId)(subDirId) = newDir
         newDir
       }
     }
