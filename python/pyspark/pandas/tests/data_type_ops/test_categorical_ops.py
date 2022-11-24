@@ -225,8 +225,6 @@ class CategoricalOpsTest(OpsTestBase):
             psdf["this_ordered_numeric_cat"],
         )
         self.assert_eq(ordered_pser == 1, ordered_psser == 1)
-        self.assert_eq(pser == pser, psser == psser)
-        self.assert_eq(ordered_pser == ordered_pser, ordered_psser == ordered_psser)
 
         pser, psser = pdf["this_string_cat"], psdf["this_string_cat"]
         ordered_pser, ordered_psser = (
@@ -234,8 +232,6 @@ class CategoricalOpsTest(OpsTestBase):
             psdf["this_ordered_string_cat"],
         )
         self.assert_eq(pser == "x", psser == "x")
-        self.assert_eq(pser == pser, psser == psser)
-        self.assert_eq(ordered_pser == ordered_pser, ordered_psser == ordered_psser)
 
         self.assertRaisesRegex(
             TypeError,
@@ -295,8 +291,6 @@ class CategoricalOpsTest(OpsTestBase):
             psdf["this_ordered_numeric_cat"],
         )
         self.assert_eq(ordered_pser != 1, ordered_psser != 1)
-        self.assert_eq(pser != pser, psser != psser)
-        self.assert_eq(ordered_pser != ordered_pser, ordered_psser != ordered_psser)
 
         pser, psser = pdf["this_string_cat"], psdf["this_string_cat"]
         ordered_pser, ordered_psser = (
@@ -304,8 +298,6 @@ class CategoricalOpsTest(OpsTestBase):
             psdf["this_ordered_string_cat"],
         )
         self.assert_eq(pser != "x", psser != "x")
-        self.assert_eq(pser != pser, psser != psser)
-        self.assert_eq(ordered_pser != ordered_pser, ordered_psser != ordered_psser)
 
         self.assertRaisesRegex(
             TypeError,
@@ -354,14 +346,12 @@ class CategoricalOpsTest(OpsTestBase):
             psdf["this_ordered_numeric_cat"],
         )
         self.assert_eq(ordered_pser < 1, ordered_psser < 1)
-        self.assert_eq(ordered_pser < ordered_pser, ordered_psser < ordered_psser)
 
         ordered_pser, ordered_psser = (
             pdf["this_ordered_string_cat"],
             psdf["this_ordered_string_cat"],
         )
         self.assert_eq(ordered_pser < "x", ordered_psser < "x")
-        self.assert_eq(ordered_pser < ordered_pser, ordered_psser < ordered_psser)
 
         self.assertRaisesRegex(
             TypeError,
@@ -404,14 +394,13 @@ class CategoricalOpsTest(OpsTestBase):
             psdf["this_ordered_numeric_cat"],
         )
         self.assert_eq(ordered_pser <= 1, ordered_psser <= 1)
-        self.assert_eq(ordered_pser <= ordered_pser, ordered_psser <= ordered_psser)
 
         ordered_pser, ordered_psser = (
             pdf["this_ordered_string_cat"],
             psdf["this_ordered_string_cat"],
         )
         self.assert_eq(ordered_pser <= "x", ordered_psser <= "x")
-        self.assert_eq(ordered_pser <= ordered_pser, ordered_psser <= ordered_psser)
+
         self.assertRaisesRegex(
             TypeError,
             "Unordered Categoricals can only compare equality or not",
@@ -453,14 +442,13 @@ class CategoricalOpsTest(OpsTestBase):
             psdf["this_ordered_numeric_cat"],
         )
         self.assert_eq(ordered_pser > 1, ordered_psser > 1)
-        self.assert_eq(ordered_pser > ordered_pser, ordered_psser > ordered_psser)
 
         ordered_pser, ordered_psser = (
             pdf["this_ordered_string_cat"],
             psdf["this_ordered_string_cat"],
         )
         self.assert_eq(ordered_pser > "x", ordered_psser > "x")
-        self.assert_eq(ordered_pser > ordered_pser, ordered_psser > ordered_psser)
+
         self.assertRaisesRegex(
             TypeError,
             "Unordered Categoricals can only compare equality or not",
@@ -502,14 +490,13 @@ class CategoricalOpsTest(OpsTestBase):
             psdf["this_ordered_numeric_cat"],
         )
         self.assert_eq(ordered_pser >= 1, ordered_psser >= 1)
-        self.assert_eq(ordered_pser >= ordered_pser, ordered_psser >= ordered_psser)
 
         ordered_pser, ordered_psser = (
             pdf["this_ordered_string_cat"],
             psdf["this_ordered_string_cat"],
         )
         self.assert_eq(ordered_pser >= "x", ordered_psser >= "x")
-        self.assert_eq(ordered_pser >= ordered_pser, ordered_psser >= ordered_psser)
+
         self.assertRaisesRegex(
             TypeError,
             "Unordered Categoricals can only compare equality or not",

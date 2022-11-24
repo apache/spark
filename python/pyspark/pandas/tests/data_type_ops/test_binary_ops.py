@@ -133,7 +133,6 @@ class BinaryOpsTest(OpsTestBase):
     def test_and(self):
         self.assertRaises(TypeError, lambda: self.psser & True)
         self.assertRaises(TypeError, lambda: self.psser & False)
-        self.assertRaises(TypeError, lambda: self.psser & self.psser)
 
     def test_rand(self):
         self.assertRaises(TypeError, lambda: True & self.psser)
@@ -142,7 +141,6 @@ class BinaryOpsTest(OpsTestBase):
     def test_or(self):
         self.assertRaises(TypeError, lambda: self.psser | True)
         self.assertRaises(TypeError, lambda: self.psser | False)
-        self.assertRaises(TypeError, lambda: self.psser | self.psser)
 
     def test_ror(self):
         self.assertRaises(TypeError, lambda: True | self.psser)
@@ -179,32 +177,26 @@ class BinaryOpsTest(OpsTestBase):
     def test_eq(self):
         byte_pdf, byte_psdf = self.byte_pdf, self.byte_psdf
         self.assert_eq(byte_pdf["this"] == byte_pdf["that"], byte_psdf["this"] == byte_psdf["that"])
-        self.assert_eq(byte_pdf["this"] == byte_pdf["this"], byte_psdf["this"] == byte_psdf["this"])
 
     def test_ne(self):
         byte_pdf, byte_psdf = self.byte_pdf, self.byte_psdf
         self.assert_eq(byte_pdf["this"] != byte_pdf["that"], byte_psdf["this"] != byte_psdf["that"])
-        self.assert_eq(byte_pdf["this"] != byte_pdf["this"], byte_psdf["this"] != byte_psdf["this"])
 
     def test_lt(self):
         byte_pdf, byte_psdf = self.byte_pdf, self.byte_psdf
         self.assert_eq(byte_pdf["this"] < byte_pdf["that"], byte_psdf["this"] < byte_psdf["that"])
-        self.assert_eq(byte_pdf["this"] < byte_pdf["this"], byte_psdf["this"] < byte_psdf["this"])
 
     def test_le(self):
         byte_pdf, byte_psdf = self.byte_pdf, self.byte_psdf
         self.assert_eq(byte_pdf["this"] <= byte_pdf["that"], byte_psdf["this"] <= byte_psdf["that"])
-        self.assert_eq(byte_pdf["this"] <= byte_pdf["this"], byte_psdf["this"] <= byte_psdf["this"])
 
     def test_gt(self):
         byte_pdf, byte_psdf = self.byte_pdf, self.byte_psdf
         self.assert_eq(byte_pdf["this"] > byte_pdf["that"], byte_psdf["this"] > byte_psdf["that"])
-        self.assert_eq(byte_pdf["this"] > byte_pdf["this"], byte_psdf["this"] > byte_psdf["this"])
 
     def test_ge(self):
         byte_pdf, byte_psdf = self.byte_pdf, self.byte_psdf
         self.assert_eq(byte_pdf["this"] >= byte_pdf["that"], byte_psdf["this"] >= byte_psdf["that"])
-        self.assert_eq(byte_pdf["this"] >= byte_pdf["this"], byte_psdf["this"] >= byte_psdf["this"])
 
 
 if __name__ == "__main__":
