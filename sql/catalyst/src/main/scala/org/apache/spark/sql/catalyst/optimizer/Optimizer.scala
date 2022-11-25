@@ -146,7 +146,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
         operatorOptimizationRuleSet: _*) ::
       Batch("Push extra predicate through join", fixedPoint,
         PushExtraPredicateThroughJoin,
-        PushDownPredicates) :: Nil
+        PushDownPredicates) ::
+      Batch("Insert window group limit", fixedPoint,
+        InsertWindowGroupLimit) :: Nil
     }
 
     val batches = (
