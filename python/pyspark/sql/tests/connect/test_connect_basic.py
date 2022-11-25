@@ -30,7 +30,8 @@ from pyspark.sql import SparkSession, Row
 from pyspark.sql.types import StructType, StructField, LongType, StringType
 
 if have_pandas:
-    from pyspark.sql.connect.session import SparkSession as RemoteSparkSession, ChannelBuilder
+    from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
+    from pyspark.sql.connect.client import ChannelBuilder
     from pyspark.sql.connect.function_builder import udf
     from pyspark.sql.connect.functions import lit, col
 from pyspark.sql.dataframe import DataFrame

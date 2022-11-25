@@ -794,8 +794,8 @@ class DataFrame(object):
             raise Exception("Cannot collect on empty plan.")
         if self._session is None:
             raise Exception("Cannot collect on empty session.")
-        query = self._plan.to_proto(self._session)
-        return self._session._to_pandas(query)
+        query = self._plan.to_proto(self._session.client)
+        return self._session.client._to_pandas(query)
 
     @property
     def schema(self) -> StructType:
@@ -809,10 +809,10 @@ class DataFrame(object):
         """
         if self._schema is None:
             if self._plan is not None:
-                query = self._plan.to_proto(self._session)
+                query = self._plan.to_proto(self._session.client)
                 if self._session is None:
                     raise Exception("Cannot analyze without SparkSession.")
-                self._schema = self._session.schema(query)
+                self._schema = self._session.client.schema(query)
                 return self._schema
             else:
                 raise Exception("Empty plan.")
@@ -932,10 +932,10 @@ class DataFrame(object):
             explain_mode = cast(str, extended)
 
         if self._plan is not None:
-            query = self._plan.to_proto(self._session)
+            query = self._plan.to_proto(self._session.client)
             if self._session is None:
                 raise Exception("Cannot analyze without SparkSession.")
-            return self._session.explain_string(query, explain_mode)
+            return self._session.client.explain_string(query, explain_mode)
         else:
             return ""
 
@@ -953,8 +953,8 @@ class DataFrame(object):
         """
         command = plan.CreateView(
             child=self._plan, name=name, is_global=True, replace=False
-        ).command(session=self._session)
-        self._session.execute_command(command)
+        ).command(session=self._session.client)
+        self._session.client.execute_command(command)
 
     def createOrReplaceGlobalTempView(self, name: str) -> None:
         """Creates or replaces a global temporary view using the given name.
@@ -970,8 +970,8 @@ class DataFrame(object):
         """
         command = plan.CreateView(
             child=self._plan, name=name, is_global=True, replace=True
-        ).command(session=self._session)
-        self._session.execute_command(command)
+        ).command(session=self._session.client)
+        self._session.client.execute_command(command)
 
     def rdd(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("RDD Support for Spark Connect is not implemented.")
