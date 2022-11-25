@@ -46,7 +46,7 @@ from pyspark.sql.types import (
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName, ExpressionOrString, LiteralType
-    from pyspark.sql.connect.client import RemoteSparkSession
+    from pyspark.sql.connect.session import SparkSession
 
 
 class GroupedData(object):
@@ -97,20 +97,20 @@ class DataFrame(object):
 
     def __init__(
         self,
-        session: "RemoteSparkSession",
+        session: "SparkSession",
         data: Optional[List[Any]] = None,
         schema: Optional[StructType] = None,
     ):
         """Creates a new data frame"""
         self._schema = schema
         self._plan: Optional[plan.LogicalPlan] = None
-        self._session: "RemoteSparkSession" = session
+        self._session: "SparkSession" = session
 
     def __repr__(self) -> str:
         return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
 
     @classmethod
-    def withPlan(cls, plan: plan.LogicalPlan, session: "RemoteSparkSession") -> "DataFrame":
+    def withPlan(cls, plan: plan.LogicalPlan, session: "SparkSession") -> "DataFrame":
         """Main initialization method used to construct a new data frame with a child plan."""
         new_frame = DataFrame(session=session)
         new_frame._plan = plan
@@ -197,14 +197,14 @@ class DataFrame(object):
 
         return self.schema.names
 
-    def sparkSession(self) -> "RemoteSparkSession":
+    def sparkSession(self) -> "SparkSession":
         """Returns Spark session that created this :class:`DataFrame`.
 
         .. versionadded:: 3.4.0
 
         Returns
         -------
-        :class:`RemoteSparkSession`
+        :class:`SparkSession`
         """
         return self._session
 
@@ -796,8 +796,8 @@ class DataFrame(object):
             raise Exception("Cannot collect on empty plan.")
         if self._session is None:
             raise Exception("Cannot collect on empty session.")
-        query = self._plan.to_proto(self._session)
-        return self._session._to_pandas(query)
+        query = self._plan.to_proto(self._session.client)
+        return self._session.client._to_pandas(query)
 
     @property
     def schema(self) -> StructType:
@@ -811,10 +811,10 @@ class DataFrame(object):
         """
         if self._schema is None:
             if self._plan is not None:
-                query = self._plan.to_proto(self._session)
+                query = self._plan.to_proto(self._session.client)
                 if self._session is None:
-                    raise Exception("Cannot analyze without RemoteSparkSession.")
-                self._schema = self._session.schema(query)
+                    raise Exception("Cannot analyze without SparkSession.")
+                self._schema = self._session.client.schema(query)
                 return self._schema
             else:
                 raise Exception("Empty plan.")
@@ -834,8 +834,8 @@ class DataFrame(object):
         """
         if self._plan is None:
             raise Exception("Cannot analyze on empty plan.")
-        query = self._plan.to_proto(self._session)
-        return self._session._analyze(query).is_local
+        query = self._plan.to_proto(self._session.client)
+        return self._session.client._analyze(query).is_local
 
     @property
     def isStreaming(self) -> bool:
@@ -859,14 +859,14 @@ class DataFrame(object):
         """
         if self._plan is None:
             raise Exception("Cannot analyze on empty plan.")
-        query = self._plan.to_proto(self._session)
-        return self._session._analyze(query).is_streaming
+        query = self._plan.to_proto(self._session.client)
+        return self._session.client._analyze(query).is_streaming
 
     def _tree_string(self) -> str:
         if self._plan is None:
             raise Exception("Cannot analyze on empty plan.")
-        query = self._plan.to_proto(self._session)
-        return self._session._analyze(query).tree_string
+        query = self._plan.to_proto(self._session.client)
+        return self._session.client._analyze(query).tree_string
 
     def printSchema(self) -> None:
         """Prints out the schema in the tree format.
@@ -895,8 +895,8 @@ class DataFrame(object):
         """
         if self._plan is None:
             raise Exception("Cannot analyze on empty plan.")
-        query = self._plan.to_proto(self._session)
-        return self._session._analyze(query).input_files
+        query = self._plan.to_proto(self._session.client)
+        return self._session.client._analyze(query).input_files
 
     def transform(self, func: Callable[..., "DataFrame"], *args: Any, **kwargs: Any) -> "DataFrame":
         """Returns a new :class:`DataFrame`. Concise syntax for chaining custom transformations.
@@ -1011,10 +1011,10 @@ class DataFrame(object):
             explain_mode = cast(str, extended)
 
         if self._plan is not None:
-            query = self._plan.to_proto(self._session)
+            query = self._plan.to_proto(self._session.client)
             if self._session is None:
-                raise Exception("Cannot analyze without RemoteSparkSession.")
-            return self._session.explain_string(query, explain_mode)
+                raise Exception("Cannot analyze without SparkSession.")
+            return self._session.client.explain_string(query, explain_mode)
         else:
             return ""
 
@@ -1032,8 +1032,8 @@ class DataFrame(object):
         """
         command = plan.CreateView(
             child=self._plan, name=name, is_global=True, replace=False
-        ).command(session=self._session)
-        self._session.execute_command(command)
+        ).command(session=self._session.client)
+        self._session.client.execute_command(command)
 
     def createOrReplaceGlobalTempView(self, name: str) -> None:
         """Creates or replaces a global temporary view using the given name.
@@ -1049,8 +1049,8 @@ class DataFrame(object):
         """
         command = plan.CreateView(
             child=self._plan, name=name, is_global=True, replace=True
-        ).command(session=self._session)
-        self._session.execute_command(command)
+        ).command(session=self._session.client)
+        self._session.client.execute_command(command)
 
     def rdd(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("RDD Support for Spark Connect is not implemented.")
