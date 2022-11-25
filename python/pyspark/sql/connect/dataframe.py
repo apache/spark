@@ -104,7 +104,6 @@ class DataFrame(object):
         """Creates a new data frame"""
         self._schema = schema
         self._plan: Optional[plan.LogicalPlan] = None
-        self._cache: Dict[str, Any] = {}
         self._session: "RemoteSparkSession" = session
 
     def __repr__(self) -> str:
@@ -821,6 +820,83 @@ class DataFrame(object):
                 raise Exception("Empty plan.")
         else:
             return self._schema
+
+    @property
+    def isLocal(self) -> bool:
+        """Returns ``True`` if the :func:`collect` and :func:`take` methods can be run locally
+        (without any Spark executors).
+
+        .. versionadded:: 3.4.0
+
+        Returns
+        -------
+        bool
+        """
+        if self._plan is None:
+            raise Exception("Cannot analyze on empty plan.")
+        query = self._plan.to_proto(self._session)
+        return self._session._analyze(query).is_local
+
+    @property
+    def isStreaming(self) -> bool:
+        """Returns ``True`` if this :class:`DataFrame` contains one or more sources that
+        continuously return data as it arrives. A :class:`DataFrame` that reads data from a
+        streaming source must be executed as a :class:`StreamingQuery` using the :func:`start`
+        method in :class:`DataStreamWriter`.  Methods that return a single answer, (e.g.,
+        :func:`count` or :func:`collect`) will throw an :class:`AnalysisException` when there
+        is a streaming source present.
+
+        .. versionadded:: 3.4.0
+
+        Notes
+        -----
+        This API is evolving.
+
+        Returns
+        -------
+        bool
+            Whether it's streaming DataFrame or not.
+        """
+        if self._plan is None:
+            raise Exception("Cannot analyze on empty plan.")
+        query = self._plan.to_proto(self._session)
+        return self._session._analyze(query).is_streaming
+
+    def _tree_string(self) -> str:
+        if self._plan is None:
+            raise Exception("Cannot analyze on empty plan.")
+        query = self._plan.to_proto(self._session)
+        return self._session._analyze(query).tree_string
+
+    def printSchema(self) -> None:
+        """Prints out the schema in the tree format.
+
+        .. versionadded:: 3.4.0
+
+        Returns
+        -------
+        None
+        """
+        print(self._tree_string())
+
+    def inputFiles(self) -> List[str]:
+        """
+        Returns a best-effort snapshot of the files that compose this :class:`DataFrame`.
+        This method simply asks each constituent BaseRelation for its respective files and
+        takes the union of all results. Depending on the source relations, this may not find
+        all input files. Duplicates are removed.
+
+        .. versionadded:: 3.4.0
+
+        Returns
+        -------
+        list
+            List of file paths.
+        """
+        if self._plan is None:
+            raise Exception("Cannot analyze on empty plan.")
+        query = self._plan.to_proto(self._session)
+        return self._session._analyze(query).input_files
 
     def transform(self, func: Callable[..., "DataFrame"], *args: Any, **kwargs: Any) -> "DataFrame":
         """Returns a new :class:`DataFrame`. Concise syntax for chaining custom transformations.

@@ -266,13 +266,32 @@ class PlanMetrics:
 
 
 class AnalyzeResult:
-    def __init__(self, schema: pb2.DataType, explain: str):
+    def __init__(
+        self,
+        schema: pb2.DataType,
+        explain: str,
+        tree_string: str,
+        is_local: bool,
+        is_streaming: bool,
+        input_files: List[str],
+    ):
         self.schema = schema
         self.explain_string = explain
+        self.tree_string = tree_string
+        self.is_local = is_local
+        self.is_streaming = is_streaming
+        self.input_files = input_files
 
     @classmethod
     def fromProto(cls, pb: Any) -> "AnalyzeResult":
-        return AnalyzeResult(pb.schema, pb.explain_string)
+        return AnalyzeResult(
+            pb.schema,
+            pb.explain_string,
+            pb.tree_string,
+            pb.is_local,
+            pb.is_streaming,
+            pb.input_files,
+        )
 
 
 class RemoteSparkSession(object):
