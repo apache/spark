@@ -118,7 +118,10 @@
     <log4j.version>2.19.0</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
     <hadoop.version>3.3.4</hadoop.version>
-    <protobuf.version>2.5.0</protobuf.version>
+    <!-- Protobuf version for building with Hadoop/Yarn dependencies -->
+    <protobuf.hadoopDependency.version>2.5.0</protobuf.hadoopDependency.version>
+    <!-- Actual Protobuf version in Spark modules like Spark Connect, protobuf connector, etc. -->
+    <protobuf.version>3.21.9</protobuf.version>
     <yarn.version>${hadoop.version}</yarn.version>
     <zookeeper.version>3.6.3</zookeeper.version>
     <curator.version>2.13.0</curator.version>
@@ -212,7 +215,7 @@
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
     -->
-    <arrow.version>10.0.0</arrow.version>
+    <arrow.version>10.0.1</arrow.version>
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
     <kubernetes-client.version>6.2.0</kubernetes-client.version>
@@ -820,7 +823,7 @@
       <dependency>
         <groupId>com.google.protobuf</groupId>
         <artifactId>protobuf-java</artifactId>
-        <version>${protobuf.version}</version>
+        <version>${protobuf.hadoopDependency.version}</version>
         <scope>${hadoop.deps.scope}</scope>
       </dependency>
       <dependency>
@@ -1206,7 +1209,7 @@
       <dependency>
         <groupId>org.postgresql</groupId>
         <artifactId>postgresql</artifactId>
-        <version>42.5.0</version>
+        <version>42.5.1</version>
         <scope>test</scope>
       </dependency>
       <dependency>

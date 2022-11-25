@@ -395,16 +395,31 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       df2.selectExpr("to_json(a, map('timestampFormat', 'dd/MM/yyyy HH:mm'))"),
       Row("""{"_1":"26/08/2015 18:00"}""") :: Nil)
 
-    val errMsg1 = intercept[AnalysisException] {
-      df2.selectExpr("to_json(a, named_struct('a', 1))")
-    }
-    assert(errMsg1.getMessage.startsWith("Must use a map() function for options"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df2.selectExpr("to_json(a, named_struct('a', 1))")
+      },
+      errorClass = "INVALID_OPTIONS.NON_MAP_FUNCTION",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "to_json(a, named_struct('a', 1))",
+        start = 0,
+        stop = 31
+      )
+    )
 
-    val errMsg2 = intercept[AnalysisException] {
-      df2.selectExpr("to_json(a, map('a', 1))")
-    }
-    assert(errMsg2.getMessage.startsWith(
-      "A type of keys and values in map() must be string, but got"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df2.selectExpr("to_json(a, map('a', 1))")
+      },
+      errorClass = "INVALID_OPTIONS.NON_STRING_TYPE",
+      parameters = Map("mapType" -> "\"MAP<STRING, INT>\""),
+      context = ExpectedContext(
+        fragment = "to_json(a, map('a', 1))",
+        start = 0,
+        stop = 22
+      )
+    )
   }
 
   test("SPARK-19967 Support from_json in SQL") {
@@ -441,15 +456,30 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       df3.selectExpr("""from_json(value, 'time InvalidType')""")
     }
     assert(errMsg2.getMessage.contains("DataType invalidtype is not supported"))
-    val errMsg3 = intercept[AnalysisException] {
-      df3.selectExpr("from_json(value, 'time Timestamp', named_struct('a', 1))")
-    }
-    assert(errMsg3.getMessage.startsWith("Must use a map() function for options"))
-    val errMsg4 = intercept[AnalysisException] {
-      df3.selectExpr("from_json(value, 'time Timestamp', map('a', 1))")
-    }
-    assert(errMsg4.getMessage.startsWith(
-      "A type of keys and values in map() must be string, but got"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df3.selectExpr("from_json(value, 'time Timestamp', named_struct('a', 1))")
+      },
+      errorClass = "INVALID_OPTIONS.NON_MAP_FUNCTION",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "from_json(value, 'time Timestamp', named_struct('a', 1))",
+        start = 0,
+        stop = 55
+      )
+    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        df3.selectExpr("from_json(value, 'time Timestamp', map('a', 1))")
+      },
+      errorClass = "INVALID_OPTIONS.NON_STRING_TYPE",
+      parameters = Map("mapType" -> "\"MAP<STRING, INT>\""),
+      context = ExpectedContext(
+        fragment = "from_json(value, 'time Timestamp', map('a', 1))",
+        start = 0,
+        stop = 46
+      )
+    )
   }
 
   test("SPARK-24027: from_json - map<string, int>") {

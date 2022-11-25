@@ -735,6 +735,23 @@
       "The <joinType> JOIN with LATERAL correlation is not allowed because an OUTER subquery cannot correlate to its join partner. Remove the LATERAL correlation or use an INNER JOIN, or LEFT OUTER JOIN instead."
     ]
   },
+  "INVALID_OPTIONS" : {
+    "message" : [
+      "Invalid options:"
+    ],
+    "subClass" : {
+      "NON_MAP_FUNCTION" : {
+        "message" : [
+          "Must use the `map()` function for options."
+        ]
+      },
+      "NON_STRING_TYPE" : {
+        "message" : [
+          "A type of keys and values in `map()` must be string, but got <mapType>."
+        ]
+      }
+    }
+  },
   "INVALID_PANDAS_UDF_PLACEMENT" : {
     "message" : [
       "The group aggregate pandas UDF <functionList> cannot be invoked together with as other, non-pandas aggregate functions."
@@ -2188,16 +2205,6 @@
   "_LEGACY_ERROR_TEMP_1094" : {
     "message" : [
       "Schema should be struct type but got <dataType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1095" : {
-    "message" : [
-      "A type of keys and values in map() must be string, but got <map>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1096" : {
-    "message" : [
-      "Must use a map() function for options."
     ]
   },
   "_LEGACY_ERROR_TEMP_1097" : {
