@@ -667,6 +667,21 @@ class QueryCompilationErrorsSuite
       errorClass = "DATATYPE_MISMATCH.INVALID_JSON_SCHEMA",
       parameters = Map("schema" -> "\"INT\"", "sqlExpr" -> "\"from_json(a)\""))
   }
+
+  test("_LEGACY_ERROR_TEMP_1210: a boolean literal as isIgnoreNull") {
+    Seq("first", "last", "any_value").foreach { func =>
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SELECT $func(c1, c2) FROM VALUES (NULL, true), (5, true) AS tab(c1, c2)").collect()
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1210",
+        parameters = Map("funcName" -> s"$func"),
+        context = ExpectedContext(
+          fragment = s"$func(c1, c2)",
+          start = 7,
+          stop = 14 + func.length))
+    }
+  }
 }
 
 class MyCastToString extends SparkUserDefinedFunction(

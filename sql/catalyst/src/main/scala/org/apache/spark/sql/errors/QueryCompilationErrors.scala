@@ -3390,8 +3390,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "class" -> unsupported.getClass.toString))
   }
 
-  def funcBuildError(funcName: String, cause: Exception): Throwable = {
-    cause.getCause match {
+  def funcBuildError(funcName: String, e: Exception): Throwable = {
+    val cause = e.getCause match {
+      case e: java.lang.reflect.InvocationTargetException => e.getCause
+      case e => e
+    }
+    cause match {
       case st: SparkThrowable with Throwable => st
       case other =>
         new AnalysisException(
