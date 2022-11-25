@@ -32,6 +32,7 @@ from typing import (
 import pandas
 
 import pyspark.sql.connect.plan as plan
+from pyspark.sql.connect.writer import DataFrameWriter
 from pyspark.sql.connect.column import (
     Column,
     Expression,
@@ -108,6 +109,10 @@ class DataFrame(object):
 
     def __repr__(self) -> str:
         return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
+
+    @property
+    def write(self) -> "DataFrameWriter":
+        return DataFrameWriter(self._plan, self._session)
 
     @classmethod
     def withPlan(cls, plan: plan.LogicalPlan, session: "RemoteSparkSession") -> "DataFrame":

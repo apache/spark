@@ -16,17 +16,20 @@
 #
 
 
-from typing import Dict, Optional
+from typing import Dict, Optional, Union, List, Tuple
+from typing import TYPE_CHECKING
 
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.connect.plan import Read, DataSource
 from pyspark.sql.utils import to_str
 
-from typing import TYPE_CHECKING
-
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import OptionalPrimitiveType
     from pyspark.sql.connect.client import RemoteSparkSession
+
+
+PathOrPaths = Union[str, List[str]]
+TupleOrListOfString = Union[List[str], Tuple[str, ...]]
 
 
 class DataFrameReader:
