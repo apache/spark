@@ -353,7 +353,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case SetNamespaceLocation(ResolvedNamespace(catalog, ns), location) =>
       if (StringUtils.isEmpty(location)) {
-        throw QueryExecutionErrors.unsupportedEmptyLocationError()
+        throw QueryExecutionErrors.invalidEmptyLocationError(location)
       }
       AlterNamespaceSetPropertiesExec(
         catalog.asNamespaceCatalog,
@@ -369,7 +369,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case CreateNamespace(ResolvedNamespace(catalog, ns), ifNotExists, properties) =>
       val location = properties.get(SupportsNamespaces.PROP_LOCATION)
       if (location.isDefined && location.get.isEmpty) {
-        throw QueryExecutionErrors.unsupportedEmptyLocationError()
+        throw QueryExecutionErrors.invalidEmptyLocationError(location.get)
       }
       val finalProperties = properties.get(SupportsNamespaces.PROP_LOCATION).map { loc =>
         properties + (SupportsNamespaces.PROP_LOCATION -> makeQualifiedDBObjectPath(loc))

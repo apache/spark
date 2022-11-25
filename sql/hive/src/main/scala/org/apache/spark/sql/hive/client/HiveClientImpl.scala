@@ -22,7 +22,7 @@ import java.lang.{Iterable => JIterable}
 import java.lang.reflect.InvocationTargetException
 import java.net.URI
 import java.nio.charset.StandardCharsets.UTF_8
-import java.util.{Locale, Map => JMap}
+import java.util.{HashMap => JHashMap, Locale, Map => JMap}
 import java.util.concurrent.TimeUnit._
 
 import scala.collection.JavaConverters._
@@ -105,6 +105,10 @@ private[hive] class HiveClientImpl(
 
   private class RawHiveTableImpl(override val rawTable: HiveTable) extends RawHiveTable {
     override lazy val toCatalogTable = convertHiveTableToCatalogTable(rawTable)
+
+    override def hiveTableProps(): Map[String, String] = {
+      rawTable.getParameters.asScala.toMap
+    }
   }
 
   import HiveClientImpl._
@@ -609,6 +613,16 @@ private[hive] class HiveClientImpl(
     shim.alterTable(client, qualifiedTableName, hiveTable)
   }
 
+  override def alterTableProps(
+      rawHiveTable: RawHiveTable,
+      newProps: Map[String, String]): Unit = withHiveState {
+    val hiveTable = rawHiveTable.rawTable.asInstanceOf[HiveTable]
+    val newPropsMap = new JHashMap[String, String]()
+    newPropsMap.putAll(newProps.asJava)
+    hiveTable.getTTable.setParameters(newPropsMap)
+    shim.alterTable(client, s"${hiveTable.getDbName}.${hiveTable.getTableName}", hiveTable)
+  }
+
   override def alterTableDataSchema(
       dbName: String,
       tableName: String,
@@ -762,7 +776,7 @@ private[hive] class HiveClientImpl(
           assert(s.values.forall(_.nonEmpty), s"partition spec '$s' is invalid")
           shim.getPartitionNames(client, table.database, table.identifier.table, s.asJava, -1)
       }
-    hivePartitionNames.sorted.toSeq
+    hivePartitionNames.sorted
   }
 
   override def getPartitionOption(
@@ -798,7 +812,7 @@ private[hive] class HiveClientImpl(
     val parts = shim.getPartitions(client, hiveTable, partSpec.asJava)
       .map(fromHivePartition(_, absoluteUri))
     HiveCatalogMetrics.incrementFetchedPartitions(parts.length)
-    parts.toSeq
+    parts
   }
 
   override def getPartitionsByFilter(

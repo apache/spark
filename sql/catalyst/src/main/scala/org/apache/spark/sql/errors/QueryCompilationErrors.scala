@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkThrowableHelper
+import org.apache.spark.{SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, Star, TableAlreadyExistsException, UnresolvedRegex}
@@ -637,13 +637,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def invalidFunctionArgumentsError(
-      name: String, expectedInfo: String, actualNumber: Int): Throwable = {
+      name: String, expectedNum: String, actualNum: Int): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1042",
+      errorClass = "WRONG_NUM_ARGS",
       messageParameters = Map(
-        "name" -> name,
-        "expectedInfo" -> expectedInfo,
-        "actualNumber" -> actualNumber.toString))
+        "functionName" -> toSQLId(name),
+        "expectedNum" -> expectedNum,
+        "actualNum" -> actualNum.toString))
   }
 
   def invalidFunctionArgumentNumberError(
@@ -656,8 +656,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       val expectedNumberOfParameters = if (validParametersCount.length == 1) {
         validParametersCount.head.toString
       } else {
-        validParametersCount.init.mkString("one of ", ", ", " and ") +
-          validParametersCount.last
+        validParametersCount.mkString("[", ", ", "]")
       }
       invalidFunctionArgumentsError(name, expectedNumberOfParameters, actualNumber)
     }
@@ -996,8 +995,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def invalidSchemaStringError(exp: Expression): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1092",
-      messageParameters = Map("expr" -> exp.sql))
+      errorClass = "INVALID_SCHEMA",
+      messageParameters = Map("expr" -> toSQLExpr(exp)))
   }
 
   def schemaNotFoldableError(exp: Expression): Throwable = {
@@ -1014,13 +1013,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def keyValueInMapNotStringError(m: CreateMap): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1095",
-      messageParameters = Map("map" -> m.dataType.catalogString))
+      errorClass = "INVALID_OPTIONS.NON_STRING_TYPE",
+      messageParameters = Map("mapType" -> toSQLType(m.dataType)))
   }
 
   def nonMapFunctionNotAllowedError(): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1096",
+      errorClass = "INVALID_OPTIONS.NON_MAP_FUNCTION",
       messageParameters = Map.empty)
   }
 
@@ -1073,10 +1072,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def literalTypeUnsupportedForSourceTypeError(field: String, source: Expression): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1102",
+      errorClass = "INVALID_EXTRACT_FIELD",
       messageParameters = Map(
-        "field" -> field,
-        "srcDataType" -> source.dataType.catalogString))
+        "field" -> toSQLId(field),
+        "expr" -> toSQLExpr(source)))
   }
 
   def arrayComponentTypeUnsupportedError(clz: Class[_]): Throwable = {
@@ -1378,7 +1377,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def dataPathNotExistError(path: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1130",
+      errorClass = "PATH_NOT_FOUND",
       messageParameters = Map("path" -> path))
   }
 
@@ -2143,17 +2142,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def escapeCharacterInTheMiddleError(pattern: String, char: String): Throwable = {
     new AnalysisException(
-      errorClass = "INVALID_LIKE_PATTERN.ESC_IN_THE_MIDDLE",
+      errorClass = "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
       messageParameters = Map(
-        "pattern" -> toSQLValue(pattern, StringType),
+        "format" -> toSQLValue(pattern, StringType),
         "char" -> toSQLValue(char, StringType)))
   }
 
   def escapeCharacterAtTheEndError(pattern: String): Throwable = {
     new AnalysisException(
-      errorClass = "INVALID_LIKE_PATTERN.ESC_AT_THE_END",
-      messageParameters = Map(
-        "pattern" -> toSQLValue(pattern, StringType)))
+      errorClass = "INVALID_FORMAT.ESC_AT_THE_END",
+      messageParameters = Map("format" -> toSQLValue(pattern, StringType)))
   }
 
   def tableIdentifierExistsError(tableIdentifier: TableIdentifier): Throwable = {
@@ -2282,12 +2280,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "tableName" -> tableName))
   }
 
-  def foundDuplicateColumnError(colType: String, duplicateCol: Seq[String]): Throwable = {
+  def columnAlreadyExistsError(columnName: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1233",
-      messageParameters = Map(
-        "colType" -> colType,
-        "duplicateCol" -> duplicateCol.sorted.mkString(", ")))
+      errorClass = "COLUMN_ALREADY_EXISTS",
+      messageParameters = Map("columnName" -> toSQLId(columnName)))
   }
 
   def noSuchTableError(db: String, table: String): Throwable = {
@@ -3392,5 +3388,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map(
         "unsupported" -> unsupported.toString,
         "class" -> unsupported.getClass.toString))
+  }
+
+  def funcBuildError(funcName: String, cause: Exception): Throwable = {
+    cause.getCause match {
+      case st: SparkThrowable with Throwable => st
+      case other =>
+        new AnalysisException(
+          errorClass = "FAILED_FUNCTION_CALL",
+          messageParameters = Map("funcName" -> toSQLId(funcName)),
+          cause = Option(other))
+    }
   }
 }

@@ -20,7 +20,6 @@ import shutil
 import tempfile
 
 import grpc  # type: ignore
-from grpc._channel import _MultiThreadedRendezvous  # type: ignore
 
 from pyspark.testing.sqlutils import have_pandas, SQLTestUtils
 
@@ -137,13 +136,120 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertGreater(len(result), 0)
 
     def test_schema(self):
-        schema = self.connect.read.table(self.tbl_name).schema()
+        schema = self.connect.read.table(self.tbl_name).schema
         self.assertEqual(
             StructType(
                 [StructField("id", LongType(), True), StructField("name", StringType(), True)]
             ),
             schema,
         )
+
+        # test FloatType, DoubleType, DecimalType, StringType, BooleanType, NullType
+        query = """
+            SELECT * FROM VALUES
+            (float(1.0), double(1.0), 1.0, "1", true, NULL),
+            (float(2.0), double(2.0), 2.0, "2", false, NULL),
+            (float(3.0), double(3.0), NULL, "3", false, NULL)
+            AS tab(a, b, c, d, e, f)
+            """
+        self.assertEqual(
+            self.spark.sql(query).schema,
+            self.connect.sql(query).schema,
+        )
+
+        # test TimestampType, DateType
+        query = """
+            SELECT * FROM VALUES
+            (TIMESTAMP('2019-04-12 15:50:00'), DATE('2022-02-22')),
+            (TIMESTAMP('2019-04-12 15:50:00'), NULL),
+            (NULL, DATE('2022-02-22'))
+            AS tab(a, b)
+            """
+        self.assertEqual(
+            self.spark.sql(query).schema,
+            self.connect.sql(query).schema,
+        )
+
+        # test MapType
+        query = """
+            SELECT * FROM VALUES
+            (MAP('a', 'ab'), MAP('a', 'ab'), MAP(1, 2, 3, 4)),
+            (MAP('x', 'yz'), MAP('x', NULL), NULL),
+            (MAP('c', 'de'), NULL, MAP(-1, NULL, -3, -4))
+            AS tab(a, b, c)
+            """
+        self.assertEqual(
+            self.spark.sql(query).schema,
+            self.connect.sql(query).schema,
+        )
+
+        # test ArrayType
+        query = """
+            SELECT * FROM VALUES
+            (ARRAY('a', 'ab'), ARRAY(1, 2, 3), ARRAY(1, NULL, 3)),
+            (ARRAY('x', NULL), NULL, ARRAY(1, 3)),
+            (NULL, ARRAY(-1, -2, -3), Array())
+            AS tab(a, b, c)
+            """
+        self.assertEqual(
+            self.spark.sql(query).schema,
+            self.connect.sql(query).schema,
+        )
+
+        # test StructType
+        query = """
+            SELECT STRUCT(a, b, c, d), STRUCT(e, f, g), STRUCT(STRUCT(a, b), STRUCT(h)) FROM VALUES
+            (float(1.0), double(1.0), 1.0, "1", true, NULL, ARRAY(1, NULL, 3), MAP(1, 2, 3, 4)),
+            (float(2.0), double(2.0), 2.0, "2", false, NULL, ARRAY(1, 3), MAP(1, NULL, 3, 4)),
+            (float(3.0), double(3.0), NULL, "3", false, NULL, ARRAY(NULL), NULL)
+            AS tab(a, b, c, d, e, f, g, h)
+            """
+        # compare the __repr__() to ignore the metadata for now
+        # the metadata is not supported in Connect for now
+        self.assertEqual(
+            self.spark.sql(query).schema.__repr__(),
+            self.connect.sql(query).schema.__repr__(),
+        )
+
+    def test_print_schema(self):
+        # SPARK-41216: Test print schema
+        tree_str = self.connect.sql("SELECT 1 AS X, 2 AS Y")._tree_string()
+        # root
+        #  |-- X: integer (nullable = false)
+        #  |-- Y: integer (nullable = false)
+        expected = "root\n |-- X: integer (nullable = false)\n |-- Y: integer (nullable = false)\n"
+        self.assertEqual(tree_str, expected)
+
+    def test_is_local(self):
+        # SPARK-41216: Test is local
+        self.assertTrue(self.connect.sql("SHOW DATABASES").isLocal)
+        self.assertFalse(self.connect.read.table(self.tbl_name).isLocal)
+
+    def test_is_streaming(self):
+        # SPARK-41216: Test is streaming
+        self.assertFalse(self.connect.read.table(self.tbl_name).isStreaming)
+        self.assertFalse(self.connect.sql("SELECT 1 AS X LIMIT 0").isStreaming)
+
+    def test_input_files(self):
+        # SPARK-41216: Test input files
+        tmpPath = tempfile.mkdtemp()
+        shutil.rmtree(tmpPath)
+        try:
+            self.df_text.write.text(tmpPath)
+
+            input_files_list1 = (
+                self.spark.read.format("text").schema("id STRING").load(path=tmpPath).inputFiles()
+            )
+            input_files_list2 = (
+                self.connect.read.format("text").schema("id STRING").load(path=tmpPath).inputFiles()
+            )
+
+            self.assertTrue(len(input_files_list1) > 0)
+            self.assertEqual(len(input_files_list1), len(input_files_list2))
+            for file_path in input_files_list2:
+                self.assertTrue(file_path in input_files_list1)
+        finally:
+            shutil.rmtree(tmpPath)
 
     def test_simple_binary_expressions(self):
         """Test complex expression"""
@@ -188,6 +294,33 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         df2 = self.connect.read.table(self.tbl_name_empty)
         self.assertEqual(0, len(df2.take(5)))
 
+    def test_drop(self):
+        # SPARK-41169: test drop
+        query = """
+            SELECT * FROM VALUES
+            (false, 1, NULL), (false, NULL, 2), (NULL, 3, 3)
+            AS tab(a, b, c)
+            """
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+        self.assert_eq(
+            cdf.drop("a").toPandas(),
+            sdf.drop("a").toPandas(),
+        )
+        self.assert_eq(
+            cdf.drop("a", "b").toPandas(),
+            sdf.drop("a", "b").toPandas(),
+        )
+        self.assert_eq(
+            cdf.drop("a", "x").toPandas(),
+            sdf.drop("a", "x").toPandas(),
+        )
+        self.assert_eq(
+            cdf.drop(cdf.a, cdf.x).toPandas(),
+            sdf.drop("a", "x").toPandas(),
+        )
+
     def test_subquery_alias(self) -> None:
         # SPARK-40938: test subquery alias.
         plan_text = (
@@ -218,10 +351,87 @@ class SparkConnectTests(SparkConnectSQLTestCase):
 
             # Test when creating a view which is alreayd exists but
             self.assertTrue(self.spark.catalog.tableExists("global_temp.view_1"))
-            with self.assertRaises(_MultiThreadedRendezvous):
+            with self.assertRaises(grpc.RpcError):
                 self.connect.sql("SELECT 1 AS X LIMIT 0").createGlobalTempView("view_1")
 
-    @unittest.skip("test_fill_na is flaky")
+    def test_to_pandas(self):
+        # SPARK-41005: Test to pandas
+        query = """
+            SELECT * FROM VALUES
+            (false, 1, NULL),
+            (false, NULL, float(2.0)),
+            (NULL, 3, float(3.0))
+            AS tab(a, b, c)
+            """
+
+        self.assert_eq(
+            self.connect.sql(query).toPandas(),
+            self.spark.sql(query).toPandas(),
+        )
+
+        query = """
+            SELECT * FROM VALUES
+            (1, 1, NULL),
+            (2, NULL, float(2.0)),
+            (3, 3, float(3.0))
+            AS tab(a, b, c)
+            """
+
+        self.assert_eq(
+            self.connect.sql(query).toPandas(),
+            self.spark.sql(query).toPandas(),
+        )
+
+        query = """
+            SELECT * FROM VALUES
+            (double(1.0), 1, "1"),
+            (NULL, NULL, NULL),
+            (double(2.0), 3, "3")
+            AS tab(a, b, c)
+            """
+
+        self.assert_eq(
+            self.connect.sql(query).toPandas(),
+            self.spark.sql(query).toPandas(),
+        )
+
+        query = """
+            SELECT * FROM VALUES
+            (float(1.0), double(1.0), 1, "1"),
+            (float(2.0), double(2.0), 2, "2"),
+            (float(3.0), double(3.0), 3, "3")
+            AS tab(a, b, c, d)
+            """
+
+        self.assert_eq(
+            self.connect.sql(query).toPandas(),
+            self.spark.sql(query).toPandas(),
+        )
+
+    def test_select_expr(self):
+        # SPARK-41201: test selectExpr API.
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name).selectExpr("id * 2").toPandas(),
+            self.spark.read.table(self.tbl_name).selectExpr("id * 2").toPandas(),
+        )
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name)
+            .selectExpr(["id * 2", "cast(name as long) as name"])
+            .toPandas(),
+            self.spark.read.table(self.tbl_name)
+            .selectExpr(["id * 2", "cast(name as long) as name"])
+            .toPandas(),
+        )
+
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name)
+            .selectExpr("id * 2", "cast(name as long) as name")
+            .toPandas(),
+            self.spark.read.table(self.tbl_name)
+            .selectExpr("id * 2", "cast(name as long) as name")
+            .toPandas(),
+        )
+
     def test_fill_na(self):
         # SPARK-41128: Test fill na
         query = """
@@ -266,6 +476,11 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertEqual(1, len(pdf.columns))  # one column
         self.assertEqual("X", pdf.columns[0])
 
+    def test_is_empty(self):
+        # SPARK-41212: Test is empty
+        self.assertFalse(self.connect.sql("SELECT 1 AS X").isEmpty())
+        self.assertTrue(self.connect.sql("SELECT 1 AS X LIMIT 0").isEmpty())
+
     def test_session(self):
         self.assertEqual(self.connect, self.connect.sql("SELECT 1").sparkSession())
 
@@ -279,6 +494,14 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         # +---+---+
         expected = "+---+---+\n|  X|  Y|\n+---+---+\n|  1|  2|\n+---+---+\n"
         self.assertEqual(show_str, expected)
+
+    def test_repr(self):
+        # SPARK-41213: Test the __repr__ method
+        query = """SELECT * FROM VALUES (1L, NULL), (3L, "Z") AS tab(a, b)"""
+        self.assertEqual(
+            self.connect.sql(query).__repr__(),
+            self.spark.sql(query).__repr__(),
+        )
 
     def test_explain_string(self):
         # SPARK-41122: test explain API.
@@ -327,14 +550,20 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         col0 = (
             self.connect.range(1, 10)
             .select(col("id").alias("name", metadata={"max": 99}))
-            .schema()
-            .names[0]
+            .schema.names[0]
         )
         self.assertEqual("name", col0)
 
         with self.assertRaises(grpc.RpcError) as exc:
             self.connect.range(1, 10).select(col("id").alias("this", "is", "not")).collect()
-        self.assertIn("Buffer(this, is, not)", str(exc.exception))
+        self.assertIn("(this, is, not)", str(exc.exception))
+
+    def test_agg_with_two_agg_exprs(self):
+        # SPARK-41230: test dataframe.agg()
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name).agg({"name": "min", "id": "max"}).toPandas(),
+            self.spark.read.table(self.tbl_name).agg({"name": "min", "id": "max"}).toPandas(),
+        )
 
 
 class ChannelBuilderTests(ReusedPySparkTestCase):

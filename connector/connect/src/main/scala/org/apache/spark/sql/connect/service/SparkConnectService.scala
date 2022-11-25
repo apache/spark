@@ -19,6 +19,8 @@ package org.apache.spark.sql.connect.service
 
 import java.util.concurrent.TimeUnit
 
+import scala.collection.JavaConverters._
+
 import com.google.common.base.Ticker
 import com.google.common.cache.CacheBuilder
 import io.grpc.{Server, Status}
@@ -127,10 +129,13 @@ class SparkConnectService(debug: Boolean)
     val ds = Dataset.ofRows(session, logicalPlan)
     val explainString = ds.queryExecution.explainString(explainMode)
 
-    val response = proto.AnalyzePlanResponse
-      .newBuilder()
-      .setExplainString(explainString)
+    val response = proto.AnalyzePlanResponse.newBuilder()
     response.setSchema(DataTypeProtoConverter.toConnectProtoType(ds.schema))
+    response.setExplainString(explainString)
+    response.setTreeString(ds.schema.treeString)
+    response.setIsLocal(ds.isLocal)
+    response.setIsStreaming(ds.isStreaming)
+    response.addAllInputFiles(ds.inputFiles.toSeq.asJava)
   }
 }
 

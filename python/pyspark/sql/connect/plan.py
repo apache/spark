@@ -20,7 +20,6 @@ from typing import (
     List,
     Optional,
     Sequence,
-    Tuple,
     Union,
     cast,
     TYPE_CHECKING,
@@ -36,7 +35,7 @@ from pyspark.sql.connect.column import (
 
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect.typing import ColumnOrString, ExpressionOrString
+    from pyspark.sql.connect._typing import ColumnOrName, ExpressionOrString
     from pyspark.sql.connect.client import RemoteSparkSession
 
 
@@ -58,7 +57,7 @@ class LogicalPlan(object):
         return exp
 
     def to_attr_or_expression(
-        self, col: "ColumnOrString", session: "RemoteSparkSession"
+        self, col: "ColumnOrName", session: "RemoteSparkSession"
     ) -> proto.Expression:
         """Returns either an instance of an unresolved attribute or the serialized
         expression value of the column."""
@@ -464,6 +463,49 @@ class Sort(LogicalPlan):
         """
 
 
+class Drop(LogicalPlan):
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        columns: List[Union[Column, str]],
+    ) -> None:
+        super().__init__(child)
+        assert len(columns) > 0 and all(isinstance(c, (Column, str)) for c in columns)
+        self.columns = columns
+
+    def _convert_to_expr(
+        self, col: Union[Column, str], session: "RemoteSparkSession"
+    ) -> proto.Expression:
+        expr = proto.Expression()
+        if isinstance(col, Column):
+            expr.CopyFrom(col.to_plan(session))
+        else:
+            expr.CopyFrom(self.unresolved_attr(col))
+        return expr
+
+    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
+        assert self._child is not None
+        plan = proto.Relation()
+        plan.drop.input.CopyFrom(self._child.plan(session))
+        plan.drop.cols.extend([self._convert_to_expr(c, session) for c in self.columns])
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
+        return f"{' ' * indent}<Drop columns={self.columns}>\n{c_buf}"
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+            <li>
+                <b>Drop</b><br />
+                columns: {self.columns} <br />
+                {self._child_repr_()}
+            </li>
+        </uL>
+        """
+
+
 class Sample(LogicalPlan):
     def __init__(
         self,
@@ -515,29 +557,19 @@ class Sample(LogicalPlan):
 
 
 class Aggregate(LogicalPlan):
-    MeasureType = Tuple["ExpressionOrString", str]
-    MeasuresType = Sequence[MeasureType]
-    OptMeasuresType = Optional[MeasuresType]
-
     def __init__(
         self,
         child: Optional["LogicalPlan"],
         grouping_cols: List[Column],
-        measures: OptMeasuresType,
+        measures: Sequence[Expression],
     ) -> None:
         super().__init__(child)
         self.grouping_cols = grouping_cols
-        self.measures = measures if measures is not None else []
+        self.measures = measures
 
-    def _convert_measure(self, m: MeasureType, session: "RemoteSparkSession") -> proto.Expression:
-        exp, fun = m
+    def _convert_measure(self, m: Expression, session: "RemoteSparkSession") -> proto.Expression:
         proto_expr = proto.Expression()
-        measure = proto_expr.unresolved_function
-        measure.parts.append(fun)
-        if type(exp) is str:
-            measure.arguments.append(self.unresolved_attr(exp))
-        else:
-            measure.arguments.append(cast(Expression, exp).to_plan(session))
+        proto_expr.CopyFrom(m.to_plan(session))
         return proto_expr
 
     def plan(self, session: "RemoteSparkSession") -> proto.Relation:

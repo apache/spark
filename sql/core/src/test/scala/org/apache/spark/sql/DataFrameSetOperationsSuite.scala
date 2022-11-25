@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
+import java.util.Locale
 
 import org.apache.spark.sql.catalyst.optimizer.RemoveNoopUnion
 import org.apache.spark.sql.catalyst.plans.logical.Union
@@ -585,16 +586,20 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         var df1 = Seq((1, 1)).toDF(c0, c1)
         var df2 = Seq((1, 1)).toDF("c0", "c1")
-        var errMsg = intercept[AnalysisException] {
-          df1.unionByName(df2)
-        }.getMessage
-        assert(errMsg.contains("Found duplicate column(s) in the left attributes:"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            df1.unionByName(df2)
+          },
+          errorClass = "COLUMN_ALREADY_EXISTS",
+          parameters = Map("columnName" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
         df1 = Seq((1, 1)).toDF("c0", "c1")
         df2 = Seq((1, 1)).toDF(c0, c1)
-        errMsg = intercept[AnalysisException] {
-          df1.unionByName(df2)
-        }.getMessage
-        assert(errMsg.contains("Found duplicate column(s) in the right attributes:"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            df1.unionByName(df2)
+          },
+          errorClass = "COLUMN_ALREADY_EXISTS",
+          parameters = Map("columnName" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
       }
     }
   }
