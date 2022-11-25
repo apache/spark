@@ -20,7 +20,6 @@ from typing import (
     List,
     Optional,
     Sequence,
-    Tuple,
     Union,
     cast,
     TYPE_CHECKING,
@@ -558,29 +557,19 @@ class Sample(LogicalPlan):
 
 
 class Aggregate(LogicalPlan):
-    MeasureType = Tuple["ExpressionOrString", str]
-    MeasuresType = Sequence[MeasureType]
-    OptMeasuresType = Optional[MeasuresType]
-
     def __init__(
         self,
         child: Optional["LogicalPlan"],
         grouping_cols: List[Column],
-        measures: OptMeasuresType,
+        measures: Sequence[Expression],
     ) -> None:
         super().__init__(child)
         self.grouping_cols = grouping_cols
-        self.measures = measures if measures is not None else []
+        self.measures = measures
 
-    def _convert_measure(self, m: MeasureType, session: "RemoteSparkSession") -> proto.Expression:
-        exp, fun = m
+    def _convert_measure(self, m: Expression, session: "RemoteSparkSession") -> proto.Expression:
         proto_expr = proto.Expression()
-        measure = proto_expr.unresolved_function
-        measure.parts.append(fun)
-        if type(exp) is str:
-            measure.arguments.append(self.unresolved_attr(exp))
-        else:
-            measure.arguments.append(cast(Expression, exp).to_plan(session))
+        proto_expr.CopyFrom(m.to_plan(session))
         return proto_expr
 
     def plan(self, session: "RemoteSparkSession") -> proto.Relation:

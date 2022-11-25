@@ -518,6 +518,13 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             self.connect.range(1, 10).select(col("id").alias("this", "is", "not")).collect()
         self.assertIn("(this, is, not)", str(exc.exception))
 
+    def test_agg_with_two_agg_exprs(self):
+        # SPARK-41230: test dataframe.agg()
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name).agg({"name": "min", "id": "max"}).toPandas(),
+            self.spark.read.table(self.tbl_name).agg({"name": "min", "id": "max"}).toPandas(),
+        )
+
 
 class ChannelBuilderTests(ReusedPySparkTestCase):
     def test_invalid_connection_strings(self):

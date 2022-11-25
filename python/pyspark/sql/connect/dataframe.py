@@ -37,6 +37,7 @@ from pyspark.sql.connect.column import (
     Expression,
     LiteralExpression,
     SQLExpression,
+    ScalarFunctionExpression,
 )
 from pyspark.sql.types import (
     StructType,
@@ -48,25 +49,13 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.client import RemoteSparkSession
 
 
-class GroupingFrame(object):
-
-    MeasuresType = Union[Sequence[Tuple["ExpressionOrString", str]], Dict[str, str]]
-    OptMeasuresType = Optional[MeasuresType]
-
+class GroupedData(object):
     def __init__(self, df: "DataFrame", *grouping_cols: Union[Column, str]) -> None:
         self._df = df
         self._grouping_cols = [x if isinstance(x, Column) else df[x] for x in grouping_cols]
 
-    def agg(self, exprs: Optional[MeasuresType] = None) -> "DataFrame":
-
-        # Normalize the dictionary into a list of tuples.
-        if isinstance(exprs, Dict):
-            measures = list(exprs.items())
-        elif isinstance(exprs, List):
-            measures = exprs
-        else:
-            measures = []
-
+    def agg(self, measures: Sequence[Expression]) -> "DataFrame":
+        assert len(measures) > 0, "exprs should not be empty"
         res = DataFrame.withPlan(
             plan.Aggregate(
                 child=self._df._plan,
@@ -77,23 +66,27 @@ class GroupingFrame(object):
         )
         return res
 
-    def _map_cols_to_dict(self, fun: str, cols: List[Union[Column, str]]) -> Dict[str, str]:
-        return {x if isinstance(x, str) else x.name(): fun for x in cols}
+    def _map_cols_to_expression(
+        self, fun: str, col: Union[Expression, str]
+    ) -> Sequence[Expression]:
+        return [
+            ScalarFunctionExpression(fun, Column(col)) if isinstance(col, str) else col,
+        ]
 
-    def min(self, *cols: Union[Column, str]) -> "DataFrame":
-        expr = self._map_cols_to_dict("min", list(cols))
+    def min(self, col: Union[Expression, str]) -> "DataFrame":
+        expr = self._map_cols_to_expression("min", col)
         return self.agg(expr)
 
-    def max(self, *cols: Union[Column, str]) -> "DataFrame":
-        expr = self._map_cols_to_dict("max", list(cols))
+    def max(self, col: Union[Expression, str]) -> "DataFrame":
+        expr = self._map_cols_to_expression("max", col)
         return self.agg(expr)
 
-    def sum(self, *cols: Union[Column, str]) -> "DataFrame":
-        expr = self._map_cols_to_dict("sum", list(cols))
+    def sum(self, col: Union[Expression, str]) -> "DataFrame":
+        expr = self._map_cols_to_expression("sum", col)
         return self.agg(expr)
 
     def count(self) -> "DataFrame":
-        return self.agg([(LiteralExpression(1), "count")])
+        return self.agg([ScalarFunctionExpression("count", LiteralExpression(1))])
 
 
 class DataFrame(object):
@@ -162,8 +155,18 @@ class DataFrame(object):
 
         return DataFrame.withPlan(plan.Project(self._plan, *sql_expr), session=self._session)
 
-    def agg(self, exprs: Optional[GroupingFrame.MeasuresType]) -> "DataFrame":
-        return self.groupBy().agg(exprs)
+    def agg(self, *exprs: Union[Expression, Dict[str, str]]) -> "DataFrame":
+        if not exprs:
+            raise ValueError("Argument 'exprs' must not be empty")
+
+        if len(exprs) == 1 and isinstance(exprs[0], dict):
+            measures = [ScalarFunctionExpression(f, Column(e)) for e, f in exprs[0].items()]
+            return self.groupBy().agg(measures)
+        else:
+            # other expressions
+            assert all(isinstance(c, Expression) for c in exprs), "all exprs should be Expression"
+            exprs = cast(Tuple[Expression, ...], exprs)
+            return self.groupBy().agg(exprs)
 
     def alias(self, alias: str) -> "DataFrame":
         return DataFrame.withPlan(plan.SubqueryAlias(self._plan, alias), session=self._session)
@@ -208,7 +211,7 @@ class DataFrame(object):
 
     def count(self) -> int:
         """Returns the number of rows in the data frame"""
-        pdd = self.agg([(LiteralExpression(1), "count")]).toPandas()
+        pdd = self.agg(ScalarFunctionExpression("count", LiteralExpression(1))).toPandas()
         if pdd is None:
             raise Exception("Empty result")
         return pdd.iloc[0, 0]
@@ -340,8 +343,8 @@ class DataFrame(object):
         """
         return self.head()
 
-    def groupBy(self, *cols: "ColumnOrName") -> GroupingFrame:
-        return GroupingFrame(self, *cols)
+    def groupBy(self, *cols: "ColumnOrName") -> GroupedData:
+        return GroupedData(self, *cols)
 
     @overload
     def head(self) -> Optional[Row]:
