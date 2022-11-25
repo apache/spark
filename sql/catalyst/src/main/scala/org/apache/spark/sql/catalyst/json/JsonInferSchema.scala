@@ -107,8 +107,7 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
     // the fold functions in the scheduler event loop thread.
     val existingConf = SQLConf.get
     var rootType: DataType = StructType(Nil)
-    val foldPartition = (iter: Iterator[DataType]) =>
-      iter.fold(StructType(Nil))(typeMerger)
+    val foldPartition = (iter: Iterator[DataType]) => iter.fold(StructType(Nil))(typeMerger)
     val mergeResult = (index: Int, taskResult: DataType) => {
       rootType = SQLConf.withExistingConf(existingConf) {
         typeMerger(rootType, taskResult)
