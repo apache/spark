@@ -47,7 +47,7 @@ jobs:
     #
     # However, these are not in a published release and the current `main` branch
     # has some issues upon testing.
-    - uses: actions/labeler@5f867a63be70efff62b767459b009290364495eb # pin@2.2.0
+    - uses: actions/labeler@v4
       with:
         repo-token: "${{ secrets.GITHUB_TOKEN }}"
         sync-labels: true
