@@ -94,8 +94,27 @@ class InMemoryFileIndex(
     val files = listLeafFiles(rootPaths)
     cachedLeafFiles =
       new mutable.LinkedHashMap[Path, FileStatus]() ++= files.map(f => f.getPath -> f)
-    cachedLeafDirToChildrenFiles = files.toArray.groupBy(_.getPath.getParent)
+    cachedLeafDirToChildrenFiles = if (sparkSession.sessionState.conf.recursiveFileLookup) {
+      recursiveDirChildrenFiles(files)
+    } else {
+      files.toArray.groupBy(_.getPath.getParent)
+    }
     cachedPartitionSpec = null
+  }
+
+  def recursiveDirChildrenFiles(files: mutable.LinkedHashSet[FileStatus])
+  : Map[Path, Array[FileStatus]] = {
+    // rootPaths is table / partition location
+    val rootParents = rootPaths.map(_.getParent).toSet
+    val reorganized = new mutable.LinkedHashMap[Path, mutable.LinkedHashSet[FileStatus]]()
+    files.foreach { f => // f is a file, not a directory.
+      var parent = f.getPath.getParent
+      while (parent != null && !rootParents.contains(parent)) {
+        reorganized.getOrElseUpdate(parent, new mutable.LinkedHashSet[FileStatus]()).add(f)
+        parent = parent.getParent
+      }
+    }
+    reorganized.mapValues(_.toArray).toMap
   }
 
   override def equals(other: Any): Boolean = other match {
