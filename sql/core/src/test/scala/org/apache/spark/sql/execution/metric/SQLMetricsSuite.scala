@@ -844,7 +844,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   }
 
   test("SPARK-41003: BHJ LeftAnti does not update numOutputRows when codegen is disabled") {
-    Seq(true, false).foreach(enableWholeStage => {
+    Seq(true, false).foreach { enableWholeStage =>
       withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> enableWholeStage.toString) {
         withSQLConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true") {
           withTable("t1", "t2") {
@@ -854,16 +854,16 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
             df.collect()
             val plan = df.queryExecution.executedPlan
 
-            val exchanges = plan.collect {
+            val joins = plan.collect {
               case s: BroadcastHashJoinExec => s
             }
 
-            assert(exchanges.size === 1)
-            testMetricsInSparkPlanOperator(exchanges.head, Map("numOutputRows" -> 2))
+            assert(joins.size === 1)
+            testMetricsInSparkPlanOperator(joins.head, Map("numOutputRows" -> 2))
           }
         }
       }
-    })
+    }
   }
 }
 
