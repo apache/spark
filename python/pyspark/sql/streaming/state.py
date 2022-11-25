@@ -19,6 +19,7 @@ import json
 from typing import Tuple, Optional
 
 from pyspark.sql.types import DateType, Row, StructType
+from pyspark.sql.utils import has_numpy
 
 __all__ = ["GroupState", "GroupStateTimeout"]
 
@@ -130,6 +131,10 @@ class GroupState:
         if newValue is None:
             raise ValueError("'None' is not a valid state value")
 
+        if has_numpy:
+            import numpy as np
+            # In order to convert NumPy types to Python primitive types.
+            newValue = tuple(v.tolist() for v in newValue if isinstance(v, np.generic))
         self._value = Row(*newValue)
         self._defined = True
         self._updated = True

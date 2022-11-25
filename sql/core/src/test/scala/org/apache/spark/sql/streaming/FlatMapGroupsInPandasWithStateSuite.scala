@@ -886,4 +886,49 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
         total = Seq(1), updated = Seq(1), droppedByWatermark = Seq(0), removed = Some(Seq(1)))
     )
   }
+
+  test("SPARK-41260: applyInPandasWithState - NumPy instances to JVM rows in state") {
+    assume(shouldTestPandasUDFs)
+
+    val pythonScript =
+      """
+        |import pandas as pd
+        |import numpy as np
+        |from pyspark.sql.types import StructType, StructField, StringType
+        |
+        |tpe = StructType([
+        |    StructField("key", StringType()),
+        |    StructField("valueAsString", StringType())])
+        |
+        |def func(key, pdf_iter, state):
+        |    np_value = np.int64(1)  # NumPy instance
+        |    state.update((np_value,))
+        |    yield pd.DataFrame({'key': [key[0]], 'valueAsString': [str(np_value)]})
+        |""".stripMargin
+    val pythonFunc = TestGroupedMapPandasUDFWithState(
+      name = "pandas_grouped_map_with_state", pythonScript = pythonScript)
+
+    val inputData = MemoryStream[String]
+    val outputStructType = StructType(
+      Seq(
+        StructField("key", StringType),
+        StructField("valueAsString", StringType)))
+    val stateStructType = StructType(Seq(StructField("value", LongType)))
+    val inputDataDS = inputData.toDS()
+    val result =
+      inputDataDS
+        .groupBy("value")
+        .applyInPandasWithState(
+          pythonFunc(inputDataDS("value")).expr.asInstanceOf[PythonUDF],
+          outputStructType,
+          stateStructType,
+          "Update",
+          "NoTimeout")
+
+    testStream(result, Update)(
+      AddData(inputData, "a"),
+      CheckNewAnswer(("a", "1")),
+      assertNumStateRows(total = 1, updated = 1)
+    )
+  }
 }
