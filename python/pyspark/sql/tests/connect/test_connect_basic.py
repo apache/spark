@@ -144,6 +144,73 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             schema,
         )
 
+        # test FloatType, DoubleType, DecimalType, StringType, BooleanType, NullType
+        query = """
+            SELECT * FROM VALUES
+            (float(1.0), double(1.0), 1.0, "1", true, NULL),
+            (float(2.0), double(2.0), 2.0, "2", false, NULL),
+            (float(3.0), double(3.0), NULL, "3", false, NULL)
+            AS tab(a, b, c, d, e, f)
+            """
+        self.assertEqual(
+            self.spark.sql(query).schema,
+            self.connect.sql(query).schema,
+        )
+
+        # test TimestampType, DateType
+        query = """
+            SELECT * FROM VALUES
+            (TIMESTAMP('2019-04-12 15:50:00'), DATE('2022-02-22')),
+            (TIMESTAMP('2019-04-12 15:50:00'), NULL),
+            (NULL, DATE('2022-02-22'))
+            AS tab(a, b)
+            """
+        self.assertEqual(
+            self.spark.sql(query).schema,
+            self.connect.sql(query).schema,
+        )
+
+        # test MapType
+        query = """
+            SELECT * FROM VALUES
+            (MAP('a', 'ab'), MAP('a', 'ab'), MAP(1, 2, 3, 4)),
+            (MAP('x', 'yz'), MAP('x', NULL), NULL),
+            (MAP('c', 'de'), NULL, MAP(-1, NULL, -3, -4))
+            AS tab(a, b, c)
+            """
+        self.assertEqual(
+            self.spark.sql(query).schema,
+            self.connect.sql(query).schema,
+        )
+
+        # test ArrayType
+        query = """
+            SELECT * FROM VALUES
+            (ARRAY('a', 'ab'), ARRAY(1, 2, 3), ARRAY(1, NULL, 3)),
+            (ARRAY('x', NULL), NULL, ARRAY(1, 3)),
+            (NULL, ARRAY(-1, -2, -3), Array())
+            AS tab(a, b, c)
+            """
+        self.assertEqual(
+            self.spark.sql(query).schema,
+            self.connect.sql(query).schema,
+        )
+
+        # test StructType
+        query = """
+            SELECT STRUCT(a, b, c, d), STRUCT(e, f, g), STRUCT(STRUCT(a, b), STRUCT(h)) FROM VALUES
+            (float(1.0), double(1.0), 1.0, "1", true, NULL, ARRAY(1, NULL, 3), MAP(1, 2, 3, 4)),
+            (float(2.0), double(2.0), 2.0, "2", false, NULL, ARRAY(1, 3), MAP(1, NULL, 3, 4)),
+            (float(3.0), double(3.0), NULL, "3", false, NULL, ARRAY(NULL), NULL)
+            AS tab(a, b, c, d, e, f, g, h)
+            """
+        # compare the __repr__() to ignore the metadata for now
+        # the metadata is not supported in Connect for now
+        self.assertEqual(
+            self.spark.sql(query).schema.__repr__(),
+            self.connect.sql(query).schema.__repr__(),
+        )
+
     def test_simple_binary_expressions(self):
         """Test complex expression"""
         df = self.connect.read.table(self.tbl_name)

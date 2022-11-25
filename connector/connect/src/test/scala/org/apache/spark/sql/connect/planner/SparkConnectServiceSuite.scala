@@ -61,10 +61,10 @@ class SparkConnectServiceSuite extends SharedSparkSession {
       assert(schema.getFieldsCount == 2)
       assert(
         schema.getFields(0).getName == "col1"
-          && schema.getFields(0).getType.getKindCase == proto.DataType.KindCase.I32)
+          && schema.getFields(0).getDataType.getKindCase == proto.DataType.KindCase.INTEGER)
       assert(
         schema.getFields(1).getName == "col2"
-          && schema.getFields(1).getType.getKindCase == proto.DataType.KindCase.STRING)
+          && schema.getFields(1).getDataType.getKindCase == proto.DataType.KindCase.STRING)
     }
   }
 
