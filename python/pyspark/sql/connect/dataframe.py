@@ -835,7 +835,7 @@ class DataFrame(object):
         if self._plan is None:
             raise Exception("Cannot analyze on empty plan.")
         query = self._plan.to_proto(self._session)
-        return self._session._analyze(query).is_local
+        return self._session.client._analyze(query).is_local
 
     @property
     def isStreaming(self) -> bool:
@@ -860,13 +860,13 @@ class DataFrame(object):
         if self._plan is None:
             raise Exception("Cannot analyze on empty plan.")
         query = self._plan.to_proto(self._session)
-        return self._session._analyze(query).is_streaming
+        return self._session.client._analyze(query).is_streaming
 
     def _tree_string(self) -> str:
         if self._plan is None:
             raise Exception("Cannot analyze on empty plan.")
         query = self._plan.to_proto(self._session)
-        return self._session._analyze(query).tree_string
+        return self._session.client._analyze(query).tree_string
 
     def printSchema(self) -> None:
         """Prints out the schema in the tree format.
@@ -896,7 +896,7 @@ class DataFrame(object):
         if self._plan is None:
             raise Exception("Cannot analyze on empty plan.")
         query = self._plan.to_proto(self._session)
-        return self._session._analyze(query).input_files
+        return self._session.client._analyze(query).input_files
 
     def transform(self, func: Callable[..., "DataFrame"], *args: Any, **kwargs: Any) -> "DataFrame":
         """Returns a new :class:`DataFrame`. Concise syntax for chaining custom transformations.
