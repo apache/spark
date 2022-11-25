@@ -83,11 +83,7 @@ object JobDataWrapperSerializer {
   }
 
   private def deserializeJobData(info: StoreTypes.JobData): JobData = {
-    val description = if (info.hasDescription) {
-      Some(info.getDescription)
-    } else {
-      None
-    }
+    val description = getOptional(info.hasDescription, info.getDescription)
     val submissionTime =
       getOptional(info.hasSubmissionTime, () => new Date(info.getSubmissionTime.getDate))
     val completionTime = getOptional(info.hasCompletionTime,
