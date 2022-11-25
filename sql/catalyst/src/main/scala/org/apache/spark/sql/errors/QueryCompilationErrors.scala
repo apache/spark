@@ -1013,13 +1013,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def keyValueInMapNotStringError(m: CreateMap): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1095",
-      messageParameters = Map("map" -> m.dataType.catalogString))
+      errorClass = "INVALID_OPTIONS.NON_STRING_TYPE",
+      messageParameters = Map("mapType" -> toSQLType(m.dataType)))
   }
 
   def nonMapFunctionNotAllowedError(): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1096",
+      errorClass = "INVALID_OPTIONS.NON_MAP_FUNCTION",
       messageParameters = Map.empty)
   }
 
