@@ -834,7 +834,7 @@ class DataFrame(object):
         """
         if self._plan is None:
             raise Exception("Cannot analyze on empty plan.")
-        query = self._plan.to_proto(self._session)
+        query = self._plan.to_proto(self._session.client)
         return self._session.client._analyze(query).is_local
 
     @property
@@ -859,13 +859,13 @@ class DataFrame(object):
         """
         if self._plan is None:
             raise Exception("Cannot analyze on empty plan.")
-        query = self._plan.to_proto(self._session)
+        query = self._plan.to_proto(self._session.client)
         return self._session.client._analyze(query).is_streaming
 
     def _tree_string(self) -> str:
         if self._plan is None:
             raise Exception("Cannot analyze on empty plan.")
-        query = self._plan.to_proto(self._session)
+        query = self._plan.to_proto(self._session.client)
         return self._session.client._analyze(query).tree_string
 
     def printSchema(self) -> None:
@@ -895,7 +895,7 @@ class DataFrame(object):
         """
         if self._plan is None:
             raise Exception("Cannot analyze on empty plan.")
-        query = self._plan.to_proto(self._session)
+        query = self._plan.to_proto(self._session.client)
         return self._session.client._analyze(query).input_files
 
     def transform(self, func: Callable[..., "DataFrame"], *args: Any, **kwargs: Any) -> "DataFrame":
