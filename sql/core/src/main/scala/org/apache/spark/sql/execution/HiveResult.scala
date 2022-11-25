@@ -44,7 +44,7 @@ object HiveResult {
     TimeFormatters(dateFormatter, timestampFormatter)
   }
 
-  private def stripRootCommandResult(executedPlan: SparkPlan): SparkPlan = executedPlan match {
+  def stripRootCommandResult(executedPlan: SparkPlan): SparkPlan = executedPlan match {
     case CommandResultExec(_, plan, _) => plan
     case other => other
   }

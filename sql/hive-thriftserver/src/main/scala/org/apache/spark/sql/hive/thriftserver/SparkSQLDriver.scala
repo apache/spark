@@ -30,7 +30,9 @@ import org.apache.spark.SparkThrowable
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
-import org.apache.spark.sql.execution.HiveResult.hiveResultString
+import org.apache.spark.sql.execution.HiveResult.{hiveResultString, stripRootCommandResult}
+import org.apache.spark.sql.execution.command.{ExecutedCommandExec, ShowTablesCommand, ShowViewsCommand}
+import org.apache.spark.sql.execution.datasources.v2.ShowTablesExec
 import org.apache.spark.sql.internal.{SQLConf, VariableSubstitution}
 
 
@@ -50,8 +52,21 @@ private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlCont
     if (analyzed.output.isEmpty) {
       new Schema(Arrays.asList(new FieldSchema("Response code", "string", "")), null)
     } else {
-      val fieldSchemas = analyzed.output.map { attr =>
-        new FieldSchema(attr.name, attr.dataType.catalogString, "")
+      val fieldSchemas = stripRootCommandResult(query.executedPlan) match {
+        case ExecutedCommandExec(s: ShowTablesCommand) if !s.isExtended =>
+          val attr = analyzed.output(1)
+          Seq(new FieldSchema(attr.name, attr.dataType.catalogString, ""))
+        case _ : ShowTablesExec =>
+          val attr = analyzed.output(1)
+          Seq(new FieldSchema(attr.name, attr.dataType.catalogString, ""))
+        case ExecutedCommandExec(_: ShowViewsCommand) =>
+          val attr = analyzed.output(1)
+          Seq(new FieldSchema(attr.name, attr.dataType.catalogString, ""))
+        case _ =>
+          analyzed.output.map { attr =>
+            new FieldSchema(attr.name, attr.dataType.catalogString, "")
+          }
+
       }
 
       new Schema(fieldSchemas.asJava, null)
