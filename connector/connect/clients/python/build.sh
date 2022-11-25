@@ -40,3 +40,10 @@ cp -R $SPARK_HOME/python/pyspark/cloudpickle $RELEASE_PATH/pyspark/
 #cp -R $SPARK_HOME/python/pyspark/util.py $RELEASE_PATH/pyspark/
 #cp -R $SPARK_HOME/python/pyspark/sql/utils.py $RELEASE_PATH/pyspark/sql/
 # cp -R $SPARK_HOME/python/pyspark/sql/types.py $RELEASE_PATH/pyspark/sql/
+
+pushd $RELEASE_PATH
+poetry build
+popd
+
+
+echo "Release build: ${RELEASE_PATH}/dist"
