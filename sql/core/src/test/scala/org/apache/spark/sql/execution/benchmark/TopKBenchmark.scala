@@ -51,7 +51,7 @@ object TopKBenchmark extends SqlBasedBenchmark {
             .noop()
         }
 
-        val benchmark = new Benchmark("Benchmark Top-K", N, minNumIters = 10)
+        val benchmark = new Benchmark("Benchmark Top-K", N, minNumIters = 10, output = output)
 
         Seq("ROW_NUMBER", "RANK", "DENSE_RANK").foreach { function =>
           Seq("", "PARTITION BY b").foreach { partition =>

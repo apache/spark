@@ -77,8 +77,8 @@ object InsertWindowGroupLimit extends Rule[LogicalPlan] with PredicateHelper {
         if (limits.filter(_.isDefined).groupBy(_.get._2).size > 1) {
           return filter
         }
-        val maxLimit = limits.sortBy(_.get._1).last
-        maxLimit match {
+        val minLimit = limits.sortBy(_.get._1).head
+        minLimit match {
           case Some((limit, rankLikeFunction)) =>
             if (limit > 0) {
               val windowGroupLimit =

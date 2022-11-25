@@ -210,7 +210,7 @@ class InsertWindowGroupLimitSuite extends PlanTest {
 
         val correctAnswer =
           testRelation
-            .windowGroupLimit(a :: Nil, c.desc :: Nil, function, 3)
+            .windowGroupLimit(a :: Nil, c.desc :: Nil, function, 1)
             .select(a, b, c,
               windowExpr(function,
                 windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"),
