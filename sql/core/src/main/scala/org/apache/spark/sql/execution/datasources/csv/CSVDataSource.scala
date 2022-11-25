@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVInferSchema, CSVO
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.StructType
 
 /**
  * Common functions for parsing CSV files
@@ -139,7 +139,7 @@ object TextInputCSVDataSource extends CSVDataSource {
         }
       case _ =>
         // If the first line could not be read, just return the empty schema.
-        StructType(Array.empty[StructField])
+        StructType(Nil)
     }
   }
 
@@ -216,7 +216,7 @@ object MultiLineCSVDataSource extends CSVDataSource {
         }
       case None =>
         // If the first row could not be read, just return the empty schema.
-        StructType(Array.empty[StructField])
+        StructType(Nil)
     }
   }
 

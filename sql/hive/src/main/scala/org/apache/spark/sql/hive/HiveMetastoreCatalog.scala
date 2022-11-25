@@ -93,8 +93,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
                 // We don't support hive bucketed tables. This function `getCached` is only used for
                 // converting supported Hive tables to data source tables.
                 relation.bucketSpec.isEmpty &&
-                relation.partitionSchema ==
-                  partitionSchema.getOrElse(StructType(Array.empty[StructField]))
+                relation.partitionSchema == partitionSchema.getOrElse(StructType(Nil))
 
             if (useCached) {
               Some(logical)

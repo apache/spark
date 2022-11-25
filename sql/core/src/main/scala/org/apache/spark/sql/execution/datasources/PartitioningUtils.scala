@@ -58,7 +58,7 @@ case class PartitionSpec(
     partitions: Seq[PartitionPath])
 
 object PartitionSpec {
-  val emptySpec = PartitionSpec(StructType(Array.empty[StructField]), Seq.empty[PartitionPath])
+  val emptySpec = PartitionSpec(StructType(Nil), Seq.empty[PartitionPath])
 }
 
 object PartitioningUtils extends SQLConfHelper {

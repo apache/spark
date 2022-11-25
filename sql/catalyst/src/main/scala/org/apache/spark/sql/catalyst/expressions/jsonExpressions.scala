@@ -824,7 +824,7 @@ case class SchemaOfJson(
           jsonInferSchema
             .canonicalizeType(at.elementType, jsonOptions)
             .map(ArrayType(_, containsNull = at.containsNull))
-            .getOrElse(ArrayType(StructType(Array.empty[StructField]), containsNull = at.containsNull))
+            .getOrElse(ArrayType(StructType(Nil), containsNull = at.containsNull))
         case other: DataType =>
           jsonInferSchema.canonicalizeType(other, jsonOptions).getOrElse(StringType)
       }

@@ -106,9 +106,9 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
     // Here we manually submit a fold-like Spark job, so that we can set the SQLConf when running
     // the fold functions in the scheduler event loop thread.
     val existingConf = SQLConf.get
-    var rootType: DataType = StructType(Array.empty[StructField])
+    var rootType: DataType = StructType(Nil)
     val foldPartition = (iter: Iterator[DataType]) =>
-      iter.fold(StructType(Array.empty[StructField]))(typeMerger)
+      iter.fold(StructType(Nil))(typeMerger)
     val mergeResult = (index: Int, taskResult: DataType) => {
       rootType = SQLConf.withExistingConf(existingConf) {
         typeMerger(rootType, taskResult)
@@ -119,7 +119,7 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
     canonicalizeType(rootType, options)
       .find(_.isInstanceOf[StructType])
       // canonicalizeType erases all empty structs, including the only one we want to keep
-      .getOrElse(StructType(Array.empty[StructField])).asInstanceOf[StructType]
+      .getOrElse(StructType(Nil)).asInstanceOf[StructType]
   }
 
   /**
