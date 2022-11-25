@@ -1493,6 +1493,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val RECURSIVE_FILE_LOOKUP =
+    buildConf("spark.sql.sources.recursiveFileLookup")
+      .doc("If dynamic partitioning is used to write the output of UNION or UNION ALL " +
+        "queries into table files with hive.execution.engine=tez, HIVE-17275 add a sub dir " +
+        "in table or partition location. If true, Spark will fetch all files on each location" +
+        " dir and sub dir. Default value is false, Spark just fetch files on each location dir")
+      .version("3.2.0")
+      .internal()
+      .booleanConf
+      .createWithDefault(false)
+
   // Whether to automatically resolve ambiguity in join conditions for self-joins.
   // See SPARK-6231.
   val DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY =
@@ -4594,6 +4605,8 @@ class SQLConf extends Serializable with Logging {
   def castDatetimeToString: Boolean = getConf(SQLConf.LEGACY_CAST_DATETIME_TO_STRING)
 
   def ignoreDataLocality: Boolean = getConf(SQLConf.IGNORE_DATA_LOCALITY)
+
+  def recursiveFileLookup: Boolean = getConf(SQLConf.RECURSIVE_FILE_LOOKUP)
 
   def csvFilterPushDown: Boolean = getConf(CSV_FILTER_PUSHDOWN_ENABLED)
 
