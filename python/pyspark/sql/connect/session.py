@@ -128,7 +128,7 @@ class SparkSession(object):
             """
             with self._lock:
                 if map is not None:
-                    for k, v in map.items():  # type: ignore[assignment]
+                    for k, v in map.items():
                         self._options[k] = to_str(v)
                 else:
                     self._options[cast(str, key)] = to_str(value)
