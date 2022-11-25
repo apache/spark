@@ -477,6 +477,38 @@ class FileIndexSuite extends SharedSparkSession {
     }
   }
 
+  test("recursive dir children files") {
+    withTempDir { dir =>
+      val fs = new Path(dir.getPath).getFileSystem(
+        spark.sessionState.newHadoopConfWithOptions(Map.empty))
+      val allFiles = new mutable.LinkedHashSet[FileStatus]()
+      val partitionDirectory = new File(dir, "a=foo")
+      partitionDirectory.mkdir()
+      for (i <- 1 to 8) {
+        val file0 = new File(partitionDirectory, i + ".txt")
+        stringToFile(file0, "text")
+        allFiles.add(fs.getFileStatus(new Path(file0.getPath)))
+        if (i % 2 == 0) {
+          val subDirectory = new File(partitionDirectory, "i=" + i)
+          subDirectory.mkdir()
+          for (ii <- 1 to 8) {
+            val file1 = new File(subDirectory, ii + ".txt")
+            stringToFile(file1, "text")
+            allFiles.add(fs.getFileStatus(new Path(file1.getPath)))
+          }
+        }
+      }
+      val path = fs.getFileStatus(new Path(partitionDirectory.getPath)).getPath
+      val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, None)
+      val files = fileIndex.listLeafFiles(Seq(path))
+      val leafDirToChildrenFiles = fileIndex.recursiveDirChildrenFiles(files)
+      assert(leafDirToChildrenFiles.size == 5)
+      val actualFiles = leafDirToChildrenFiles(path)
+      assert(allFiles.size == actualFiles.length)
+      assert(actualFiles.forall(actualFiles.contains))
+    }
+  }
+
   test("SPARK-31047 - Improve file listing for ViewFileSystem") {
     val path = mock(classOf[Path])
     val dfs = mock(classOf[ViewFileSystem])
