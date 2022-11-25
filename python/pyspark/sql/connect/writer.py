@@ -16,7 +16,7 @@
 #
 
 
-from typing import Optional, Union, List, overload, Tuple
+from typing import Optional, Union, List, overload, Tuple, cast, Any
 from typing import TYPE_CHECKING
 
 from pyspark.sql.connect.plan import WriteOperation, LogicalPlan
@@ -54,7 +54,7 @@ class DataFrameWriter(OptionUtils):
     (e.g. file systems, key-value stores, etc). Use :attr:`DataFrame.write`
     to access this.
 
-    .. versionadded:: 1.4
+    .. versionadded:: 3.4.0
     """
 
     def __init__(self, plan: "LogicalPlan", session: "RemoteSparkSession"):
@@ -123,7 +123,7 @@ class DataFrameWriter(OptionUtils):
     def format(self, source: str) -> "DataFrameWriter":
         """Specifies the underlying output data source.
 
-        .. versionadded:: 1.4.0
+        .. versionadded:: 3.4.0
 
         Parameters
         ----------
@@ -159,7 +159,7 @@ class DataFrameWriter(OptionUtils):
         """
         Adds a output option for the underlying data source.
 
-        .. versionadded:: 1.5.0
+        .. versionadded:: 3.4.0
 
         Parameters
         ----------
@@ -196,7 +196,7 @@ class DataFrameWriter(OptionUtils):
         """
         Adds output options for the underlying data source.
 
-        .. versionadded:: 1.4.0
+        .. versionadded:: 3.4.0
 
         Parameters
         ----------
@@ -244,7 +244,7 @@ class DataFrameWriter(OptionUtils):
         If specified, the output is laid out on the file system similar
         to Hive's partitioning scheme.
 
-        .. versionadded:: 1.4.0
+        .. versionadded:: 3.4.0
 
         Parameters
         ----------
@@ -283,7 +283,7 @@ class DataFrameWriter(OptionUtils):
         if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
             cols = cols[0]  # type: ignore[assignment]
 
-        self._write.partitioning_cols = cols
+        self._write.partitioning_cols = cast(List[str], cols)
         return self
 
     @overload
@@ -352,7 +352,7 @@ class DataFrameWriter(OptionUtils):
             raise TypeError("all names should be `str`")
 
         self._write.num_buckets = numBuckets
-        self._write.bucket_cols = cols
+        self._write.bucket_cols = cast(List[str], cols)
         return self
 
     @overload
@@ -368,7 +368,7 @@ class DataFrameWriter(OptionUtils):
     ) -> "DataFrameWriter":
         """Sorts the output in each bucket by the given columns on the file system.
 
-        .. versionadded:: 2.3.0
+        .. versionadded:: 3.4.0
 
         Parameters
         ----------
@@ -409,7 +409,7 @@ class DataFrameWriter(OptionUtils):
         if not all(isinstance(c, str) for c in cols) or not (isinstance(col, str)):
             raise TypeError("all names should be `str`")
 
-        self._write.sort_cols = cols
+        self._write.sort_cols = cast(List[str], cols)
         return self
 
     def save(
@@ -426,7 +426,7 @@ class DataFrameWriter(OptionUtils):
         If ``format`` is not specified, the default data source configured by
         ``spark.sql.sources.default`` will be used.
 
-        .. versionadded:: 1.4.0
+        .. versionadded:: 3.4.0
 
         Parameters
         ----------
@@ -480,7 +480,7 @@ class DataFrameWriter(OptionUtils):
         It requires that the schema of the :class:`DataFrame` is the same as the
         schema of the table.
 
-        .. versionadded:: 1.4.0
+        .. versionadded:: 3.4.0
 
         Parameters
         ----------
@@ -541,7 +541,7 @@ class DataFrameWriter(OptionUtils):
         * `error` or `errorifexists`: Throw an exception if data already exists.
         * `ignore`: Silently ignore this operation if data already exists.
 
-        .. versionadded:: 1.4.0
+        .. versionadded:: 3.4.0
 
         Notes
         -----
@@ -607,7 +607,7 @@ class DataFrameWriter(OptionUtils):
         (`JSON Lines text format or newline-delimited JSON <http://jsonlines.org/>`_) at the
         specified path.
 
-        .. versionadded:: 1.4.0
+        .. versionadded:: 3.4.0
 
         Parameters
         ----------
@@ -670,7 +670,7 @@ class DataFrameWriter(OptionUtils):
     ) -> None:
         """Saves the content of the :class:`DataFrame` in Parquet format at the specified path.
 
-        .. versionadded:: 1.4.0
+        .. versionadded:: 3.4.0
 
         Parameters
         ----------
@@ -727,7 +727,7 @@ class DataFrameWriter(OptionUtils):
         """Saves the content of the DataFrame in a text file at the specified path.
         The text files will be encoded as UTF-8.
 
-        .. versionadded:: 1.6.0
+        .. versionadded:: 3.4.0
 
         Parameters
         ----------
@@ -794,7 +794,7 @@ class DataFrameWriter(OptionUtils):
     ) -> None:
         r"""Saves the content of the :class:`DataFrame` in CSV format at the specified path.
 
-        .. versionadded:: 2.0.0
+        .. versionadded:: 3.4.0
 
         Parameters
         ----------
@@ -867,7 +867,7 @@ class DataFrameWriter(OptionUtils):
     ) -> None:
         """Saves the content of the :class:`DataFrame` in ORC format at the specified path.
 
-        .. versionadded:: 1.5.0
+        .. versionadded:: 3.4.0
 
         Parameters
         ----------
@@ -918,5 +918,5 @@ class DataFrameWriter(OptionUtils):
         self._set_opts(compression=compression)
         self.format("orc").save(path)
 
-    def jdbc(self, *args, **kwargs) -> None:
+    def jdbc(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("jdbc() not supported for DataFrameWriter")

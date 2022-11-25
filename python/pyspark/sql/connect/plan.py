@@ -1048,7 +1048,7 @@ class WriteOperation(LogicalPlan):
         self.mode: Optional[str] = None
         self.sort_cols: List[str] = []
         self.partitioning_cols: List[str] = []
-        self.options: dict[str, str] = {}
+        self.options: dict[str, Optional[str]] = {}
         self.num_buckets: int = -1
         self.bucket_cols: List[str] = []
 
@@ -1056,7 +1056,8 @@ class WriteOperation(LogicalPlan):
         assert self._child is not None
         plan = proto.Command()
         plan.write_operation.input.CopyFrom(self._child.plan(session))
-        plan.write_operation.source = self.source
+        if self.source is not None:
+            plan.write_operation.source = self.source
         plan.write_operation.sort_column_names.extend(self.sort_cols)
         plan.write_operation.partitioning_columns.extend(self.partitioning_cols)
 
@@ -1065,7 +1066,10 @@ class WriteOperation(LogicalPlan):
             plan.write_operation.bucket_by.num_buckets = self.num_buckets
 
         for k in self.options:
-            plan.write_operation.options[k] = self.options[k]
+            if self.options[k] is None:
+                del plan.write_operation.options[k]
+            else:
+                plan.write_operation.options[k] = cast(str, self.options[k])
 
         if self.table_name is not None:
             plan.write_operation.table_name = self.table_name

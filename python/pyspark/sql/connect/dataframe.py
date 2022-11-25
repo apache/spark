@@ -112,6 +112,7 @@ class DataFrame(object):
 
     @property
     def write(self) -> "DataFrameWriter":
+        assert self._plan is not None
         return DataFrameWriter(self._plan, self._session)
 
     @classmethod
