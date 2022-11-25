@@ -963,9 +963,9 @@ class NAFill(LogicalPlan):
         if isinstance(v, bool):
             value.boolean = v
         elif isinstance(v, int):
-            value.i64 = v
+            value.long = v
         elif isinstance(v, float):
-            value.fp64 = v
+            value.double = v
         else:
             value.string = v
         return value

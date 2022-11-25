@@ -399,23 +399,6 @@ class DataType(google.protobuf.message.Message):
             self, oneof_group: typing_extensions.Literal["_start_field", b"_start_field"]
         ) -> typing_extensions.Literal["start_field"] | None: ...
 
-    class UUID(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        type_variation_reference: builtins.int
-        def __init__(
-            self,
-            *,
-            type_variation_reference: builtins.int = ...,
-        ) -> None: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "type_variation_reference", b"type_variation_reference"
-            ],
-        ) -> None: ...
-
     class Char(google.protobuf.message.Message):
         """Start compound types."""
 
@@ -439,26 +422,6 @@ class DataType(google.protobuf.message.Message):
         ) -> None: ...
 
     class VarChar(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        LENGTH_FIELD_NUMBER: builtins.int
-        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        length: builtins.int
-        type_variation_reference: builtins.int
-        def __init__(
-            self,
-            *,
-            length: builtins.int = ...,
-            type_variation_reference: builtins.int = ...,
-        ) -> None: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "length", b"length", "type_variation_reference", b"type_variation_reference"
-            ],
-        ) -> None: ...
-
-    class FixedBinary(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         LENGTH_FIELD_NUMBER: builtins.int
@@ -708,9 +671,6 @@ class DataType(google.protobuf.message.Message):
     ARRAY_FIELD_NUMBER: builtins.int
     STRUCT_FIELD_NUMBER: builtins.int
     MAP_FIELD_NUMBER: builtins.int
-    UUID_FIELD_NUMBER: builtins.int
-    FIXED_BINARY_FIELD_NUMBER: builtins.int
-    USER_DEFINED_TYPE_REFERENCE_FIELD_NUMBER: builtins.int
     @property
     def null(self) -> global___DataType.NULL: ...
     @property
@@ -760,11 +720,6 @@ class DataType(google.protobuf.message.Message):
     def struct(self) -> global___DataType.Struct: ...
     @property
     def map(self) -> global___DataType.Map: ...
-    @property
-    def uuid(self) -> global___DataType.UUID: ...
-    @property
-    def fixed_binary(self) -> global___DataType.FixedBinary: ...
-    user_defined_type_reference: builtins.int
     def __init__(
         self,
         *,
@@ -790,9 +745,6 @@ class DataType(google.protobuf.message.Message):
         array: global___DataType.Array | None = ...,
         struct: global___DataType.Struct | None = ...,
         map: global___DataType.Map | None = ...,
-        uuid: global___DataType.UUID | None = ...,
-        fixed_binary: global___DataType.FixedBinary | None = ...,
-        user_defined_type_reference: builtins.int = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -817,8 +769,6 @@ class DataType(google.protobuf.message.Message):
             b"decimal",
             "double",
             b"double",
-            "fixed_binary",
-            b"fixed_binary",
             "float",
             b"float",
             "integer",
@@ -841,10 +791,6 @@ class DataType(google.protobuf.message.Message):
             b"timestamp",
             "timestamp_ntz",
             b"timestamp_ntz",
-            "user_defined_type_reference",
-            b"user_defined_type_reference",
-            "uuid",
-            b"uuid",
             "var_char",
             b"var_char",
             "year_month_interval",
@@ -874,8 +820,6 @@ class DataType(google.protobuf.message.Message):
             b"decimal",
             "double",
             b"double",
-            "fixed_binary",
-            b"fixed_binary",
             "float",
             b"float",
             "integer",
@@ -898,10 +842,6 @@ class DataType(google.protobuf.message.Message):
             b"timestamp",
             "timestamp_ntz",
             b"timestamp_ntz",
-            "user_defined_type_reference",
-            b"user_defined_type_reference",
-            "uuid",
-            b"uuid",
             "var_char",
             b"var_char",
             "year_month_interval",
@@ -933,9 +873,6 @@ class DataType(google.protobuf.message.Message):
         "array",
         "struct",
         "map",
-        "uuid",
-        "fixed_binary",
-        "user_defined_type_reference",
     ] | None: ...
 
 global___DataType = DataType

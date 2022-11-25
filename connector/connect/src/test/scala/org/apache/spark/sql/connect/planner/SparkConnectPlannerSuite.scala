@@ -275,7 +275,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       .setInput(readRel)
       .addExpressions(
         proto.Expression.newBuilder
-          .setLiteral(proto.Expression.Literal.newBuilder.setI32(32))
+          .setLiteral(proto.Expression.Literal.newBuilder.setInteger(32))
           .build())
       .build()
 
