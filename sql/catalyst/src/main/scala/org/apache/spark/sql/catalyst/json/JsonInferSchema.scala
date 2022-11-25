@@ -57,7 +57,7 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
       columnNameOfCorruptRecord: String, e: Throwable): Option[StructType] = {
     parseMode match {
       case PermissiveMode =>
-        Some(StructType(Seq(StructField(columnNameOfCorruptRecord, StringType))))
+        Some(StructType(Array(StructField(columnNameOfCorruptRecord, StringType))))
       case DropMalformedMode =>
         None
       case FailFastMode =>
@@ -106,8 +106,9 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
     // Here we manually submit a fold-like Spark job, so that we can set the SQLConf when running
     // the fold functions in the scheduler event loop thread.
     val existingConf = SQLConf.get
-    var rootType: DataType = StructType(Nil)
-    val foldPartition = (iter: Iterator[DataType]) => iter.fold(StructType(Nil))(typeMerger)
+    var rootType: DataType = StructType(Array.empty[StructField])
+    val foldPartition = (iter: Iterator[DataType]) =>
+      iter.fold(StructType(Array.empty[StructField]))(typeMerger)
     val mergeResult = (index: Int, taskResult: DataType) => {
       rootType = SQLConf.withExistingConf(existingConf) {
         typeMerger(rootType, taskResult)
@@ -118,7 +119,7 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
     canonicalizeType(rootType, options)
       .find(_.isInstanceOf[StructType])
       // canonicalizeType erases all empty structs, including the only one we want to keep
-      .getOrElse(StructType(Nil)).asInstanceOf[StructType]
+      .getOrElse(StructType(Array.empty[StructField])).asInstanceOf[StructType]
   }
 
   /**

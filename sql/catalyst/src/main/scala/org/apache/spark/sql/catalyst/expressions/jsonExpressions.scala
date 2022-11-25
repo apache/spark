@@ -611,7 +611,7 @@ case class JsonToStructs(
         ExprUtils.verifyColumnNameOfCorruptRecord(s, parsedOptions.columnNameOfCorruptRecord)
         (s, StructType(s.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)))
       case other =>
-        (StructType(StructField("value", other) :: Nil), other)
+        (StructType(Array(StructField("value", other))), other)
     }
 
     val rawParser = new JacksonParser(actualSchema, parsedOptions, allowArrayAsStructs = false)
@@ -824,7 +824,7 @@ case class SchemaOfJson(
           jsonInferSchema
             .canonicalizeType(at.elementType, jsonOptions)
             .map(ArrayType(_, containsNull = at.containsNull))
-            .getOrElse(ArrayType(StructType(Nil), containsNull = at.containsNull))
+            .getOrElse(ArrayType(StructType(Array.empty[StructField]), containsNull = at.containsNull))
         case other: DataType =>
           jsonInferSchema.canonicalizeType(other, jsonOptions).getOrElse(StringType)
       }

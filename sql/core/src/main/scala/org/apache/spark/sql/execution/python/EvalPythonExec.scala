@@ -119,7 +119,7 @@ trait EvalPythonExec extends UnaryExecNode {
       projection.initialize(context.partitionId())
       val schema = StructType(dataTypes.zipWithIndex.map { case (dt, i) =>
         StructField(s"_$i", dt)
-      }.toSeq)
+      }.toArray)
 
       // Add rows to queue to join later with the result.
       val projectedRowIter = contextAwareIterator.map { inputRow =>

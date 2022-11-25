@@ -44,9 +44,11 @@ case class ForeachWriterTable[T](
     converter: Either[ExpressionEncoder[T], InternalRow => T])
   extends Table with SupportsWrite {
 
+  import org.apache.spark.sql.types.StructField
+
   override def name(): String = "ForeachSink"
 
-  override def schema(): StructType = StructType(Nil)
+  override def schema(): StructType = StructType(Array.empty[StructField])
 
   override def capabilities(): util.Set[TableCapability] = {
     util.EnumSet.of(TableCapability.STREAMING_WRITE)
