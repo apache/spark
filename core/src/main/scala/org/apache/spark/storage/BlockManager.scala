@@ -2014,7 +2014,7 @@ private[spark] class BlockManager(
       }
     } finally {
       if (!hasRemoveBlock) {
-        logWarning(s"Block $blockId could not be removed normally.")
+        logWarning(s"Block $blockId was not removed normally.")
         blockInfoManager.removeBlock(blockId)
       }
     }
