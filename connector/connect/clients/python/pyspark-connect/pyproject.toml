@@ -4,7 +4,13 @@ version = "0.1.0"
 description = ""
 authors = ["Martin Grund <martin.grund@databricks.com>"]
 readme = "README.md"
-packages = [{include = "pyspark"}]
+packages = [
+    {include = "pyspark"}
+]
+include = [
+    "pyspark/**/*",
+
+]
 
 [tool.poetry.dependencies]
 python = "^3.9"

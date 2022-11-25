@@ -1,4 +1,5 @@
 import pyspark
+import importlib
 from importlib.abc import MetaPathFinder
 from importlib.machinery import ModuleSpec, SourceFileLoader
 from importlib.util import spec_from_file_location
@@ -31,6 +32,8 @@ def _install_sparkconnect_finder():
         def find_spec(
             self, fullname: str, path: Optional[Sequence[str]], target
         ) -> Optional[ModuleSpec]:
+            if not fullname.startswith("pyspark"):
+                return None
 
             # Rewriting the target namespaces as aliases
             if fullname in namespace_map:
@@ -51,7 +54,7 @@ def _install_sparkconnect_finder():
                 return None
 
 
-            # First chech if the package / module exists in the local overrides.
+            # First check if the package / module exists in the local overrides.
             parent, local_name = parts
             if parent in namespace_map:
                 conf = namespace_map[parent]
@@ -74,20 +77,24 @@ def _install_sparkconnect_finder():
 
 
             # Check if we can find the full file or directory somewhere.
-            os_path = os.path.join(*fullname.split("."))
-            module_path = os.path.join(os_path, "__init__.py")
+            parts = fullname.split(".", 1)
+            if len(parts) < 2:
+                return None
 
+            parent, local_name = parts
+            os_path = os.path.join(*local_name.split("."))
+            module_path = os.path.join(pyspark_root, os_path, "__init__.py")
             if os.path.exists(module_path):
                 loader = SourceFileLoader(fullname, module_path)
                 spec = ModuleSpec(fullname, loader, origin=module_path, is_package=True)
                 return spec
 
-
-            filepath = "{}.py".format(os_path)
+            filepath = os.path.join(pyspark_root, "{}.py".format(os_path))
             if os.path.exists(filepath):
                 loader = SourceFileLoader(fullname, filepath)
                 spec = ModuleSpec(fullname, loader, origin=filepath, is_package=False)
                 return spec
+
             return None
 
     sys.meta_path.insert(0, SparkConnectPathFinder())
