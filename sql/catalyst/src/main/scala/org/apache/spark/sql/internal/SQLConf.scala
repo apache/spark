@@ -2628,6 +2628,14 @@ object SQLConf {
       .intConf
       .createWithDefault(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD.defaultValue.get)
 
+  val WINDOW_GROUP_LIMIT_ENABLE = buildConf("spark.sql.window.group.limit.enabled")
+    .internal()
+    .doc("When true, filter the dataset by the window group limit before" +
+      " window-based top-k computation.")
+    .version("3.4.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val SESSION_WINDOW_BUFFER_IN_MEMORY_THRESHOLD =
     buildConf("spark.sql.sessionWindow.buffer.in.memory.threshold")
       .internal()
@@ -4715,6 +4723,8 @@ class SQLConf extends Serializable with Logging {
   def windowExecBufferInMemoryThreshold: Int = getConf(WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD)
 
   def windowExecBufferSpillThreshold: Int = getConf(WINDOW_EXEC_BUFFER_SPILL_THRESHOLD)
+
+  def windowGroupLimitEnabled: Boolean = getConf(WINDOW_GROUP_LIMIT_ENABLE)
 
   def sessionWindowBufferInMemoryThreshold: Int = getConf(SESSION_WINDOW_BUFFER_IN_MEMORY_THRESHOLD)
 

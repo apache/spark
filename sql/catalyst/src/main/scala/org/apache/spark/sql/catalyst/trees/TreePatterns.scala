@@ -126,6 +126,7 @@ object TreePattern extends Enumeration  {
   val TEMP_RESOLVED_COLUMN: Value = Value
   val TYPED_FILTER: Value = Value
   val WINDOW: Value = Value
+  val WINDOW_GROUP_LIMIT: Value = Value
   val WITH_WINDOW_DEFINITION: Value = Value
 
   // Unresolved expression patterns (Alphabetically ordered)
