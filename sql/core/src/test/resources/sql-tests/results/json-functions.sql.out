@@ -70,7 +70,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_OPTIONS.NOT_MAP_FUNCTION",
+  "errorClass" : "INVALID_OPTIONS.NON_MAP_FUNCTION",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -90,7 +90,7 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_OPTIONS.NON_STRING_TYPE",
   "messageParameters" : {
-    "map" : "\"MAP<STRING, INT>\""
+    "mapType" : "\"MAP<STRING, INT>\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -192,7 +192,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_OPTIONS.NOT_MAP_FUNCTION",
+  "errorClass" : "INVALID_OPTIONS.NON_MAP_FUNCTION",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -212,7 +212,7 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_OPTIONS.NON_STRING_TYPE",
   "messageParameters" : {
-    "map" : "\"MAP<STRING, INT>\""
+    "mapType" : "\"MAP<STRING, INT>\""
   },
   "queryContext" : [ {
     "objectType" : "",

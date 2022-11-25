@@ -399,7 +399,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df2.selectExpr("to_json(a, named_struct('a', 1))")
       },
-      errorClass = "INVALID_OPTIONS.NOT_MAP_FUNCTION",
+      errorClass = "INVALID_OPTIONS.NON_MAP_FUNCTION",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = "to_json(a, named_struct('a', 1))",
@@ -413,7 +413,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         df2.selectExpr("to_json(a, map('a', 1))")
       },
       errorClass = "INVALID_OPTIONS.NON_STRING_TYPE",
-      parameters = Map("map" -> "\"MAP<STRING, INT>\""),
+      parameters = Map("mapType" -> "\"MAP<STRING, INT>\""),
       context = ExpectedContext(
         fragment = "to_json(a, map('a', 1))",
         start = 0,
@@ -460,7 +460,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df3.selectExpr("from_json(value, 'time Timestamp', named_struct('a', 1))")
       },
-      errorClass = "INVALID_OPTIONS.NOT_MAP_FUNCTION",
+      errorClass = "INVALID_OPTIONS.NON_MAP_FUNCTION",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = "from_json(value, 'time Timestamp', named_struct('a', 1))",
@@ -473,7 +473,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         df3.selectExpr("from_json(value, 'time Timestamp', map('a', 1))")
       },
       errorClass = "INVALID_OPTIONS.NON_STRING_TYPE",
-      parameters = Map("map" -> "\"MAP<STRING, INT>\""),
+      parameters = Map("mapType" -> "\"MAP<STRING, INT>\""),
       context = ExpectedContext(
         fragment = "from_json(value, 'time Timestamp', map('a', 1))",
         start = 0,

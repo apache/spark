@@ -735,14 +735,14 @@
       "Invalid options:"
     ],
     "subClass" : {
-      "NON_STRING_TYPE" : {
+      "NON_MAP_FUNCTION" : {
         "message" : [
-          "A type of keys and values in map() must be string, but got <map>."
+          "Must use the `map()` function for options."
         ]
       },
-      "NOT_MAP_FUNCTION" : {
+      "NON_STRING_TYPE" : {
         "message" : [
-          "Must use a map() function for options."
+          "A type of keys and values in `map()` must be string, but got <mapType>."
         ]
       }
     }

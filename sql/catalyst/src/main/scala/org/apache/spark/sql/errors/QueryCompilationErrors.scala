@@ -1014,12 +1014,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def keyValueInMapNotStringError(m: CreateMap): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_OPTIONS.NON_STRING_TYPE",
-      messageParameters = Map("map" -> toSQLType(m.dataType)))
+      messageParameters = Map("mapType" -> toSQLType(m.dataType)))
   }
 
   def nonMapFunctionNotAllowedError(): Throwable = {
     new AnalysisException(
-      errorClass = "INVALID_OPTIONS.NOT_MAP_FUNCTION",
+      errorClass = "INVALID_OPTIONS.NON_MAP_FUNCTION",
       messageParameters = Map.empty)
   }
 
