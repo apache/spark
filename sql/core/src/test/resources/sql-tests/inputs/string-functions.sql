@@ -225,3 +225,7 @@ select to_binary(null, cast(null as string));
 -- invalid format
 select to_binary('abc', 1);
 select to_binary('abc', 'invalidFormat');
+CREATE TEMPORARY VIEW fmtTable(fmtField) AS SELECT * FROM VALUES ('invalidFormat');
+SELECT to_binary('abc', fmtField) FROM fmtTable;
+-- Clean up
+DROP VIEW IF EXISTS fmtTable;

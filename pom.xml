@@ -114,11 +114,14 @@
     <maven.version>3.8.6</maven.version>
     <exec-maven-plugin.version>1.6.0</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
-    <slf4j.version>2.0.3</slf4j.version>
+    <slf4j.version>2.0.4</slf4j.version>
     <log4j.version>2.19.0</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
     <hadoop.version>3.3.4</hadoop.version>
-    <protobuf.version>2.5.0</protobuf.version>
+    <!-- Protobuf version for building with Hadoop/Yarn dependencies -->
+    <protobuf.hadoopDependency.version>2.5.0</protobuf.hadoopDependency.version>
+    <!-- Actual Protobuf version in Spark modules like Spark Connect, protobuf connector, etc. -->
+    <protobuf.version>3.21.9</protobuf.version>
     <yarn.version>${hadoop.version}</yarn.version>
     <zookeeper.version>3.6.3</zookeeper.version>
     <curator.version>2.13.0</curator.version>
@@ -175,8 +178,8 @@
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
     <scalafmt.changedOnly>true</scalafmt.changedOnly>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.14.0</fasterxml.jackson.version>
-    <fasterxml.jackson.databind.version>2.14.0</fasterxml.jackson.databind.version>
+    <fasterxml.jackson.version>2.14.1</fasterxml.jackson.version>
+    <fasterxml.jackson.databind.version>2.14.1</fasterxml.jackson.databind.version>
     <snappy.version>1.1.8.4</snappy.version>
     <netlib.ludovic.dev.version>3.0.2</netlib.ludovic.dev.version>
     <commons-codec.version>1.15</commons-codec.version>
@@ -190,7 +193,7 @@
     <commons-pool2.version>2.11.1</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
     <guava.version>14.0.1</guava.version>
-    <janino.version>3.1.7</janino.version>
+    <janino.version>3.1.9</janino.version>
     <jersey.version>2.36</jersey.version>
     <joda.version>2.12.1</joda.version>
     <jodd.version>3.5.2</jodd.version>
@@ -820,7 +823,7 @@
       <dependency>
         <groupId>com.google.protobuf</groupId>
         <artifactId>protobuf-java</artifactId>
-        <version>${protobuf.version}</version>
+        <version>${protobuf.hadoopDependency.version}</version>
         <scope>${hadoop.deps.scope}</scope>
       </dependency>
       <dependency>

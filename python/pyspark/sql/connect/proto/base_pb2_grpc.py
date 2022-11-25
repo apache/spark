@@ -46,7 +46,10 @@ class SparkConnectServiceServicer(object):
     """Main interface for the SparkConnect service."""
 
     def ExecutePlan(self, request, context):
-        """Executes a request that contains the query and returns a stream of [[Response]]."""
+        """Executes a request that contains the query and returns a stream of [[Response]].
+
+        It is guaranteed that there is at least one ARROW batch returned even if the result set is empty.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")

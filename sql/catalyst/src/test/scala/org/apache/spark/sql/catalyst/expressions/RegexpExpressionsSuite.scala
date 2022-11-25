@@ -154,15 +154,18 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on nonascii
 
     // invalid escaping
-    val invalidEscape = intercept[AnalysisException] {
-      evaluateWithoutCodegen("""a""" like """\a""")
-    }
-    assert(invalidEscape.getMessage.contains("pattern"))
-
-    val endEscape = intercept[AnalysisException] {
-      evaluateWithoutCodegen("""a""" like """a\""")
-    }
-    assert(endEscape.getMessage.contains("pattern"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        evaluateWithoutCodegen("""a""" like """\a""")
+      },
+      errorClass = "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
+      parameters = Map("format" -> """'\\a'""", "char" -> "'a'"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        evaluateWithoutCodegen("""a""" like """a\""")
+      },
+      errorClass = "INVALID_FORMAT.ESC_AT_THE_END",
+      parameters = Map("format" -> """'a\\'"""))
 
     // case
     checkLiteralRow("A" like _, "a%", false)
@@ -231,14 +234,12 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       // scalastyle:on nonascii
 
       // invalid escaping
-      val invalidEscape = intercept[AnalysisException] {
-        evaluateWithoutCodegen("""a""" like(s"""${escapeChar}a""", escapeChar))
-      }
-      assert(invalidEscape.getMessage.contains("pattern"))
-      val endEscape = intercept[AnalysisException] {
-        evaluateWithoutCodegen("""a""" like(s"""a$escapeChar""", escapeChar))
-      }
-      assert(endEscape.getMessage.contains("pattern"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          evaluateWithoutCodegen("""a""" like(s"""${escapeChar}a""", escapeChar))
+        },
+        errorClass = "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
+        parameters = Map("format" -> s"'${escapeChar}a'", "char" -> "'a'"))
 
       // case
       checkLiteralRow("A" like(_, escapeChar), "a%", false)
