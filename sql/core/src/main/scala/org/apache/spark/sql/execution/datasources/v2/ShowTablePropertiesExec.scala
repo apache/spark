@@ -47,7 +47,7 @@ case class ShowTablePropertiesExec(
         }
       case None =>
         properties.toSeq.sortBy(_._1).map(kv =>
-          toCatalystRow(kv._1, kv._2)).toSeq
+          toCatalystRow(kv._1, kv._2))
     }
   }
 }

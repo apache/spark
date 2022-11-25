@@ -22,7 +22,6 @@ import decimal
 import datetime
 
 import pyspark.sql.connect.proto as proto
-from pyspark.sql.connect._typing import PrimitiveType
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.client import RemoteSparkSession
@@ -33,6 +32,8 @@ def _bin_op(
     name: str, doc: str = "binary function", reverse: bool = False
 ) -> Callable[["Column", Any], "Expression"]:
     def _(self: "Column", other: Any) -> "Expression":
+        from pyspark.sql.connect._typing import PrimitiveType
+
         if isinstance(other, get_args(PrimitiveType)):
             other = LiteralExpression(other)
         if not reverse:
@@ -70,6 +71,8 @@ class Expression(object):
         """Returns a binary expression with the current column as the left
         side and the other expression as the right side.
         """
+        from pyspark.sql.connect._typing import PrimitiveType
+
         if isinstance(other, get_args(PrimitiveType)):
             other = LiteralExpression(other)
         return ScalarFunctionExpression("==", self, other)

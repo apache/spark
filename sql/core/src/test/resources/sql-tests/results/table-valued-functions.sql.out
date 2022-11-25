@@ -83,7 +83,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "_LEGACY_ERROR_TEMP_1179",
   "messageParameters" : {
     "arguments" : "integer, integer, integer, integer, integer",
-    "details" : "Invalid number of arguments for function range. Expected: one of 1, 2, 3 and 4; Found: 5.",
+    "details" : "[WRONG_NUM_ARGS] The `range` requires [1, 2, 3, 4] parameters but the actual number is 5.",
     "name" : "range",
     "usage" : "\n    range(start: long, end: long, step: long, numSlices: integer)\n    range(start: long, end: long, step: long)\n    range(start: long, end: long)\n    range(end: long)"
   },

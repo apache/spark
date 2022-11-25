@@ -57,7 +57,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       s"""
         | Registering new PythonUDF:
         | name: $name
-        | command: ${udf.func.command.toSeq}
+        | command: ${udf.func.command}
         | envVars: ${udf.func.envVars}
         | pythonIncludes: ${udf.func.pythonIncludes}
         | pythonExec: ${udf.func.pythonExec}
