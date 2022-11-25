@@ -103,7 +103,7 @@ object RandomDataGenerator {
    * @param acceptedTypes types to draw from.
    */
   def randomSchema(rand: Random, numFields: Int, acceptedTypes: Seq[DataType]): StructType = {
-    StructType(Array.tabulate(numFields) { i =>
+    StructType(Seq.tabulate(numFields) { i =>
       val dt = acceptedTypes(rand.nextInt(acceptedTypes.size))
       StructField("col_" + i, dt, nullable = rand.nextBoolean())
     })
@@ -140,7 +140,7 @@ object RandomDataGenerator {
       }
       i += 1
     }
-    StructType(fields.toArray)
+    StructType(fields.toSeq)
   }
 
   private def uniformMicrosRand(rand: Random): Long = {
