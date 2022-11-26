@@ -778,6 +778,11 @@
       "<protobufClassName> is not a Protobuf message type"
     ]
   },
+  "INVALID_MAP_KEY" : {
+    "message" : [
+      "Cannot use null as map key!"
+    ]
+  },
   "INVALID_SCHEMA" : {
     "message" : [
       "The expression <expr> is not a valid schema string."
@@ -3502,11 +3507,6 @@
   "_LEGACY_ERROR_TEMP_2018" : {
     "message" : [
       "class `<cls>` is not supported by `MapObjects` as resulting collection."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2019" : {
-    "message" : [
-      "Cannot use null as map key!"
     ]
   },
   "_LEGACY_ERROR_TEMP_2020" : {
