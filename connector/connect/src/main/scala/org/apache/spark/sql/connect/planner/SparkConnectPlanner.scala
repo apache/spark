@@ -25,7 +25,7 @@ import com.google.common.collect.{Lists, Maps}
 import org.apache.spark.TaskContext
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.WriteOperation
+import org.apache.spark.connect.proto.{CatalogRequest, CatalogResponse, WriteOperation}
 import org.apache.spark.sql.{Column, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.AliasIdentifier
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedStar}
@@ -582,6 +582,30 @@ class SparkConnectPlanner(session: SparkSession) {
         handleCreateViewCommand(command.getCreateDataframeView)
       case _ => throw new UnsupportedOperationException(s"$command not supported.")
     }
+  }
+
+  def processCatalogRequest(req: CatalogRequest): CatalogResponse.Builder = {
+    req.getReqTypeCase match {
+      case proto.CatalogRequest.ReqTypeCase.TABLE_EXISTS =>
+        processTableExists(req.getTableExists)
+      case proto.CatalogRequest.ReqTypeCase.NAMESPACE_EXISTS =>
+        processTableExists(req.getNamespaceExists)
+      case _ => throw new UnsupportedOperationException(s"${req.getReqTypeCase} not supported.")
+    }
+  }
+
+  private def processTableExists(req: CatalogRequest.TableExists): CatalogResponse.Builder = {
+    val ret = session.catalog.tableExists(req.getTableName)
+    CatalogResponse
+      .newBuilder()
+      .setTableExists(CatalogResponse.TableExists.newBuilder().setIfExists(ret))
+  }
+
+  private def processTableExists(req: CatalogRequest.NamespaceExists): CatalogResponse.Builder = {
+    val ret = session.catalog.databaseExists(req.getNamespaceName)
+    CatalogResponse
+      .newBuilder()
+      .setNamespaceExists(CatalogResponse.NamespaceExists.newBuilder().setIfExists(ret))
   }
 
   /**

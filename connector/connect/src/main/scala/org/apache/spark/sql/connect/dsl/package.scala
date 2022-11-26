@@ -38,6 +38,8 @@ package object dsl {
 
   class MockRemoteSession {}
 
+  class MockCatalog {}
+
   object expressions { // scalastyle:ignore
     implicit class DslString(val s: String) {
       def protoAttr: Expression =
@@ -642,6 +644,25 @@ package object dsl {
           .setIsAll(isAll)
           .setByName(byName)
         setOp
+      }
+    }
+  }
+
+  object catalog { // scalastyle:ignore
+    implicit class DslMockCatalog(val catalog: MockCatalog) {
+      def tableExists(tableName: String): CatalogRequest = {
+        CatalogRequest
+          .newBuilder()
+          .setTableExists(CatalogRequest.TableExists.newBuilder().setTableName(tableName))
+          .build()
+      }
+
+      def databaseExists(dbName: String): CatalogRequest = {
+        CatalogRequest
+          .newBuilder()
+          .setNamespaceExists(
+            CatalogRequest.NamespaceExists.newBuilder().setNamespaceName(dbName))
+          .build()
       }
     }
   }

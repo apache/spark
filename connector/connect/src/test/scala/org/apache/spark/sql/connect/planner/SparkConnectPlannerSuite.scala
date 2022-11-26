@@ -23,6 +23,7 @@ import com.google.protobuf.ByteString
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
+import org.apache.spark.connect.proto.CatalogResponse
 import org.apache.spark.connect.proto.Expression.UnresolvedStar
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.InternalRow
@@ -45,6 +46,10 @@ trait SparkConnectPlanTest extends SharedSparkSession {
 
   def transform(cmd: proto.Command): Unit = {
     new SparkConnectPlanner(spark).process(cmd)
+  }
+
+  def transform(req: proto.CatalogRequest): CatalogResponse = {
+    new SparkConnectPlanner(spark).processCatalogRequest(req).build()
   }
 
   def readRel: proto.Relation =

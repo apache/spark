@@ -183,6 +183,46 @@ message ExecutePlanResponse {
   }
 }
 
+// Base request to execute Catalog operations.
+message CatalogRequest {
+  oneof req_type {
+    TableExists table_exists = 1;
+    NamespaceExists namespace_exists = 2;
+  }
+
+  // (Required) User context
+  UserContext user_context = 3;
+
+  // Check if the table or view with the specified name exists. This can either be a temporary
+  // view or a table/view.
+  message TableExists {
+    // (Required) the name of the table.
+    string table_name = 1;
+  }
+
+  // Check if the namespace (database) with the specified name exists.
+  message NamespaceExists {
+    // (Required) the name of the namespace.
+    string namespace_name = 1;
+  }
+}
+
+// Base response to execute Catalog operations.
+message CatalogResponse {
+  oneof res_type {
+    TableExists table_exists = 1;
+    NamespaceExists namespace_exists = 2;
+  }
+
+  message TableExists {
+    bool if_exists = 1;
+  }
+
+  message NamespaceExists {
+    bool if_exists = 1;
+  }
+}
+
 // Main interface for the SparkConnect service.
 service SparkConnectService {
 
@@ -193,5 +233,8 @@ service SparkConnectService {
 
   // Analyzes a query and returns a [[AnalyzeResponse]] containing metadata about the query.
   rpc AnalyzePlan(AnalyzePlanRequest) returns (AnalyzePlanResponse) {}
+
+  // Execute a catalog operation and returns a [[CatalogResponse]] which contains results if there is any
+  rpc Catalog(CatalogRequest) returns (CatalogResponse) {}
 }
 

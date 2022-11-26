@@ -120,6 +120,19 @@ class SparkConnectService(debug: Boolean)
     }
   }
 
+  /**
+   * Handle catalog operations.
+   */
+  override def catalog(
+      request: CatalogRequest,
+      responseObserver: StreamObserver[CatalogResponse]): Unit = {
+    val session =
+      SparkConnectService.getOrCreateIsolatedSession(request.getUserContext.getUserId).session
+    val response = handleCatalogRequest(request, session)
+    responseObserver.onNext(response.build())
+    responseObserver.onCompleted()
+  }
+
   def handleAnalyzePlanRequest(
       relation: proto.Relation,
       session: SparkSession,
@@ -136,6 +149,13 @@ class SparkConnectService(debug: Boolean)
     response.setIsLocal(ds.isLocal)
     response.setIsStreaming(ds.isStreaming)
     response.addAllInputFiles(ds.inputFiles.toSeq.asJava)
+  }
+
+  def handleCatalogRequest(
+      req: CatalogRequest,
+      session: SparkSession): proto.CatalogResponse.Builder = {
+    val planner = new SparkConnectPlanner(session)
+    planner.processCatalogRequest(req)
   }
 }
 

@@ -29,7 +29,8 @@ import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.connect.dsl.MockRemoteSession
+import org.apache.spark.sql.connect.dsl.{MockCatalog, MockRemoteSession}
+import org.apache.spark.sql.connect.dsl.catalog._
 import org.apache.spark.sql.connect.dsl.commands._
 import org.apache.spark.sql.connect.dsl.expressions._
 import org.apache.spark.sql.connect.dsl.plans._
@@ -44,6 +45,8 @@ import org.apache.spark.sql.types.{IntegerType, MapType, Metadata, StringType, S
  */
 class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   lazy val connect = new MockRemoteSession()
+
+  lazy val catalog = new MockCatalog()
 
   lazy val connectTestRelation =
     createLocalRelationProto(
@@ -478,6 +481,23 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     combinations.foreach { a =>
       assert(DataTypeProtoConverter.toSaveModeProto(a._1) == a._2)
       assert(DataTypeProtoConverter.toSaveMode(a._2) == a._1)
+    }
+  }
+
+  test("Test Catalog tableExists and namespaceExists") {
+    withTable("test_table") {
+      val resp = transform(catalog.tableExists("test_table"))
+      assert(!resp.getTableExists.getIfExists)
+      spark.sql("CREATE TABLE IF NOT EXISTS test_table (key INT) USING csv")
+      val resp2 = transform(catalog.tableExists("test_table"))
+      assert(resp2.getTableExists.getIfExists)
+    }
+    withDatabase("test_db") {
+      val resp = transform(catalog.databaseExists("test_db"))
+      assert(!resp.getNamespaceExists.getIfExists)
+      spark.sql("CREATE DATABASE IF NOT EXISTS test_db")
+      val resp2 = transform(catalog.databaseExists("test_db"))
+      assert(resp2.getNamespaceExists.getIfExists)
     }
   }
 
