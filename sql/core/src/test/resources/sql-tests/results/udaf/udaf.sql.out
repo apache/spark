@@ -32,11 +32,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1042",
+  "errorClass" : "WRONG_NUM_ARGS",
   "messageParameters" : {
-    "actualNumber" : "2",
-    "expectedInfo" : "1",
-    "name" : "spark_catalog.default.mydoubleavg"
+    "actualNum" : "2",
+    "expectedNum" : "1",
+    "functionName" : "`spark_catalog`.`default`.`mydoubleavg`"
   },
   "queryContext" : [ {
     "objectType" : "",

@@ -444,10 +444,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_LIKE_PATTERN.ESC_IN_THE_MIDDLE",
+  "errorClass" : "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
   "messageParameters" : {
     "char" : "'a'",
-    "pattern" : "'m%aca'"
+    "format" : "'m%aca'"
   }
 }
 
@@ -459,10 +459,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_LIKE_PATTERN.ESC_IN_THE_MIDDLE",
+  "errorClass" : "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
   "messageParameters" : {
     "char" : "'a'",
-    "pattern" : "'m%aca'"
+    "format" : "'m%aca'"
   }
 }
 
@@ -474,10 +474,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_LIKE_PATTERN.ESC_IN_THE_MIDDLE",
+  "errorClass" : "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
   "messageParameters" : {
     "char" : "'a'",
-    "pattern" : "'m%a%%a'"
+    "format" : "'m%a%%a'"
   }
 }
 
@@ -489,10 +489,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_LIKE_PATTERN.ESC_IN_THE_MIDDLE",
+  "errorClass" : "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
   "messageParameters" : {
     "char" : "'a'",
-    "pattern" : "'m%a%%a'"
+    "format" : "'m%a%%a'"
   }
 }
 
@@ -504,10 +504,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_LIKE_PATTERN.ESC_IN_THE_MIDDLE",
+  "errorClass" : "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
   "messageParameters" : {
     "char" : "'e'",
-    "pattern" : "'b_ear'"
+    "format" : "'b_ear'"
   }
 }
 
@@ -519,10 +519,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_LIKE_PATTERN.ESC_IN_THE_MIDDLE",
+  "errorClass" : "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
   "messageParameters" : {
     "char" : "'e'",
-    "pattern" : "'b_ear'"
+    "format" : "'b_ear'"
   }
 }
 
@@ -534,10 +534,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_LIKE_PATTERN.ESC_IN_THE_MIDDLE",
+  "errorClass" : "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
   "messageParameters" : {
     "char" : "'e'",
-    "pattern" : "'b_e__r'"
+    "format" : "'b_e__r'"
   }
 }
 
@@ -549,10 +549,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_LIKE_PATTERN.ESC_IN_THE_MIDDLE",
+  "errorClass" : "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
   "messageParameters" : {
     "char" : "'e'",
-    "pattern" : "'b_e__r'"
+    "format" : "'b_e__r'"
   }
 }
 

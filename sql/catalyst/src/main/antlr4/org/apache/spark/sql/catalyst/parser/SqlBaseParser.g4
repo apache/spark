@@ -697,7 +697,13 @@ setQuantifier
     ;
 
 relation
-    : LATERAL? relationPrimary joinRelation*
+    : LATERAL? relationPrimary relationExtension*
+    ;
+
+relationExtension
+    : joinRelation
+    | pivotClause
+    | unpivotClause
     ;
 
 joinRelation

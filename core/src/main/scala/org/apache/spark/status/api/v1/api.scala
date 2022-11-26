@@ -424,7 +424,7 @@ class ExecutorPeakMetricsDistributions private[spark](
   /** Returns the distributions for the specified metric. */
   def getMetricDistribution(metricName: String): IndexedSeq[Double] = {
     val sorted = executorMetrics.map(_.getMetricValue(metricName)).sorted
-    indices.map(i => sorted(i.toInt).toDouble).toIndexedSeq
+    indices.map(i => sorted(i.toInt).toDouble)
   }
 }
 

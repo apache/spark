@@ -283,17 +283,38 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
     CLIENT_ID_FIELD_NUMBER: builtins.int
     SCHEMA_FIELD_NUMBER: builtins.int
     EXPLAIN_STRING_FIELD_NUMBER: builtins.int
+    TREE_STRING_FIELD_NUMBER: builtins.int
+    IS_LOCAL_FIELD_NUMBER: builtins.int
+    IS_STREAMING_FIELD_NUMBER: builtins.int
+    INPUT_FILES_FIELD_NUMBER: builtins.int
     client_id: builtins.str
     @property
     def schema(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
     explain_string: builtins.str
     """The extended explain string as produced by Spark."""
+    tree_string: builtins.str
+    """Get the tree string of the schema."""
+    is_local: builtins.bool
+    """Whether the 'collect' and 'take' methods can be run locally."""
+    is_streaming: builtins.bool
+    """Whether this plan contains one or more sources that continuously
+    return data as it arrives.
+    """
+    @property
+    def input_files(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """A best-effort snapshot of the files that compose this Dataset"""
     def __init__(
         self,
         *,
         client_id: builtins.str = ...,
         schema: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
         explain_string: builtins.str = ...,
+        tree_string: builtins.str = ...,
+        is_local: builtins.bool = ...,
+        is_streaming: builtins.bool = ...,
+        input_files: collections.abc.Iterable[builtins.str] | None = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["schema", b"schema"]
@@ -301,7 +322,20 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "client_id", b"client_id", "explain_string", b"explain_string", "schema", b"schema"
+            "client_id",
+            b"client_id",
+            "explain_string",
+            b"explain_string",
+            "input_files",
+            b"input_files",
+            "is_local",
+            b"is_local",
+            "is_streaming",
+            b"is_streaming",
+            "schema",
+            b"schema",
+            "tree_string",
+            b"tree_string",
         ],
     ) -> None: ...
 
@@ -384,28 +418,6 @@ class ExecutePlanResponse(google.protobuf.message.Message):
 
     class ArrowBatch(google.protobuf.message.Message):
         """Batch results of metrics."""
-
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        ROW_COUNT_FIELD_NUMBER: builtins.int
-        DATA_FIELD_NUMBER: builtins.int
-        row_count: builtins.int
-        data: builtins.bytes
-        def __init__(
-            self,
-            *,
-            row_count: builtins.int = ...,
-            data: builtins.bytes = ...,
-        ) -> None: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["data", b"data", "row_count", b"row_count"]
-        ) -> None: ...
-
-    class JSONBatch(google.protobuf.message.Message):
-        """Message type when the result is returned as JSON. This is essentially a bulk wrapper
-        for the JSON result of a Spark DataFrame. All rows are returned in the JSON record format
-        of `{col -> row}`.
-        """
 
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -530,13 +542,10 @@ class ExecutePlanResponse(google.protobuf.message.Message):
 
     CLIENT_ID_FIELD_NUMBER: builtins.int
     ARROW_BATCH_FIELD_NUMBER: builtins.int
-    JSON_BATCH_FIELD_NUMBER: builtins.int
     METRICS_FIELD_NUMBER: builtins.int
     client_id: builtins.str
     @property
     def arrow_batch(self) -> global___ExecutePlanResponse.ArrowBatch: ...
-    @property
-    def json_batch(self) -> global___ExecutePlanResponse.JSONBatch: ...
     @property
     def metrics(self) -> global___ExecutePlanResponse.Metrics:
         """Metrics for the query execution. Typically, this field is only present in the last
@@ -547,39 +556,17 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         *,
         client_id: builtins.str = ...,
         arrow_batch: global___ExecutePlanResponse.ArrowBatch | None = ...,
-        json_batch: global___ExecutePlanResponse.JSONBatch | None = ...,
         metrics: global___ExecutePlanResponse.Metrics | None = ...,
     ) -> None: ...
     def HasField(
         self,
-        field_name: typing_extensions.Literal[
-            "arrow_batch",
-            b"arrow_batch",
-            "json_batch",
-            b"json_batch",
-            "metrics",
-            b"metrics",
-            "result_type",
-            b"result_type",
-        ],
+        field_name: typing_extensions.Literal["arrow_batch", b"arrow_batch", "metrics", b"metrics"],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "arrow_batch",
-            b"arrow_batch",
-            "client_id",
-            b"client_id",
-            "json_batch",
-            b"json_batch",
-            "metrics",
-            b"metrics",
-            "result_type",
-            b"result_type",
+            "arrow_batch", b"arrow_batch", "client_id", b"client_id", "metrics", b"metrics"
         ],
     ) -> None: ...
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["result_type", b"result_type"]
-    ) -> typing_extensions.Literal["arrow_batch", "json_batch"] | None: ...
 
 global___ExecutePlanResponse = ExecutePlanResponse

@@ -112,9 +112,13 @@ object SparkBuild extends PomBuild {
     if (profiles.contains("user-defined-protoc")) {
       val connectProtocExecPath = Properties.envOrNone("CONNECT_PROTOC_EXEC_PATH")
       val connectPluginExecPath = Properties.envOrNone("CONNECT_PLUGIN_EXEC_PATH")
+      val protobufProtocExecPath = Properties.envOrNone("PROTOBUF_PROTOC_EXEC_PATH")
       if (connectProtocExecPath.isDefined && connectPluginExecPath.isDefined) {
         sys.props.put("connect.protoc.executable.path", connectProtocExecPath.get)
         sys.props.put("connect.plugin.executable.path", connectPluginExecPath.get)
+      }
+      if (protobufProtocExecPath.isDefined) {
+        sys.props.put("protobuf.protoc.executable.path", protobufProtocExecPath.get)
       }
     }
     profiles
@@ -779,7 +783,16 @@ object SparkProtobuf {
       case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
       case _ => MergeStrategy.first
     },
-  )
+  ) ++ {
+    val protobufProtocExecPath = sys.props.get("protobuf.protoc.executable.path")
+    if (protobufProtocExecPath.isDefined) {
+      Seq(
+        PB.protocExecutable := file(protobufProtocExecPath.get)
+      )
+    } else {
+      Seq.empty
+    }
+  }
 }
 
 object Unsafe {

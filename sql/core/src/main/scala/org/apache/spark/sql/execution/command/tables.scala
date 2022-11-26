@@ -238,7 +238,6 @@ case class AlterTableAddColumnsCommand(
 
     SchemaUtils.checkColumnNameDuplication(
       (colsWithProcessedDefaults ++ catalogTable.schema).map(_.name),
-      "in the table definition of " + table.identifier,
       conf.caseSensitiveAnalysis)
     DDLUtils.checkTableColumns(catalogTable, StructType(colsWithProcessedDefaults))
 
@@ -940,7 +939,7 @@ case class ShowTablePropertiesCommand(
           }
         case None =>
           properties.filterKeys(!_.startsWith(CatalogTable.VIEW_PREFIX))
-            .toSeq.sortBy(_._1).map(p => Row(p._1, p._2)).toSeq
+            .toSeq.sortBy(_._1).map(p => Row(p._1, p._2))
       }
     }
   }
