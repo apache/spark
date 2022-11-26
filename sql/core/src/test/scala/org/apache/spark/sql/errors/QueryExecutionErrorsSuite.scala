@@ -651,13 +651,14 @@ class QueryExecutionErrorsSuite
           ds.writeStream.option("checkpointLocation", checkpointLocation).queryName("_").format("memory").start()
         }
 
+        val expectedPath = p.toURI
         checkError(
           exception = e.getCause.asInstanceOf[SparkFileAlreadyExistsException],
           errorClass = "FAILED_RENAME_PATH",
           sqlState = Some("22023"),
           matchPVals = true,
-          parameters = Map("sourcePath" -> s"file:$checkpointLocation.+",
-            "targetPath" -> s"file:$checkpointLocation.+"))
+          parameters = Map("sourcePath" -> s"$expectedPath.+",
+            "targetPath" -> s"$expectedPath.+"))
       }
     }
   }
