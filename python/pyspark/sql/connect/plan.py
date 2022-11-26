@@ -185,7 +185,7 @@ class LocalRelation(LogicalPlan):
         super().__init__(None)
         self._pdf = pdf
 
-    def plan(self, session: "RemoteSparkSession") -> proto.Relation:
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._pdf is not None
 
         sink = pa.BufferOutputStream()
@@ -202,7 +202,7 @@ class LocalRelation(LogicalPlan):
         return f"{' ' * indent}<LocalRelation>\n"
 
     def _repr_html_(self) -> str:
-        return f"""
+        return """
         <ul>
             <li>LocalRelation</li>
         </ul>
