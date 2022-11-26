@@ -1062,7 +1062,7 @@ class DataFrameWriter(OptionUtils):
         >>> schema = StructType([
         ...     StructField("age",IntegerType(),True),
         ...     StructField("name",StringType(),True),
-        ...])
+        ... ])
         >>> import tempfile
         >>> with tempfile.TemporaryDirectory() as d:
         ...     # Write a DataFrame into a CSV file with 'nullValue' option set to 'Hyukjin Kwon',

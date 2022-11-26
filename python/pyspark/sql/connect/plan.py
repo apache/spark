@@ -1052,7 +1052,7 @@ class WriteOperation(LogicalPlan):
         self.num_buckets: int = -1
         self.bucket_cols: List[str] = []
 
-    def command(self, session: "RemoteSparkSession") -> proto.Command:
+    def command(self, session: "SparkConnectClient") -> proto.Command:
         assert self._child is not None
         plan = proto.Command()
         plan.write_operation.input.CopyFrom(self._child.plan(session))

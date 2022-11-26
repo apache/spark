@@ -25,7 +25,7 @@ from pyspark.sql.utils import to_str
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import OptionalPrimitiveType
-    from pyspark.sql.connect.client import RemoteSparkSession
+    from pyspark.sql.connect.session import SparkSession
 
 
 PathOrPaths = Union[str, List[str]]
@@ -57,9 +57,9 @@ class DataFrameWriter(OptionUtils):
     .. versionadded:: 3.4.0
     """
 
-    def __init__(self, plan: "LogicalPlan", session: "RemoteSparkSession"):
+    def __init__(self, plan: "LogicalPlan", session: "SparkSession"):
         self._df: "LogicalPlan" = plan
-        self._spark: "RemoteSparkSession" = session
+        self._spark: "SparkSession" = session
         self._write: "WriteOperation" = WriteOperation(self._df)
 
     def mode(self, saveMode: Optional[str]) -> "DataFrameWriter":
@@ -476,7 +476,7 @@ class DataFrameWriter(OptionUtils):
         if format is not None:
             self.format(format)
         self._write.path = path
-        self._spark.execute_command(self._write.command(self._spark))
+        self._spark.client.execute_command(self._write.command(self._spark.client))
 
     def insertInto(self, tableName: str, overwrite: Optional[bool] = None) -> None:
         """Inserts the content of the :class:`DataFrame` to the specified table.
@@ -594,7 +594,7 @@ class DataFrameWriter(OptionUtils):
         if format is not None:
             self.format(format)
         self._write.table_name = name
-        self._spark.execute_command(self._write.command(self._spark))
+        self._spark.client.execute_command(self._write.command(self._spark.client))
 
     def json(
         self,
