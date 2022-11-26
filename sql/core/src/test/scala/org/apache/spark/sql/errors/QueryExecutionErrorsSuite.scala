@@ -637,13 +637,15 @@ class QueryExecutionErrorsSuite
       sqlState = "0A000")
   }
 
-  test("FAILED_RENAME_PATH: rename when destination path already exists (user)") {
+  test("FAILED_RENAME_PATH: rename when destination path already exists") {
     withTempPath { p =>
       withSQLConf(
         "spark.sql.streaming.checkpointFileManagerClass" -> classOf[FileSystemBasedCheckpointFileManager].getName,
         "fs.file.impl" -> classOf[FakeFileSystemAlwaysExists].getName,
+        // FileSystem caching could cause a different implementation of fs.file to be used
         "fs.file.impl.disable.cache" -> "true") {
         val checkpointLocation = p.getAbsolutePath
+
         val ds = spark.readStream.format("rate").load()
         val e = intercept[SparkConcurrentModificationException] {
           ds.writeStream.option("checkpointLocation", checkpointLocation).queryName("_").format("memory").start()
@@ -658,33 +660,6 @@ class QueryExecutionErrorsSuite
             "targetPath" -> s"file:$checkpointLocation.+"))
       }
     }
-  }
-
-  test("FAILED_RENAME_PATH: rename when destination path already exists") {
-    var srcPath: Path = null
-    var dstPath: Path = null
-
-    val e = intercept[SparkFileAlreadyExistsException](
-      withTempPath { p =>
-        val basePath = new Path(p.getAbsolutePath)
-        val fm = new FileSystemBasedCheckpointFileManager(basePath, new Configuration())
-        srcPath = new Path(s"$basePath/src")
-        fm.createAtomic(srcPath, overwriteIfPossible = true).close()
-        dstPath = new Path(s"$basePath/dst")
-        fm.createAtomic(dstPath, overwriteIfPossible = true).close()
-
-        fm.renameTempFile(srcPath, dstPath, false)
-      }
-    )
-
-    checkError(
-      exception = e,
-      errorClass = "FAILED_RENAME_PATH",
-      sqlState = "22023",
-      parameters = Map(
-        "sourcePath" -> s"$srcPath",
-        "targetPath" -> s"$dstPath"
-      ))
   }
 
   test("RENAME_SRC_PATH_NOT_FOUND: rename the file which source path does not exist") {
