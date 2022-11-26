@@ -637,6 +637,29 @@ class QueryExecutionErrorsSuite
       sqlState = "0A000")
   }
 
+  test("FAILED_RENAME_PATH: rename when destination path already exists (user)") {
+    withTempPath { p =>
+      withSQLConf(
+        "spark.sql.streaming.checkpointFileManagerClass" -> classOf[FileSystemBasedCheckpointFileManager].getName,
+        "fs.file.impl" -> classOf[FakeFileSystemAlwaysExists].getName,
+        "fs.file.impl.disable.cache" -> "true") {
+        val checkpointLocation = p.getAbsolutePath
+        val ds = spark.readStream.format("rate").load()
+        val e = intercept[SparkConcurrentModificationException] {
+          ds.writeStream.option("checkpointLocation", checkpointLocation).queryName("_").format("memory").start()
+        }
+
+        checkError(
+          exception = e.getCause.asInstanceOf[SparkFileAlreadyExistsException],
+          errorClass = "FAILED_RENAME_PATH",
+          sqlState = Some("22023"),
+          matchPVals = true,
+          parameters = Map("sourcePath" -> s"file:$checkpointLocation.+",
+            "targetPath" -> s"file:$checkpointLocation.+"))
+      }
+    }
+  }
+
   test("FAILED_RENAME_PATH: rename when destination path already exists") {
     var srcPath: Path = null
     var dstPath: Path = null
@@ -771,4 +794,8 @@ class FakeFileSystemSetPermission extends LocalFileSystem {
   override def setPermission(src: Path, permission: FsPermission): Unit = {
     throw new IOException(s"fake fileSystem failed to set permission: $permission")
   }
+}
+
+class FakeFileSystemAlwaysExists extends DebugFilesystem {
+  override def exists(f: Path): Boolean = true
 }
