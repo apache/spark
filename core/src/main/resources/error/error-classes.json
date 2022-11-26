@@ -641,12 +641,6 @@
     ],
     "sqlState" : "42000"
   },
-  "INVALID_DATA_TYPE_SCHEMA" : {
-    "message" : [
-      "<msg><e1>",
-      "Failed fallback parsing: <e2>"
-    ]
-  },
   "INVALID_EMPTY_LOCATION" : {
     "message" : [
       "The location name cannot be empty string, but `<location>` was given."
@@ -786,7 +780,7 @@
   },
   "INVALID_SCHEMA" : {
     "message" : [
-      "The expression <expr> is not a valid schema string."
+      "The input schema <invalidSchema> is not a valid schema string."
     ]
   },
   "INVALID_SQL_SYNTAX" : {

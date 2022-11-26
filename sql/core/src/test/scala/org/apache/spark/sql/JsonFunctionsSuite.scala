@@ -444,7 +444,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         df3.selectExpr("from_json(value, 1)")
       },
       errorClass = "INVALID_SCHEMA",
-      parameters = Map("expr" -> "\"1\""),
+      parameters = Map("invalidSchema" -> "\"1\""),
       context = ExpectedContext(
         fragment = "from_json(value, 1)",
         start = 0,

@@ -133,7 +133,6 @@ object DataType {
     parseTypeWithFallback(
       ddl,
       CatalystSqlParser.parseDataType,
-      "Cannot parse the data type: ",
       fallbackParser = str => CatalystSqlParser.parseTableSchema(str))
   }
 
@@ -144,14 +143,12 @@ object DataType {
    *
    * @param schema The schema string to parse by `parser` or `fallbackParser`.
    * @param parser The function that should be invoke firstly.
-   * @param errorMsg The error message for `parser`.
    * @param fallbackParser The function that is called when `parser` fails.
    * @return The data type parsed from the `schema` schema.
    */
   def parseTypeWithFallback(
       schema: String,
       parser: String => DataType,
-      errorMsg: String,
       fallbackParser: String => DataType): DataType = {
     try {
       parser(schema)
@@ -160,8 +157,8 @@ object DataType {
         try {
           fallbackParser(schema)
         } catch {
-          case NonFatal(e2) =>
-            throw QueryCompilationErrors.failedFallbackParsingError(errorMsg, e1, e2)
+          case NonFatal(_) =>
+            throw QueryCompilationErrors.invalidSchemaStringError(schema, e1)
         }
     }
   }
