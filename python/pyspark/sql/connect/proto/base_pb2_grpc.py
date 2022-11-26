@@ -40,6 +40,11 @@ class SparkConnectServiceStub(object):
             request_serializer=spark_dot_connect_dot_base__pb2.AnalyzePlanRequest.SerializeToString,
             response_deserializer=spark_dot_connect_dot_base__pb2.AnalyzePlanResponse.FromString,
         )
+        self.Catalog = channel.unary_unary(
+            "/spark.connect.SparkConnectService/Catalog",
+            request_serializer=spark_dot_connect_dot_base__pb2.CatalogRequest.SerializeToString,
+            response_deserializer=spark_dot_connect_dot_base__pb2.CatalogResponse.FromString,
+        )
 
 
 class SparkConnectServiceServicer(object):
@@ -60,6 +65,12 @@ class SparkConnectServiceServicer(object):
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
+    def Catalog(self, request, context):
+        """Execute a catalog operation and returns a [[CatalogResponse]] which contains results if there is any"""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
 
 def add_SparkConnectServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -72,6 +83,11 @@ def add_SparkConnectServiceServicer_to_server(servicer, server):
             servicer.AnalyzePlan,
             request_deserializer=spark_dot_connect_dot_base__pb2.AnalyzePlanRequest.FromString,
             response_serializer=spark_dot_connect_dot_base__pb2.AnalyzePlanResponse.SerializeToString,
+        ),
+        "Catalog": grpc.unary_unary_rpc_method_handler(
+            servicer.Catalog,
+            request_deserializer=spark_dot_connect_dot_base__pb2.CatalogRequest.FromString,
+            response_serializer=spark_dot_connect_dot_base__pb2.CatalogResponse.SerializeToString,
         ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -132,6 +148,35 @@ class SparkConnectService(object):
             "/spark.connect.SparkConnectService/AnalyzePlan",
             spark_dot_connect_dot_base__pb2.AnalyzePlanRequest.SerializeToString,
             spark_dot_connect_dot_base__pb2.AnalyzePlanResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+        )
+
+    @staticmethod
+    def Catalog(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/spark.connect.SparkConnectService/Catalog",
+            spark_dot_connect_dot_base__pb2.CatalogRequest.SerializeToString,
+            spark_dot_connect_dot_base__pb2.CatalogResponse.FromString,
             options,
             channel_credentials,
             insecure,

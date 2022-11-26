@@ -570,3 +570,166 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     ) -> None: ...
 
 global___ExecutePlanResponse = ExecutePlanResponse
+
+class CatalogRequest(google.protobuf.message.Message):
+    """Base request to execute Catalog operations."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class TableExists(google.protobuf.message.Message):
+        """Check if the table or view with the specified name exists. This can either be a temporary
+        view or a table/view.
+        """
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        TABLE_NAME_FIELD_NUMBER: builtins.int
+        table_name: builtins.str
+        """(Required) the name of the table."""
+        def __init__(
+            self,
+            *,
+            table_name: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["table_name", b"table_name"]
+        ) -> None: ...
+
+    class NamespaceExists(google.protobuf.message.Message):
+        """Check if the namespace (database) with the specified name exists."""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        NAMESPACE_NAME_FIELD_NUMBER: builtins.int
+        namespace_name: builtins.str
+        """(Required) the name of the namespace."""
+        def __init__(
+            self,
+            *,
+            namespace_name: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["namespace_name", b"namespace_name"]
+        ) -> None: ...
+
+    TABLE_EXISTS_FIELD_NUMBER: builtins.int
+    NAMESPACE_EXISTS_FIELD_NUMBER: builtins.int
+    USER_CONTEXT_FIELD_NUMBER: builtins.int
+    @property
+    def table_exists(self) -> global___CatalogRequest.TableExists: ...
+    @property
+    def namespace_exists(self) -> global___CatalogRequest.NamespaceExists: ...
+    @property
+    def user_context(self) -> global___UserContext:
+        """(Required) User context"""
+    def __init__(
+        self,
+        *,
+        table_exists: global___CatalogRequest.TableExists | None = ...,
+        namespace_exists: global___CatalogRequest.NamespaceExists | None = ...,
+        user_context: global___UserContext | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "namespace_exists",
+            b"namespace_exists",
+            "req_type",
+            b"req_type",
+            "table_exists",
+            b"table_exists",
+            "user_context",
+            b"user_context",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "namespace_exists",
+            b"namespace_exists",
+            "req_type",
+            b"req_type",
+            "table_exists",
+            b"table_exists",
+            "user_context",
+            b"user_context",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["req_type", b"req_type"]
+    ) -> typing_extensions.Literal["table_exists", "namespace_exists"] | None: ...
+
+global___CatalogRequest = CatalogRequest
+
+class CatalogResponse(google.protobuf.message.Message):
+    """Base response to execute Catalog operations."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class TableExists(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        IF_EXISTS_FIELD_NUMBER: builtins.int
+        if_exists: builtins.bool
+        def __init__(
+            self,
+            *,
+            if_exists: builtins.bool = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["if_exists", b"if_exists"]
+        ) -> None: ...
+
+    class NamespaceExists(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        IF_EXISTS_FIELD_NUMBER: builtins.int
+        if_exists: builtins.bool
+        def __init__(
+            self,
+            *,
+            if_exists: builtins.bool = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["if_exists", b"if_exists"]
+        ) -> None: ...
+
+    TABLE_EXISTS_FIELD_NUMBER: builtins.int
+    NAMESPACE_EXISTS_FIELD_NUMBER: builtins.int
+    @property
+    def table_exists(self) -> global___CatalogResponse.TableExists: ...
+    @property
+    def namespace_exists(self) -> global___CatalogResponse.NamespaceExists: ...
+    def __init__(
+        self,
+        *,
+        table_exists: global___CatalogResponse.TableExists | None = ...,
+        namespace_exists: global___CatalogResponse.NamespaceExists | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "namespace_exists",
+            b"namespace_exists",
+            "res_type",
+            b"res_type",
+            "table_exists",
+            b"table_exists",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "namespace_exists",
+            b"namespace_exists",
+            "res_type",
+            b"res_type",
+            "table_exists",
+            b"table_exists",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["res_type", b"res_type"]
+    ) -> typing_extensions.Literal["table_exists", "namespace_exists"] | None: ...
+
+global___CatalogResponse = CatalogResponse

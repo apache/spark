@@ -36,7 +36,7 @@ from pyspark.sql.connect.proto import types_pb2 as spark_dot_connect_dot_types__
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
-    b'\n\x18spark/connect/base.proto\x12\rspark.connect\x1a\x19google/protobuf/any.proto\x1a\x1cspark/connect/commands.proto\x1a\x1dspark/connect/relations.proto\x1a\x19spark/connect/types.proto"t\n\x04Plan\x12-\n\x04root\x18\x01 \x01(\x0b\x32\x17.spark.connect.RelationH\x00R\x04root\x12\x32\n\x07\x63ommand\x18\x02 \x01(\x0b\x32\x16.spark.connect.CommandH\x00R\x07\x63ommandB\t\n\x07op_type"\xb5\x01\n\x07\x45xplain\x12\x45\n\x0c\x65xplain_mode\x18\x01 \x01(\x0e\x32".spark.connect.Explain.ExplainModeR\x0b\x65xplainMode"c\n\x0b\x45xplainMode\x12\x14\n\x10MODE_UNSPECIFIED\x10\x00\x12\n\n\x06SIMPLE\x10\x01\x12\x0c\n\x08\x45XTENDED\x10\x02\x12\x0b\n\x07\x43ODEGEN\x10\x03\x12\x08\n\x04\x43OST\x10\x04\x12\r\n\tFORMATTED\x10\x05"z\n\x0bUserContext\x12\x17\n\x07user_id\x18\x01 \x01(\tR\x06userId\x12\x1b\n\tuser_name\x18\x02 \x01(\tR\x08userName\x12\x35\n\nextensions\x18\xe7\x07 \x03(\x0b\x32\x14.google.protobuf.AnyR\nextensions"\x81\x02\n\x12\x41nalyzePlanRequest\x12\x1b\n\tclient_id\x18\x01 \x01(\tR\x08\x63lientId\x12=\n\x0cuser_context\x18\x02 \x01(\x0b\x32\x1a.spark.connect.UserContextR\x0buserContext\x12\'\n\x04plan\x18\x03 \x01(\x0b\x32\x13.spark.connect.PlanR\x04plan\x12$\n\x0b\x63lient_type\x18\x04 \x01(\tH\x00R\nclientType\x88\x01\x01\x12\x30\n\x07\x65xplain\x18\x05 \x01(\x0b\x32\x16.spark.connect.ExplainR\x07\x65xplainB\x0e\n\x0c_client_type"\x8a\x02\n\x13\x41nalyzePlanResponse\x12\x1b\n\tclient_id\x18\x01 \x01(\tR\x08\x63lientId\x12/\n\x06schema\x18\x02 \x01(\x0b\x32\x17.spark.connect.DataTypeR\x06schema\x12%\n\x0e\x65xplain_string\x18\x03 \x01(\tR\rexplainString\x12\x1f\n\x0btree_string\x18\x04 \x01(\tR\ntreeString\x12\x19\n\x08is_local\x18\x05 \x01(\x08R\x07isLocal\x12!\n\x0cis_streaming\x18\x06 \x01(\x08R\x0bisStreaming\x12\x1f\n\x0binput_files\x18\x07 \x03(\tR\ninputFiles"\xcf\x01\n\x12\x45xecutePlanRequest\x12\x1b\n\tclient_id\x18\x01 \x01(\tR\x08\x63lientId\x12=\n\x0cuser_context\x18\x02 \x01(\x0b\x32\x1a.spark.connect.UserContextR\x0buserContext\x12\'\n\x04plan\x18\x03 \x01(\x0b\x32\x13.spark.connect.PlanR\x04plan\x12$\n\x0b\x63lient_type\x18\x04 \x01(\tH\x00R\nclientType\x88\x01\x01\x42\x0e\n\x0c_client_type"\x8f\x06\n\x13\x45xecutePlanResponse\x12\x1b\n\tclient_id\x18\x01 \x01(\tR\x08\x63lientId\x12N\n\x0b\x61rrow_batch\x18\x02 \x01(\x0b\x32-.spark.connect.ExecutePlanResponse.ArrowBatchR\narrowBatch\x12\x44\n\x07metrics\x18\x04 \x01(\x0b\x32*.spark.connect.ExecutePlanResponse.MetricsR\x07metrics\x1a=\n\nArrowBatch\x12\x1b\n\trow_count\x18\x01 \x01(\x03R\x08rowCount\x12\x12\n\x04\x64\x61ta\x18\x02 \x01(\x0cR\x04\x64\x61ta\x1a\x85\x04\n\x07Metrics\x12Q\n\x07metrics\x18\x01 \x03(\x0b\x32\x37.spark.connect.ExecutePlanResponse.Metrics.MetricObjectR\x07metrics\x1a\xcc\x02\n\x0cMetricObject\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x17\n\x07plan_id\x18\x02 \x01(\x03R\x06planId\x12\x16\n\x06parent\x18\x03 \x01(\x03R\x06parent\x12z\n\x11\x65xecution_metrics\x18\x04 \x03(\x0b\x32M.spark.connect.ExecutePlanResponse.Metrics.MetricObject.ExecutionMetricsEntryR\x10\x65xecutionMetrics\x1a{\n\x15\x45xecutionMetricsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12L\n\x05value\x18\x02 \x01(\x0b\x32\x36.spark.connect.ExecutePlanResponse.Metrics.MetricValueR\x05value:\x02\x38\x01\x1aX\n\x0bMetricValue\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n\x05value\x18\x02 \x01(\x03R\x05value\x12\x1f\n\x0bmetric_type\x18\x03 \x01(\tR\nmetricType2\xc7\x01\n\x13SparkConnectService\x12X\n\x0b\x45xecutePlan\x12!.spark.connect.ExecutePlanRequest\x1a".spark.connect.ExecutePlanResponse"\x00\x30\x01\x12V\n\x0b\x41nalyzePlan\x12!.spark.connect.AnalyzePlanRequest\x1a".spark.connect.AnalyzePlanResponse"\x00\x42"\n\x1eorg.apache.spark.connect.protoP\x01\x62\x06proto3'
+    b'\n\x18spark/connect/base.proto\x12\rspark.connect\x1a\x19google/protobuf/any.proto\x1a\x1cspark/connect/commands.proto\x1a\x1dspark/connect/relations.proto\x1a\x19spark/connect/types.proto"t\n\x04Plan\x12-\n\x04root\x18\x01 \x01(\x0b\x32\x17.spark.connect.RelationH\x00R\x04root\x12\x32\n\x07\x63ommand\x18\x02 \x01(\x0b\x32\x16.spark.connect.CommandH\x00R\x07\x63ommandB\t\n\x07op_type"\xb5\x01\n\x07\x45xplain\x12\x45\n\x0c\x65xplain_mode\x18\x01 \x01(\x0e\x32".spark.connect.Explain.ExplainModeR\x0b\x65xplainMode"c\n\x0b\x45xplainMode\x12\x14\n\x10MODE_UNSPECIFIED\x10\x00\x12\n\n\x06SIMPLE\x10\x01\x12\x0c\n\x08\x45XTENDED\x10\x02\x12\x0b\n\x07\x43ODEGEN\x10\x03\x12\x08\n\x04\x43OST\x10\x04\x12\r\n\tFORMATTED\x10\x05"z\n\x0bUserContext\x12\x17\n\x07user_id\x18\x01 \x01(\tR\x06userId\x12\x1b\n\tuser_name\x18\x02 \x01(\tR\x08userName\x12\x35\n\nextensions\x18\xe7\x07 \x03(\x0b\x32\x14.google.protobuf.AnyR\nextensions"\x81\x02\n\x12\x41nalyzePlanRequest\x12\x1b\n\tclient_id\x18\x01 \x01(\tR\x08\x63lientId\x12=\n\x0cuser_context\x18\x02 \x01(\x0b\x32\x1a.spark.connect.UserContextR\x0buserContext\x12\'\n\x04plan\x18\x03 \x01(\x0b\x32\x13.spark.connect.PlanR\x04plan\x12$\n\x0b\x63lient_type\x18\x04 \x01(\tH\x00R\nclientType\x88\x01\x01\x12\x30\n\x07\x65xplain\x18\x05 \x01(\x0b\x32\x16.spark.connect.ExplainR\x07\x65xplainB\x0e\n\x0c_client_type"\x8a\x02\n\x13\x41nalyzePlanResponse\x12\x1b\n\tclient_id\x18\x01 \x01(\tR\x08\x63lientId\x12/\n\x06schema\x18\x02 \x01(\x0b\x32\x17.spark.connect.DataTypeR\x06schema\x12%\n\x0e\x65xplain_string\x18\x03 \x01(\tR\rexplainString\x12\x1f\n\x0btree_string\x18\x04 \x01(\tR\ntreeString\x12\x19\n\x08is_local\x18\x05 \x01(\x08R\x07isLocal\x12!\n\x0cis_streaming\x18\x06 \x01(\x08R\x0bisStreaming\x12\x1f\n\x0binput_files\x18\x07 \x03(\tR\ninputFiles"\xcf\x01\n\x12\x45xecutePlanRequest\x12\x1b\n\tclient_id\x18\x01 \x01(\tR\x08\x63lientId\x12=\n\x0cuser_context\x18\x02 \x01(\x0b\x32\x1a.spark.connect.UserContextR\x0buserContext\x12\'\n\x04plan\x18\x03 \x01(\x0b\x32\x13.spark.connect.PlanR\x04plan\x12$\n\x0b\x63lient_type\x18\x04 \x01(\tH\x00R\nclientType\x88\x01\x01\x42\x0e\n\x0c_client_type"\x8f\x06\n\x13\x45xecutePlanResponse\x12\x1b\n\tclient_id\x18\x01 \x01(\tR\x08\x63lientId\x12N\n\x0b\x61rrow_batch\x18\x02 \x01(\x0b\x32-.spark.connect.ExecutePlanResponse.ArrowBatchR\narrowBatch\x12\x44\n\x07metrics\x18\x04 \x01(\x0b\x32*.spark.connect.ExecutePlanResponse.MetricsR\x07metrics\x1a=\n\nArrowBatch\x12\x1b\n\trow_count\x18\x01 \x01(\x03R\x08rowCount\x12\x12\n\x04\x64\x61ta\x18\x02 \x01(\x0cR\x04\x64\x61ta\x1a\x85\x04\n\x07Metrics\x12Q\n\x07metrics\x18\x01 \x03(\x0b\x32\x37.spark.connect.ExecutePlanResponse.Metrics.MetricObjectR\x07metrics\x1a\xcc\x02\n\x0cMetricObject\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x17\n\x07plan_id\x18\x02 \x01(\x03R\x06planId\x12\x16\n\x06parent\x18\x03 \x01(\x03R\x06parent\x12z\n\x11\x65xecution_metrics\x18\x04 \x03(\x0b\x32M.spark.connect.ExecutePlanResponse.Metrics.MetricObject.ExecutionMetricsEntryR\x10\x65xecutionMetrics\x1a{\n\x15\x45xecutionMetricsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12L\n\x05value\x18\x02 \x01(\x0b\x32\x36.spark.connect.ExecutePlanResponse.Metrics.MetricValueR\x05value:\x02\x38\x01\x1aX\n\x0bMetricValue\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n\x05value\x18\x02 \x01(\x03R\x05value\x12\x1f\n\x0bmetric_type\x18\x03 \x01(\tR\nmetricType"\xef\x02\n\x0e\x43\x61talogRequest\x12N\n\x0ctable_exists\x18\x01 \x01(\x0b\x32).spark.connect.CatalogRequest.TableExistsH\x00R\x0btableExists\x12Z\n\x10namespace_exists\x18\x02 \x01(\x0b\x32-.spark.connect.CatalogRequest.NamespaceExistsH\x00R\x0fnamespaceExists\x12=\n\x0cuser_context\x18\x03 \x01(\x0b\x32\x1a.spark.connect.UserContextR\x0buserContext\x1a,\n\x0bTableExists\x12\x1d\n\ntable_name\x18\x01 \x01(\tR\ttableName\x1a\x38\n\x0fNamespaceExists\x12%\n\x0enamespace_name\x18\x01 \x01(\tR\rnamespaceNameB\n\n\x08req_type"\xa7\x02\n\x0f\x43\x61talogResponse\x12O\n\x0ctable_exists\x18\x01 \x01(\x0b\x32*.spark.connect.CatalogResponse.TableExistsH\x00R\x0btableExists\x12[\n\x10namespace_exists\x18\x02 \x01(\x0b\x32..spark.connect.CatalogResponse.NamespaceExistsH\x00R\x0fnamespaceExists\x1a*\n\x0bTableExists\x12\x1b\n\tif_exists\x18\x01 \x01(\x08R\x08ifExists\x1a.\n\x0fNamespaceExists\x12\x1b\n\tif_exists\x18\x01 \x01(\x08R\x08ifExistsB\n\n\x08res_type2\x93\x02\n\x13SparkConnectService\x12X\n\x0b\x45xecutePlan\x12!.spark.connect.ExecutePlanRequest\x1a".spark.connect.ExecutePlanResponse"\x00\x30\x01\x12V\n\x0b\x41nalyzePlan\x12!.spark.connect.AnalyzePlanRequest\x1a".spark.connect.AnalyzePlanResponse"\x00\x12J\n\x07\x43\x61talog\x12\x1d.spark.connect.CatalogRequest\x1a\x1e.spark.connect.CatalogResponse"\x00\x42"\n\x1eorg.apache.spark.connect.protoP\x01\x62\x06proto3'
 )
 
 
@@ -58,6 +58,12 @@ _EXECUTEPLANRESPONSE_METRICS_METRICOBJECT_EXECUTIONMETRICSENTRY = (
 _EXECUTEPLANRESPONSE_METRICS_METRICVALUE = _EXECUTEPLANRESPONSE_METRICS.nested_types_by_name[
     "MetricValue"
 ]
+_CATALOGREQUEST = DESCRIPTOR.message_types_by_name["CatalogRequest"]
+_CATALOGREQUEST_TABLEEXISTS = _CATALOGREQUEST.nested_types_by_name["TableExists"]
+_CATALOGREQUEST_NAMESPACEEXISTS = _CATALOGREQUEST.nested_types_by_name["NamespaceExists"]
+_CATALOGRESPONSE = DESCRIPTOR.message_types_by_name["CatalogResponse"]
+_CATALOGRESPONSE_TABLEEXISTS = _CATALOGRESPONSE.nested_types_by_name["TableExists"]
+_CATALOGRESPONSE_NAMESPACEEXISTS = _CATALOGRESPONSE.nested_types_by_name["NamespaceExists"]
 _EXPLAIN_EXPLAINMODE = _EXPLAIN.enum_types_by_name["ExplainMode"]
 Plan = _reflection.GeneratedProtocolMessageType(
     "Plan",
@@ -186,6 +192,68 @@ _sym_db.RegisterMessage(ExecutePlanResponse.Metrics.MetricObject)
 _sym_db.RegisterMessage(ExecutePlanResponse.Metrics.MetricObject.ExecutionMetricsEntry)
 _sym_db.RegisterMessage(ExecutePlanResponse.Metrics.MetricValue)
 
+CatalogRequest = _reflection.GeneratedProtocolMessageType(
+    "CatalogRequest",
+    (_message.Message,),
+    {
+        "TableExists": _reflection.GeneratedProtocolMessageType(
+            "TableExists",
+            (_message.Message,),
+            {
+                "DESCRIPTOR": _CATALOGREQUEST_TABLEEXISTS,
+                "__module__": "spark.connect.base_pb2"
+                # @@protoc_insertion_point(class_scope:spark.connect.CatalogRequest.TableExists)
+            },
+        ),
+        "NamespaceExists": _reflection.GeneratedProtocolMessageType(
+            "NamespaceExists",
+            (_message.Message,),
+            {
+                "DESCRIPTOR": _CATALOGREQUEST_NAMESPACEEXISTS,
+                "__module__": "spark.connect.base_pb2"
+                # @@protoc_insertion_point(class_scope:spark.connect.CatalogRequest.NamespaceExists)
+            },
+        ),
+        "DESCRIPTOR": _CATALOGREQUEST,
+        "__module__": "spark.connect.base_pb2"
+        # @@protoc_insertion_point(class_scope:spark.connect.CatalogRequest)
+    },
+)
+_sym_db.RegisterMessage(CatalogRequest)
+_sym_db.RegisterMessage(CatalogRequest.TableExists)
+_sym_db.RegisterMessage(CatalogRequest.NamespaceExists)
+
+CatalogResponse = _reflection.GeneratedProtocolMessageType(
+    "CatalogResponse",
+    (_message.Message,),
+    {
+        "TableExists": _reflection.GeneratedProtocolMessageType(
+            "TableExists",
+            (_message.Message,),
+            {
+                "DESCRIPTOR": _CATALOGRESPONSE_TABLEEXISTS,
+                "__module__": "spark.connect.base_pb2"
+                # @@protoc_insertion_point(class_scope:spark.connect.CatalogResponse.TableExists)
+            },
+        ),
+        "NamespaceExists": _reflection.GeneratedProtocolMessageType(
+            "NamespaceExists",
+            (_message.Message,),
+            {
+                "DESCRIPTOR": _CATALOGRESPONSE_NAMESPACEEXISTS,
+                "__module__": "spark.connect.base_pb2"
+                # @@protoc_insertion_point(class_scope:spark.connect.CatalogResponse.NamespaceExists)
+            },
+        ),
+        "DESCRIPTOR": _CATALOGRESPONSE,
+        "__module__": "spark.connect.base_pb2"
+        # @@protoc_insertion_point(class_scope:spark.connect.CatalogResponse)
+    },
+)
+_sym_db.RegisterMessage(CatalogResponse)
+_sym_db.RegisterMessage(CatalogResponse.TableExists)
+_sym_db.RegisterMessage(CatalogResponse.NamespaceExists)
+
 _SPARKCONNECTSERVICE = DESCRIPTOR.services_by_name["SparkConnectService"]
 if _descriptor._USE_C_DESCRIPTORS == False:
 
@@ -219,6 +287,18 @@ if _descriptor._USE_C_DESCRIPTORS == False:
     _EXECUTEPLANRESPONSE_METRICS_METRICOBJECT_EXECUTIONMETRICSENTRY._serialized_end = 2017
     _EXECUTEPLANRESPONSE_METRICS_METRICVALUE._serialized_start = 2019
     _EXECUTEPLANRESPONSE_METRICS_METRICVALUE._serialized_end = 2107
-    _SPARKCONNECTSERVICE._serialized_start = 2110
-    _SPARKCONNECTSERVICE._serialized_end = 2309
+    _CATALOGREQUEST._serialized_start = 2110
+    _CATALOGREQUEST._serialized_end = 2477
+    _CATALOGREQUEST_TABLEEXISTS._serialized_start = 2363
+    _CATALOGREQUEST_TABLEEXISTS._serialized_end = 2407
+    _CATALOGREQUEST_NAMESPACEEXISTS._serialized_start = 2409
+    _CATALOGREQUEST_NAMESPACEEXISTS._serialized_end = 2465
+    _CATALOGRESPONSE._serialized_start = 2480
+    _CATALOGRESPONSE._serialized_end = 2775
+    _CATALOGRESPONSE_TABLEEXISTS._serialized_start = 2673
+    _CATALOGRESPONSE_TABLEEXISTS._serialized_end = 2715
+    _CATALOGRESPONSE_NAMESPACEEXISTS._serialized_start = 2717
+    _CATALOGRESPONSE_NAMESPACEEXISTS._serialized_end = 2763
+    _SPARKCONNECTSERVICE._serialized_start = 2778
+    _SPARKCONNECTSERVICE._serialized_end = 3053
 # @@protoc_insertion_point(module_scope)
