@@ -255,10 +255,10 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
       .set(KUBERNETES_SCHEDULER_NAME.key, "volcano")
       .set(KUBERNETES_DRIVER_POD_FEATURE_STEPS.key, VOLCANO_FEATURE_STEP)
       .set(KUBERNETES_EXECUTOR_POD_FEATURE_STEPS.key, VOLCANO_FEATURE_STEP)
-    sys.props.get(CONFIG_DRIVER_REQUEST_CORES).map { cpu =>
+    sys.props.get(CONFIG_DRIVER_REQUEST_CORES).foreach { cpu =>
       conf.set("spark.kubernetes.driver.request.cores", cpu)
     }
-    sys.props.get(CONFIG_EXECUTOR_REQUEST_CORES).map { cpu =>
+    sys.props.get(CONFIG_EXECUTOR_REQUEST_CORES).foreach { cpu =>
       conf.set("spark.kubernetes.executor.request.cores", cpu)
     }
     queue.foreach { q =>
