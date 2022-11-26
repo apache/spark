@@ -5208,7 +5208,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       },
       errorClass = "INVALID_SCHEMA",
       parameters = Map(
-        "invalidSchema" -> "\"1\""
+        "inputSchema" -> "\"1\""
       ),
       context = ExpectedContext(
         fragment = "from_json('{\"a\":1}', 1)",

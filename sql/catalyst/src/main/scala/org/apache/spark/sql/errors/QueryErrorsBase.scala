@@ -104,7 +104,7 @@ private[sql] trait QueryErrorsBase {
     quoteByDefault(toPrettySQL(e))
   }
 
-  def toSQLSchemaStmt(schema: String): String = {
+  def toSQLSchema(schema: String): String = {
     quoteByDefault(schema)
   }
 

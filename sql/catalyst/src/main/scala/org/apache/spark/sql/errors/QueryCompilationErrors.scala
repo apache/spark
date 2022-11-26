@@ -996,14 +996,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def invalidSchemaStringError(schema: String, e1: Throwable): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_SCHEMA",
-      messageParameters = Map("invalidSchema" -> toSQLSchemaStmt(schema)),
+      messageParameters = Map("inputSchema" -> toSQLSchema(schema)),
       cause = Some(e1.getCause))
   }
 
   def invalidSchemaStringError(exp: Expression): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_SCHEMA",
-      messageParameters = Map("invalidSchema" -> toSQLExpr(exp)))
+      messageParameters = Map("inputSchema" -> toSQLExpr(exp)))
   }
 
   def schemaNotFoldableError(exp: Expression): Throwable = {

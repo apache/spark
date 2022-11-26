@@ -780,7 +780,7 @@
   },
   "INVALID_SCHEMA" : {
     "message" : [
-      "The input schema <invalidSchema> is not a valid schema string."
+      "The input schema <inputSchema> is not a valid schema string."
     ]
   },
   "INVALID_SQL_SYNTAX" : {

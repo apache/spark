@@ -24,7 +24,7 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_SCHEMA",
   "messageParameters" : {
-    "invalidSchema" : "\"1\""
+    "inputSchema" : "\"1\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -45,7 +45,7 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_SCHEMA",
   "messageParameters" : {
-    "invalidSchema" : "\"a InvalidType\""
+    "inputSchema" : "\"a InvalidType\""
   },
   "queryContext" : [ {
     "objectType" : "",
