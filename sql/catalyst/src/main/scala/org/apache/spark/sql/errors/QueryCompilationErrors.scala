@@ -997,7 +997,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "INVALID_SCHEMA",
       messageParameters = Map("inputSchema" -> toSQLSchema(schema)),
-      cause = Some(e1.getCause))
+      cause = Some(e1))
   }
 
   def invalidSchemaStringError(exp: Expression): Throwable = {
