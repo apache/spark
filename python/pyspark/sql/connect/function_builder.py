@@ -34,7 +34,7 @@ if TYPE_CHECKING:
         FunctionBuilderCallable,
         UserDefinedFunctionCallable,
     )
-    from pyspark.sql.connect.client import RemoteSparkSession
+    from pyspark.sql.connect.client import SparkConnectClient
 
 
 def _build(name: str, *args: "ExpressionOrString") -> ScalarFunctionExpression:
@@ -91,7 +91,7 @@ class UserDefinedFunction(Expression):
             self._args = []
         self._func_name = None
 
-    def to_plan(self, session: "RemoteSparkSession") -> proto.Expression:
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
         if session is None:
             raise Exception("CAnnot create UDF without remote Session.")
         # Needs to materialize the UDF to the server

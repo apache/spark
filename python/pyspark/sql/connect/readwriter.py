@@ -25,7 +25,7 @@ from pyspark.sql.utils import to_str
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import OptionalPrimitiveType
-    from pyspark.sql.connect.client import RemoteSparkSession
+    from pyspark.sql.connect.session import SparkSession
 
 
 PathOrPaths = Union[str, List[str]]
@@ -37,7 +37,7 @@ class DataFrameReader:
     TODO(SPARK-40539) Achieve parity with PySpark.
     """
 
-    def __init__(self, client: "RemoteSparkSession"):
+    def __init__(self, client: "SparkSession"):
         self._client = client
         self._format = ""
         self._schema = ""
