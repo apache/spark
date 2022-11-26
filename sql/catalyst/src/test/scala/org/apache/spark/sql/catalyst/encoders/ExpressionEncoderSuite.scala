@@ -22,11 +22,12 @@ import java.sql.{Date, Timestamp}
 import java.util.Arrays
 
 import scala.collection.mutable.ArrayBuffer
-import scala.reflect.runtime.universe.TypeTag
+import scala.reflect.ClassTag
+import scala.reflect.runtime.universe.{TypeTag, WeakTypeTag}
 
 import org.apache.spark.SparkArithmeticException
 import org.apache.spark.sql.{Encoder, Encoders}
-import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, OptionalData, PrimitiveData, ScroogeLikeExample}
+import org.apache.spark.sql.catalyst.{DeepClassTag, FooClassWithEnum, FooEnum, OptionalData, PrimitiveData, ScroogeLikeExample}
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
@@ -137,7 +138,33 @@ case class OptionNestedGeneric[T](list: Option[T])
 case class MapNestedGenericKey[T](list: Map[T, Int])
 case class MapNestedGenericValue[T](list: Map[Int, T])
 
-class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTest {
+trait LowPriorityEncoders {
+  implicit def localEncoder[T: WeakTypeTag : ClassTag : DeepClassTag]: ExpressionEncoder[T] =
+    verifyNotLeakingReflectionObjects {
+      ExpressionEncoder.local()
+    }
+
+  /**
+   * Verify the size of scala.reflect.runtime.JavaUniverse.undoLog before and after `func` to
+   * ensure we don't leak Scala reflection garbage.
+   *
+   * @see org.apache.spark.sql.catalyst.ScalaReflection.cleanUpReflectionObjects
+   */
+  protected def verifyNotLeakingReflectionObjects[T](func: => T): T = {
+    def undoLogSize: Int = {
+      scala.reflect.runtime.universe
+        .asInstanceOf[scala.reflect.runtime.JavaUniverse].undoLog.log.size
+    }
+
+    val previousUndoLogSize = undoLogSize
+    val r = func
+    assert(previousUndoLogSize == undoLogSize)
+    r
+  }
+}
+
+class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTest
+  with LowPriorityEncoders {
   OuterScopes.addOuterScope(this)
 
   implicit def encoder[T : TypeTag]: ExpressionEncoder[T] = verifyNotLeakingReflectionObjects {
@@ -237,18 +264,16 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     def runLocalTest(): Unit = {
       case class Local(i: Int, s: String)
 
-      encodeDecodeTest(Local(1, "a"), "local class")(ExpressionEncoder.local[Local]())
+      encodeDecodeTest(Local(1, "a"), "local class")
     }
 
     def runGenericLocalTest(): Unit = {
       case class GenericLocal[T](i: Int, s: String, t: T)
 
-      encodeDecodeTest(GenericLocal[Boolean](1, "a", true),
-        "generic local class")(ExpressionEncoder.local[GenericLocal[Boolean]]())
+      encodeDecodeTest(GenericLocal[Boolean](1, "a", true), "generic local class")
 
       encodeDecodeTest(GenericLocal[GenericLocal[Boolean]](1, "a", GenericLocal(2, "b", true)),
-        "generic local class with local type argument")(
-        ExpressionEncoder.local[GenericLocal[GenericLocal[Boolean]]]())
+        "generic local class with local type argument")
     }
 
     // Scala runtime reflection doesn't support type aliases for local classes
@@ -780,24 +805,6 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
          """.stripMargin)
       }
     }
-  }
-
-  /**
-   * Verify the size of scala.reflect.runtime.JavaUniverse.undoLog before and after `func` to
-   * ensure we don't leak Scala reflection garbage.
-   *
-   * @see org.apache.spark.sql.catalyst.ScalaReflection.cleanUpReflectionObjects
-   */
-  private def verifyNotLeakingReflectionObjects[T](func: => T): T = {
-    def undoLogSize: Int = {
-      scala.reflect.runtime.universe
-        .asInstanceOf[scala.reflect.runtime.JavaUniverse].undoLog.log.size
-    }
-
-    val previousUndoLogSize = undoLogSize
-    val r = func
-    assert(previousUndoLogSize == undoLogSize)
-    r
   }
 
   private def testAndVerifyNotLeakingReflectionObjects(
