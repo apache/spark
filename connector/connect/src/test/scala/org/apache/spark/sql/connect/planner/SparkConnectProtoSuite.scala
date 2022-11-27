@@ -190,18 +190,22 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       sparkTestRelationMap.select(explode(Column("id")).as(Seq("a", "b"))))
 
     // Metadata must only be specified for regular Aliases.
-    assertThrows[InvalidPlanInput] {
-      val attr = proto_explode("id".protoAttr)
-      val alias = proto.Expression.Alias
-        .newBuilder()
-        .setExpr(attr)
-        .addName("a")
-        .addName("b")
-        .setMetadata(mdJson)
-        .build()
-      transform(
-        connectTestRelationMap.select(proto.Expression.newBuilder().setAlias(alias).build()))
-    }
+    checkError(
+      exception = intercept[InvalidPlanInput] {
+        val attr = proto_explode("id".protoAttr)
+        val alias = proto.Expression.Alias
+          .newBuilder()
+          .setExpr(attr)
+          .addName("a")
+          .addName("b")
+          .setMetadata(mdJson)
+          .build()
+        transform(
+          connectTestRelationMap.select(proto.Expression.newBuilder().setAlias(alias).build()))
+      },
+      errorClass = "CONNECT.INVALID_PLAN_INPUT",
+      parameters = Map(
+        "msg" -> "Alias expressions with more than 1 identifier must not use optional metadata."))
   }
 
   test("Aggregate with more than 1 grouping expressions") {
@@ -406,9 +410,12 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
 
   test("Write with invalid bucketBy configuration") {
     val cmd = localRelation.write(bucketByCols = Seq("id"), numBuckets = Some(0))
-    assertThrows[InvalidCommandInput] {
-      transform(cmd)
-    }
+    checkError(
+      exception = intercept[InvalidCommandInput] {
+        transform(cmd)
+      },
+      errorClass = "CONNECT.INVALID_COMMAND_INPUT",
+      parameters = Map("msg" -> "BucketBy must specify a bucket count > 0, received 0 instead."))
   }
 
   test("Write to Path") {
