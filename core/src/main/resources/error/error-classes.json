@@ -735,6 +735,11 @@
       "The <joinType> JOIN with LATERAL correlation is not allowed because an OUTER subquery cannot correlate to its join partner. Remove the LATERAL correlation or use an INNER JOIN, or LEFT OUTER JOIN instead."
     ]
   },
+  "INVALID_MAP_KEY" : {
+    "message" : [
+      "Cannot use null as map key!"
+    ]
+  },
   "INVALID_OPTIONS" : {
     "message" : [
       "Invalid options:"
@@ -776,11 +781,6 @@
   "INVALID_PROTOBUF_MESSAGE_TYPE" : {
     "message" : [
       "<protobufClassName> is not a Protobuf message type"
-    ]
-  },
-  "INVALID_MAP_KEY" : {
-    "message" : [
-      "Cannot use null as map key!"
     ]
   },
   "INVALID_SCHEMA" : {
