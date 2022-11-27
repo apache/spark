@@ -23,12 +23,17 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.Expressions
+import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.execution.datasources.PreprocessTableCreation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StringType}
 
-class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTest {
+class V2CommandsCaseSensitivitySuite
+  extends SharedSparkSession
+  with AnalysisTest
+  with QueryErrorsBase {
+
   import CreateTablePartitioningValidationSuite._
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
@@ -238,7 +243,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
   }
 
   test("SPARK-36372: Adding duplicate columns should not be allowed") {
-    alterTableTest(
+    assertAnalysisErrorClass(
       AddColumns(
         table,
         Seq(QualifiedColType(
@@ -257,8 +262,9 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
           None,
           None,
           None))),
-      Seq("Found duplicate column(s) in the user specified columns: `point.z`"),
-      expectErrorOnCaseSensitive = false)
+      "COLUMN_ALREADY_EXISTS",
+      Map("columnName" -> toSQLId("point.z")),
+      caseSensitive = false)
   }
 
   test("SPARK-36381: Check column name exist case sensitive and insensitive when add column") {
@@ -341,13 +347,14 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
   }
 
   test("SPARK-36449: Replacing columns with duplicate name should not be allowed") {
-    alterTableTest(
+    assertAnalysisErrorClass(
       ReplaceColumns(
         table,
         Seq(QualifiedColType(None, "f", LongType, true, None, None, None),
           QualifiedColType(None, "F", LongType, true, None, None, None))),
-      Seq("Found duplicate column(s) in the user specified columns: `f`"),
-      expectErrorOnCaseSensitive = false)
+      "COLUMN_ALREADY_EXISTS",
+      Map("columnName" -> toSQLId("f")),
+      caseSensitive = false)
   }
 
   private def alterTableTest(
