@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.catalyst
 
-import scala.reflect.runtime.universe.showRaw
+import scala.reflect.classTag
+import scala.reflect.runtime.{currentMirror => rm}
+import scala.reflect.runtime.universe.{internal, symbolOf, weakTypeOf}
 
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -25,11 +27,35 @@ class LocalTypeImproverSuite extends AnyFunSuite {
   test("LocalTypeImprover") {
     case class Local()
 
-    val clsName = getClass.getName
-    val newName = """"$Local$1""""
+    val expected = internal.typeRef(
+      internal.thisType(symbolOf[LocalTypeImproverSuite]),
+      rm.classSymbol(classOf[Local]),
+      Nil
+    )
 
-    assert(showRaw(
-      LocalTypeImprover.improveStaticType[Local]
-    ) == s"TypeRef(ThisType($clsName), TypeName($newName), List())")
+    assert(
+      LocalTypeImprover.improveStaticType[Local] =:= expected,
+      "improveStaticType"
+    )
+
+    assert(
+      LocalTypeImprover.improveDynamicType(
+        weakTypeOf[Local],
+        ClassTagApplication(classTag[Local], Nil)
+      ) =:= expected,
+      "improveDynamicType: weakTypeOf"
+    )
+
+    assert(
+      LocalTypeImprover.improveDynamicType(
+        internal.typeRef(
+          internal.thisType(symbolOf[LocalTypeImproverSuite]),
+          symbolOf[Local],
+          Nil
+        ),
+        ClassTagApplication(classTag[Local], Nil)
+      ) =:= expected,
+      "improveDynamicType: manual"
+    )
   }
 }
