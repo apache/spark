@@ -26,7 +26,7 @@ if have_pandas:
     from pyspark.sql.connect.plan import Read, Range, SQL
     from pyspark.testing.utils import search_jar
     from pyspark.sql.connect.plan import LogicalPlan
-    from pyspark.sql.connect.client import RemoteSparkSession
+    from pyspark.sql.connect.session import SparkSession
 
     connect_jar = search_jar("connector/connect", "spark-connect-assembly-", "spark-connect")
 else:
@@ -69,7 +69,7 @@ class MockRemoteSession:
 class PlanOnlyTestFixture(unittest.TestCase):
 
     connect: "MockRemoteSession"
-    session: RemoteSparkSession
+    session: SparkSession
 
     @classmethod
     def _read_table(cls, table_name: str) -> "DataFrame":
@@ -102,7 +102,7 @@ class PlanOnlyTestFixture(unittest.TestCase):
     @classmethod
     def setUpClass(cls: Any) -> None:
         cls.connect = MockRemoteSession()
-        cls.session = RemoteSparkSession()
+        cls.session = SparkSession.builder.remote().getOrCreate()
         cls.tbl_name = "test_connect_plan_only_table_1"
 
         cls.connect.set_hook("register_udf", cls._udf_mock)

@@ -68,7 +68,7 @@ message Expression {
       bytes uuid = 28;
       DataType null = 29; // a typed null literal
       List list = 30;
-      DataType.List empty_list = 31;
+      DataType.Array empty_array = 31;
       DataType.Map empty_map = 32;
       UserDefined user_defined = 33;
     }

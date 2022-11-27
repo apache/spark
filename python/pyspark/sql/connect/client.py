@@ -15,28 +15,42 @@
 # limitations under the License.
 #
 
-
-import logging
 import os
 import urllib.parse
 import uuid
+from typing import Iterable, Optional, Any, Union, List, Tuple, Dict
 
 import grpc  # type: ignore
-import pyarrow as pa
 import pandas
+import pyarrow as pa
 
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 import pyspark.sql.types
 from pyspark import cloudpickle
-from pyspark.sql.connect.dataframe import DataFrame
-from pyspark.sql.connect.readwriter import DataFrameReader
-from pyspark.sql.connect.plan import SQL, Range
-from pyspark.sql.types import DataType, StructType, StructField, LongType, StringType
-
-from typing import Iterable, Optional, Any, Union, List, Tuple, Dict
-
-logging.basicConfig(level=logging.INFO)
+from pyspark.sql.types import (
+    DataType,
+    ByteType,
+    ShortType,
+    IntegerType,
+    FloatType,
+    DateType,
+    TimestampType,
+    DayTimeIntervalType,
+    MapType,
+    StringType,
+    CharType,
+    VarcharType,
+    StructType,
+    StructField,
+    ArrayType,
+    DoubleType,
+    LongType,
+    DecimalType,
+    BinaryType,
+    BooleanType,
+    NullType,
+)
 
 
 class ChannelBuilder:
@@ -244,21 +258,40 @@ class PlanMetrics:
 
 
 class AnalyzeResult:
-    def __init__(self, schema: pb2.DataType, explain: str):
+    def __init__(
+        self,
+        schema: pb2.DataType,
+        explain: str,
+        tree_string: str,
+        is_local: bool,
+        is_streaming: bool,
+        input_files: List[str],
+    ):
         self.schema = schema
         self.explain_string = explain
+        self.tree_string = tree_string
+        self.is_local = is_local
+        self.is_streaming = is_streaming
+        self.input_files = input_files
 
     @classmethod
     def fromProto(cls, pb: Any) -> "AnalyzeResult":
-        return AnalyzeResult(pb.schema, pb.explain_string)
+        return AnalyzeResult(
+            pb.schema,
+            pb.explain_string,
+            pb.tree_string,
+            pb.is_local,
+            pb.is_streaming,
+            pb.input_files,
+        )
 
 
-class RemoteSparkSession(object):
+class SparkConnectClient(object):
     """Conceptually the remote spark session that communicates with the server"""
 
-    def __init__(self, connectionString: str = "sc://localhost", userId: Optional[str] = None):
+    def __init__(self, connectionString: str, userId: Optional[str] = None):
         """
-        Creates a new RemoteSparkSession for the Spark Connect interface.
+        Creates a new SparkSession for the Spark Connect interface.
 
         Parameters
         ----------
@@ -283,9 +316,6 @@ class RemoteSparkSession(object):
 
         self._channel = self._builder.toChannel()
         self._stub = grpc_lib.SparkConnectServiceStub(self._channel)
-
-        # Create the reader
-        self.read = DataFrameReader(self)
 
     def register_udf(
         self, function: Any, return_type: Union[str, pyspark.sql.types.DataType]
@@ -314,80 +344,84 @@ class RemoteSparkSession(object):
             for x in metrics.metrics
         ]
 
-    def sql(self, sql_string: str) -> "DataFrame":
-        return DataFrame.withPlan(SQL(sql_string), self)
-
-    def range(
-        self,
-        start: int,
-        end: int,
-        step: int = 1,
-        numPartitions: Optional[int] = None,
-    ) -> DataFrame:
-        """
-        Create a :class:`DataFrame` with column named ``id`` and typed Long,
-        containing elements in a range from ``start`` to ``end`` (exclusive) with
-        step value ``step``.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        start : int
-            the start value
-        end : int
-            the end value (exclusive)
-        step : int, optional
-            the incremental step (default: 1)
-        numPartitions : int, optional
-            the number of partitions of the DataFrame
-
-        Returns
-        -------
-        :class:`DataFrame`
-        """
-        return DataFrame.withPlan(
-            Range(start=start, end=end, step=step, num_partitions=numPartitions), self
-        )
-
     def _to_pandas(self, plan: pb2.Plan) -> "pandas.DataFrame":
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
         return self._execute_and_fetch(req)
 
     def _proto_schema_to_pyspark_schema(self, schema: pb2.DataType) -> DataType:
-        if schema.HasField("struct"):
-            structFields = []
-            for proto_field in schema.struct.fields:
-                structFields.append(
-                    StructField(
-                        proto_field.name,
-                        self._proto_schema_to_pyspark_schema(proto_field.type),
-                        proto_field.nullable,
-                    )
-                )
-            return StructType(structFields)
-        elif schema.HasField("i64"):
+        if schema.HasField("null"):
+            return NullType()
+        elif schema.HasField("boolean"):
+            return BooleanType()
+        elif schema.HasField("binary"):
+            return BinaryType()
+        elif schema.HasField("byte"):
+            return ByteType()
+        elif schema.HasField("short"):
+            return ShortType()
+        elif schema.HasField("integer"):
+            return IntegerType()
+        elif schema.HasField("long"):
             return LongType()
+        elif schema.HasField("float"):
+            return FloatType()
+        elif schema.HasField("double"):
+            return DoubleType()
+        elif schema.HasField("decimal"):
+            p = schema.decimal.precision if schema.decimal.HasField("precision") else 10
+            s = schema.decimal.scale if schema.decimal.HasField("scale") else 0
+            return DecimalType(precision=p, scale=s)
         elif schema.HasField("string"):
             return StringType()
+        elif schema.HasField("char"):
+            return CharType(schema.char.length)
+        elif schema.HasField("var_char"):
+            return VarcharType(schema.var_char.length)
+        elif schema.HasField("date"):
+            return DateType()
+        elif schema.HasField("timestamp"):
+            return TimestampType()
+        elif schema.HasField("day_time_interval"):
+            return DayTimeIntervalType()
+        elif schema.HasField("array"):
+            return ArrayType(
+                self._proto_schema_to_pyspark_schema(schema.array.element_type),
+                schema.array.contains_null,
+            )
+        elif schema.HasField("struct"):
+            fields = [
+                StructField(
+                    f.name,
+                    self._proto_schema_to_pyspark_schema(f.data_type),
+                    f.nullable,
+                )
+                for f in schema.struct.fields
+            ]
+            return StructType(fields)
+        elif schema.HasField("map"):
+            return MapType(
+                self._proto_schema_to_pyspark_schema(schema.map.key_type),
+                self._proto_schema_to_pyspark_schema(schema.map.value_type),
+                schema.map.value_contains_null,
+            )
         else:
-            raise Exception("Only support long, string, struct conversion")
+            raise Exception(f"Unsupported data type {schema}")
 
     def schema(self, plan: pb2.Plan) -> StructType:
         proto_schema = self._analyze(plan).schema
         # Server side should populate the struct field which is the schema.
         assert proto_schema.HasField("struct")
-        structFields = []
-        for proto_field in proto_schema.struct.fields:
-            structFields.append(
-                StructField(
-                    proto_field.name,
-                    self._proto_schema_to_pyspark_schema(proto_field.type),
-                    proto_field.nullable,
-                )
+
+        fields = [
+            StructField(
+                f.name,
+                self._proto_schema_to_pyspark_schema(f.data_type),
+                f.nullable,
             )
-        return StructType(structFields)
+            for f in proto_schema.struct.fields
+        ]
+        return StructType(fields)
 
     def explain_string(self, plan: pb2.Plan, explain_mode: str = "extended") -> str:
         result = self._analyze(plan, explain_mode)

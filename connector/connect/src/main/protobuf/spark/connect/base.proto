@@ -112,6 +112,19 @@ message AnalyzePlanResponse {
 
   // The extended explain string as produced by Spark.
   string explain_string = 3;
+
+  // Get the tree string of the schema.
+  string tree_string = 4;
+
+  // Whether the 'collect' and 'take' methods can be run locally.
+  bool is_local = 5;
+
+  // Whether this plan contains one or more sources that continuously
+  // return data as it arrives.
+  bool is_streaming = 6;
+
+  // A best-effort snapshot of the files that compose this Dataset
+  repeated string input_files = 7;
 }
 
 // A request to be executed by the service.

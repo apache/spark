@@ -37,6 +37,7 @@ from pyspark.sql.connect.column import (
     Expression,
     LiteralExpression,
     SQLExpression,
+    ScalarFunctionExpression,
 )
 from pyspark.sql.types import (
     StructType,
@@ -45,28 +46,16 @@ from pyspark.sql.types import (
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName, ExpressionOrString, LiteralType
-    from pyspark.sql.connect.client import RemoteSparkSession
+    from pyspark.sql.connect.session import SparkSession
 
 
-class GroupingFrame(object):
-
-    MeasuresType = Union[Sequence[Tuple["ExpressionOrString", str]], Dict[str, str]]
-    OptMeasuresType = Optional[MeasuresType]
-
+class GroupedData(object):
     def __init__(self, df: "DataFrame", *grouping_cols: Union[Column, str]) -> None:
         self._df = df
         self._grouping_cols = [x if isinstance(x, Column) else df[x] for x in grouping_cols]
 
-    def agg(self, exprs: Optional[MeasuresType] = None) -> "DataFrame":
-
-        # Normalize the dictionary into a list of tuples.
-        if isinstance(exprs, Dict):
-            measures = list(exprs.items())
-        elif isinstance(exprs, List):
-            measures = exprs
-        else:
-            measures = []
-
+    def agg(self, measures: Sequence[Expression]) -> "DataFrame":
+        assert len(measures) > 0, "exprs should not be empty"
         res = DataFrame.withPlan(
             plan.Aggregate(
                 child=self._df._plan,
@@ -77,23 +66,27 @@ class GroupingFrame(object):
         )
         return res
 
-    def _map_cols_to_dict(self, fun: str, cols: List[Union[Column, str]]) -> Dict[str, str]:
-        return {x if isinstance(x, str) else x.name(): fun for x in cols}
+    def _map_cols_to_expression(
+        self, fun: str, col: Union[Expression, str]
+    ) -> Sequence[Expression]:
+        return [
+            ScalarFunctionExpression(fun, Column(col)) if isinstance(col, str) else col,
+        ]
 
-    def min(self, *cols: Union[Column, str]) -> "DataFrame":
-        expr = self._map_cols_to_dict("min", list(cols))
+    def min(self, col: Union[Expression, str]) -> "DataFrame":
+        expr = self._map_cols_to_expression("min", col)
         return self.agg(expr)
 
-    def max(self, *cols: Union[Column, str]) -> "DataFrame":
-        expr = self._map_cols_to_dict("max", list(cols))
+    def max(self, col: Union[Expression, str]) -> "DataFrame":
+        expr = self._map_cols_to_expression("max", col)
         return self.agg(expr)
 
-    def sum(self, *cols: Union[Column, str]) -> "DataFrame":
-        expr = self._map_cols_to_dict("sum", list(cols))
+    def sum(self, col: Union[Expression, str]) -> "DataFrame":
+        expr = self._map_cols_to_expression("sum", col)
         return self.agg(expr)
 
     def count(self) -> "DataFrame":
-        return self.agg([(LiteralExpression(1), "count")])
+        return self.agg([ScalarFunctionExpression("count", LiteralExpression(1))])
 
 
 class DataFrame(object):
@@ -104,21 +97,20 @@ class DataFrame(object):
 
     def __init__(
         self,
-        session: "RemoteSparkSession",
+        session: "SparkSession",
         data: Optional[List[Any]] = None,
         schema: Optional[StructType] = None,
     ):
         """Creates a new data frame"""
         self._schema = schema
         self._plan: Optional[plan.LogicalPlan] = None
-        self._cache: Dict[str, Any] = {}
-        self._session: "RemoteSparkSession" = session
+        self._session: "SparkSession" = session
 
     def __repr__(self) -> str:
         return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
 
     @classmethod
-    def withPlan(cls, plan: plan.LogicalPlan, session: "RemoteSparkSession") -> "DataFrame":
+    def withPlan(cls, plan: plan.LogicalPlan, session: "SparkSession") -> "DataFrame":
         """Main initialization method used to construct a new data frame with a child plan."""
         new_frame = DataFrame(session=session)
         new_frame._plan = plan
@@ -162,8 +154,18 @@ class DataFrame(object):
 
         return DataFrame.withPlan(plan.Project(self._plan, *sql_expr), session=self._session)
 
-    def agg(self, exprs: Optional[GroupingFrame.MeasuresType]) -> "DataFrame":
-        return self.groupBy().agg(exprs)
+    def agg(self, *exprs: Union[Expression, Dict[str, str]]) -> "DataFrame":
+        if not exprs:
+            raise ValueError("Argument 'exprs' must not be empty")
+
+        if len(exprs) == 1 and isinstance(exprs[0], dict):
+            measures = [ScalarFunctionExpression(f, Column(e)) for e, f in exprs[0].items()]
+            return self.groupBy().agg(measures)
+        else:
+            # other expressions
+            assert all(isinstance(c, Expression) for c in exprs), "all exprs should be Expression"
+            exprs = cast(Tuple[Expression, ...], exprs)
+            return self.groupBy().agg(exprs)
 
     def alias(self, alias: str) -> "DataFrame":
         return DataFrame.withPlan(plan.SubqueryAlias(self._plan, alias), session=self._session)
@@ -195,20 +197,20 @@ class DataFrame(object):
 
         return self.schema.names
 
-    def sparkSession(self) -> "RemoteSparkSession":
+    def sparkSession(self) -> "SparkSession":
         """Returns Spark session that created this :class:`DataFrame`.
 
         .. versionadded:: 3.4.0
 
         Returns
         -------
-        :class:`RemoteSparkSession`
+        :class:`SparkSession`
         """
         return self._session
 
     def count(self) -> int:
         """Returns the number of rows in the data frame"""
-        pdd = self.agg([(LiteralExpression(1), "count")]).toPandas()
+        pdd = self.agg(ScalarFunctionExpression("count", LiteralExpression(1))).toPandas()
         if pdd is None:
             raise Exception("Empty result")
         return pdd.iloc[0, 0]
@@ -340,8 +342,8 @@ class DataFrame(object):
         """
         return self.head()
 
-    def groupBy(self, *cols: "ColumnOrName") -> GroupingFrame:
-        return GroupingFrame(self, *cols)
+    def groupBy(self, *cols: "ColumnOrName") -> GroupedData:
+        return GroupedData(self, *cols)
 
     @overload
     def head(self) -> Optional[Row]:
@@ -794,8 +796,8 @@ class DataFrame(object):
             raise Exception("Cannot collect on empty plan.")
         if self._session is None:
             raise Exception("Cannot collect on empty session.")
-        query = self._plan.to_proto(self._session)
-        return self._session._to_pandas(query)
+        query = self._plan.to_proto(self._session.client)
+        return self._session.client._to_pandas(query)
 
     @property
     def schema(self) -> StructType:
@@ -809,15 +811,92 @@ class DataFrame(object):
         """
         if self._schema is None:
             if self._plan is not None:
-                query = self._plan.to_proto(self._session)
+                query = self._plan.to_proto(self._session.client)
                 if self._session is None:
-                    raise Exception("Cannot analyze without RemoteSparkSession.")
-                self._schema = self._session.schema(query)
+                    raise Exception("Cannot analyze without SparkSession.")
+                self._schema = self._session.client.schema(query)
                 return self._schema
             else:
                 raise Exception("Empty plan.")
         else:
             return self._schema
+
+    @property
+    def isLocal(self) -> bool:
+        """Returns ``True`` if the :func:`collect` and :func:`take` methods can be run locally
+        (without any Spark executors).
+
+        .. versionadded:: 3.4.0
+
+        Returns
+        -------
+        bool
+        """
+        if self._plan is None:
+            raise Exception("Cannot analyze on empty plan.")
+        query = self._plan.to_proto(self._session.client)
+        return self._session.client._analyze(query).is_local
+
+    @property
+    def isStreaming(self) -> bool:
+        """Returns ``True`` if this :class:`DataFrame` contains one or more sources that
+        continuously return data as it arrives. A :class:`DataFrame` that reads data from a
+        streaming source must be executed as a :class:`StreamingQuery` using the :func:`start`
+        method in :class:`DataStreamWriter`.  Methods that return a single answer, (e.g.,
+        :func:`count` or :func:`collect`) will throw an :class:`AnalysisException` when there
+        is a streaming source present.
+
+        .. versionadded:: 3.4.0
+
+        Notes
+        -----
+        This API is evolving.
+
+        Returns
+        -------
+        bool
+            Whether it's streaming DataFrame or not.
+        """
+        if self._plan is None:
+            raise Exception("Cannot analyze on empty plan.")
+        query = self._plan.to_proto(self._session.client)
+        return self._session.client._analyze(query).is_streaming
+
+    def _tree_string(self) -> str:
+        if self._plan is None:
+            raise Exception("Cannot analyze on empty plan.")
+        query = self._plan.to_proto(self._session.client)
+        return self._session.client._analyze(query).tree_string
+
+    def printSchema(self) -> None:
+        """Prints out the schema in the tree format.
+
+        .. versionadded:: 3.4.0
+
+        Returns
+        -------
+        None
+        """
+        print(self._tree_string())
+
+    def inputFiles(self) -> List[str]:
+        """
+        Returns a best-effort snapshot of the files that compose this :class:`DataFrame`.
+        This method simply asks each constituent BaseRelation for its respective files and
+        takes the union of all results. Depending on the source relations, this may not find
+        all input files. Duplicates are removed.
+
+        .. versionadded:: 3.4.0
+
+        Returns
+        -------
+        list
+            List of file paths.
+        """
+        if self._plan is None:
+            raise Exception("Cannot analyze on empty plan.")
+        query = self._plan.to_proto(self._session.client)
+        return self._session.client._analyze(query).input_files
 
     def transform(self, func: Callable[..., "DataFrame"], *args: Any, **kwargs: Any) -> "DataFrame":
         """Returns a new :class:`DataFrame`. Concise syntax for chaining custom transformations.
@@ -932,10 +1011,10 @@ class DataFrame(object):
             explain_mode = cast(str, extended)
 
         if self._plan is not None:
-            query = self._plan.to_proto(self._session)
+            query = self._plan.to_proto(self._session.client)
             if self._session is None:
-                raise Exception("Cannot analyze without RemoteSparkSession.")
-            return self._session.explain_string(query, explain_mode)
+                raise Exception("Cannot analyze without SparkSession.")
+            return self._session.client.explain_string(query, explain_mode)
         else:
             return ""
 
@@ -953,8 +1032,8 @@ class DataFrame(object):
         """
         command = plan.CreateView(
             child=self._plan, name=name, is_global=True, replace=False
-        ).command(session=self._session)
-        self._session.execute_command(command)
+        ).command(session=self._session.client)
+        self._session.client.execute_command(command)
 
     def createOrReplaceGlobalTempView(self, name: str) -> None:
         """Creates or replaces a global temporary view using the given name.
@@ -970,8 +1049,8 @@ class DataFrame(object):
         """
         command = plan.CreateView(
             child=self._plan, name=name, is_global=True, replace=True
-        ).command(session=self._session)
-        self._session.execute_command(command)
+        ).command(session=self._session.client)
+        self._session.client.execute_command(command)
 
     def rdd(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("RDD Support for Spark Connect is not implemented.")

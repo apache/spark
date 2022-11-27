@@ -70,7 +70,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1096",
+  "errorClass" : "INVALID_OPTIONS.NON_MAP_FUNCTION",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -88,9 +88,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1095",
+  "errorClass" : "INVALID_OPTIONS.NON_STRING_TYPE",
   "messageParameters" : {
-    "map" : "map<string,int>"
+    "mapType" : "\"MAP<STRING, INT>\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -192,7 +192,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1096",
+  "errorClass" : "INVALID_OPTIONS.NON_MAP_FUNCTION",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -210,9 +210,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1095",
+  "errorClass" : "INVALID_OPTIONS.NON_STRING_TYPE",
   "messageParameters" : {
-    "map" : "map<string,int>"
+    "mapType" : "\"MAP<STRING, INT>\""
   },
   "queryContext" : [ {
     "objectType" : "",
