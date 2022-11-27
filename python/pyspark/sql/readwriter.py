@@ -343,7 +343,7 @@ class DataFrameReader(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -463,7 +463,7 @@ class DataFrameReader(OptionUtils):
         **options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -535,7 +535,7 @@ class DataFrameReader(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -632,7 +632,7 @@ class DataFrameReader(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -740,7 +740,7 @@ class DataFrameReader(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -835,7 +835,7 @@ class DataFrameReader(OptionUtils):
         column : str, optional
             alias of ``partitionColumn`` option. Refer to ``partitionColumn`` in
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
         predicates : list, optional
             a list of expressions suitable for inclusion in WHERE clauses;
             each one defines one partition of the :class:`DataFrame`
@@ -849,7 +849,7 @@ class DataFrameReader(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -1550,7 +1550,7 @@ class DataFrameWriter(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -1597,7 +1597,7 @@ class DataFrameWriter(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -1672,7 +1672,7 @@ class DataFrameWriter(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -1747,7 +1747,7 @@ class DataFrameWriter(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -1809,7 +1809,7 @@ class DataFrameWriter(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
