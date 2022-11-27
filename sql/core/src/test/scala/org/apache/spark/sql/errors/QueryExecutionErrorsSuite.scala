@@ -448,7 +448,7 @@ class QueryExecutionErrorsSuite
 
       override def getResources(name: String): java.util.Enumeration[URL] = {
         if (name.equals("META-INF/services/org.apache.spark.sql.sources.DataSourceRegister")) {
-          // scalastyle:off
+          // scalastyle:off throwerror
           throw new ServiceConfigurationError(s"Illegal configuration-file syntax: $name",
             new NoClassDefFoundError("org.apache.spark.sql.sources.HadoopFsRelationProvider"))
           // scalastyle:on throwerror
@@ -632,7 +632,8 @@ class QueryExecutionErrorsSuite
       },
       errorClass = "UNSUPPORTED_DATATYPE",
       parameters = Map(
-        "typeName" -> "StructType()[1.1] failure: 'TimestampType' expected but 'S' found\n\nStructType()\n^"
+        "typeName" ->
+          "StructType()[1.1] failure: 'TimestampType' expected but 'S' found\n\nStructType()\n^"
       ),
       sqlState = "0A000")
   }
