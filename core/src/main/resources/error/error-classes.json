@@ -783,15 +783,15 @@
       "The input schema <inputSchema> is not a valid schema string."
     ],
     "subClass" : {
-      "UNEXPECTED_INPUT_TYPE" : {
-        "message" : [
-          "The input expression must be string literal and not null."
-        ]
-      },
       "PARSE_ERROR" : {
         "message" : [
           "Cannot parse the schema: ",
           "<reason>"
+        ]
+      },
+      "UNEXPECTED_INPUT_TYPE" : {
+        "message" : [
+          "The input expression must be string literal and not null."
         ]
       }
     }
