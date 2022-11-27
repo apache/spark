@@ -20,14 +20,18 @@ package org.apache.spark.sql.catalyst
 import scala.annotation.implicitNotFound
 import scala.reflect.ClassTag
 
-import ScalaReflection.universe.{appliedType, internal, weakTypeOf, Type, WeakTypeTag}
-import macros.DeepClassTagMacros
+import ScalaReflection.universe.{appliedType, internal, Type}
+import macros.{DeepClassTagMacros, DeepDealiaserMacros, LocalTypeImproverMacros}
 
 case class ClassTagApplication(tycon: ClassTag[_], targs: List[ClassTagApplication])
 
 /**
  * A type class generalizing `ClassTag`. It recursively attaches `ClassTag`s to type arguments,
  * their type arguments, etc.
+ *
+ * Implemented via a macro because there are too many shapes of type constructors and it's
+ * rather boilerplaty to implement the type-class instances manually, especially resolving
+ * implicit ambiguities and implicit divergence.
  *
  * @since 3.4.0
  */
@@ -42,21 +46,38 @@ object DeepClassTag {
 }
 
 /**
+ * Enhanced version of `.dealias`. It is recursively applied to type arguments, their type
+ * arguments, etc.
+ *
+ * Executed at compile time because Scala runtime reflection not completely supports dealiasing
+ * type aliases of local types.
+ *
+ * @since 3.4.0
+ */
+object DeepDealiaser {
+  import scala.language.experimental.macros
+  def dealiasStaticType[T]: Type = macro DeepDealiaserMacros.dealiasStaticTypeImpl[T]
+}
+
+/**
  * Transforms a type having `WeakTypeTag` but not having `TypeTag` (i.e. Scala free type, type of
- * local case class, etc) into the one having `TypeTag` using `ClassTag`.
+ * local case class, their type aliases, etc.) into the one having `TypeTag` using `ClassTag`.
  *
  * E.g. it transforms `TypeRef(NoPrefix, TypeName("Local"), List())` into
  * `TypeRef(NoPrefix, TypeName("$Local$1"), List())` for local (method-inner) class `Local`.
  *
  * Handles type arguments recursively.
  *
- * In runtime reflection, dealiasing seems not to work for local type aliases.
+ * Implemented via a macro because [[DeepDealiaser]] is a macro too and we need to postpone the
+ * inference of type parameter `T` till macro expansion.
  *
  * @since 3.4.0
  */
 object LocalTypeImprover {
-  def improveStaticType[T: WeakTypeTag : DeepClassTag]: Type =
-    improveDynamicType(weakTypeOf[T], DeepClassTag[T].classTags)
+  import scala.language.experimental.macros
+
+  def improveStaticType[T: DeepClassTag]: Type =
+    macro LocalTypeImproverMacros.improveStaticTypeImpl[T]
 
   def improveDynamicType(tpe: Type, classTags: ClassTagApplication): Type = {
     val newTycon = improveFreeType(tpe, classTags.tycon.runtimeClass)

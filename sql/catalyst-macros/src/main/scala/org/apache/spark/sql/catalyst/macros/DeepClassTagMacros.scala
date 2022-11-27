@@ -24,7 +24,7 @@ import scala.reflect.macros.whitebox
  *
  * @since 3.4.0
  */
-class DeepClassTagMacros(val c: whitebox.Context) {
+class DeepClassTagMacros(val c: whitebox.Context) extends StandardTrees {
   import c.universe._
 
   implicit class ModifiersOps(left: Modifiers) {
@@ -62,20 +62,16 @@ class DeepClassTagMacros(val c: whitebox.Context) {
     tq"${tpe.typeSymbol}[..$targs] forSome { ..$targDefs }"
   }
 
-  val catalyst = q"_root_.org.apache.spark.sql.catalyst"
-  val ClassTagApplication = tq"$catalyst.ClassTagApplication"
-  val scalaT = q"_root_.scala"
-
   def mkApplication(tpe: Type): Tree = {
     val dealiased = tpe.dealias
     val existentialTpeTree = mkExistentialTypeTree(dealiased)
-    val tpeCtag = q"$scalaT.reflect.classTag[$existentialTpeTree]"
+    val tpeCtag = q"$reflectT.classTag[$existentialTpeTree]"
     val targCtags = dealiased.typeArgs.map(mkApplication)
-    q"new $ClassTagApplication($tpeCtag, $scalaT.List.apply[$ClassTagApplication](..$targCtags))"
+    q"new $ClassTagApplication($tpeCtag, $ListT.apply[$ClassTagApplication](..$targCtags))"
   }
 
   def mkDeepClassTagImpl[T: WeakTypeTag]: Tree = {
     val T = weakTypeOf[T]
-    q"new $catalyst.DeepClassTag[$T](${mkApplication(T)})"
+    q"new $DeepClassTag[$T](${mkApplication(T)})"
   }
 }

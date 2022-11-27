@@ -17,15 +17,17 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
-import scala.reflect.{classTag, ClassTag}
-import scala.reflect.runtime.universe.{typeTag, TypeTag, WeakTypeTag}
+import scala.language.experimental.macros
+import scala.reflect.ClassTag
+import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
 import org.apache.spark.sql.Encoder
-import org.apache.spark.sql.catalyst.{DeepClassTag, InternalRow, JavaTypeInference, LocalTypeImprover, ScalaReflection}
+import org.apache.spark.sql.catalyst.{DeepClassTag, InternalRow, JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, GetColumnByOrdinal, SimpleAnalyzer, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder.{Deserializer, Serializer}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, InitializeJavaBean, Invoke, NewInstance}
+import org.apache.spark.sql.catalyst.macros.ExpressionEncoderMacros
 import org.apache.spark.sql.catalyst.optimizer.{ReassignLambdaVariableID, SimplifyCasts}
 import org.apache.spark.sql.catalyst.plans.logical.{CatalystSerde, DeserializeToObject, LeafNode, LocalRelation}
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -43,6 +45,9 @@ import org.apache.spark.util.Utils
  *  - Tuples will have their subfields extracted by position using [[BoundReference]] expressions.
  *  - Primitives will have their values extracted from the first ordinal with a schema that defaults
  *    to the name `value`.
+ *
+ * An encoder for local classes is implemented via a macro to overcome limitations of Scala runtime
+ * reflection and to postpone the inference of type parameter `T` till macro expansion.
  */
 object ExpressionEncoder {
 
@@ -60,17 +65,8 @@ object ExpressionEncoder {
       ClassTag[T](cls))
   }
 
-  def local[T: WeakTypeTag : ClassTag : DeepClassTag](): ExpressionEncoder[T] = {
-    val tpe = LocalTypeImprover.improveStaticType[T]
-    val serializer = ScalaReflection.serializerForType(tpe)
-    val deserializer = ScalaReflection.deserializerForType(tpe)
-
-    new ExpressionEncoder[T](
-      serializer,
-      deserializer,
-      classTag[T]
-    )
-  }
+  def local[T: ClassTag : DeepClassTag](): ExpressionEncoder[T] =
+    macro ExpressionEncoderMacros.localImpl[T]
 
   // TODO: improve error message for java bean encoder.
   def javaBean[T](beanClass: Class[T]): ExpressionEncoder[T] = {

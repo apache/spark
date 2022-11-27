@@ -283,34 +283,14 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
       type BoolGenLocal = GenericLocal[Boolean]
       type GenGenLocal = GenericLocal[GenericLocal[Boolean]]
 
-      val m = intercept[AssertionError] {
-        encodeDecodeTest(
-          GenericLocal[Boolean](1, "a", true),
-          "ignored")(ExpressionEncoder.local[BoolGenLocal]()
-        )
-      }.getMessage
-      test("alias for generic local class") {
-        assert(m.contains(
-          "( List() ).length == ( List(ClassTagApplication(Boolean,List())) ).length"
-        ))
-      }
+      encodeDecodeTest(
+        GenericLocal[Boolean](1, "a", true),
+        "alias for generic local class")(ExpressionEncoder.local[BoolGenLocal]())
 
-      val m1 = intercept[AssertionError] {
-        encodeDecodeTest(
-          GenericLocal[BoolGenLocal](1, "a", GenericLocal(2, "b", true)),
-          "ignored")(
-          ExpressionEncoder.local[GenGenLocal]()
-        )
-      }.getMessage
-      test("alias for generic local class with local type argument") {
-        assert(
-          Seq(
-            "( List() ).length == ( List(ClassTagApplication(org.apache.spark.sql.catalyst" +
-              ".encoders.ExpressionEncoderSuite$SerializableOuter$GenericLocal$",
-            ",List(ClassTagApplication(Boolean,List())))) ).length"
-          ).forall(m1.contains)
-        )
-      }
+      encodeDecodeTest(
+        GenericLocal[BoolGenLocal](1, "a", GenericLocal(2, "b", true)),
+        "alias for generic local class with local type argument")(
+        ExpressionEncoder.local[GenGenLocal]())
     }
   }
 

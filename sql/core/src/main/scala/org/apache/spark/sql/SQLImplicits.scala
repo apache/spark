@@ -268,13 +268,12 @@ trait LowPrioritySQLImplicits extends LowerPrioritySQLImplicits {
 }
 
 /**
- * Lower priority implicit methods for converting objects of local classes into [[Dataset]]s.
+ * Lower priority implicit methods for converting objects of local classes (not having `TypeTag`)
+ * into [[Dataset]]s.
  * Conflicting implicits are placed here to disambiguate resolution.
  *
  * Reasons for including specific implicits:
  * newLocalProductEncoder - to disambiguate for `T`s which have both `TypeTag` and `WeakTypeTag`.
- *
- * Doesn't work for type aliases of local classes.
  */
 trait LowerPrioritySQLImplicits {
   /** @since 3.4.0 */

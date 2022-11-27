@@ -309,7 +309,7 @@ object Encoders {
   def product[T <: Product : TypeTag]: Encoder[T] = ExpressionEncoder()
 
   /**
-   * An encoder for Scala's local product type (local case classes, etc).
+   * An encoder for Scala's local product type (local case classes, their type aliases, etc).
    * @since 3.4.0
    */
   def localProduct[T <: Product : WeakTypeTag : ClassTag : DeepClassTag]: Encoder[T] =
