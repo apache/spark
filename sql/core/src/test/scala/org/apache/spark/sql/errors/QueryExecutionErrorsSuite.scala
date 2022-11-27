@@ -641,7 +641,8 @@ class QueryExecutionErrorsSuite
   test("FAILED_RENAME_PATH: rename when destination path already exists") {
     withTempPath { p =>
       withSQLConf(
-        "spark.sql.streaming.checkpointFileManagerClass" -> classOf[FileSystemBasedCheckpointFileManager].getName,
+        "spark.sql.streaming.checkpointFileManagerClass" ->
+          classOf[FileSystemBasedCheckpointFileManager].getName,
         "fs.file.impl" -> classOf[FakeFileSystemAlwaysExists].getName,
         // FileSystem caching could cause a different implementation of fs.file to be used
         "fs.file.impl.disable.cache" -> "true") {
@@ -649,7 +650,11 @@ class QueryExecutionErrorsSuite
 
         val ds = spark.readStream.format("rate").load()
         val e = intercept[SparkConcurrentModificationException] {
-          ds.writeStream.option("checkpointLocation", checkpointLocation).queryName("_").format("memory").start()
+          ds.writeStream
+            .option("checkpointLocation", checkpointLocation)
+            .queryName("_")
+            .format("memory")
+            .start()
         }
 
         val expectedPath = p.toURI
