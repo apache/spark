@@ -158,7 +158,7 @@ object DataType {
           fallbackParser(schema)
         } catch {
           case NonFatal(_) =>
-            throw QueryCompilationErrors.invalidSchemaStringError(schema, e1)
+            throw QueryCompilationErrors.schemaFailToParseError(schema, e1)
         }
     }
   }

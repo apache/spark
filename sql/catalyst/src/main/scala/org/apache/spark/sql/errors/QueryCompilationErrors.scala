@@ -993,16 +993,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("key" -> key, "details" -> details))
   }
 
-  def invalidSchemaStringError(schema: String, e1: Throwable): Throwable = {
+  def schemaFailToParseError(schema: String, e: Throwable): Throwable = {
     new AnalysisException(
-      errorClass = "INVALID_SCHEMA",
-      messageParameters = Map("inputSchema" -> toSQLSchema(schema)),
-      cause = Some(e1))
+      errorClass = "INVALID_SCHEMA.PARSE_ERROR",
+      messageParameters = Map(
+        "inputSchema" -> toSQLSchema(schema),
+        "reason" -> e.getMessage
+      ),
+      cause = Some(e))
   }
 
-  def invalidSchemaStringError(exp: Expression): Throwable = {
+  def unexpectedSchemaTypeError(exp: Expression): Throwable = {
     new AnalysisException(
-      errorClass = "INVALID_SCHEMA",
+      errorClass = "INVALID_SCHEMA.UNEXPECTED_INPUT_TYPE",
       messageParameters = Map("inputSchema" -> toSQLExpr(exp)))
   }
 

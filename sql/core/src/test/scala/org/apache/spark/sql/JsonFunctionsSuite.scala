@@ -443,7 +443,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df3.selectExpr("from_json(value, 1)")
       },
-      errorClass = "INVALID_SCHEMA",
+      errorClass = "INVALID_SCHEMA.UNEXPECTED_INPUT_TYPE",
       parameters = Map("inputSchema" -> "\"1\""),
       context = ExpectedContext(
         fragment = "from_json(value, 1)",
@@ -452,12 +452,23 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       )
     )
 
+    val reason =
+      """
+        |[PARSE_SYNTAX_ERROR] Syntax error at or near 'InvalidType': extra input 'InvalidType'(line 1, pos 5)
+        |
+        |== SQL ==
+        |time InvalidType
+        |-----^^^
+        |""".stripMargin
     checkError(
       exception = intercept[AnalysisException] {
         df3.selectExpr("""from_json(value, 'time InvalidType')""")
       },
-      errorClass = "INVALID_SCHEMA",
-      parameters = Map("inputSchema" -> "\"time InvalidType\""),
+      errorClass = "INVALID_SCHEMA.PARSE_ERROR",
+      parameters = Map(
+        "inputSchema" -> "\"time InvalidType\"",
+        "reason" -> reason
+      ),
       context = ExpectedContext(
         fragment = "from_json(value, 'time InvalidType')",
         start = 0,
@@ -999,30 +1010,46 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
   test("SPARK-33286: from_json - combined error messages") {
     val df = Seq("""{"a":1}""").toDF("json")
     val invalidJsonSchema = """{"fields": [{"a":123}], "type": "struct"}"""
+    val invalidJsonSchemaReason = "Failed to convert the JSON string '{\"a\":123}' to a field."
     checkError(
       exception = intercept[AnalysisException] {
         df.select(from_json($"json", invalidJsonSchema, Map.empty[String, String])).collect()
       },
-      errorClass = "INVALID_SCHEMA",
-      parameters = Map("inputSchema" -> "\"{\"fields\": [{\"a\":123}], \"type\": \"struct\"}\"")
+      errorClass = "INVALID_SCHEMA.PARSE_ERROR",
+      parameters = Map(
+        "inputSchema" -> "\"{\"fields\": [{\"a\":123}], \"type\": \"struct\"}\"",
+        "reason" -> invalidJsonSchemaReason
+      )
     )
 
     val invalidDataType = "MAP<INT, cow>"
+    val invalidDataTypeReason = "Unrecognized token 'MAP': " +
+      "was expecting (JSON String, Number, Array, Object or token 'null', 'true' or 'false')\n " +
+      "at [Source: (String)\"MAP<INT, cow>\"; line: 1, column: 4]"
     checkError(
       exception = intercept[AnalysisException] {
         df.select(from_json($"json", invalidDataType, Map.empty[String, String])).collect()
       },
-      errorClass = "INVALID_SCHEMA",
-      parameters = Map("inputSchema" -> "\"MAP<INT, cow>\"")
+      errorClass = "INVALID_SCHEMA.PARSE_ERROR",
+      parameters = Map(
+        "inputSchema" -> "\"MAP<INT, cow>\"",
+        "reason" -> invalidDataTypeReason
+      )
     )
 
     val invalidTableSchema = "x INT, a cow"
+    val invalidTableSchemaReason = "Unrecognized token 'x': " +
+      "was expecting (JSON String, Number, Array, Object or token 'null', 'true' or 'false')\n" +
+      " at [Source: (String)\"x INT, a cow\"; line: 1, column: 2]"
     checkError(
       exception = intercept[AnalysisException] {
         df.select(from_json($"json", invalidTableSchema, Map.empty[String, String])).collect()
       },
-      errorClass = "INVALID_SCHEMA",
-      parameters = Map("inputSchema" -> "\"x INT, a cow\"")
+      errorClass = "INVALID_SCHEMA.PARSE_ERROR",
+      parameters = Map(
+        "inputSchema" -> "\"x INT, a cow\"",
+        "reason" -> invalidTableSchemaReason
+      )
     )
   }
 
