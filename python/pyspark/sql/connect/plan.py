@@ -186,8 +186,6 @@ class LocalRelation(LogicalPlan):
         self._pdf = pdf
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        assert self._pdf is not None
-
         sink = pa.BufferOutputStream()
         table = pa.Table.from_pandas(self._pdf)
         with pa.ipc.new_stream(sink, table.schema) as writer:

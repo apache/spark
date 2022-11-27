@@ -140,6 +140,11 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertEqual(rows[0][0], 3)
         self.assertEqual(rows[0][1], "c")
 
+        # Check correct behavior for empty DataFrame
+        pdf = pandas.DataFrame({"a": []})
+        with self.assertRaises(ValueError):
+            self.connect.createDataFrame(pdf)
+
     def test_simple_explain_string(self):
         df = self.connect.read.table(self.tbl_name).limit(10)
         result = df.explain()

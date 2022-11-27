@@ -230,6 +230,9 @@ class SparkSession(object):
         [Row(a=1, b='a'), Row(a=2, b='b'), Row(a=3, b='c')]
 
         """
+        assert data is not None
+        if len(data) == 0:
+            raise ValueError("Input data cannot be empty")
         return DataFrame.withPlan(plan.LocalRelation(data), self)
 
     @property
