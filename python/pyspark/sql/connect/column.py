@@ -22,10 +22,9 @@ import decimal
 import datetime
 
 import pyspark.sql.connect.proto as proto
-from pyspark.sql.connect._typing import PrimitiveType
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect.client import RemoteSparkSession
+    from pyspark.sql.connect.client import SparkConnectClient
     import pyspark.sql.connect.proto as proto
 
 
@@ -33,6 +32,8 @@ def _bin_op(
     name: str, doc: str = "binary function", reverse: bool = False
 ) -> Callable[["Column", Any], "Expression"]:
     def _(self: "Column", other: Any) -> "Expression":
+        from pyspark.sql.connect._typing import PrimitiveType
+
         if isinstance(other, get_args(PrimitiveType)):
             other = LiteralExpression(other)
         if not reverse:
@@ -70,6 +71,8 @@ class Expression(object):
         """Returns a binary expression with the current column as the left
         side and the other expression as the right side.
         """
+        from pyspark.sql.connect._typing import PrimitiveType
+
         if isinstance(other, get_args(PrimitiveType)):
             other = LiteralExpression(other)
         return ScalarFunctionExpression("==", self, other)
@@ -77,7 +80,7 @@ class Expression(object):
     def __init__(self) -> None:
         pass
 
-    def to_plan(self, session: "RemoteSparkSession") -> "proto.Expression":
+    def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
         ...
 
     def __str__(self) -> str:
@@ -128,7 +131,7 @@ class ColumnAlias(Expression):
         self._metadata = metadata
         self._parent = parent
 
-    def to_plan(self, session: "RemoteSparkSession") -> "proto.Expression":
+    def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
         if len(self._alias) == 1:
             exp = proto.Expression()
             exp.alias.name.append(self._alias[0])
@@ -159,7 +162,7 @@ class LiteralExpression(Expression):
         super().__init__()
         self._value = value
 
-    def to_plan(self, session: "RemoteSparkSession") -> "proto.Expression":
+    def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
         """Converts the literal expression to the literal in proto.
 
         TODO(SPARK-40533) This method always assumes the largest type and can thus
@@ -247,7 +250,7 @@ class Column(Expression):
         """Returns the qualified name of the column reference."""
         return self._unparsed_identifier
 
-    def to_plan(self, session: "RemoteSparkSession") -> proto.Expression:
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
         """Returns the Proto representation of the expression."""
         expr = proto.Expression()
         expr.unresolved_attribute.unparsed_identifier = self._unparsed_identifier
@@ -263,6 +266,22 @@ class Column(Expression):
         return f"Column({self._unparsed_identifier})"
 
 
+class SQLExpression(Expression):
+    """Returns Expression which contains a string which is a SQL expression
+    and server side will parse it by Catalyst
+    """
+
+    def __init__(self, expr: str) -> None:
+        super().__init__()
+        self._expr: str = expr
+
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
+        """Returns the Proto representation of the SQL expression."""
+        expr = proto.Expression()
+        expr.expression_string.expression = self._expr
+        return expr
+
+
 class SortOrder(Expression):
     def __init__(self, col: Column, ascending: bool = True, nullsLast: bool = True) -> None:
         super().__init__()
@@ -273,7 +292,7 @@ class SortOrder(Expression):
     def __str__(self) -> str:
         return str(self.ref) + " ASC" if self.ascending else " DESC"
 
-    def to_plan(self, session: "RemoteSparkSession") -> proto.Expression:
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
         return self.ref.to_plan(session)
 
 
@@ -287,7 +306,7 @@ class ScalarFunctionExpression(Expression):
         self._args = args
         self._op = op
 
-    def to_plan(self, session: "RemoteSparkSession") -> proto.Expression:
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
         fun = proto.Expression()
         fun.unresolved_function.parts.append(self._op)
         fun.unresolved_function.arguments.extend([x.to_plan(session) for x in self._args])

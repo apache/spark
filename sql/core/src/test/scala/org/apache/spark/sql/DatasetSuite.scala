@@ -2251,7 +2251,11 @@ class DatasetLargeResultCollectingSuite extends QueryTest
   with SharedSparkSession {
 
   override protected def sparkConf: SparkConf = super.sparkConf.set(MAX_RESULT_SIZE.key, "4g")
-  test("collect data with single partition larger than 2GB bytes array limit") {
+  // SPARK-41193: Ignore this suite because it cannot run successfully with Spark
+  // default Java Options, if user need do local test, please make the following changes:
+  // - Maven test: change `-Xmx4g` of `scalatest-maven-plugin` in `sql/core/pom.xml` to `-Xmx10g`
+  // - SBT test: change `-Xmx4g` of `Test / javaOptions` in `SparkBuild.scala` to `-Xmx10g`
+  ignore("collect data with single partition larger than 2GB bytes array limit") {
     // This test requires large memory and leads to OOM in Github Action so we skip it. Developer
     // should verify it in local build.
     assume(!sys.env.contains("GITHUB_ACTIONS"))

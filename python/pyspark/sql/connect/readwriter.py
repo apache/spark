@@ -18,18 +18,15 @@
 
 from typing import Dict, Optional
 
-from pyspark.sql.connect.column import PrimitiveType
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.connect.plan import Read, DataSource
 from pyspark.sql.utils import to_str
 
-
-OptionalPrimitiveType = Optional[PrimitiveType]
-
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect.client import RemoteSparkSession
+    from pyspark.sql.connect._typing import OptionalPrimitiveType
+    from pyspark.sql.connect.session import SparkSession
 
 
 class DataFrameReader:
@@ -37,7 +34,7 @@ class DataFrameReader:
     TODO(SPARK-40539) Achieve parity with PySpark.
     """
 
-    def __init__(self, client: "RemoteSparkSession"):
+    def __init__(self, client: "SparkSession"):
         self._client = client
         self._format = ""
         self._schema = ""
