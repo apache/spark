@@ -603,31 +603,6 @@ class Expression(google.protobuf.message.Message):
             self,
         ) -> None: ...
 
-    class QualifiedAttribute(google.protobuf.message.Message):
-        """An qualified attribute that can specify a reference (e.g. column) without needing a resolution
-        by the analyzer.
-        """
-
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        NAME_FIELD_NUMBER: builtins.int
-        TYPE_FIELD_NUMBER: builtins.int
-        name: builtins.str
-        @property
-        def type(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
-        def __init__(
-            self,
-            *,
-            name: builtins.str = ...,
-            type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
-        ) -> None: ...
-        def HasField(
-            self, field_name: typing_extensions.Literal["type", b"type"]
-        ) -> builtins.bool: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["name", b"name", "type", b"type"]
-        ) -> None: ...
-
     class Alias(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
