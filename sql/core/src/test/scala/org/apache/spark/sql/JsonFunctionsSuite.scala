@@ -452,14 +452,8 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       )
     )
 
-    val reason =
-      """
-        |[PARSE_SYNTAX_ERROR] Syntax error at or near 'InvalidType': extra input 'InvalidType'(line 1, pos 5)
-        |
-        |== SQL ==
-        |time InvalidType
-        |-----^^^
-        |""".stripMargin
+    val reason = "\n[PARSE_SYNTAX_ERROR] Syntax error at or near 'InvalidType': " +
+      "extra input 'InvalidType'(line 1, pos 5)\n\n== SQL ==\ntime InvalidType\n-----^^^\n"
     checkError(
       exception = intercept[AnalysisException] {
         df3.selectExpr("""from_json(value, 'time InvalidType')""")
