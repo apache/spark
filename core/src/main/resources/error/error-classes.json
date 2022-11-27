@@ -785,7 +785,7 @@
     "subClass" : {
       "PARSE_ERROR" : {
         "message" : [
-          "Cannot parse the schema: ",
+          "Cannot parse the schema:",
           "<reason>"
         ]
       },
