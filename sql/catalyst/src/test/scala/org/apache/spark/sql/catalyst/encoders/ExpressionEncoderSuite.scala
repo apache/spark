@@ -540,8 +540,9 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   test("null check for map key: String") {
     val toRow = ExpressionEncoder[Map[String, Int]]().createSerializer()
     val e = intercept[SparkRuntimeException](toRow(Map(("a", 1), (null, 2))))
+    assert(e.getCause.isInstanceOf[SparkRuntimeException])
     checkError(
-      exception = e,
+      exception = e.getCause.asInstanceOf[SparkRuntimeException],
       errorClass = "INVALID_MAP_KEY",
       parameters = Map.empty
     )
@@ -550,8 +551,9 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   test("null check for map key: Integer") {
     val toRow = ExpressionEncoder[Map[Integer, String]]().createSerializer()
     val e = intercept[SparkRuntimeException](toRow(Map((1, "a"), (null, "b"))))
+    assert(e.getCause.isInstanceOf[SparkRuntimeException])
     checkError(
-      exception = e,
+      exception = e.getCause.asInstanceOf[SparkRuntimeException],
       errorClass = "INVALID_MAP_KEY",
       parameters = Map.empty
     )
