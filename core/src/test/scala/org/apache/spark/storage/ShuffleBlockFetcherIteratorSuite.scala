@@ -1786,4 +1786,17 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       ShuffleBlockId(0, 5, 2), ShuffleBlockId(0, 6, 2)))
   }
 
+  test("SPARK-40872: fallback to original shuffle block when a push-merged shuffle chunk " +
+    "is zero-size") {
+    val blockManager = mock(classOf[BlockManager])
+    val localDirs = Array("local-dir")
+    val blocksByAddress = prepareForFallbackToLocalBlocks(
+      blockManager, Map(SHUFFLE_MERGER_IDENTIFIER -> localDirs))
+    val zeroSizeBuffer = createMockManagedBuffer(0)
+    doReturn(Seq({zeroSizeBuffer})).when(blockManager)
+      .getLocalMergedBlockData(ShuffleMergedBlockId(0, 0, 2), localDirs)
+    val iterator = createShuffleBlockIteratorWithDefaults(blocksByAddress,
+      blockManager = Some(blockManager), streamWrapperLimitSize = Some(100))
+    verifyLocalBlocksFromFallback(iterator)
+  }
 }
