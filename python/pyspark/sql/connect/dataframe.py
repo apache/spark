@@ -325,10 +325,14 @@ class DataFrame(object):
             session=self._session,
         )
 
-    def filter(self, condition: Expression) -> "DataFrame":
-        return DataFrame.withPlan(
-            plan.Filter(child=self._plan, filter=condition), session=self._session
-        )
+    def filter(self, condition: Union[Expression, str]) -> "DataFrame":
+        # The expression can be a SQL string expression.
+        if isinstance(condition, str):
+            expr = SQLExpression(condition)
+        else:
+            expr = condition
+
+        return DataFrame.withPlan(plan.Filter(child=self._plan, filter=expr), session=self._session)
 
     def first(self) -> Optional[Row]:
         """Returns the first row as a :class:`Row`.
@@ -636,7 +640,7 @@ class DataFrame(object):
             session=self._session,
         )
 
-    def where(self, condition: Expression) -> "DataFrame":
+    def where(self, condition: Union[Expression, str]) -> "DataFrame":
         return self.filter(condition)
 
     @property
