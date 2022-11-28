@@ -131,12 +131,23 @@ class GroupState:
         if newValue is None:
             raise ValueError("'None' is not a valid state value")
 
+        converted = []
         if has_numpy:
             import numpy as np
 
             # In order to convert NumPy types to Python primitive types.
-            newValue = tuple(v.tolist() for v in newValue if isinstance(v, np.generic))
-        self._value = Row(*newValue)
+            for v in newValue:
+                if isinstance(v, np.generic):
+                    converted.append(v.tolist())
+                # Address a couple of pandas dtypes too.
+                if hasattr(v, "to_pytimedelta"):
+                    converted.append(v.to_pytimedelta())
+                if hasattr(v, "to_pydatetime"):
+                    converted.append(v.to_pydatetime())
+        else:
+            converted = list(newValue)
+
+        self._value = Row(*converted)
         self._defined = True
         self._updated = True
         self._removed = False
