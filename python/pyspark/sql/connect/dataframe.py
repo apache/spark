@@ -1133,6 +1133,15 @@ class DataFrame(object):
     def toJSON(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("toJSON() is not implemented.")
 
+    def _repr_html_(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("_repr_html_() is not implemented.")
+
+    def semanticHash(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("semanticHash() is not implemented.")
+
+    def sameSemantics(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("sameSemantics() is not implemented.")
+
 
 class DataFrameNaFunctions:
     """Functionality for working with missing data in :class:`DataFrame`.
