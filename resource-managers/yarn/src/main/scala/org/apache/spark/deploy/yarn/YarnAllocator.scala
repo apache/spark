@@ -298,7 +298,7 @@ private[yarn] class YarnAllocator(
 
   // if a ResourceProfile hasn't been seen yet, create the corresponding YARN Resource for it
   private def createYarnResourceForResourceProfile(rp: ResourceProfile): Unit = synchronized {
-    if (!rpIdToYarnResource.contains(rp.id)) {
+    if (!rpIdToYarnResource.containsKey(rp.id)) {
       // track the resource profile if not already there
       getOrUpdateRunningExecutorForRPId(rp.id)
       logInfo(s"Resource profile ${rp.id} doesn't exist, adding it")
