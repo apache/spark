@@ -975,29 +975,9 @@ class DataFrame(object):
         ), "Func returned an instance of type [%s], " "should have been DataFrame." % type(result)
         return result
 
-    def explain(
+    def _explain_string(
         self, extended: Optional[Union[bool, str]] = None, mode: Optional[str] = None
     ) -> str:
-        """Retruns plans in string for debugging purpose.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        extended : bool, optional
-            default ``False``. If ``False``, returns only the physical plan.
-            When this is a string without specifying the ``mode``, it works as the mode is
-            specified.
-        mode : str, optional
-            specifies the expected output format of plans.
-
-            * ``simple``: Print only a physical plan.
-            * ``extended``: Print both logical and physical plans.
-            * ``codegen``: Print a physical plan and generated codes if they are available.
-            * ``cost``: Print a logical plan and statistics if they are available.
-            * ``formatted``: Split explain output into two sections: a physical plan outline \
-                and node details.
-        """
         if extended is not None and mode is not None:
             raise ValueError("extended and mode should not be set together.")
 
@@ -1041,6 +1021,31 @@ class DataFrame(object):
             return self._session.client.explain_string(query, explain_mode)
         else:
             return ""
+
+    def explain(
+        self, extended: Optional[Union[bool, str]] = None, mode: Optional[str] = None
+    ) -> None:
+        """Retruns plans in string for debugging purpose.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        extended : bool, optional
+            default ``False``. If ``False``, returns only the physical plan.
+            When this is a string without specifying the ``mode``, it works as the mode is
+            specified.
+        mode : str, optional
+            specifies the expected output format of plans.
+
+            * ``simple``: Print only a physical plan.
+            * ``extended``: Print both logical and physical plans.
+            * ``codegen``: Print a physical plan and generated codes if they are available.
+            * ``cost``: Print a logical plan and statistics if they are available.
+            * ``formatted``: Split explain output into two sections: a physical plan outline \
+                and node details.
+        """
+        print(self._explain_string(extended=extended, mode=mode))
 
     def createGlobalTempView(self, name: str) -> None:
         """Creates a global temporary view with this :class:`DataFrame`.
