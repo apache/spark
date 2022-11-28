@@ -449,7 +449,7 @@ class DataFrame(object):
         ----------
         num : int
             Number of records to return. Will return this number of records
-            or whataver number is available.
+            or whatever number is available.
 
         Returns
         -------
@@ -460,19 +460,19 @@ class DataFrame(object):
 
     def offset(self, n: int) -> "DataFrame":
         """Returns a new :class: `DataFrame` by skipping the first `n` rows.
-        .
-                 .. versionadded:: 3.4.0
 
-                 Parameters
-                 ----------
-                 num : int
-                     Number of records to return. Will return this number of records
-                     or whataver number is available.
+        .. versionadded:: 3.4.0
 
-                 Returns
-                 -------
-                 :class:`DataFrame`
-                     Subset of the records
+        Parameters
+        ----------
+        num : int
+            Number of records to return. Will return this number of records
+            or all records if the DataFrame contains less than this number of records.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Subset of the records
         """
         return DataFrame.withPlan(plan.Offset(child=self._plan, offset=n), session=self._session)
 
@@ -489,7 +489,7 @@ class DataFrame(object):
         ----------
         num : int
             Number of records to return. Will return this number of records
-            or whataver number is available.
+            or all records if the DataFrame contains less than this number of records.
 
         Returns
         -------
