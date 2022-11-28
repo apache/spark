@@ -44,65 +44,46 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
     intercept[AnalysisException](assertSuccess(expr))
   }
 
-  def assertError(expr: Expression, errorMessage: String): Unit = {
-    val e = intercept[AnalysisException] {
-      assertSuccess(expr)
-    }
-    assert(e.getMessage.contains(
-      s"cannot resolve '${expr.sql}' due to data type mismatch:"))
-    assert(e.getMessage.contains(errorMessage))
-  }
-
-  def assertSuccess(expr: Expression): Unit = {
+  private def assertSuccess(expr: Expression): Unit = {
     val analyzed = testRelation.select(expr.as("c")).analyze
     SimpleAnalyzer.checkAnalysis(analyzed)
   }
 
-  def assertErrorForBinaryDifferingTypes(
+  private def assertErrorForBinaryDifferingTypes(
       expr: Expression, messageParameters: Map[String, String]): Unit = {
     checkError(
-      exception = intercept[AnalysisException] {
-        assertSuccess(expr)
-      },
+      exception = analysisException(expr),
       errorClass = "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
       parameters = messageParameters)
   }
 
-  def assertErrorForOrderingTypes(
+  private def assertErrorForOrderingTypes(
       expr: Expression, messageParameters: Map[String, String]): Unit = {
     checkError(
-      exception = intercept[AnalysisException] {
-        assertSuccess(expr)
-      },
+      exception = analysisException(expr),
       errorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
       parameters = messageParameters)
   }
 
-  def assertErrorForDataDifferingTypes(
+  private def assertErrorForDataDifferingTypes(
       expr: Expression, messageParameters: Map[String, String]): Unit = {
     checkError(
-      exception = intercept[AnalysisException] {
-        assertSuccess(expr)
-      },
+      exception = analysisException(expr),
       errorClass = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
       parameters = messageParameters)
   }
 
-  def assertErrorForWrongNumParameters(
+  private def assertErrorForWrongNumParameters(
       expr: Expression, messageParameters: Map[String, String]): Unit = {
     checkError(
-      exception = intercept[AnalysisException] {
-        assertSuccess(expr)
-      },
+      exception = analysisException(expr),
       errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
       parameters = messageParameters)
   }
 
-  def assertForWrongType(expr: Expression, messageParameters: Map[String, String]): Unit = {
+  private def assertForWrongType(expr: Expression, messageParameters: Map[String, String]): Unit = {
     checkError(
-      exception = intercept[AnalysisException] {
-        assertSuccess(expr)
-      },
+      exception = analysisException(expr),
       errorClass = "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
       parameters = messageParameters)
   }
