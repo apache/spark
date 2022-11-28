@@ -51,6 +51,7 @@ message Relation {
     RenameColumnsByNameToNameMap rename_columns_by_name_to_name_map = 19;
     ShowString show_string = 20;
     Drop drop = 21;
+    Tail tail = 22;
 
     // NA functions
     NAFill fill_na = 90;
@@ -212,6 +213,15 @@ message Offset {
 
   // (Required) the limit.
   int32 offset = 2;
+}
+
+// Relation of type [[Tail]] that is used to fetch `limit` rows from the last of the input relation.
+message Tail {
+  // (Required) Input relation for an Tail.
+  Relation input = 1;
+
+  // (Required) the limit.
+  int32 limit = 2;
 }
 
 // Relation of type [[Aggregate]].

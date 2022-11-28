@@ -332,6 +332,34 @@ class Limit(LogicalPlan):
         """
 
 
+class Tail(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], limit: int) -> None:
+        super().__init__(child)
+        self.limit = limit
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+        plan = proto.Relation()
+        plan.tail.input.CopyFrom(self._child.plan(session))
+        plan.tail.limit = self.limit
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
+        return f"{' ' * indent}<Tail limit={self.limit}>\n{c_buf}"
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+            <li>
+                <b>Tail</b><br />
+                Limit: {self.limit} <br />
+                {self._child_repr_()}
+            </li>
+        </uL>
+        """
+
+
 class Offset(LogicalPlan):
     def __init__(self, child: Optional["LogicalPlan"], offset: int = 0) -> None:
         super().__init__(child)

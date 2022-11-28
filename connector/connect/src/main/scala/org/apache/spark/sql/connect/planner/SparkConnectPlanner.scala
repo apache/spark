@@ -67,6 +67,7 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Relation.RelTypeCase.FILTER => transformFilter(rel.getFilter)
       case proto.Relation.RelTypeCase.LIMIT => transformLimit(rel.getLimit)
       case proto.Relation.RelTypeCase.OFFSET => transformOffset(rel.getOffset)
+      case proto.Relation.RelTypeCase.TAIL => transformTail(rel.getTail)
       case proto.Relation.RelTypeCase.JOIN => transformJoin(rel.getJoin)
       case proto.Relation.RelTypeCase.DEDUPLICATE => transformDeduplicate(rel.getDeduplicate)
       case proto.Relation.RelTypeCase.SET_OP => transformSetOperation(rel.getSetOp)
@@ -388,6 +389,12 @@ class SparkConnectPlanner(session: SparkSession) {
     logical.Limit(
       limitExpr = expressions.Literal(limit.getLimit, IntegerType),
       transformRelation(limit.getInput))
+  }
+
+  private def transformTail(tail: proto.Tail): LogicalPlan = {
+    logical.Tail(
+      limitExpr = expressions.Literal(tail.getLimit, IntegerType),
+      transformRelation(tail.getInput))
   }
 
   private def transformOffset(offset: proto.Offset): LogicalPlan = {
