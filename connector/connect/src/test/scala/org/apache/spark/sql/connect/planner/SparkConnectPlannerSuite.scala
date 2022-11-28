@@ -363,7 +363,8 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       },
       errorClass = "CONNECT.INVALID_PLAN_INPUT",
       parameters = Map(
-        "msg" -> "Deduplicate requires to either deduplicate on all columns or a subset of columns"))
+        "msg" -> ("Deduplicate requires to either deduplicate" +
+          " on all columns or a subset of columns")))
   }
 
   test("Test invalid intersect, except") {
