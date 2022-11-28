@@ -63,8 +63,9 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
     def test_crossjoin(self):
         left_input = self.connect.readTable(table_name=self.tbl_name)
         right_input = self.connect.readTable(table_name=self.tbl_name)
-        plan = left_input.crossJoin(other=right_input)._plan.to_proto(self.connect)
-        self.assertEqual(plan.root.join.join_type, 7)  # JOIN_TYPE_CROSS
+        crossJoin_plan = left_input.crossJoin(other=right_input)._plan.to_proto(self.connect)
+        join_plan = left_input.join(other=right_input, how="cross")._plan.to_proto(self.connect)
+        self.assertEqual(crossJoin_plan, join_plan)
 
     def test_filter(self):
         df = self.connect.readTable(table_name=self.tbl_name)

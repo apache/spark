@@ -705,7 +705,7 @@ class Join(LogicalPlan):
                 "inner", "outer", "full", "fullouter", "full_outer",
                 "leftouter", "left", "left_outer", "rightouter",
                 "right", "right_outer", "leftsemi", "left_semi",
-                "semi", "leftanti", "left_anti", "anti",
+                "semi", "leftanti", "left_anti", "anti", "cross",
                 """
                 % how
             )
