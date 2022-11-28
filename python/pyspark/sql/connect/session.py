@@ -257,7 +257,7 @@ class SparkSession(object):
     def range(
         self,
         start: int,
-        end: int,
+        end: Optional[int] = None,
         step: int = 1,
         numPartitions: Optional[int] = None,
     ) -> DataFrame:
@@ -283,6 +283,12 @@ class SparkSession(object):
         -------
         :class:`DataFrame`
         """
+        if end is None:
+            actual_end = start
+            start = 0
+        else:
+            actual_end = end
+
         return DataFrame.withPlan(
-            Range(start=start, end=end, step=step, num_partitions=numPartitions), self
+            Range(start=start, end=actual_end, step=step, num_partitions=numPartitions), self
         )
