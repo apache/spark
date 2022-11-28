@@ -1558,20 +1558,20 @@ class Analyzer(override val catalogManager: CatalogManager)
    *   resolved by other rules
    * - in Aggregate TODO.
    *
-   * For Project, it rewrites the Project plan by inserting a newly created Project plan between
-   * the original Project and its child, and updating the project list of the original Project plan.
-   * The project list of the new Project plan is the lateral column aliases that are referenced
-   * in the original project list. These aliases in the original project list are updated to
-   * attribute references.
+   * For Project, it rewrites by inserting a newly created Project plan between the original Project
+   * and its child, pushing the referenced lateral column aliases to this new Project, and updating
+   * the project list of the original Project.
    *
    * Before rewrite:
-   * Project [age AS a, a + 1]
+   * Project [age AS a, 'a + 1]
    * +- Child
    *
    * After rewrite:
-   * Project [a, a + 1]
-   * +- Project [age AS a]
+   * Project [a, 'a + 1]
+   * +- Project [child output, age AS a]
    *    +- Child
+   *
+   * For Aggregate TODO.
    */
   object ResolveLateralColumnAlias extends Rule[LogicalPlan] {
     private case class AliasEntry(alias: Alias, index: Int)
@@ -1581,14 +1581,14 @@ class Analyzer(override val catalogManager: CatalogManager)
         case p @ Project(projectList, child) if p.childrenResolved
           && !ResolveReferences.containsStar(projectList)
           && projectList.exists(_.containsPattern(UNRESOLVED_ATTRIBUTE)) =>
-          // TODO: delta
+
           var aliasMap = CaseInsensitiveMap(Map[String, Seq[AliasEntry]]())
-          var referencedAliases = Seq[AliasEntry]()
-          def updateAliasMap(a: Alias, idx: Int): Unit = {
+          def insertIntoAliasMap(a: Alias, idx: Int): Unit = {
             val prevAliases = aliasMap.getOrElse(a.name, Seq.empty[AliasEntry])
             aliasMap += (a.name -> (prevAliases :+ AliasEntry(a, idx)))
           }
-          def searchMatchedLCA(e: Expression): Unit = {
+          def lookUpLCA(e: Expression): Option[AliasEntry] = {
+            var matchedLCA: Option[AliasEntry] = None
             e.transformWithPruning(_.containsPattern(UNRESOLVED_ATTRIBUTE)) {
               case u: UnresolvedAttribute if aliasMap.contains(u.nameParts.head) &&
                 resolveExpressionByPlanChildren(u, p).isInstanceOf[UnresolvedAttribute] =>
@@ -1600,13 +1600,15 @@ class Analyzer(override val catalogManager: CatalogManager)
                     val referencedAlias = aliases.head
                     // Only resolved alias can be the lateral column alias
                     if (referencedAlias.alias.resolved) {
-                      referencedAliases :+= referencedAlias
+                      matchedLCA = Some(referencedAlias)
                     }
                 }
                 u
             }
+            matchedLCA
           }
-          projectList.zipWithIndex.foreach {
+
+          val referencedAliases = projectList.zipWithIndex.flatMap {
             case (a: Alias, idx) =>
               // Add all alias to the aliasMap. But note only resolved alias can be LCA and pushed
               // down. Unresolved alias is added to the map to perform the ambiguous name check.
@@ -1615,13 +1617,13 @@ class Analyzer(override val catalogManager: CatalogManager)
               // only 1 AS a is pushed down, even though 1 AS a, 'a + 1 AS b and 'b + 1 AS c are
               // all added to the aliasMap. On the second round, when 'a + 1 AS b is resolved,
               // it is pushed down.
-              searchMatchedLCA(a)
-              updateAliasMap(a, idx)
+              val matchedLCA = lookUpLCA(a)
+              insertIntoAliasMap(a, idx)
+              matchedLCA
             case (e, _) =>
-              searchMatchedLCA(e)
-          }
+              lookUpLCA(e)
+          }.toSet
 
-          referencedAliases = referencedAliases.sortBy(_.index)
           if (referencedAliases.isEmpty) {
             p
           } else {
