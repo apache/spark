@@ -668,7 +668,7 @@ class QueryCompilationErrorsSuite
       parameters = Map("schema" -> "\"INT\"", "sqlExpr" -> "\"from_json(a)\""))
   }
 
-  test("UNBOUND_PARAMETER: named parameters should be substituted") {
+  test("UNBOUND_PARAMETER - SPARK-41271: non-substituted parameters") {
     checkError(
       exception = intercept[AnalysisException] {
         sql("select @abc").collect()

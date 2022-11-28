@@ -1569,7 +1569,7 @@ class PlanParserSuite extends AnalysisTest {
     )
   }
 
-  test("named parameters") {
+  test("SPARK-41271: parsing of named parameters") {
     comparePlans(
       parsePlan("SELECT @param_1"),
       Project(UnresolvedAlias(NamedParameter("param_1"), None) :: Nil, OneRowRelation()))

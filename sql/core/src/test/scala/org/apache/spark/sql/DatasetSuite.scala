@@ -2245,6 +2245,16 @@ class DatasetSuite extends QueryTest
       assert(parquetFiles.size === 10)
     }
   }
+
+  test("SPARK-41271: bind parameters") {
+    val input = spark.range(10)
+      .selectExpr("id", "id % @div as c0")
+      .where("c0 = @constA")
+    val df = input.bind(Map(
+      "div" -> (3, IntegerType),
+      "constA" -> (1L, LongType)))
+    checkAnswer(df, Row(1, 1) :: Row(4, 1) :: Row(7, 1) :: Nil)
+  }
 }
 
 class DatasetLargeResultCollectingSuite extends QueryTest
