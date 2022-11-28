@@ -32,7 +32,7 @@ from typing import (
 import pandas
 
 import pyspark.sql.connect.plan as plan
-from pyspark.sql.connect.writer import DataFrameWriter
+from pyspark.sql.connect.readwriter import DataFrameWriter
 from pyspark.sql.connect.column import (
     Column,
     Expression,

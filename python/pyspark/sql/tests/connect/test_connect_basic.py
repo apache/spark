@@ -27,7 +27,7 @@ if have_pandas:
     import pandas
 
 from pyspark.sql import SparkSession, Row
-from pyspark.sql.types import StructType, StructField, LongType, StringType
+from pyspark.sql.types import StructType, StructField, LongType, StringType, IntegerType
 
 if have_pandas:
     from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
@@ -574,21 +574,21 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             df = self.connect.range(1, 100)
             df.write.mode("overwrite").format("csv").save(d)
 
-            ndf = self.connect.read.load(d, format="csv")
-            df.toPandas().equals(ndf.toPandas())
+            ndf = self.connect.read.schema("id INT").load(d, format="csv")
+            self.assertEqual(set(df.collect()), set(ndf.collect()))
 
         with tempfile.TemporaryDirectory() as d:
             df = self.connect.range(1, 100)
             df.write.mode("overwrite").csv(d, lineSep="|")
 
             ndf = self.connect.read.load(d, format="csv", lineSep="|")
-            df.toPandas().equals(ndf.toPandas())
+            self.assertEqual(set(df.collect()), set(ndf.collect()))
 
         df = self.connect.range(1, 100)
         df.write.format("parquet").saveAsTable("parquet_test")
 
         ndf = self.connect.read.table("parquet_test")
-        df.toPandas().equals(ndf.toPandas())
+        self.assertEqual(set(df.collect()), set(ndf.collect()))
 
 
 class ChannelBuilderTests(ReusedPySparkTestCase):
