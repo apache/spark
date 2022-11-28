@@ -882,7 +882,7 @@ class TaskSetManagerSuite
     assert(manager.runningTasks === 2)
     assert(manager.isZombie === false)
 
-    val directTaskResult = new DirectTaskResult[String](null, Seq(), Array()) {
+    val directTaskResult = new DirectTaskResult[String]() {
       override def value(resultSer: SerializerInstance): String = ""
     }
     // Complete one copy of the task, which should result in the task set manager

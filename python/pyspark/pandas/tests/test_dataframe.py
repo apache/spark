@@ -6044,6 +6044,19 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         with self.assertRaises(ValueError):
             psdf.mode(axis=2)
 
+        def f(index, iterator):
+            return ["3", "3", "3", "3", "4"] if index == 3 else ["0", "1", "2", "3", "4"]
+
+        rdd = self.spark.sparkContext.parallelize(
+            [
+                1,
+            ],
+            4,
+        ).mapPartitionsWithIndex(f)
+        df = self.spark.createDataFrame(rdd, schema="string")
+        psdf = df.pandas_api()
+        self.assert_eq(psdf.mode(), psdf._to_pandas().mode())
+
     def test_abs(self):
         pdf = pd.DataFrame({"a": [-2, -1, 0, 1]})
         psdf = ps.from_pandas(pdf)
@@ -6078,10 +6091,12 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
     def _test_corrwith(self, psdf, psobj):
         pdf = psdf._to_pandas()
         pobj = psobj._to_pandas()
-        # Regression in pandas 1.5.0 when other is Series and method is "pearson" or "spearman"
+        # There was a regression in pandas 1.5.0
+        # when other is Series and method is "pearson" or "spearman", and fixed in pandas 1.5.1
+        # Therefore, we only test the pandas 1.5.0 in different way.
         # See https://github.com/pandas-dev/pandas/issues/48826 for the reported issue,
         # and https://github.com/pandas-dev/pandas/pull/46174 for the initial PR that causes.
-        if LooseVersion(pd.__version__) >= LooseVersion("1.5.0") and isinstance(pobj, pd.Series):
+        if LooseVersion(pd.__version__) == LooseVersion("1.5.0") and isinstance(pobj, pd.Series):
             methods = ["kendall"]
         else:
             methods = ["pearson", "spearman", "kendall"]

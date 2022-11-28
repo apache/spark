@@ -21,9 +21,9 @@ import java.util.Locale
 
 import com.google.common.collect.Maps
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{Resolver, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
@@ -368,8 +368,7 @@ package object expressions  {
 
         case ambiguousReferences =>
           // More than one match.
-          val referenceNames = ambiguousReferences.map(_.qualifiedName).mkString(", ")
-          throw new AnalysisException(s"Reference '$name' is ambiguous, could be: $referenceNames.")
+          throw QueryCompilationErrors.ambiguousReferenceError(name, ambiguousReferences)
       }
     }
   }

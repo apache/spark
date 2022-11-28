@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedExtractValue}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util._
@@ -314,6 +315,40 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
         assert(errorSubClass == "INVALID_MAP_KEY_TYPE")
         assert(messageParameters === Map("keyType" -> "\"MAP<INT, INT>\""))
     }
+
+    // expects a positive even number of arguments
+    val map3 = CreateMap(Seq(Literal(1), Literal(2), Literal(3)))
+    assert(map3.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "WRONG_NUM_ARGS",
+        messageParameters = Map(
+          "functionName" -> "`map`",
+          "expectedNum" -> "2n (n > 0)",
+          "actualNum" -> "3")
+      )
+    )
+
+    // The given keys of function map should all be the same type
+    val map4 = CreateMap(Seq(Literal(1), Literal(2), Literal('a'), Literal(3)))
+    assert(map4.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "CREATE_MAP_KEY_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> "`map`",
+          "dataType" -> "[\"INT\", \"STRING\"]")
+      )
+    )
+
+    // The given values of function map should all be the same type
+    val map5 = CreateMap(Seq(Literal(1), Literal(2), Literal(3), Literal('a')))
+    assert(map5.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "CREATE_MAP_VALUE_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> "`map`",
+          "dataType" -> "[\"INT\", \"STRING\"]")
+      )
+    )
   }
 
   test("MapFromArrays") {
@@ -397,6 +432,18 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
       create_row(UTF8String.fromString("x"), 2.0))
     checkEvaluation(CreateNamedStruct(Seq("a", Literal.create(null, IntegerType))),
       create_row(null))
+
+    // expects a positive even number of arguments
+    val namedStruct1 = CreateNamedStruct(Seq(Literal(1), Literal(2), Literal(3)))
+    assert(namedStruct1.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "WRONG_NUM_ARGS",
+        messageParameters = Map(
+          "functionName" -> "`named_struct`",
+          "expectedNum" -> "2n (n > 0)",
+          "actualNum" -> "3")
+      )
+    )
   }
 
   test("test dsl for complex type") {
@@ -480,7 +527,7 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val s6 = Literal("a=1&b=2&c=3")
     val m6 = Map("a" -> "1", "b" -> "2", "c" -> "3")
-    checkEvaluation(new StringToMap(s6, NonFoldableLiteral("&"), NonFoldableLiteral("=")), m6)
+    checkEvaluation(StringToMap(s6, NonFoldableLiteral("&"), NonFoldableLiteral("=")), m6)
 
     checkExceptionInExpression[RuntimeException](
       new StringToMap(Literal("a:1,b:2,a:3")), "Duplicate map key")
@@ -493,11 +540,51 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // arguments checking
     assert(new StringToMap(Literal("a:1,b:2,c:3")).checkInputDataTypes().isSuccess)
-    assert(new StringToMap(Literal(null)).checkInputDataTypes().isFailure)
-    assert(new StringToMap(Literal("a:1,b:2,c:3"), Literal(null)).checkInputDataTypes().isFailure)
-    assert(StringToMap(Literal("a:1,b:2,c:3"), Literal(null), Literal(null))
-      .checkInputDataTypes().isFailure)
-    assert(new StringToMap(Literal(null), Literal(null)).checkInputDataTypes().isFailure)
+    assert(new StringToMap(Literal(null)).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "1",
+          "requiredType" -> "\"STRING\"",
+          "inputSql" -> "\"NULL\"",
+          "inputType" -> "\"VOID\""
+        )
+      )
+    )
+    assert(new StringToMap(Literal("a:1,b:2,c:3"), Literal(null)).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "2",
+          "requiredType" -> "\"STRING\"",
+          "inputSql" -> "\"NULL\"",
+          "inputType" -> "\"VOID\""
+        )
+      )
+    )
+    assert(StringToMap(Literal("a:1,b:2,c:3"), Literal(null),
+      Literal(null)).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "2",
+          "requiredType" -> "\"STRING\"",
+          "inputSql" -> "\"NULL\"",
+          "inputType" -> "\"VOID\""
+        )
+      )
+    )
+    assert(new StringToMap(Literal(null), Literal(null)).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "1",
+          "requiredType" -> "\"STRING\"",
+          "inputSql" -> "\"NULL\"",
+          "inputType" -> "\"VOID\""
+        )
+      )
+    )
   }
 
   test("SPARK-22693: CreateNamedStruct should not use global variables") {

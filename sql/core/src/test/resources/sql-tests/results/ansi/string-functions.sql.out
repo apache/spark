@@ -5,7 +5,22 @@ select concat_ws()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-requirement failed: concat_ws requires at least one argument.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+  "messageParameters" : {
+    "actualNum" : "0",
+    "expectedNum" : "> 0",
+    "functionName" : "`concat_ws`",
+    "sqlExpr" : "\"concat_ws()\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 18,
+    "fragment" : "concat_ws()"
+  } ]
+}
 
 
 -- !query
@@ -14,7 +29,22 @@ select format_string()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-requirement failed: format_string() should take at least 1 argument; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+  "messageParameters" : {
+    "actualNum" : "0",
+    "expectedNum" : "> 0",
+    "functionName" : "`format_string`",
+    "sqlExpr" : "\"format_string()\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 22,
+    "fragment" : "format_string()"
+  } ]
+}
 
 
 -- !query
@@ -553,6 +583,22 @@ AABB
 
 
 -- !query
+SELECT hex(lpad(unhex('123'), 2))
+-- !query schema
+struct<hex(lpad(unhex(123), 2, X'00')):string>
+-- !query output
+0123
+
+
+-- !query
+SELECT hex(lpad(unhex('12345'), 2))
+-- !query schema
+struct<hex(lpad(unhex(12345), 2, X'00')):string>
+-- !query output
+0123
+
+
+-- !query
 SELECT hex(lpad(unhex(''), 5, unhex('1f')))
 -- !query schema
 struct<hex(lpad(unhex(), 5, unhex(1f))):string>
@@ -646,6 +692,22 @@ SELECT hex(rpad(unhex('aabbcc'), 2))
 struct<hex(rpad(unhex(aabbcc), 2, X'00')):string>
 -- !query output
 AABB
+
+
+-- !query
+SELECT hex(rpad(unhex('123'), 2))
+-- !query schema
+struct<hex(rpad(unhex(123), 2, X'00')):string>
+-- !query output
+0123
+
+
+-- !query
+SELECT hex(rpad(unhex('12345'), 2))
+-- !query schema
+struct<hex(rpad(unhex(12345), 2, X'00')):string>
+-- !query output
+0123
 
 
 -- !query
@@ -759,11 +821,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1042",
+  "errorClass" : "WRONG_NUM_ARGS",
   "messageParameters" : {
-    "actualNumber" : "0",
-    "expectedInfo" : "2",
-    "name" : "decode"
+    "actualNum" : "0",
+    "expectedNum" : "2",
+    "functionName" : "`decode`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -782,11 +844,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1042",
+  "errorClass" : "WRONG_NUM_ARGS",
   "messageParameters" : {
-    "actualNumber" : "1",
-    "expectedInfo" : "2",
-    "name" : "decode"
+    "actualNum" : "1",
+    "expectedNum" : "2",
+    "functionName" : "`decode`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1409,6 +1471,22 @@ struct<to_binary(FF):binary>
 
 
 -- !query
+select to_binary('123', 'hex')
+-- !query schema
+struct<to_binary(123, hex):binary>
+-- !query output
+#
+
+
+-- !query
+select to_binary('12345', 'hex')
+-- !query schema
+struct<to_binary(12345, hex):binary>
+-- !query output
+#E
+
+
+-- !query
 select to_binary('GG')
 -- !query schema
 struct<>
@@ -1489,7 +1567,8 @@ select to_binary('abc', 'Hex')
 -- !query schema
 struct<to_binary(abc, Hex):binary>
 -- !query output
-� 
+
+�
 
 
 -- !query
@@ -1530,7 +1609,23 @@ select to_binary('abc', 1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The 'format' parameter of function 'to_binary' needs to be a string literal.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_ARG_VALUE",
+  "messageParameters" : {
+    "inputName" : "fmt",
+    "inputValue" : "'1'",
+    "requireType" : "case-insensitive \"STRING\"",
+    "sqlExpr" : "\"to_binary(abc, 1)\"",
+    "validValues" : "'hex', 'utf-8', 'utf8', or 'base64'"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 26,
+    "fragment" : "to_binary('abc', 1)"
+  } ]
+}
 
 
 -- !query
@@ -1540,11 +1635,59 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1101",
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_ARG_VALUE",
   "messageParameters" : {
-    "argName" : "format",
-    "endingMsg" : " The value has to be a case-insensitive string literal of 'hex', 'utf-8', 'utf8', or 'base64'.",
-    "funcName" : "to_binary",
-    "invalidValue" : "invalidformat"
-  }
+    "inputName" : "fmt",
+    "inputValue" : "'invalidformat'",
+    "requireType" : "case-insensitive \"STRING\"",
+    "sqlExpr" : "\"to_binary(abc, invalidFormat)\"",
+    "validValues" : "'hex', 'utf-8', 'utf8', or 'base64'"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 40,
+    "fragment" : "to_binary('abc', 'invalidFormat')"
+  } ]
 }
+
+
+-- !query
+CREATE TEMPORARY VIEW fmtTable(fmtField) AS SELECT * FROM VALUES ('invalidFormat')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT to_binary('abc', fmtField) FROM fmtTable
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "messageParameters" : {
+    "inputExpr" : "\"fmtField\"",
+    "inputName" : "fmt",
+    "inputType" : "\"STRING\"",
+    "sqlExpr" : "\"to_binary(abc, fmtField)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 33,
+    "fragment" : "to_binary('abc', fmtField)"
+  } ]
+}
+
+
+-- !query
+DROP VIEW IF EXISTS fmtTable
+-- !query schema
+struct<>
+-- !query output
+

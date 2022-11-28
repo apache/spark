@@ -32,6 +32,7 @@ import org.apache.spark.sql.api.python.PythonSQLUtils
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.ApplyInPandasWithStatePythonRunner.{InType, OutType, OutTypeForState, STATE_METADATA_SCHEMA_FROM_PYTHON_WORKER}
 import org.apache.spark.sql.execution.python.ApplyInPandasWithStateWriter.STATE_METADATA_SCHEMA
 import org.apache.spark.sql.execution.streaming.GroupStateImpl
@@ -58,7 +59,8 @@ class ApplyInPandasWithStatePythonRunner(
     stateEncoder: ExpressionEncoder[Row],
     keySchema: StructType,
     outputSchema: StructType,
-    stateValueSchema: StructType)
+    stateValueSchema: StructType,
+    val pythonMetrics: Map[String, SQLMetric])
   extends BasePythonRunner[InType, OutType](funcs, evalType, argOffsets)
   with PythonArrowInput[InType]
   with PythonArrowOutput[OutType] {
@@ -116,6 +118,7 @@ class ApplyInPandasWithStatePythonRunner(
     val w = new ApplyInPandasWithStateWriter(root, writer, arrowMaxRecordsPerBatch)
 
     while (inputIterator.hasNext) {
+      val startData = dataOut.size()
       val (keyRow, groupState, dataIter) = inputIterator.next()
       assert(dataIter.hasNext, "should have at least one data row!")
       w.startNewGroup(keyRow, groupState)
@@ -126,6 +129,8 @@ class ApplyInPandasWithStatePythonRunner(
       }
 
       w.finalizeGroup()
+      val deltaData = dataOut.size() - startData
+      pythonMetrics("pythonDataSent") += deltaData
     }
 
     w.finalizeData()

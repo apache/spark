@@ -70,10 +70,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.MAP_CONTAINS_KEY_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.MAP_FUNCTION_DIFF_TYPES",
   "messageParameters" : {
     "dataType" : "\"MAP\"",
-    "functionName" : "map_contains_key",
+    "functionName" : "`map_contains_key`",
     "leftType" : "\"MAP<STRING, STRING>\"",
     "rightType" : "\"INT\"",
     "sqlExpr" : "\"map_contains_key(map(1, a, 2, b), 1)\""
@@ -95,10 +95,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.MAP_CONTAINS_KEY_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.MAP_FUNCTION_DIFF_TYPES",
   "messageParameters" : {
     "dataType" : "\"MAP\"",
-    "functionName" : "map_contains_key",
+    "functionName" : "`map_contains_key`",
     "leftType" : "\"MAP<INT, STRING>\"",
     "rightType" : "\"STRING\"",
     "sqlExpr" : "\"map_contains_key(map(1, a, 2, b), 1)\""

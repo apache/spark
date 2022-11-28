@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.expressions.Window
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Literal, NonFoldableLiteral, RangeFrame, SortOrder, SpecifiedWindowFrame}
+import org.apache.spark.sql.expressions.{Window, WindowSpec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.CalendarIntervalType
 
 /**
  * Window frame testing for DataFrame API.
@@ -418,5 +420,46 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
       ds.withColumn("m",
         lag("i", 1).over(Window.partitionBy("n").orderBy("i").rowsBetween(-1, -1))),
       res)
+  }
+
+  test("Window frame bounds lower and upper do not have the same type") {
+    val df = Seq((1L, "1"), (1L, "1")).toDF("key", "value")
+    val windowSpec = new WindowSpec(
+      Seq(Column("value").expr),
+      Seq(SortOrder(Column("key").expr, Ascending)),
+      SpecifiedWindowFrame(RangeFrame, Literal.create(null, CalendarIntervalType), Literal(2))
+    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select($"key", count("key").over(windowSpec)).collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_DIFF_TYPES",
+      parameters = Map(
+        "sqlExpr" -> "\"RANGE BETWEEN NULL FOLLOWING AND 2 FOLLOWING\"",
+        "lower" -> "\"NULL\"",
+        "upper" -> "\"2\"",
+        "lowerType" -> "\"INTERVAL\"",
+        "upperType" -> "\"BIGINT\""
+      )
+    )
+  }
+
+  test("Window frame lower bound is not a literal") {
+    val df = Seq((1L, "1"), (1L, "1")).toDF("key", "value")
+    val windowSpec = new WindowSpec(
+      Seq(Column("value").expr),
+      Seq(SortOrder(Column("key").expr, Ascending)),
+      SpecifiedWindowFrame(RangeFrame, NonFoldableLiteral(1), Literal(2))
+    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select($"key", count("key").over(windowSpec)).collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_WITHOUT_FOLDABLE",
+      parameters = Map(
+        "sqlExpr" -> "\"RANGE BETWEEN nonfoldableliteral() FOLLOWING AND 2 FOLLOWING\"",
+        "location" -> "lower",
+        "expression" -> "\"nonfoldableliteral()\"")
+    )
   }
 }

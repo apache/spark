@@ -215,7 +215,10 @@ object CharVarcharUtils extends Logging {
           Seq(Literal(f.name), processStringForCharVarchar(
             GetStructField(expr, i, Some(f.name)), f.dataType, charFuncName, varcharFuncName))
         })
-        if (expr.nullable) {
+        if (struct.valExprs.forall(_.isInstanceOf[GetStructField])) {
+          // No field needs char/varchar processing, just return the original expression.
+          expr
+        } else if (expr.nullable) {
           If(IsNull(expr), Literal(null, struct.dataType), struct)
         } else {
           struct
@@ -225,11 +228,18 @@ object CharVarcharUtils extends Logging {
         processStringForCharVarcharInArray(expr, et, containsNull, charFuncName, varcharFuncName)
 
       case MapType(kt, vt, valueContainsNull) =>
+        val keys = MapKeys(expr)
         val newKeys = processStringForCharVarcharInArray(
-          MapKeys(expr), kt, containsNull = false, charFuncName, varcharFuncName)
+          keys, kt, containsNull = false, charFuncName, varcharFuncName)
+        val values = MapValues(expr)
         val newValues = processStringForCharVarcharInArray(
-          MapValues(expr), vt, valueContainsNull, charFuncName, varcharFuncName)
-        MapFromArrays(newKeys, newValues)
+          values, vt, valueContainsNull, charFuncName, varcharFuncName)
+        if (newKeys.fastEquals(keys) && newValues.fastEquals(values)) {
+          // If map key/value does not need char/varchar processing, return the original expression.
+          expr
+        } else {
+          MapFromArrays(newKeys, newValues)
+        }
 
       case _ => expr
     }
@@ -242,10 +252,13 @@ object CharVarcharUtils extends Logging {
       charFuncName: Option[String],
       varcharFuncName: Option[String]): Expression = {
     val param = NamedLambdaVariable("x", replaceCharVarcharWithString(et), containsNull)
-    val func = LambdaFunction(
-      processStringForCharVarchar(param, et, charFuncName, varcharFuncName),
-      Seq(param))
-    ArrayTransform(arr, func)
+    val funcBody = processStringForCharVarchar(param, et, charFuncName, varcharFuncName)
+    if (funcBody.fastEquals(param)) {
+      // If array element does not need char/varchar processing, return the original expression.
+      arr
+    } else {
+      ArrayTransform(arr, LambdaFunction(funcBody, Seq(param)))
+    }
   }
 
   def addPaddingForScan(attr: Attribute): Expression = {

@@ -21,19 +21,18 @@ import scala.util.control.NonFatal
 
 import com.google.protobuf.DynamicMessage
 
-import org.apache.spark.SparkException
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, SpecificInternalRow, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.util.{FailFastMode, ParseMode, PermissiveMode}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.protobuf.utils.{ProtobufOptions, ProtobufUtils, SchemaConverters}
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, StructType}
 
 private[protobuf] case class ProtobufDataToCatalyst(
     child: Expression,
-    descFilePath: String,
     messageName: String,
-    options: Map[String, String])
+    descFilePath: Option[String] = None,
+    options: Map[String, String] = Map.empty)
     extends UnaryExpression
     with ExpectsInputTypes {
 
@@ -55,10 +54,14 @@ private[protobuf] case class ProtobufDataToCatalyst(
   private lazy val protobufOptions = ProtobufOptions(options)
 
   @transient private lazy val messageDescriptor =
-    ProtobufUtils.buildDescriptor(descFilePath, messageName)
+    ProtobufUtils.buildDescriptor(messageName, descFilePath)
+    // TODO: Avoid carrying the file name. Read the contents of descriptor file only once
+    //       at the start. Rest of the runs should reuse the buffer. Otherwise, it could
+    //       cause inconsistencies if the file contents are changed the user after a few days.
+    //       Same for the write side in [[CatalystDataToProtobuf]].
 
   @transient private lazy val fieldsNumbers =
-    messageDescriptor.getFields.asScala.map(f => f.getNumber)
+    messageDescriptor.getFields.asScala.map(f => f.getNumber).toSet
 
   @transient private lazy val deserializer = new ProtobufDeserializer(messageDescriptor, dataType)
 
@@ -67,14 +70,9 @@ private[protobuf] case class ProtobufDataToCatalyst(
   @transient private lazy val parseMode: ParseMode = {
     val mode = protobufOptions.parseMode
     if (mode != PermissiveMode && mode != FailFastMode) {
-      throw new AnalysisException(unacceptableModeMessage(mode.name))
+      throw QueryCompilationErrors.parseModeUnsupportedError(prettyName, mode)
     }
     mode
-  }
-
-  private def unacceptableModeMessage(name: String): String = {
-    s"from_protobuf() doesn't support the $name mode. " +
-      s"Acceptable modes are ${PermissiveMode.name} and ${FailFastMode.name}."
   }
 
   @transient private lazy val nullResultRow: Any = dataType match {
@@ -94,13 +92,9 @@ private[protobuf] case class ProtobufDataToCatalyst(
       case PermissiveMode =>
         nullResultRow
       case FailFastMode =>
-        throw new SparkException(
-          "Malformed records are detected in record parsing. " +
-            s"Current parse Mode: ${FailFastMode.name}. To process malformed records as null " +
-            "result, try setting the option 'mode' as 'PERMISSIVE'.",
-          e)
+        throw QueryExecutionErrors.malformedProtobufMessageDetectedInMessageParsingError(e)
       case _ =>
-        throw new AnalysisException(unacceptableModeMessage(parseMode.name))
+        throw QueryCompilationErrors.parseModeUnsupportedError(prettyName, parseMode)
     }
   }
 
@@ -108,18 +102,18 @@ private[protobuf] case class ProtobufDataToCatalyst(
     val binary = input.asInstanceOf[Array[Byte]]
     try {
       result = DynamicMessage.parseFrom(messageDescriptor, binary)
-      val unknownFields = result.getUnknownFields
-      if (!unknownFields.asMap().isEmpty) {
-        unknownFields.asMap().keySet().asScala.map { number =>
-          {
-            if (fieldsNumbers.contains(number)) {
-              return handleException(
-                new Throwable(s"Type mismatch encountered for field:" +
-                  s" ${messageDescriptor.getFields.get(number)}"))
-            }
-          }
-        }
+      // If the Java class is available, it is likely more efficient to parse with it than using
+      // DynamicMessage. Can consider it in the future if parsing overhead is noticeable.
+
+      result.getUnknownFields.asMap().keySet().asScala.find(fieldsNumbers.contains(_)) match {
+        case Some(number) =>
+          // Unknown fields contain a field with same number as a known field. Must be due to
+          // mismatch of schema between writer and reader here.
+          throw QueryCompilationErrors.protobufFieldTypeMismatchError(
+            messageDescriptor.getFields.get(number).toString)
+        case None =>
       }
+
       val deserialized = deserializer.deserialize(result)
       assert(
         deserialized.isDefined,

@@ -19,26 +19,29 @@ package org.apache.spark.sql.errors
 
 import java.io.{File, IOException}
 import java.net.{URI, URL}
-import java.sql.{Connection, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData}
+import java.sql.{Connection, Driver, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData}
 import java.util.{Locale, Properties, ServiceConfigurationError}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{LocalFileSystem, Path}
 import org.apache.hadoop.fs.permission.FsPermission
-import org.mockito.Mockito.{mock, when}
+import org.mockito.Mockito.{mock, spy, when}
 
 import org.apache.spark._
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util.BadRecordException
 import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions}
+import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
+import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.execution.streaming.FileSystemBasedCheckpointFileManager
 import org.apache.spark.sql.execution.streaming.state.RenameReturnsFalseFileSystem
 import org.apache.spark.sql.functions.{lit, lower, struct, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.EXCEPTION
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
+import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, DecimalType, LongType, MetadataBuilder, StructType}
 import org.apache.spark.util.Utils
@@ -445,7 +448,7 @@ class QueryExecutionErrorsSuite
 
       override def getResources(name: String): java.util.Enumeration[URL] = {
         if (name.equals("META-INF/services/org.apache.spark.sql.sources.DataSourceRegister")) {
-          // scalastyle:off
+          // scalastyle:off throwerror
           throw new ServiceConfigurationError(s"Illegal configuration-file syntax: $name",
             new NoClassDefFoundError("org.apache.spark.sql.sources.HadoopFsRelationProvider"))
           // scalastyle:on throwerror
@@ -572,13 +575,13 @@ class QueryExecutionErrorsSuite
   }
 
   test(
-    "MULTI_VALUE_SUBQUERY_ERROR: " +
+    "SCALAR_SUBQUERY_TOO_MANY_ROWS: " +
     "More than one row returned by a subquery used as an expression") {
     checkError(
       exception = intercept[SparkException] {
         sql("select (select a from (select 1 as a union all select 2 as a) t) as b").collect()
       },
-      errorClass = "MULTI_VALUE_SUBQUERY_ERROR",
+      errorClass = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
       queryContext = Array(
         ExpectedContext(
           fragment = "(select a from (select 1 as a union all select 2 as a) t)",
@@ -629,9 +632,41 @@ class QueryExecutionErrorsSuite
       },
       errorClass = "UNSUPPORTED_DATATYPE",
       parameters = Map(
-        "typeName" -> "StructType()[1.1] failure: 'TimestampType' expected but 'S' found\n\nStructType()\n^"
+        "typeName" ->
+          "StructType()[1.1] failure: 'TimestampType' expected but 'S' found\n\nStructType()\n^"
       ),
       sqlState = "0A000")
+  }
+
+  test("FAILED_RENAME_PATH: rename when destination path already exists") {
+    withTempPath { p =>
+      withSQLConf(
+        "spark.sql.streaming.checkpointFileManagerClass" ->
+          classOf[FileSystemBasedCheckpointFileManager].getName,
+        "fs.file.impl" -> classOf[FakeFileSystemAlwaysExists].getName,
+        // FileSystem caching could cause a different implementation of fs.file to be used
+        "fs.file.impl.disable.cache" -> "true") {
+        val checkpointLocation = p.getAbsolutePath
+
+        val ds = spark.readStream.format("rate").load()
+        val e = intercept[SparkConcurrentModificationException] {
+          ds.writeStream
+            .option("checkpointLocation", checkpointLocation)
+            .queryName("_")
+            .format("memory")
+            .start()
+        }
+
+        val expectedPath = p.toURI
+        checkError(
+          exception = e.getCause.asInstanceOf[SparkFileAlreadyExistsException],
+          errorClass = "FAILED_RENAME_PATH",
+          sqlState = Some("22023"),
+          matchPVals = true,
+          parameters = Map("sourcePath" -> s"$expectedPath.+",
+            "targetPath" -> s"$expectedPath.+"))
+      }
+    }
   }
 
   test("RENAME_SRC_PATH_NOT_FOUND: rename the file which source path does not exist") {
@@ -658,6 +693,82 @@ class QueryExecutionErrorsSuite
         "sourcePath" -> s"$srcPath"
       ))
   }
+
+  test("UNSUPPORTED_FEATURE.JDBC_TRANSACTION: the target JDBC server does not support " +
+    "transactions and can only support ALTER TABLE with a single action") {
+    withTempDir { tempDir =>
+      val url = s"jdbc:h2:${tempDir.getCanonicalPath};user=testUser;password=testPass"
+      Utils.classForName("org.h2.Driver")
+      var conn: java.sql.Connection = null
+      try {
+        conn = DriverManager.getConnection(url, new Properties())
+        conn.prepareStatement("""CREATE SCHEMA "test"""").executeUpdate()
+        conn.prepareStatement(
+          """CREATE TABLE "test"."people" (name TEXT(32) NOT NULL, id INTEGER NOT NULL)""")
+          .executeUpdate()
+        conn.commit()
+      } finally {
+        if (null != conn) {
+          conn.close()
+        }
+      }
+
+      val testH2DialectUnsupportedJdbcTransaction = new JdbcDialect {
+        override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
+
+        override def createConnectionFactory(options: JDBCOptions): Int => Connection = {
+          val driverClass: String = options.driverClass
+
+          (_: Int) => {
+            DriverRegistry.register(driverClass)
+            val driver: Driver = DriverRegistry.get(driverClass)
+            val connection = ConnectionProvider.create(
+              driver, options.parameters, options.connectionProviderName)
+            val spyConnection = spy(connection)
+            val spyMetaData = spy(connection.getMetaData)
+            when(spyConnection.getMetaData).thenReturn(spyMetaData)
+            when(spyMetaData.supportsTransactions()).thenReturn(false)
+
+            spyConnection
+          }
+        }
+      }
+
+      withSQLConf(
+        "spark.sql.catalog.h2" -> classOf[JDBCTableCatalog].getName,
+        "spark.sql.catalog.h2.url" -> url,
+        "spark.sql.catalog.h2.driver" -> "org.h2.Driver") {
+
+        val existedH2Dialect = JdbcDialects.get(url)
+        JdbcDialects.unregisterDialect(existedH2Dialect)
+        JdbcDialects.registerDialect(testH2DialectUnsupportedJdbcTransaction)
+
+        val e = intercept[AnalysisException] {
+          sql("alter TABLE h2.test.people SET TBLPROPERTIES (xx='xx', yy='yy')")
+        }
+
+        checkError(
+          exception = e.getCause.asInstanceOf[SparkSQLFeatureNotSupportedException],
+          errorClass = "UNSUPPORTED_FEATURE.JDBC_TRANSACTION",
+          parameters = Map.empty)
+
+        JdbcDialects.unregisterDialect(testH2DialectUnsupportedJdbcTransaction)
+      }
+    }
+  }
+
+  test("STREAM_FAILED: NPE in user code") {
+    val ds = spark.readStream.format("rate").load()
+    val query = ds.writeStream.foreachBatch { (_: Dataset[Row], _: Long) =>
+      val s: String = null
+      s.length: Unit
+    }.start()
+    val e = intercept[StreamingQueryException] {
+      query.awaitTermination()
+    }
+    assert(e.getErrorClass === "STREAM_FAILED")
+    assert(e.getCause.isInstanceOf[NullPointerException])
+  }
 }
 
 class FakeFileSystemSetPermission extends LocalFileSystem {
@@ -665,4 +776,8 @@ class FakeFileSystemSetPermission extends LocalFileSystem {
   override def setPermission(src: Path, permission: FsPermission): Unit = {
     throw new IOException(s"fake fileSystem failed to set permission: $permission")
   }
+}
+
+class FakeFileSystemAlwaysExists extends DebugFilesystem {
+  override def exists(f: Path): Boolean = true
 }

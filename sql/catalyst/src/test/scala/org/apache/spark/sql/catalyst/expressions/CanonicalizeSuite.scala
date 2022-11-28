@@ -23,7 +23,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.plans.logical.Range
-import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{Decimal, DecimalType, IntegerType, LongType, StringType, StructField, StructType}
 
 class CanonicalizeSuite extends SparkFunSuite {
 
@@ -187,7 +187,23 @@ class CanonicalizeSuite extends SparkFunSuite {
   test("SPARK-40362: Commutative operator under BinaryComparison") {
     Seq(EqualTo, EqualNullSafe, GreaterThan, LessThan, GreaterThanOrEqual, LessThanOrEqual)
       .foreach { bc =>
-        assert(bc(Add($"a", $"b"), Literal(10)).semanticEquals(bc(Add($"b", $"a"), Literal(10))))
+        assert(bc(Multiply($"a", $"b"), Literal(10)).semanticEquals(
+          bc(Multiply($"b", $"a"), Literal(10))))
       }
+  }
+
+  test("SPARK-40903: Only reorder decimal Add when the result data type is not changed") {
+    val d = Decimal(1.2)
+    val literal1 = Literal.create(d, DecimalType(2, 1))
+    val literal2 = Literal.create(d, DecimalType(2, 1))
+    val literal3 = Literal.create(d, DecimalType(3, 2))
+    assert(Add(literal1, literal2).semanticEquals(Add(literal2, literal1)))
+    assert(Add(Add(literal1, literal2), literal3).semanticEquals(
+      Add(Add(literal3, literal2), literal1)))
+
+    val literal4 = Literal.create(d, DecimalType(12, 5))
+    val literal5 = Literal.create(d, DecimalType(12, 6))
+    assert(!Add(Add(literal4, literal5), literal1).semanticEquals(
+      Add(Add(literal1, literal5), literal4)))
   }
 }

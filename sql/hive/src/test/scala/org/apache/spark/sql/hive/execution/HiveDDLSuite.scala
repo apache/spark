@@ -549,10 +549,10 @@ class HiveDDLSuite
   }
 
   test("create table: partition column names exist in table definition") {
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       "CREATE TABLE tbl(a int) PARTITIONED BY (a string)",
-      "Found duplicate column(s) in the table definition of " +
-        s"`$SESSION_CATALOG_NAME`.`default`.`tbl`: `a`")
+      "COLUMN_ALREADY_EXISTS",
+      Map("columnName" -> "`a`"))
   }
 
   test("create partitioned table without specifying data type for the partition columns") {
@@ -608,7 +608,7 @@ class HiveDDLSuite
   }
 
   test("SPARK-19129: drop partition with a empty string will drop the whole table") {
-    val df = spark.createDataFrame(Seq((0, "a"), (1, "b"))).toDF("partCol1", "name")
+    val df = spark.createDataFrame(Seq(("0", "a"), ("1", "b"))).toDF("partCol1", "name")
     df.write.mode("overwrite").partitionBy("partCol1").saveAsTable("partitionedTable")
     assertAnalysisError(
       "alter table partitionedTable drop partition(partCol1='')",
@@ -2356,14 +2356,16 @@ class HiveDDLSuite
           sql("CREATE TABLE tab (c1 int) PARTITIONED BY (c2 int) STORED AS PARQUET")
           if (!caseSensitive) {
             // duplicating partitioning column name
-            assertAnalysisError(
+            assertAnalysisErrorClass(
               "ALTER TABLE tab ADD COLUMNS (C2 string)",
-              "Found duplicate column(s)")
+              "COLUMN_ALREADY_EXISTS",
+              Map("columnName" -> "`c2`"))
 
             // duplicating data column name
-            assertAnalysisError(
+            assertAnalysisErrorClass(
               "ALTER TABLE tab ADD COLUMNS (C1 string)",
-              "Found duplicate column(s)")
+              "COLUMN_ALREADY_EXISTS",
+              Map("columnName" -> "`c1`"))
           } else {
             // hive catalog will still complains that c1 is duplicate column name because hive
             // identifiers are case insensitive.
@@ -2678,27 +2680,30 @@ class HiveDDLSuite
   }
 
   test("Hive CTAS can't create partitioned table by specifying schema") {
-    val err1 = intercept[ParseException] {
-      spark.sql(
-        s"""
-           |CREATE TABLE t (a int)
-           |PARTITIONED BY (b string)
-           |STORED AS parquet
-           |AS SELECT 1 as a, "a" as b
-                 """.stripMargin)
-    }.getMessage
-    assert(err1.contains("Schema may not be specified in a Create Table As Select"))
+    val sql1 =
+      s"""CREATE TABLE t (a int)
+         |PARTITIONED BY (b string)
+         |STORED AS parquet
+         |AS SELECT 1 as a, "a" as b""".stripMargin
+    checkError(
+      exception = intercept[ParseException](sql(sql1)),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map(
+        "message" -> "Schema may not be specified in a Create Table As Select (CTAS) statement"),
+      context = ExpectedContext(sql1, 0, 92))
 
-    val err2 = intercept[ParseException] {
-      spark.sql(
-        s"""
-           |CREATE TABLE t
-           |PARTITIONED BY (b string)
-           |STORED AS parquet
-           |AS SELECT 1 as a, "a" as b
-                 """.stripMargin)
-    }.getMessage
-    assert(err2.contains("Partition column types may not be specified in Create Table As Select"))
+    val sql2 =
+      s"""CREATE TABLE t
+         |PARTITIONED BY (b string)
+         |STORED AS parquet
+         |AS SELECT 1 as a, "a" as b""".stripMargin
+    checkError(
+      exception = intercept[ParseException](sql(sql2)),
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map(
+        "message" ->
+          "Partition column types may not be specified in Create Table As Select (CTAS)"),
+      context = ExpectedContext(sql2, 0, 84))
   }
 
   test("Hive CTAS with dynamic partition") {

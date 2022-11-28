@@ -5,7 +5,19 @@ select * from dummy(3)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-could not resolve `dummy` to a table-valued function; line 1 pos 14
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2308",
+  "messageParameters" : {
+    "name" : "dummy"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 22,
+    "fragment" : "dummy(3)"
+  } ]
+}
 
 
 -- !query
@@ -71,7 +83,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "_LEGACY_ERROR_TEMP_1179",
   "messageParameters" : {
     "arguments" : "integer, integer, integer, integer, integer",
-    "details" : "Invalid number of arguments for function range. Expected: one of 1, 2, 3 and 4; Found: 5.",
+    "details" : "[WRONG_NUM_ARGS] The `range` requires [1, 2, 3, 4] parameters but the actual number is 5.",
     "name" : "range",
     "usage" : "\n    range(start: long, end: long, step: long, numSlices: integer)\n    range(start: long, end: long, step: long)\n    range(start: long, end: long)\n    range(end: long)"
   },
@@ -143,7 +155,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "_LEGACY_ERROR_TEMP_1179",
   "messageParameters" : {
     "arguments" : "integer, integer, integer",
-    "details" : "requirement failed: step (0) cannot be 0",
+    "details" : "[FAILED_FUNCTION_CALL] Failed preparing of the function `range` for call. Please, double check function's arguments.",
     "name" : "range",
     "usage" : "\n    range(start: long, end: long, step: long, numSlices: integer)\n    range(start: long, end: long, step: long)\n    range(start: long, end: long)\n    range(end: long)"
   },

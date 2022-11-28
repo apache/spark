@@ -242,7 +242,20 @@ SELECT udf(count(*)) FROM test_missing_target x, test_missing_target y
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Reference 'b' is ambiguous, could be: x.b, y.b.; line 3 pos 14
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "messageParameters" : {
+    "name" : "`b`",
+    "referenceNames" : "[`x`.`b`, `y`.`b`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 113,
+    "stopIndex" : 113,
+    "fragment" : "b"
+  } ]
+}
 
 
 -- !query
@@ -432,7 +445,20 @@ SELECT udf(count(udf(x.a))) FROM test_missing_target x, test_missing_target y
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Reference 'b' is ambiguous, could be: x.b, y.b.; line 3 pos 14
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "messageParameters" : {
+    "name" : "`b`",
+    "referenceNames" : "[`x`.`b`, `y`.`b`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 120,
+    "stopIndex" : 120,
+    "fragment" : "b"
+  } ]
+}
 
 
 -- !query
@@ -457,7 +483,20 @@ SELECT udf(count(udf(b))) FROM test_missing_target x, test_missing_target y
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Reference 'b' is ambiguous, could be: x.b, y.b.; line 1 pos 21
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "messageParameters" : {
+    "name" : "`b`",
+    "referenceNames" : "[`x`.`b`, `y`.`b`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 22,
+    "stopIndex" : 22,
+    "fragment" : "b"
+  } ]
+}
 
 
 -- !query
