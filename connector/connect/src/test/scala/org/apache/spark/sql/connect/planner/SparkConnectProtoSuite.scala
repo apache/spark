@@ -18,7 +18,9 @@ package org.apache.spark.sql.connect.planner
 
 import java.nio.file.{Files, Paths}
 
-import com.google.protobuf.ByteString
+import scala.collection.JavaConverters._
+
+import com.google.protobuf.{ByteString, UnknownFieldSet}
 
 import org.apache.spark.{SparkClassNotFoundException, SparkException}
 import org.apache.spark.connect.proto
@@ -35,7 +37,7 @@ import org.apache.spark.sql.connect.dsl.expressions._
 import org.apache.spark.sql.connect.dsl.plans._
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{IntegerType, MapType, Metadata, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, IntegerType, MapType, Metadata, StringType, StructField, StructType, UserDefinedType}
 
 /**
  * This suite is based on connect DSL and test that given same dataframe operations, whether
@@ -82,6 +84,21 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     val connectPlan = connectTestRelation.select("id".protoAttr)
     val sparkPlan = sparkTestRelation.select("id")
     comparePlans(connectPlan, sparkPlan)
+  }
+
+  test("Select with invalid expression") {
+    checkError(
+      exception = intercept[SparkException] {
+        transform(
+          connectTestRelation.select(
+            proto.Expression
+              .newBuilder()
+              .setUnknownFields(UnknownFieldSet.newBuilder().build())
+              .build()))
+      },
+      errorClass = "CONNECT.INVALID_PLAN_UNSUPPORTED_EXPRESSION_TYPE",
+      parameters = Map("type" -> "EXPRTYPE_NOT_SET"))
+
   }
 
   test("Test select expression in strings") {
@@ -330,6 +347,60 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   }
 
   test("SPARK-41128: Test fill na") {
+    // Values must be set.
+    checkError(
+      exception = intercept[SparkException] {
+        transform(
+          proto.Relation
+            .newBuilder()
+            .setFillNa(
+              proto.NAFill
+                .newBuilder()
+                .setInput(connectTestRelation)
+                .build())
+            .build())
+      },
+      errorClass = "CONNECT.INVALID_PLAN_TRANSFORM_NA_FILL_EMPTY",
+      parameters = Map.empty)
+
+    // Cannot fill for more values than columns.
+    checkError(
+      exception = intercept[SparkException] {
+        transform(
+          proto.Relation
+            .newBuilder()
+            .setFillNa(
+              proto.NAFill
+                .newBuilder()
+                .addAllValues(Seq(
+                  intToLiteral(1).getLiteral,
+                  intToLiteral(2).getLiteral,
+                  intToLiteral(3).getLiteral).asJava)
+                .setInput(connectTestRelation)
+                .build())
+            .build())
+      },
+      errorClass = "CONNECT.INVALID_PLAN_TRANSFORM_NA_FILL_SIZE",
+      parameters = Map.empty)
+
+    // Cannot fill with unsupported literal types.
+    checkError(
+      exception = intercept[SparkException] {
+        transform(
+          proto.Relation
+            .newBuilder()
+            .setFillNa(
+              proto.NAFill
+                .newBuilder()
+                .addAllValues(
+                  Seq(proto.Expression.Literal.newBuilder().setFp32(1.0f).build()).asJava)
+                .setInput(connectTestRelation)
+                .build())
+            .build())
+      },
+      errorClass = "CONNECT.INVALID_PLAN_UNSUPPORTED_LITERAL_TYPE",
+      parameters = Map("type" -> "FP32"))
+
     comparePlans(connectTestRelation.na.fillValue(1L), sparkTestRelation.na.fill(1L))
     comparePlans(connectTestRelation.na.fillValue(1.5), sparkTestRelation.na.fill(1.5))
     comparePlans(connectTestRelation.na.fillValue("str"), sparkTestRelation.na.fill("str"))
@@ -529,6 +600,21 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       .newBuilder()
       .setLocalRelation(localRelationBuilder.setData(ByteString.copyFrom(buffer)).build())
       .build()
+  }
+
+  test("SPARK-41204 Exception Handling") {
+    class TestUDT extends UserDefinedType[String] {
+      override def sqlType: DataType = StringType
+      override def serialize(obj: String): Any = null
+      override def deserialize(datum: Any): String = ""
+      override def userClass: Class[String] = classOf[String]
+    }
+    checkError(
+      exception = intercept[SparkException] {
+        DataTypeProtoConverter.toConnectProtoType(new TestUDT)
+      },
+      errorClass = "CONNECT.INVALID_PLAN_UNSUPPORTED_TYPE_CONVERSION",
+      parameters = Map("from" -> "catalyst", "to" -> "proto", "type" -> "testudt$1"))
   }
 
   // This is a function for testing only. This is used when the plan is ready and it only waits
