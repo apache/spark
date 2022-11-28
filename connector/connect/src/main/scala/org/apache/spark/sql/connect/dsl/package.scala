@@ -354,6 +354,17 @@ package object dsl {
             .build()
         }: _*)
 
+      def tail(limit: Int): Relation = {
+        Relation
+          .newBuilder()
+          .setTail(
+            Tail
+              .newBuilder()
+              .setInput(logicalPlan)
+              .setLimit(limit))
+          .build()
+      }
+
       def limit(limit: Int): Relation = {
         Relation
           .newBuilder()
