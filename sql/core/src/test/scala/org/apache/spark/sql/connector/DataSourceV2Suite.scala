@@ -596,6 +596,27 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       }
     }
   }
+
+  test("SPARK-41290: cannot CREATE TABLE with GENERATED ALWAYS AS if table provider does not " +
+    "support generated columns on creation") {
+    val supportsGeneratedColumn =
+      classOf[SupportsGeneratedColumnsOnCreationWritableDataSource].getName
+    val doesNotSupportGeneratedColumn = classOf[SimpleWritableDataSource].getName
+    val tblName = "my_tab"
+    withTable(tblName) {
+      spark.sql(s"CREATE TABLE my_tab_1(a INT, b INT GENERATED ALWAYS AS (a+1)) " +
+        s"USING $supportsGeneratedColumn")
+    }
+    withTable(tblName) {
+      val e = intercept[AnalysisException] {
+        spark.sql(s"CREATE TABLE my_tab_2(a INT, b INT GENERATED ALWAYS AS (a+1)) " +
+          s"USING $doesNotSupportGeneratedColumn")
+      }
+      assert(e.getMessage.contains("GENERATED ALWAYS AS expressions are not supported for\n" +
+        "target data source with table provider: " +
+        "\"org.apache.spark.sql.connector.SimpleWritableDataSource\""))
+    }
+  }
 }
 
 
@@ -1105,4 +1126,8 @@ class ReportStatisticsDataSource extends SimpleWritableDataSource {
       }
     }
   }
+}
+
+class SupportsGeneratedColumnsOnCreationWritableDataSource extends SimpleWritableDataSource {
+  override def supportsGeneratedColumnsOnCreation(): Boolean = true
 }

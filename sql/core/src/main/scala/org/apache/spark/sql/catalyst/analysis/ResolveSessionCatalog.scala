@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, ResolveDefaultColumns => DefaultCols}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, Identifier, LookupCatalog, SupportsNamespaces, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, Identifier, LookupCatalog, SupportsNamespaces, TableProvider, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command._
@@ -156,6 +156,14 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       val (storageFormat, provider) = getStorageFormatAndProvider(
         c.tableSpec.provider, c.tableSpec.options, c.tableSpec.location, c.tableSpec.serde,
         ctas = false)
+
+      // todo: move these into a GeneratedColumn module?
+      def isGeneratedColumn(field: StructField) = field.metadata.contains("generationExpression")
+      val hasGeneratedColumn = c.tableSchema.exists(isGeneratedColumn)
+
+      if (hasGeneratedColumn && !supportsGeneratedColumnsOnCreation(provider)) {
+        throw QueryCompilationErrors.generatedColumnsNotAllowedInDataSource(provider)
+      }
       if (!isV2Provider(provider)) {
         constructV1TableCmd(None, c.tableSpec, ident, c.tableSchema, c.partitioning,
           c.ignoreIfExists, storageFormat, provider)
@@ -610,6 +618,16 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       // TODO(SPARK-28396): Currently file source v2 can't work with tables.
       case Some(_: FileDataSourceV2) => false
       case Some(_) => true
+      case _ => false
+    }
+  }
+
+  private def supportsGeneratedColumnsOnCreation(provider: String): Boolean = {
+    // Return earlier since `lookupDataSourceV2` may fail to resolve provider "hive" to
+    // `HiveFileFormat`, when running tests in sql/core.
+    if (DDLUtils.isHiveTable(Some(provider))) return false
+    DataSource.lookupDataSource(provider, conf).newInstance() match {
+      case t: TableProvider => t.supportsGeneratedColumnsOnCreation()
       case _ => false
     }
   }

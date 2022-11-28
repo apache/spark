@@ -2342,5 +2342,6 @@ class DDLParserSuite extends AnalysisTest {
         "CREATE TABLE my_tab(a INT, b INT NOT NULL GENERATED ALWAYS AS (a+1)) USING parquet",
         "Support for GENERATED ALWAYS AS column is not allowed")
     }
+    // TODO: add test for non sql expression string
   }
 }

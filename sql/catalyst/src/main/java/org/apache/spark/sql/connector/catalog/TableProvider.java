@@ -93,4 +93,11 @@ public interface TableProvider {
   default boolean supportsExternalMetadata() {
     return false;
   }
+
+  /**
+   * TODO
+   */
+  default boolean supportsGeneratedColumnsOnCreation() {
+    return false;
+  }
 }

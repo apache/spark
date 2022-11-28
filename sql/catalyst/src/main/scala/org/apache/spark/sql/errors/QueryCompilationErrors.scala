@@ -2528,4 +2528,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       errorClass = "INVALID_COLUMN_OR_FIELD_DATA_TYPE",
       messageParameters = Array(toSQLId(name), toSQLType(dt), toSQLType(expected)))
   }
+
+  def generatedColumnsNotAllowedInDataSource(provider: String): Throwable = {
+    new AnalysisException(
+      s"""
+        |Failed to execute command because GENERATED ALWAYS AS expressions are not supported for
+        |target data source with table provider: \"$provider\"
+        |""".stripMargin
+    )
+  }
 }
