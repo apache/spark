@@ -363,6 +363,10 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             self.connect.range(start=0, end=10, step=3, numPartitions=2).toPandas(),
             self.spark.range(start=0, end=10, step=3, numPartitions=2).toPandas(),
         )
+        # SPARK-41301
+        self.assert_eq(
+            self.connect.range(10).toPandas(), self.connect.range(start=0, end=10).toPandas()
+        )
 
     def test_create_global_temp_view(self):
         # SPARK-41127: test global temp view creation.
