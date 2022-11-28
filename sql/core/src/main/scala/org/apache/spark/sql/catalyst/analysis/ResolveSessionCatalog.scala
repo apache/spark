@@ -195,6 +195,11 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case c @ ReplaceTable(ResolvedIdentifier(catalog, _), _, _, _, _)
         if isSessionCatalog(catalog) =>
       val provider = c.tableSpec.provider.getOrElse(conf.defaultDataSourceName)
+
+      if (GeneratedColumn.hasGeneratedColumns(c.tableSchema) &&
+        !supportsGeneratedColumnsOnCreation(provider)) {
+        throw QueryCompilationErrors.generatedColumnsNotAllowedInDataSource(provider)
+      }
       if (!isV2Provider(provider)) {
         throw QueryCompilationErrors.operationOnlySupportedWithV2TableError("REPLACE TABLE")
       } else {
