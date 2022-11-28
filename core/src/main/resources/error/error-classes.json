@@ -895,6 +895,11 @@
       "The comparison result is null. If you want to handle null as 0 (equal), you can set \"spark.sql.legacy.allowNullComparisonResultInArraySort\" to \"true\"."
     ]
   },
+  "NULL_MAP_KEY" : {
+    "message" : [
+      "Cannot use null as map key."
+    ]
+  },
   "NUMERIC_OUT_OF_SUPPORTED_RANGE" : {
     "message" : [
       "The value <value> cannot be interpreted as a numeric since it has more than 38 digits."
@@ -3502,11 +3507,6 @@
   "_LEGACY_ERROR_TEMP_2018" : {
     "message" : [
       "class `<cls>` is not supported by `MapObjects` as resulting collection."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2019" : {
-    "message" : [
-      "Cannot use null as map key!"
     ]
   },
   "_LEGACY_ERROR_TEMP_2020" : {
