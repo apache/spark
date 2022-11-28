@@ -538,7 +538,7 @@ class KafkaTestUtils(
     // wait for all in-sync replicas to ack sends
     props.put("acks", "all")
     props.put("partitioner.class",
-        classOf[org.apache.kafka.clients.producer.internals.DefaultPartitioner].getName)
+      classOf[org.apache.kafka.clients.producer.internals.DefaultPartitioner].getName)
     setAuthenticationConfigIfNeeded(props)
     props
   }
