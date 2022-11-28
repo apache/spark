@@ -133,6 +133,7 @@ class GroupState:
 
         if has_numpy:
             import numpy as np
+
             # In order to convert NumPy types to Python primitive types.
             newValue = tuple(v.tolist() for v in newValue if isinstance(v, np.generic))
         self._value = Row(*newValue)
