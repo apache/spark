@@ -20,7 +20,7 @@ import java.nio.file.{Files, Paths}
 
 import com.google.protobuf.ByteString
 
-import org.apache.spark.SparkClassNotFoundException
+import org.apache.spark.{SparkClassNotFoundException, SparkException}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Row, SaveMode}
@@ -191,7 +191,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
 
     // Metadata must only be specified for regular Aliases.
     checkError(
-      exception = intercept[InvalidPlanInput] {
+      exception = intercept[SparkException] {
         val attr = proto_explode("id".protoAttr)
         val alias = proto.Expression.Alias
           .newBuilder()
@@ -203,9 +203,8 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
         transform(
           connectTestRelationMap.select(proto.Expression.newBuilder().setAlias(alias).build()))
       },
-      errorClass = "CONNECT.INVALID_PLAN_INPUT",
-      parameters = Map(
-        "msg" -> "Alias expressions with more than 1 identifier must not use optional metadata."))
+      errorClass = "CONNECT.INVALID_PLAN_INVALID_ALIAS",
+      parameters = Map.empty)
   }
 
   test("Aggregate with more than 1 grouping expressions") {
@@ -411,11 +410,11 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   test("Write with invalid bucketBy configuration") {
     val cmd = localRelation.write(bucketByCols = Seq("id"), numBuckets = Some(0))
     checkError(
-      exception = intercept[InvalidCommandInput] {
+      exception = intercept[SparkException] {
         transform(cmd)
       },
-      errorClass = "CONNECT.INVALID_COMMAND_INPUT",
-      parameters = Map("msg" -> "BucketBy must specify a bucket count > 0, received 0 instead."))
+      errorClass = "CONNECT.INVALID_COMMAND_WRITE_INVALID_BUCKET_BY",
+      parameters = Map("bucket" -> "0"))
   }
 
   test("Write to Path") {

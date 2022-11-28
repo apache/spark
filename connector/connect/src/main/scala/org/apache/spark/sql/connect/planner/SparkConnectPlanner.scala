@@ -45,22 +45,6 @@ import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-final case class InvalidPlanInput(
-    private val message: String = "",
-    private val cause: Throwable = None.orNull)
-    extends SparkException(
-      errorClass = "CONNECT.INVALID_PLAN_INPUT",
-      messageParameters = Map("msg" -> message),
-      cause = cause)
-
-final case class InvalidCommandInput(
-    private val message: String = "",
-    private val cause: Throwable = null)
-    extends SparkException(
-      errorClass = "CONNECT.INVALID_COMMAND_INPUT",
-      messageParameters = Map("msg" -> message),
-      cause = cause)
-
 class SparkConnectPlanner(session: SparkSession) {
   lazy val pythonExec =
     sys.env.getOrElse("PYSPARK_PYTHON", sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python3"))
@@ -98,7 +82,11 @@ class SparkConnectPlanner(session: SparkSession) {
         transformRenameColumnsByNameToNameMap(rel.getRenameColumnsByNameToNameMap)
       case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
         throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
-      case _ => throw InvalidPlanInput(s"${rel.getUnknown} not supported.")
+      case _ =>
+        throw new SparkException(
+          errorClass = "CONNECT.INVALID_PLAN_UNKNOWN_RELATION",
+          messageParameters = Map("param" -> s"${rel.getRelTypeCase}"),
+          cause = null)
     }
   }
 
@@ -158,12 +146,16 @@ class SparkConnectPlanner(session: SparkSession) {
 
   private def transformNAFill(rel: proto.NAFill): LogicalPlan = {
     if (rel.getValuesCount == 0) {
-      throw InvalidPlanInput(s"values must contains at least 1 item!")
+      throw new SparkException(
+        errorClass = "CONNECT.INVALID_PLAN_TRANSFORM_NA_FILL_EMPTY",
+        messageParameters = Map.empty,
+        cause = null)
     }
     if (rel.getValuesCount > 1 && rel.getValuesCount != rel.getColsCount) {
-      throw InvalidPlanInput(
-        s"When values contains more than 1 items, " +
-          s"values and cols should have the same length!")
+      throw new SparkException(
+        errorClass = "CONNECT.INVALID_PLAN_TRANSFORM_NA_FILL_SIZE",
+        messageParameters = Map.empty,
+        cause = null)
     }
 
     val dataset = Dataset.ofRows(session, transformRelation(rel.getInput))
@@ -197,7 +189,11 @@ class SparkConnectPlanner(session: SparkSession) {
           } else {
             dataset.na.fill(value = value.getString).logicalPlan
           }
-        case other => throw InvalidPlanInput(s"Unsupported value type: $other")
+        case other =>
+          throw new SparkException(
+            errorClass = "CONNECT.INVALID_PLAN_UNSUPPORTED_LITERAL_TYPE",
+            messageParameters = Map("type" -> s"$other"),
+            cause = null)
       }
     } else {
       val valueMap = mutable.Map.empty[String, Any]
@@ -211,7 +207,11 @@ class SparkConnectPlanner(session: SparkSession) {
             valueMap.update(col, value.getFp64)
           case proto.Expression.Literal.LiteralTypeCase.STRING =>
             valueMap.update(col, value.getString)
-          case other => throw InvalidPlanInput(s"Unsupported value type: $other")
+          case other =>
+            throw new SparkException(
+              errorClass = "CONNECT.INVALID_PLAN_UNSUPPORTED_LITERAL_TYPE",
+              messageParameters = Map("type" -> s"$other"),
+              cause = null)
         }
       }
       dataset.na.fill(valueMap = valueMap.toMap).logicalPlan
@@ -251,14 +251,22 @@ class SparkConnectPlanner(session: SparkSession) {
 
   private def transformDeduplicate(rel: proto.Deduplicate): LogicalPlan = {
     if (!rel.hasInput) {
-      throw InvalidPlanInput("Deduplicate needs a plan input")
+      throw new SparkException(
+        errorClass = "CONNECT.INVALID_PLAN_EMPTY_INPUT",
+        messageParameters = Map.empty,
+        cause = null)
     }
     if (rel.getAllColumnsAsKeys && rel.getColumnNamesCount > 0) {
-      throw InvalidPlanInput("Cannot deduplicate on both all columns and a subset of columns")
+      throw new SparkException(
+        errorClass = "CONNECT.INVALID_PLAN_DEDUPLICATE_INVALID_INPUT",
+        messageParameters = Map.empty,
+        cause = null)
     }
     if (!rel.getAllColumnsAsKeys && rel.getColumnNamesCount == 0) {
-      throw InvalidPlanInput(
-        "Deduplicate requires to either deduplicate on all columns or a subset of columns")
+      throw new SparkException(
+        errorClass = "CONNECT.INVALID_PLAN_DEDUPLICATE_INVALID_INPUT",
+        messageParameters = Map.empty,
+        cause = null)
     }
     val queryExecution = new QueryExecution(session, transformRelation(rel.getInput))
     val resolver = session.sessionState.analyzer.resolver
@@ -272,7 +280,10 @@ class SparkConnectPlanner(session: SparkSession) {
         // so we call filter instead of find.
         val cols = allColumns.filter(col => resolver(col.name, colName))
         if (cols.isEmpty) {
-          throw InvalidPlanInput(s"Invalid deduplicate column ${colName}")
+          throw new SparkException(
+            errorClass = "CONNECT.INVALID_PLAN_DEDUPLICATE_INVALID_INPUT_COLUMN",
+            messageParameters = Map("col" -> colName),
+            cause = null)
         }
         cols
       }
@@ -301,7 +312,10 @@ class SparkConnectPlanner(session: SparkSession) {
         UnresolvedRelation(multipartIdentifier)
       case proto.Read.ReadTypeCase.DATA_SOURCE =>
         if (rel.getDataSource.getFormat == "") {
-          throw InvalidPlanInput("DataSource requires a format")
+          throw new SparkException(
+            errorClass = "CONNECT.INVALID_PLAN_INVALID_DATA_SOURCE",
+            messageParameters = Map.empty,
+            cause = null)
         }
         val localMap = CaseInsensitiveMap[String](rel.getDataSource.getOptionsMap.asScala.toMap)
         val reader = session.read
@@ -311,7 +325,11 @@ class SparkConnectPlanner(session: SparkSession) {
           reader.schema(rel.getDataSource.getSchema)
         }
         reader.load().queryExecution.analyzed
-      case _ => throw InvalidPlanInput("Does not support " + rel.getReadTypeCase.name())
+      case _ =>
+        throw new SparkException(
+          errorClass = "CONNECT.INVALID_PLAN_UNSUPPORTED_DATA_SOURCE",
+          messageParameters = Map("type" -> s"${rel.getReadTypeCase}"),
+          cause = null)
     }
     baseRelation
   }
@@ -353,8 +371,10 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Expression.ExprTypeCase.EXPRESSION_STRING =>
         transformExpressionString(exp.getExpressionString)
       case _ =>
-        throw InvalidPlanInput(
-          s"Expression with ID: ${exp.getExprTypeCase.getNumber} is not supported")
+        throw new SparkException(
+          errorClass = "CONNECT.INVALID_PLAN_UNSUPPORTED_EXPRESSION_TYPE",
+          messageParameters = Map("type" -> s"${exp.getExprTypeCase}"),
+          cause = null)
     }
   }
 
@@ -389,9 +409,10 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Expression.Literal.LiteralTypeCase.DATE =>
         expressions.Literal(lit.getDate, DateType)
       case _ =>
-        throw InvalidPlanInput(
-          s"Unsupported Literal Type: ${lit.getLiteralTypeCase.getNumber}" +
-            s"(${lit.getLiteralTypeCase.name})")
+        throw new SparkException(
+          errorClass = "CONNECT.INVALID_PLAN_UNSUPPORTED_LITERAL_TYPE",
+          messageParameters = Map("type" -> s"${lit.getLiteralTypeCase}"),
+          cause = null)
     }
   }
 
@@ -437,8 +458,10 @@ class SparkConnectPlanner(session: SparkSession) {
       Alias(transformExpression(alias.getExpr), alias.getName(0))(explicitMetadata = md)
     } else {
       if (alias.hasMetadata) {
-        throw new InvalidPlanInput(
-          "Alias expressions with more than 1 identifier must not use optional metadata.")
+        throw new SparkException(
+          errorClass = "CONNECT.INVALID_PLAN_INVALID_ALIAS",
+          messageParameters = Map.empty,
+          cause = null)
       }
       MultiAlias(transformExpression(alias.getExpr), alias.getNameList.asScala.toSeq)
     }
@@ -454,12 +477,18 @@ class SparkConnectPlanner(session: SparkSession) {
     u.getSetOpType match {
       case proto.SetOperation.SetOpType.SET_OP_TYPE_EXCEPT =>
         if (u.getByName) {
-          throw InvalidPlanInput("Except does not support union_by_name")
+          throw new SparkException(
+            errorClass = "CONNECT.INVALID_PLAN_INVALID_SET_OPERATION",
+            messageParameters = Map("type" -> "Except", "param" -> "union_by_name"),
+            cause = null)
         }
         Except(transformRelation(u.getLeftInput), transformRelation(u.getRightInput), u.getIsAll)
       case proto.SetOperation.SetOpType.SET_OP_TYPE_INTERSECT =>
         if (u.getByName) {
-          throw InvalidPlanInput("Intersect does not support union_by_name")
+          throw new SparkException(
+            errorClass = "CONNECT.INVALID_PLAN_INVALID_SET_OPERATION",
+            messageParameters = Map("type" -> "Intersect", "param" -> "union_by_name"),
+            cause = null)
         }
         Intersect(
           transformRelation(u.getLeftInput),
@@ -476,15 +505,20 @@ class SparkConnectPlanner(session: SparkSession) {
           logical.Deduplicate(combinedUnion.output, combinedUnion)
         }
       case _ =>
-        throw InvalidPlanInput(s"Unsupported set operation ${u.getSetOpTypeValue}")
+        throw new SparkException(
+          errorClass = "CONNECT.INVALID_PLAN_UNSUPPORTED_SET_OPERATION",
+          messageParameters = Map("type" -> s"${u.getSetOpType}"),
+          cause = null)
     }
   }
 
   private def transformJoin(rel: proto.Join): LogicalPlan = {
     assert(rel.hasLeft && rel.hasRight, "Both join sides must be present")
     if (rel.hasJoinCondition && rel.getUsingColumnsCount > 0) {
-      throw InvalidPlanInput(
-        s"Using columns or join conditions cannot be set at the same time in Join")
+      throw new SparkException(
+        errorClass = "CONNECT.INVALID_PLAN_INVALID_JOIN_CONDITION",
+        messageParameters = Map.empty,
+        cause = null)
     }
     val joinCondition =
       if (rel.hasJoinCondition) Some(transformExpression(rel.getJoinCondition)) else None
@@ -511,7 +545,11 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Join.JoinType.JOIN_TYPE_LEFT_OUTER => LeftOuter
       case proto.Join.JoinType.JOIN_TYPE_RIGHT_OUTER => RightOuter
       case proto.Join.JoinType.JOIN_TYPE_LEFT_SEMI => LeftSemi
-      case _ => throw InvalidPlanInput(s"Join type ${t} is not supported")
+      case _ =>
+        throw new SparkException(
+          errorClass = "CONNECT.INVALID_PLAN_UNSUPPORTED_JOIN_TYPE",
+          messageParameters = Map("type" -> s"${t}"),
+          cause = null)
     }
   }
 
@@ -681,8 +719,10 @@ class SparkConnectPlanner(session: SparkSession) {
       val op = writeOperation.getBucketBy
       val cols = op.getBucketColumnNamesList.asScala
       if (op.getNumBuckets <= 0) {
-        throw InvalidCommandInput(
-          s"BucketBy must specify a bucket count > 0, received ${op.getNumBuckets} instead.")
+        throw new SparkException(
+          errorClass = "CONNECT.INVALID_COMMAND_WRITE_INVALID_BUCKET_BY",
+          messageParameters = Map("bucket" -> s"${op.getNumBuckets}"),
+          cause = null)
       }
       w.bucketBy(op.getNumBuckets, cols.head, cols.tail.toSeq: _*)
     }

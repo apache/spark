@@ -19,6 +19,7 @@ package org.apache.spark.sql.connect.planner
 
 import scala.collection.convert.ImplicitConversions._
 
+import org.apache.spark.SparkException
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.types._
@@ -62,7 +63,11 @@ object DataTypeProtoConverter {
       case proto.DataType.KindCase.STRUCT => toCatalystStructType(t.getStruct)
       case proto.DataType.KindCase.MAP => toCatalystMapType(t.getMap)
       case _ =>
-        throw InvalidPlanInput(s"Does not support convert ${t.getKindCase} to catalyst types.")
+        throw new SparkException(
+          errorClass = "CONNECT.INVALID_PLAN_UNSUPPORTED_TYPE_CONVERSION",
+          messageParameters =
+            Map("from" -> "proto", "to" -> "catalyst", "type" -> s"${t.getKindCase}"),
+          cause = null)
     }
   }
 
@@ -285,7 +290,11 @@ object DataTypeProtoConverter {
           .build()
 
       case _ =>
-        throw InvalidPlanInput(s"Does not support convert ${t.typeName} to connect proto types.")
+        throw new SparkException(
+          errorClass = "CONNECT.INVALID_PLAN_UNSUPPORTED_TYPE_CONVERSION",
+          messageParameters =
+            Map("from" -> "catalyst", "to" -> "proto", "type" -> s"${t.typeName}"),
+          cause = null)
     }
   }
 

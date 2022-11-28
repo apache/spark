@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 
 import com.google.protobuf.ByteString
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression.UnresolvedStar
 import org.apache.spark.sql.Dataset
@@ -109,24 +109,24 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       new SparkConnectPlanner(None.orNull).transformRelation(proto.Relation.newBuilder().build()))
 
     checkError(
-      exception = intercept[InvalidPlanInput] {
+      exception = intercept[SparkException] {
         new SparkConnectPlanner(None.orNull)
           .transformRelation(
             proto.Relation.newBuilder.setUnknown(proto.Unknown.newBuilder().build()).build())
       },
-      errorClass = "CONNECT.INVALID_PLAN_INPUT",
-      parameters = Map("msg" -> " not supported."))
+      errorClass = "CONNECT.INVALID_PLAN_UNKNOWN_RELATION",
+      parameters = Map("param" -> "UNKNOWN"))
   }
 
   test("Simple Read") {
     val read = proto.Read.newBuilder().build()
     // Invalid read without Table name.
     checkError(
-      exception = intercept[InvalidPlanInput] {
+      exception = intercept[SparkException] {
         transform(proto.Relation.newBuilder.setRead(read).build())
       },
-      errorClass = "CONNECT.INVALID_PLAN_INPUT",
-      parameters = Map("msg" -> "Does not support READTYPE_NOT_SET"))
+      errorClass = "CONNECT.INVALID_PLAN_UNSUPPORTED_DATA_SOURCE",
+      parameters = Map("type" -> "READTYPE_NOT_SET"))
 
     val readWithTable = read.toBuilder
       .setNamedTable(proto.Read.NamedTable.newBuilder.setUnparsedIdentifier("name").build())
@@ -206,11 +206,11 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
         proto.SetOperation.newBuilder.setLeftInput(readRel).setRightInput(readRel).build())
       .build()
     checkError(
-      exception = intercept[InvalidPlanInput] {
+      exception = intercept[SparkException] {
         transform(union)
       },
-      errorClass = "CONNECT.INVALID_PLAN_INPUT",
-      parameters = Map("msg" -> "Unsupported set operation 0"))
+      errorClass = "CONNECT.INVALID_PLAN_UNSUPPORTED_SET_OPERATION",
+      parameters = Map("type" -> "SET_OP_TYPE_UNSPECIFIED"))
 
     val res = transform(
       proto.Relation.newBuilder
@@ -232,14 +232,14 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
     // Join type JOIN_TYPE_UNSPECIFIED is not supported.
     checkError(
-      exception = intercept[InvalidPlanInput] {
+      exception = intercept[SparkException] {
         val simpleJoin = proto.Relation.newBuilder
           .setJoin(proto.Join.newBuilder.setLeft(readRel).setRight(readRel))
           .build()
         transform(simpleJoin)
       },
-      errorClass = "CONNECT.INVALID_PLAN_INPUT",
-      parameters = Map("msg" -> "Join type JOIN_TYPE_UNSPECIFIED is not supported"))
+      errorClass = "CONNECT.INVALID_PLAN_UNSUPPORTED_JOIN_TYPE",
+      parameters = Map("type" -> "JOIN_TYPE_UNSPECIFIED"))
     // Construct a simple Join.
     val unresolvedAttribute = proto.Expression
       .newBuilder()
@@ -269,7 +269,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     assert(res != null)
 
     checkError(
-      exception = intercept[InvalidPlanInput] {
+      exception = intercept[SparkException] {
         val simpleJoin = proto.Relation.newBuilder
           .setJoin(
             proto.Join.newBuilder
@@ -280,9 +280,8 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
           .build()
         transform(simpleJoin)
       },
-      errorClass = "CONNECT.INVALID_PLAN_INPUT",
-      parameters =
-        Map("msg" -> "Using columns or join conditions cannot be set at the same time in Join"))
+      errorClass = "CONNECT.INVALID_PLAN_INVALID_JOIN_CONDITION",
+      parameters = Map.empty)
   }
 
   test("Simple Projection") {
@@ -328,15 +327,15 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   test("Invalid DataSource") {
     val dataSource = proto.Read.DataSource.newBuilder()
     checkError(
-      exception = intercept[InvalidPlanInput] {
+      exception = intercept[SparkException] {
         transform(
           proto.Relation
             .newBuilder()
             .setRead(proto.Read.newBuilder().setDataSource(dataSource))
             .build())
       },
-      errorClass = "CONNECT.INVALID_PLAN_INPUT",
-      parameters = Map("msg" -> "DataSource requires a format"))
+      errorClass = "CONNECT.INVALID_PLAN_INVALID_DATA_SOURCE",
+      parameters = Map.empty)
   }
 
   test("Test invalid deduplicate") {
@@ -347,24 +346,22 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       .addColumnNames("test")
 
     checkError(
-      exception = intercept[InvalidPlanInput] {
+      exception = intercept[SparkException] {
         transform(proto.Relation.newBuilder.setDeduplicate(deduplicate).build())
       },
-      errorClass = "CONNECT.INVALID_PLAN_INPUT",
-      parameters = Map("msg" -> "Cannot deduplicate on both all columns and a subset of columns"))
+      errorClass = "CONNECT.INVALID_PLAN_DEDUPLICATE_INVALID_INPUT",
+      parameters = Map.empty)
 
     val deduplicate2 = proto.Deduplicate
       .newBuilder()
       .setInput(readRel)
 
     checkError(
-      exception = intercept[InvalidPlanInput] {
+      exception = intercept[SparkException] {
         transform(proto.Relation.newBuilder.setDeduplicate(deduplicate2).build())
       },
-      errorClass = "CONNECT.INVALID_PLAN_INPUT",
-      parameters = Map(
-        "msg" -> ("Deduplicate requires to either deduplicate" +
-          " on all columns or a subset of columns")))
+      errorClass = "CONNECT.INVALID_PLAN_DEDUPLICATE_INVALID_INPUT",
+      parameters = Map.empty)
   }
 
   test("Test invalid intersect, except") {
@@ -377,11 +374,11 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       .setSetOpType(proto.SetOperation.SetOpType.SET_OP_TYPE_EXCEPT)
 
     checkError(
-      exception = intercept[InvalidPlanInput] {
+      exception = intercept[SparkException] {
         transform(proto.Relation.newBuilder.setSetOp(except).build())
       },
-      errorClass = "CONNECT.INVALID_PLAN_INPUT",
-      parameters = Map("msg" -> "Except does not support union_by_name"))
+      errorClass = "CONNECT.INVALID_PLAN_INVALID_SET_OPERATION",
+      parameters = Map("type" -> "Except", "param" -> "union_by_name"))
 
     // Intersect with union_by_name=true
     val intersect = proto.SetOperation
@@ -391,11 +388,11 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       .setByName(true)
       .setSetOpType(proto.SetOperation.SetOpType.SET_OP_TYPE_INTERSECT)
     checkError(
-      exception = intercept[InvalidPlanInput] {
+      exception = intercept[SparkException] {
         transform(proto.Relation.newBuilder.setSetOp(intersect).build())
       },
-      errorClass = "CONNECT.INVALID_PLAN_INPUT",
-      parameters = Map("msg" -> "Intersect does not support union_by_name"))
+      errorClass = "CONNECT.INVALID_PLAN_INVALID_SET_OPERATION",
+      parameters = Map("type" -> "Intersect", "param" -> "union_by_name"))
   }
 
   test("transform LocalRelation") {
