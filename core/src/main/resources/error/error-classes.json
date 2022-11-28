@@ -780,8 +780,21 @@
   },
   "INVALID_SCHEMA" : {
     "message" : [
-      "The expression <expr> is not a valid schema string."
-    ]
+      "The input schema <inputSchema> is not a valid schema string."
+    ],
+    "subClass" : {
+      "NON_STRING_LITERAL" : {
+        "message" : [
+          "The input expression must be string literal and not null."
+        ]
+      },
+      "PARSE_ERROR" : {
+        "message" : [
+          "Cannot parse the schema:",
+          "<reason>"
+        ]
+      }
+    }
   },
   "INVALID_SQL_SYNTAX" : {
     "message" : [
@@ -2842,12 +2855,6 @@
   "_LEGACY_ERROR_TEMP_1226" : {
     "message" : [
       "The SQL config '<configName>' was removed in the version <version>. <comment>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1227" : {
-    "message" : [
-      "<msg><e1>",
-      "Failed fallback parsing: <e2>"
     ]
   },
   "_LEGACY_ERROR_TEMP_1228" : {

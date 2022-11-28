@@ -367,8 +367,8 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         Seq("1").toDF("csv").select(from_csv($"csv", lit(1), options)).collect()
       },
-      errorClass = "INVALID_SCHEMA",
-      parameters = Map("expr" -> "\"1\"")
+      errorClass = "INVALID_SCHEMA.NON_STRING_LITERAL",
+      parameters = Map("inputSchema" -> "\"1\"")
     )
   }
 

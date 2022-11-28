@@ -5226,9 +5226,9 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         sql("select from_json('{\"a\":1}', 1)")
       },
-      errorClass = "INVALID_SCHEMA",
+      errorClass = "INVALID_SCHEMA.NON_STRING_LITERAL",
       parameters = Map(
-        "expr" -> "\"1\""
+        "inputSchema" -> "\"1\""
       ),
       context = ExpectedContext(
         fragment = "from_json('{\"a\":1}', 1)",
