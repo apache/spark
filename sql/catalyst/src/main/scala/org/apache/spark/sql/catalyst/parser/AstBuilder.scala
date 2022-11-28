@@ -2980,6 +2980,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     // Check that no duplicates exist among any CREATE TABLE column options specified.
     var nullable = true
     var defaultExpression: Option[DefaultExpressionContext] = None
+    var generationExpression: Option[GenerationExpressionContext] = None
     var commentSpec: Option[CommentSpecContext] = None
     ctx.colDefinitionOption().asScala.foreach { option =>
       if (option.NULL != null) {
@@ -2995,6 +2996,13 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
             option, colName.getText, "DEFAULT")
         }
         defaultExpression = Some(expr)
+      }
+      Option(option.generationExpression()).foreach { expr =>
+        if (generationExpression.isDefined) {
+          throw QueryParsingErrors.duplicateCreateTableColumnOption(
+            option, colName.getText, "GENERATED ALWAYS AS")
+        }
+        generationExpression = Some(expr)
       }
       Option(option.commentSpec()).foreach { spec =>
         if (commentSpec.isDefined) {
@@ -3022,7 +3030,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     }
     // Add the 'GENERATED ALWAYS AS expression' clause in the column definition, if any, to the
     // column metadata.
-    Option(ctx.generationExpression()).map(visitGenerationExpression).foreach { field =>
+    generationExpression.map(visitGenerationExpression).foreach { field =>
       if (conf.getConf(SQLConf.ENABLE_GENERATED_COLUMNS)) {
         builder.putString(GeneratedColumn.GENERATION_EXPRESSION_METADATA_KEY, field)
       } else {

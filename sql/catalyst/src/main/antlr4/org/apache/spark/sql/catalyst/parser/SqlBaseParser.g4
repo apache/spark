@@ -1040,7 +1040,7 @@ colDefinitionOption
 
 generationExpression
     : GENERATED ALWAYS AS LEFT_PAREN expression RIGHT_PAREN
-    ;    
+    ;
 
 complexColTypeList
     : complexColType (COMMA complexColType)*

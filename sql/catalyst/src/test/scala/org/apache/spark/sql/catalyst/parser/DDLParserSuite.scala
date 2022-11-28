@@ -2735,9 +2735,16 @@ class DDLParserSuite extends AnalysisTest {
           Map.empty[String, String], None, None, None, false), false))
     // Make sure that the parser returns an exception when the feature is disabled.
     withSQLConf(SQLConf.ENABLE_GENERATED_COLUMNS.key -> "false") {
-      intercept(
-        "CREATE TABLE my_tab(a INT, b INT NOT NULL GENERATED ALWAYS AS (a+1)) USING parquet",
-        "Support for GENERATED ALWAYS AS column is not allowed")
+      val sql = "CREATE TABLE my_tab(a INT, b INT NOT NULL GENERATED ALWAYS AS (a+1)) USING parquet"
+      val fragment = "b INT NOT NULL GENERATED ALWAYS AS (a+1)"
+      checkError(
+        exception = parseException(sql),
+        errorClass = "_LEGACY_ERROR_TEMP_0065",
+        parameters = Map.empty,
+        context = ExpectedContext(
+          fragment = fragment,
+          start = 27,
+          stop = 66))
     }
   }
 }

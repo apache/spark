@@ -652,6 +652,6 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def generatedColumnNotEnabledError(ctx: ParserRuleContext): Throwable = {
-    new ParseException("Support for GENERATED ALWAYS AS column is not allowed", ctx)
+    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0065", ctx)
   }
 }

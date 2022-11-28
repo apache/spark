@@ -1803,6 +1803,11 @@
       "<msg>."
     ]
   },
+  "_LEGACY_ERROR_TEMP_0065" : {
+    "message" : [
+      "Support for GENERATED ALWAYS AS column is not allowed."
+    ]
+  },
   "_LEGACY_ERROR_TEMP_1000" : {
     "message" : [
       "LEGACY store assignment policy is disallowed in Spark data source V2. Please set the configuration <configKey> to other values."
