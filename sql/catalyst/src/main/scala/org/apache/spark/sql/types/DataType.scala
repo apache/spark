@@ -27,6 +27,7 @@ import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.SparkThrowable
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
@@ -153,12 +154,15 @@ object DataType {
     try {
       parser(schema)
     } catch {
-      case NonFatal(e1) =>
+      case NonFatal(e) =>
         try {
           fallbackParser(schema)
         } catch {
           case NonFatal(_) =>
-            throw QueryCompilationErrors.schemaFailToParseError(schema, e1)
+            if (e.isInstanceOf[SparkThrowable]) {
+              throw e
+            }
+            throw QueryCompilationErrors.schemaFailToParseError(schema, e)
         }
     }
   }

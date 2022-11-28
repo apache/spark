@@ -43,10 +43,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_SCHEMA.PARSE_ERROR",
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "inputSchema" : "\"a InvalidType\"",
-    "reason" : "\n[PARSE_SYNTAX_ERROR] Syntax error at or near 'InvalidType': extra input 'InvalidType'(line 1, pos 2)\n\n== SQL ==\na InvalidType\n--^^^\n"
+    "error" : "'InvalidType'",
+    "hint" : ": extra input 'InvalidType'"
   },
   "queryContext" : [ {
     "objectType" : "",
