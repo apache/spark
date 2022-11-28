@@ -161,13 +161,6 @@ message Expression {
   message UnresolvedStar {
   }
 
-  // An qualified attribute that can specify a reference (e.g. column) without needing a resolution
-  // by the analyzer.
-  message QualifiedAttribute {
-    string name = 1;
-    DataType type = 2;
-  }
-
   message Alias {
     Expression expr = 1;
     repeated string name = 2;

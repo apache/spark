@@ -30,7 +30,7 @@ import org.apache.spark.sql.{Column, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.AliasIdentifier
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression, NamedExpression, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Expression, NamedExpression, UnsafeProjection}
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.{logical, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
@@ -280,10 +280,6 @@ class SparkConnectPlanner(session: SparkSession) {
     val attributes = structType.toAttributes
     val proj = UnsafeProjection.create(attributes, attributes)
     new logical.LocalRelation(attributes, rows.map(r => proj(r).copy()).toSeq)
-  }
-
-  private def transformAttribute(exp: proto.Expression.QualifiedAttribute): Attribute = {
-    AttributeReference(exp.getName, DataTypeProtoConverter.toCatalystType(exp.getType))()
   }
 
   private def transformReadRel(rel: proto.Read): LogicalPlan = {
