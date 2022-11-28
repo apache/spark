@@ -2321,7 +2321,7 @@ class DDLParserSuite extends AnalysisTest {
             Assignment(UnresolvedAttribute("target.col2"), UnresolvedAttribute("DEFAULT")))))))
   }
 
-  test("Implement parser support for GENERATED ALWAYS AS columns in tables") {
+  test("SPARK-41290: implement parser support for GENERATED ALWAYS AS columns in tables") {
     val schemaWithGeneratedColumn = new StructType()
       .add("a", IntegerType, true)
       .add("b", IntegerType, false,
@@ -2342,6 +2342,5 @@ class DDLParserSuite extends AnalysisTest {
         "CREATE TABLE my_tab(a INT, b INT NOT NULL GENERATED ALWAYS AS (a+1)) USING parquet",
         "Support for GENERATED ALWAYS AS column is not allowed")
     }
-    // TODO: add test for non sql expression string
   }
 }

@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, ResolveDefaultColumns => DefaultCols}
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, GeneratedColumn, ResolveDefaultColumns => DefaultCols}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, Identifier, LookupCatalog, SupportsNamespaces, TableProvider, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
@@ -157,11 +157,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         c.tableSpec.provider, c.tableSpec.options, c.tableSpec.location, c.tableSpec.serde,
         ctas = false)
 
-      // todo: move these into a GeneratedColumn module?
-      def isGeneratedColumn(field: StructField) = field.metadata.contains("generationExpression")
-      val hasGeneratedColumn = c.tableSchema.exists(isGeneratedColumn)
-
-      if (hasGeneratedColumn && !supportsGeneratedColumnsOnCreation(provider)) {
+      if (GeneratedColumn.hasGeneratedColumns(c.tableSchema) &&
+        !supportsGeneratedColumnsOnCreation(provider)) {
         throw QueryCompilationErrors.generatedColumnsNotAllowedInDataSource(provider)
       }
       if (!isV2Provider(provider)) {

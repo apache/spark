@@ -95,7 +95,14 @@ public interface TableProvider {
   }
 
   /**
-   * TODO
+   * Returns true if the source supports defining generated columns upon table creation in SQL.
+   * When false any create table statements with a generated column defined in the table schema will
+   * throw an exception during analysis.
+   *
+   * A generated column is defined with syntax: {@code colName colType GENERATED ALWAYS AS (expr)}
+   * The generation expression is stored in the column metadata with key "generationExpression".
+   *
+   * Override this method to allow defining generated columns in create table statements.
    */
   default boolean supportsGeneratedColumnsOnCreation() {
     return false;
