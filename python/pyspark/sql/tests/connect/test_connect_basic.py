@@ -552,6 +552,18 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             actualResult = pandasResult.values.tolist()
             self.assertEqual(len(expectResult), len(actualResult))
 
+    def test_simple_read_without_schema(self) -> None:
+        """SPARK-41300: Schema not set when reading CSV."""
+        writeDf = self.df_text
+        tmpPath = tempfile.mkdtemp()
+        shutil.rmtree(tmpPath)
+        writeDf.write.csv(tmpPath, header=True)
+
+        readDf = self.connect.read.format("csv").option("header", True).load(path=tmpPath)
+        expectResult = set(writeDf.collect())
+        pandasResult = set(readDf.collect())
+        self.assertEqual(expectResult, pandasResult)
+
     def test_simple_transform(self) -> None:
         """SPARK-41203: Support DF.transform"""
 
