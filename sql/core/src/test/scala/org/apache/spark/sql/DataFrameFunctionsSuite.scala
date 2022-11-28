@@ -5206,7 +5206,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         sql("select from_json('{\"a\":1}', 1)")
       },
-      errorClass = "INVALID_SCHEMA.UNEXPECTED_INPUT_TYPE",
+      errorClass = "INVALID_SCHEMA.NON_STRING_LITERAL",
       parameters = Map(
         "inputSchema" -> "\"1\""
       ),

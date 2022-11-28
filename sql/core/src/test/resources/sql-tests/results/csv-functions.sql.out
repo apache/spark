@@ -22,7 +22,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_SCHEMA.UNEXPECTED_INPUT_TYPE",
+  "errorClass" : "INVALID_SCHEMA.NON_STRING_LITERAL",
   "messageParameters" : {
     "inputSchema" : "\"1\""
   },

@@ -1005,7 +1005,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def unexpectedSchemaTypeError(exp: Expression): Throwable = {
     new AnalysisException(
-      errorClass = "INVALID_SCHEMA.UNEXPECTED_INPUT_TYPE",
+      errorClass = "INVALID_SCHEMA.NON_STRING_LITERAL",
       messageParameters = Map("inputSchema" -> toSQLExpr(exp)))
   }
 

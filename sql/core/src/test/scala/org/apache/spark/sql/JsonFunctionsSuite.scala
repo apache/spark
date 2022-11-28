@@ -443,7 +443,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df3.selectExpr("from_json(value, 1)")
       },
-      errorClass = "INVALID_SCHEMA.UNEXPECTED_INPUT_TYPE",
+      errorClass = "INVALID_SCHEMA.NON_STRING_LITERAL",
       parameters = Map("inputSchema" -> "\"1\""),
       context = ExpectedContext(
         fragment = "from_json(value, 1)",
