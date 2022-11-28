@@ -330,7 +330,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
             "localCheckpoint",
             "_repr_html_",
             "semanticHash",
-            "sameSemantics"
+            "sameSemantics",
         ):
             with self.assertRaises(NotImplementedError):
                 getattr(df, f)()
