@@ -27,6 +27,7 @@ from pyspark.sql.utils import to_str
 if TYPE_CHECKING:
     from pyspark.sql.connect.dataframe import DataFrame
     from pyspark.sql.connect._typing import OptionalPrimitiveType
+    from pyspark.sql.connect.session import SparkSession
 
 
 PathOrPaths = Union[str, List[str]]
