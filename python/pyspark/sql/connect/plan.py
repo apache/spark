@@ -25,7 +25,8 @@ from typing import (
     TYPE_CHECKING,
     Mapping,
 )
-
+import pandas
+import pyarrow as pa
 import pyspark.sql.connect.proto as proto
 from pyspark.sql.connect.column import (
     Column,
@@ -173,6 +174,35 @@ class Read(LogicalPlan):
                 <b>Read</b><br />
                 table name: {self.table_name}
             </li>
+        </ul>
+        """
+
+
+class LocalRelation(LogicalPlan):
+    """Creates a LocalRelation plan object based on a Pandas DataFrame."""
+
+    def __init__(self, pdf: "pandas.DataFrame") -> None:
+        super().__init__(None)
+        self._pdf = pdf
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        sink = pa.BufferOutputStream()
+        table = pa.Table.from_pandas(self._pdf)
+        with pa.ipc.new_stream(sink, table.schema) as writer:
+            for b in table.to_batches():
+                writer.write_batch(b)
+
+        plan = proto.Relation()
+        plan.local_relation.data = sink.getvalue().to_pybytes()
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        return f"{' ' * indent}<LocalRelation>\n"
+
+    def _repr_html_(self) -> str:
+        return """
+        <ul>
+            <li>LocalRelation</li>
         </ul>
         """
 

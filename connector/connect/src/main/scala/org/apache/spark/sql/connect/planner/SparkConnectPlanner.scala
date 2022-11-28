@@ -278,6 +278,9 @@ class SparkConnectPlanner(session: SparkSession) {
     val (rows, structType) = ArrowConverters.fromBatchWithSchemaIterator(
       Iterator(rel.getData.toByteArray),
       TaskContext.get())
+    if (structType == null) {
+      throw InvalidPlanInput(s"Input data for LocalRelation does not produce a schema.")
+    }
     val attributes = structType.toAttributes
     val proj = UnsafeProjection.create(attributes, attributes)
     new logical.LocalRelation(attributes, rows.map(r => proj(r).copy()).toSeq)

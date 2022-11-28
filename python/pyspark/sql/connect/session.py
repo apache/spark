@@ -17,6 +17,7 @@
 
 from threading import RLock
 from typing import Optional, Any, Union, Dict, cast, overload
+import pandas as pd
 
 import pyspark.sql.types
 from pyspark.sql.connect.client import SparkConnectClient
@@ -24,6 +25,7 @@ from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.connect.plan import SQL, Range
 from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.utils import to_str
+from . import plan
 from ._typing import OptionalPrimitiveType
 
 
@@ -204,6 +206,34 @@ class SparkSession(object):
 
         # Create the reader
         self.read = DataFrameReader(self)
+
+    def createDataFrame(self, data: "pd.DataFrame") -> "DataFrame":
+        """
+        Creates a :class:`DataFrame` from a :class:`pandas.DataFrame`.
+
+        .. versionadded:: 3.4.0
+
+
+        Parameters
+        ----------
+        data : :class:`pandas.DataFrame`
+
+        Returns
+        -------
+        :class:`DataFrame`
+
+        Examples
+        --------
+        >>> import pandas
+        >>> pdf = pandas.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]})
+        >>> self.connect.createDataFrame(pdf).collect()
+        [Row(a=1, b='a'), Row(a=2, b='b'), Row(a=3, b='c')]
+
+        """
+        assert data is not None
+        if len(data) == 0:
+            raise ValueError("Input data cannot be empty")
+        return DataFrame.withPlan(plan.LocalRelation(data), self)
 
     @property
     def client(self) -> "SparkConnectClient":
