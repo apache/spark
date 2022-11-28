@@ -70,7 +70,8 @@ case class StreamingRelation(dataSource: DataSource, sourceName: String, output:
         // filter out the metadata struct column if it has the name conflicting with output columns.
         // if the file has a column "_metadata",
         // then the data column should be returned not the metadata struct column
-        Seq(FileFormat.createFileMetadataCol).filterNot(isOutputColumn)
+        Seq(FileFormat.createFileMetadataCol(
+          dataSource.providingInstance().asInstanceOf[FileFormat])).filterNot(isOutputColumn)
       case _ => Nil
     }
   }

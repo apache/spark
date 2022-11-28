@@ -21,9 +21,10 @@ import io.fabric8.volcano.client.DefaultVolcanoClient
 import io.fabric8.volcano.scheduling.v1beta1.{PodGroup, PodGroupSpec}
 
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverConf, KubernetesExecutorConf, SparkPod}
+import org.apache.spark.internal.Logging
 
 private[spark] class VolcanoFeatureStep extends KubernetesDriverCustomFeatureConfigStep
-  with KubernetesExecutorCustomFeatureConfigStep {
+  with KubernetesExecutorCustomFeatureConfigStep with Logging {
   import VolcanoFeatureStep._
 
   private var kubernetesConf: KubernetesConf = _
@@ -40,6 +41,11 @@ private[spark] class VolcanoFeatureStep extends KubernetesDriverCustomFeatureCon
   }
 
   override def getAdditionalPreKubernetesResources(): Seq[HasMetadata] = {
+    if (kubernetesConf.isInstanceOf[KubernetesExecutorConf]) {
+      logWarning("VolcanoFeatureStep#getAdditionalPreKubernetesResources() is not supported " +
+        "for executor.")
+      return Seq.empty
+    }
     val client = new DefaultVolcanoClient
     val template = kubernetesConf.getOption(POD_GROUP_TEMPLATE_FILE_KEY)
     val pg = template.map(client.podGroups.load(_).get).getOrElse(new PodGroup())

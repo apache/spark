@@ -235,13 +235,21 @@ class TypesTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame([["a", "b"]], ["col1"])
         self.assertEqual(df.columns, ["col1", "_2"])
 
-    def test_infer_schema_fails(self):
-        with self.assertRaisesRegex(TypeError, "field a"):
-            self.spark.createDataFrame(
-                self.spark.sparkContext.parallelize([[1, 1], ["x", 1]]),
-                schema=["a", "b"],
-                samplingRatio=0.99,
-            )
+    def test_infer_schema_upcast_int_to_string(self):
+        df = self.spark.createDataFrame(
+            self.spark.sparkContext.parallelize([[1, 1], ["x", 1]]),
+            schema=["a", "b"],
+            samplingRatio=0.99,
+        )
+        self.assertEqual([Row(a="1", b=1), Row(a="x", b=1)], df.collect())
+
+    def test_infer_schema_upcast_float_to_string(self):
+        df = self.spark.createDataFrame([[1.33, 1], ["2.1", 1]], schema=["a", "b"])
+        self.assertEqual([Row(a="1.33", b=1), Row(a="2.1", b=1)], df.collect())
+
+    def test_infer_schema_upcast_boolean_to_string(self):
+        df = self.spark.createDataFrame([[True, 1], ["false", 1]], schema=["a", "b"])
+        self.assertEqual([Row(a="true", b=1), Row(a="false", b=1)], df.collect())
 
     def test_infer_nested_schema(self):
         NestedRow = Row("f1", "f2")
@@ -316,8 +324,10 @@ class TypesTests(ReusedSQLTestCase):
         self.assertRaises(ValueError, lambda: self.spark.createDataFrame(data3))
 
         # an array with conflicting types should raise an error
+        # in this case this is ArrayType(StringType) and ArrayType(NullType)
         data4 = [ArrayRow([1, "1"], [None])]
-        self.assertRaises(TypeError, lambda: self.spark.createDataFrame(data4))
+        with self.assertRaisesRegex(ValueError, "types cannot be determined after inferring"):
+            self.spark.createDataFrame(data4)
 
     def test_infer_array_element_type_empty(self):
         # SPARK-39168: Test inferring array element type from all rows
@@ -802,12 +812,12 @@ class TypesTests(ReusedSQLTestCase):
         self.assertEqual(100000000000000, df1.first().f2)
 
         self.assertEqual(_infer_type(1), LongType())
-        self.assertEqual(_infer_type(2 ** 10), LongType())
-        self.assertEqual(_infer_type(2 ** 20), LongType())
-        self.assertEqual(_infer_type(2 ** 31 - 1), LongType())
-        self.assertEqual(_infer_type(2 ** 31), LongType())
-        self.assertEqual(_infer_type(2 ** 61), LongType())
-        self.assertEqual(_infer_type(2 ** 71), LongType())
+        self.assertEqual(_infer_type(2**10), LongType())
+        self.assertEqual(_infer_type(2**20), LongType())
+        self.assertEqual(_infer_type(2**31 - 1), LongType())
+        self.assertEqual(_infer_type(2**31), LongType())
+        self.assertEqual(_infer_type(2**61), LongType())
+        self.assertEqual(_infer_type(2**71), LongType())
 
     def test_infer_binary_type(self):
         binaryrow = [Row(f1="a", f2=b"abcd")]
@@ -840,8 +850,12 @@ class TypesTests(ReusedSQLTestCase):
             _merge_type(MapType(StringType(), LongType()), MapType(StringType(), LongType())),
             MapType(StringType(), LongType()),
         )
-        with self.assertRaisesRegex(TypeError, "key of map"):
-            _merge_type(MapType(StringType(), LongType()), MapType(DoubleType(), LongType()))
+
+        self.assertEqual(
+            _merge_type(MapType(StringType(), LongType()), MapType(DoubleType(), LongType())),
+            MapType(StringType(), LongType()),
+        )
+
         with self.assertRaisesRegex(TypeError, "value of map"):
             _merge_type(MapType(StringType(), LongType()), MapType(StringType(), DoubleType()))
 
@@ -865,11 +879,13 @@ class TypesTests(ReusedSQLTestCase):
             ),
             StructType([StructField("f1", StructType([StructField("f2", LongType())]))]),
         )
-        with self.assertRaisesRegex(TypeError, "field f2 in field f1"):
+        self.assertEqual(
             _merge_type(
                 StructType([StructField("f1", StructType([StructField("f2", LongType())]))]),
                 StructType([StructField("f1", StructType([StructField("f2", StringType())]))]),
-            )
+            ),
+            StructType([StructField("f1", StructType([StructField("f2", StringType())]))]),
+        )
 
         self.assertEqual(
             _merge_type(
@@ -937,11 +953,13 @@ class TypesTests(ReusedSQLTestCase):
             ),
             StructType([StructField("f1", ArrayType(MapType(StringType(), LongType())))]),
         )
-        with self.assertRaisesRegex(TypeError, "key of map element in array field f1"):
+        self.assertEqual(
             _merge_type(
                 StructType([StructField("f1", ArrayType(MapType(StringType(), LongType())))]),
                 StructType([StructField("f1", ArrayType(MapType(DoubleType(), LongType())))]),
-            )
+            ),
+            StructType([StructField("f1", ArrayType(MapType(StringType(), LongType())))]),
+        )
 
     # test for SPARK-16542
     def test_array_types(self):
@@ -1256,17 +1274,17 @@ class DataTypeVerificationTests(unittest.TestCase):
             # Boolean
             (True, BooleanType()),
             # Byte
-            (-(2 ** 7), ByteType()),
-            (2 ** 7 - 1, ByteType()),
+            (-(2**7), ByteType()),
+            (2**7 - 1, ByteType()),
             # Short
-            (-(2 ** 15), ShortType()),
-            (2 ** 15 - 1, ShortType()),
+            (-(2**15), ShortType()),
+            (2**15 - 1, ShortType()),
             # Integer
-            (-(2 ** 31), IntegerType()),
-            (2 ** 31 - 1, IntegerType()),
+            (-(2**31), IntegerType()),
+            (2**31 - 1, IntegerType()),
             # Long
-            (-(2 ** 63), LongType()),
-            (2 ** 63 - 1, LongType()),
+            (-(2**63), LongType()),
+            (2**63 - 1, LongType()),
             # Float & Double
             (1.0, FloatType()),
             (1.0, DoubleType()),
@@ -1318,16 +1336,16 @@ class DataTypeVerificationTests(unittest.TestCase):
             ("True", BooleanType(), TypeError),
             ([1], BooleanType(), TypeError),
             # Byte
-            (-(2 ** 7) - 1, ByteType(), ValueError),
-            (2 ** 7, ByteType(), ValueError),
+            (-(2**7) - 1, ByteType(), ValueError),
+            (2**7, ByteType(), ValueError),
             ("1", ByteType(), TypeError),
             (1.0, ByteType(), TypeError),
             # Short
-            (-(2 ** 15) - 1, ShortType(), ValueError),
-            (2 ** 15, ShortType(), ValueError),
+            (-(2**15) - 1, ShortType(), ValueError),
+            (2**15, ShortType(), ValueError),
             # Integer
-            (-(2 ** 31) - 1, IntegerType(), ValueError),
-            (2 ** 31, IntegerType(), ValueError),
+            (-(2**31) - 1, IntegerType(), ValueError),
+            (2**31, IntegerType(), ValueError),
             # Float & Double
             (1, FloatType(), TypeError),
             (1, DoubleType(), TypeError),

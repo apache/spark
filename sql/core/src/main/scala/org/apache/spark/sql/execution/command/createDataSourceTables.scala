@@ -20,7 +20,9 @@ package org.apache.spark.sql.execution.command
 import java.net.URI
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -141,7 +143,21 @@ case class CreateDataSourceTableAsSelectCommand(
     mode: SaveMode,
     query: LogicalPlan,
     outputColumnNames: Seq[String])
-  extends DataWritingCommand {
+  extends V1WriteCommand {
+
+  override lazy val partitionColumns: Seq[Attribute] = {
+    val unresolvedPartitionColumns = table.partitionColumnNames.map(UnresolvedAttribute.quoted)
+    DataSource.resolvePartitionColumns(
+      unresolvedPartitionColumns,
+      outputColumns,
+      query,
+      SparkSession.active.sessionState.conf.resolver)
+  }
+
+  override def requiredOrdering: Seq[SortOrder] = {
+    val options = table.storage.properties
+    V1WritesUtils.getSortOrder(outputColumns, partitionColumns, table.bucketSpec, options)
+  }
 
   override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
     assert(table.tableType != CatalogTableType.VIEW)
@@ -157,8 +173,7 @@ case class CreateDataSourceTableAsSelectCommand(
         s"Expect the table $tableName has been dropped when the save mode is Overwrite")
 
       if (mode == SaveMode.ErrorIfExists) {
-        throw QueryCompilationErrors.tableAlreadyExistsError(
-          tableName, " You need to drop it first.")
+        throw QueryCompilationErrors.tableAlreadyExistsError(tableName)
       }
       if (mode == SaveMode.Ignore) {
         // Since the table already exists and the save mode is Ignore, we will just return.

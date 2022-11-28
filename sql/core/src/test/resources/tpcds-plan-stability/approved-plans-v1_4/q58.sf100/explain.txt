@@ -71,6 +71,7 @@ Output [1]: [d_date_sk#5]
 (5) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_sold_date_sk#3]
 Right keys [1]: [d_date_sk#5]
+Join type: Inner
 Join condition: None
 
 (6) Project [codegen id : 4]
@@ -98,6 +99,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)
 (11) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_item_sk#1]
 Right keys [1]: [i_item_sk#6]
+Join type: Inner
 Join condition: None
 
 (12) Project [codegen id : 4]
@@ -147,6 +149,7 @@ Output [1]: [d_date_sk#16]
 (21) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [cs_sold_date_sk#15]
 Right keys [1]: [d_date_sk#16]
+Join type: Inner
 Join condition: None
 
 (22) Project [codegen id : 8]
@@ -159,6 +162,7 @@ Output [2]: [i_item_sk#17, i_item_id#18]
 (24) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [cs_item_sk#13]
 Right keys [1]: [i_item_sk#17]
+Join type: Inner
 Join condition: None
 
 (25) Project [codegen id : 8]
@@ -194,6 +198,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [pla
 (31) BroadcastHashJoin [codegen id : 15]
 Left keys [1]: [item_id#11]
 Right keys [1]: [item_id#22]
+Join type: Inner
 Join condition: ((((cast(ss_item_rev#12 as decimal(19,3)) >= (0.9 * cs_item_rev#23)) AND (cast(ss_item_rev#12 as decimal(20,3)) <= (1.1 * cs_item_rev#23))) AND (cast(cs_item_rev#23 as decimal(19,3)) >= (0.9 * ss_item_rev#12))) AND (cast(cs_item_rev#23 as decimal(20,3)) <= (1.1 * ss_item_rev#12)))
 
 (32) Project [codegen id : 15]
@@ -221,6 +226,7 @@ Output [1]: [d_date_sk#27]
 (37) BroadcastHashJoin [codegen id : 13]
 Left keys [1]: [ws_sold_date_sk#26]
 Right keys [1]: [d_date_sk#27]
+Join type: Inner
 Join condition: None
 
 (38) Project [codegen id : 13]
@@ -233,6 +239,7 @@ Output [2]: [i_item_sk#28, i_item_id#29]
 (40) BroadcastHashJoin [codegen id : 13]
 Left keys [1]: [ws_item_sk#24]
 Right keys [1]: [i_item_sk#28]
+Join type: Inner
 Join condition: None
 
 (41) Project [codegen id : 13]
@@ -268,6 +275,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [pla
 (47) BroadcastHashJoin [codegen id : 15]
 Left keys [1]: [item_id#11]
 Right keys [1]: [item_id#33]
+Join type: Inner
 Join condition: ((((((((cast(ss_item_rev#12 as decimal(19,3)) >= (0.9 * ws_item_rev#34)) AND (cast(ss_item_rev#12 as decimal(20,3)) <= (1.1 * ws_item_rev#34))) AND (cast(cs_item_rev#23 as decimal(19,3)) >= (0.9 * ws_item_rev#34))) AND (cast(cs_item_rev#23 as decimal(20,3)) <= (1.1 * ws_item_rev#34))) AND (cast(ws_item_rev#34 as decimal(19,3)) >= (0.9 * ss_item_rev#12))) AND (cast(ws_item_rev#34 as decimal(20,3)) <= (1.1 * ss_item_rev#12))) AND (cast(ws_item_rev#34 as decimal(19,3)) >= (0.9 * cs_item_rev#23))) AND (cast(ws_item_rev#34 as decimal(20,3)) <= (1.1 * cs_item_rev#23)))
 
 (48) Project [codegen id : 15]
@@ -333,6 +341,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, date, true]),false), [plan_
 (58) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [d_date#39]
 Right keys [1]: [d_date#40]
+Join type: LeftSemi
 Join condition: None
 
 (59) Project [codegen id : 2]

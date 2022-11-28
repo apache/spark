@@ -181,8 +181,8 @@ public final class VariableLengthRowBasedKeyValueBatch extends RowBasedKeyValueB
     };
   }
 
-  protected VariableLengthRowBasedKeyValueBatch(StructType keySchema, StructType valueSchema,
-                                              int maxRows, TaskMemoryManager manager) {
+  VariableLengthRowBasedKeyValueBatch(StructType keySchema, StructType valueSchema,
+      int maxRows, TaskMemoryManager manager) {
     super(keySchema, valueSchema, maxRows, manager);
     this.keyOffsets = new long[maxRows];
   }

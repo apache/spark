@@ -26,8 +26,8 @@ import warnings
 from distutils.version import LooseVersion
 from typing import Any
 
-from pyspark.pandas.missing.general_functions import _MissingPandasLikeGeneralFunctions
-from pyspark.pandas.missing.scalars import _MissingPandasLikeScalars
+from pyspark.pandas.missing.general_functions import MissingPandasLikeGeneralFunctions
+from pyspark.pandas.missing.scalars import MissingPandasLikeScalars
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 
 try:
@@ -159,9 +159,9 @@ from pyspark.pandas.sql_formatter import sql
 def __getattr__(key: str) -> Any:
     if key.startswith("__"):
         raise AttributeError(key)
-    if hasattr(_MissingPandasLikeScalars, key):
-        raise getattr(_MissingPandasLikeScalars, key)
-    if hasattr(_MissingPandasLikeGeneralFunctions, key):
-        return getattr(_MissingPandasLikeGeneralFunctions, key)
+    if hasattr(MissingPandasLikeScalars, key):
+        raise getattr(MissingPandasLikeScalars, key)
+    if hasattr(MissingPandasLikeGeneralFunctions, key):
+        return getattr(MissingPandasLikeGeneralFunctions, key)
     else:
         raise AttributeError("module 'pyspark.pandas' has no attribute '%s'" % (key))

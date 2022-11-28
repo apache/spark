@@ -119,6 +119,24 @@ class UnivocityParser(
     new NoopFilters
   }
 
+  // Flags to signal if we need to fall back to the backward compatible behavior of parsing
+  // dates and timestamps.
+  // For more information, see comments for "enableDateTimeParsingFallback" option in CSVOptions.
+  private val enableParsingFallbackForTimestampType =
+    options.enableDateTimeParsingFallback
+      .orElse(SQLConf.get.csvEnableDateTimeParsingFallback)
+      .getOrElse {
+        SQLConf.get.legacyTimeParserPolicy == SQLConf.LegacyBehaviorPolicy.LEGACY ||
+          options.timestampFormatInRead.isEmpty
+      }
+  private val enableParsingFallbackForDateType =
+    options.enableDateTimeParsingFallback
+      .orElse(SQLConf.get.csvEnableDateTimeParsingFallback)
+      .getOrElse {
+        SQLConf.get.legacyTimeParserPolicy == SQLConf.LegacyBehaviorPolicy.LEGACY ||
+          options.dateFormatOption.isEmpty
+      }
+
   // Retrieve the raw record string.
   private def getCurrentInput: UTF8String = {
     val currentContent = tokenizer.getContext.currentParsedContent()
@@ -197,24 +215,6 @@ class UnivocityParser(
         Decimal(decimalParser(datum), dt.precision, dt.scale)
       }
 
-    case _: TimestampType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options) { datum =>
-        try {
-          timestampFormatter.parse(datum)
-        } catch {
-          case NonFatal(e) =>
-            // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
-            // compatibility.
-            val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
-            DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse(throw e)
-        }
-      }
-
-    case _: TimestampNTZType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options) { datum =>
-        timestampNTZFormatter.parseWithoutTimeZone(datum, false)
-      }
-
     case _: DateType => (d: String) =>
       nullSafeDatum(d, name, nullable, options) { datum =>
         try {
@@ -222,10 +222,34 @@ class UnivocityParser(
         } catch {
           case NonFatal(e) =>
             // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
-            // compatibility.
+            // compatibility if enabled.
+            if (!enableParsingFallbackForDateType) {
+              throw e
+            }
             val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
             DateTimeUtils.stringToDate(str).getOrElse(throw e)
         }
+      }
+
+    case _: TimestampType => (d: String) =>
+      nullSafeDatum(d, name, nullable, options) { datum =>
+        try {
+          timestampFormatter.parse(datum)
+        } catch {
+          case NonFatal(e) =>
+            // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
+            // compatibility if enabled.
+            if (!enableParsingFallbackForTimestampType) {
+              throw e
+            }
+            val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
+            DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse(throw(e))
+        }
+      }
+
+    case _: TimestampNTZType => (d: String) =>
+      nullSafeDatum(d, name, nullable, options) { datum =>
+        timestampNTZFormatter.parseWithoutTimeZone(datum, false)
       }
 
     case _: StringType => (d: String) =>

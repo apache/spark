@@ -116,6 +116,7 @@ trait EvalPythonExec extends UnaryExecNode {
         }.toArray
       }.toArray
       val projection = MutableProjection.create(allInputs.toSeq, child.output)
+      projection.initialize(context.partitionId())
       val schema = StructType(dataTypes.zipWithIndex.map { case (dt, i) =>
         StructField(s"_$i", dt)
       }.toSeq)

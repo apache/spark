@@ -120,4 +120,10 @@ public interface MergedShuffleFileManager {
    * @param appId application ID
    */
   String[] getMergedBlockDirs(String appId);
+
+  /**
+   * Optionally close any resources associated the MergedShuffleFileManager, such as the
+   * leveldb for state persistence.
+   */
+  default void close() {}
 }

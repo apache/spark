@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.connector.expressions;
 
-import java.io.Serializable;
 import java.util.Arrays;
 import java.util.Objects;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.filter.Predicate;
-import org.apache.spark.sql.internal.connector.ToStringSQLBuilder;
+import org.apache.spark.sql.internal.connector.ExpressionWithToString;
 
 /**
  * The general representation of SQL scalar expressions, which contains the upper-cased
@@ -340,6 +339,24 @@ import org.apache.spark.sql.internal.connector.ToStringSQLBuilder;
  *    <li>Since version: 3.4.0</li>
  *   </ul>
  *  </li>
+ *  <li>Name: <code>BIT_LENGTH</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>BIT_LENGTH(src)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>CHAR_LENGTH</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>CHAR_LENGTH(src)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>CONCAT</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>CONCAT(col1, col2, ..., colN)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
  *  <li>Name: <code>OVERLAY</code>
  *   <ul>
  *    <li>SQL semantic: <code>OVERLAY(string, replace, position[, length])</code></li>
@@ -364,6 +381,42 @@ import org.apache.spark.sql.internal.connector.ToStringSQLBuilder;
  *    <li>Since version: 3.4.0</li>
  *   </ul>
  *  </li>
+ *  <li>Name: <code>AES_ENCRYPT</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>AES_ENCRYPT(expr, key[, mode[, padding]])</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>AES_DECRYPT</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>AES_DECRYPT(expr, key[, mode[, padding]])</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>SHA1</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>SHA1(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>SHA2</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>SHA2(expr, bitLength)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>MD5</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>MD5(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>CRC32</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>CRC32(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
  * </ol>
  * Note: SQL semantic conforms ANSI standard, so some expressions are not supported when ANSI off,
  * including: add, subtract, multiply, divide, remainder, pmod.
@@ -371,7 +424,7 @@ import org.apache.spark.sql.internal.connector.ToStringSQLBuilder;
  * @since 3.3.0
  */
 @Evolving
-public class GeneralScalarExpression implements Expression, Serializable {
+public class GeneralScalarExpression extends ExpressionWithToString {
   private String name;
   private Expression[] children;
 
@@ -395,11 +448,5 @@ public class GeneralScalarExpression implements Expression, Serializable {
   @Override
   public int hashCode() {
     return Objects.hash(name, children);
-  }
-
-  @Override
-  public String toString() {
-    ToStringSQLBuilder builder = new ToStringSQLBuilder();
-    return builder.build(this);
   }
 }

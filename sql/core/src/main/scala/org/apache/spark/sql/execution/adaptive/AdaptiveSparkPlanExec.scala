@@ -118,6 +118,7 @@ case class AdaptiveSparkPlanExec(
     Seq(
       RemoveRedundantProjects,
       ensureRequirements,
+      AdjustShuffleExchangePosition,
       ValidateSparkPlan,
       ReplaceHashWithSortAgg,
       RemoveRedundantSorts,
@@ -187,7 +188,7 @@ case class AdaptiveSparkPlanExec(
 
   @volatile private var currentPhysicalPlan = initialPlan
 
-  private var isFinalPlan = false
+  @volatile private var _isFinalPlan = false
 
   private var currentStageId = 0
 
@@ -203,6 +204,8 @@ case class AdaptiveSparkPlanExec(
     newStages: Seq[QueryStageExec])
 
   def executedPlan: SparkPlan = currentPhysicalPlan
+
+  def isFinalPlan: Boolean = _isFinalPlan
 
   override def conf: SQLConf = context.session.sessionState.conf
 
@@ -264,6 +267,8 @@ case class AdaptiveSparkPlanExec(
                 } else {
                   events.offer(StageFailure(stage, res.failed.get))
                 }
+                // explicitly clean up the resources in this stage
+                stage.cleanupResources()
               }(AdaptiveSparkPlanExec.executionContext)
             } catch {
               case e: Throwable =>
@@ -326,7 +331,7 @@ case class AdaptiveSparkPlanExec(
         optimizeQueryStage(result.newPlan, isFinalStage = true),
         postStageCreationRules(supportsColumnar),
         Some((planChangeLogger, "AQE Post Stage Creation")))
-      isFinalPlan = true
+      _isFinalPlan = true
       executionId.foreach(onUpdatePlan(_, Seq(currentPhysicalPlan)))
       currentPhysicalPlan
     }

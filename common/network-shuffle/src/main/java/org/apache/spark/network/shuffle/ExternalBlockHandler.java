@@ -80,7 +80,7 @@ public class ExternalBlockHandler extends RpcHandler
     throws IOException {
     this(new OneForOneStreamManager(),
       new ExternalShuffleBlockResolver(conf, registeredExecutorFile),
-      new NoOpMergedShuffleFileManager(conf));
+      new NoOpMergedShuffleFileManager(conf, null));
   }
 
   public ExternalBlockHandler(
@@ -101,7 +101,7 @@ public class ExternalBlockHandler extends RpcHandler
   public ExternalBlockHandler(
       OneForOneStreamManager streamManager,
       ExternalShuffleBlockResolver blockManager) {
-    this(streamManager, blockManager, new NoOpMergedShuffleFileManager(null));
+    this(streamManager, blockManager, new NoOpMergedShuffleFileManager(null, null));
   }
 
   /** Enables mocking out the StreamManager, BlockManager, and MergeManager. */
@@ -295,6 +295,7 @@ public class ExternalBlockHandler extends RpcHandler
 
   public void close() {
     blockManager.close();
+    mergeManager.close();
   }
 
   private void checkAuth(TransportClient client, String appId) {

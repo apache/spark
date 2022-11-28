@@ -76,7 +76,7 @@ public enum TableCapability {
    * Signals that the table can replace existing data that matches a filter with appended data in
    * a write operation.
    * <p>
-   * See {@link org.apache.spark.sql.connector.write.SupportsOverwrite}.
+   * See {@link org.apache.spark.sql.connector.write.SupportsOverwriteV2}.
    */
   OVERWRITE_BY_FILTER,
 

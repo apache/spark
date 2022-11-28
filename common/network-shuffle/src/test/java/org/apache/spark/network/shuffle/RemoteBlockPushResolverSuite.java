@@ -32,6 +32,7 @@ import java.util.Map;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadLocalRandom;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableMap;
 
 import org.apache.commons.io.FileUtils;
@@ -88,7 +89,7 @@ public class RemoteBlockPushResolverSuite {
     MapConfigProvider provider = new MapConfigProvider(
       ImmutableMap.of("spark.shuffle.push.server.minChunkSizeInMergedShuffleFile", "4"));
     conf = new TransportConf("shuffle", provider);
-    pushResolver = new RemoteBlockPushResolver(conf);
+    pushResolver = new RemoteBlockPushResolver(conf, null);
     registerExecutor(TEST_APP, prepareLocalDirs(localDirs, MERGE_DIRECTORY), MERGE_DIRECTORY_META);
   }
 
@@ -488,7 +489,7 @@ public class RemoteBlockPushResolverSuite {
   public void testCleanUpDirectory() throws IOException, InterruptedException {
     String testApp = "cleanUpDirectory";
     Semaphore deleted = new Semaphore(0);
-    pushResolver = new RemoteBlockPushResolver(conf) {
+    pushResolver = new RemoteBlockPushResolver(conf, null) {
       @Override
       void deleteExecutorDirs(AppShuffleInfo appShuffleInfo) {
         super.deleteExecutorDirs(appShuffleInfo);
@@ -886,12 +887,12 @@ public class RemoteBlockPushResolverSuite {
   public void testPushBlockFromPreviousAttemptIsRejected()
       throws IOException, InterruptedException {
     Semaphore closed = new Semaphore(0);
-    pushResolver = new RemoteBlockPushResolver(conf) {
+    pushResolver = new RemoteBlockPushResolver(conf, null) {
       @Override
-      void closeAndDeletePartitionFilesIfNeeded(
-        AppShuffleInfo appShuffleInfo,
-        boolean cleanupLocalDirs) {
-        super.closeAndDeletePartitionFilesIfNeeded(appShuffleInfo, cleanupLocalDirs);
+      void closeAndDeletePartitionsIfNeeded(
+          AppShuffleInfo appShuffleInfo,
+          boolean cleanupLocalDirs) {
+        super.closeAndDeletePartitionsIfNeeded(appShuffleInfo, cleanupLocalDirs);
         closed.release();
       }
     };
@@ -983,12 +984,12 @@ public class RemoteBlockPushResolverSuite {
   public void testOngoingMergeOfBlockFromPreviousAttemptIsAborted()
       throws IOException, InterruptedException {
     Semaphore closed = new Semaphore(0);
-    pushResolver = new RemoteBlockPushResolver(conf) {
+    pushResolver = new RemoteBlockPushResolver(conf, null) {
       @Override
-      void closeAndDeletePartitionFilesIfNeeded(
+      void closeAndDeletePartitionsIfNeeded(
           AppShuffleInfo appShuffleInfo,
           boolean cleanupLocalDirs) {
-        super.closeAndDeletePartitionFilesIfNeeded(appShuffleInfo, cleanupLocalDirs);
+        super.closeAndDeletePartitionsIfNeeded(appShuffleInfo, cleanupLocalDirs);
         closed.release();
       }
     };
@@ -1145,10 +1146,12 @@ public class RemoteBlockPushResolverSuite {
   @Test
   public void testCleanupOlderShuffleMergeId() throws IOException, InterruptedException {
     Semaphore closed = new Semaphore(0);
-    pushResolver = new RemoteBlockPushResolver(conf) {
+    pushResolver = new RemoteBlockPushResolver(conf, null) {
       @Override
-      void closeAndDeletePartitionFiles(Map<Integer, AppShufflePartitionInfo> partitions) {
-        super.closeAndDeletePartitionFiles(partitions);
+      void closeAndDeleteOutdatedPartitions(
+          AppAttemptShuffleMergeId appAttemptShuffleMergeId,
+          Map<Integer, AppShufflePartitionInfo> partitions) {
+        super.closeAndDeleteOutdatedPartitions(appAttemptShuffleMergeId, partitions);
         closed.release();
       }
     };
@@ -1273,23 +1276,66 @@ public class RemoteBlockPushResolverSuite {
     removeApplication(TEST_APP);
   }
 
+
+  @Test
+  public void testJsonSerializationOfPushShufflePartitionInfo() throws IOException {
+    ObjectMapper mapper = new ObjectMapper();
+    RemoteBlockPushResolver.AppAttemptId appAttemptId =
+      new RemoteBlockPushResolver.AppAttemptId("foo", 1);
+    String appAttemptIdJson = mapper.writeValueAsString(appAttemptId);
+    RemoteBlockPushResolver.AppAttemptId parsedAppAttemptId =
+      mapper.readValue(appAttemptIdJson, RemoteBlockPushResolver.AppAttemptId.class);
+    assertEquals(appAttemptId, parsedAppAttemptId);
+
+    RemoteBlockPushResolver.AppPathsInfo pathInfo =
+      new RemoteBlockPushResolver.AppPathsInfo(new String[]{"/foo", "/bar"}, 64);
+    String pathInfoJson = mapper.writeValueAsString(pathInfo);
+    RemoteBlockPushResolver.AppPathsInfo
+      parsedPathInfo = mapper.readValue(pathInfoJson, RemoteBlockPushResolver.AppPathsInfo.class);
+    assertEquals(pathInfo, parsedPathInfo);
+
+    RemoteBlockPushResolver.AppAttemptShuffleMergeId partitionId =
+      new RemoteBlockPushResolver.AppAttemptShuffleMergeId("foo", 1, 1, 1);
+    String partitionIdJson = mapper.writeValueAsString(partitionId);
+    RemoteBlockPushResolver.AppAttemptShuffleMergeId parsedPartitionId =
+      mapper.readValue(partitionIdJson, RemoteBlockPushResolver.AppAttemptShuffleMergeId.class);
+    assertEquals(partitionId, parsedPartitionId);
+
+    // Intentionally keep these hard-coded strings in here, to check backwards-compatibility.
+    // It is not legacy yet, but keeping this here in case anybody changes it
+    String legacyAppAttemptIdJson = "{\"appId\": \"foo\", \"attemptId\":\"1\"}";
+    assertEquals(appAttemptId,
+      mapper.readValue(legacyAppAttemptIdJson, RemoteBlockPushResolver.AppAttemptId.class));
+    String legacyAppPathInfoJson =
+      "{\"activeLocalDirs\": [\"/foo\", \"/bar\"], \"subDirsPerLocalDir\":\"64\"}";
+    assertEquals(pathInfo,
+      mapper.readValue(legacyAppPathInfoJson, RemoteBlockPushResolver.AppPathsInfo.class));
+    String legacyPartitionIdJson = "{\"appId\":\"foo\", \"attemptId\":\"1\", "
+      + "\"shuffleId\":\"1\", \"shuffleMergeId\":\"1\"}";
+    assertEquals(partitionId, mapper.readValue(legacyPartitionIdJson,
+      RemoteBlockPushResolver.AppAttemptShuffleMergeId.class));
+  }
+
   private void useTestFiles(boolean useTestIndexFile, boolean useTestMetaFile) throws IOException {
-    pushResolver = new RemoteBlockPushResolver(conf) {
+    pushResolver = new RemoteBlockPushResolver(conf, null) {
       @Override
       AppShufflePartitionInfo newAppShufflePartitionInfo(
-          String appId,
+          AppShuffleInfo appShuffleInfo,
           int shuffleId,
           int shuffleMergeId,
           int reduceId,
           File dataFile,
           File indexFile,
           File metaFile) throws IOException {
-        MergeShuffleFile mergedIndexFile = useTestIndexFile ? new TestMergeShuffleFile(indexFile)
-          : new MergeShuffleFile(indexFile);
-        MergeShuffleFile mergedMetaFile = useTestMetaFile ? new TestMergeShuffleFile(metaFile) :
-          new MergeShuffleFile(metaFile);
-        return new AppShufflePartitionInfo(appId, shuffleId, shuffleMergeId, reduceId, dataFile,
-          mergedIndexFile, mergedMetaFile);
+        MergeShuffleFile mergedIndexFile = useTestIndexFile ?
+          new TestMergeShuffleFile(indexFile)
+            : new MergeShuffleFile(indexFile);
+        MergeShuffleFile mergedMetaFile = useTestMetaFile ?
+          new TestMergeShuffleFile(metaFile) :
+            new MergeShuffleFile(metaFile);
+        return new AppShufflePartitionInfo(new AppAttemptShuffleMergeId(
+            appShuffleInfo.appId, appShuffleInfo.attemptId, shuffleId, shuffleMergeId), reduceId,
+            dataFile, mergedIndexFile, mergedMetaFile);
       }
     };
     registerExecutor(TEST_APP, prepareLocalDirs(localDirs, MERGE_DIRECTORY), MERGE_DIRECTORY_META);
@@ -1345,6 +1391,7 @@ public class RemoteBlockPushResolverSuite {
     assertEquals("num of bitmaps", meta.getNumChunks(), bitmaps.length);
     for (int i = 0; i < meta.getNumChunks(); i++) {
       RoaringBitmap chunkBitmap = bitmaps[i];
+      assertEquals("cardinality", expectedMapsPerChunk[i].length, chunkBitmap.getCardinality());
       Arrays.stream(expectedMapsPerChunk[i]).forEach(x -> assertTrue(chunkBitmap.contains(x)));
     }
     for (int i = 0; i < meta.getNumChunks(); i++) {
@@ -1389,7 +1436,7 @@ public class RemoteBlockPushResolverSuite {
     private FileChannel channel;
 
     private TestMergeShuffleFile(File file) throws IOException {
-      super(null, null);
+      super(file);
       this.file = file;
       FileOutputStream fos = new FileOutputStream(file);
       channel = fos.getChannel();
@@ -1397,7 +1444,7 @@ public class RemoteBlockPushResolverSuite {
     }
 
     @Override
-    DataOutputStream getDos() {
+    public DataOutputStream getDos() {
       return activeDos;
     }
 

@@ -17,9 +17,6 @@
 
 package org.apache.spark.sql.catalyst
 
-import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
-import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
-
 /**
  * An identifier that optionally specifies a database.
  *
@@ -61,29 +58,17 @@ sealed trait CatalystIdentifier {
     }
   }
 
-  override def toString: String = quotedString
-}
-
-object CatalystIdentifier {
-  private def sessionCatalogOption(database: Option[String]): Option[String] = {
-    if (!SQLConf.get.getConf(SQLConf.LEGACY_NON_IDENTIFIER_OUTPUT_CATALOG_NAME) &&
-      database.isDefined &&
-      database.get != SQLConf.get.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)) {
-      Some(SESSION_CATALOG_NAME)
+  def nameParts: Seq[String] = {
+    if (catalog.isDefined && database.isDefined) {
+      Seq(catalog.get, database.get, identifier)
+    } else if (database.isDefined) {
+      Seq(database.get, identifier)
     } else {
-      None
+      Seq(identifier)
     }
   }
 
-  def attachSessionCatalog(identifier: TableIdentifier): TableIdentifier = {
-    val catalog = identifier.catalog.orElse(sessionCatalogOption(identifier.database))
-    identifier.copy(catalog = catalog)
-  }
-
-  def attachSessionCatalog(identifier: FunctionIdentifier): FunctionIdentifier = {
-    val catalog = identifier.catalog.orElse(sessionCatalogOption(identifier.database))
-    identifier.copy(catalog = catalog)
-  }
+  override def toString: String = quotedString
 }
 
 /**
@@ -113,6 +98,7 @@ object AliasIdentifier {
  */
 case class TableIdentifier(table: String, database: Option[String], catalog: Option[String])
   extends CatalystIdentifier {
+  assert(catalog.isEmpty || database.isDefined)
 
   override val identifier: String = table
 
@@ -138,6 +124,7 @@ object TableIdentifier {
  */
 case class FunctionIdentifier(funcName: String, database: Option[String], catalog: Option[String])
   extends CatalystIdentifier {
+  assert(catalog.isEmpty || database.isDefined)
 
   override val identifier: String = funcName
 

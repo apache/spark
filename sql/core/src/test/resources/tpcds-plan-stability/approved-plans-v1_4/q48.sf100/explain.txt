@@ -65,6 +65,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)
 (8) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ss_store_sk#3]
 Right keys [1]: [s_store_sk#9]
+Join type: Inner
 Join condition: None
 
 (9) Project [codegen id : 5]
@@ -92,6 +93,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)
 (14) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ss_cdemo_sk#1]
 Right keys [1]: [cd_demo_sk#10]
+Join type: Inner
 Join condition: ((((((cd_marital_status#11 = M) AND (cd_education_status#12 = 4 yr Degree         )) AND (ss_sales_price#5 >= 100.00)) AND (ss_sales_price#5 <= 150.00)) OR ((((cd_marital_status#11 = D) AND (cd_education_status#12 = 2 yr Degree         )) AND (ss_sales_price#5 >= 50.00)) AND (ss_sales_price#5 <= 100.00))) OR ((((cd_marital_status#11 = S) AND (cd_education_status#12 = College             )) AND (ss_sales_price#5 >= 150.00)) AND (ss_sales_price#5 <= 200.00)))
 
 (15) Project [codegen id : 5]
@@ -123,6 +125,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (21) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ss_addr_sk#2]
 Right keys [1]: [ca_address_sk#13]
+Join type: Inner
 Join condition: ((((ca_state#14 IN (CO,OH,TX) AND (ss_net_profit#6 >= 0.00)) AND (ss_net_profit#6 <= 2000.00)) OR ((ca_state#14 IN (OR,MN,KY) AND (ss_net_profit#6 >= 150.00)) AND (ss_net_profit#6 <= 3000.00))) OR ((ca_state#14 IN (VA,CA,MS) AND (ss_net_profit#6 >= 50.00)) AND (ss_net_profit#6 <= 25000.00)))
 
 (22) Project [codegen id : 5]
@@ -135,6 +138,7 @@ Output [1]: [d_date_sk#16]
 (24) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ss_sold_date_sk#7]
 Right keys [1]: [d_date_sk#16]
+Join type: Inner
 Join condition: None
 
 (25) Project [codegen id : 5]

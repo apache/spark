@@ -21,9 +21,11 @@ Window
 ======
 .. currentmodule:: pyspark.pandas.window
 
-Rolling objects are returned by ``.rolling`` calls: :func:`pandas_on_spark.DataFrame.rolling`, :func:`pandas_on_spark.Series.rolling`, etc.
-Expanding objects are returned by ``.expanding`` calls: :func:`pandas_on_spark.DataFrame.expanding`, :func:`pandas_on_spark.Series.expanding`, etc.
-ExponentialMoving objects are returned by ``.ewm`` calls: :func:`pandas_on_spark.DataFrame.ewm`, :func:`pandas_on_spark.Series.ewm`, etc.
+Rolling objects are returned by ``.rolling`` calls: :func:`pyspark.pandas.DataFrame.rolling`, :func:`pyspark.pandas.Series.rolling`, etc.
+
+Expanding objects are returned by ``.expanding`` calls: :func:`pyspark.pandas.DataFrame.expanding`, :func:`pyspark.pandas.Series.expanding`, etc.
+
+ExponentialMoving objects are returned by ``.ewm`` calls: :func:`pyspark.pandas.DataFrame.ewm`, :func:`pyspark.pandas.Series.ewm`, etc.
 
 Standard moving window functions
 --------------------------------
@@ -36,6 +38,7 @@ Standard moving window functions
    Rolling.min
    Rolling.max
    Rolling.mean
+   Rolling.quantile
 
 Standard expanding window functions
 -----------------------------------
@@ -48,6 +51,7 @@ Standard expanding window functions
    Expanding.min
    Expanding.max
    Expanding.mean
+   Expanding.quantile
 
 Exponential moving window functions
 -----------------------------------

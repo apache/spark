@@ -109,6 +109,12 @@ Data source options of CSV can be set via:
     <td>read</td>
   </tr>
   <tr>
+    <td><code>prefersDate</code></td>
+    <td>true</td>
+    <td>During schema inference (<code>inferSchema</code>), attempts to infer string columns that contain dates as <code>Date</code> if the values satisfy the <code>dateFormat</code> option or default date format. For columns that contain a mixture of dates and timestamps, try inferring them as <code>TimestampType</code> if timestamp format not specified, otherwise infer them as <code>StringType</code>.</td>
+    <td>read</td>
+  </tr>
+  <tr>
     <td><code>enforceSchema</code></td>
     <td>true</td>
     <td>If it is set to <code>true</code>, the specified or inferred schema will be forcibly applied to datasource files, and headers in CSV files will be ignored. If the option is set to <code>false</code>, the schema will be validated against all headers in CSV files in the case when the <code>header</code> option is set to <code>true</code>. Field names in the schema and column names in CSV headers are checked by their positions taking into account <code>spark.sql.caseSensitive</code>. Though the default value is true, it is recommended to disable the <code>enforceSchema</code> option to avoid incorrect results. CSV built-in functions ignore this option.</td>
@@ -167,6 +173,12 @@ Data source options of CSV can be set via:
     <td>yyyy-MM-dd'T'HH:mm:ss[.SSS]</td>
     <td>Sets the string that indicates a timestamp without timezone format. Custom date formats follow the formats at <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>. This applies to timestamp without timezone type, note that zone-offset and time-zone components are not supported when writing or reading this data type.</td>
     <td>read/write</td>
+  </tr>
+  <tr>
+    <td><code>enableDateTimeParsingFallback</code></td>
+    <td>Enabled if the time parser policy has legacy settings or if no custom date or timestamp pattern was provided.</td>
+    <td>Allows falling back to the backward compatible (Spark 1.x and 2.0) behavior of parsing dates and timestamps if values do not match the set patterns.</td>
+    <td>read</td>
   </tr>
   <tr>
     <td><code>maxColumns</code></td>

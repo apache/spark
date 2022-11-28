@@ -40,6 +40,7 @@ Output [1]: [d_date_sk#5]
 (4) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [ss_sold_date_sk#3]
 Right keys [1]: [d_date_sk#5]
+Join type: Inner
 Join condition: None
 
 (5) Project [codegen id : 2]
@@ -84,6 +85,7 @@ Output [1]: [d_date_sk#11]
 (13) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [cs_sold_date_sk#10]
 Right keys [1]: [d_date_sk#11]
+Join type: Inner
 Join condition: None
 
 (14) Project [codegen id : 5]
@@ -115,6 +117,7 @@ Arguments: [customer_sk#12 ASC NULLS FIRST, item_sk#13 ASC NULLS FIRST], false, 
 (19) SortMergeJoin [codegen id : 7]
 Left keys [2]: [customer_sk#6, item_sk#7]
 Right keys [2]: [customer_sk#12, item_sk#13]
+Join type: FullOuter
 Join condition: None
 
 (20) Project [codegen id : 7]

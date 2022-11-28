@@ -27,6 +27,95 @@ class TaskContext:
     Contextual information about a task which can be read or mutated during
     execution. To access the TaskContext for a running task, use:
     :meth:`TaskContext.get`.
+
+    .. versionadded:: 2.2.0
+
+    Examples
+    --------
+    >>> from pyspark import TaskContext
+
+    Get a task context instance from :class:`RDD`.
+
+    >>> spark.sparkContext.setLocalProperty("key1", "value")
+    >>> taskcontext = spark.sparkContext.parallelize([1]).map(lambda _: TaskContext.get()).first()
+    >>> isinstance(taskcontext.attemptNumber(), int)
+    True
+    >>> isinstance(taskcontext.partitionId(), int)
+    True
+    >>> isinstance(taskcontext.stageId(), int)
+    True
+    >>> isinstance(taskcontext.taskAttemptId(), int)
+    True
+    >>> taskcontext.getLocalProperty("key1")
+    'value'
+    >>> isinstance(taskcontext.cpus(), int)
+    True
+
+    Get a task context instance from a dataframe via Python UDF.
+
+    >>> from pyspark.sql import Row
+    >>> from pyspark.sql.functions import udf
+    >>> @udf("STRUCT<anum: INT, partid: INT, stageid: INT, taskaid: INT, prop: STRING, cpus: INT>")
+    ... def taskcontext_as_row():
+    ...    taskcontext = TaskContext.get()
+    ...    return Row(
+    ...        anum=taskcontext.attemptNumber(),
+    ...        partid=taskcontext.partitionId(),
+    ...        stageid=taskcontext.stageId(),
+    ...        taskaid=taskcontext.taskAttemptId(),
+    ...        prop=taskcontext.getLocalProperty("key2"),
+    ...        cpus=taskcontext.cpus())
+    ...
+    >>> spark.sparkContext.setLocalProperty("key2", "value")
+    >>> [(anum, partid, stageid, taskaid, prop, cpus)] = (
+    ...     spark.range(1).select(taskcontext_as_row()).first()
+    ... )
+    >>> isinstance(anum, int)
+    True
+    >>> isinstance(partid, int)
+    True
+    >>> isinstance(stageid, int)
+    True
+    >>> isinstance(taskaid, int)
+    True
+    >>> prop
+    'value'
+    >>> isinstance(cpus, int)
+    True
+
+    Get a task context instance from a dataframe via Pandas UDF.
+
+    >>> import pandas as pd  # doctest: +SKIP
+    >>> from pyspark.sql.functions import pandas_udf
+    >>> @pandas_udf("STRUCT<"
+    ...     "anum: INT, partid: INT, stageid: INT, taskaid: INT, prop: STRING, cpus: INT>")
+    ... def taskcontext_as_row(_):
+    ...    taskcontext = TaskContext.get()
+    ...    return pd.DataFrame({
+    ...        "anum": [taskcontext.attemptNumber()],
+    ...        "partid": [taskcontext.partitionId()],
+    ...        "stageid": [taskcontext.stageId()],
+    ...        "taskaid": [taskcontext.taskAttemptId()],
+    ...        "prop": [taskcontext.getLocalProperty("key3")],
+    ...        "cpus": [taskcontext.cpus()]
+    ...    })  # doctest: +SKIP
+    ...
+    >>> spark.sparkContext.setLocalProperty("key3", "value")  # doctest: +SKIP
+    >>> [(anum, partid, stageid, taskaid, prop, cpus)] = (
+    ...     spark.range(1).select(taskcontext_as_row("id")).first()
+    ... )  # doctest: +SKIP
+    >>> isinstance(anum, int)
+    True
+    >>> isinstance(partid, int)
+    True
+    >>> isinstance(stageid, int)
+    True
+    >>> isinstance(taskaid, int)
+    True
+    >>> prop
+    'value'
+    >>> isinstance(cpus, int)
+    True
     """
 
     _taskContext: ClassVar[Optional["TaskContext"]] = None
@@ -40,7 +129,9 @@ class TaskContext:
     _resources: Optional[Dict[str, ResourceInformation]] = None
 
     def __new__(cls: Type["TaskContext"]) -> "TaskContext":
-        """Even if users construct TaskContext instead of using get, give them the singleton."""
+        """
+        Even if users construct :class:`TaskContext` instead of using get, give them the singleton.
+        """
         taskContext = cls._taskContext
         if taskContext is not None:
             return taskContext
@@ -49,7 +140,7 @@ class TaskContext:
 
     @classmethod
     def _getOrCreate(cls: Type["TaskContext"]) -> "TaskContext":
-        """Internal function to get or create global TaskContext."""
+        """Internal function to get or create global :class:`TaskContext`."""
         if cls._taskContext is None:
             cls._taskContext = TaskContext()
         return cls._taskContext
@@ -61,49 +152,90 @@ class TaskContext:
     @classmethod
     def get(cls: Type["TaskContext"]) -> Optional["TaskContext"]:
         """
-        Return the currently active TaskContext. This can be called inside of
+        Return the currently active :class:`TaskContext`. This can be called inside of
         user functions to access contextual information about running tasks.
+
+        Returns
+        -------
+        :class:`TaskContext`, optional
 
         Notes
         -----
-        Must be called on the worker, not the driver. Returns None if not initialized.
+        Must be called on the worker, not the driver. Returns ``None`` if not initialized.
         """
         return cls._taskContext
 
     def stageId(self) -> int:
-        """The ID of the stage that this task belong to."""
+        """
+        The ID of the stage that this task belong to.
+
+        Returns
+        -------
+        int
+            current stage id.
+        """
         return cast(int, self._stageId)
 
     def partitionId(self) -> int:
         """
         The ID of the RDD partition that is computed by this task.
+
+        Returns
+        -------
+        int
+            current partition id.
         """
         return cast(int, self._partitionId)
 
     def attemptNumber(self) -> int:
-        """ "
+        """
         How many times this task has been attempted.  The first task attempt will be assigned
         attemptNumber = 0, and subsequent attempts will have increasing attempt numbers.
+
+        Returns
+        -------
+        int
+            current attempt number.
         """
         return cast(int, self._attemptNumber)
 
     def taskAttemptId(self) -> int:
         """
-        An ID that is unique to this task attempt (within the same SparkContext, no two task
-        attempts will share the same attempt ID).  This is roughly equivalent to Hadoop's
-        TaskAttemptID.
+        An ID that is unique to this task attempt (within the same :class:`SparkContext`,
+        no two task attempts will share the same attempt ID).  This is roughly equivalent
+        to Hadoop's `TaskAttemptID`.
+
+        Returns
+        -------
+        int
+            current task attempt id.
         """
         return cast(int, self._taskAttemptId)
 
     def getLocalProperty(self, key: str) -> Optional[str]:
         """
         Get a local property set upstream in the driver, or None if it is missing.
+
+        Parameters
+        ----------
+        key : str
+            the key of the local property to get.
+
+        Returns
+        -------
+        int
+            the value of the local property.
         """
         return cast(Dict[str, str], self._localProperties).get(key, None)
 
     def cpus(self) -> int:
         """
         CPUs allocated to the task.
+
+        Returns
+        -------
+        int
+            the number of CPUs.
         """
         return cast(int, self._cpus)
 
@@ -111,6 +243,11 @@ class TaskContext:
         """
         Resources allocated to the task. The key is the resource name and the value is information
         about the resource.
+
+        Returns
+        -------
+        dict
+            a dictionary of a string resource name, and :class:`ResourceInformation`.
         """
         return cast(Dict[str, ResourceInformation], self._resources)
 
@@ -169,6 +306,24 @@ class BarrierTaskContext(TaskContext):
     Notes
     -----
     This API is experimental
+
+    Examples
+    --------
+    Set a barrier, and execute it with RDD.
+
+    >>> from pyspark import BarrierTaskContext
+    >>> def block_and_do_something(itr):
+    ...     taskcontext = BarrierTaskContext.get()
+    ...     # Do something.
+    ...
+    ...     # Wait until all tasks finished.
+    ...     taskcontext.barrier()
+    ...
+    ...     return itr
+    ...
+    >>> rdd = spark.sparkContext.parallelize([1])
+    >>> rdd.barrier().mapPartitions(block_and_do_something).collect()
+    [1]
     """
 
     _port: ClassVar[Optional[Union[str, int]]] = None
@@ -177,9 +332,9 @@ class BarrierTaskContext(TaskContext):
     @classmethod
     def _getOrCreate(cls: Type["BarrierTaskContext"]) -> "BarrierTaskContext":
         """
-        Internal function to get or create global BarrierTaskContext. We need to make sure
-        BarrierTaskContext is returned from here because it is needed in python worker reuse
-        scenario, see SPARK-25921 for more details.
+        Internal function to get or create global :class:`BarrierTaskContext`. We need to make sure
+        :class:`BarrierTaskContext` is returned from here because it is needed in python worker
+        reuse scenario, see SPARK-25921 for more details.
         """
         if not isinstance(cls._taskContext, BarrierTaskContext):
             cls._taskContext = object.__new__(cls)
@@ -194,7 +349,7 @@ class BarrierTaskContext(TaskContext):
 
         Notes
         -----
-        Must be called on the worker, not the driver. Returns None if not initialized.
+        Must be called on the worker, not the driver. Returns ``None`` if not initialized.
         An Exception will raise if it is not in a barrier stage.
 
         This API is experimental
@@ -208,8 +363,8 @@ class BarrierTaskContext(TaskContext):
         cls: Type["BarrierTaskContext"], port: Optional[Union[str, int]], secret: str
     ) -> None:
         """
-        Initialize BarrierTaskContext, other methods within BarrierTaskContext can only be called
-        after BarrierTaskContext is initialized.
+        Initialize :class:`BarrierTaskContext`, other methods within :class:`BarrierTaskContext`
+        can only be called after BarrierTaskContext is initialized.
         """
         cls._port = port
         cls._secret = secret
@@ -222,17 +377,17 @@ class BarrierTaskContext(TaskContext):
 
         .. versionadded:: 2.4.0
 
-        .. warning:: In a barrier stage, each task much have the same number of `barrier()`
-            calls, in all possible code branches.
-            Otherwise, you may get the job hanging or a SparkException after timeout.
-
         Notes
         -----
         This API is experimental
+
+        In a barrier stage, each task much have the same number of `barrier()`
+        calls, in all possible code branches. Otherwise, you may get the job hanging
+        or a `SparkException` after timeout.
         """
         if self._port is None or self._secret is None:
             raise RuntimeError(
-                "Not supported to call barrier() before initialize " + "BarrierTaskContext."
+                "Not supported to call barrier() before initialize BarrierTaskContext."
             )
         else:
             _load_from_socket(self._port, self._secret, BARRIER_FUNCTION)
@@ -245,19 +400,19 @@ class BarrierTaskContext(TaskContext):
 
         .. versionadded:: 3.0.0
 
-        .. warning:: In a barrier stage, each task much have the same number of `allGather()`
-            calls, in all possible code branches.
-            Otherwise, you may get the job hanging or a SparkException after timeout.
-
         Notes
         -----
         This API is experimental
+
+        In a barrier stage, each task much have the same number of `barrier()`
+        calls, in all possible code branches. Otherwise, you may get the job hanging
+        or a `SparkException` after timeout.
         """
         if not isinstance(message, str):
             raise TypeError("Argument `message` must be of type `str`")
         elif self._port is None or self._secret is None:
             raise RuntimeError(
-                "Not supported to call barrier() before initialize " + "BarrierTaskContext."
+                "Not supported to call barrier() before initialize BarrierTaskContext."
             )
         else:
             return _load_from_socket(self._port, self._secret, ALL_GATHER_FUNCTION, message)
@@ -272,6 +427,15 @@ class BarrierTaskContext(TaskContext):
         Notes
         -----
         This API is experimental
+
+        Examples
+        --------
+        >>> from pyspark import BarrierTaskContext
+        >>> rdd = spark.sparkContext.parallelize([1])
+        >>> barrier_info = rdd.barrier().mapPartitions(
+        ...     lambda _: [BarrierTaskContext.get().getTaskInfos()]).collect()[0][0]
+        >>> barrier_info.address
+        '...:...'
         """
         if self._port is None or self._secret is None:
             raise RuntimeError(
@@ -300,3 +464,23 @@ class BarrierTaskInfo:
 
     def __init__(self, address: str) -> None:
         self.address = address
+
+
+def _test() -> None:
+    import doctest
+    import sys
+    from pyspark.sql import SparkSession
+
+    globs = globals().copy()
+    globs["spark"] = (
+        SparkSession.builder.master("local[2]").appName("taskcontext tests").getOrCreate()
+    )
+    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    globs["spark"].stop()
+
+    if failure_count:
+        sys.exit(-1)
+
+
+if __name__ == "__main__":
+    _test()

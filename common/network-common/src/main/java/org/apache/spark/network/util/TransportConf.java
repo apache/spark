@@ -386,4 +386,13 @@ public class TransportConf {
   public int ioExceptionsThresholdDuringMerge() {
     return conf.getInt("spark.shuffle.push.server.ioExceptionsThresholdDuringMerge", 4);
   }
+
+  /**
+   * The RemoteBlockPushResolver#mergedShuffleCleanermergedShuffleCleaner
+   * shutdown timeout, in seconds.
+   */
+  public long mergedShuffleCleanerShutdownTimeout() {
+    return JavaUtils.timeStringAsSec(
+      conf.get("spark.shuffle.push.server.mergedShuffleCleaner.shutdown.timeout", "60s"));
+  }
 }

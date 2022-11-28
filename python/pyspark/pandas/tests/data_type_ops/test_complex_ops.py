@@ -183,7 +183,7 @@ class ComplexOpsTest(OpsTestBase):
 
     def test_pow(self):
         self.assertRaises(TypeError, lambda: self.psser ** "x")
-        self.assertRaises(TypeError, lambda: self.psser ** 1)
+        self.assertRaises(TypeError, lambda: self.psser**1)
 
         psdf = self.array_psdf
         for col in self.array_df_cols:
@@ -215,7 +215,7 @@ class ComplexOpsTest(OpsTestBase):
 
     def test_rpow(self):
         self.assertRaises(TypeError, lambda: "x" ** self.psser)
-        self.assertRaises(TypeError, lambda: 1 ** self.psser)
+        self.assertRaises(TypeError, lambda: 1**self.psser)
 
     def test_and(self):
         self.assertRaises(TypeError, lambda: self.psser & True)
@@ -239,7 +239,7 @@ class ComplexOpsTest(OpsTestBase):
         pdf, psdf = self.array_pdf, self.array_psdf
         for col in self.array_df_cols:
             pser, psser = pdf[col], psdf[col]
-            self.assert_eq(pser, psser.to_pandas())
+            self.assert_eq(pser, psser._to_pandas())
             self.assert_eq(ps.from_pandas(pser), psser)
 
     def test_isnull(self):

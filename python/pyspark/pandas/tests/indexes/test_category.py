@@ -67,6 +67,13 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
         self.assert_eq(psidx.codes, pd.Index(pidx.codes))
         self.assert_eq(psidx.ordered, pidx.ordered)
 
+        with self.assertRaisesRegexp(TypeError, "Index.name must be a hashable type"):
+            ps.CategoricalIndex([1, 2, 3], name=[(1, 2, 3)])
+        with self.assertRaisesRegexp(
+            TypeError, "Cannot perform 'all' with this index type: CategoricalIndex"
+        ):
+            ps.CategoricalIndex([1, 2, 3]).all()
+
     def test_categories_setter(self):
         pdf = pd.DataFrame(
             {
@@ -219,9 +226,18 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
         psidx3 = ps.from_pandas(pidx3)
 
         self.assert_eq(psidx1.append(psidx2), pidx1.append(pidx2))
-        self.assert_eq(
-            psidx1.append(psidx3.astype("category")), pidx1.append(pidx3.astype("category"))
-        )
+        if LooseVersion(pd.__version__) >= LooseVersion("1.5.0"):
+            self.assert_eq(
+                psidx1.append(psidx3.astype("category")), pidx1.append(pidx3.astype("category"))
+            )
+        else:
+            expected_result = ps.CategoricalIndex(
+                ["x", "y", "z", "y", "x", "w", "z"],
+                categories=["z", "y", "x", "w"],
+                ordered=False,
+                dtype="category",
+            )
+            self.assert_eq(psidx1.append(psidx3.astype("category")), expected_result)
 
         # TODO: append non-categorical or categorical with a different category
         self.assertRaises(NotImplementedError, lambda: psidx1.append(psidx3))

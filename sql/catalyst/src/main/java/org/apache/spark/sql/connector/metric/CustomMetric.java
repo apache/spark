@@ -25,6 +25,10 @@ import org.apache.spark.annotation.Evolving;
  * and combine the metrics at the driver side. How to combine task metrics is defined by the
  * metric class with the same metric name.
  *
+ * When Spark needs to aggregate task metrics, it will internally construct the instance of
+ * custom metric class defined in data source by using reflection. Spark requires the class
+ * implementing this interface to have a 0-arg constructor.
+ *
  * @since 3.2.0
  */
 @Evolving

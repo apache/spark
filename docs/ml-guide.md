@@ -62,11 +62,11 @@ The primary Machine Learning API for Spark is now the [DataFrame](sql-programmin
 
 # Dependencies
 
-MLlib uses linear algebra packages [Breeze](http://www.scalanlp.org/), [dev.ludovic.netlib](https://github.com/luhenry/netlib), and [netlib-java](https://github.com/fommil/netlib-java) for optimised numerical processing[^1]. Those packages may call native acceleration libraries such as [Intel MKL](https://software.intel.com/content/www/us/en/develop/tools/math-kernel-library.html) or [OpenBLAS](http://www.openblas.net) if they are available as system libraries or in runtime library paths.
+MLlib uses linear algebra packages [Breeze](http://www.scalanlp.org/) and [dev.ludovic.netlib](https://github.com/luhenry/netlib) for optimised numerical processing[^1]. Those packages may call native acceleration libraries such as [Intel MKL](https://software.intel.com/content/www/us/en/develop/tools/math-kernel-library.html) or [OpenBLAS](http://www.openblas.net) if they are available as system libraries or in runtime library paths.
 
 However, native acceleration libraries can't be distributed with Spark. See [MLlib Linear Algebra Acceleration Guide](ml-linalg-guide.html) for how to enable accelerated linear algebra processing. If accelerated native libraries are not enabled, you will see a warning message like below and a pure JVM implementation will be used instead:
 ```
-WARN BLAS: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
+WARNING: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
 ```
 
 To use MLlib in Python, you will need [NumPy](http://www.numpy.org) version 1.4 or newer.

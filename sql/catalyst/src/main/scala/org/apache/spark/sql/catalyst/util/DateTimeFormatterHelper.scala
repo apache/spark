@@ -161,7 +161,7 @@ trait DateTimeFormatterHelper {
       } catch {
         case _: Throwable => throw e
       }
-      throw QueryExecutionErrors.failToFormatDateTimeInNewFormatterError(resultCandidate, e)
+      throw QueryExecutionErrors.failToParseDateTimeInNewParserError(resultCandidate, e)
   }
 
   /**

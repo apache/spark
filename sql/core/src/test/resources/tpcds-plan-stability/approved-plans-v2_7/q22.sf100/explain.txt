@@ -47,6 +47,7 @@ Output [1]: [d_date_sk#5]
 (5) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [inv_date_sk#3]
 Right keys [1]: [d_date_sk#5]
+Join type: Inner
 Join condition: None
 
 (6) Project [codegen id : 2]
@@ -86,6 +87,7 @@ Arguments: [i_item_sk#6 ASC NULLS FIRST], false, 0
 (14) SortMergeJoin [codegen id : 7]
 Left keys [1]: [inv_item_sk#1]
 Right keys [1]: [i_item_sk#6]
+Join type: Inner
 Join condition: None
 
 (15) Project [codegen id : 7]
@@ -106,6 +108,7 @@ Input: []
 Arguments: IdentityBroadcastMode, [plan_id=3]
 
 (19) BroadcastNestedLoopJoin [codegen id : 7]
+Join type: Inner
 Join condition: None
 
 (20) Project [codegen id : 7]

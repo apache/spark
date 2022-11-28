@@ -113,3 +113,9 @@ select array_size(array(true));
 select array_size(array(2, 1));
 select array_size(NULL);
 select array_size(map('a', 1, 'b', 2));
+
+-- function get()
+select get(array(1, 2, 3), 0);
+select get(array(1, 2, 3), 3);
+select get(array(1, 2, 3), null);
+select get(array(1, 2, 3), -1);

@@ -35,7 +35,21 @@ SELECT count(k) FROM hav GROUP BY v HAVING v = array(1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(hav.v = array(1))' due to data type mismatch: differing types in '(hav.v = array(1))' (int and array<int>).; line 1 pos 43
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "messageParameters" : {
+    "left" : "\"INT\"",
+    "right" : "\"ARRAY<INT>\"",
+    "sqlExpr" : "\"(v = array(1))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 44,
+    "stopIndex" : 55,
+    "fragment" : "v = array(1)"
+  } ]
+}
 
 
 -- !query

@@ -875,7 +875,7 @@ abstract class AvroSuite
         dfWithNull.write.format("avro")
           .option("avroSchema", avroSchema).save(s"$tempDir/${UUID.randomUUID()}")
       }
-      assertExceptionMsg[AvroTypeException](e1, "Not an enum: null")
+      assertExceptionMsg[AvroTypeException](e1, "value null is not a SuitEnumType")
 
       // Writing df containing data not in the enum will throw an exception
       val e2 = intercept[SparkException] {
@@ -1069,14 +1069,13 @@ abstract class AvroSuite
       df.write.format("avro").option("avroSchema", avroSchema).save(tempSaveDir)
       checkAvroSchemaEquals(avroSchema, getAvroSchemaStringFromFiles(tempSaveDir))
 
-      val message = intercept[Exception] {
+      val message = intercept[SparkException] {
         spark.createDataFrame(spark.sparkContext.parallelize(Seq(Row(2, null))), catalystSchema)
           .write.format("avro").option("avroSchema", avroSchema)
           .save(s"$tempDir/${UUID.randomUUID()}")
-      }.getCause.getMessage
+      }.getMessage
       assert(message.contains("Caused by: java.lang.NullPointerException: "))
-      assert(message.contains(
-        "null of string in string in field Name of test_schema in test_schema"))
+      assert(message.contains("null value for (non-nullable) string at test_schema.Name"))
     }
   }
 
@@ -1168,7 +1167,7 @@ abstract class AvroSuite
       withTempPath { tempDir =>
         val message = intercept[SparkException] {
           df.write.format("avro").option("avroSchema", avroSchema).save(tempDir.getPath)
-        }.getCause.getMessage
+        }.getMessage
         assert(message.contains("Only UNION of a null type and a non-null type is supported"))
       }
     }
@@ -1182,14 +1181,16 @@ abstract class AvroSuite
           sql("select interval 1 days").write.format("avro").mode("overwrite").save(tempDir)
         }.getMessage
         assert(msg.contains("Cannot save interval data type into external storage.") ||
-          msg.contains("AVRO data source does not support interval data type."))
+          msg.contains("Column `INTERVAL '1' DAY` has a data type of interval day, " +
+            "which is not supported by Avro."))
 
         msg = intercept[AnalysisException] {
           spark.udf.register("testType", () => new IntervalData())
           sql("select testType()").write.format("avro").mode("overwrite").save(tempDir)
         }.getMessage
         assert(msg.toLowerCase(Locale.ROOT)
-          .contains(s"avro data source does not support interval data type."))
+          .contains("column `testtype()` has a data type of interval, " +
+            "which is not supported by avro."))
       }
     }
   }
@@ -1803,13 +1804,13 @@ abstract class AvroSuite
         spark
           .read
           .format("avro")
-          .option(AvroOptions.ignoreExtensionKey, false)
+          .option(AvroOptions.IGNORE_EXTENSION, false)
           .load(dir.getCanonicalPath)
           .count()
       }
       val deprecatedEvents = logAppender.loggingEvents
         .filter(_.getMessage.getFormattedMessage.contains(
-          s"Option ${AvroOptions.ignoreExtensionKey} is deprecated"))
+          s"Option ${AvroOptions.IGNORE_EXTENSION} is deprecated"))
       assert(deprecatedEvents.size === 1)
     }
   }
@@ -1817,7 +1818,7 @@ abstract class AvroSuite
   // It generates input files for the test below:
   // "SPARK-31183, SPARK-37705: compatibility with Spark 2.4/3.2 in reading dates/timestamps"
   ignore("SPARK-31855: generate test files for checking compatibility with Spark 2.4/3.2") {
-    val resourceDir = "external/avro/src/test/resources"
+    val resourceDir = "connector/avro/src/test/resources"
     val version = SPARK_VERSION_SHORT.replaceAll("\\.", "_")
     def save(
       in: Seq[String],
@@ -1932,7 +1933,7 @@ abstract class AvroSuite
           val e = intercept[SparkException] {
             df.write.format("avro").option("avroSchema", avroSchema).save(path3_x)
           }
-          assert(e.getCause.getCause.getCause.isInstanceOf[SparkUpgradeException])
+          assert(e.getCause.getCause.isInstanceOf[SparkUpgradeException])
           checkDefaultLegacyRead(oldPath)
 
           withSQLConf(SQLConf.AVRO_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
@@ -2183,7 +2184,7 @@ abstract class AvroSuite
           val e = intercept[SparkException] {
             df.write.format("avro").option("avroSchema", avroSchema).save(dir.getCanonicalPath)
           }
-          val errMsg = e.getCause.getCause.getCause.asInstanceOf[SparkUpgradeException].getMessage
+          val errMsg = e.getCause.getCause.asInstanceOf[SparkUpgradeException].getMessage
           assert(errMsg.contains("You may get a different result due to the upgrading"))
         }
       }
@@ -2193,7 +2194,7 @@ abstract class AvroSuite
         val e = intercept[SparkException] {
           df.write.format("avro").save(dir.getCanonicalPath)
         }
-        val errMsg = e.getCause.getCause.getCause.asInstanceOf[SparkUpgradeException].getMessage
+        val errMsg = e.getCause.getCause.asInstanceOf[SparkUpgradeException].getMessage
         assert(errMsg.contains("You may get a different result due to the upgrading"))
       }
     }
@@ -2271,6 +2272,20 @@ abstract class AvroSuite
       checkAnswer(df2, df.collect().toSeq)
     }
   }
+
+  test("SPARK-40667: validate Avro Options") {
+    assert(AvroOptions.getAllOptions.size == 9)
+    // Please add validation on any new Avro options here
+    assert(AvroOptions.isValidOption("ignoreExtension"))
+    assert(AvroOptions.isValidOption("mode"))
+    assert(AvroOptions.isValidOption("recordName"))
+    assert(AvroOptions.isValidOption("compression"))
+    assert(AvroOptions.isValidOption("avroSchema"))
+    assert(AvroOptions.isValidOption("avroSchemaUrl"))
+    assert(AvroOptions.isValidOption("recordNamespace"))
+    assert(AvroOptions.isValidOption("positionalFieldMatching"))
+    assert(AvroOptions.isValidOption("datetimeRebaseMode"))
+  }
 }
 
 class AvroV1Suite extends AvroSuite {
@@ -2335,7 +2350,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
       })
 
       val fileScan = df.queryExecution.executedPlan collectFirst {
-        case BatchScanExec(_, f: AvroScan, _, _, _) => f
+        case BatchScanExec(_, f: AvroScan, _, _, _, _) => f
       }
       assert(fileScan.nonEmpty)
       assert(fileScan.get.partitionFilters.nonEmpty)
@@ -2368,7 +2383,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
       assert(filterCondition.isDefined)
 
       val fileScan = df.queryExecution.executedPlan collectFirst {
-        case BatchScanExec(_, f: AvroScan, _, _, _) => f
+        case BatchScanExec(_, f: AvroScan, _, _, _, _) => f
       }
       assert(fileScan.nonEmpty)
       assert(fileScan.get.partitionFilters.isEmpty)
@@ -2408,7 +2423,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
       val basePath = dir.getCanonicalPath + "/avro"
       val expected_plan_fragment =
         s"""
-           |\\(1\\) BatchScan
+           |\\(1\\) BatchScan avro file:$basePath
            |Output \\[2\\]: \\[value#xL, id#x\\]
            |DataFilters: \\[isnotnull\\(value#xL\\), \\(value#xL > 2\\)\\]
            |Format: avro
@@ -2449,7 +2464,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
             .where("value = 'a'")
 
           val fileScan = df.queryExecution.executedPlan collectFirst {
-            case BatchScanExec(_, f: AvroScan, _, _, _) => f
+            case BatchScanExec(_, f: AvroScan, _, _, _, _) => f
           }
           assert(fileScan.nonEmpty)
           if (filtersPushdown) {

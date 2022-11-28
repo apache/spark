@@ -21,12 +21,20 @@ select date '2020-01-01中文'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the DATE value: 2020-01-01中文(line 1, pos 7)
-
-== SQL ==
-select date '2020-01-01中文'
--------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
+  "messageParameters" : {
+    "value" : "2020-01-01中文",
+    "valueType" : "DATE"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 26,
+    "fragment" : "date '2020-01-01中文'"
+  } ]
+}
 
 
 -- !query
@@ -59,12 +67,20 @@ select date'015'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the DATE value: 015(line 1, pos 7)
-
-== SQL ==
-select date'015'
--------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
+  "messageParameters" : {
+    "value" : "015",
+    "valueType" : "DATE"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 16,
+    "fragment" : "date'015'"
+  } ]
+}
 
 
 -- !query
@@ -73,12 +89,20 @@ select date'2021-4294967297-11'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the DATE value: 2021-4294967297-11(line 1, pos 7)
-
-== SQL ==
-select date'2021-4294967297-11'
--------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
+  "messageParameters" : {
+    "value" : "2021-4294967297-11",
+    "valueType" : "DATE"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 31,
+    "fragment" : "date'2021-4294967297-11'"
+  } ]
+}
 
 
 -- !query
@@ -281,7 +305,23 @@ select date_add('2011-11-11', 1L)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'date_add(CAST('2011-11-11' AS DATE), 1L)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, '1L' is of bigint type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"BIGINT\"",
+    "paramIndex" : "2",
+    "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
+    "sqlExpr" : "\"date_add(2011-11-11, 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 33,
+    "fragment" : "date_add('2011-11-11', 1L)"
+  } ]
+}
 
 
 -- !query
@@ -290,7 +330,23 @@ select date_add('2011-11-11', 1.0)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'date_add(CAST('2011-11-11' AS DATE), 1.0BD)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, '1.0BD' is of decimal(2,1) type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"1.0\"",
+    "inputType" : "\"DECIMAL(2,1)\"",
+    "paramIndex" : "2",
+    "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
+    "sqlExpr" : "\"date_add(2011-11-11, 1.0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 34,
+    "fragment" : "date_add('2011-11-11', 1.0)"
+  } ]
+}
 
 
 -- !query
@@ -299,7 +355,23 @@ select date_add('2011-11-11', 1E1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'date_add(CAST('2011-11-11' AS DATE), 10.0D)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, '10.0D' is of double type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"10.0\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "2",
+    "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
+    "sqlExpr" : "\"date_add(2011-11-11, 10.0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 34,
+    "fragment" : "date_add('2011-11-11', 1E1)"
+  } ]
+}
 
 
 -- !query
@@ -316,7 +388,13 @@ select date_add('2011-11-11', '1.2')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[SECOND_FUNCTION_ARGUMENT_NOT_INTEGER] The second argument of date_add function needs to be an integer.
+{
+  "errorClass" : "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "date_add"
+  }
+}
 
 
 -- !query
@@ -389,7 +467,23 @@ select date_sub('2011-11-11', 1L)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'date_sub(CAST('2011-11-11' AS DATE), 1L)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, '1L' is of bigint type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"BIGINT\"",
+    "paramIndex" : "2",
+    "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
+    "sqlExpr" : "\"date_sub(2011-11-11, 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 33,
+    "fragment" : "date_sub('2011-11-11', 1L)"
+  } ]
+}
 
 
 -- !query
@@ -398,7 +492,23 @@ select date_sub('2011-11-11', 1.0)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'date_sub(CAST('2011-11-11' AS DATE), 1.0BD)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, '1.0BD' is of decimal(2,1) type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"1.0\"",
+    "inputType" : "\"DECIMAL(2,1)\"",
+    "paramIndex" : "2",
+    "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
+    "sqlExpr" : "\"date_sub(2011-11-11, 1.0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 34,
+    "fragment" : "date_sub('2011-11-11', 1.0)"
+  } ]
+}
 
 
 -- !query
@@ -407,7 +517,23 @@ select date_sub('2011-11-11', 1E1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'date_sub(CAST('2011-11-11' AS DATE), 10.0D)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, '10.0D' is of double type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"10.0\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "2",
+    "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
+    "sqlExpr" : "\"date_sub(2011-11-11, 10.0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 34,
+    "fragment" : "date_sub('2011-11-11', 1E1)"
+  } ]
+}
 
 
 -- !query
@@ -424,7 +550,13 @@ select date_sub(date'2011-11-11', '1.2')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[SECOND_FUNCTION_ARGUMENT_NOT_INTEGER] The second argument of date_sub function needs to be an integer.
+{
+  "errorClass" : "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "date_sub"
+  }
+}
 
 
 -- !query
@@ -465,7 +597,23 @@ select date_add('2011-11-11', int_str) from date_view
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'date_add(CAST('2011-11-11' AS DATE), date_view.int_str)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, 'date_view.int_str' is of string type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"int_str\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "2",
+    "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
+    "sqlExpr" : "\"date_add(2011-11-11, int_str)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 38,
+    "fragment" : "date_add('2011-11-11', int_str)"
+  } ]
+}
 
 
 -- !query
@@ -474,7 +622,23 @@ select date_sub('2011-11-11', int_str) from date_view
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'date_sub(CAST('2011-11-11' AS DATE), date_view.int_str)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, 'date_view.int_str' is of string type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"int_str\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "2",
+    "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
+    "sqlExpr" : "\"date_sub(2011-11-11, int_str)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 38,
+    "fragment" : "date_sub('2011-11-11', int_str)"
+  } ]
+}
 
 
 -- !query
@@ -499,7 +663,23 @@ select date '2011-11-11' + 1E1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'date_add(DATE '2011-11-11', 10.0D)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, '10.0D' is of double type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"10.0\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "2",
+    "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
+    "sqlExpr" : "\"date_add(DATE '2011-11-11', 10.0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 30,
+    "fragment" : "date '2011-11-11' + 1E1"
+  } ]
+}
 
 
 -- !query
@@ -540,7 +720,23 @@ select date '2001-10-01' - '2001-09-28'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'date_sub(DATE '2001-10-01', CAST('2001-09-28' AS DOUBLE))' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, 'CAST('2001-09-28' AS DOUBLE)' is of double type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"2001-09-28\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "2",
+    "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
+    "sqlExpr" : "\"date_sub(DATE '2001-10-01', 2001-09-28)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 39,
+    "fragment" : "date '2001-10-01' - '2001-09-28'"
+  } ]
+}
 
 
 -- !query
@@ -581,7 +777,23 @@ select date '2001-09-28' - date_str from date_view
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'date_sub(DATE '2001-09-28', CAST(date_view.date_str AS DOUBLE))' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, 'CAST(date_view.date_str AS DOUBLE)' is of double type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"date_str\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "2",
+    "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
+    "sqlExpr" : "\"date_sub(DATE '2001-09-28', date_str)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 35,
+    "fragment" : "date '2001-09-28' - date_str"
+  } ]
+}
 
 
 -- !query
@@ -590,7 +802,23 @@ select date'2011-11-11' + '1'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'date_add(DATE '2011-11-11', CAST('1' AS DOUBLE))' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, 'CAST('1' AS DOUBLE)' is of double type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "2",
+    "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
+    "sqlExpr" : "\"date_add(DATE '2011-11-11', 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 29,
+    "fragment" : "date'2011-11-11' + '1'"
+  } ]
+}
 
 
 -- !query
@@ -599,7 +827,23 @@ select '1' + date'2011-11-11'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'date_add(DATE '2011-11-11', CAST('1' AS DOUBLE))' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, 'CAST('1' AS DOUBLE)' is of double type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "2",
+    "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
+    "sqlExpr" : "\"date_add(DATE '2011-11-11', 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 29,
+    "fragment" : "'1' + date'2011-11-11'"
+  } ]
+}
 
 
 -- !query
@@ -829,12 +1073,20 @@ select timestamp '2019-01-01中文'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the TIMESTAMP value: 2019-01-01中文(line 1, pos 7)
-
-== SQL ==
-select timestamp '2019-01-01中文'
--------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
+  "messageParameters" : {
+    "value" : "2019-01-01中文",
+    "valueType" : "TIMESTAMP"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 31,
+    "fragment" : "timestamp '2019-01-01中文'"
+  } ]
+}
 
 
 -- !query
@@ -843,12 +1095,20 @@ select timestamp'4294967297'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the TIMESTAMP value: 4294967297(line 1, pos 7)
-
-== SQL ==
-select timestamp'4294967297'
--------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
+  "messageParameters" : {
+    "value" : "4294967297",
+    "valueType" : "TIMESTAMP"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "timestamp'4294967297'"
+  } ]
+}
 
 
 -- !query
@@ -857,12 +1117,20 @@ select timestamp'2021-01-01T12:30:4294967297.123456'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the TIMESTAMP value: 2021-01-01T12:30:4294967297.123456(line 1, pos 7)
-
-== SQL ==
-select timestamp'2021-01-01T12:30:4294967297.123456'
--------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
+  "messageParameters" : {
+    "value" : "2021-01-01T12:30:4294967297.123456",
+    "valueType" : "TIMESTAMP"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 52,
+    "fragment" : "timestamp'2021-01-01T12:30:4294967297.123456'"
+  } ]
+}
 
 
 -- !query
@@ -1421,7 +1689,23 @@ select timestamp'2011-11-11 11:11:11' - '2011-11-11 11:11:10'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(TIMESTAMP '2011-11-11 11:11:11' - '2011-11-11 11:11:10')' due to data type mismatch: argument 2 requires (timestamp or timestamp without time zone) type, however, ''2011-11-11 11:11:10'' is of string type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"2011-11-11 11:11:10\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "2",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"(TIMESTAMP '2011-11-11 11:11:11' - 2011-11-11 11:11:10)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 61,
+    "fragment" : "timestamp'2011-11-11 11:11:11' - '2011-11-11 11:11:10'"
+  } ]
+}
 
 
 -- !query
@@ -1430,7 +1714,23 @@ select '2011-11-11 11:11:11' - timestamp'2011-11-11 11:11:10'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '('2011-11-11 11:11:11' - TIMESTAMP '2011-11-11 11:11:10')' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, ''2011-11-11 11:11:11'' is of string type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"2011-11-11 11:11:11\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"(2011-11-11 11:11:11 - TIMESTAMP '2011-11-11 11:11:10')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 61,
+    "fragment" : "'2011-11-11 11:11:11' - timestamp'2011-11-11 11:11:10'"
+  } ]
+}
 
 
 -- !query
@@ -1463,7 +1763,23 @@ select str - timestamp'2011-11-11 11:11:11' from ts_view
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(ts_view.str - TIMESTAMP '2011-11-11 11:11:11')' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'ts_view.str' is of string type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"str\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"(str - TIMESTAMP '2011-11-11 11:11:11')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 43,
+    "fragment" : "str - timestamp'2011-11-11 11:11:11'"
+  } ]
+}
 
 
 -- !query
@@ -1472,7 +1788,23 @@ select timestamp'2011-11-11 11:11:11' - str from ts_view
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(TIMESTAMP '2011-11-11 11:11:11' - ts_view.str)' due to data type mismatch: argument 2 requires (timestamp or timestamp without time zone) type, however, 'ts_view.str' is of string type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"str\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "2",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"(TIMESTAMP '2011-11-11 11:11:11' - str)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 43,
+    "fragment" : "timestamp'2011-11-11 11:11:11' - str"
+  } ]
+}
 
 
 -- !query
@@ -1481,7 +1813,21 @@ select timestamp'2011-11-11 11:11:11' + '1'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(TIMESTAMP '2011-11-11 11:11:11' + CAST('1' AS DOUBLE))' due to data type mismatch: differing types in '(TIMESTAMP '2011-11-11 11:11:11' + CAST('1' AS DOUBLE))' (timestamp and double).; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "messageParameters" : {
+    "left" : "\"TIMESTAMP\"",
+    "right" : "\"DOUBLE\"",
+    "sqlExpr" : "\"(TIMESTAMP '2011-11-11 11:11:11' + 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 43,
+    "fragment" : "timestamp'2011-11-11 11:11:11' + '1'"
+  } ]
+}
 
 
 -- !query
@@ -1490,7 +1836,21 @@ select '1' + timestamp'2011-11-11 11:11:11'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS DOUBLE) + TIMESTAMP '2011-11-11 11:11:11')' due to data type mismatch: differing types in '(CAST('1' AS DOUBLE) + TIMESTAMP '2011-11-11 11:11:11')' (double and timestamp).; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "messageParameters" : {
+    "left" : "\"DOUBLE\"",
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(1 + TIMESTAMP '2011-11-11 11:11:11')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 43,
+    "fragment" : "'1' + timestamp'2011-11-11 11:11:11'"
+  } ]
+}
 
 
 -- !query
@@ -1499,7 +1859,21 @@ select timestamp'2011-11-11 11:11:11' + null
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(TIMESTAMP '2011-11-11 11:11:11' + NULL)' due to data type mismatch: differing types in '(TIMESTAMP '2011-11-11 11:11:11' + NULL)' (timestamp and void).; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "messageParameters" : {
+    "left" : "\"TIMESTAMP\"",
+    "right" : "\"VOID\"",
+    "sqlExpr" : "\"(TIMESTAMP '2011-11-11 11:11:11' + NULL)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 44,
+    "fragment" : "timestamp'2011-11-11 11:11:11' + null"
+  } ]
+}
 
 
 -- !query
@@ -1508,7 +1882,21 @@ select null + timestamp'2011-11-11 11:11:11'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(NULL + TIMESTAMP '2011-11-11 11:11:11')' due to data type mismatch: differing types in '(NULL + TIMESTAMP '2011-11-11 11:11:11')' (void and timestamp).; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "messageParameters" : {
+    "left" : "\"VOID\"",
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(NULL + TIMESTAMP '2011-11-11 11:11:11')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 44,
+    "fragment" : "null + timestamp'2011-11-11 11:11:11'"
+  } ]
+}
 
 
 -- !query

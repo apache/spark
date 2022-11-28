@@ -25,6 +25,7 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.scheduler.Task
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util.{AccumulatorV2, TaskCompletionListener, TaskFailureListener}
 
@@ -133,19 +134,51 @@ abstract class TaskContext extends Serializable {
   }
 
   /**
-   * Adds a listener to be executed on task failure. Adding a listener to an already failed task
-   * will result in that listener being called immediately.
+   * Adds a listener to be executed on task failure (which includes completion listener failure, if
+   * the task body did not already fail). Adding a listener to an already failed task will result in
+   * that listener being called immediately.
+   *
+   * Note: Prior to Spark 3.4.0, failure listeners were only invoked if the main task body failed.
    */
   def addTaskFailureListener(listener: TaskFailureListener): TaskContext
 
   /**
-   * Adds a listener to be executed on task failure.  Adding a listener to an already failed task
-   * will result in that listener being called immediately.
+   * Adds a listener to be executed on task failure (which includes completion listener failure, if
+   * the task body did not already fail). Adding a listener to an already failed task will result in
+   * that listener being called immediately.
+   *
+   * Note: Prior to Spark 3.4.0, failure listeners were only invoked if the main task body failed.
    */
   def addTaskFailureListener(f: (TaskContext, Throwable) => Unit): TaskContext = {
     addTaskFailureListener(new TaskFailureListener {
       override def onTaskFailure(context: TaskContext, error: Throwable): Unit = f(context, error)
     })
+  }
+
+  /** Runs a task with this context, ensuring failure and completion listeners get triggered. */
+  private[spark] def runTaskWithListeners[T](task: Task[T]): T = {
+    try {
+      task.runTask(this)
+    } catch {
+      case e: Throwable =>
+        // Catch all errors; run task failure and completion callbacks, and rethrow the exception.
+        try {
+          markTaskFailed(e)
+        } catch {
+          case t: Throwable =>
+            e.addSuppressed(t)
+        }
+        try {
+          markTaskCompleted(Some(e))
+        } catch {
+          case t: Throwable =>
+            e.addSuppressed(t)
+        }
+        throw e
+    } finally {
+      // Call the task completion callbacks. No-op if "markTaskCompleted" was already called.
+      markTaskCompleted(None)
+    }
   }
 
   /**

@@ -53,6 +53,7 @@ class StatefulSetPodsAllocator(
 
   val driverPod = kubernetesDriverPodName
     .map(name => Option(kubernetesClient.pods()
+      .inNamespace(namespace)
       .withName(name)
       .get())
       .getOrElse(throw new SparkException(
@@ -69,6 +70,7 @@ class StatefulSetPodsAllocator(
       Utils.tryLogNonFatalError {
         kubernetesClient
           .pods()
+          .inNamespace(namespace)
           .withName(pod.getMetadata.getName)
           .waitUntilReady(driverPodReadinessTimeout, TimeUnit.SECONDS)
       }
@@ -99,7 +101,7 @@ class StatefulSetPodsAllocator(
       applicationId: String,
       resourceProfileId: Int): Unit = {
     if (setsCreated.contains(resourceProfileId)) {
-      val statefulset = kubernetesClient.apps().statefulSets().withName(
+      val statefulset = kubernetesClient.apps().statefulSets().inNamespace(namespace).withName(
         setName(applicationId, resourceProfileId: Int))
       statefulset.scale(expected, false /* wait */)
     } else {
@@ -169,7 +171,7 @@ class StatefulSetPodsAllocator(
       val statefulSet = new io.fabric8.kubernetes.api.model.apps.StatefulSetBuilder()
         .withNewMetadata()
           .withName(setName(applicationId, resourceProfileId))
-          .withNamespace(conf.get(KUBERNETES_NAMESPACE))
+          .withNamespace(namespace)
         .endMetadata()
         .withNewSpec()
           .withPodManagementPolicy("Parallel")
@@ -185,7 +187,7 @@ class StatefulSetPodsAllocator(
         .build()
 
       addOwnerReference(driverPod.get, Seq(statefulSet))
-      kubernetesClient.apps().statefulSets().create(statefulSet)
+      kubernetesClient.apps().statefulSets().inNamespace(namespace).resource(statefulSet).create()
       setsCreated += (resourceProfileId)
     }
   }
@@ -194,7 +196,12 @@ class StatefulSetPodsAllocator(
     // Cleanup the statefulsets when we stop
     setsCreated.foreach { rpid =>
       Utils.tryLogNonFatalError {
-        kubernetesClient.apps().statefulSets().withName(setName(applicationId, rpid)).delete()
+        kubernetesClient
+          .apps()
+          .statefulSets()
+          .inNamespace(namespace)
+          .withName(setName(applicationId, rpid))
+          .delete()
       }
     }
   }

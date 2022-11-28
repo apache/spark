@@ -71,6 +71,7 @@ Arguments: HashedRelationBroadcastMode(List(input[1, bigint, false]),false), [pl
 (8) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [s_suppkey#1]
 Right keys [1]: [l_suppkey#4]
+Join type: Inner
 Join condition: None
 
 (9) Project [codegen id : 6]
@@ -98,6 +99,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [pl
 (14) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [l_orderkey#3]
 Right keys [1]: [o_orderkey#8]
+Join type: Inner
 Join condition: None
 
 (15) Project [codegen id : 6]
@@ -125,6 +127,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [pl
 (20) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [o_custkey#9]
 Right keys [1]: [c_custkey#10]
+Join type: Inner
 Join condition: None
 
 (21) Project [codegen id : 6]
@@ -152,6 +155,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [pl
 (26) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [s_nationkey#2]
 Right keys [1]: [n_nationkey#12]
+Join type: Inner
 Join condition: None
 
 (27) Project [codegen id : 6]
@@ -164,6 +168,7 @@ Output [2]: [n_nationkey#14, n_name#15]
 (29) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [c_nationkey#11]
 Right keys [1]: [n_nationkey#14]
+Join type: Inner
 Join condition: (((n_name#13 = FRANCE) AND (n_name#15 = GERMANY)) OR ((n_name#13 = GERMANY) AND (n_name#15 = FRANCE)))
 
 (30) Project [codegen id : 6]

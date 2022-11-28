@@ -221,7 +221,6 @@ abstract class ParquetDeltaEncodingSuite[T] extends ParquetCompatibilityTest
         data(i) = getNextRandom
       }
       shouldReadAndWrite(data, size)
-      writer.reset()
     }
   }
 
@@ -231,19 +230,33 @@ abstract class ParquetDeltaEncodingSuite[T] extends ParquetCompatibilityTest
   }
 
   private def shouldReadAndWrite(data: Array[T], length: Int): Unit = {
-    writeData(data, length)
-    reader = new VectorizedDeltaBinaryPackedReader
-    val page = writer.getBytes.toByteArray
+    // SPARK-40052: Check that we can handle direct and non-direct byte buffers depending on the
+    // implementation of ByteBufferInputStream.
+    for (useDirect <- Seq(true, false)) {
+      writeData(data, length)
+      reader = new VectorizedDeltaBinaryPackedReader
+      val page = writer.getBytes.toByteArray
 
-    assert(estimatedSize(length) >= page.length)
-    writableColumnVector = new OnHeapColumnVector(data.length, getSparkSqlType)
-    reader.initFromPage(100, ByteBufferInputStream.wrap(ByteBuffer.wrap(page)))
-    readData(length, writableColumnVector, 0)
-    for (i <- 0 until length) {
-      assert(data(i) == readDataFromVector(writableColumnVector, i))
+      assert(estimatedSize(length) >= page.length)
+      writableColumnVector = new OnHeapColumnVector(data.length, getSparkSqlType)
+
+      val buf = if (useDirect) {
+        ByteBuffer.allocateDirect(page.length)
+      } else {
+        ByteBuffer.allocate(page.length)
+      }
+      buf.put(page)
+      buf.flip()
+
+      reader.initFromPage(100, ByteBufferInputStream.wrap(buf))
+      readData(length, writableColumnVector, 0)
+      for (i <- 0 until length) {
+        assert(data(i) == readDataFromVector(writableColumnVector, i))
+      }
+
+      writer.reset()
     }
   }
-
 }
 
 class ParquetDeltaEncodingInteger extends ParquetDeltaEncodingSuite[Int] {

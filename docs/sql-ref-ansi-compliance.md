@@ -45,10 +45,13 @@ When `spark.sql.ansi.enabled` is set to `true` and an overflow occurs in numeric
 ```sql
 -- `spark.sql.ansi.enabled=true`
 SELECT 2147483647 + 1;
-java.lang.ArithmeticException: integer overflow
+org.apache.spark.SparkArithmeticException: [ARITHMETIC_OVERFLOW] integer overflow. Use 'try_add' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" to bypass this error.
+== SQL(line 1, position 8) ==
+SELECT 2147483647 + 1
+       ^^^^^^^^^^^^^^
 
 SELECT abs(-2147483648);
-java.lang.ArithmeticException: integer overflow
+org.apache.spark.SparkArithmeticException: [ARITHMETIC_OVERFLOW] integer overflow. If necessary set spark.sql.ansi.enabled to "false" to bypass this error.
 
 -- `spark.sql.ansi.enabled=false`
 SELECT 2147483647 + 1;
@@ -80,17 +83,17 @@ Besides, the ANSI SQL mode disallows the following type conversions which are al
 “Y” indicates that the combination is syntactically valid without restriction and “N” indicates that the combination is not valid.
 
 | Source\Target | Numeric | String | Date | Timestamp | Interval | Boolean | Binary | Array | Map | Struct |
-|-----------|---------|--------|------|-----------|----------|---------|--------|-------|-----|--------|
-| Numeric   | <span style="color:red">**Y**</span> | <span style="color:red">**Y**</span>      | N    | <span style="color:red">**Y**</span>         | N      | Y       | N      | N     | N   | N      |
+|-----------|--------|--------|------|-----------|----------|---------|--------|-------|-----|--------|
+| Numeric   | <span style="color:red">**Y**</span> | <span style="color:red">**Y**</span>      | N    | <span style="color:red">**Y**</span>         | <span style="color:red">**Y**</span>      | Y       | N      | N     | N   | N      |
 | String    | <span style="color:red">**Y**</span> | Y | <span style="color:red">**Y**</span> | <span style="color:red">**Y**</span> | <span style="color:red">**Y**</span> | <span style="color:red">**Y**</span> | Y | N     | N   | N      |
-| Date      | N       | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
+| Date      | N      | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
 | Timestamp | <span style="color:red">**Y**</span> | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
-| Interval  | N       | Y      | N    | N         | Y        | N       | N      | N     | N   | N      |
-| Boolean   | Y       | Y      | N    | N         | N        | Y       | N      | N     | N   | N      |
-| Binary    | N       | Y      | N    | N         | N        | N       | Y      | N     | N   | N      |
-| Array     | N       | Y      | N    | N         | N        | N       | N      | <span style="color:red">**Y**</span> | N   | N      |
-| Map       | N       | Y      | N    | N         | N        | N       | N      | N     | <span style="color:red">**Y**</span> | N      |
-| Struct    | N       | Y      | N    | N         | N        | N       | N      | N     | N   | <span style="color:red">**Y**</span> |
+| Interval  | <span style="color:red">**Y**</span> | Y      | N    | N         | Y        | N       | N      | N     | N   | N      |
+| Boolean   | Y      | Y      | N    | N         | N        | Y       | N      | N     | N   | N      |
+| Binary    | N      | Y      | N    | N         | N        | N       | Y      | N     | N   | N      |
+| Array     | N      | Y      | N    | N         | N        | N       | N      | <span style="color:red">**Y**</span> | N   | N      |
+| Map       | N      | Y      | N    | N         | N        | N       | N      | N     | <span style="color:red">**Y**</span> | N      |
+| Struct    | N      | Y      | N    | N         | N        | N       | N      | N     | N   | <span style="color:red">**Y**</span> |
 
 In the table above, all the `CAST`s with new syntax are marked as red <span style="color:red">**Y**</span>:
 * CAST(Numeric AS Numeric): raise an overflow exception if the value is out of the target data type's range.
@@ -101,18 +104,23 @@ In the table above, all the `CAST`s with new syntax are marked as red <span styl
 * CAST(Map AS Map): raise an exception if there is any on the conversion of the keys and the values.
 * CAST(Struct AS Struct): raise an exception if there is any on the conversion of the struct fields.
 * CAST(Numeric AS String): Always use plain string representation on casting decimal values to strings, instead of using scientific notation if an exponent is needed
+* CAST(Interval AS Numeric): raise an overflow exception if the number of microseconds of the day-time interval or months of year-month interval is out of the target data type's range.
+* CAST(Numeric AS Interval): raise an overflow exception if numeric value times by the target interval's end-unit is out of the range of the Int type for year-month intervals or the Long type for day-time intervals.
 
 ```sql
 -- Examples of explicit casting
 
 -- `spark.sql.ansi.enabled=true`
 SELECT CAST('a' AS INT);
-java.lang.NumberFormatException: invalid input syntax for type numeric: a
+org.apache.spark.SparkNumberFormatException: [CAST_INVALID_INPUT] The value 'a' of the type "STRING" cannot be cast to "INT" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+== SQL(line 1, position 8) ==
+SELECT CAST('a' AS INT)
+       ^^^^^^^^^^^^^^^^
 
 SELECT CAST(2147483648L AS INT);
-java.lang.ArithmeticException: Casting 2147483648 to int causes overflow
+org.apache.spark.SparkArithmeticException: [CAST_OVERFLOW] The value 2147483648L of the type "BIGINT" cannot be cast to "INT" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 
-SELECT CAST(DATE'2020-01-01' AS INT)
+SELECT CAST(DATE'2020-01-01' AS INT);
 org.apache.spark.sql.AnalysisException: cannot resolve 'CAST(DATE '2020-01-01' AS INT)' due to data type mismatch: cannot cast date to int.
 To convert values from date to int, you can use function UNIX_DATE instead.
 
@@ -156,6 +164,9 @@ SELECT * FROM t;
 +---+
 ```
 
+#### Rounding in cast
+While casting of a decimal with a fraction to an interval type with SECOND as the end-unit like INTERVAL HOUR TO SECOND, Spark rounds the fractional part towards "nearest neighbor" unless both neighbors are equidistant, in which case round up.
+
 ### Store assignment
 As mentioned at the beginning, when `spark.sql.storeAssignmentPolicy` is set to `ANSI`(which is the default value), Spark SQL complies with the ANSI store assignment rules on table insertions. The valid combinations of source and target data type in table insertions are given by the following table.
 
@@ -181,7 +192,7 @@ During table insertion, Spark will throw exception on numeric value overflow.
 CREATE TABLE test(i INT);
 
 INSERT INTO test VALUES (2147483648L);
-java.lang.ArithmeticException: Casting 2147483648 to int causes overflow
+org.apache.spark.SparkArithmeticException: [CAST_OVERFLOW_IN_TABLE_INSERT] Fail to insert a value of "BIGINT" type into the "INT" type column `i` due to an overflow. Use `try_cast` on the input value to tolerate overflow and return NULL instead.
 ```
 
 ### Type coercion
@@ -291,7 +302,6 @@ The behavior of some SQL functions can be different under ANSI mode (`spark.sql.
   - `size`: This function returns null for null input.
   - `element_at`:
     - This function throws `ArrayIndexOutOfBoundsException` if using invalid indices.
-    - This function throws `NoSuchElementException` if key does not exist in map.
   - `elt`: This function throws `ArrayIndexOutOfBoundsException` if using invalid indices.
   - `parse_url`: This function throws `IllegalArgumentException` if an input string is not a valid url.
   - `to_date`: This function should fail with an exception if the input string can't be parsed, or the pattern string is invalid.
@@ -307,7 +317,6 @@ The behavior of some SQL functions can be different under ANSI mode (`spark.sql.
 
 The behavior of some SQL operators can be different under ANSI mode (`spark.sql.ansi.enabled=true`).
   - `array_col[index]`: This operator throws `ArrayIndexOutOfBoundsException` if using invalid indices.
-  - `map_col[key]`: This operator throws `NoSuchElementException` if key does not exist in map.
 
 ### Useful Functions for ANSI Mode
 
@@ -319,7 +328,7 @@ When ANSI mode is on, it throws exceptions for invalid operations. You can use t
   - `try_divide`: identical to the division operator `/`, except that it returns `NULL` result instead of throwing an exception on dividing 0.
   - `try_sum`: identical to the function `sum`, except that it returns `NULL` result instead of throwing an exception on integral/decimal/interval value overflow.
   - `try_avg`: identical to the function `avg`, except that it returns `NULL` result instead of throwing an exception on decimal/interval value overflow.
-  - `try_element_at`: identical to the function `element_at`, except that it returns `NULL` result instead of throwing an exception on array's index out of bound or map's key not found.
+  - `try_element_at`: identical to the function `element_at`, except that it returns `NULL` result instead of throwing an exception on array's index out of bound.
   - `try_to_timestamp`: identical to the function `to_timestamp`, except that it returns `NULL` result instead of throwing an exception on string parsing error.
 
 ### SQL Keywords (optional, disabled by default)
@@ -399,6 +408,7 @@ Below is a list of all the keywords in Spark SQL.
 |DATEADD|non-reserved|non-reserved|non-reserved|
 |DATEDIFF|non-reserved|non-reserved|non-reserved|
 |DAY|non-reserved|non-reserved|non-reserved|
+|DAYS|non-reserved|non-reserved|non-reserved|
 |DAYOFYEAR|non-reserved|non-reserved|non-reserved|
 |DBPROPERTIES|non-reserved|non-reserved|non-reserved|
 |DEFAULT|non-reserved|non-reserved|non-reserved|
@@ -420,6 +430,7 @@ Below is a list of all the keywords in Spark SQL.
 |ESCAPED|non-reserved|non-reserved|non-reserved|
 |EXCEPT|reserved|strict-non-reserved|reserved|
 |EXCHANGE|non-reserved|non-reserved|non-reserved|
+|EXCLUDE|non-reserved|non-reserved|non-reserved|
 |EXISTS|non-reserved|non-reserved|reserved|
 |EXPLAIN|non-reserved|non-reserved|non-reserved|
 |EXPORT|non-reserved|non-reserved|non-reserved|
@@ -448,10 +459,12 @@ Below is a list of all the keywords in Spark SQL.
 |GROUPING|non-reserved|non-reserved|reserved|
 |HAVING|reserved|non-reserved|reserved|
 |HOUR|non-reserved|non-reserved|non-reserved|
+|HOURS|non-reserved|non-reserved|non-reserved|
 |IF|non-reserved|non-reserved|not a keyword|
 |IGNORE|non-reserved|non-reserved|non-reserved|
 |IMPORT|non-reserved|non-reserved|non-reserved|
 |IN|reserved|non-reserved|reserved|
+|INCLUDE|non-reserved|non-reserved|non-reserved|
 |INDEX|non-reserved|non-reserved|non-reserved|
 |INDEXES|non-reserved|non-reserved|non-reserved|
 |INNER|reserved|strict-non-reserved|reserved|
@@ -486,13 +499,19 @@ Below is a list of all the keywords in Spark SQL.
 |MATCHED|non-reserved|non-reserved|non-reserved|
 |MERGE|non-reserved|non-reserved|non-reserved|
 |MICROSECOND|non-reserved|non-reserved|non-reserved|
+|MICROSECONDS|non-reserved|non-reserved|non-reserved|
 |MILLISECOND|non-reserved|non-reserved|non-reserved|
+|MILLISECONDS|non-reserved|non-reserved|non-reserved|
 |MINUTE|non-reserved|non-reserved|non-reserved|
+|MINUTES|non-reserved|non-reserved|non-reserved|
 |MINUS|non-reserved|strict-non-reserved|non-reserved|
 |MONTH|non-reserved|non-reserved|non-reserved|
+|MONTHS|non-reserved|non-reserved|non-reserved|
 |MSCK|non-reserved|non-reserved|non-reserved|
 |NAMESPACE|non-reserved|non-reserved|non-reserved|
 |NAMESPACES|non-reserved|non-reserved|non-reserved|
+|NANOSECOND|non-reserved|non-reserved|non-reserved|
+|NANOSECONDS|non-reserved|non-reserved|non-reserved|
 |NATURAL|reserved|strict-non-reserved|reserved|
 |NO|non-reserved|non-reserved|reserved|
 |NOT|reserved|non-reserved|reserved|
@@ -556,6 +575,7 @@ Below is a list of all the keywords in Spark SQL.
 |SCHEMA|non-reserved|non-reserved|non-reserved|
 |SCHEMAS|non-reserved|non-reserved|non-reserved|
 |SECOND|non-reserved|non-reserved|non-reserved|
+|SECONDS|non-reserved|non-reserved|non-reserved|
 |SELECT|reserved|non-reserved|reserved|
 |SEMI|non-reserved|strict-non-reserved|non-reserved|
 |SEPARATED|non-reserved|non-reserved|non-reserved|
@@ -569,6 +589,7 @@ Below is a list of all the keywords in Spark SQL.
 |SOME|reserved|non-reserved|reserved|
 |SORT|non-reserved|non-reserved|non-reserved|
 |SORTED|non-reserved|non-reserved|non-reserved|
+|SOURCE|non-reserved|non-reserved|non-reserved|
 |START|non-reserved|non-reserved|reserved|
 |STATISTICS|non-reserved|non-reserved|non-reserved|
 |STORED|non-reserved|non-reserved|non-reserved|
@@ -582,6 +603,7 @@ Below is a list of all the keywords in Spark SQL.
 |TABLE|reserved|non-reserved|reserved|
 |TABLES|non-reserved|non-reserved|non-reserved|
 |TABLESAMPLE|non-reserved|non-reserved|reserved|
+|TARGET|non-reserved|non-reserved|non-reserved|
 |TBLPROPERTIES|non-reserved|non-reserved|non-reserved|
 |TEMP|non-reserved|non-reserved|not a keyword|
 |TEMPORARY|non-reserved|non-reserved|non-reserved|
@@ -609,6 +631,7 @@ Below is a list of all the keywords in Spark SQL.
 |UNIQUE|reserved|non-reserved|reserved|
 |UNKNOWN|reserved|non-reserved|reserved|
 |UNLOCK|non-reserved|non-reserved|non-reserved|
+|UNPIVOT|non-reserved|non-reserved|non-reserved|
 |UNSET|non-reserved|non-reserved|non-reserved|
 |UPDATE|non-reserved|non-reserved|reserved|
 |USE|non-reserved|non-reserved|non-reserved|
@@ -619,10 +642,12 @@ Below is a list of all the keywords in Spark SQL.
 |VIEW|non-reserved|non-reserved|non-reserved|
 |VIEWS|non-reserved|non-reserved|non-reserved|
 |WEEK|non-reserved|non-reserved|non-reserved|
+|WEEKS|non-reserved|non-reserved|non-reserved|
 |WHEN|reserved|non-reserved|reserved|
 |WHERE|reserved|non-reserved|reserved|
 |WINDOW|non-reserved|non-reserved|reserved|
 |WITH|reserved|non-reserved|reserved|
 |WITHIN|reserved|non-reserved|reserved|
 |YEAR|non-reserved|non-reserved|non-reserved|
+|YEARS|non-reserved|non-reserved|non-reserved|
 |ZONE|non-reserved|non-reserved|non-reserved|

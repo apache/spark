@@ -73,6 +73,7 @@ Input [3]: [inv_item_sk#6, inv_quantity_on_hand#7, inv_date_sk#8]
 (10) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [i_item_sk#1]
 Right keys [1]: [inv_item_sk#6]
+Join type: Inner
 Join condition: None
 
 (11) Project [codegen id : 3]
@@ -85,6 +86,7 @@ Output [1]: [d_date_sk#10]
 (13) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [inv_date_sk#8]
 Right keys [1]: [d_date_sk#10]
+Join type: Inner
 Join condition: None
 
 (14) Project [codegen id : 3]
@@ -128,6 +130,7 @@ Arguments: [ss_item_sk#11 ASC NULLS FIRST], false, 0
 (23) SortMergeJoin [codegen id : 7]
 Left keys [1]: [i_item_sk#1]
 Right keys [1]: [ss_item_sk#11]
+Join type: Inner
 Join condition: None
 
 (24) Project [codegen id : 7]

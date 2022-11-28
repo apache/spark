@@ -199,6 +199,32 @@ abstract class TypeCoercionBase {
   }
 
   /**
+   * Widens the data types of the [[Unpivot]] values.
+   */
+  object UnpivotCoercion extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case up: Unpivot if up.canBeCoercioned && !up.valuesTypeCoercioned =>
+        // get wider data type of inner values at same idx
+        val valueDataTypes = up.values.get.head.zipWithIndex.map {
+          case (_, idx) => findWiderTypeWithoutStringPromotion(up.values.get.map(_ (idx).dataType))
+        }
+
+        // cast inner values to type according to their idx
+        val values = up.values.get.map(values =>
+          values.zipWithIndex.map {
+            case (value, idx) => (value, valueDataTypes(idx))
+          } map {
+            case (value, Some(valueType)) if value.dataType != valueType =>
+              Alias(Cast(value, valueType), value.name)()
+            case (value, _) => value
+          }
+        )
+
+        up.copy(values = Some(values))
+    }
+  }
+
+  /**
    * Widens the data types of the children of Union/Except/Intersect.
    * 1. When ANSI mode is off:
    *   Loosely based on rules from "Hadoop: The Definitive Guide" 2nd edition, by Tom White
@@ -334,7 +360,7 @@ abstract class TypeCoercionBase {
 
       // Handle type casting required between value expression and subquery output
       // in IN subquery.
-      case i @ InSubquery(lhs, ListQuery(sub, children, exprId, _, conditions))
+      case i @ InSubquery(lhs, ListQuery(sub, children, exprId, _, conditions, _))
           if !i.resolved && lhs.length == sub.output.length =>
         // LHS is the value expressions of IN subquery.
         // RHS is the subquery output.
@@ -806,6 +832,7 @@ abstract class TypeCoercionBase {
 object TypeCoercion extends TypeCoercionBase {
 
   override def typeCoercionRules: List[Rule[LogicalPlan]] =
+    UnpivotCoercion ::
     WidenSetOperationTypes ::
     new CombinedTypeCoercionRule(
       InConversion ::
@@ -1196,13 +1223,13 @@ trait TypeCoercionRule extends Rule[LogicalPlan] with Logging {
     // Check if the inputs have changed.
     val references = AttributeMap(plan.references.collect {
       case a if a.resolved => a -> a
-    }.toSeq)
+    })
     def sameButDifferent(a: Attribute): Boolean = {
       references.get(a).exists(b => b.dataType != a.dataType || b.nullable != a.nullable)
     }
     val inputMap = AttributeMap(plan.inputSet.collect {
       case a if a.resolved && sameButDifferent(a) => a -> a
-    }.toSeq)
+    })
     if (inputMap.isEmpty) {
       // Nothing changed.
       plan

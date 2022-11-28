@@ -17,9 +17,8 @@
 
 package org.apache.spark.sql.execution.command
 
-import java.util.Locale
-
 import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -28,21 +27,19 @@ import org.apache.spark.util.Utils
  * specific test suites:
  *
  *   - V2 catalog tests: `org.apache.spark.sql.execution.command.v2.ShowFunctionsSuite`
- *   - V1 catalog tests:
- *     `org.apache.spark.sql.execution.command.v1.ShowFunctionsSuiteBase`
- *     - Temporary functions:
- *        `org.apache.spark.sql.execution.command.v1.ShowTempFunctionsSuite`
- *     - Permanent functions:
- *        `org.apache.spark.sql.hive.execution.command.ShowFunctionsSuite`
+ *   - V1 catalog tests: `org.apache.spark.sql.execution.command.v1.ShowFunctionsSuiteBase`
+ *     - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.ShowFunctionsSuite`
+ *     - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.ShowFunctionsSuite`
  */
 trait ShowFunctionsSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "SHOW FUNCTIONS"
 
   protected def funCatalog: String = catalog
-  protected def createFunction(name: String): Unit = {}
-  protected def dropFunction(name: String): Unit = {}
-  protected def showFun(ns: String, name: String): String = s"$ns.$name".toLowerCase(Locale.ROOT)
-  protected def isTempFunctions(): Boolean = false
+  protected def createFunction(name: String): Unit
+  protected def dropFunction(name: String): Unit
+  protected def qualifiedFunName(ns: String, name: String): String = {
+    Seq(funCatalog, ns, name).quoted
+  }
 
   /**
    * Drops function `funName` after calling `f`.
@@ -53,9 +50,9 @@ trait ShowFunctionsSuiteBase extends QueryTest with DDLCommandTestUtils {
     }
   }
 
-  protected def withNamespaceAndFuns(ns: String, funNames: Seq[String], cat: String = funCatalog)
+  protected def withNamespaceAndFuns(ns: String, funNames: Seq[String])
       (f: (String, Seq[String]) => Unit): Unit = {
-    val nsCat = s"$cat.$ns"
+    val nsCat = s"$funCatalog.$ns"
     withNamespace(nsCat) {
       sql(s"CREATE NAMESPACE $nsCat")
       val nsCatFns = funNames.map(funName => s"$nsCat.$funName")
@@ -65,9 +62,9 @@ trait ShowFunctionsSuiteBase extends QueryTest with DDLCommandTestUtils {
     }
   }
 
-  protected def withNamespaceAndFun(ns: String, funName: String, cat: String = funCatalog)
+  protected def withNamespaceAndFun(ns: String, funName: String)
       (f: (String, String) => Unit): Unit = {
-    withNamespaceAndFuns(ns, Seq(funName), cat) { case (ns, Seq(name)) =>
+    withNamespaceAndFuns(ns, Seq(funName)) { case (ns, Seq(name)) =>
       f(ns, name)
     }
   }
@@ -87,7 +84,7 @@ trait ShowFunctionsSuiteBase extends QueryTest with DDLCommandTestUtils {
       createFunction(f)
       QueryTest.checkAnswer(
         sql(s"SHOW USER FUNCTIONS IN $ns"),
-        Row(showFun("ns", "logiii")) :: Nil)
+        Row(qualifiedFunName("ns", "logiii")) :: Nil)
     }
   }
 
@@ -99,7 +96,7 @@ trait ShowFunctionsSuiteBase extends QueryTest with DDLCommandTestUtils {
         spark.udf.register(f1, (arg1: Int, arg2: String) => arg2 + arg1)
         QueryTest.checkAnswer(
           sql(s"SHOW USER FUNCTIONS IN $ns"),
-          Row(showFun("ns", "poggi")) :: Row(f1) :: Nil)
+          Row(qualifiedFunName("ns", "poggi")) :: Row(f1) :: Nil)
         QueryTest.checkAnswer(
           sql(s"SHOW ALL FUNCTIONS IN $ns").filter(s"function='$f1'"),
           Row(f1) :: Nil)
@@ -130,7 +127,7 @@ trait ShowFunctionsSuiteBase extends QueryTest with DDLCommandTestUtils {
       createFunction(f)
       QueryTest.checkAnswer(
         sql(s"SHOW ALL FUNCTIONS IN $ns"),
-        allFuns :+ Row(showFun("ns", "current_datei")))
+        allFuns :+ Row(qualifiedFunName("ns", "current_datei")))
     }
   }
 
@@ -141,48 +138,35 @@ trait ShowFunctionsSuiteBase extends QueryTest with DDLCommandTestUtils {
       funs.foreach(createFunction)
       QueryTest.checkAnswer(
         sql(s"SHOW USER FUNCTIONS IN $ns LIKE '*'"),
-        testFuns.map(testFun => Row(showFun("ns", testFun))))
+        testFuns.map(testFun => Row(qualifiedFunName("ns", testFun))))
       QueryTest.checkAnswer(
         sql(s"SHOW USER FUNCTIONS IN $ns LIKE '*rc*'"),
-        Seq("crc32i", "crc16j").map(testFun => Row(showFun("ns", testFun))))
+        Seq("crc32i", "crc16j").map(testFun => Row(qualifiedFunName("ns", testFun))))
     }
   }
 
   test("show a function by its string name") {
-    assume(!isTempFunctions())
     val testFuns = Seq("crc32i", "crc16j")
     withNamespaceAndFuns("ns", testFuns) { (ns, funs) =>
       assert(sql(s"SHOW USER FUNCTIONS IN $ns").isEmpty)
       funs.foreach(createFunction)
       QueryTest.checkAnswer(
         sql(s"SHOW USER FUNCTIONS IN $ns 'crc32i'"),
-        Row(showFun("ns", "crc32i")) :: Nil)
+        Row(qualifiedFunName("ns", "crc32i")) :: Nil)
     }
   }
 
   test("show functions matched to the '|' pattern") {
-    assume(!isTempFunctions())
     val testFuns = Seq("crc32i", "crc16j", "date1900", "Date1")
     withNamespaceAndFuns("ns", testFuns) { (ns, funs) =>
       assert(sql(s"SHOW USER FUNCTIONS IN $ns").isEmpty)
       funs.foreach(createFunction)
       QueryTest.checkAnswer(
         sql(s"SHOW USER FUNCTIONS IN $ns LIKE 'crc32i|date1900'"),
-        Seq("crc32i", "date1900").map(testFun => Row(showFun("ns", testFun))))
+        Seq("crc32i", "date1900").map(testFun => Row(qualifiedFunName("ns", testFun))))
       QueryTest.checkAnswer(
         sql(s"SHOW USER FUNCTIONS IN $ns LIKE 'crc32i|date*'"),
-        Seq("crc32i", "date1900", "Date1").map(testFun => Row(showFun("ns", testFun))))
-    }
-  }
-
-  test("show a function by its id") {
-    assume(!isTempFunctions())
-    withNamespaceAndFun("ns", "crc32i") { (ns, fun) =>
-      assert(sql(s"SHOW USER FUNCTIONS IN $ns").isEmpty)
-      createFunction(fun)
-      QueryTest.checkAnswer(
-        sql(s"SHOW USER FUNCTIONS $fun"),
-        Row(showFun("ns", "crc32i")) :: Nil)
+        Seq("crc32i", "date1900", "Date1").map(testFun => Row(qualifiedFunName("ns", testFun))))
     }
   }
 }

@@ -53,6 +53,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [pl
 (9) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [l_partkey#1]
 Right keys [1]: [p_partkey#7]
+Join type: Inner
 Join condition: (((((((p_brand#8 = Brand#11) AND p_container#10 IN (SM CASE,SM BOX,SM PACK,SM PKG)) AND (l_quantity#2 >= 1)) AND (l_quantity#2 <= 11)) AND (p_size#9 <= 5)) OR (((((p_brand#8 = Brand#12) AND p_container#10 IN (MED BAG,MED BOX,MED PKG,MED PACK)) AND (l_quantity#2 >= 10)) AND (l_quantity#2 <= 20)) AND (p_size#9 <= 10))) OR (((((p_brand#8 = Brand#13) AND p_container#10 IN (LG CASE,LG BOX,LG PACK,LG PKG)) AND (l_quantity#2 >= 20)) AND (l_quantity#2 <= 30)) AND (p_size#9 <= 15)))
 
 (10) Project [codegen id : 2]

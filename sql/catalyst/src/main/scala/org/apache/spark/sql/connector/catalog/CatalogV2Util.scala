@@ -146,7 +146,7 @@ private[sql] object CatalogV2Util {
                 Option(add.defaultValue).map(field.withCurrentDefaultValue).getOrElse(field)
               val fieldWithComment: StructField =
                 Option(add.comment).map(fieldWithDefault.withComment).getOrElse(fieldWithDefault)
-              addField(schema, fieldWithComment, add.position(), tableProvider, statementType)
+              addField(schema, fieldWithComment, add.position(), tableProvider, statementType, true)
             case names =>
               replace(schema, names.init, parent => parent.dataType match {
                 case parentType: StructType =>
@@ -158,7 +158,7 @@ private[sql] object CatalogV2Util {
                       .getOrElse(fieldWithDefault)
                   Some(parent.copy(dataType =
                     addField(parentType, fieldWithComment, add.position(), tableProvider,
-                      statementType)))
+                      statementType, true)))
                 case _ =>
                   throw new IllegalArgumentException(s"Not a struct: ${names.init.last}")
               })
@@ -188,7 +188,8 @@ private[sql] object CatalogV2Util {
               throw new IllegalArgumentException("Field not found: " + name)
             }
             val withFieldRemoved = StructType(struct.fields.filter(_ != oldField))
-            addField(withFieldRemoved, oldField, update.position(), tableProvider, statementType)
+            addField(withFieldRemoved, oldField, update.position(), tableProvider, statementType,
+              false)
           }
 
           update.fieldNames() match {
@@ -230,7 +231,8 @@ private[sql] object CatalogV2Util {
       field: StructField,
       position: ColumnPosition,
       tableProvider: Option[String],
-      statementType: String): StructType = {
+      statementType: String,
+      addNewColumnToExistingTable: Boolean): StructType = {
     val newSchema: StructType = if (position == null) {
       schema.add(field)
     } else if (position.isInstanceOf[First]) {
@@ -244,7 +246,8 @@ private[sql] object CatalogV2Util {
       val (before, after) = schema.fields.splitAt(fieldIndex + 1)
       StructType(before ++ (field +: after))
     }
-    constantFoldCurrentDefaultsToExistDefaults(newSchema, tableProvider, statementType)
+    constantFoldCurrentDefaultsToExistDefaults(
+      newSchema, tableProvider, statementType, addNewColumnToExistingTable)
   }
 
   private def replace(

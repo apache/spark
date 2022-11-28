@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, InMemoryCatalog, InMemoryPartitionTableCatalog, StagingInMemoryTableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, InMemoryCatalog, InMemoryPartitionTableCatalog, InMemoryTableWithV2FilterCatalog, StagingInMemoryTableCatalog}
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -33,6 +33,8 @@ trait DatasourceV2SQLBase
 
   before {
     spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryCatalog].getName)
+    spark.conf.set("spark.sql.catalog.testv2filter",
+      classOf[InMemoryTableWithV2FilterCatalog].getName)
     spark.conf.set("spark.sql.catalog.testpart", classOf[InMemoryPartitionTableCatalog].getName)
     spark.conf.set(
       "spark.sql.catalog.testcat_atomic", classOf[StagingInMemoryTableCatalog].getName)

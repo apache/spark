@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
-class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper {
+class BinaryComparisonSimplificationSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =

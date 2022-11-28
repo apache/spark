@@ -35,7 +35,7 @@ private[avro] case class CatalystDataToAvro(
 
   @transient private lazy val avroType =
     jsonFormatSchema
-      .map(new Schema.Parser().parse)
+      .map(new Schema.Parser().setValidateDefaults(false).parse)
       .getOrElse(SchemaConverters.toAvroType(child.dataType, child.nullable))
 
   @transient private lazy val serializer =

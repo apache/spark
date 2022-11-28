@@ -38,7 +38,7 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 class CastWithAnsiOffSuite extends CastSuiteBase {
 
-  override def ansiEnabled: Boolean = false
+  override def evalMode: EvalMode.Value = EvalMode.LEGACY
 
   test("null cast #2") {
     import DataTypeTestUtils._

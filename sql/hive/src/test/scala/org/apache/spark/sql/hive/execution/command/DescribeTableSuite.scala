@@ -58,7 +58,7 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
         ("comment", StringType)))
       QueryTest.checkAnswer(
         // Filter out 'Table Properties' to don't check `transient_lastDdlTime`
-        descriptionDf.filter("col_name != 'Created Time' and col_name != 'Table Properties'"),
+        descriptionDf.filter("!(col_name in ('Created Time', 'Table Properties', 'Created By'))"),
         Seq(
           Row("data", "string", null),
           Row("id", "bigint", null),
@@ -72,7 +72,6 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
           Row("Table", "table", ""),
           Row(TableCatalog.PROP_OWNER.capitalize, Utils.getCurrentUserName(), ""),
           Row("Last Access", "UNKNOWN", ""),
-          Row("Created By", "Spark 3.4.0-SNAPSHOT", ""),
           Row("Type", "EXTERNAL", ""),
           Row("Provider", getProvider(), ""),
           Row("Comment", "this is a test table", ""),

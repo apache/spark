@@ -260,19 +260,19 @@ def cogrouped_apply_in_pandas_example(spark: SparkSession) -> None:
         [(20000101, 1, "x"), (20000101, 2, "y")],
         ("time", "id", "v2"))
 
-    def asof_join(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFrame:
-        return pd.merge_asof(left, right, on="time", by="id")
+    def merge_ordered(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFrame:
+        return pd.merge_ordered(left, right)
 
     df1.groupby("id").cogroup(df2.groupby("id")).applyInPandas(
-        asof_join, schema="time int, id int, v1 double, v2 string").show()
-    # +--------+---+---+---+
-    # |    time| id| v1| v2|
-    # +--------+---+---+---+
-    # |20000101|  1|1.0|  x|
-    # |20000102|  1|3.0|  x|
-    # |20000101|  2|2.0|  y|
-    # |20000102|  2|4.0|  y|
-    # +--------+---+---+---+
+        merge_ordered, schema="time int, id int, v1 double, v2 string").show()
+    # +--------+---+---+----+
+    # |    time| id| v1|  v2|
+    # +--------+---+---+----+
+    # |20000101|  1|1.0|   x|
+    # |20000102|  1|3.0|null|
+    # |20000101|  2|2.0|   y|
+    # |20000102|  2|4.0|null|
+    # +--------+---+---+----+
 
 
 if __name__ == "__main__":

@@ -110,4 +110,20 @@ class GenericAvroSerializerSuite extends SparkFunSuite with SharedSparkContext {
       assert(rdd.collect() sameElements Array.fill(10)(datum))
     }
   }
+
+  test("SPARK-39775: Disable validate default values when parsing Avro schemas") {
+    val avroTypeStruct = s"""
+      |{
+      |  "type": "record",
+      |  "name": "struct",
+      |  "fields": [
+      |    {"name": "id", "type": "long", "default": null}
+      |  ]
+      |}
+    """.stripMargin
+    val schema = new Schema.Parser().setValidateDefaults(false).parse(avroTypeStruct)
+
+    val genericSer = new GenericAvroSerializer(conf.getAvroSchema)
+    assert(schema === genericSer.decompress(ByteBuffer.wrap(genericSer.compress(schema))))
+  }
 }

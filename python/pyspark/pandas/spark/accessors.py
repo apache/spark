@@ -555,7 +555,7 @@ class SparkFrameMethods:
         from pyspark.pandas.frame import CachedDataFrame
 
         self._psdf._update_internal_frame(
-            self._psdf._internal.resolved_copy, requires_same_anchor=False
+            self._psdf._internal.resolved_copy, check_same_anchor=False
         )
         return CachedDataFrame(self._psdf._internal)
 
@@ -633,7 +633,7 @@ class SparkFrameMethods:
         from pyspark.pandas.frame import CachedDataFrame
 
         self._psdf._update_internal_frame(
-            self._psdf._internal.resolved_copy, requires_same_anchor=False
+            self._psdf._internal.resolved_copy, check_same_anchor=False
         )
         return CachedDataFrame(self._psdf._internal, storage_level=storage_level)
 

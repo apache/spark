@@ -33,7 +33,21 @@ SELECT `(a)?+.+` FROM testData2 WHERE a = 1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNRESOLVED_COLUMN] A column or function parameter with name `(a)?+.+` cannot be resolved. Did you mean one of the following? [`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`]; line 1 pos 7
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "objectName" : "`(a)?+.+`",
+    "proposal" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 16,
+    "fragment" : "`(a)?+.+`"
+  } ]
+}
 
 
 -- !query
@@ -42,7 +56,21 @@ SELECT t.`(a)?+.+` FROM testData2 t WHERE a = 1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNRESOLVED_COLUMN] A column or function parameter with name `t`.`(a)?+.+` cannot be resolved. Did you mean one of the following? [`t`.`A`, `t`.`B`, `t`.`c`, `t`.`d`]; line 1 pos 7
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "objectName" : "`t`.`(a)?+.+`",
+    "proposal" : "`t`.`A`, `t`.`B`, `t`.`c`, `t`.`d`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 18,
+    "fragment" : "t.`(a)?+.+`"
+  } ]
+}
 
 
 -- !query
@@ -51,7 +79,21 @@ SELECT `(a|b)` FROM testData2 WHERE a = 2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNRESOLVED_COLUMN] A column or function parameter with name `(a|b)` cannot be resolved. Did you mean one of the following? [`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`]; line 1 pos 7
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "objectName" : "`(a|b)`",
+    "proposal" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 14,
+    "fragment" : "`(a|b)`"
+  } ]
+}
 
 
 -- !query
@@ -60,7 +102,21 @@ SELECT `(a|b)?+.+` FROM testData2 WHERE a = 2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNRESOLVED_COLUMN] A column or function parameter with name `(a|b)?+.+` cannot be resolved. Did you mean one of the following? [`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`]; line 1 pos 7
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "objectName" : "`(a|b)?+.+`",
+    "proposal" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 18,
+    "fragment" : "`(a|b)?+.+`"
+  } ]
+}
 
 
 -- !query
@@ -69,7 +125,21 @@ SELECT SUM(`(a|b)?+.+`) FROM testData2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNRESOLVED_COLUMN] A column or function parameter with name `(a|b)?+.+` cannot be resolved. Did you mean one of the following? [`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`]; line 1 pos 11
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "objectName" : "`(a|b)?+.+`",
+    "proposal" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 22,
+    "fragment" : "`(a|b)?+.+`"
+  } ]
+}
 
 
 -- !query
@@ -78,7 +148,21 @@ SELECT SUM(`(a)`) FROM testData2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNRESOLVED_COLUMN] A column or function parameter with name `(a)` cannot be resolved. Did you mean one of the following? [`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`]; line 1 pos 11
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "objectName" : "`(a)`",
+    "proposal" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 16,
+    "fragment" : "`(a)`"
+  } ]
+}
 
 
 -- !query
@@ -298,7 +382,21 @@ SELECT SUM(a) FROM testdata3 GROUP BY `(a)`
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNRESOLVED_COLUMN] A column or function parameter with name `(a)` cannot be resolved. Did you mean one of the following? [`testdata3`.`a`, `testdata3`.`b`]; line 1 pos 38
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "objectName" : "`(a)`",
+    "proposal" : "`testdata3`.`a`, `testdata3`.`b`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 39,
+    "stopIndex" : 43,
+    "fragment" : "`(a)`"
+  } ]
+}
 
 
 -- !query
@@ -307,4 +405,18 @@ SELECT SUM(a) FROM testdata3 GROUP BY `(a)?+.+`
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNRESOLVED_COLUMN] A column or function parameter with name `(a)?+.+` cannot be resolved. Did you mean one of the following? [`testdata3`.`a`, `testdata3`.`b`]; line 1 pos 38
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "objectName" : "`(a)?+.+`",
+    "proposal" : "`testdata3`.`a`, `testdata3`.`b`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 39,
+    "stopIndex" : 47,
+    "fragment" : "`(a)?+.+`"
+  } ]
+}

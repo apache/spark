@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 import java.util
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -31,8 +31,8 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.TypeCollection.NumericAndAnsiInterval
 import org.apache.spark.util.collection.OpenHashMap
 
-abstract class PercentileBase extends TypedImperativeAggregate[OpenHashMap[AnyRef, Long]]
-  with ImplicitCastInputTypes {
+abstract class PercentileBase
+  extends TypedAggregateWithHashMapAsBuffer with ImplicitCastInputTypes {
 
   val child: Expression
   val percentageExpression: Expression
@@ -60,7 +60,8 @@ abstract class PercentileBase extends TypedImperativeAggregate[OpenHashMap[AnyRe
 
   override lazy val dataType: DataType = {
     val resultType = child.dataType match {
-      case it: AnsiIntervalType => it
+      case _: YearMonthIntervalType => YearMonthIntervalType()
+      case _: DayTimeIntervalType => DayTimeIntervalType()
       case _ => DoubleType
     }
     if (returnPercentileArray) ArrayType(resultType, false) else resultType
@@ -84,14 +85,28 @@ abstract class PercentileBase extends TypedImperativeAggregate[OpenHashMap[AnyRe
       defaultCheck
     } else if (!percentageExpression.foldable) {
       // percentageExpression must be foldable
-      TypeCheckFailure("The percentage(s) must be a constant literal, " +
-        s"but got $percentageExpression")
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> "percentage",
+          "inputType" -> toSQLType(percentageExpression.dataType),
+          "inputExpr" -> toSQLExpr(percentageExpression))
+      )
     } else if (percentages == null) {
-      TypeCheckFailure("Percentage value must not be null")
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_NULL",
+        messageParameters = Map("exprName" -> "percentage")
+      )
     } else if (percentages.exists(percentage => percentage < 0.0 || percentage > 1.0)) {
       // percentages(s) must be in the range [0.0, 1.0]
-      TypeCheckFailure("Percentage(s) must be between 0.0 and 1.0, " +
-        s"but got $percentageExpression")
+      DataTypeMismatch(
+        errorSubClass = "VALUE_OUT_OF_RANGE",
+        messageParameters = Map(
+          "exprName" -> "percentage",
+          "valueRange" -> "[0.0, 1.0]",
+          "currentValue" -> percentages.map(toSQLValue(_, DoubleType)).mkString(",")
+        )
+      )
     } else {
       TypeCheckSuccess
     }
@@ -100,11 +115,6 @@ abstract class PercentileBase extends TypedImperativeAggregate[OpenHashMap[AnyRe
   protected def toDoubleValue(d: Any): Double = d match {
     case d: Decimal => d.toDouble
     case n: Number => n.doubleValue
-  }
-
-  override def createAggregationBuffer(): OpenHashMap[AnyRef, Long] = {
-    // Initialize new counts map instance here.
-    new OpenHashMap[AnyRef, Long]()
   }
 
   override def update(
@@ -224,56 +234,6 @@ abstract class PercentileBase extends TypedImperativeAggregate[OpenHashMap[AnyRe
     util.Arrays.binarySearch(countsArray, 0, end, value) match {
       case ix if ix < 0 => -(ix + 1)
       case ix => ix
-    }
-  }
-
-  private lazy val projection = UnsafeProjection.create(Array[DataType](child.dataType, LongType))
-
-  override def serialize(obj: OpenHashMap[AnyRef, Long]): Array[Byte] = {
-    val buffer = new Array[Byte](4 << 10)  // 4K
-    val bos = new ByteArrayOutputStream()
-    val out = new DataOutputStream(bos)
-    try {
-      // Write pairs in counts map to byte buffer.
-      obj.foreach { case (key, count) =>
-        val row = InternalRow.apply(key, count)
-        val unsafeRow = projection.apply(row)
-        out.writeInt(unsafeRow.getSizeInBytes)
-        unsafeRow.writeToStream(out, buffer)
-      }
-      out.writeInt(-1)
-      out.flush()
-
-      bos.toByteArray
-    } finally {
-      out.close()
-      bos.close()
-    }
-  }
-
-  override def deserialize(bytes: Array[Byte]): OpenHashMap[AnyRef, Long] = {
-    val bis = new ByteArrayInputStream(bytes)
-    val ins = new DataInputStream(bis)
-    try {
-      val counts = new OpenHashMap[AnyRef, Long]
-      // Read unsafeRow size and content in bytes.
-      var sizeOfNextRow = ins.readInt()
-      while (sizeOfNextRow >= 0) {
-        val bs = new Array[Byte](sizeOfNextRow)
-        ins.readFully(bs)
-        val row = new UnsafeRow(2)
-        row.pointTo(bs, sizeOfNextRow)
-        // Insert the pairs into counts map.
-        val key = row.get(0, child.dataType)
-        val count = row.get(1, LongType).asInstanceOf[Long]
-        counts.update(key, count)
-        sizeOfNextRow = ins.readInt()
-      }
-
-      counts
-    } finally {
-      ins.close()
-      bis.close()
     }
   }
 }

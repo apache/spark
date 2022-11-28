@@ -72,6 +72,7 @@ Arguments: [i_item_sk#5 ASC NULLS FIRST], false, 0
 (11) SortMergeJoin [codegen id : 6]
 Left keys [1]: [cs_item_sk#1]
 Right keys [1]: [i_item_sk#5]
+Join type: Inner
 Join condition: None
 
 (12) Project [codegen id : 6]
@@ -84,6 +85,7 @@ Output [1]: [d_date_sk#11]
 (14) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [cs_sold_date_sk#3]
 Right keys [1]: [d_date_sk#11]
+Join type: Inner
 Join condition: None
 
 (15) Project [codegen id : 6]

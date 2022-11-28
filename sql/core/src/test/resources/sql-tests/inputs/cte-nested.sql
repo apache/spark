@@ -147,3 +147,60 @@ WITH
     SELECT * FROM t3
   )
 SELECT * FROM t2;
+
+-- CTE nested in CTE main body FROM clause references outer CTE def
+WITH cte_outer AS (
+  SELECT 1
+)
+SELECT * FROM (
+  WITH cte_inner AS (
+    SELECT * FROM cte_outer
+  )
+  SELECT * FROM cte_inner
+);
+
+-- CTE double nested in CTE main body FROM clause references outer CTE def
+WITH cte_outer AS (
+  SELECT 1
+)
+SELECT * FROM (
+  WITH cte_inner AS (
+    SELECT * FROM (
+      WITH cte_inner_inner AS (
+        SELECT * FROM cte_outer
+      )
+      SELECT * FROM cte_inner_inner
+    )
+  )
+  SELECT * FROM cte_inner
+);
+
+-- Invalid reference to invisible CTE def nested CTE def
+WITH cte_outer AS (
+  WITH cte_invisible_inner AS (
+    SELECT 1
+  )
+  SELECT * FROM cte_invisible_inner
+)
+SELECT * FROM (
+  WITH cte_inner AS (
+    SELECT * FROM cte_invisible_inner
+  )
+  SELECT * FROM cte_inner
+);
+
+-- Invalid reference to invisible CTE def nested CTE def (in FROM)
+WITH cte_outer AS (
+  SELECT * FROM (
+    WITH cte_invisible_inner AS (
+      SELECT 1
+    )
+    SELECT * FROM cte_invisible_inner
+  )
+)
+SELECT * FROM (
+  WITH cte_inner AS (
+    SELECT * FROM cte_invisible_inner
+  )
+  SELECT * FROM cte_inner
+);

@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.Strategy
-import org.apache.spark.sql.catalyst.expressions.PredicateHelper
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractSingleColumnNullAwareAntiJoin}
 import org.apache.spark.sql.catalyst.plans.LeftAnti
@@ -35,7 +34,7 @@ import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNes
  *    stage in case of the larger join child relation finishes before the smaller relation. Note
  *    that this rule needs to be applied before regular join strategies.
  */
-object LogicalQueryStageStrategy extends Strategy with PredicateHelper {
+object LogicalQueryStageStrategy extends Strategy {
 
   private def isBroadcastStage(plan: LogicalPlan): Boolean = plan match {
     case LogicalQueryStage(_, _: BroadcastQueryStageExec) => true

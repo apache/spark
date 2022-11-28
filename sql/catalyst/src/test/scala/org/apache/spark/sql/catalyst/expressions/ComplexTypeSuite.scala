@@ -17,16 +17,16 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedExtractValue}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
-
 
 class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -85,19 +85,11 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("SPARK-33460: GetMapValue NoSuchElementException") {
+  test("SPARK-40066: GetMapValue returns null on invalid map value access") {
     Seq(true, false).foreach { ansiEnabled =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
         val map = Literal.create(Map(1 -> "a", 2 -> "b"), MapType(IntegerType, StringType))
-
-        if (ansiEnabled) {
-          checkExceptionInExpression[Exception](
-            GetMapValue(map, Literal(5)),
-            "Key 5 does not exist."
-          )
-        } else {
-          checkEvaluation(GetMapValue(map, Literal(5)), null)
-        }
+        checkEvaluation(GetMapValue(map, Literal(5)), null)
       }
     }
   }
@@ -285,9 +277,9 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
       create_map(intSeq, strWithNull.map(_.value)))
 
     // Map key can't be null
-    checkExceptionInExpression[RuntimeException](
+    checkErrorInExpression[SparkRuntimeException](
       CreateMap(interlace(strWithNull, intSeq.map(Literal(_)))),
-      "Cannot use null as map key")
+      "NULL_MAP_KEY")
 
     checkExceptionInExpression[RuntimeException](
       CreateMap(Seq(Literal(1), Literal(2), Literal(1), Literal(3))), "Duplicate map key")
@@ -318,9 +310,44 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     ))
     map2.checkInputDataTypes() match {
       case TypeCheckResult.TypeCheckSuccess => fail("should not allow map as map key")
-      case TypeCheckResult.TypeCheckFailure(msg) =>
-        assert(msg.contains("The key of map cannot be/contain map"))
+      case TypeCheckResult.DataTypeMismatch(errorSubClass, messageParameters) =>
+        assert(errorSubClass == "INVALID_MAP_KEY_TYPE")
+        assert(messageParameters === Map("keyType" -> "\"MAP<INT, INT>\""))
     }
+
+    // expects a positive even number of arguments
+    val map3 = CreateMap(Seq(Literal(1), Literal(2), Literal(3)))
+    assert(map3.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "WRONG_NUM_ARGS",
+        messageParameters = Map(
+          "functionName" -> "`map`",
+          "expectedNum" -> "2n (n > 0)",
+          "actualNum" -> "3")
+      )
+    )
+
+    // The given keys of function map should all be the same type
+    val map4 = CreateMap(Seq(Literal(1), Literal(2), Literal('a'), Literal(3)))
+    assert(map4.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "CREATE_MAP_KEY_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> "`map`",
+          "dataType" -> "[\"INT\", \"STRING\"]")
+      )
+    )
+
+    // The given values of function map should all be the same type
+    val map5 = CreateMap(Seq(Literal(1), Literal(2), Literal(3), Literal('a')))
+    assert(map5.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "CREATE_MAP_VALUE_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> "`map`",
+          "dataType" -> "[\"INT\", \"STRING\"]")
+      )
+    )
   }
 
   test("MapFromArrays") {
@@ -354,9 +381,9 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(MapFromArrays(nullArray, nullArray), null)
 
     // Map key can't be null
-    checkExceptionInExpression[RuntimeException](
+    checkErrorInExpression[SparkRuntimeException](
       MapFromArrays(intWithNullArray, strArray),
-      "Cannot use null as map key")
+      "NULL_MAP_KEY")
 
     checkExceptionInExpression[RuntimeException](
       MapFromArrays(
@@ -379,8 +406,9 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create(Seq(1), ArrayType(IntegerType)))
     map.checkInputDataTypes() match {
       case TypeCheckResult.TypeCheckSuccess => fail("should not allow map as map key")
-      case TypeCheckResult.TypeCheckFailure(msg) =>
-        assert(msg.contains("The key of map cannot be/contain map"))
+      case TypeCheckResult.DataTypeMismatch(errorSubClass, messageParameters) =>
+        assert(errorSubClass == "INVALID_MAP_KEY_TYPE")
+        assert(messageParameters === Map("keyType" -> "\"MAP<INT, STRING>\""))
     }
   }
 
@@ -403,6 +431,18 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
       create_row(UTF8String.fromString("x"), 2.0))
     checkEvaluation(CreateNamedStruct(Seq("a", Literal.create(null, IntegerType))),
       create_row(null))
+
+    // expects a positive even number of arguments
+    val namedStruct1 = CreateNamedStruct(Seq(Literal(1), Literal(2), Literal(3)))
+    assert(namedStruct1.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "WRONG_NUM_ARGS",
+        messageParameters = Map(
+          "functionName" -> "`named_struct`",
+          "expectedNum" -> "2n (n > 0)",
+          "actualNum" -> "3")
+      )
+    )
   }
 
   test("test dsl for complex type") {
@@ -484,6 +524,10 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     val m5 = Map("a" -> null)
     checkEvaluation(new StringToMap(s5), m5)
 
+    val s6 = Literal("a=1&b=2&c=3")
+    val m6 = Map("a" -> "1", "b" -> "2", "c" -> "3")
+    checkEvaluation(StringToMap(s6, NonFoldableLiteral("&"), NonFoldableLiteral("=")), m6)
+
     checkExceptionInExpression[RuntimeException](
       new StringToMap(Literal("a:1,b:2,a:3")), "Duplicate map key")
     withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
@@ -495,17 +539,51 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // arguments checking
     assert(new StringToMap(Literal("a:1,b:2,c:3")).checkInputDataTypes().isSuccess)
-    assert(new StringToMap(Literal(null)).checkInputDataTypes().isFailure)
-    assert(new StringToMap(Literal("a:1,b:2,c:3"), Literal(null)).checkInputDataTypes().isFailure)
-    assert(StringToMap(Literal("a:1,b:2,c:3"), Literal(null), Literal(null))
-      .checkInputDataTypes().isFailure)
-    assert(new StringToMap(Literal(null), Literal(null)).checkInputDataTypes().isFailure)
-
-    assert(new StringToMap(Literal("a:1_b:2_c:3"), NonFoldableLiteral("_"))
-        .checkInputDataTypes().isFailure)
-    assert(
-      new StringToMap(Literal("a=1_b=2_c=3"), Literal("_"), NonFoldableLiteral("="))
-        .checkInputDataTypes().isFailure)
+    assert(new StringToMap(Literal(null)).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "1",
+          "requiredType" -> "\"STRING\"",
+          "inputSql" -> "\"NULL\"",
+          "inputType" -> "\"VOID\""
+        )
+      )
+    )
+    assert(new StringToMap(Literal("a:1,b:2,c:3"), Literal(null)).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "2",
+          "requiredType" -> "\"STRING\"",
+          "inputSql" -> "\"NULL\"",
+          "inputType" -> "\"VOID\""
+        )
+      )
+    )
+    assert(StringToMap(Literal("a:1,b:2,c:3"), Literal(null),
+      Literal(null)).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "2",
+          "requiredType" -> "\"STRING\"",
+          "inputSql" -> "\"NULL\"",
+          "inputType" -> "\"VOID\""
+        )
+      )
+    )
+    assert(new StringToMap(Literal(null), Literal(null)).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "1",
+          "requiredType" -> "\"STRING\"",
+          "inputSql" -> "\"NULL\"",
+          "inputType" -> "\"VOID\""
+        )
+      )
+    )
   }
 
   test("SPARK-22693: CreateNamedStruct should not use global variables") {
@@ -526,5 +604,31 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     val m2 = GetMapValue(Literal.create(d2, MapType(StringType, StringType)), Literal("a"))
 
     assert(m1.semanticEquals(m2))
+  }
+
+  test("SPARK-40315: Literals of ArrayBasedMapData should have deterministic hashCode.") {
+    val keys = new Array[UTF8String](1)
+    val values1 = new Array[UTF8String](1)
+    val values2 = new Array[UTF8String](1)
+
+    keys(0) = UTF8String.fromString("key")
+    values1(0) = UTF8String.fromString("value1")
+    values2(0) = UTF8String.fromString("value2")
+
+    val d1 = new ArrayBasedMapData(new GenericArrayData(keys), new GenericArrayData(values1))
+    val d2 = new ArrayBasedMapData(new GenericArrayData(keys), new GenericArrayData(values1))
+    val d3 = new ArrayBasedMapData(new GenericArrayData(keys), new GenericArrayData(values2))
+    val m1 = Literal.create(d1, MapType(StringType, StringType))
+    val m2 = Literal.create(d2, MapType(StringType, StringType))
+    val m3 = Literal.create(d3, MapType(StringType, StringType))
+
+    // If two Literals of ArrayBasedMapData have the same elements, we expect them to be equal and
+    // to have the same hashCode().
+    assert(m1 == m2)
+    assert(m1.hashCode() == m2.hashCode())
+    // If two Literals of ArrayBasedMapData have different elements, we expect them not to be equal
+    // and to have different hashCode().
+    assert(m1 != m3)
+    assert(m1.hashCode() != m3.hashCode())
   }
 }

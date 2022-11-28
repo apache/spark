@@ -93,6 +93,8 @@ class TaskInfo(
 
   var killed = false
 
+  var launching = true
+
   private[spark] def markGettingResult(time: Long): Unit = {
     gettingResultTime = time
   }
@@ -106,6 +108,10 @@ class TaskInfo(
     } else if (state == TaskState.KILLED) {
       killed = true
     }
+  }
+
+  private[spark] def launchSucceeded(): Unit = {
+    launching = false
   }
 
   def gettingResult: Boolean = gettingResultTime != 0

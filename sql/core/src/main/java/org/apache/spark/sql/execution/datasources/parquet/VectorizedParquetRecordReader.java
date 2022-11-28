@@ -133,6 +133,11 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   private boolean returnColumnarBatch;
 
   /**
+   * Populates the row index column if needed.
+   */
+  private ParquetRowIndexUtil.RowIndexGenerator rowIndexGenerator = null;
+
+  /**
    * The memory mode of the columnarBatch
    */
   private final MemoryMode MEMORY_MODE;
@@ -275,6 +280,8 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
           (ConstantColumnVector) vectors[i + partitionIdx], partitionValues, i);
       }
     }
+
+    rowIndexGenerator = ParquetRowIndexUtil.createGeneratorIfNeeded(sparkSchema);
   }
 
   private void initBatch() {
@@ -323,6 +330,10 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
         }
       }
       cv.assemble();
+    }
+    // If needed, compute row indexes within a file.
+    if (rowIndexGenerator != null) {
+      rowIndexGenerator.populateRowIndex(columnVectors, num);
     }
 
     rowsReturned += num;
@@ -394,6 +405,9 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     if (pages == null) {
       throw new IOException("expecting more rows but reached last block. Read "
           + rowsReturned + " out of " + totalRowCount);
+    }
+    if (rowIndexGenerator != null) {
+      rowIndexGenerator.initFromPageReadStore(pages);
     }
     for (ParquetColumnVector cv : columnVectors) {
       initColumnReader(pages, cv);

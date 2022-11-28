@@ -66,7 +66,7 @@ class ColumnTests(ReusedSQLTestCase):
         cs = self.df.value
         ci == cs
         self.assertTrue(isinstance((-ci - 1 - 2) % 3 * 2.5 / 3.5, Column))
-        rcc = (1 + ci), (1 - ci), (1 * ci), (1 / ci), (1 % ci), (1 ** ci), (ci ** 1)
+        rcc = (1 + ci), (1 - ci), (1 * ci), (1 / ci), (1 % ci), (1**ci), (ci**1)
         self.assertTrue(all(isinstance(c, Column) for c in rcc))
         cb = [ci == 5, ci != 0, ci > 3, ci < 4, ci >= 0, ci <= 7]
         self.assertTrue(all(isinstance(c, Column) for c in cb))

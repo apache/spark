@@ -71,4 +71,36 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
         pythonTestUDF(count(pythonTestUDF(base("a") + 1))))
     checkAnswer(df1, df2)
   }
+
+  test("SPARK-39962: Global aggregation of Pandas UDF should respect the column order") {
+    assume(shouldTestPandasUDFs)
+    val df = Seq[(java.lang.Integer, java.lang.Integer)]((1, null)).toDF("a", "b")
+
+    val pandasTestUDF = TestGroupedAggPandasUDF(name = "pandas_udf")
+    val reorderedDf = df.select("b", "a")
+    val actual = reorderedDf.agg(
+      pandasTestUDF(reorderedDf("a")), pandasTestUDF(reorderedDf("b")))
+    val expected = df.agg(pandasTestUDF(df("a")), pandasTestUDF(df("b")))
+
+    checkAnswer(actual, expected)
+  }
+
+  test("SPARK-34265: Instrument Python UDF execution using SQL Metrics") {
+    assume(shouldTestPythonUDFs)
+    val pythonSQLMetrics = List(
+      "data sent to Python workers",
+      "data returned from Python workers",
+      "number of output rows")
+
+    val df = base.groupBy(pythonTestUDF(base("a") + 1))
+      .agg(pythonTestUDF(pythonTestUDF(base("a") + 1)))
+    df.count()
+
+    val statusStore = spark.sharedState.statusStore
+    val lastExecId = statusStore.executionsList.last.executionId
+    val executionMetrics = statusStore.execution(lastExecId).get.metrics.mkString
+    for (metric <- pythonSQLMetrics) {
+      assert(executionMetrics.contains(metric))
+    }
+  }
 }

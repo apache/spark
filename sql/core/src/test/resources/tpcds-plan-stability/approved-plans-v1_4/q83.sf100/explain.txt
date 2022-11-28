@@ -68,6 +68,7 @@ Output [1]: [d_date_sk#5]
 (5) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [sr_returned_date_sk#3]
 Right keys [1]: [d_date_sk#5]
+Join type: Inner
 Join condition: None
 
 (6) Project [codegen id : 5]
@@ -95,6 +96,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)
 (11) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [sr_item_sk#1]
 Right keys [1]: [i_item_sk#6]
+Join type: Inner
 Join condition: None
 
 (12) Project [codegen id : 5]
@@ -140,6 +142,7 @@ Output [1]: [d_date_sk#16]
 (20) BroadcastHashJoin [codegen id : 10]
 Left keys [1]: [cr_returned_date_sk#15]
 Right keys [1]: [d_date_sk#16]
+Join type: Inner
 Join condition: None
 
 (21) Project [codegen id : 10]
@@ -152,6 +155,7 @@ Output [2]: [i_item_sk#17, i_item_id#18]
 (23) BroadcastHashJoin [codegen id : 10]
 Left keys [1]: [cr_item_sk#13]
 Right keys [1]: [i_item_sk#17]
+Join type: Inner
 Join condition: None
 
 (24) Project [codegen id : 10]
@@ -183,6 +187,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [pla
 (29) BroadcastHashJoin [codegen id : 18]
 Left keys [1]: [item_id#11]
 Right keys [1]: [item_id#22]
+Join type: Inner
 Join condition: None
 
 (30) Project [codegen id : 18]
@@ -210,6 +215,7 @@ Output [1]: [d_date_sk#27]
 (35) BroadcastHashJoin [codegen id : 16]
 Left keys [1]: [wr_returned_date_sk#26]
 Right keys [1]: [d_date_sk#27]
+Join type: Inner
 Join condition: None
 
 (36) Project [codegen id : 16]
@@ -222,6 +228,7 @@ Output [2]: [i_item_sk#28, i_item_id#29]
 (38) BroadcastHashJoin [codegen id : 16]
 Left keys [1]: [wr_item_sk#24]
 Right keys [1]: [i_item_sk#28]
+Join type: Inner
 Join condition: None
 
 (39) Project [codegen id : 16]
@@ -253,6 +260,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [pla
 (44) BroadcastHashJoin [codegen id : 18]
 Left keys [1]: [item_id#11]
 Right keys [1]: [item_id#33]
+Join type: Inner
 Join condition: None
 
 (45) Project [codegen id : 18]
@@ -331,6 +339,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (57) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [d_week_seq#41]
 Right keys [1]: [d_week_seq#43]
+Join type: LeftSemi
 Join condition: None
 
 (58) Project [codegen id : 2]
@@ -344,6 +353,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, date, true]),false), [plan_
 (60) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [d_date#39]
 Right keys [1]: [d_date#40]
+Join type: LeftSemi
 Join condition: None
 
 (61) Project [codegen id : 3]

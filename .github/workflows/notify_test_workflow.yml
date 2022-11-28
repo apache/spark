@@ -31,9 +31,12 @@ jobs:
   notify:
     name: Notify test workflow
     runs-on: ubuntu-20.04
+    permissions:
+      actions: read
+      checks: write
     steps:
       - name: "Notify test workflow"
-        uses: actions/github-script@f05a81df23035049204b043b50c3322045ce7eb3 # pin@v3
+        uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -77,7 +80,7 @@ jobs:
               status = 'completed'
               const conclusion = 'action_required'
 
-              github.checks.create({
+              github.rest.checks.create({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 name: name,
@@ -129,7 +132,7 @@ jobs:
                 + '/actions/runs/'
                 + run_id
 
-              github.checks.create({
+              github.rest.checks.create({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 name: name,

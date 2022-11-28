@@ -206,12 +206,12 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             psser.rename(["0", "1"])
 
         # Function index
-        self.assert_eq(psser.rename(lambda x: x ** 2), pser.rename(lambda x: x ** 2))
-        self.assert_eq((psser + 1).rename(lambda x: x ** 2), (pser + 1).rename(lambda x: x ** 2))
+        self.assert_eq(psser.rename(lambda x: x**2), pser.rename(lambda x: x**2))
+        self.assert_eq((psser + 1).rename(lambda x: x**2), (pser + 1).rename(lambda x: x**2))
 
         expected_error_message = "inplace True is not supported yet for a function 'index'"
         with self.assertRaisesRegex(ValueError, expected_error_message):
-            psser.rename(lambda x: x ** 2, inplace=True)
+            psser.rename(lambda x: x**2, inplace=True)
 
         unsupported_index_inputs = (pd.Series([2, 3, 4, 5, 6, 7, 8]), {0: "zero", 1: "one"})
         for index in unsupported_index_inputs:
@@ -579,6 +579,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psser.fillna(0), pser.fillna(0))
         self.assert_eq(psser.fillna(method="ffill"), pser.fillna(method="ffill"))
         self.assert_eq(psser.fillna(method="bfill"), pser.fillna(method="bfill"))
+        self.assert_eq(psser.fillna(method="backfill"), pser.fillna(method="backfill"))
 
         # inplace fillna on non-nullable column
         pdf = pd.DataFrame({"a": [1, 2, None], "b": [1, 2, 3]})
@@ -599,6 +600,16 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             ValueError, "Must specify a fillna 'value' or 'method' parameter."
         ):
             psser.fillna()
+        with self.assertRaisesRegex(TypeError, "Unsupported type list"):
+            psdf.a.fillna([0])
+        with self.assertRaisesRegex(
+            NotImplementedError, "fillna currently only works for axis=0 or axis='index'"
+        ):
+            psdf.a.fillna(0, axis=1)
+        with self.assertRaisesRegex(
+            NotImplementedError, "limit parameter for value is not support now"
+        ):
+            psdf.a.fillna(0, limit=1)
 
     def test_dropna(self):
         pdf = pd.DataFrame({"x": [np.nan, 2, 3, 4, np.nan, 6]})
@@ -971,7 +982,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         with ps.option_context("compute.default_index_type", "distributed"):
             # the index is different.
             self.assert_eq(
-                psser.reset_index().to_pandas().reset_index(drop=True), pser.reset_index()
+                psser.reset_index()._to_pandas().reset_index(drop=True), pser.reset_index()
             )
 
     def test_index_to_series_reset_index(self):
@@ -1460,7 +1471,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         with self.assertRaisesRegex(TypeError, "accuracy must be an integer; however"):
             ps.Series([24.0, 21.0, 25.0, 33.0, 26.0]).quantile(accuracy="a")
         with self.assertRaisesRegex(TypeError, "q must be a float or an array of floats;"):
-            ps.Series([24.0, 21.0, 25.0, 33.0, 26.0]).quantile(q="a")
+            ps.Series([24.0, 21.0, 25.0, 33.0, 26.0]).quantile(q=1)
         with self.assertRaisesRegex(TypeError, "q must be a float or an array of floats;"):
             ps.Series([24.0, 21.0, 25.0, 33.0, 26.0]).quantile(q=["a"])
         with self.assertRaisesRegex(
@@ -1537,6 +1548,8 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
 
         with self.assertRaisesRegex(TypeError, "periods should be an int; however"):
             psser.shift(periods=1.5)
+
+        self.assert_eq(psser.shift(periods=0), pser.shift(periods=0))
 
     def test_diff(self):
         pser = pd.Series([10, 20, 15, 30, 45], name="x")
@@ -2695,6 +2708,8 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             TypeError, "Could not convert datetime64\\[ns\\] \\(timestamp.*\\) to numeric"
         ):
             ps.Series([pd.Timestamp("2016-01-01") for _ in range(3)]).prod()
+        with self.assertRaisesRegex(NotImplementedError, "Series does not support columns axis."):
+            psser.prod(axis=1)
 
     def test_hasnans(self):
         # BooleanType
@@ -2851,7 +2866,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             psser = ps.Series([1, 2, np.nan, 4, 5])  # Arrow takes np.nan as null
             psser.loc[3] = np.nan  # Spark takes np.nan as NaN
             kcodes, kuniques = psser.factorize(na_sentinel=None)
-            pcodes, puniques = psser.to_pandas().factorize(sort=True, na_sentinel=None)
+            pcodes, puniques = psser._to_pandas().factorize(sort=True, na_sentinel=None)
             self.assert_eq(pcodes.tolist(), kcodes.to_list())
             self.assert_eq(puniques, kuniques)
 
@@ -2999,8 +3014,12 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         psser = ps.from_pandas(pser)
         self.assert_eq(pser.argmin(), psser.argmin())
         self.assert_eq(pser.argmax(), psser.argmax())
+        self.assert_eq(pser.argmin(skipna=False), psser.argmin(skipna=False))
+        self.assert_eq(pser.argmax(skipna=False), psser.argmax(skipna=False))
         self.assert_eq(pser.argmax(skipna=False), psser.argmax(skipna=False))
         self.assert_eq((pser + 1).argmax(skipna=False), (psser + 1).argmax(skipna=False))
+        self.assert_eq(pser.argmin(skipna=False), psser.argmin(skipna=False))
+        self.assert_eq((pser + 1).argmin(skipna=False), (psser + 1).argmin(skipna=False))
 
         # MultiIndex
         pser.index = pd.MultiIndex.from_tuples(
@@ -3010,6 +3029,13 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(pser.argmin(), psser.argmin())
         self.assert_eq(pser.argmax(), psser.argmax())
         self.assert_eq(pser.argmax(skipna=False), psser.argmax(skipna=False))
+
+        pser2 = pd.Series([np.NaN, 1.0, 2.0, np.NaN])
+        psser2 = ps.from_pandas(pser2)
+        self.assert_eq(pser2.argmin(), psser2.argmin())
+        self.assert_eq(pser2.argmax(), psser2.argmax())
+        self.assert_eq(pser2.argmin(skipna=False), psser2.argmin(skipna=False))
+        self.assert_eq(pser2.argmax(skipna=False), psser2.argmax(skipna=False))
 
         # Null Series
         self.assert_eq(pd.Series([np.nan]).argmin(), ps.Series([np.nan]).argmin())
@@ -3024,6 +3050,8 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             ps.Series([]).argmax()
         with self.assertRaisesRegex(ValueError, "axis can only be 0 or 'index'"):
             psser.argmax(axis=1)
+        with self.assertRaisesRegex(ValueError, "axis can only be 0 or 'index'"):
+            psser.argmin(axis=1)
 
     def test_backfill(self):
         pdf = pd.DataFrame({"x": [np.nan, 2, 3, 4, np.nan, 6]})
@@ -3045,6 +3073,33 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             # Test `inplace=True`
             psser.backfill(inplace=True)
             self.assert_eq(expected, psser)
+
+    def test_searchsorted(self):
+        pser1 = pd.Series([1, 2, 2, 3])
+
+        index2 = pd.date_range("2018-04-09", periods=4, freq="2D")
+        pser2 = pd.Series([1, 2, 3, 4], index=index2)
+
+        index3 = pd.MultiIndex.from_tuples(
+            [("A", "B"), ("C", "D"), ("E", "F")], names=["index1", "index2"]
+        )
+        pser3 = pd.Series([1.0, 2.0, 3.0], index=index3, name="name")
+
+        pser4 = pd.Series([])
+
+        for pser in [pser1, pser2, pser3, pser4]:
+            psser = ps.from_pandas(pser)
+            for value in [0.5, 1, 2, 3.0, 4, 5]:
+                for side in ["left", "right"]:
+                    self.assert_eq(
+                        pser.searchsorted(value, side=side),
+                        psser.searchsorted(value, side=side),
+                    )
+
+        with self.assertRaisesRegex(ValueError, "Invalid side"):
+            ps.from_pandas(pser1).searchsorted(1.1, side=[1, 2])
+        with self.assertRaisesRegex(ValueError, "Invalid side"):
+            ps.from_pandas(pser1).searchsorted(1.1, side="middle")
 
     def test_align(self):
         pdf = pd.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]})
@@ -3069,9 +3124,9 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         psser = ps.from_pandas(pser)
 
         self.assert_eq(pser.pow(np.nan), psser.pow(np.nan))
-        self.assert_eq(pser ** np.nan, psser ** np.nan)
+        self.assert_eq(pser**np.nan, psser**np.nan)
         self.assert_eq(pser.rpow(np.nan), psser.rpow(np.nan))
-        self.assert_eq(1 ** pser, 1 ** psser)
+        self.assert_eq(1**pser, 1**psser)
 
     def test_between(self):
         pser = pd.Series([np.nan, 1, 2, 3, 4])
@@ -3184,6 +3239,10 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         pdf = pd.DataFrame({"s1": [0.2, 0.0, 0.6, 0.2, np.nan, 0.5, 0.6]})
         self._test_autocorr(pdf)
 
+        psser = ps.from_pandas(pdf["s1"])
+        with self.assertRaisesRegex(TypeError, r"lag should be an int; however, got"):
+            psser.autocorr(1.0)
+
     def _test_autocorr(self, pdf):
         psdf = ps.from_pandas(pdf)
         for lag in range(-10, 10):
@@ -3202,6 +3261,10 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf = ps.from_pandas(pdf)
         with self.assertRaisesRegex(TypeError, "unsupported dtype: object"):
             psdf["s1"].cov(psdf["s2"])
+        with self.assertRaisesRegex(TypeError, "unsupported dtype: object"):
+            psdf["s2"].cov(psdf["s1"])
+        with self.assertRaisesRegex(TypeError, "ddof must be integer"):
+            psdf["s2"].cov(psdf["s2"], ddof="ddof")
 
         pdf = pd.DataFrame(
             {
@@ -3224,17 +3287,32 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
     def _test_cov(self, pdf):
         psdf = ps.from_pandas(pdf)
 
-        pcov = pdf["s1"].cov(pdf["s2"])
-        pscov = psdf["s1"].cov(psdf["s2"])
-        self.assert_eq(pcov, pscov, almost=True)
+        self.assert_eq(pdf["s1"].cov(pdf["s2"]), psdf["s1"].cov(psdf["s2"]), almost=True)
+        self.assert_eq(
+            pdf["s1"].cov(pdf["s2"], ddof=2), psdf["s1"].cov(psdf["s2"], ddof=2), almost=True
+        )
 
-        pcov = pdf["s1"].cov(pdf["s2"], min_periods=3)
-        pscov = psdf["s1"].cov(psdf["s2"], min_periods=3)
-        self.assert_eq(pcov, pscov, almost=True)
+        self.assert_eq(
+            pdf["s1"].cov(pdf["s2"], min_periods=3),
+            psdf["s1"].cov(psdf["s2"], min_periods=3),
+            almost=True,
+        )
+        self.assert_eq(
+            pdf["s1"].cov(pdf["s2"], min_periods=3, ddof=-1),
+            psdf["s1"].cov(psdf["s2"], min_periods=3, ddof=-1),
+            almost=True,
+        )
 
-        pcov = pdf["s1"].cov(pdf["s2"], min_periods=4)
-        pscov = psdf["s1"].cov(psdf["s2"], min_periods=4)
-        self.assert_eq(pcov, pscov, almost=True)
+        self.assert_eq(
+            pdf["s1"].cov(pdf["s2"], min_periods=4),
+            psdf["s1"].cov(psdf["s2"], min_periods=4),
+            almost=True,
+        )
+        self.assert_eq(
+            pdf["s1"].cov(pdf["s2"], min_periods=4, ddof=3),
+            psdf["s1"].cov(psdf["s2"], min_periods=4, ddof=3),
+            almost=True,
+        )
 
     def test_eq(self):
         pser = pd.Series([1, 2, 3, 4, 5, 6], name="x")
@@ -3285,6 +3363,29 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             psser.eq(other)
         with self.assertRaisesRegex(ValueError, "Lengths must be equal"):
             psser == other
+
+    def test_transform(self):
+        psser = self.psser
+        with self.assertRaisesRegex(
+            NotImplementedError, 'axis should be either 0 or "index" currently.'
+        ):
+            psser.transform(lambda x: x + 1, axis=1)
+
+    def test_series_stat_fail(self):
+        with self.assertRaisesRegex(TypeError, "Could not convert object"):
+            ps.Series(["a", "b", "c"]).mean()
+        with self.assertRaisesRegex(TypeError, "Could not convert object"):
+            ps.Series(["a", "b", "c"]).skew()
+        with self.assertRaisesRegex(TypeError, "Could not convert object"):
+            ps.Series(["a", "b", "c"]).kurtosis()
+        with self.assertRaisesRegex(TypeError, "Could not convert object"):
+            ps.Series(["a", "b", "c"]).std()
+        with self.assertRaisesRegex(TypeError, "Could not convert object"):
+            ps.Series(["a", "b", "c"]).var()
+        with self.assertRaisesRegex(TypeError, "Could not convert object"):
+            ps.Series(["a", "b", "c"]).median()
+        with self.assertRaisesRegex(TypeError, "Could not convert object"):
+            ps.Series(["a", "b", "c"]).sem()
 
 
 if __name__ == "__main__":

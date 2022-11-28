@@ -350,12 +350,19 @@ SELECT CAST(interval 3 month 1 hour AS string)
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot mix year-month and day-time fields: interval 3 month 1 hour(line 1, pos 12)
-
-== SQL ==
-SELECT CAST(interval 3 month 1 hour AS string)
-------------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0029",
+  "messageParameters" : {
+    "literal" : "interval 3 month 1 hour"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 13,
+    "stopIndex" : 35,
+    "fragment" : "interval 3 month 1 hour"
+  } ]
+}
 
 
 -- !query
@@ -631,7 +638,16 @@ select cast(interval '23:59:59' hour to second as smallint)
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[CAST_OVERFLOW] The value INTERVAL '23:59:59' HOUR TO SECOND of the type "INTERVAL HOUR TO SECOND" cannot be cast to "SMALLINT" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "CAST_OVERFLOW",
+  "sqlState" : "22005",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "sourceType" : "\"INTERVAL HOUR TO SECOND\"",
+    "targetType" : "\"SMALLINT\"",
+    "value" : "INTERVAL '23:59:59' HOUR TO SECOND"
+  }
+}
 
 
 -- !query
@@ -656,7 +672,16 @@ select cast(interval '-1000' month as tinyint)
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[CAST_OVERFLOW] The value INTERVAL '-1000' MONTH of the type "INTERVAL MONTH" cannot be cast to "TINYINT" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "CAST_OVERFLOW",
+  "sqlState" : "22005",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "sourceType" : "\"INTERVAL MONTH\"",
+    "targetType" : "\"TINYINT\"",
+    "value" : "INTERVAL '-1000' MONTH"
+  }
+}
 
 
 -- !query
@@ -665,7 +690,124 @@ select cast(interval '1000000' second as smallint)
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[CAST_OVERFLOW] The value INTERVAL '1000000' SECOND of the type "INTERVAL SECOND" cannot be cast to "SMALLINT" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "CAST_OVERFLOW",
+  "sqlState" : "22005",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "sourceType" : "\"INTERVAL SECOND\"",
+    "targetType" : "\"SMALLINT\"",
+    "value" : "INTERVAL '1000000' SECOND"
+  }
+}
+
+
+-- !query
+select cast(1Y as interval year)
+-- !query schema
+struct<CAST(1 AS INTERVAL YEAR):interval year>
+-- !query output
+1-0
+
+
+-- !query
+select cast(-122S as interval year to month)
+-- !query schema
+struct<CAST(-122 AS INTERVAL YEAR TO MONTH):interval year to month>
+-- !query output
+-10-2
+
+
+-- !query
+select cast(ym as interval year to month) from values(-122S) as t(ym)
+-- !query schema
+struct<ym:interval year to month>
+-- !query output
+-10-2
+
+
+-- !query
+select cast(1000 as interval month)
+-- !query schema
+struct<CAST(1000 AS INTERVAL MONTH):interval month>
+-- !query output
+83-4
+
+
+-- !query
+select cast(-10L as interval second)
+-- !query schema
+struct<CAST(-10 AS INTERVAL SECOND):interval second>
+-- !query output
+-0 00:00:10.000000000
+
+
+-- !query
+select cast(100Y as interval hour to second)
+-- !query schema
+struct<CAST(100 AS INTERVAL HOUR TO SECOND):interval hour to second>
+-- !query output
+0 00:01:40.000000000
+
+
+-- !query
+select cast(dt as interval hour to second) from values(100Y) as t(dt)
+-- !query schema
+struct<dt:interval hour to second>
+-- !query output
+0 00:01:40.000000000
+
+
+-- !query
+select cast(-1000S as interval day to second)
+-- !query schema
+struct<CAST(-1000 AS INTERVAL DAY TO SECOND):interval day to second>
+-- !query output
+-0 00:16:40.000000000
+
+
+-- !query
+select cast(10 as interval day)
+-- !query schema
+struct<CAST(10 AS INTERVAL DAY):interval day>
+-- !query output
+10 00:00:00.000000000
+
+
+-- !query
+select cast(2147483647 as interval year)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "CAST_OVERFLOW",
+  "sqlState" : "22005",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "sourceType" : "\"INT\"",
+    "targetType" : "\"INTERVAL YEAR\"",
+    "value" : "2147483647"
+  }
+}
+
+
+-- !query
+select cast(-9223372036854775808L as interval day)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "CAST_OVERFLOW",
+  "sqlState" : "22005",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "sourceType" : "\"BIGINT\"",
+    "targetType" : "\"INTERVAL DAY\"",
+    "value" : "-9223372036854775808L"
+  }
+}
 
 
 -- !query
@@ -730,4 +872,45 @@ select cast(interval '10.123' second as decimal(1, 0))
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[CANNOT_CHANGE_DECIMAL_PRECISION] Decimal(compact, 10, 18, 6) cannot be represented as Decimal(1, 0). If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE",
+  "sqlState" : "22005",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "precision" : "1",
+    "scale" : "0",
+    "value" : "10.123000"
+  }
+}
+
+
+-- !query
+select cast(10.123456BD as interval day to second)
+-- !query schema
+struct<CAST(10.123456 AS INTERVAL DAY TO SECOND):interval day to second>
+-- !query output
+0 00:00:10.123456000
+
+
+-- !query
+select cast(80.654321BD as interval hour to minute)
+-- !query schema
+struct<CAST(80.654321 AS INTERVAL HOUR TO MINUTE):interval hour to minute>
+-- !query output
+0 01:20:00.000000000
+
+
+-- !query
+select cast(-10.123456BD as interval year to month)
+-- !query schema
+struct<CAST(-10.123456 AS INTERVAL YEAR TO MONTH):interval year to month>
+-- !query output
+-0-10
+
+
+-- !query
+select cast(10.654321BD as interval month)
+-- !query schema
+struct<CAST(10.654321 AS INTERVAL MONTH):interval month>
+-- !query output
+0-11

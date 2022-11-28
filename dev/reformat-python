@@ -16,15 +16,16 @@
 # limitations under the License.
 
 # The current directory of the script.
+PYTHON_EXECUTABLE="${PYTHON_EXECUTABLE:-python3}"
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 FWDIR="$( cd "$DIR"/.. && pwd )"
 cd "$FWDIR"
 
-BLACK_BUILD="python -m black"
-BLACK_VERSION="21.12b0"
-$BLACK_BUILD 2> /dev/null
+BLACK_BUILD="${PYTHON_EXECUTABLE} -m black"
+BLACK_VERSION="22.6.0"
+$PYTHON_EXECUTABLE -c 'import black' 2> /dev/null
 if [ $? -ne 0 ]; then
-    echo "The '$BLACK_BUILD' command was not found. Please install Black, for example, via 'pip install black==$BLACK_VERSION'."
+    echo "The Python library providing the 'black' module was not found. Please install Black, for example, via 'pip install black==$BLACK_VERSION'."
     exit 1
 fi
 

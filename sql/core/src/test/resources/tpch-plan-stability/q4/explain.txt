@@ -60,6 +60,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [pla
 (10) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [o_orderkey#1]
 Right keys [1]: [l_orderkey#4]
+Join type: LeftSemi
 Join condition: None
 
 (11) Project [codegen id : 2]

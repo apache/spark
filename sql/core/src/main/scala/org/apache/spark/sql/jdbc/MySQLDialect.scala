@@ -210,9 +210,9 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
   // https://dev.mysql.com/doc/refman/8.0/en/show-index.html
   override def listIndexes(
       conn: Connection,
-      tableName: String,
+      tableIdent: Identifier,
       options: JDBCOptions): Array[TableIndex] = {
-    val sql = s"SHOW INDEXES FROM $tableName"
+    val sql = s"SHOW INDEXES FROM ${tableIdent.name()}"
     var indexMap: Map[String, TableIndex] = Map()
     try {
       JdbcUtils.executeQuery(conn, options, sql) { rs =>

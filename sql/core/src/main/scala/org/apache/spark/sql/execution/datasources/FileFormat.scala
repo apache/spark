@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.{DataType, LongType, StringType, StructField, StructType, TimestampType}
@@ -60,6 +61,11 @@ trait FileFormat {
 
   /**
    * Returns whether this format supports returning columnar batch or not.
+   * If columnar batch output is requested, users shall supply
+   * FileFormat.OPTION_RETURNING_BATCH -> true
+   * in relation options when calling buildReaderWithPartitionValues.
+   * This should only be passed as true if it can actually be supported.
+   * For ParquetFileFormat and OrcFileFormat, passing this option is required.
    *
    * TODO: we should just have different traits for the different formats.
    */
@@ -182,18 +188,40 @@ object FileFormat {
 
   val FILE_MODIFICATION_TIME = "file_modification_time"
 
+  val ROW_INDEX = "row_index"
+
+  // A name for a temporary column that holds row indexes computed by the file format reader
+  // until they can be placed in the _metadata struct.
+  val ROW_INDEX_TEMPORARY_COLUMN_NAME = s"_tmp_metadata_$ROW_INDEX"
+
   val METADATA_NAME = "_metadata"
 
-  // supported metadata struct fields for hadoop fs relation
-  val METADATA_STRUCT: StructType = new StructType()
-    .add(StructField(FILE_PATH, StringType))
-    .add(StructField(FILE_NAME, StringType))
-    .add(StructField(FILE_SIZE, LongType))
-    .add(StructField(FILE_MODIFICATION_TIME, TimestampType))
+  /**
+   * Option to pass to buildReaderWithPartitionValues to return columnar batch output or not.
+   * For ParquetFileFormat and OrcFileFormat, passing this option is required.
+   * This should only be passed as true if it can actually be supported, which can be checked
+   * by calling supportBatch.
+   */
+  val OPTION_RETURNING_BATCH = "returning_batch"
 
-  // create a file metadata struct col
-  def createFileMetadataCol: AttributeReference =
-    FileSourceMetadataAttribute(METADATA_NAME, METADATA_STRUCT)
+  /** Schema of metadata struct that can be produced by every file format. */
+  val BASE_METADATA_STRUCT: StructType = new StructType()
+    .add(StructField(FileFormat.FILE_PATH, StringType))
+    .add(StructField(FileFormat.FILE_NAME, StringType))
+    .add(StructField(FileFormat.FILE_SIZE, LongType))
+    .add(StructField(FileFormat.FILE_MODIFICATION_TIME, TimestampType))
+
+  /**
+   * Create a file metadata struct column containing fields supported by the given file format.
+   */
+  def createFileMetadataCol(fileFormat: FileFormat): AttributeReference = {
+    val struct = if (fileFormat.isInstanceOf[ParquetFileFormat]) {
+      BASE_METADATA_STRUCT.add(StructField(FileFormat.ROW_INDEX, LongType))
+    } else {
+      BASE_METADATA_STRUCT
+    }
+    FileSourceMetadataAttribute(FileFormat.METADATA_NAME, struct)
+  }
 
   // create an internal row given required metadata fields and file information
   def createMetadataInternalRow(
@@ -220,9 +248,22 @@ object FileFormat {
           // the modificationTime from the file is in millisecond,
           // while internally, the TimestampType `file_modification_time` is stored in microsecond
           row.update(i, fileModificationTime * 1000L)
+        case ROW_INDEX =>
+          // Do nothing. Only the metadata fields that have identical values for each row of the
+          // file are set by this function, while fields that have different values (such as row
+          // index) are set separately.
       }
     }
     row
+  }
+
+  /**
+   * Returns true if the given metadata column always contains identical values for all rows
+   * originating from the same data file.
+   */
+  def isConstantMetadataAttr(name: String): Boolean = name match {
+    case FILE_PATH | FILE_NAME | FILE_SIZE | FILE_MODIFICATION_TIME => true
+    case ROW_INDEX => false
   }
 }
 

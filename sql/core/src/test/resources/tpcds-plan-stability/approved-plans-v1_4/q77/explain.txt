@@ -107,6 +107,7 @@ Output [1]: [d_date_sk#6]
 (5) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ss_sold_date_sk#4]
 Right keys [1]: [d_date_sk#6]
+Join type: Inner
 Join condition: None
 
 (6) Project [codegen id : 3]
@@ -134,6 +135,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)
 (11) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ss_store_sk#1]
 Right keys [1]: [s_store_sk#7]
+Join type: Inner
 Join condition: None
 
 (12) Project [codegen id : 3]
@@ -179,6 +181,7 @@ Output [1]: [d_date_sk#20]
 (20) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [sr_returned_date_sk#19]
 Right keys [1]: [d_date_sk#20]
+Join type: Inner
 Join condition: None
 
 (21) Project [codegen id : 6]
@@ -191,6 +194,7 @@ Output [1]: [s_store_sk#21]
 (23) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [sr_store_sk#16]
 Right keys [1]: [s_store_sk#21]
+Join type: Inner
 Join condition: None
 
 (24) Project [codegen id : 6]
@@ -222,6 +226,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (29) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [s_store_sk#7]
 Right keys [1]: [s_store_sk#21]
+Join type: LeftOuter
 Join condition: None
 
 (30) Project [codegen id : 8]
@@ -244,6 +249,7 @@ Output [1]: [d_date_sk#38]
 (34) BroadcastHashJoin [codegen id : 10]
 Left keys [1]: [cs_sold_date_sk#37]
 Right keys [1]: [d_date_sk#38]
+Join type: Inner
 Join condition: None
 
 (35) Project [codegen id : 10]
@@ -288,6 +294,7 @@ Output [1]: [d_date_sk#50]
 (43) BroadcastHashJoin [codegen id : 13]
 Left keys [1]: [cr_returned_date_sk#49]
 Right keys [1]: [d_date_sk#50]
+Join type: Inner
 Join condition: None
 
 (44) Project [codegen id : 13]
@@ -313,6 +320,7 @@ Aggregate Attributes [2]: [sum(UnscaledValue(cr_return_amount#47))#55, sum(Unsca
 Results [2]: [MakeDecimal(sum(UnscaledValue(cr_return_amount#47))#55,17,2) AS returns#57, MakeDecimal(sum(UnscaledValue(cr_net_loss#48))#56,17,2) AS profit_loss#58]
 
 (48) BroadcastNestedLoopJoin [codegen id : 14]
+Join type: Inner
 Join condition: None
 
 (49) Project [codegen id : 14]
@@ -340,6 +348,7 @@ Output [1]: [d_date_sk#66]
 (54) BroadcastHashJoin [codegen id : 17]
 Left keys [1]: [ws_sold_date_sk#65]
 Right keys [1]: [d_date_sk#66]
+Join type: Inner
 Join condition: None
 
 (55) Project [codegen id : 17]
@@ -367,6 +376,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)
 (60) BroadcastHashJoin [codegen id : 17]
 Left keys [1]: [ws_web_page_sk#62]
 Right keys [1]: [wp_web_page_sk#67]
+Join type: Inner
 Join condition: None
 
 (61) Project [codegen id : 17]
@@ -412,6 +422,7 @@ Output [1]: [d_date_sk#80]
 (69) BroadcastHashJoin [codegen id : 20]
 Left keys [1]: [wr_returned_date_sk#79]
 Right keys [1]: [d_date_sk#80]
+Join type: Inner
 Join condition: None
 
 (70) Project [codegen id : 20]
@@ -424,6 +435,7 @@ Output [1]: [wp_web_page_sk#81]
 (72) BroadcastHashJoin [codegen id : 20]
 Left keys [1]: [wr_web_page_sk#76]
 Right keys [1]: [wp_web_page_sk#81]
+Join type: Inner
 Join condition: None
 
 (73) Project [codegen id : 20]
@@ -455,6 +467,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (78) BroadcastHashJoin [codegen id : 22]
 Left keys [1]: [wp_web_page_sk#67]
 Right keys [1]: [wp_web_page_sk#81]
+Join type: LeftOuter
 Join condition: None
 
 (79) Project [codegen id : 22]

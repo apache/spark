@@ -5,8 +5,13 @@ select date_format('2018-11-17 13:33:33.333', 'GGGGG')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0:
-Fail to recognize 'GGGGG' pattern in the DateTimeFormatter. 1) You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'GGGGG'"
+  }
+}
 
 
 -- !query
@@ -15,8 +20,13 @@ select date_format('2018-11-17 13:33:33.333', 'yyyyyyy')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0:
-Fail to recognize 'yyyyyyy' pattern in the DateTimeFormatter. 1) You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'yyyyyyy'"
+  }
+}
 
 
 -- !query
@@ -43,8 +53,13 @@ select date_format('2018-11-17 13:33:33.333', 'MMMMM')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0:
-Fail to recognize 'MMMMM' pattern in the DateTimeFormatter. 1) You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'MMMMM'"
+  }
+}
 
 
 -- !query
@@ -53,8 +68,13 @@ select date_format('2018-11-17 13:33:33.333', 'LLLLL')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0:
-Fail to recognize 'LLLLL' pattern in the DateTimeFormatter. 1) You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'LLLLL'"
+  }
+}
 
 
 -- !query
@@ -63,8 +83,13 @@ select date_format('2018-11-17 13:33:33.333', 'EEEEE')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0:
-Fail to recognize 'EEEEE' pattern in the DateTimeFormatter. 1) You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'EEEEE'"
+  }
+}
 
 
 -- !query
@@ -73,8 +98,13 @@ select date_format('2018-11-17 13:33:33.333', 'FF')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0:
-Fail to recognize 'FF' pattern in the DateTimeFormatter. 1) You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'FF'"
+  }
+}
 
 
 -- !query
@@ -83,8 +113,13 @@ select date_format('2018-11-17 13:33:33.333', 'ddd')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0:
-Fail to recognize 'ddd' pattern in the DateTimeFormatter. 1) You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'ddd'"
+  }
+}
 
 
 -- !query
@@ -93,8 +128,13 @@ select date_format('2018-11-17 13:33:33.333', 'DDDD')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0:
-Fail to recognize 'DDDD' pattern in the DateTimeFormatter. 1) You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'DDDD'"
+  }
+}
 
 
 -- !query
@@ -103,8 +143,13 @@ select date_format('2018-11-17 13:33:33.333', 'HHH')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0:
-Fail to recognize 'HHH' pattern in the DateTimeFormatter. 1) You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'HHH'"
+  }
+}
 
 
 -- !query
@@ -113,8 +158,13 @@ select date_format('2018-11-17 13:33:33.333', 'hhh')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0:
-Fail to recognize 'hhh' pattern in the DateTimeFormatter. 1) You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'hhh'"
+  }
+}
 
 
 -- !query
@@ -123,8 +173,13 @@ select date_format('2018-11-17 13:33:33.333', 'kkk')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0:
-Fail to recognize 'kkk' pattern in the DateTimeFormatter. 1) You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'kkk'"
+  }
+}
 
 
 -- !query
@@ -133,8 +188,13 @@ select date_format('2018-11-17 13:33:33.333', 'KKK')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0:
-Fail to recognize 'KKK' pattern in the DateTimeFormatter. 1) You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'KKK'"
+  }
+}
 
 
 -- !query
@@ -143,8 +203,13 @@ select date_format('2018-11-17 13:33:33.333', 'mmm')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0:
-Fail to recognize 'mmm' pattern in the DateTimeFormatter. 1) You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'mmm'"
+  }
+}
 
 
 -- !query
@@ -153,8 +218,13 @@ select date_format('2018-11-17 13:33:33.333', 'sss')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0:
-Fail to recognize 'sss' pattern in the DateTimeFormatter. 1) You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'sss'"
+  }
+}
 
 
 -- !query
@@ -163,8 +233,13 @@ select date_format('2018-11-17 13:33:33.333', 'SSSSSSSSSS')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0:
-Fail to recognize 'SSSSSSSSSS' pattern in the DateTimeFormatter. 1) You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'SSSSSSSSSS'"
+  }
+}
 
 
 -- !query
@@ -173,8 +248,13 @@ select date_format('2018-11-17 13:33:33.333', 'aa')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0:
-Fail to recognize 'aa' pattern in the DateTimeFormatter. 1) You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'aa'"
+  }
+}
 
 
 -- !query
@@ -192,8 +272,13 @@ select date_format('2018-11-17 13:33:33.333', 'zzzzz')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0:
-Fail to recognize 'zzzzz' pattern in the DateTimeFormatter. 1) You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'zzzzz'"
+  }
+}
 
 
 -- !query
@@ -211,8 +296,13 @@ select date_format('2018-11-17 13:33:33.333', 'ZZZZZZ')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0:
-Fail to recognize 'ZZZZZZ' pattern in the DateTimeFormatter. 1) You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'ZZZZZZ'"
+  }
+}
 
 
 -- !query
@@ -275,8 +365,13 @@ select date_format('2018-11-17 13:33:33.333', 'Y')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0:
-Fail to recognize 'Y' pattern in the DateTimeFormatter. 1) You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'Y'"
+  }
+}
 
 
 -- !query
@@ -285,8 +380,13 @@ select date_format('2018-11-17 13:33:33.333', 'w')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0:
-Fail to recognize 'w' pattern in the DateTimeFormatter. 1) You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'w'"
+  }
+}
 
 
 -- !query
@@ -295,8 +395,13 @@ select date_format('2018-11-17 13:33:33.333', 'W')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0:
-Fail to recognize 'W' pattern in the DateTimeFormatter. 1) You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'W'"
+  }
+}
 
 
 -- !query
@@ -305,8 +410,13 @@ select date_format('2018-11-17 13:33:33.333', 'u')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0:
-Fail to recognize 'u' pattern in the DateTimeFormatter. 1) You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'u'"
+  }
+}
 
 
 -- !query

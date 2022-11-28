@@ -38,7 +38,7 @@ class ExecutorResourceRequests() extends Serializable {
   private val _executorResources = new ConcurrentHashMap[String, ExecutorResourceRequest]()
 
   /**
-   * Returns all the resource requests for the task.
+   * Returns all the resource requests for the executor.
    */
   def requests: Map[String, ExecutorResourceRequest] = _executorResources.asScala.toMap
 

@@ -168,9 +168,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    *     Supports both equi-joins and non-equi-joins.
    *     Supports only inner like joins.
    */
-  object JoinSelection extends Strategy
-    with PredicateHelper
-    with JoinSelectionHelper {
+  object JoinSelection extends Strategy with JoinSelectionHelper {
     private val hintErrorHandler = conf.hintErrorHandler
 
     private def checkHintBuildSide(
@@ -529,8 +527,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
         val (functionsWithDistinct, functionsWithoutDistinct) =
           aggregateExpressions.partition(_.isDistinct)
-        if (functionsWithDistinct.map(
-          _.aggregateFunction.children.filterNot(_.foldable).toSet).distinct.length > 1) {
+        val distinctAggChildSets = functionsWithDistinct.map { ae =>
+          ExpressionSet(ae.aggregateFunction.children.filterNot(_.foldable))
+        }.distinct
+        if (distinctAggChildSets.length > 1) {
           // This is a sanity check. We should not reach here when we have multiple distinct
           // column sets. Our `RewriteDistinctAggregates` should take care this case.
           throw new IllegalStateException(
@@ -678,7 +678,28 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         val execPlan = FlatMapGroupsWithStateExec(
           func, keyDeser, valueDeser, sDeser, groupAttr, stateGroupAttr, dataAttr, sda, outputAttr,
           None, stateEnc, stateVersion, outputMode, timeout, batchTimestampMs = None,
-          eventTimeWatermark = None, planLater(initialState), hasInitialState, planLater(child)
+          eventTimeWatermarkForLateEvents = None, eventTimeWatermarkForEviction = None,
+          planLater(initialState), hasInitialState, planLater(child)
+        )
+        execPlan :: Nil
+      case _ =>
+        Nil
+    }
+  }
+
+  /**
+   * Strategy to convert [[FlatMapGroupsInPandasWithState]] logical operator to physical operator
+   * in streaming plans. Conversion for batch plans is handled by [[BasicOperators]].
+   */
+  object FlatMapGroupsInPandasWithStateStrategy extends Strategy {
+    override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case FlatMapGroupsInPandasWithState(
+        func, groupAttr, outputAttr, stateType, outputMode, timeout, child) =>
+        val stateVersion = conf.getConf(SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION)
+        val execPlan = python.FlatMapGroupsInPandasWithStateExec(
+          func, groupAttr, outputAttr, stateType, None, stateVersion, outputMode, timeout,
+          batchTimestampMs = None, eventTimeWatermarkForLateEvents = None,
+          eventTimeWatermarkForEviction = None, planLater(child)
         )
         execPlan :: Nil
       case _ =>
@@ -795,6 +816,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           initialStateGroupAttrs, data, initialStateDataAttrs, output, timeout,
           hasInitialState, planLater(initialState), planLater(child)
         ) :: Nil
+      case _: FlatMapGroupsInPandasWithState =>
+        // TODO(SPARK-40443): support applyInPandasWithState in batch query
+        throw new UnsupportedOperationException(
+          "applyInPandasWithState is unsupported in batch query. Use applyInPandas instead.")
       case logical.CoGroup(f, key, lObj, rObj, lGroup, rGroup, lAttr, rAttr, oAttr, left, right) =>
         execution.CoGroupExec(
           f, key, lObj, rObj, lGroup, rGroup, lAttr, rAttr, oAttr,

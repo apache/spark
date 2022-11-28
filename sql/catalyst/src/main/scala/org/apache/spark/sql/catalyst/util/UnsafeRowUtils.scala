@@ -27,8 +27,15 @@ object UnsafeRowUtils {
    * - schema.fields.length == row.numFields should always be true
    * - UnsafeRow.calculateBitSetWidthInBytes(row.numFields) < row.getSizeInBytes should always be
    *   true if the expectedSchema contains at least one field.
-   * - For variable-length fields: if null bit says it's null then don't do anything, else extract
-   *   offset and size:
+   * - For variable-length fields:
+   *   - if null bit says it's null, then
+   *     - in general the offset-and-size should be zero
+   *     - special case: variable-length DecimalType is considered mutable in UnsafeRow, and to
+   *       support that, the offset is set to point to the variable-length part like a non-null
+   *       value, while the size is set to zero to signal that it's a null value. The offset
+   *       may also be set to zero, in which case this variable-length Decimal no longer supports
+   *       being mutable in the UnsafeRow.
+   *   - otherwise the field is not null, then extract offset and size:
    *   1) 0 <= size < row.getSizeInBytes should always be true. We can be even more precise than
    *      this, where the upper bound of size can only be as big as the variable length part of
    *      the row.
@@ -52,9 +59,7 @@ object UnsafeRowUtils {
     var varLenFieldsSizeInBytes = 0
     expectedSchema.fields.zipWithIndex.foreach {
       case (field, index) if !UnsafeRow.isFixedLength(field.dataType) && !row.isNullAt(index) =>
-        val offsetAndSize = row.getLong(index)
-        val offset = (offsetAndSize >> 32).toInt
-        val size = offsetAndSize.toInt
+        val (offset, size) = getOffsetAndSize(row, index)
         if (size < 0 ||
             offset < bitSetWidthInBytes + 8 * row.numFields || offset + size > rowSizeInBytes) {
           return false
@@ -74,13 +79,38 @@ object UnsafeRowUtils {
             if ((row.getLong(index) >> 32) != 0L) return false
           case _ =>
         }
-      case (_, index) if row.isNullAt(index) =>
-        if (row.getLong(index) != 0L) return false
+      case (field, index) if row.isNullAt(index) =>
+        field.dataType match {
+          case dt: DecimalType if !UnsafeRow.isFixedLength(dt) =>
+            // See special case in UnsafeRowWriter.write(int, Decimal, int, int) and
+            // UnsafeRow.setDecimal(int, Decimal, int).
+            // A variable-length Decimal may be marked as null while having non-zero offset and
+            // zero length. This allows the field to be updated (i.e. mutable variable-length data)
+
+            // Check the integrity of null value of variable-length DecimalType in UnsafeRow:
+            // 1. size must be zero
+            // 2. offset may be zero, in which case this variable-length field is no longer mutable
+            // 3. otherwise offset is non-zero, range check it the same way as a non-null value
+            val (offset, size) = getOffsetAndSize(row, index)
+            if (size != 0 || offset != 0 &&
+                (offset < bitSetWidthInBytes + 8 * row.numFields || offset > rowSizeInBytes)) {
+              return false
+            }
+          case _ =>
+            if (row.getLong(index) != 0L) return false
+        }
       case _ =>
     }
     if (bitSetWidthInBytes + 8 * row.numFields + varLenFieldsSizeInBytes > rowSizeInBytes) {
       return false
     }
     true
+  }
+
+  def getOffsetAndSize(row: UnsafeRow, index: Int): (Int, Int) = {
+    val offsetAndSize = row.getLong(index)
+    val offset = (offsetAndSize >> 32).toInt
+    val size = offsetAndSize.toInt
+    (offset, size)
   }
 }

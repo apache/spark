@@ -36,7 +36,7 @@ import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, SQLHadoopMapReduceCommitProtocol}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
-import org.apache.spark.sql.execution.joins.ShuffledHashJoinExec
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -206,7 +206,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     // Assume the execution plan is
     // ... -> ObjectHashAggregate(nodeId = 2) -> Exchange(nodeId = 1)
     // -> ObjectHashAggregate(nodeId = 0)
-    val df = testData2.groupBy().agg(collect_set($"a")) // 2 partitions
+    val df = testData2.agg(collect_set($"a")) // 2 partitions
     testSparkPlanMetrics(df, 1, Map(
       2L -> (("ObjectHashAggregate", Map("number of output rows" -> 2L))),
       1L -> (("Exchange", Map(
@@ -643,8 +643,9 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
       val union = view.union(view)
       testSparkPlanMetrics(union, 1, Map(
         0L -> ("Union" -> Map()),
-        1L -> ("LocalTableScan" -> Map("number of output rows" -> 2L)),
-        2L -> ("LocalTableScan" -> Map("number of output rows" -> 2L))))
+        1L -> ("Project" -> Map()),
+        2L -> ("LocalTableScan" -> Map("number of output rows" -> 2L)),
+        3L -> ("LocalTableScan" -> Map("number of output rows" -> 2L))))
     }
   }
 
@@ -839,6 +840,29 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
       assert(createTableAsSelect.metrics("numOutputBytes").value > 0)
       assert(createTableAsSelect.metrics.contains("numOutputRows"))
       assert(createTableAsSelect.metrics("numOutputRows").value == 1)
+    }
+  }
+
+  test("SPARK-41003: BHJ LeftAnti does not update numOutputRows when codegen is disabled") {
+    Seq(true, false).foreach { enableWholeStage =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> enableWholeStage.toString) {
+        withSQLConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true") {
+          withTable("t1", "t2") {
+            spark.range(4).write.saveAsTable("t1")
+            spark.range(2).write.saveAsTable("t2")
+            val df = sql("SELECT * FROM t1 WHERE id NOT IN (SELECT id FROM t2)")
+            df.collect()
+            val plan = df.queryExecution.executedPlan
+
+            val joins = plan.collect {
+              case s: BroadcastHashJoinExec => s
+            }
+
+            assert(joins.size === 1)
+            testMetricsInSparkPlanOperator(joins.head, Map("numOutputRows" -> 2))
+          }
+        }
+      }
     }
   }
 }

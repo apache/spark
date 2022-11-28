@@ -106,7 +106,7 @@ case class UnresolvedInlineTable(
  *                    adds [[Project]] to rename the output columns.
  */
 case class UnresolvedTableValuedFunction(
-    name: FunctionIdentifier,
+    name: Seq[String],
     functionArgs: Seq[Expression],
     outputNames: Seq[String])
   extends LeafNode {
@@ -114,14 +114,25 @@ case class UnresolvedTableValuedFunction(
   override def output: Seq[Attribute] = Nil
 
   override lazy val resolved = false
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_TABLE_VALUED_FUNCTION)
 }
 
 object UnresolvedTableValuedFunction {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
   def apply(
       name: String,
       functionArgs: Seq[Expression],
       outputNames: Seq[String]): UnresolvedTableValuedFunction = {
-    UnresolvedTableValuedFunction(FunctionIdentifier(name), functionArgs, outputNames)
+    UnresolvedTableValuedFunction(Seq(name), functionArgs, outputNames)
+  }
+
+  def apply(
+      name: FunctionIdentifier,
+      functionArgs: Seq[Expression],
+      outputNames: Seq[String]): UnresolvedTableValuedFunction = {
+    UnresolvedTableValuedFunction(name.asMultipart, functionArgs, outputNames)
   }
 }
 
@@ -363,7 +374,7 @@ case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevalu
     if (target.isEmpty) return input.output
 
     // If there is a table specified, use hidden input attributes as well
-    val hiddenOutput = input.metadataOutput.filter(_.supportsQualifiedStar)
+    val hiddenOutput = input.metadataOutput.filter(_.qualifiedAccessOnly)
     val expandedAttributes = (hiddenOutput ++ input.output).filter(
       matchedQualifier(_, target.get, resolver))
 
@@ -641,7 +652,7 @@ case object UnresolvedSeed extends LeafExpression with Unevaluable {
  */
 case class TempResolvedColumn(child: Expression, nameParts: Seq[String]) extends UnaryExpression
   with Unevaluable {
-  override lazy val preCanonicalized = child.preCanonicalized
+  override lazy val canonicalized = child.canonicalized
   override def dataType: DataType = child.dataType
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)

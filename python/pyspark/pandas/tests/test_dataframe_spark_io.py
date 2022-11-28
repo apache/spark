@@ -18,6 +18,7 @@
 import unittest
 import glob
 import os
+from distutils.version import LooseVersion
 
 import numpy as np
 import pandas as pd
@@ -57,7 +58,7 @@ class DataFrameSparkIOTest(PandasOnSparkTestCase, TestUtils):
             def check(columns):
                 expected = pd.read_parquet(tmp, columns=columns)
                 actual = ps.read_parquet(tmp, columns=columns)
-                self.assertPandasEqual(expected, actual.to_pandas())
+                self.assertPandasEqual(expected, actual._to_pandas())
 
             check(None)
             check(["i32", "i64"])
@@ -66,7 +67,7 @@ class DataFrameSparkIOTest(PandasOnSparkTestCase, TestUtils):
             # check with pyspark patch.
             expected = pd.read_parquet(tmp)
             actual = ps.read_parquet(tmp)
-            self.assertPandasEqual(expected, actual.to_pandas())
+            self.assertPandasEqual(expected, actual._to_pandas())
 
             # When index columns are known
             pdf = self.test_pdf
@@ -96,11 +97,18 @@ class DataFrameSparkIOTest(PandasOnSparkTestCase, TestUtils):
             self.assert_eq(ps.read_parquet(path2, pandas_metadata=True), expected2)
 
             expected3 = expected2.set_index("index", append=True)
+            # There is a bug in `to_parquet` from pandas 1.5.0 when writing MultiIndex.
+            # See https://github.com/pandas-dev/pandas/issues/48848 for the reported issue.
+            if LooseVersion(pd.__version__) > LooseVersion("1.5.0"):
+                expected_psdf = ps.read_parquet(path2, pandas_metadata=True).set_index(
+                    "index", append=True
+                )
+            else:
+                path3 = "{}/file3.parquet".format(tmp)
+                expected3.to_parquet(path3)
+                expected_psdf = ps.read_parquet(path3, pandas_metadata=True)
 
-            path3 = "{}/file3.parquet".format(tmp)
-            expected3.to_parquet(path3)
-
-            self.assert_eq(ps.read_parquet(path3, pandas_metadata=True), expected3)
+            self.assert_eq(expected_psdf, expected3)
 
     def test_parquet_write(self):
         with self.temp_dir() as tmp:
@@ -123,6 +131,28 @@ class DataFrameSparkIOTest(PandasOnSparkTestCase, TestUtils):
             expected.to_parquet(tmp, mode="overwrite", partition_cols=["i32", "bhello"])
             # Reset column order, as once the data is written out, Spark rearranges partition
             # columns to appear first.
+            actual = ps.read_parquet(tmp)
+            self.assertFalse((actual.columns == self.test_column_order).all())
+            actual = actual[self.test_column_order]
+            self.assert_eq(
+                actual.sort_values(by="f").to_spark().toPandas(),
+                expected.sort_values(by="f").to_spark().toPandas(),
+            )
+
+            # Set `compression` with string
+            expected.to_parquet(tmp, mode="overwrite", partition_cols="i32", compression="none")
+            actual = ps.read_parquet(tmp)
+            self.assertFalse((actual.columns == self.test_column_order).all())
+            actual = actual[self.test_column_order]
+            self.assert_eq(
+                actual.sort_values(by="f").to_spark().toPandas(),
+                expected.sort_values(by="f").to_spark().toPandas(),
+            )
+
+            # Test `options` parameter
+            expected.to_parquet(
+                tmp, mode="overwrite", partition_cols="i32", options={"compression": "none"}
+            )
             actual = ps.read_parquet(tmp)
             self.assertFalse((actual.columns == self.test_column_order).all())
             actual = actual[self.test_column_order]
@@ -225,6 +255,7 @@ class DataFrameSparkIOTest(PandasOnSparkTestCase, TestUtils):
                 expected_idx.sort_values(by="f").to_spark().toPandas(),
             )
 
+    # TODO(SPARK-40353): re-enabling the `test_read_excel`.
     @unittest.skip("openpyxl")
     def test_read_excel(self):
         with self.temp_dir() as tmp:
@@ -363,13 +394,13 @@ class DataFrameSparkIOTest(PandasOnSparkTestCase, TestUtils):
 
             expected = data.reset_index()[data.columns]
             actual = ps.read_orc(path)
-            self.assertPandasEqual(expected, actual.to_pandas())
+            self.assertPandasEqual(expected, actual._to_pandas())
 
             # columns
             columns = ["i32", "i64"]
             expected = data.reset_index()[columns]
             actual = ps.read_orc(path, columns=columns)
-            self.assertPandasEqual(expected, actual.to_pandas())
+            self.assertPandasEqual(expected, actual._to_pandas())
 
             # index_col
             expected = data.set_index("i32")
@@ -415,6 +446,20 @@ class DataFrameSparkIOTest(PandasOnSparkTestCase, TestUtils):
 
             # Write out partitioned by two columns
             expected.to_orc(tmp, mode="overwrite", partition_cols=["i32", "bhello"])
+            # Reset column order, as once the data is written out, Spark rearranges partition
+            # columns to appear first.
+            actual = ps.read_orc(tmp)
+            self.assertFalse((actual.columns == self.test_column_order).all())
+            actual = actual[self.test_column_order]
+            self.assert_eq(
+                actual.sort_values(by="f").to_spark().toPandas(),
+                expected.sort_values(by="f").to_spark().toPandas(),
+            )
+
+            # Test `options` parameter
+            expected.to_orc(
+                tmp, mode="overwrite", partition_cols="i32", options={"compression": "none"}
+            )
             # Reset column order, as once the data is written out, Spark rearranges partition
             # columns to appear first.
             actual = ps.read_orc(tmp)

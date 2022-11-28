@@ -157,7 +157,7 @@ object ExtractGroupingPythonUDFFromAggregate extends Rule[LogicalPlan] {
  * This has the limitation that the input to the Python UDF is not allowed include attributes from
  * multiple child operators.
  */
-object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
+object ExtractPythonUDFs extends Rule[LogicalPlan] {
 
   private type EvalType = Int
   private type EvalTypeChecker = EvalType => Boolean

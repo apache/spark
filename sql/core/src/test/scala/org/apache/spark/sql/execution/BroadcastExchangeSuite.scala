@@ -19,8 +19,10 @@ package org.apache.spark.sql.execution
 
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 
-import org.apache.spark.SparkException
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkException, SparkFunSuite}
+import org.apache.spark.broadcast.TorrentBroadcast
 import org.apache.spark.scheduler._
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.BroadcastExchangeExec
 import org.apache.spark.sql.execution.joins.HashedRelation
@@ -92,5 +94,30 @@ class BroadcastExchangeSuite extends SparkPlanTest
       assert(broadcastExchangeExec.size == 1, "one and only BroadcastExchangeExec")
       assert(joinDF.collect().length == 1)
     }
+  }
+}
+
+// Additional tests run in 'local-cluster' mode.
+class BroadcastExchangeExecSparkSuite
+  extends SparkFunSuite with LocalSparkContext with AdaptiveSparkPlanHelper {
+
+  test("SPARK-39983 - Broadcasted relation is not cached on the driver") {
+    // Use distributed cluster as in local mode the broabcast value is actually cached.
+    val conf = new SparkConf()
+      .setMaster("local-cluster[2,1,1024]")
+      .setAppName("test")
+    sc = new SparkContext(conf)
+    val spark = new SparkSession(sc)
+
+    val df = spark.range(1).toDF()
+    val joinDF = df.join(broadcast(df), "id")
+    val broadcastExchangeExec = collect(
+      joinDF.queryExecution.executedPlan) { case p: BroadcastExchangeExec => p }
+    assert(broadcastExchangeExec.size == 1, "one and only BroadcastExchangeExec")
+
+    // The broadcasted relation should not be cached on the driver.
+    val broadcasted =
+      broadcastExchangeExec(0).relationFuture.get().asInstanceOf[TorrentBroadcast[Any]]
+    assert(!broadcasted.hasCachedValue)
   }
 }

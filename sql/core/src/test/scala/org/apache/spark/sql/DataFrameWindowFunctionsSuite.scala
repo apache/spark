@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import org.scalatest.matchers.must.Matchers.the
 
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, Lag, Literal, NonFoldableLiteral}
 import org.apache.spark.sql.catalyst.optimizer.TransposeWindow
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -404,8 +404,12 @@ class DataFrameWindowFunctionsSuite extends QueryTest
     val df = Seq((1, "1")).toDF("key", "value")
     val e = intercept[AnalysisException](
       df.select($"key", count("invalid").over()))
-    assert(e.getErrorClass == "UNRESOLVED_COLUMN")
-    assert(e.messageParameters.sameElements(Array("`invalid`", "`value`, `key`")))
+    checkError(
+      exception = e,
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map(
+        "objectName" -> "`invalid`",
+        "proposal" -> "`value`, `key`"))
   }
 
   test("numerical aggregate functions on string column") {
@@ -842,6 +846,51 @@ class DataFrameWindowFunctionsSuite extends QueryTest
           "v", "z", null, "v", "z", "y", "va")))
   }
 
+  test("lag - Offset expression <offset> must be a literal") {
+    val nullStr: String = null
+    val df = Seq(
+      ("a", 0, nullStr),
+      ("a", 1, "x"),
+      ("b", 2, nullStr),
+      ("c", 3, nullStr),
+      ("a", 4, "y"),
+      ("b", 5, nullStr),
+      ("a", 6, "z"),
+      ("a", 7, "v"),
+      ("a", 8, nullStr)).
+      toDF("key", "order", "value")
+    val window = Window.orderBy($"order")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(
+          $"key",
+          $"order",
+          $"value",
+          lead($"value", 1).over(window),
+          lead($"value", 2).over(window),
+          lead($"value", 0, null, true).over(window),
+          lead($"value", 1, null, true).over(window),
+          lead($"value", 2, null, true).over(window),
+          lead($"value", 3, null, true).over(window),
+          lead(concat($"value", $"key"), 1, null, true).over(window),
+          Column(Lag($"value".expr, NonFoldableLiteral(1), Literal(null), true)).over(window),
+          lag($"value", 2).over(window),
+          lag($"value", 0, null, true).over(window),
+          lag($"value", 1, null, true).over(window),
+          lag($"value", 2, null, true).over(window),
+          lag($"value", 3, null, true).over(window),
+          lag(concat($"value", $"key"), 1, null, true).over(window)).orderBy($"order").collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+      parameters = Map(
+        "sqlExpr" -> "\"lag(value, nonfoldableliteral(), NULL)\"",
+        "inputName" -> "offset",
+        "inputType" -> "\"INT\"",
+        "inputExpr" -> "\"(- nonfoldableliteral())\""
+      )
+    )
+  }
+
   test("SPARK-12989 ExtractWindowExpressions treats alias as regular attribute") {
     val src = Seq((0, 3, 5)).toDF("a", "b", "c")
       .withColumn("Data", struct("a", "b"))
@@ -1200,6 +1249,19 @@ class DataFrameWindowFunctionsSuite extends QueryTest
         Row(0, 0.0d),
         Row(1, 0.01d),
         Row(2, 0.02d)
+      )
+    )
+  }
+
+  test("SPARK-40002: ntile should apply before limit") {
+    val df = Seq.tabulate(101)(identity).toDF("id")
+    val w = Window.orderBy("id")
+    checkAnswer(
+      df.select($"id", ntile(10).over(w)).limit(3),
+      Seq(
+        Row(0, 1),
+        Row(1, 1),
+        Row(2, 1)
       )
     )
   }

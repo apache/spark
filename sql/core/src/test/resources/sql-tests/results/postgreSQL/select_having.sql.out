@@ -140,7 +140,20 @@ SELECT a FROM test_having HAVING min(a) < max(a)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-grouping expressions sequence is empty, and 'spark_catalog.default.test_having.a' is not an aggregate function. Wrap '(min(spark_catalog.default.test_having.a) AS `min(a#x)`, max(spark_catalog.default.test_having.a) AS `max(a#x)`)' in windowing function(s) or wrap 'spark_catalog.default.test_having.a' in first() (or first_value) if you don't care which value you get.
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2422",
+  "messageParameters" : {
+    "aggExprs" : "(min(spark_catalog.default.test_having.a) AS `min(a#x)`, max(spark_catalog.default.test_having.a) AS `max(a#x)`)",
+    "sqlExpr" : "spark_catalog.default.test_having.a"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 48,
+    "fragment" : "SELECT a FROM test_having HAVING min(a) < max(a)"
+  } ]
+}
 
 
 -- !query
@@ -149,7 +162,21 @@ SELECT 1 AS one FROM test_having HAVING a > 1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNRESOLVED_COLUMN] A column or function parameter with name `a` cannot be resolved. Did you mean one of the following? [`one`]; line 1 pos 40
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "objectName" : "`a`",
+    "proposal" : "`one`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 41,
+    "stopIndex" : 41,
+    "fragment" : "a"
+  } ]
+}
 
 
 -- !query
@@ -174,10 +201,20 @@ SELECT 1 AS one FROM test_having WHERE 1/a = 1 HAVING 1 < 2
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" (except for ANSI interval type) to bypass this error.
-== SQL(line 1, position 40) ==
-...1 AS one FROM test_having WHERE 1/a = 1 HAVING 1 < 2
-                                   ^^^
+{
+  "errorClass" : "DIVIDE_BY_ZERO",
+  "sqlState" : "22012",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 40,
+    "stopIndex" : 42,
+    "fragment" : "1/a"
+  } ]
+}
 
 
 -- !query

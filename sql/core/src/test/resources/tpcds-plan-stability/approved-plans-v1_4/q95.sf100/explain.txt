@@ -120,6 +120,7 @@ Arguments: [ws_order_number#18 ASC NULLS FIRST], false, 0
 (15) SortMergeJoin [codegen id : 7]
 Left keys [1]: [ws_order_number#15]
 Right keys [1]: [ws_order_number#18]
+Join type: Inner
 Join condition: NOT (ws_warehouse_sk#14 = ws_warehouse_sk#17)
 
 (16) Project [codegen id : 7]
@@ -129,6 +130,7 @@ Input [4]: [ws_warehouse_sk#14, ws_order_number#15, ws_warehouse_sk#17, ws_order
 (17) SortMergeJoin [codegen id : 8]
 Left keys [1]: [ws_order_number#4]
 Right keys [1]: [ws_order_number#15]
+Join type: LeftSemi
 Join condition: None
 
 (18) Scan parquet spark_catalog.default.web_returns
@@ -167,6 +169,7 @@ Arguments: [ws_order_number#15 ASC NULLS FIRST], false, 0
 (26) SortMergeJoin [codegen id : 13]
 Left keys [1]: [wr_order_number#19]
 Right keys [1]: [ws_order_number#15]
+Join type: Inner
 Join condition: None
 
 (27) ReusedExchange [Reuses operator id: 11]
@@ -179,6 +182,7 @@ Arguments: [ws_order_number#18 ASC NULLS FIRST], false, 0
 (29) SortMergeJoin [codegen id : 16]
 Left keys [1]: [ws_order_number#15]
 Right keys [1]: [ws_order_number#18]
+Join type: Inner
 Join condition: NOT (ws_warehouse_sk#14 = ws_warehouse_sk#17)
 
 (30) Project [codegen id : 16]
@@ -188,6 +192,7 @@ Input [5]: [wr_order_number#19, ws_warehouse_sk#14, ws_order_number#15, ws_wareh
 (31) SortMergeJoin [codegen id : 20]
 Left keys [1]: [ws_order_number#4]
 Right keys [1]: [wr_order_number#19]
+Join type: LeftSemi
 Join condition: None
 
 (32) Scan parquet spark_catalog.default.customer_address
@@ -215,6 +220,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (37) BroadcastHashJoin [codegen id : 20]
 Left keys [1]: [ws_ship_addr_sk#2]
 Right keys [1]: [ca_address_sk#21]
+Join type: Inner
 Join condition: None
 
 (38) Project [codegen id : 20]
@@ -246,6 +252,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (44) BroadcastHashJoin [codegen id : 20]
 Left keys [1]: [ws_web_site_sk#3]
 Right keys [1]: [web_site_sk#23]
+Join type: Inner
 Join condition: None
 
 (45) Project [codegen id : 20]
@@ -277,6 +284,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (51) BroadcastHashJoin [codegen id : 20]
 Left keys [1]: [ws_ship_date_sk#1]
 Right keys [1]: [d_date_sk#25]
+Join type: Inner
 Join condition: None
 
 (52) Project [codegen id : 20]
@@ -348,7 +356,7 @@ Input [2]: [ca_address_sk#21, ca_state#22]
 (62) ObjectHashAggregate
 Input [1]: [ca_address_sk#21]
 Keys: []
-Functions [1]: [partial_bloom_filter_agg(xxhash64(ca_address_sk#21, 42), 17961, 143688, 0, 0)]
+Functions [1]: [partial_bloom_filter_agg(xxhash64(ca_address_sk#21, 42), 17961, 333176, 0, 0)]
 Aggregate Attributes [1]: [buf#36]
 Results [1]: [buf#37]
 
@@ -359,9 +367,9 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=8]
 (64) ObjectHashAggregate
 Input [1]: [buf#37]
 Keys: []
-Functions [1]: [bloom_filter_agg(xxhash64(ca_address_sk#21, 42), 17961, 143688, 0, 0)]
-Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(ca_address_sk#21, 42), 17961, 143688, 0, 0)#38]
-Results [1]: [bloom_filter_agg(xxhash64(ca_address_sk#21, 42), 17961, 143688, 0, 0)#38 AS bloomFilter#39]
+Functions [1]: [bloom_filter_agg(xxhash64(ca_address_sk#21, 42), 17961, 333176, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(ca_address_sk#21, 42), 17961, 333176, 0, 0)#38]
+Results [1]: [bloom_filter_agg(xxhash64(ca_address_sk#21, 42), 17961, 333176, 0, 0)#38 AS bloomFilter#39]
 
 Subquery:2 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#10, [id=#11]
 ObjectHashAggregate (71)
@@ -394,7 +402,7 @@ Input [2]: [web_site_sk#23, web_company_name#24]
 (69) ObjectHashAggregate
 Input [1]: [web_site_sk#23]
 Keys: []
-Functions [1]: [partial_bloom_filter_agg(xxhash64(web_site_sk#23, 42), 4, 32, 0, 0)]
+Functions [1]: [partial_bloom_filter_agg(xxhash64(web_site_sk#23, 42), 4, 144, 0, 0)]
 Aggregate Attributes [1]: [buf#40]
 Results [1]: [buf#41]
 
@@ -405,9 +413,9 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=9]
 (71) ObjectHashAggregate
 Input [1]: [buf#41]
 Keys: []
-Functions [1]: [bloom_filter_agg(xxhash64(web_site_sk#23, 42), 4, 32, 0, 0)]
-Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(web_site_sk#23, 42), 4, 32, 0, 0)#42]
-Results [1]: [bloom_filter_agg(xxhash64(web_site_sk#23, 42), 4, 32, 0, 0)#42 AS bloomFilter#43]
+Functions [1]: [bloom_filter_agg(xxhash64(web_site_sk#23, 42), 4, 144, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(web_site_sk#23, 42), 4, 144, 0, 0)#42]
+Results [1]: [bloom_filter_agg(xxhash64(web_site_sk#23, 42), 4, 144, 0, 0)#42 AS bloomFilter#43]
 
 Subquery:3 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#12, [id=#13]
 ObjectHashAggregate (78)
@@ -440,7 +448,7 @@ Input [2]: [d_date_sk#25, d_date#26]
 (76) ObjectHashAggregate
 Input [1]: [d_date_sk#25]
 Keys: []
-Functions [1]: [partial_bloom_filter_agg(xxhash64(d_date_sk#25, 42), 73049, 584392, 0, 0)]
+Functions [1]: [partial_bloom_filter_agg(xxhash64(d_date_sk#25, 42), 73049, 1141755, 0, 0)]
 Aggregate Attributes [1]: [buf#44]
 Results [1]: [buf#45]
 
@@ -451,8 +459,8 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=10]
 (78) ObjectHashAggregate
 Input [1]: [buf#45]
 Keys: []
-Functions [1]: [bloom_filter_agg(xxhash64(d_date_sk#25, 42), 73049, 584392, 0, 0)]
-Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(d_date_sk#25, 42), 73049, 584392, 0, 0)#46]
-Results [1]: [bloom_filter_agg(xxhash64(d_date_sk#25, 42), 73049, 584392, 0, 0)#46 AS bloomFilter#47]
+Functions [1]: [bloom_filter_agg(xxhash64(d_date_sk#25, 42), 73049, 1141755, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(d_date_sk#25, 42), 73049, 1141755, 0, 0)#46]
+Results [1]: [bloom_filter_agg(xxhash64(d_date_sk#25, 42), 73049, 1141755, 0, 0)#46 AS bloomFilter#47]
 
 

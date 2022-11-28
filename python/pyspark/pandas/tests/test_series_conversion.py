@@ -16,6 +16,7 @@
 #
 
 import unittest
+import sys
 
 import pandas as pd
 
@@ -33,7 +34,10 @@ class SeriesConversionTest(PandasOnSparkTestCase, SQLTestUtils):
     def psser(self):
         return ps.from_pandas(self.pser)
 
-    @unittest.skip("Pyperclip could not find a copy/paste mechanism for Linux.")
+    @unittest.skipIf(
+        sys.platform == "linux" or sys.platform == "linux2",
+        "Pyperclip could not find a copy/paste mechanism for Linux.",
+    )
     def test_to_clipboard(self):
         pser = self.pser
         psser = self.psser

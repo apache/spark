@@ -163,7 +163,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest {
         .start()
       inputData.addData(1, 2)
       val e = intercept[StreamingQueryException](query.processAllAvailable())
-      assert(e.getCause.getCause.getMessage.contains("Unsupported BlockBasedTable format_version"))
+      assert(e.getCause.getMessage.contains("Unsupported BlockBasedTable format_version"))
     }
   }
 

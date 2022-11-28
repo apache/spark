@@ -19,9 +19,9 @@ package org.apache.spark.scheduler.cluster.k8s
 import java.util.Arrays
 import java.util.concurrent.TimeUnit
 
-import io.fabric8.kubernetes.api.model.{ObjectMeta, Pod, PodList}
+import io.fabric8.kubernetes.api.model.{ConfigMap, Pod, PodList}
 import io.fabric8.kubernetes.client.KubernetesClient
-import io.fabric8.kubernetes.client.dsl.{NonNamespaceOperation, PodResource}
+import io.fabric8.kubernetes.client.dsl.PodResource
 import org.jmock.lib.concurrent.DeterministicScheduler
 import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
 import org.mockito.ArgumentMatchers.{any, eq => mockitoEq}
@@ -67,10 +67,19 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
   private var podOperations: PODS = _
 
   @Mock
+  private var podsWithNamespace: PODS_WITH_NAMESPACE = _
+
+  @Mock
   private var labeledPods: LABELED_PODS = _
 
   @Mock
   private var configMapsOperations: CONFIG_MAPS = _
+
+  @Mock
+  private var configMapsWithNamespace: CONFIG_MAPS_WITH_NAMESPACE = _
+
+  @Mock
+  private var configMapResource: CONFIG_MAPS_RESOURCE = _
 
   @Mock
   private var labeledConfigMaps: LABELED_CONFIG_MAPS = _
@@ -117,7 +126,10 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
         driverEndpoint.capture()))
       .thenReturn(driverEndpointRef)
     when(kubernetesClient.pods()).thenReturn(podOperations)
+    when(podOperations.inNamespace("default")).thenReturn(podsWithNamespace)
     when(kubernetesClient.configMaps()).thenReturn(configMapsOperations)
+    when(configMapsOperations.inNamespace("default")).thenReturn(configMapsWithNamespace)
+    when(configMapsWithNamespace.resource(any[ConfigMap]())).thenReturn(configMapResource)
     when(podAllocator.driverPod).thenReturn(None)
     schedulerBackendUnderTest = new KubernetesClusterSchedulerBackend(
       taskScheduler,
@@ -142,13 +154,13 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     verify(lifecycleEventHandler).start(schedulerBackendUnderTest)
     verify(watchEvents).start(TEST_SPARK_APP_ID)
     verify(pollEvents).start(TEST_SPARK_APP_ID)
-    verify(configMapsOperations).create(any())
+    verify(configMapResource).create()
   }
 
   test("Stop all components") {
-    when(podOperations.withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID)).thenReturn(labeledPods)
+    when(podsWithNamespace.withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID)).thenReturn(labeledPods)
     when(labeledPods.withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)).thenReturn(labeledPods)
-    when(configMapsOperations.withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID))
+    when(configMapsWithNamespace.withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID))
       .thenReturn(labeledConfigMaps)
     when(labeledConfigMaps.withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
       .thenReturn(labeledConfigMaps)
@@ -177,36 +189,14 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
   test("Kill executors") {
     schedulerBackendUnderTest.start()
 
-    val operation = mock(classOf[NonNamespaceOperation[
-      Pod, PodList, PodResource[Pod]]])
-
-    when(podOperations.inNamespace(any())).thenReturn(operation)
-    when(podOperations.withField(any(), any())).thenReturn(labeledPods)
-    when(podOperations.withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID)).thenReturn(labeledPods)
+    when(podsWithNamespace.withField(any(), any())).thenReturn(labeledPods)
+    when(podsWithNamespace.withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID)).thenReturn(labeledPods)
     when(labeledPods.withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID)).thenReturn(labeledPods)
     when(labeledPods.withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)).thenReturn(labeledPods)
     when(labeledPods.withLabelIn(SPARK_EXECUTOR_ID_LABEL, "1", "2")).thenReturn(labeledPods)
-
-    val pod1 = mock(classOf[Pod])
-    val pod1Metadata = mock(classOf[ObjectMeta])
-    when(pod1Metadata.getNamespace).thenReturn("coffeeIsLife")
-    when(pod1Metadata.getName).thenReturn("pod1")
-    when(pod1.getMetadata).thenReturn(pod1Metadata)
-
-    val pod2 = mock(classOf[Pod])
-    val pod2Metadata = mock(classOf[ObjectMeta])
-    when(pod2Metadata.getNamespace).thenReturn("coffeeIsLife")
-    when(pod2Metadata.getName).thenReturn("pod2")
-    when(pod2.getMetadata).thenReturn(pod2Metadata)
-
-    val pod1op = mock(classOf[PodResource[Pod]])
-    val pod2op = mock(classOf[PodResource[Pod]])
-    when(operation.withName("pod1")).thenReturn(pod1op)
-    when(operation.withName("pod2")).thenReturn(pod2op)
-
-    val podList = mock(classOf[PodList])
-    when(labeledPods.list()).thenReturn(podList)
-    when(podList.getItems()).thenReturn(Arrays.asList[Pod]())
+    val pod1op = mock(classOf[PodResource])
+    val pod2op = mock(classOf[PodResource])
+    when(labeledPods.resources()).thenReturn(Arrays.asList[PodResource]().stream)
     schedulerExecutorService.tick(sparkConf.get(KUBERNETES_DYN_ALLOC_KILL_GRACE_PERIOD) * 2,
       TimeUnit.MILLISECONDS)
     verify(labeledPods, never()).delete()
@@ -227,7 +217,13 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     verify(pod2op, never()).edit(any(
       classOf[java.util.function.UnaryOperator[io.fabric8.kubernetes.api.model.Pod]]))
 
-    when(podList.getItems()).thenReturn(Arrays.asList(pod1))
+    when(labeledPods.resources()).thenReturn(Arrays.asList(pod1op).stream)
+    val podList = mock(classOf[PodList])
+    when(labeledPods.list()).thenReturn(podList)
+    val pod1 = mock(classOf[Pod])
+    val pod2 = mock(classOf[Pod])
+    when(podList.getItems).thenReturn(Arrays.asList(pod1, pod2))
+
     schedulerBackendUnderTest.doKillExecutors(Seq("1", "2"))
     verify(labeledPods, never()).delete()
     schedulerExecutorService.runUntilIdle()

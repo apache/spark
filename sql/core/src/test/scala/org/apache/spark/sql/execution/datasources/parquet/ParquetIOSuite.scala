@@ -36,6 +36,7 @@ import org.apache.parquet.hadoop._
 import org.apache.parquet.hadoop.example.ExampleParquetWriter
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
 import org.apache.parquet.hadoop.metadata.CompressionCodecName.GZIP
+import org.apache.parquet.io.api.Binary
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkException, TestUtils}
@@ -108,6 +109,41 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         val sparkTypes = df.schema.map(_.dataType)
         assert(sparkTypes === expectedSparkTypes)
       })
+    }
+  }
+
+  test("SPARK-41096: FIXED_LEN_BYTE_ARRAY support") {
+    Seq(true, false).foreach { dictionaryEnabled =>
+      def makeRawParquetFile(path: Path): Unit = {
+        val schemaStr =
+          """message root {
+            |  required FIXED_LEN_BYTE_ARRAY(1) a;
+            |  required FIXED_LEN_BYTE_ARRAY(3) b;
+            |}
+        """.stripMargin
+        val schema = MessageTypeParser.parseMessageType(schemaStr)
+
+        val writer = createParquetWriter(schema, path, dictionaryEnabled)
+
+        (0 until 10).map(_.toString).foreach { n =>
+          val record = new SimpleGroup(schema)
+          record.add(0, Binary.fromString(n))
+          record.add(1, Binary.fromString(n + n + n))
+          writer.write(record)
+        }
+        writer.close()
+      }
+
+      withTempDir { dir =>
+        val path = new Path(dir.toURI.toString, "part-r-0.parquet")
+        makeRawParquetFile(path)
+        Seq(true, false).foreach { vectorizedReaderEnabled =>
+          readParquetFile(path.toString, vectorizedReaderEnabled) { df =>
+            checkAnswer(df, (48 until 58).map(n => // char '0' is 48 in ascii
+              Row(Array(n), Array(n, n, n))))
+          }
+        }
+      }
     }
   }
 
@@ -1164,9 +1200,9 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
           classOf[JobCommitFailureParquetOutputCommitter].getCanonicalName
       )
       withTempPath { dir =>
-        val message = intercept[SparkException] {
+        val message = intercept[RuntimeException] {
           spark.range(0, 1).write.options(extraOptions).parquet(dir.getCanonicalPath)
-        }.getCause.getMessage
+        }.getMessage
         assert(message === "Intentional exception for testing purposes")
       }
     }
@@ -1201,7 +1237,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       withTempPath { dir =>
         val m1 = intercept[SparkException] {
           spark.range(1).coalesce(1).write.options(extraOptions).parquet(dir.getCanonicalPath)
-        }.getCause.getMessage
+        }.getMessage
         assert(m1.contains("Intentional exception for testing purposes"))
       }
 
@@ -1210,7 +1246,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
           val df = spark.range(1).select($"id" as Symbol("a"), $"id" as Symbol("b"))
             .coalesce(1)
           df.write.partitionBy("a").options(extraOptions).parquet(dir.getCanonicalPath)
-        }.getCause.getMessage
+        }.getMessage
         assert(m2.contains("Intentional exception for testing purposes"))
       }
     }
@@ -1304,6 +1340,16 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         // and dictionary encodings.
         readResourceParquetFile("test-data/timemillis-in-i64.parquet"),
         (1 to 3).map(i => Row(new java.sql.Timestamp(10))))
+    }
+  }
+
+  test("SPARK-40128 read DELTA_LENGTH_BYTE_ARRAY encoded strings") {
+    withAllParquetReaders {
+      checkAnswer(
+        // "fruit" column in this file is encoded using DELTA_LENGTH_BYTE_ARRAY.
+        // The file comes from https://github.com/apache/parquet-testing
+        readResourceParquetFile("test-data/delta_length_byte_array.parquet"),
+        (0 to 999).map(i => Row("apple_banana_mango" + Integer.toString(i * i))))
     }
   }
 
@@ -1473,6 +1519,16 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       val option = new ParquetOptions(Map("Compression" -> "uncompressed"), spark.sessionState.conf)
       assert(option.compressionCodecClassName == "UNCOMPRESSED")
     }
+  }
+
+  test("SPARK-40667: validate Parquet Options") {
+    assert(ParquetOptions.getAllOptions.size == 5)
+    // Please add validation on any new parquet options here
+    assert(ParquetOptions.isValidOption("mergeSchema"))
+    assert(ParquetOptions.isValidOption("compression"))
+    assert(ParquetOptions.isValidOption("parquet.compression"))
+    assert(ParquetOptions.isValidOption("datetimeRebaseMode"))
+    assert(ParquetOptions.isValidOption("int96RebaseMode"))
   }
 
   test("SPARK-23173 Writing a file with data converted from JSON with and incorrect user schema") {

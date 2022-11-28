@@ -159,14 +159,14 @@ def load_model(
     ...     lr = LinearRegression()
     ...     lr.fit(train_x, train_y)
     ...     mlflow.sklearn.log_model(lr, "model")
-    LinearRegression(...)
+    LinearRegression...
 
     Now that our model is logged using MLflow, we load it back and apply it on a pandas-on-Spark
     dataframe:
 
     >>> from pyspark.pandas.mlflow import load_model
-    >>> run_info = client.list_run_infos(exp_id)[-1]
-    >>> model = load_model("runs:/{run_id}/model".format(run_id=run_info.run_uuid))
+    >>> run_info = client.search_runs(exp_id)[-1].info
+    >>> model = load_model("runs:/{run_id}/model".format(run_id=run_info.run_id))
     >>> prediction_df = ps.DataFrame({"x1": [2.0], "x2": [4.0]})
     >>> prediction_df["prediction"] = model.predict(prediction_df)
     >>> prediction_df

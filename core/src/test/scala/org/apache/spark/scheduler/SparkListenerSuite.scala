@@ -599,6 +599,22 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     assert(bus.getQueueCapacity(EVENT_LOG_QUEUE) == Some(2))
   }
 
+  test("SPARK-39973: Suppress error logs when the number of timers is set to 0") {
+    sc = new SparkContext(
+      "local",
+      "SparkListenerSuite",
+      new SparkConf().set(
+        LISTENER_BUS_METRICS_MAX_LISTENER_CLASSES_TIMED.key, 0.toString))
+    val testAppender = new LogAppender("Error logger for timers")
+    withLogAppender(testAppender) {
+      sc.addSparkListener(new SparkListener { })
+      sc.addSparkListener(new SparkListener { })
+    }
+    assert(!testAppender.loggingEvents
+      .exists(_.getMessage.getFormattedMessage.contains(
+        "Not measuring processing time for listener")))
+  }
+
   /**
    * Assert that the given list of numbers has an average that is greater than zero.
    */

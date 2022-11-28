@@ -92,6 +92,7 @@ Output [1]: [d_date_sk#9]
 (9) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_sold_date_sk#7]
 Right keys [1]: [d_date_sk#9]
+Join type: Inner
 Join condition: None
 
 (10) Project [codegen id : 4]
@@ -109,6 +110,7 @@ Arguments: [ss_customer_sk#6 ASC NULLS FIRST], false, 0
 (13) SortMergeJoin [codegen id : 6]
 Left keys [1]: [c_customer_sk#3]
 Right keys [1]: [ss_customer_sk#6]
+Join type: LeftSemi
 Join condition: None
 
 (14) Scan parquet spark_catalog.default.web_sales
@@ -127,6 +129,7 @@ Output [1]: [d_date_sk#12]
 (17) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [ws_sold_date_sk#11]
 Right keys [1]: [d_date_sk#12]
+Join type: Inner
 Join condition: None
 
 (18) Project [codegen id : 8]
@@ -144,6 +147,7 @@ Arguments: [ws_bill_customer_sk#10 ASC NULLS FIRST], false, 0
 (21) SortMergeJoin [codegen id : 10]
 Left keys [1]: [c_customer_sk#3]
 Right keys [1]: [ws_bill_customer_sk#10]
+Join type: ExistenceJoin(exists#2)
 Join condition: None
 
 (22) Scan parquet spark_catalog.default.catalog_sales
@@ -162,6 +166,7 @@ Output [1]: [d_date_sk#15]
 (25) BroadcastHashJoin [codegen id : 12]
 Left keys [1]: [cs_sold_date_sk#14]
 Right keys [1]: [d_date_sk#15]
+Join type: Inner
 Join condition: None
 
 (26) Project [codegen id : 12]
@@ -179,6 +184,7 @@ Arguments: [cs_ship_customer_sk#13 ASC NULLS FIRST], false, 0
 (29) SortMergeJoin [codegen id : 14]
 Left keys [1]: [c_customer_sk#3]
 Right keys [1]: [cs_ship_customer_sk#13]
+Join type: ExistenceJoin(exists#1)
 Join condition: None
 
 (30) Filter [codegen id : 14]
@@ -222,6 +228,7 @@ Arguments: [ca_address_sk#16 ASC NULLS FIRST], false, 0
 (39) SortMergeJoin [codegen id : 18]
 Left keys [1]: [c_current_addr_sk#5]
 Right keys [1]: [ca_address_sk#16]
+Join type: Inner
 Join condition: None
 
 (40) Project [codegen id : 18]
@@ -261,6 +268,7 @@ Arguments: [cd_demo_sk#18 ASC NULLS FIRST], false, 0
 (48) SortMergeJoin [codegen id : 22]
 Left keys [1]: [c_current_cdemo_sk#4]
 Right keys [1]: [cd_demo_sk#18]
+Join type: Inner
 Join condition: None
 
 (49) Project [codegen id : 22]

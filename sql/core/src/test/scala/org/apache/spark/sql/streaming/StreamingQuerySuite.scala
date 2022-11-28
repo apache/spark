@@ -36,7 +36,7 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Dataset, Row}
+import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Dataset, Row, SaveMode}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Literal, Rand, Randn, Shuffle, Uuid}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
@@ -174,6 +174,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
   }
 
   testQuietly("OneTime trigger, commit log, and exception") {
+    // NOTE: the test uses the deprecated Trigger.Once() by intention, do not change.
     import Trigger.Once
     val inputData = MemoryStream[Int]
     val mapped = inputData.toDS().map { 6 / _}
@@ -182,7 +183,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       AssertOnQuery(_.isActive),
       StopStream,
       AddData(inputData, 1, 2),
-      StartStream(trigger = Once),
+      StartStream(trigger = Trigger.Once),
       CheckAnswer(6, 3),
       StopStream, // clears out StreamTest state
       AssertOnQuery { q =>
@@ -656,6 +657,112 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     )
   }
 
+  test("SPARK-41198: input row calculation with CTE") {
+    withTable("parquet_tbl", "parquet_streaming_tbl") {
+      spark.range(0, 10).selectExpr("id AS col1", "id AS col2")
+        .write.format("parquet").saveAsTable("parquet_tbl")
+
+      val dfWithClause = spark.sql(
+        """
+          |with batch_tbl as (
+          |  SELECT col1, col2 FROM parquet_tbl
+          |)
+          |
+          |SELECT col1 AS key, col2 as value_batch FROM batch_tbl
+          |""".stripMargin)
+
+      spark.sql(
+        """
+          |CREATE TABLE parquet_streaming_tbl
+          |(
+          |  key integer,
+          |  value_stream integer
+          |)
+          |USING parquet
+          |""".stripMargin)
+
+      // NOTE: if we only have DSv2 streaming source(s) as all streaming sources in the query, it
+      // simply collects the corresponding physical nodes from executed plan and does not encounter
+      // the issue. Here we use DSv1 streaming source to reproduce the issue.
+      val streamDf = spark.readStream.table("parquet_streaming_tbl")
+      val joinedDf = streamDf.join(dfWithClause, Seq("key"), "inner")
+
+      val clock = new StreamManualClock()
+      testStream(joinedDf)(
+        StartStream(triggerClock = clock, trigger = Trigger.ProcessingTime(100)),
+        Execute { _ =>
+          spark.range(1, 5).selectExpr("id AS key", "id AS value_stream")
+            .write.format("parquet").mode(SaveMode.Append).saveAsTable("parquet_streaming_tbl")
+        },
+        AdvanceManualClock(150),
+        waitUntilBatchProcessed(clock),
+        CheckLastBatch((1, 1, 1), (2, 2, 2), (3, 3, 3), (4, 4, 4)),
+        AssertOnQuery { q =>
+          val lastProgress = getLastProgressWithData(q)
+          assert(lastProgress.nonEmpty)
+          assert(lastProgress.get.numInputRows == 4)
+          assert(lastProgress.get.sources.length == 1)
+          assert(lastProgress.get.sources(0).numInputRows == 4)
+          true
+        }
+      )
+    }
+  }
+
+  test("SPARK-41199: input row calculation with mixed-up of DSv1 and DSv2 streaming sources") {
+    withTable("parquet_streaming_tbl") {
+      val streamInput = MemoryStream[Int]
+      val streamDf = streamInput.toDF().selectExpr("value AS key", "value AS value_stream")
+
+      spark.sql(
+        """
+          |CREATE TABLE parquet_streaming_tbl
+          |(
+          |  key integer,
+          |  value_stream integer
+          |)
+          |USING parquet
+          |""".stripMargin)
+
+      val streamDf2 = spark.readStream.table("parquet_streaming_tbl")
+      val unionedDf = streamDf.union(streamDf2)
+
+      val clock = new StreamManualClock()
+      testStream(unionedDf)(
+        StartStream(triggerClock = clock, trigger = Trigger.ProcessingTime(100)),
+        AddData(streamInput, 1, 2, 3),
+        Execute { _ =>
+          spark.range(4, 6).selectExpr("id AS key", "id AS value_stream")
+            .write.format("parquet").mode(SaveMode.Append).saveAsTable("parquet_streaming_tbl")
+        },
+        AdvanceManualClock(150),
+        waitUntilBatchProcessed(clock),
+        CheckLastBatch((1, 1), (2, 2), (3, 3), (4, 4), (5, 5)),
+        AssertOnQuery { q =>
+          val lastProgress = getLastProgressWithData(q)
+          assert(lastProgress.nonEmpty)
+          assert(lastProgress.get.numInputRows == 5)
+          assert(lastProgress.get.sources.length == 2)
+          assert(lastProgress.get.sources(0).numInputRows == 3)
+          assert(lastProgress.get.sources(1).numInputRows == 2)
+          true
+        }
+      )
+    }
+  }
+
+  private def waitUntilBatchProcessed(clock: StreamManualClock) = AssertOnQuery { q =>
+    eventually(Timeout(streamingTimeout)) {
+      if (!q.exception.isDefined) {
+        assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
+      }
+    }
+    if (q.exception.isDefined) {
+      throw q.exception.get
+    }
+    true
+  }
+
   testQuietly("StreamExecution metadata garbage collection") {
     val inputData = MemoryStream[Int]
     val mapped = inputData.toDS().map(6 / _)
@@ -740,7 +847,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         q3.processAllAvailable()
       }
       assert(e.getCause.isInstanceOf[SparkException])
-      assert(e.getCause.getCause.getCause.isInstanceOf[IllegalStateException])
+      assert(e.getCause.getCause.isInstanceOf[IllegalStateException])
       TestUtils.assertExceptionMsg(e, "StreamingQuery cannot be used in executors")
     } finally {
       q1.stop()
@@ -846,10 +953,24 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
   }
 
   test("processAllAvailable should not block forever when a query is stopped") {
+    // NOTE: the test uses the deprecated Trigger.Once() by intention, do not change.
     val input = MemoryStream[Int]
     input.addData(1)
     val query = input.toDF().writeStream
       .trigger(Trigger.Once())
+      .format("console")
+      .start()
+    failAfter(streamingTimeout) {
+      query.processAllAvailable()
+    }
+  }
+
+  test("processAllAvailable should not block forever when a query is stopped -" +
+    " Trigger.AvailableNow") {
+    val input = MemoryStream[Int]
+    input.addData(1)
+    val query = input.toDF().writeStream
+      .trigger(Trigger.AvailableNow())
       .format("console")
       .start()
     failAfter(streamingTimeout) {

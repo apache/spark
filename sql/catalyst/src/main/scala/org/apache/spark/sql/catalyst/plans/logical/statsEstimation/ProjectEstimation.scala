@@ -26,7 +26,8 @@ object ProjectEstimation {
   def estimate(project: Project): Option[Statistics] = {
     if (rowCountsExist(project.child)) {
       val childStats = project.child.stats
-      val aliasStats = EstimationUtils.getAliasStats(project.expressions, childStats.attributeStats)
+      val aliasStats = EstimationUtils.getAliasStats(
+        project.expressions, childStats.attributeStats, childStats.rowCount.get)
 
       val outputAttrStats =
         getOutputMap(AttributeMap(childStats.attributeStats.toSeq ++ aliasStats), project.output)

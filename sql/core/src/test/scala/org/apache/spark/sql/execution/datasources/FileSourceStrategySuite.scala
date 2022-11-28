@@ -29,7 +29,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionSet, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionSet}
 import org.apache.spark.sql.catalyst.util
 import org.apache.spark.sql.execution.{DataSourceScanExec, FileSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
@@ -40,7 +40,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, LongType, StructField, StructType}
 import org.apache.spark.util.Utils
 
-class FileSourceStrategySuite extends QueryTest with SharedSparkSession with PredicateHelper {
+class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   protected override def sparkConf = super.sparkConf.set("spark.default.parallelism", "1")

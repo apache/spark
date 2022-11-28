@@ -37,3 +37,5 @@ Upgrading from PySpark 3.3 to 3.4
 * In Spark 3.4, the infer schema process of ``groupby.apply`` in Pandas on Spark, will first infer the pandas type to ensure the accuracy of the pandas ``dtype`` as much as possible.
 
 * In Spark 3.4, the ``Series.concat`` sort parameter will be respected to follow pandas 1.4 behaviors.
+
+* In Spark 3.4, the ``DataFrame.__setitem__`` will make a copy and replace pre-existing arrays, which will NOT be over-written to follow pandas 1.4 behaviors.

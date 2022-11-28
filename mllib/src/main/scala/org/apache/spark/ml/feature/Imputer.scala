@@ -81,6 +81,7 @@ private[feature] trait ImputerParams extends Params with HasInputCol with HasInp
   protected def validateAndTransformSchema(schema: StructType): StructType = {
     ParamValidators.checkSingleVsMultiColumnParams(this, Seq(outputCol), Seq(outputCols))
     val (inputColNames, outputColNames) = getInOutCols()
+    require(inputColNames.length > 0, "inputCols cannot be empty")
     require(inputColNames.length == inputColNames.distinct.length, s"inputCols contains" +
       s" duplicates: (${inputColNames.mkString(", ")})")
     require(outputColNames.length == outputColNames.distinct.length, s"outputCols contains" +

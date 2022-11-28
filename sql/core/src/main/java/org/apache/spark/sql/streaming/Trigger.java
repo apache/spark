@@ -92,11 +92,13 @@ public class Trigger {
   /**
    * A trigger that processes all available data in a single batch then terminates the query.
    *
-   * For better scalability, AvailableNow can be used alternatively to process the data in
-   * multiple batches.
-   *
    * @since 2.2.0
+   * @deprecated This is deprecated as of Spark 3.4.0. Use {@link #AvailableNow()} to leverage
+   *             better guarantee of processing, fine-grained scale of batches, and better gradual
+   *             processing of watermark advancement including no-data batch.
+   *             See the NOTES in {@link #AvailableNow()} for details.
    */
+  @Deprecated
   public static Trigger Once() {
     return OneTimeTrigger$.MODULE$;
   }
@@ -104,6 +106,17 @@ public class Trigger {
   /**
    * A trigger that processes all available data at the start of the query in one or multiple
    * batches, then terminates the query.
+   *
+   * Users are encouraged to set the source options to control the size of the batch as similar as
+   * controlling the size of the batch in {@link #ProcessingTime(long)} trigger.
+   *
+   * NOTES:
+   * - This trigger provides a strong guarantee of processing: regardless of how many batches were
+   *   left over in previous run, it ensures all available data at the time of execution gets
+   *   processed before termination. All uncommitted batches will be processed first.
+   * - Watermark gets advanced per each batch, and no-data batch gets executed before termination
+   *   if the last batch advances the watermark. This helps to maintain smaller and predictable
+   *   state size and smaller latency on the output of stateful operators.
    *
    * @since 3.3.0
    */

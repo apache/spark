@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector.catalog
 import java.util
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, PartitionAlreadyExistsException, PartitionsAlreadyExistException}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, PartitionsAlreadyExistException}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types.StructType
 
@@ -39,7 +39,7 @@ class InMemoryAtomicPartitionTable (
       ident: InternalRow,
       properties: util.Map[String, String]): Unit = {
     if (memoryTablePartitions.containsKey(ident)) {
-      throw new PartitionAlreadyExistsException(name, ident, partitionSchema)
+      throw new PartitionsAlreadyExistException(name, ident, partitionSchema)
     } else {
       createPartitionKey(ident.toSeq(schema))
       memoryTablePartitions.put(ident, properties)

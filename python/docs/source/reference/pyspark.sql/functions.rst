@@ -84,6 +84,7 @@ Math Functions
     log10
     log1p
     log2
+    pmod
     pow
     rint
     round
@@ -125,6 +126,7 @@ Datetime Functions
     quarter
     month
     last_day
+    localtimestamp
     minute
     months_between
     next_day
@@ -140,6 +142,7 @@ Datetime Functions
     window
     session_window
     timestamp_seconds
+    window_time
 
 
 Collection Functions
@@ -174,6 +177,9 @@ Collection Functions
     explode_outer
     posexplode
     posexplode_outer
+    inline
+    inline_outer
+    get
     get_json_object
     json_tuple
     from_json
@@ -188,6 +194,7 @@ Collection Functions
     flatten
     sequence
     array_repeat
+    map_contains_key
     map_keys
     map_values
     map_entries
@@ -235,8 +242,10 @@ Aggregate Functions
     max
     max_by
     mean
+    median
     min
     min_by
+    mode
     percentile_approx
     product
     skewness
@@ -324,6 +333,7 @@ UDF
 .. autosummary::
     :toctree: api/
 
+    call_udf
     pandas_udf
     udf
     unwrap_udt

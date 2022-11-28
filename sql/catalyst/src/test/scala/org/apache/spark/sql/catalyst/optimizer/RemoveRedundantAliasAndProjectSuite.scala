@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types.MetadataBuilder
 
-class RemoveRedundantAliasAndProjectSuite extends PlanTest with PredicateHelper {
+class RemoveRedundantAliasAndProjectSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch(
@@ -99,7 +99,7 @@ class RemoveRedundantAliasAndProjectSuite extends PlanTest with PredicateHelper 
     val query = r1.select($"a" as "a")
       .union(r2.select($"b" as "b")).select($"a").analyze
     val optimized = Optimize.execute(query)
-    val expected = r1.union(r2)
+    val expected = r1.select($"a" as "a").union(r2).analyze
     comparePlans(optimized, expected)
   }
 

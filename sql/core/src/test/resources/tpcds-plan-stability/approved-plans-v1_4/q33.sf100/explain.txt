@@ -85,6 +85,7 @@ Output [1]: [d_date_sk#6]
 (5) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ss_sold_date_sk#4]
 Right keys [1]: [d_date_sk#6]
+Join type: Inner
 Join condition: None
 
 (6) Project [codegen id : 5]
@@ -130,6 +131,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (15) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [i_manufact_id#8]
 Right keys [1]: [i_manufact_id#10]
+Join type: LeftSemi
 Join condition: None
 
 (16) BroadcastExchange
@@ -139,6 +141,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)
 (17) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ss_item_sk#1]
 Right keys [1]: [i_item_sk#7]
+Join type: Inner
 Join condition: None
 
 (18) Project [codegen id : 5]
@@ -170,6 +173,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (24) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ss_addr_sk#2]
 Right keys [1]: [ca_address_sk#11]
+Join type: Inner
 Join condition: None
 
 (25) Project [codegen id : 5]
@@ -215,6 +219,7 @@ Output [1]: [d_date_sk#21]
 (33) BroadcastHashJoin [codegen id : 11]
 Left keys [1]: [cs_sold_date_sk#20]
 Right keys [1]: [d_date_sk#21]
+Join type: Inner
 Join condition: None
 
 (34) Project [codegen id : 11]
@@ -227,6 +232,7 @@ Output [2]: [i_item_sk#22, i_manufact_id#23]
 (36) BroadcastHashJoin [codegen id : 11]
 Left keys [1]: [cs_item_sk#18]
 Right keys [1]: [i_item_sk#22]
+Join type: Inner
 Join condition: None
 
 (37) Project [codegen id : 11]
@@ -239,6 +245,7 @@ Output [1]: [ca_address_sk#24]
 (39) BroadcastHashJoin [codegen id : 11]
 Left keys [1]: [cs_bill_addr_sk#17]
 Right keys [1]: [ca_address_sk#24]
+Join type: Inner
 Join condition: None
 
 (40) Project [codegen id : 11]
@@ -284,6 +291,7 @@ Output [1]: [d_date_sk#33]
 (48) BroadcastHashJoin [codegen id : 17]
 Left keys [1]: [ws_sold_date_sk#32]
 Right keys [1]: [d_date_sk#33]
+Join type: Inner
 Join condition: None
 
 (49) Project [codegen id : 17]
@@ -296,6 +304,7 @@ Output [2]: [i_item_sk#34, i_manufact_id#35]
 (51) BroadcastHashJoin [codegen id : 17]
 Left keys [1]: [ws_item_sk#29]
 Right keys [1]: [i_item_sk#34]
+Join type: Inner
 Join condition: None
 
 (52) Project [codegen id : 17]
@@ -308,6 +317,7 @@ Output [1]: [ca_address_sk#36]
 (54) BroadcastHashJoin [codegen id : 17]
 Left keys [1]: [ws_bill_addr_sk#30]
 Right keys [1]: [ca_address_sk#36]
+Join type: Inner
 Join condition: None
 
 (55) Project [codegen id : 17]

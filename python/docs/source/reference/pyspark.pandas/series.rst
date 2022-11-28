@@ -145,6 +145,7 @@ Computations / Descriptive Stats
    Series.cumsum
    Series.cumprod
    Series.describe
+   Series.ewm
    Series.filter
    Series.kurt
    Series.mad
@@ -200,6 +201,7 @@ Reindexing / Selection / Label manipulation
    Series.reindex_like
    Series.reset_index
    Series.sample
+   Series.searchsorted
    Series.swaplevel
    Series.swapaxes
    Series.take

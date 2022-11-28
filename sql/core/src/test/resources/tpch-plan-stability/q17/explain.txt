@@ -63,6 +63,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [pla
 (9) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [l_partkey#1]
 Right keys [1]: [p_partkey#4]
+Join type: Inner
 Join condition: None
 
 (10) Project [codegen id : 4]
@@ -112,6 +113,7 @@ Arguments: HashedRelationBroadcastMode(List(input[1, bigint, true]),false), [pla
 (19) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [p_partkey#4]
 Right keys [1]: [l_partkey#8]
+Join type: Inner
 Join condition: (cast(l_quantity#2 as decimal(16,5)) < (0.2 * avg(l_quantity))#15)
 
 (20) Project [codegen id : 4]
