@@ -132,7 +132,7 @@
       },
       "INTERCEPTOR_RUNTIME_ERROR" : {
         "message" : [
-          "Error instantiating GRPC interceptor: <msg>"
+          "Error instantiating GRPC interceptor: <msg>."
         ]
       },
       "INVALID_COMMAND_WRITE_INVALID_BUCKET_BY" : {
@@ -140,90 +140,89 @@
           "BucketBy must specify a bucket count > 0, received <bucket> instead."
         ]
       },
-      "INVALID_PLAN_INPUT" : {
-        "message" : [
-          "Error transforming Spark Connect plan: <msg>"
-        ]
-      },
-      "INVALID_PLAN_UNKNOWN_RELATION": {
-        "message": [
-          "Relation: <param> not supported."
-        ]
-      },
-      "INVALID_PLAN_TRANSFORM_NA_FILL_EMPTY": {
-        "message": [
-          "Values must contains at least 1 item"
-        ]
-      },
-      "INVALID_PLAN_TRANSFORM_NA_FILL_SIZE": {
-        "message": [
-          "When values contains more than 1 items, ",
-          "values and cols should have the same length!"
-        ]
-      },
-      "INVALID_PLAN_UNSUPPORTED_LITERAL_TYPE": {
-        "message": [
-          "Unsupported Literal type: <type>"
-        ]
-      },
-      "INVALID_PLAN_EMPTY_INPUT" : {
-        "message": [
-          "Input relation must not be empty."
-        ]
-      },
       "INVALID_PLAN_DEDUPLICATE_INVALID_INPUT" : {
-        "message": [
-          "Deduplicate must be called with either all or a subset of coulumn names to deduplicate."
+        "message" : [
+          "Deduplicate must be called with either all or a subset of column names to deduplicate."
         ]
       },
       "INVALID_PLAN_DEDUPLICATE_INVALID_INPUT_COLUMN" : {
-        "message": [
-          "Invalid column name used for Deduplicate: <col>"
+        "message" : [
+          "Invalid column name used for Deduplicate: <col>."
         ]
       },
-      "INVALID_PLAN_INVALID_DATA_SOURCE" : {
-        "message": [
-          "Read from DataSource requires a format parameter"
+      "INVALID_PLAN_EMPTY_INPUT" : {
+        "message" : [
+          "Input relation must not be empty."
         ]
       },
-      "INVALID_PLAN_UNSUPPORTED_DATA_SOURCE" : {
-        "message": [
-          "Unsupported input data source: <type>"
-        ]
-      },
-      "INVALID_PLAN_UNSUPPORTED_EXPRESSION_TYPE" : {
-        "message": [
-          "Unsupported expression type: <type>"
+      "INVALID_PLAN_INPUT" : {
+        "message" : [
+          "Error transforming Spark Connect plan: <msg>."
         ]
       },
       "INVALID_PLAN_INVALID_ALIAS" : {
-        "message": [
+        "message" : [
           "Alias expressions with more than 1 identifier must not use optional metadata."
         ]
       },
-      "INVALID_PLAN_INVALID_SET_OPERATION" : {
-        "message": [
-          "Invalid Set operation: <type> does not support <param>"
-        ]
-      },
-      "INVALID_PLAN_UNSUPPORTED_SET_OPERATION" : {
-        "message": [
-          "Unsupported Set operation: <type>"
-        ]
-      },
-      "INVALID_PLAN_UNSUPPORTED_JOIN_TYPE" : {
-        "message": [
-          "Unsupported Join type: <type>"
+      "INVALID_PLAN_INVALID_DATA_SOURCE" : {
+        "message" : [
+          "Read from DataSource requires a format parameter."
         ]
       },
       "INVALID_PLAN_INVALID_JOIN_CONDITION" : {
-        "message": [
-          "Using columns or join conditions cannot be set at the same time in Join"
+        "message" : [
+          "Using columns or join conditions cannot be set at the same time in Join."
+        ]
+      },
+      "INVALID_PLAN_INVALID_SET_OPERATION" : {
+        "message" : [
+          "Invalid Set operation: <type> does not support <param>."
+        ]
+      },
+      "INVALID_PLAN_TRANSFORM_NA_FILL_EMPTY" : {
+        "message" : [
+          "Values must contains at least 1 item."
+        ]
+      },
+      "INVALID_PLAN_TRANSFORM_NA_FILL_SIZE" : {
+        "message" : [
+          "When values contains more than 1 items, values and cols should have the same length."
+        ]
+      },
+      "INVALID_PLAN_UNKNOWN_RELATION" : {
+        "message" : [
+          "Relation: <param> not supported."
+        ]
+      },
+      "INVALID_PLAN_UNSUPPORTED_DATA_SOURCE" : {
+        "message" : [
+          "Unsupported input data source: <type>."
+        ]
+      },
+      "INVALID_PLAN_UNSUPPORTED_EXPRESSION_TYPE" : {
+        "message" : [
+          "Unsupported expression type: <type>."
+        ]
+      },
+      "INVALID_PLAN_UNSUPPORTED_JOIN_TYPE" : {
+        "message" : [
+          "Unsupported Join type: <type>."
+        ]
+      },
+      "INVALID_PLAN_UNSUPPORTED_LITERAL_TYPE" : {
+        "message" : [
+          "Unsupported Literal type: <type>."
+        ]
+      },
+      "INVALID_PLAN_UNSUPPORTED_SET_OPERATION" : {
+        "message" : [
+          "Unsupported Set operation: <type>."
         ]
       },
       "INVALID_PLAN_UNSUPPORTED_TYPE_CONVERSION" : {
-        "message": [
-          "Unsupported type conversion from <from> to <to>: <type>"
+        "message" : [
+          "Unsupported type conversion from <from> to <to>: <type>."
         ]
       }
     }
