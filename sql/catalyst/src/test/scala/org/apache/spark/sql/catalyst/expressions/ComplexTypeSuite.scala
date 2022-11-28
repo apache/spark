@@ -279,7 +279,7 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Map key can't be null
     checkErrorInExpression[SparkRuntimeException](
       CreateMap(interlace(strWithNull, intSeq.map(Literal(_)))),
-      "INVALID_MAP_KEY")
+      "NULL_MAP_KEY")
 
     checkExceptionInExpression[RuntimeException](
       CreateMap(Seq(Literal(1), Literal(2), Literal(1), Literal(3))), "Duplicate map key")
@@ -383,7 +383,7 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Map key can't be null
     checkErrorInExpression[SparkRuntimeException](
       MapFromArrays(intWithNullArray, strArray),
-      "INVALID_MAP_KEY")
+      "NULL_MAP_KEY")
 
     checkExceptionInExpression[RuntimeException](
       MapFromArrays(

@@ -185,7 +185,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     assert(e1.getCause.isInstanceOf[SparkRuntimeException])
     checkError(
       exception = e1.getCause.asInstanceOf[SparkRuntimeException],
-      errorClass = "INVALID_MAP_KEY",
+      errorClass = "NULL_MAP_KEY",
       parameters = Map.empty
     )
 
@@ -4507,7 +4507,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     assert(ex3.getCause.isInstanceOf[SparkRuntimeException])
     checkError(
       exception = ex3.getCause.asInstanceOf[SparkRuntimeException],
-      errorClass = "INVALID_MAP_KEY",
+      errorClass = "NULL_MAP_KEY",
       parameters = Map.empty
     )
 
@@ -4517,7 +4517,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     assert(ex3a.getCause.isInstanceOf[SparkRuntimeException])
     checkError(
       exception = ex3a.getCause.asInstanceOf[SparkRuntimeException],
-      errorClass = "INVALID_MAP_KEY",
+      errorClass = "NULL_MAP_KEY",
       parameters = Map.empty
     )
 
@@ -5128,7 +5128,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     assert(e1.getCause.isInstanceOf[SparkRuntimeException])
     checkError(
       exception = e1.getCause.asInstanceOf[SparkRuntimeException],
-      errorClass = "INVALID_MAP_KEY",
+      errorClass = "NULL_MAP_KEY",
       parameters = Map.empty
     )
   }

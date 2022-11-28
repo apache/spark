@@ -543,7 +543,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     assert(e.getCause.isInstanceOf[SparkRuntimeException])
     checkError(
       exception = e.getCause.asInstanceOf[SparkRuntimeException],
-      errorClass = "INVALID_MAP_KEY",
+      errorClass = "NULL_MAP_KEY",
       parameters = Map.empty
     )
   }
@@ -554,7 +554,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     assert(e.getCause.isInstanceOf[SparkRuntimeException])
     checkError(
       exception = e.getCause.asInstanceOf[SparkRuntimeException],
-      errorClass = "INVALID_MAP_KEY",
+      errorClass = "NULL_MAP_KEY",
       parameters = Map.empty
     )
   }

@@ -333,7 +333,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     // Map key can't be null
     checkErrorInExpression[SparkRuntimeException](
       MapFromEntries(ai5),
-      "INVALID_MAP_KEY")
+      "NULL_MAP_KEY")
     checkEvaluation(MapFromEntries(ai6), null)
 
     // Non-primitive-type keys and values
@@ -360,7 +360,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     // Map key can't be null
     checkExceptionInExpression[SparkRuntimeException](
       MapFromEntries(as5),
-      "INVALID_MAP_KEY")
+      "NULL_MAP_KEY")
     checkEvaluation(MapFromEntries(as6), null)
 
     // map key can't be map

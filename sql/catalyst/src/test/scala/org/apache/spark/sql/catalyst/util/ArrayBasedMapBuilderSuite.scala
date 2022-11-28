@@ -43,7 +43,7 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
     builder.put(1, null) // null value is OK
     checkError(
       exception = intercept[SparkRuntimeException](builder.put(null, 1)),
-      errorClass = "INVALID_MAP_KEY",
+      errorClass = "NULL_MAP_KEY",
       parameters = Map.empty
     )
   }

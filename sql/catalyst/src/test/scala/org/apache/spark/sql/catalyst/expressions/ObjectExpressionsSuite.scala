@@ -606,14 +606,14 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       javaMapSerializerFor(classOf[java.lang.Integer], classOf[java.lang.String])(
         Literal.fromObject(javaMapHasNullKey))
     checkErrorInExpression[SparkRuntimeException](
-      serializer3, EmptyRow, "INVALID_MAP_KEY", Map[String, String]())
+      serializer3, EmptyRow, "NULL_MAP_KEY", Map[String, String]())
 
     // Scala Map
     val serializer4 = scalaMapSerializerFor[java.lang.Integer, String](
       Literal.fromObject(scalaMapHasNullKey))
 
     checkErrorInExpression[SparkRuntimeException](
-      serializer4, EmptyRow, "INVALID_MAP_KEY", Map[String, String]())
+      serializer4, EmptyRow, "NULL_MAP_KEY", Map[String, String]())
   }
 
   test("SPARK-35244: invoke should throw the original exception") {
