@@ -66,7 +66,6 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolvePivot" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveRandomSeed" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveReferences" ::
-      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveLateralColumnAlias" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveRelations" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveSubquery" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveSubqueryColumnAliases" ::
@@ -89,6 +88,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.ResolveHints$ResolveJoinStrategyHints" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveInlineTables" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveLambdaVariables" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveLateralColumnAlias" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveTimeZone" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveUnion" ::
       "org.apache.spark.sql.catalyst.analysis.SubstituteUnresolvedOrdinals" ::
