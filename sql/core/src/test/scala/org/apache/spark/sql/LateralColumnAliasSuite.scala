@@ -53,7 +53,7 @@ class LateralColumnAliasSuite extends QueryTest with SharedSparkSession {
   override protected def test(testName: String, testTags: Tag*)(testFun: => Any)
     (implicit pos: Position): Unit = {
     super.test(testName, testTags: _*) {
-      withSQLConf(SQLConf.LATERAL_COLUMN_ALIAS_ENABLED.key -> lcaEnabled.toString) {
+      withSQLConf(SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED.key -> lcaEnabled.toString) {
         testFun
       }
     }

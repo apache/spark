@@ -118,7 +118,7 @@ object ResolveLateralColumnAlias extends Rule[LogicalPlan] {
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    if (!conf.getConf(SQLConf.LATERAL_COLUMN_ALIAS_ENABLED)) {
+    if (!conf.getConf(SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED)) {
       plan
     } else {
       rewriteLateralColumnAlias(plan)

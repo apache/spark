@@ -4027,10 +4027,13 @@ object SQLConf {
     .checkValues(ErrorMessageFormat.values.map(_.toString))
     .createWithDefault(ErrorMessageFormat.PRETTY.toString)
 
-  val LATERAL_COLUMN_ALIAS_ENABLED =
-    buildConf("spark.sql.lateralColumnAlias.enabled")
+  val LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED =
+    buildConf("spark.sql.lateralColumnAlias.enableImplicitResolution")
       .internal()
-      .doc("Enable lateral column alias in analyzer")
+      .doc("Enable resolving implicit lateral column alias defined in the same SELECT list. For " +
+        "example, with this conf turned on, for query `SELECT 1 AS a, a + 1` the `a` in `a + 1` " +
+        "can be resolved as the previously defined `1 AS a`. But note that table column has " +
+        "higher resolution priority than the lateral column alias.")
       .version("3.4.0")
       .booleanConf
       .createWithDefault(false)
