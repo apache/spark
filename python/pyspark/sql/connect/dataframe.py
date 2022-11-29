@@ -364,7 +364,7 @@ class DataFrame(object):
             Filtered DataFrame.
         """
         if isinstance(condition, str):
-            expr = cast(Expression, SQLExpression(condition))
+            expr = sql_expression(condition)
         else:
             expr = condition
         return DataFrame.withPlan(plan.Filter(child=self._plan, filter=expr), session=self._session)
