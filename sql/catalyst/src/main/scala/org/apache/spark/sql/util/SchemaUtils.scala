@@ -107,7 +107,7 @@ private[spark] object SchemaUtils {
     val names = if (caseSensitiveAnalysis) columnNames else columnNames.map(_.toLowerCase)
     // scalastyle:on caselocale
     if (names.distinct.length != names.length) {
-      val columnName = names.groupBy(identity).collectFirst {
+      val columnName = names.groupBy(identity).toSeq.sortBy(_._1).collectFirst {
         case (x, ys) if ys.length > 1 => x
       }.get
       throw QueryCompilationErrors.columnAlreadyExistsError(columnName)

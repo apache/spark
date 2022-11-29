@@ -104,6 +104,10 @@ private[sql] trait QueryErrorsBase {
     quoteByDefault(toPrettySQL(e))
   }
 
+  def toSQLSchema(schema: String): String = {
+    quoteByDefault(schema)
+  }
+
   def getSummary(sqlContext: SQLQueryContext): String = {
     if (sqlContext == null) "" else sqlContext.summary
   }
