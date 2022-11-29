@@ -3013,6 +3013,32 @@ test_that("mutate(), transform(), rename() and names()", {
   expect_match(tail(columns(newDF), 1L), "234567890", fixed = TRUE)
 })
 
+test_that("unpivot / melt", {
+  df <- createDataFrame(data.frame(
+    id = 1:3, x = c(1, 3, 5), y = c(2, 4, 6), z = c(-1, 0, 1)
+  ))
+
+  result <- unpivot(df, "id", c("x", "y"), "var", "val")
+  expect_s4_class(result, "SparkDataFrame")
+  expect_equal(columns(result), c("id", "var", "val"))
+  expect_equal(count(distinct(select(result, "var"))), 2)
+
+  result <- unpivot(df, "id", NULL, "variable", "value")
+  expect_s4_class(result, "SparkDataFrame")
+  expect_equal(columns(result), c("id", "variable", "value"))
+  expect_equal(count(distinct(select(result, "variable"))), 3)
+
+  result <- melt(df, "id", c("x", "y"), "key", "value")
+  expect_s4_class(result, "SparkDataFrame")
+  expect_equal(columns(result), c("id", "key", "value"))
+  expect_equal(count(distinct(select(result, "key"))), 2)
+
+  result <- melt(df, "id", NULL, "key", "val")
+  expect_s4_class(result, "SparkDataFrame")
+  expect_equal(columns(result), c("id", "key", "val"))
+  expect_equal(count(distinct(select(result, "key"))), 3)
+})
+
 test_that("read/write ORC files", {
   setHiveContext(sc)
   df <- read.df(jsonPath, "json")

@@ -30,7 +30,8 @@ from pyspark.sql import SparkSession, Row
 from pyspark.sql.types import StructType, StructField, LongType, StringType
 
 if have_pandas:
-    from pyspark.sql.connect.client import RemoteSparkSession, ChannelBuilder
+    from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
+    from pyspark.sql.connect.client import ChannelBuilder
     from pyspark.sql.connect.function_builder import udf
     from pyspark.sql.connect.functions import lit, col
 from pyspark.sql.dataframe import DataFrame
@@ -79,7 +80,7 @@ class SparkConnectSQLTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLT
     @classmethod
     def spark_connect_load_test_data(cls: Any):
         # Setup Remote Spark Session
-        cls.connect = RemoteSparkSession(userId="test_user")
+        cls.connect = RemoteSparkSession.builder.remote().getOrCreate()
         df = cls.spark.createDataFrame([(x, f"{x}") for x in range(100)], ["id", "name"])
         # Since we might create multiple Spark sessions, we need to create global temporary view
         # that is specifically maintained in the "global_temp" schema.
@@ -130,9 +131,23 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         result = df.select(u(df.id)).toPandas()
         self.assertIsNotNone(result)
 
+    def test_with_local_data(self):
+        """SPARK-41114: Test creating a dataframe using local data"""
+        pdf = pandas.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]})
+        df = self.connect.createDataFrame(pdf)
+        rows = df.filter(df.a == lit(3)).collect()
+        self.assertTrue(len(rows) == 1)
+        self.assertEqual(rows[0][0], 3)
+        self.assertEqual(rows[0][1], "c")
+
+        # Check correct behavior for empty DataFrame
+        pdf = pandas.DataFrame({"a": []})
+        with self.assertRaises(ValueError):
+            self.connect.createDataFrame(pdf)
+
     def test_simple_explain_string(self):
         df = self.connect.read.table(self.tbl_name).limit(10)
-        result = df.explain()
+        result = df._explain_string()
         self.assertGreater(len(result), 0)
 
     def test_schema(self):
@@ -165,6 +180,13 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             (NULL, DATE('2022-02-22'))
             AS tab(a, b)
             """
+        self.assertEqual(
+            self.spark.sql(query).schema,
+            self.connect.sql(query).schema,
+        )
+
+        # test DayTimeIntervalType
+        query = """ SELECT INTERVAL '100 10:30' DAY TO MINUTE AS interval """
         self.assertEqual(
             self.spark.sql(query).schema,
             self.connect.sql(query).schema,
@@ -267,6 +289,11 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         pd2 = df.offset(98).limit(10).toPandas()
         self.assertEqual(2, len(pd2.index))
 
+    def test_tail(self):
+        df = self.connect.read.table(self.tbl_name)
+        df2 = self.spark.read.table(self.tbl_name)
+        self.assertEqual(df.tail(10), df2.tail(10))
+
     def test_sql(self):
         pdf = self.connect.sql("SELECT 1").toPandas()
         self.assertEqual(1, len(pdf.index))
@@ -324,7 +351,9 @@ class SparkConnectTests(SparkConnectSQLTestCase):
     def test_subquery_alias(self) -> None:
         # SPARK-40938: test subquery alias.
         plan_text = (
-            self.connect.read.table(self.tbl_name).alias("special_alias").explain(extended=True)
+            self.connect.read.table(self.tbl_name)
+            .alias("special_alias")
+            ._explain_string(extended=True)
         )
         self.assertTrue("special_alias" in plan_text)
 
@@ -340,6 +369,10 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assert_eq(
             self.connect.range(start=0, end=10, step=3, numPartitions=2).toPandas(),
             self.spark.range(start=0, end=10, step=3, numPartitions=2).toPandas(),
+        )
+        # SPARK-41301
+        self.assert_eq(
+            self.connect.range(10).toPandas(), self.connect.range(start=0, end=10).toPandas()
         )
 
     def test_create_global_temp_view(self):
@@ -505,14 +538,14 @@ class SparkConnectTests(SparkConnectSQLTestCase):
 
     def test_explain_string(self):
         # SPARK-41122: test explain API.
-        plan_str = self.connect.sql("SELECT 1").explain(extended=True)
+        plan_str = self.connect.sql("SELECT 1")._explain_string(extended=True)
         self.assertTrue("Parsed Logical Plan" in plan_str)
         self.assertTrue("Analyzed Logical Plan" in plan_str)
         self.assertTrue("Optimized Logical Plan" in plan_str)
         self.assertTrue("Physical Plan" in plan_str)
 
         with self.assertRaises(ValueError) as context:
-            self.connect.sql("SELECT 1").explain(mode="unknown")
+            self.connect.sql("SELECT 1")._explain_string(mode="unknown")
         self.assertTrue("unknown" in str(context.exception))
 
     def test_simple_datasource_read(self) -> None:
@@ -529,6 +562,18 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         else:
             actualResult = pandasResult.values.tolist()
             self.assertEqual(len(expectResult), len(actualResult))
+
+    def test_simple_read_without_schema(self) -> None:
+        """SPARK-41300: Schema not set when reading CSV."""
+        writeDf = self.df_text
+        tmpPath = tempfile.mkdtemp()
+        shutil.rmtree(tmpPath)
+        writeDf.write.csv(tmpPath, header=True)
+
+        readDf = self.connect.read.format("csv").option("header", True).load(path=tmpPath)
+        expectResult = set(writeDf.collect())
+        pandasResult = set(readDf.collect())
+        self.assertEqual(expectResult, pandasResult)
 
     def test_simple_transform(self) -> None:
         """SPARK-41203: Support DF.transform"""

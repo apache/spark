@@ -443,8 +443,8 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df3.selectExpr("from_json(value, 1)")
       },
-      errorClass = "INVALID_SCHEMA",
-      parameters = Map("expr" -> "\"1\""),
+      errorClass = "INVALID_SCHEMA.NON_STRING_LITERAL",
+      parameters = Map("inputSchema" -> "\"1\""),
       context = ExpectedContext(
         fragment = "from_json(value, 1)",
         start = 0,
@@ -452,10 +452,22 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       )
     )
 
-    val errMsg2 = intercept[AnalysisException] {
-      df3.selectExpr("""from_json(value, 'time InvalidType')""")
-    }
-    assert(errMsg2.getMessage.contains("DataType invalidtype is not supported"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df3.selectExpr("""from_json(value, 'time InvalidType')""")
+      },
+      errorClass = "PARSE_SYNTAX_ERROR",
+      sqlState = "42000",
+      parameters = Map(
+        "error" -> "'InvalidType'",
+        "hint" -> ": extra input 'InvalidType'"
+      ),
+      context = ExpectedContext(
+        fragment = "from_json(value, 'time InvalidType')",
+        start = 0,
+        stop = 35
+      )
+    )
     checkError(
       exception = intercept[AnalysisException] {
         df3.selectExpr("from_json(value, 'time Timestamp', named_struct('a', 1))")
@@ -991,22 +1003,47 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
   test("SPARK-33286: from_json - combined error messages") {
     val df = Seq("""{"a":1}""").toDF("json")
     val invalidJsonSchema = """{"fields": [{"a":123}], "type": "struct"}"""
-    val errMsg1 = intercept[AnalysisException] {
-      df.select(from_json($"json", invalidJsonSchema, Map.empty[String, String])).collect()
-    }.getMessage
-    assert(errMsg1.contains("""Failed to convert the JSON string '{"a":123}' to a field"""))
+    val invalidJsonSchemaReason = "Failed to convert the JSON string '{\"a\":123}' to a field."
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(from_json($"json", invalidJsonSchema, Map.empty[String, String])).collect()
+      },
+      errorClass = "INVALID_SCHEMA.PARSE_ERROR",
+      parameters = Map(
+        "inputSchema" -> "\"{\"fields\": [{\"a\":123}], \"type\": \"struct\"}\"",
+        "reason" -> invalidJsonSchemaReason
+      )
+    )
 
     val invalidDataType = "MAP<INT, cow>"
-    val errMsg2 = intercept[AnalysisException] {
-      df.select(from_json($"json", invalidDataType, Map.empty[String, String])).collect()
-    }.getMessage
-    assert(errMsg2.contains("DataType cow is not supported"))
+    val invalidDataTypeReason = "Unrecognized token 'MAP': " +
+      "was expecting (JSON String, Number, Array, Object or token 'null', 'true' or 'false')\n " +
+      "at [Source: (String)\"MAP<INT, cow>\"; line: 1, column: 4]"
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(from_json($"json", invalidDataType, Map.empty[String, String])).collect()
+      },
+      errorClass = "INVALID_SCHEMA.PARSE_ERROR",
+      parameters = Map(
+        "inputSchema" -> "\"MAP<INT, cow>\"",
+        "reason" -> invalidDataTypeReason
+      )
+    )
 
     val invalidTableSchema = "x INT, a cow"
-    val errMsg3 = intercept[AnalysisException] {
-      df.select(from_json($"json", invalidTableSchema, Map.empty[String, String])).collect()
-    }.getMessage
-    assert(errMsg3.contains("DataType cow is not supported"))
+    val invalidTableSchemaReason = "Unrecognized token 'x': " +
+      "was expecting (JSON String, Number, Array, Object or token 'null', 'true' or 'false')\n" +
+      " at [Source: (String)\"x INT, a cow\"; line: 1, column: 2]"
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(from_json($"json", invalidTableSchema, Map.empty[String, String])).collect()
+      },
+      errorClass = "INVALID_SCHEMA.PARSE_ERROR",
+      parameters = Map(
+        "inputSchema" -> "\"x INT, a cow\"",
+        "reason" -> invalidTableSchemaReason
+      )
+    )
   }
 
   test("SPARK-33907: bad json input with json pruning optimization: GetStructField") {

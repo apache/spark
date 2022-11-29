@@ -538,6 +538,9 @@ class Expression(google.protobuf.message.Message):
 
         UNPARSED_IDENTIFIER_FIELD_NUMBER: builtins.int
         unparsed_identifier: builtins.str
+        """(Required) An identifier that will be parsed by Catalyst parser. This should follow the
+        Spark SQL identifier syntax.
+        """
         def __init__(
             self,
             *,
@@ -560,13 +563,15 @@ class Expression(google.protobuf.message.Message):
         @property
         def parts(
             self,
-        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+            """(Required) Names parts for the unresolved function."""
         @property
         def arguments(
             self,
         ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
             global___Expression
-        ]: ...
+        ]:
+            """(Optional) Function arguments. Empty arguments are allowed."""
         def __init__(
             self,
             *,
@@ -585,6 +590,7 @@ class Expression(google.protobuf.message.Message):
 
         EXPRESSION_FIELD_NUMBER: builtins.int
         expression: builtins.str
+        """(Required) A SQL expression that will be parsed by Catalyst parser."""
         def __init__(
             self,
             *,
@@ -603,31 +609,6 @@ class Expression(google.protobuf.message.Message):
             self,
         ) -> None: ...
 
-    class QualifiedAttribute(google.protobuf.message.Message):
-        """An qualified attribute that can specify a reference (e.g. column) without needing a resolution
-        by the analyzer.
-        """
-
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        NAME_FIELD_NUMBER: builtins.int
-        TYPE_FIELD_NUMBER: builtins.int
-        name: builtins.str
-        @property
-        def type(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
-        def __init__(
-            self,
-            *,
-            name: builtins.str = ...,
-            type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
-        ) -> None: ...
-        def HasField(
-            self, field_name: typing_extensions.Literal["type", b"type"]
-        ) -> builtins.bool: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["name", b"name", "type", b"type"]
-        ) -> None: ...
-
     class Alias(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -635,13 +616,18 @@ class Expression(google.protobuf.message.Message):
         NAME_FIELD_NUMBER: builtins.int
         METADATA_FIELD_NUMBER: builtins.int
         @property
-        def expr(self) -> global___Expression: ...
+        def expr(self) -> global___Expression:
+            """(Required) The expression that alias will be added on."""
         @property
         def name(
             self,
-        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+            """(Required) a list of name parts for the alias.
+
+            Scalar columns only has one name that presents.
+            """
         metadata: builtins.str
-        """Alias metadata expressed as a JSON map."""
+        """(Optional) Alias metadata expressed as a JSON map."""
         def __init__(
             self,
             *,

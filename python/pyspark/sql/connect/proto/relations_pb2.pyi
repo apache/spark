@@ -80,6 +80,7 @@ class Relation(google.protobuf.message.Message):
     RENAME_COLUMNS_BY_NAME_TO_NAME_MAP_FIELD_NUMBER: builtins.int
     SHOW_STRING_FIELD_NUMBER: builtins.int
     DROP_FIELD_NUMBER: builtins.int
+    TAIL_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     SUMMARY_FIELD_NUMBER: builtins.int
     CROSSTAB_FIELD_NUMBER: builtins.int
@@ -127,6 +128,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def drop(self) -> global___Drop: ...
     @property
+    def tail(self) -> global___Tail: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -160,6 +163,7 @@ class Relation(google.protobuf.message.Message):
         rename_columns_by_name_to_name_map: global___RenameColumnsByNameToNameMap | None = ...,
         show_string: global___ShowString | None = ...,
         drop: global___Drop | None = ...,
+        tail: global___Tail | None = ...,
         fill_na: global___NAFill | None = ...,
         summary: global___StatSummary | None = ...,
         crosstab: global___StatCrosstab | None = ...,
@@ -218,6 +222,8 @@ class Relation(google.protobuf.message.Message):
             b"subquery_alias",
             "summary",
             b"summary",
+            "tail",
+            b"tail",
             "unknown",
             b"unknown",
         ],
@@ -275,6 +281,8 @@ class Relation(google.protobuf.message.Message):
             b"subquery_alias",
             "summary",
             b"summary",
+            "tail",
+            b"tail",
             "unknown",
             b"unknown",
         ],
@@ -302,6 +310,7 @@ class Relation(google.protobuf.message.Message):
         "rename_columns_by_name_to_name_map",
         "show_string",
         "drop",
+        "tail",
         "fill_na",
         "summary",
         "crosstab",
@@ -801,6 +810,33 @@ class Offset(google.protobuf.message.Message):
     ) -> None: ...
 
 global___Offset = Offset
+
+class Tail(google.protobuf.message.Message):
+    """Relation of type [[Tail]] that is used to fetch `limit` rows from the last of the input relation."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    LIMIT_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) Input relation for an Tail."""
+    limit: builtins.int
+    """(Required) the limit."""
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        limit: builtins.int = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["input", b"input", "limit", b"limit"]
+    ) -> None: ...
+
+global___Tail = Tail
 
 class Aggregate(google.protobuf.message.Message):
     """Relation of type [[Aggregate]]."""

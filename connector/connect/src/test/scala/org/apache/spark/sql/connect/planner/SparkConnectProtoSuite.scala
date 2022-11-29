@@ -233,7 +233,8 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   }
 
   test("Test StructType in LocalRelation") {
-    val connectPlan = createLocalRelationProtoByQualifiedAttributes(Seq("a".struct("id".int)))
+    val connectPlan = createLocalRelationProtoByAttributeReferences(
+      Seq(AttributeReference("a", StructType(Seq(StructField("id", IntegerType))))()))
     val sparkPlan =
       LocalRelation(AttributeReference("a", StructType(Seq(StructField("id", IntegerType))))())
     comparePlans(connectPlan, sparkPlan)
@@ -505,12 +506,11 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(select(1), spark.sql("SELECT 1"))
   }
 
-  private def createLocalRelationProtoByQualifiedAttributes(
-      attrs: Seq[proto.Expression.QualifiedAttribute]): proto.Relation = {
+  private def createLocalRelationProtoByAttributeReferences(
+      attrs: Seq[AttributeReference]): proto.Relation = {
     val localRelationBuilder = proto.LocalRelation.newBuilder()
 
-    val attributes = attrs.map(exp =>
-      AttributeReference(exp.getName, DataTypeProtoConverter.toCatalystType(exp.getType))())
+    val attributes = attrs.map(exp => AttributeReference(exp.name, exp.dataType)())
     val buffer = ArrowConverters
       .toBatchWithSchemaIterator(
         Iterator.empty,
