@@ -177,7 +177,7 @@ class HiveUDAFSuite extends QueryTest
         },
         errorClass = "WRONG_NUM_ARGS",
         parameters = Map(
-          "sqlExpr" -> "longProductSum(100)",
+          "sqlExpr" -> "\"longProductSum(100)\"",
           "functionName" -> toSQLId("longProductSum"),
           "expectedNum" -> "2",
           "actualNum" -> "1"),

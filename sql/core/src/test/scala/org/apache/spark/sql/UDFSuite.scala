@@ -107,7 +107,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       },
       errorClass = "WRONG_NUM_ARGS",
       parameters = Map(
-        "sqlExpr" -> "abcd,2,3,4",
+        "sqlExpr" -> "\"abcd\",\"2\",\"3\",\"4\"",
         "functionName" -> toSQLId("substr"),
         "expectedNum" -> "[2, 3]",
         "actualNum" -> "4"
@@ -128,7 +128,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       },
       errorClass = "WRONG_NUM_ARGS",
       parameters = Map(
-        "sqlExpr" -> "2,3,4",
+        "sqlExpr" -> "\"2\",\"3\",\"4\"",
         "functionName" -> toSQLId("foo"),
         "expectedNum" -> "1",
         "actualNum" -> "3"

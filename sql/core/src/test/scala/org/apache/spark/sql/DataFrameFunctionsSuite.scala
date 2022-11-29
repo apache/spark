@@ -4868,7 +4868,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       },
       errorClass = "WRONG_NUM_ARGS",
       parameters = Map(
-        "sqlExpr" -> "a1,a2,lambdafunction(x, acc, x),lambdafunction(x, acc, x)",
+        "sqlExpr" -> "\"a1\",\"a2\",\"lambdafunction(x, acc, x)\",\"lambdafunction(x, acc, x)\"",
         "functionName" -> toSQLId("zip_with"),
         "expectedNum" -> "3",
         "actualNum" -> "4"),
