@@ -306,6 +306,40 @@ class Project(LogicalPlan):
         """
 
 
+class WithColumns(LogicalPlan):
+    """Logical plan object for a withColumns operation."""
+
+    def __init__(self, child: Optional["LogicalPlan"], cols_map: Mapping[str, Expression]) -> None:
+        super().__init__(child)
+        self._cols_map = cols_map
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+        plan = proto.Relation()
+        plan.with_columns.input.CopyFrom(self._child.plan(session))
+        for k, v in self._cols_map.items():
+            name_expr = proto.Expression.Alias()
+            name_expr.name.append(k)
+            name_expr.expr.CopyFrom(v.to_plan(session))
+            plan.with_columns.name_expr_list.append(name_expr)
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
+        return f"{' ' * indent}<WithColumns cols={self._cols_map}>\n{c_buf}"
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+            <li>
+                <b>WithColumns</b><br />
+                Column Map: {self._cols_map}
+                {self._child._repr_html_() if self._child is not None else ""}
+            </li>
+        </uL>
+        """
+
+
 class Filter(LogicalPlan):
     def __init__(self, child: Optional["LogicalPlan"], filter: Expression) -> None:
         super().__init__(child)
@@ -938,6 +972,36 @@ class Range(LogicalPlan):
         """
 
 
+class RenameColumnsNameByName(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], colsMap: Mapping[str, str]) -> None:
+        super().__init__(child)
+        self._colsMap = colsMap
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+
+        plan = proto.Relation()
+        plan.rename_columns_by_name_to_name_map.input.CopyFrom(self._child.plan(session))
+        for k, v in self._colsMap.items():
+            plan.rename_columns_by_name_to_name_map.rename_columns_map[k] = v
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return f"""{i}<RenameColumnsNameByName ColsMap='{self._colsMap}'>"""
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>RenameColumns</b><br />
+              ColsMap: {self._colsMap} <br />
+              {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
 class NAFill(LogicalPlan):
     def __init__(
         self, child: Optional["LogicalPlan"], cols: Optional[List[str]], values: List[Any]
@@ -963,9 +1027,9 @@ class NAFill(LogicalPlan):
         if isinstance(v, bool):
             value.boolean = v
         elif isinstance(v, int):
-            value.i64 = v
+            value.long = v
         elif isinstance(v, float):
-            value.fp64 = v
+            value.double = v
         else:
             value.string = v
         return value
@@ -989,6 +1053,45 @@ class NAFill(LogicalPlan):
               <b>NAFill</b><br />
               Cols: {self.cols} <br />
               Values: {self.values} <br />
+              {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
+class NADrop(LogicalPlan):
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        cols: Optional[List[str]],
+        min_non_nulls: Optional[int],
+    ) -> None:
+        super().__init__(child)
+
+        self.cols = cols
+        self.min_non_nulls = min_non_nulls
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+        plan = proto.Relation()
+        plan.drop_na.input.CopyFrom(self._child.plan(session))
+        if self.cols is not None and len(self.cols) > 0:
+            plan.drop_na.cols.extend(self.cols)
+        if self.min_non_nulls is not None:
+            plan.drop_na.min_non_nulls = self.min_non_nulls
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return f"{i}" f"<NADrop cols='{self.cols}' " f"min_non_nulls='{self.min_non_nulls}'>"
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>NADrop</b><br />
+              Cols: {self.cols} <br />
+              Min_non_nulls: {self.min_non_nulls} <br />
               {self._child_repr_()}
            </li>
         </ul>
@@ -1049,6 +1152,35 @@ class StatCrosstab(LogicalPlan):
               <b>Crosstab</b><br />
               Col1: {self.col1} <br />
               Col2: {self.col2} <br />
+              {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
+class RenameColumns(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], cols: Sequence[str]) -> None:
+        super().__init__(child)
+        self._cols = cols
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+
+        plan = proto.Relation()
+        plan.rename_columns_by_same_length_names.input.CopyFrom(self._child.plan(session))
+        plan.rename_columns_by_same_length_names.column_names.extend(self._cols)
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return f"""{i}<RenameColumns cols='{self._cols}'>"""
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>RenameColumns</b><br />
+              cols: {self._cols} <br />
               {self._child_repr_()}
            </li>
         </ul>

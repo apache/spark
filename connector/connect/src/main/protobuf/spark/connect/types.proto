@@ -61,13 +61,6 @@ message DataType {
     Array array = 20;
     Struct struct = 21;
     Map map = 22;
-
-
-    UUID uuid = 25;
-
-    FixedBinary fixed_binary = 26;
-
-    uint32 user_defined_type_reference = 31;
   }
 
   message Boolean {
@@ -138,10 +131,6 @@ message DataType {
     uint32 type_variation_reference = 3;
   }
 
-  message UUID {
-    uint32 type_variation_reference = 1;
-  }
-
   // Start compound types.
   message Char {
     int32 length = 1;
@@ -149,11 +138,6 @@ message DataType {
   }
 
   message VarChar {
-    int32 length = 1;
-    uint32 type_variation_reference = 2;
-  }
-
-  message FixedBinary {
     int32 length = 1;
     uint32 type_variation_reference = 2;
   }

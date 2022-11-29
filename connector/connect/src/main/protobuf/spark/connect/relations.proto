@@ -52,9 +52,11 @@ message Relation {
     ShowString show_string = 20;
     Drop drop = 21;
     Tail tail = 22;
+    WithColumns with_columns = 23;
 
     // NA functions
     NAFill fill_na = 90;
+    NADrop drop_na = 91;
 
     // stat functions
     StatSummary summary = 100;
@@ -440,6 +442,30 @@ message NAFill {
   repeated Expression.Literal values = 3;
 }
 
+
+// Drop rows containing null values.
+// It will invoke 'Dataset.na.drop' (same as 'DataFrameNaFunctions.drop') to compute the results.
+message NADrop {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Optional) Optional list of column names to consider.
+  //
+  // When it is empty, all the columns in the input relation will be considered.
+  repeated string cols = 2;
+
+  // (Optional) The minimum number of non-null and non-NaN values required to keep.
+  //
+  // When not set, it is equivalent to the number of considered columns, which means
+  // a row will be kept only if all columns are non-null.
+  //
+  // 'how' options ('all', 'any') can be easily converted to this field:
+  //   - 'all' -> set 'min_non_nulls' 1;
+  //   - 'any' -> keep 'min_non_nulls' unset;
+  optional int32 min_non_nulls = 3;
+}
+
+
 // Rename columns on the input relation by the same length of names.
 message RenameColumnsBySameLengthNames {
   // (Required) The input relation of RenameColumnsBySameLengthNames.
@@ -466,4 +492,21 @@ message RenameColumnsByNameToNameMap {
   // does not require that all input relation column names to present as keys.
   // duplicated B are not allowed.
   map<string, string> rename_columns_map = 2;
+}
+
+// Adding columns or replacing the existing columns that have the same names.
+message WithColumns {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required)
+  //
+  // Given a column name, apply the corresponding expression on the column. If column
+  // name exists in the input relation, then replace the column. If the column name
+  // does not exist in the input relation, then adds it as a new column.
+  //
+  // Only one name part is expected from each Expression.Alias.
+  //
+  // An exception is thrown when duplicated names are present in the mapping.
+  repeated Expression.Alias name_expr_list = 2;
 }
