@@ -383,7 +383,17 @@ class SparkConnectClient(object):
         elif schema.HasField("timestamp"):
             return TimestampType()
         elif schema.HasField("day_time_interval"):
-            return DayTimeIntervalType()
+            start: Optional[int] = (
+                schema.day_time_interval.start_field
+                if schema.day_time_interval.HasField("start_field")
+                else None
+            )
+            end: Optional[int] = (
+                schema.day_time_interval.end_field
+                if schema.day_time_interval.HasField("end_field")
+                else None
+            )
+            return DayTimeIntervalType(startField=start, endField=end)
         elif schema.HasField("array"):
             return ArrayType(
                 self._proto_schema_to_pyspark_schema(schema.array.element_type),

@@ -993,10 +993,20 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("key" -> key, "details" -> details))
   }
 
-  def invalidSchemaStringError(exp: Expression): Throwable = {
+  def schemaFailToParseError(schema: String, e: Throwable): Throwable = {
     new AnalysisException(
-      errorClass = "INVALID_SCHEMA",
-      messageParameters = Map("expr" -> toSQLExpr(exp)))
+      errorClass = "INVALID_SCHEMA.PARSE_ERROR",
+      messageParameters = Map(
+        "inputSchema" -> toSQLSchema(schema),
+        "reason" -> e.getMessage
+      ),
+      cause = Some(e))
+  }
+
+  def unexpectedSchemaTypeError(exp: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_SCHEMA.NON_STRING_LITERAL",
+      messageParameters = Map("inputSchema" -> toSQLExpr(exp)))
   }
 
   def schemaNotFoldableError(exp: Expression): Throwable = {
@@ -2227,13 +2237,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "configName" -> configName,
         "version" -> version,
         "comment" -> comment))
-  }
-
-  def failedFallbackParsingError(msg: String, e1: Throwable, e2: Throwable): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1227",
-      messageParameters = Map("msg" -> msg, "e1" -> e1.getMessage, "e2" -> e2.getMessage),
-      cause = Some(e1.getCause))
   }
 
   def decimalCannotGreaterThanPrecisionError(scale: Int, precision: Int): Throwable = {

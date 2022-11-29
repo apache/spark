@@ -48,33 +48,6 @@ package object dsl {
               .newBuilder()
               .setUnparsedIdentifier(s))
           .build()
-
-      def struct(attrs: Expression.QualifiedAttribute*): Expression.QualifiedAttribute = {
-        val structExpr = DataType.Struct.newBuilder()
-        for (attr <- attrs) {
-          val structField = DataType.StructField.newBuilder()
-          structField.setName(attr.getName)
-          structField.setDataType(attr.getType)
-          structField.setNullable(true)
-          structExpr.addFields(structField)
-        }
-        Expression.QualifiedAttribute
-          .newBuilder()
-          .setName(s)
-          .setType(DataType.newBuilder().setStruct(structExpr))
-          .build()
-      }
-
-      /** Creates a new AttributeReference of type int */
-      def int: Expression.QualifiedAttribute = protoQualifiedAttrWithType(
-        DataType.newBuilder().setInteger(DataType.Integer.newBuilder()).build())
-
-      private def protoQualifiedAttrWithType(dataType: DataType): Expression.QualifiedAttribute =
-        Expression.QualifiedAttribute
-          .newBuilder()
-          .setName(s)
-          .setType(dataType)
-          .build()
     }
 
     implicit class DslExpression(val expr: Expression) {
@@ -353,6 +326,17 @@ package object dsl {
             .setExpressionString(ExpressionString.newBuilder().setExpression(expr))
             .build()
         }: _*)
+
+      def tail(limit: Int): Relation = {
+        Relation
+          .newBuilder()
+          .setTail(
+            Tail
+              .newBuilder()
+              .setInput(logicalPlan)
+              .setLimit(limit))
+          .build()
+      }
 
       def limit(limit: Int): Relation = {
         Relation

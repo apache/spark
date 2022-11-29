@@ -25,7 +25,8 @@ from typing import (
     TYPE_CHECKING,
     Mapping,
 )
-
+import pandas
+import pyarrow as pa
 import pyspark.sql.connect.proto as proto
 from pyspark.sql.connect.column import (
     Column,
@@ -173,6 +174,35 @@ class Read(LogicalPlan):
                 <b>Read</b><br />
                 table name: {self.table_name}
             </li>
+        </ul>
+        """
+
+
+class LocalRelation(LogicalPlan):
+    """Creates a LocalRelation plan object based on a Pandas DataFrame."""
+
+    def __init__(self, pdf: "pandas.DataFrame") -> None:
+        super().__init__(None)
+        self._pdf = pdf
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        sink = pa.BufferOutputStream()
+        table = pa.Table.from_pandas(self._pdf)
+        with pa.ipc.new_stream(sink, table.schema) as writer:
+            for b in table.to_batches():
+                writer.write_batch(b)
+
+        plan = proto.Relation()
+        plan.local_relation.data = sink.getvalue().to_pybytes()
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        return f"{' ' * indent}<LocalRelation>\n"
+
+    def _repr_html_(self) -> str:
+        return """
+        <ul>
+            <li>LocalRelation</li>
         </ul>
         """
 
@@ -325,6 +355,34 @@ class Limit(LogicalPlan):
         <ul>
             <li>
                 <b>Limit</b><br />
+                Limit: {self.limit} <br />
+                {self._child_repr_()}
+            </li>
+        </uL>
+        """
+
+
+class Tail(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], limit: int) -> None:
+        super().__init__(child)
+        self.limit = limit
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+        plan = proto.Relation()
+        plan.tail.input.CopyFrom(self._child.plan(session))
+        plan.tail.limit = self.limit
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
+        return f"{' ' * indent}<Tail limit={self.limit}>\n{c_buf}"
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+            <li>
+                <b>Tail</b><br />
                 Limit: {self.limit} <br />
                 {self._child_repr_()}
             </li>

@@ -30,7 +30,7 @@ import org.apache.spark.sql.{Column, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.AliasIdentifier
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression, NamedExpression, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Expression, NamedExpression, UnsafeProjection}
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.{logical, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
@@ -67,6 +67,7 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Relation.RelTypeCase.FILTER => transformFilter(rel.getFilter)
       case proto.Relation.RelTypeCase.LIMIT => transformLimit(rel.getLimit)
       case proto.Relation.RelTypeCase.OFFSET => transformOffset(rel.getOffset)
+      case proto.Relation.RelTypeCase.TAIL => transformTail(rel.getTail)
       case proto.Relation.RelTypeCase.JOIN => transformJoin(rel.getJoin)
       case proto.Relation.RelTypeCase.DEDUPLICATE => transformDeduplicate(rel.getDeduplicate)
       case proto.Relation.RelTypeCase.SET_OP => transformSetOperation(rel.getSetOp)
@@ -277,13 +278,12 @@ class SparkConnectPlanner(session: SparkSession) {
     val (rows, structType) = ArrowConverters.fromBatchWithSchemaIterator(
       Iterator(rel.getData.toByteArray),
       TaskContext.get())
+    if (structType == null) {
+      throw InvalidPlanInput(s"Input data for LocalRelation does not produce a schema.")
+    }
     val attributes = structType.toAttributes
     val proj = UnsafeProjection.create(attributes, attributes)
     new logical.LocalRelation(attributes, rows.map(r => proj(r).copy()).toSeq)
-  }
-
-  private def transformAttribute(exp: proto.Expression.QualifiedAttribute): Attribute = {
-    AttributeReference(exp.getName, DataTypeProtoConverter.toCatalystType(exp.getType))()
   }
 
   private def transformReadRel(rel: proto.Read): LogicalPlan = {
@@ -300,7 +300,7 @@ class SparkConnectPlanner(session: SparkSession) {
         val reader = session.read
         reader.format(rel.getDataSource.getFormat)
         localMap.foreach { case (key, value) => reader.option(key, value) }
-        if (rel.getDataSource.getSchema != null) {
+        if (rel.getDataSource.getSchema != null && !rel.getDataSource.getSchema.isEmpty) {
           reader.schema(rel.getDataSource.getSchema)
         }
         reader.load().queryExecution.analyzed
@@ -392,6 +392,12 @@ class SparkConnectPlanner(session: SparkSession) {
     logical.Limit(
       limitExpr = expressions.Literal(limit.getLimit, IntegerType),
       transformRelation(limit.getInput))
+  }
+
+  private def transformTail(tail: proto.Tail): LogicalPlan = {
+    logical.Tail(
+      limitExpr = expressions.Literal(tail.getLimit, IntegerType),
+      transformRelation(tail.getInput))
   }
 
   private def transformOffset(offset: proto.Offset): LogicalPlan = {

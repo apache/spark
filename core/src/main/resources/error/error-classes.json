@@ -780,8 +780,21 @@
   },
   "INVALID_SCHEMA" : {
     "message" : [
-      "The expression <expr> is not a valid schema string."
-    ]
+      "The input schema <inputSchema> is not a valid schema string."
+    ],
+    "subClass" : {
+      "NON_STRING_LITERAL" : {
+        "message" : [
+          "The input expression must be string literal and not null."
+        ]
+      },
+      "PARSE_ERROR" : {
+        "message" : [
+          "Cannot parse the schema:",
+          "<reason>"
+        ]
+      }
+    }
   },
   "INVALID_SQL_SYNTAX" : {
     "message" : [
@@ -893,6 +906,11 @@
   "NULL_COMPARISON_RESULT" : {
     "message" : [
       "The comparison result is null. If you want to handle null as 0 (equal), you can set \"spark.sql.legacy.allowNullComparisonResultInArraySort\" to \"true\"."
+    ]
+  },
+  "NULL_MAP_KEY" : {
+    "message" : [
+      "Cannot use null as map key."
     ]
   },
   "NUMERIC_OUT_OF_SUPPORTED_RANGE" : {
@@ -2839,12 +2857,6 @@
       "The SQL config '<configName>' was removed in the version <version>. <comment>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_1227" : {
-    "message" : [
-      "<msg><e1>",
-      "Failed fallback parsing: <e2>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1228" : {
     "message" : [
       "Decimal scale (<scale>) cannot be greater than precision (<precision>)."
@@ -3502,11 +3514,6 @@
   "_LEGACY_ERROR_TEMP_2018" : {
     "message" : [
       "class `<cls>` is not supported by `MapObjects` as resulting collection."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2019" : {
-    "message" : [
-      "Cannot use null as map key!"
     ]
   },
   "_LEGACY_ERROR_TEMP_2020" : {

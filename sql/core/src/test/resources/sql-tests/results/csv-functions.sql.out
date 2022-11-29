@@ -22,9 +22,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_SCHEMA",
+  "errorClass" : "INVALID_SCHEMA.NON_STRING_LITERAL",
   "messageParameters" : {
-    "expr" : "\"1\""
+    "inputSchema" : "\"1\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -43,11 +43,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1227",
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "e1" : "\n[PARSE_SYNTAX_ERROR] Syntax error at or near 'InvalidType': extra input 'InvalidType'(line 1, pos 2)\n\n== SQL ==\na InvalidType\n--^^^\n",
-    "e2" : "\nDataType invalidtype is not supported.(line 1, pos 2)\n\n== SQL ==\na InvalidType\n--^^^\n",
-    "msg" : "Cannot parse the data type: "
+    "error" : "'InvalidType'",
+    "hint" : ": extra input 'InvalidType'"
   },
   "queryContext" : [ {
     "objectType" : "",
