@@ -39,7 +39,7 @@ object ExprUtils extends QueryErrorsBase {
 
       }
     } else {
-      throw QueryCompilationErrors.schemaNotFoldableError(exp)
+      throw QueryCompilationErrors.unexpectedSchemaTypeError(exp)
     }
   }
 
