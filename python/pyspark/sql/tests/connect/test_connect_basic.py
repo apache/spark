@@ -123,6 +123,21 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertTrue("name" in data[0])
         self.assertTrue("id" in data[0])
 
+    def test_with_columns_renamed(self):
+        # SPARK-41312: test DataFrame.withColumnsRenamed()
+        self.assertEqual(
+            self.connect.read.table(self.tbl_name).withColumnRenamed("id", "id_new").schema,
+            self.spark.read.table(self.tbl_name).withColumnRenamed("id", "id_new").schema,
+        )
+        self.assertEqual(
+            self.connect.read.table(self.tbl_name)
+            .withColumnsRenamed({"id": "id_new", "name": "name_new"})
+            .schema,
+            self.spark.read.table(self.tbl_name)
+            .withColumnsRenamed({"id": "id_new", "name": "name_new"})
+            .schema,
+        )
+
     def test_simple_udf(self):
         def conv_udf(x) -> str:
             return "Martin"
