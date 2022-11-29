@@ -645,7 +645,7 @@ class DataFrame(object):
         assert pdf is not None
         return pdf["show_string"][0]
 
-    def withColumns(self, colsMap: Dict[str, Expression]) -> "DataFrame":
+    def withColumns(self, colsMap: Dict[str, Column]) -> "DataFrame":
         """
         Returns a new :class:`DataFrame` by adding multiple columns or replacing the
         existing columns that have the same names.
@@ -673,7 +673,7 @@ class DataFrame(object):
             session=self._session,
         )
 
-    def withColumn(self, colName: str, col: Expression) -> "DataFrame":
+    def withColumn(self, colName: str, col: Column) -> "DataFrame":
         """
         Returns a new :class:`DataFrame` by adding a column or replacing the
         existing column that has the same name.
@@ -695,7 +695,7 @@ class DataFrame(object):
         :class:`DataFrame`
             DataFrame with new or replaced column.
         """
-        if not isinstance(col, Expression):
+        if not isinstance(col, Column):
             raise TypeError("col should be Column")
         return DataFrame.withPlan(
             plan.WithColumns(self._plan, {colName: col}),

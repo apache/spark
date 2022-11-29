@@ -305,7 +305,7 @@ class Project(LogicalPlan):
 class WithColumns(LogicalPlan):
     """Logical plan object for a withColumns operation."""
 
-    def __init__(self, child: Optional["LogicalPlan"], cols_map: Mapping[str, Expression]) -> None:
+    def __init__(self, child: Optional["LogicalPlan"], cols_map: Mapping[str, Column]) -> None:
         super().__init__(child)
         self._cols_map = cols_map
 
@@ -506,12 +506,12 @@ class Sort(LogicalPlan):
             sf.expression.CopyFrom(col.to_plan(session))
             sf.direction = (
                 proto.Sort.SortDirection.SORT_DIRECTION_ASCENDING
-                if col.ascending
+                if col._expr.ascending
                 else proto.Sort.SortDirection.SORT_DIRECTION_DESCENDING
             )
             sf.nulls = (
                 proto.Sort.SortNulls.SORT_NULLS_FIRST
-                if not col.nullsLast
+                if not col._expr.nullsLast
                 else proto.Sort.SortNulls.SORT_NULLS_LAST
             )
             return sf

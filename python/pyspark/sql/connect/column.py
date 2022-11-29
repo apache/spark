@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from typing import cast, get_args, TYPE_CHECKING, Callable, Any, Union
+from typing import get_args, TYPE_CHECKING, Callable, Any, Union
 
 import json
 import decimal
@@ -376,12 +376,6 @@ class Column(object):
 
     def asc(self) -> "Column":
         return Column(self._expr.asc())
-
-    def ascending(self) -> bool:
-        return self._expr.ascending()
-
-    def nullsLast(self) -> bool:
-        return self._expr.nullsLast()
 
     def name(self) -> str:
         return self._expr.name()
