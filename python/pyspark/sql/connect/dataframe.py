@@ -644,6 +644,63 @@ class DataFrame(object):
         assert pdf is not None
         return pdf["show_string"][0]
 
+    def withColumns(self, colsMap: Dict[str, Expression]) -> "DataFrame":
+        """
+        Returns a new :class:`DataFrame` by adding multiple columns or replacing the
+        existing columns that have the same names.
+
+        The colsMap is a map of column name and column, the column must only refer to attributes
+        supplied by this Dataset. It is an error to add columns that refer to some other Dataset.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        colsMap : dict
+            a dict of column name and :class:`Column`.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with new or replaced columns.
+        """
+        if not isinstance(colsMap, dict):
+            raise TypeError("colsMap must be dict of column name and column.")
+
+        return DataFrame.withPlan(
+            plan.WithColumns(self._plan, colsMap),
+            session=self._session,
+        )
+
+    def withColumn(self, colName: str, col: Expression) -> "DataFrame":
+        """
+        Returns a new :class:`DataFrame` by adding a column or replacing the
+        existing column that has the same name.
+
+        The column expression must be an expression over this :class:`DataFrame`; attempting to add
+        a column from some other :class:`DataFrame` will raise an error.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        colName : str
+            string, name of the new column.
+        col : :class:`Column`
+            a :class:`Column` expression for the new column.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with new or replaced column.
+        """
+        if not isinstance(col, Expression):
+            raise TypeError("col should be Column")
+        return DataFrame.withPlan(
+            plan.WithColumns(self._plan, {colName: col}),
+            session=self._session,
+        )
+
     def show(self, n: int = 20, truncate: Union[bool, int] = True, vertical: bool = False) -> None:
         """
         Prints the first ``n`` rows to the console.

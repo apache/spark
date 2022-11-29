@@ -35,6 +35,7 @@ if have_pandas:
     from pyspark.sql.connect.function_builder import udf
     from pyspark.sql.connect.functions import lit, col
 from pyspark.sql.dataframe import DataFrame
+import pyspark.sql.functions
 from pyspark.sql.connect.dataframe import DataFrame as CDataFrame
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
@@ -545,6 +546,29 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             self.spark.sql(query).na.drop(how="any", thresh=2, subset="a").toPandas(),
         )
 
+    def test_with_columns(self):
+        # SPARK-41256: test withColumn(s).
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name).withColumn("id", lit(False)).toPandas(),
+            self.spark.read.table(self.tbl_name)
+            .withColumn("id", pyspark.sql.functions.lit(False))
+            .toPandas(),
+        )
+
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name)
+            .withColumns({"id": lit(False), "col_not_exist": lit(False)})
+            .toPandas(),
+            self.spark.read.table(self.tbl_name)
+            .withColumns(
+                {
+                    "id": pyspark.sql.functions.lit(False),
+                    "col_not_exist": pyspark.sql.functions.lit(False),
+                }
+            )
+            .toPandas(),
+        )
+
     def test_empty_dataset(self):
         # SPARK-41005: Test arrow based collection with empty dataset.
         self.assertTrue(
@@ -658,7 +682,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             self.connect.range(1, 10).select(col("id").alias("this", "is", "not")).collect()
         self.assertIn("(this, is, not)", str(exc.exception))
 
-    def test_agg_with_two_agg_exprs(self):
+    def test_agg_with_two_agg_exprs(self) -> None:
         # SPARK-41230: test dataframe.agg()
         self.assert_eq(
             self.connect.read.table(self.tbl_name).agg({"name": "min", "id": "max"}).toPandas(),
