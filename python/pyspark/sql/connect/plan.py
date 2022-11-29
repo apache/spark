@@ -938,6 +938,36 @@ class Range(LogicalPlan):
         """
 
 
+class RenameColumnsNameByName(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], colsMap: Mapping[str, str]) -> None:
+        super().__init__(child)
+        self._colsMap = colsMap
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+
+        plan = proto.Relation()
+        plan.rename_columns_by_name_to_name_map.input.CopyFrom(self._child.plan(session))
+        for k, v in self._colsMap.items():
+            plan.rename_columns_by_name_to_name_map.rename_columns_map[k] = v
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return f"""{i}<RenameColumnsNameByName ColsMap='{self._colsMap}'>"""
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>RenameColumns</b><br />
+              ColsMap: {self._colsMap} <br />
+              {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
 class NAFill(LogicalPlan):
     def __init__(
         self, child: Optional["LogicalPlan"], cols: Optional[List[str]], values: List[Any]

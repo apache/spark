@@ -570,6 +570,54 @@ class DataFrame(object):
             session=self._session,
         )
 
+    def withColumnRenamed(self, existing: str, new: str) -> "DataFrame":
+        """Returns a new :class:`DataFrame` by renaming an existing column.
+        This is a no-op if schema doesn't contain the given column name.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        existing : str
+            string, name of the existing column to rename.
+        new : str
+            string, new name of the column.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with renamed column.
+        """
+        return self.withColumnsRenamed({existing: new})
+
+    def withColumnsRenamed(self, colsMap: Dict[str, str]) -> "DataFrame":
+        """
+        Returns a new :class:`DataFrame` by renaming multiple columns.
+        This is a no-op if schema doesn't contain the given column names.
+
+        .. versionadded:: 3.4.0
+           Added support for multiple columns renaming
+
+        Parameters
+        ----------
+        colsMap : dict
+            a dict of existing column names and corresponding desired column names.
+            Currently, only single map is supported.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with renamed columns.
+
+        See Also
+        --------
+        :meth:`withColumnRenamed`
+        """
+        if not isinstance(colsMap, dict):
+            raise TypeError("colsMap must be dict of existing column name and new column name.")
+
+        return DataFrame.withPlan(plan.RenameColumnsNameByName(self._plan, colsMap), self._session)
+
     def _show_string(
         self, n: int = 20, truncate: Union[bool, int] = True, vertical: bool = False
     ) -> str:
