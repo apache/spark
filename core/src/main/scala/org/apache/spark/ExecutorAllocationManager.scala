@@ -644,6 +644,7 @@ private[spark] class ExecutorAllocationManager(
     private val stageAttemptToNumRunningTask = new mutable.HashMap[StageAttempt, Int]
     private val stageAttemptToTaskIndices = new mutable.HashMap[StageAttempt, mutable.HashSet[Int]]
     // Number of speculative tasks running in each stageAttempt
+    // TODO(SPARK-14492): We simply need an Int for this.
     private val stageAttemptToSpeculativeTaskIndices =
       new mutable.HashMap[StageAttempt, mutable.HashSet[Int]]()
     // Number of speculative tasks pending in each stageAttempt
@@ -723,6 +724,7 @@ private[spark] class ExecutorAllocationManager(
         // because the attempt may still have running tasks,
         // even after another attempt for the stage is submitted.
         stageAttemptToNumTasks -= stageAttempt
+        stageAttemptToSpeculativeTaskIndices -= stageAttempt
         stageAttemptToUnsubmittedSpeculativeTasks -= stageAttempt
         stageAttemptToTaskIndices -= stageAttempt
         stageAttemptToExecutorPlacementHints -= stageAttempt
