@@ -142,18 +142,24 @@ message Expression {
   // An unresolved attribute that is not explicitly bound to a specific column, but the column
   // is resolved during analysis by name.
   message UnresolvedAttribute {
+    // (Required) An identifier that will be parsed by Catalyst parser. This should follow the
+    // Spark SQL identifier syntax.
     string unparsed_identifier = 1;
   }
 
   // An unresolved function is not explicitly bound to one explicit function, but the function
   // is resolved during analysis following Sparks name resolution rules.
   message UnresolvedFunction {
+    // (Required) Names parts for the unresolved function.
     repeated string parts = 1;
+
+    // (Optional) Function arguments. Empty arguments are allowed.
     repeated Expression arguments = 2;
   }
 
   // Expression as string.
   message ExpressionString {
+    // (Required) A SQL expression that will be parsed by Catalyst parser.
     string expression = 1;
   }
 
@@ -162,9 +168,15 @@ message Expression {
   }
 
   message Alias {
+    // (Required) The expression that alias will be added on.
     Expression expr = 1;
+
+    // (Required) a list of name parts for the alias.
+    //
+    // Scalar columns only has one name that presents.
     repeated string name = 2;
-    // Alias metadata expressed as a JSON map.
+
+    // (Optional) Alias metadata expressed as a JSON map.
     optional string metadata = 3;
   }
 }
