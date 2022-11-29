@@ -53,7 +53,7 @@ if TYPE_CHECKING:
 class GroupedData(object):
     def __init__(self, df: "DataFrame", *grouping_cols: Union[Column, str]) -> None:
         self._df = df
-        self._grouping_cols = [x if isinstance(x, Column) else df[x] for x in grouping_cols]
+        self._grouping_cols = [x if isinstance(x, Expression) else df[x] for x in grouping_cols]
 
     def agg(self, measures: Sequence[Expression]) -> "DataFrame":
         assert len(measures) > 0, "exprs should not be empty"
@@ -84,6 +84,10 @@ class GroupedData(object):
 
     def sum(self, col: Union[Expression, str]) -> "DataFrame":
         expr = self._map_cols_to_expression("sum", col)
+        return self.agg(expr)
+
+    def avg(self, col: Union[Expression, str]) -> "DataFrame":
+        expr = self._map_cols_to_expression("avg", col)
         return self.agg(expr)
 
     def count(self) -> "DataFrame":
@@ -388,7 +392,7 @@ class DataFrame(object):
         """
         return self.head()
 
-    def groupBy(self, *cols: "ColumnOrName") -> GroupedData:
+    def groupBy(self, *cols: "ExpressionOrString") -> GroupedData:
         return GroupedData(self, *cols)
 
     @overload

@@ -651,6 +651,7 @@ class SparkConnectPlanner(session: SparkSession) {
         .map(transformExpression)
         .map {
           case x @ UnresolvedAttribute(_) => x
+          case x @ Alias(_, _) => x
           case x => UnresolvedAlias(x)
         }
 
