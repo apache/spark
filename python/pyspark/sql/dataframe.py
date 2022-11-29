@@ -4575,13 +4575,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         return DataFrame(jdf, self.sparkSession)
 
-    def toDF(self, *cols: "ColumnOrName") -> "DataFrame":
+    def toDF(self, *cols: str) -> "DataFrame":
         """Returns a new :class:`DataFrame` that with new specified column names
 
         Parameters
         ----------
         *cols : tuple
-            a tuple of string new column name or :class:`Column`. The length of the
+            a tuple of string new column name. The length of the
             list needs to be the same as the number of columns in the initial
             :class:`DataFrame`
 
