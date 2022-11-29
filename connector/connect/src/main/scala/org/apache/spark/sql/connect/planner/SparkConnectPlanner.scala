@@ -83,6 +83,7 @@ class SparkConnectPlanner(session: SparkSession) {
         transformSubqueryAlias(rel.getSubqueryAlias)
       case proto.Relation.RelTypeCase.REPARTITION => transformRepartition(rel.getRepartition)
       case proto.Relation.RelTypeCase.FILL_NA => transformNAFill(rel.getFillNa)
+      case proto.Relation.RelTypeCase.DROP_NA => transformNADrop(rel.getDropNa)
       case proto.Relation.RelTypeCase.SUMMARY => transformStatSummary(rel.getSummary)
       case proto.Relation.RelTypeCase.CROSSTAB =>
         transformStatCrosstab(rel.getCrosstab)
@@ -209,6 +210,23 @@ class SparkConnectPlanner(session: SparkSession) {
         }
       }
       dataset.na.fill(valueMap = valueMap.toMap).logicalPlan
+    }
+  }
+
+  private def transformNADrop(rel: proto.NADrop): LogicalPlan = {
+    val dataset = Dataset.ofRows(session, transformRelation(rel.getInput))
+
+    val cols = rel.getColsList.asScala.toArray
+
+    (cols.nonEmpty, rel.hasMinNonNulls) match {
+      case (true, true) =>
+        dataset.na.drop(minNonNulls = rel.getMinNonNulls, cols = cols).logicalPlan
+      case (true, false) =>
+        dataset.na.drop(cols = cols).logicalPlan
+      case (false, true) =>
+        dataset.na.drop(minNonNulls = rel.getMinNonNulls).logicalPlan
+      case (false, false) =>
+        dataset.na.drop().logicalPlan
     }
   }
 

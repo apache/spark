@@ -55,6 +55,7 @@ message Relation {
 
     // NA functions
     NAFill fill_na = 90;
+    NADrop drop_na = 91;
 
     // stat functions
     StatSummary summary = 100;
@@ -439,6 +440,30 @@ message NAFill {
   // Only 4 data types are supported now: bool, long, double, string
   repeated Expression.Literal values = 3;
 }
+
+
+// Drop rows containing null values.
+// It will invoke 'Dataset.na.drop' (same as 'DataFrameNaFunctions.drop') to compute the results.
+message NADrop {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Optional) Optional list of column names to consider.
+  //
+  // When it is empty, all the columns in the input relation will be considered.
+  repeated string cols = 2;
+
+  // (Optional) The minimum number of non-null and non-NaN values required to keep.
+  //
+  // When not set, it is equivalent to the number of considered columns, which means
+  // a row will be kept only if all columns are non-null.
+  //
+  // 'how' options ('all', 'any') can be easily converted to this field:
+  //   - 'all' -> set 'min_non_nulls' 1;
+  //   - 'any' -> keep 'min_non_nulls' unset;
+  optional int32 min_non_nulls = 3;
+}
+
 
 // Rename columns on the input relation by the same length of names.
 message RenameColumnsBySameLengthNames {

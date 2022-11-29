@@ -873,6 +873,77 @@ class DataFrame(object):
             session=self._session,
         )
 
+    def dropna(
+        self,
+        how: str = "any",
+        thresh: Optional[int] = None,
+        subset: Optional[Union[str, Tuple[str, ...], List[str]]] = None,
+    ) -> "DataFrame":
+        """Returns a new :class:`DataFrame` omitting rows with null values.
+        :func:`DataFrame.dropna` and :func:`DataFrameNaFunctions.drop` are aliases of each other.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        how : str, optional
+            'any' or 'all'.
+            If 'any', drop a row if it contains any nulls.
+            If 'all', drop a row only if all its values are null.
+        thresh: int, optional
+            default None
+            If specified, drop rows that have less than `thresh` non-null values.
+            This overwrites the `how` parameter.
+        subset : str, tuple or list, optional
+            optional list of column names to consider.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with null only rows excluded.
+        """
+        min_non_nulls: Optional[int] = None
+
+        if how is not None:
+            if not isinstance(how, str):
+                raise TypeError(f"how should be a str, but got {type(how).__name__}")
+            if how == "all":
+                min_non_nulls = 1
+            elif how == "any":
+                min_non_nulls = None
+            else:
+                raise ValueError("how ('" + how + "') should be 'any' or 'all'")
+
+        if thresh is not None:
+            if not isinstance(thresh, int):
+                raise TypeError(f"thresh should be a int, but got {type(thresh).__name__}")
+
+            # 'thresh' overwrites 'how'
+            min_non_nulls = thresh
+
+        _cols: List[str] = []
+        if subset is not None:
+            if isinstance(subset, str):
+                _cols = [subset]
+            elif isinstance(subset, (tuple, list)):
+                for c in subset:
+                    if not isinstance(c, str):
+                        raise TypeError(
+                            f"cols should be a str, tuple[str] or list[str], "
+                            f"but got {type(c).__name__}"
+                        )
+                _cols = list(subset)
+            else:
+                raise TypeError(
+                    f"cols should be a str, tuple[str] or list[str], "
+                    f"but got {type(subset).__name__}"
+                )
+
+        return DataFrame.withPlan(
+            plan.NADrop(child=self._plan, cols=_cols, min_non_nulls=min_non_nulls),
+            session=self._session,
+        )
+
     @property
     def stat(self) -> "DataFrameStatFunctions":
         """Returns a :class:`DataFrameStatFunctions` for statistic functions.
@@ -1311,6 +1382,16 @@ class DataFrameNaFunctions:
         return self.df.fillna(value=value, subset=subset)
 
     fill.__doc__ = DataFrame.fillna.__doc__
+
+    def drop(
+        self,
+        how: str = "any",
+        thresh: Optional[int] = None,
+        subset: Optional[Union[str, Tuple[str, ...], List[str]]] = None,
+    ) -> DataFrame:
+        return self.df.dropna(how=how, thresh=thresh, subset=subset)
+
+    drop.__doc__ = DataFrame.dropna.__doc__
 
 
 class DataFrameStatFunctions:

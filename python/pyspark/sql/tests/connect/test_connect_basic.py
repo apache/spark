@@ -498,6 +498,38 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             self.spark.sql(query).na.fill({"a": True, "b": 2}).toPandas(),
         )
 
+    def test_drop_na(self):
+        # SPARK-41148: Test drop na
+        query = """
+            SELECT * FROM VALUES
+            (false, 1, NULL), (false, NULL, 2.0), (NULL, 3, 3.0)
+            AS tab(a, b, c)
+            """
+        # +-----+----+----+
+        # |    a|   b|   c|
+        # +-----+----+----+
+        # |false|   1|null|
+        # |false|null| 2.0|
+        # | null|   3| 3.0|
+        # +-----+----+----+
+
+        self.assert_eq(
+            self.connect.sql(query).dropna().toPandas(),
+            self.spark.sql(query).dropna().toPandas(),
+        )
+        self.assert_eq(
+            self.connect.sql(query).na.drop(how="all", thresh=1).toPandas(),
+            self.spark.sql(query).na.drop(how="all", thresh=1).toPandas(),
+        )
+        self.assert_eq(
+            self.connect.sql(query).dropna(thresh=1, subset=("a", "b")).toPandas(),
+            self.spark.sql(query).dropna(thresh=1, subset=("a", "b")).toPandas(),
+        )
+        self.assert_eq(
+            self.connect.sql(query).na.drop(how="any", thresh=2, subset="a").toPandas(),
+            self.spark.sql(query).na.drop(how="any", thresh=2, subset="a").toPandas(),
+        )
+
     def test_empty_dataset(self):
         # SPARK-41005: Test arrow based collection with empty dataset.
         self.assertTrue(

@@ -995,6 +995,45 @@ class NAFill(LogicalPlan):
         """
 
 
+class NADrop(LogicalPlan):
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        cols: Optional[List[str]],
+        min_non_nulls: Optional[int],
+    ) -> None:
+        super().__init__(child)
+
+        self.cols = cols
+        self.min_non_nulls = min_non_nulls
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+        plan = proto.Relation()
+        plan.drop_na.input.CopyFrom(self._child.plan(session))
+        if self.cols is not None and len(self.cols) > 0:
+            plan.drop_na.cols.extend(self.cols)
+        if self.min_non_nulls is not None:
+            plan.drop_na.min_non_nulls = self.min_non_nulls
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return f"{i}" f"<NADrop cols='{self.cols}' " f"min_non_nulls='{self.min_non_nulls}'>"
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>NADrop</b><br />
+              Cols: {self.cols} <br />
+              Min_non_nulls: {self.min_non_nulls} <br />
+              {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
 class StatSummary(LogicalPlan):
     def __init__(self, child: Optional["LogicalPlan"], statistics: List[str]) -> None:
         super().__init__(child)

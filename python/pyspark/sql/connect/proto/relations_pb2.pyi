@@ -82,6 +82,7 @@ class Relation(google.protobuf.message.Message):
     DROP_FIELD_NUMBER: builtins.int
     TAIL_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
+    DROP_NA_FIELD_NUMBER: builtins.int
     SUMMARY_FIELD_NUMBER: builtins.int
     CROSSTAB_FIELD_NUMBER: builtins.int
     UNKNOWN_FIELD_NUMBER: builtins.int
@@ -133,6 +134,8 @@ class Relation(google.protobuf.message.Message):
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
+    def drop_na(self) -> global___NADrop: ...
+    @property
     def summary(self) -> global___StatSummary:
         """stat functions"""
     @property
@@ -165,6 +168,7 @@ class Relation(google.protobuf.message.Message):
         drop: global___Drop | None = ...,
         tail: global___Tail | None = ...,
         fill_na: global___NAFill | None = ...,
+        drop_na: global___NADrop | None = ...,
         summary: global___StatSummary | None = ...,
         crosstab: global___StatCrosstab | None = ...,
         unknown: global___Unknown | None = ...,
@@ -182,6 +186,8 @@ class Relation(google.protobuf.message.Message):
             b"deduplicate",
             "drop",
             b"drop",
+            "drop_na",
+            b"drop_na",
             "fill_na",
             b"fill_na",
             "filter",
@@ -241,6 +247,8 @@ class Relation(google.protobuf.message.Message):
             b"deduplicate",
             "drop",
             b"drop",
+            "drop_na",
+            b"drop_na",
             "fill_na",
             b"fill_na",
             "filter",
@@ -312,6 +320,7 @@ class Relation(google.protobuf.message.Message):
         "drop",
         "tail",
         "fill_na",
+        "drop_na",
         "summary",
         "crosstab",
         "unknown",
@@ -1546,6 +1555,74 @@ class NAFill(google.protobuf.message.Message):
     ) -> None: ...
 
 global___NAFill = NAFill
+
+class NADrop(google.protobuf.message.Message):
+    """Drop rows containing null values.
+    It will invoke 'Dataset.na.drop' (same as 'DataFrameNaFunctions.drop') to compute the results.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    COLS_FIELD_NUMBER: builtins.int
+    MIN_NON_NULLS_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    @property
+    def cols(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """(Optional) Optional list of column names to consider.
+
+        When it is empty, all the columns in the input relation will be considered.
+        """
+    min_non_nulls: builtins.int
+    """(Optional) The minimum number of non-null and non-NaN values required to keep.
+
+    When not set, it is equivalent to the number of considered columns, which means
+    a row will be kept only if all columns are non-null.
+
+    'how' options ('all', 'any') can be easily converted to this field:
+      - 'all' -> set 'min_non_nulls' 1;
+      - 'any' -> keep 'min_non_nulls' unset;
+    """
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        cols: collections.abc.Iterable[builtins.str] | None = ...,
+        min_non_nulls: builtins.int | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_min_non_nulls",
+            b"_min_non_nulls",
+            "input",
+            b"input",
+            "min_non_nulls",
+            b"min_non_nulls",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_min_non_nulls",
+            b"_min_non_nulls",
+            "cols",
+            b"cols",
+            "input",
+            b"input",
+            "min_non_nulls",
+            b"min_non_nulls",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_min_non_nulls", b"_min_non_nulls"]
+    ) -> typing_extensions.Literal["min_non_nulls"] | None: ...
+
+global___NADrop = NADrop
 
 class RenameColumnsBySameLengthNames(google.protobuf.message.Message):
     """Rename columns on the input relation by the same length of names."""
