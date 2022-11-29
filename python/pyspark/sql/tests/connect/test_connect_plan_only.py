@@ -61,6 +61,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertIsNotNone(plan.root.join.join_condition)
 
     def test_crossjoin(self):
+        # SPARK-41227: Test CrossJoin
         left_input = self.connect.readTable(table_name=self.tbl_name)
         right_input = self.connect.readTable(table_name=self.tbl_name)
         crossJoin_plan = left_input.crossJoin(other=right_input)._plan.to_proto(self.connect)
