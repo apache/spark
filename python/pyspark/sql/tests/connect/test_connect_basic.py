@@ -568,6 +568,12 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         pandasResult = set(readDf.collect())
         self.assertEqual(expectResult, pandasResult)
 
+    def test_count(self) -> None:
+        self.assertEqual(
+            self.connect.read.table(self.tbl_name).count(),
+            self.spark.read.table(self.tbl_name).count(),
+        )
+
     def test_simple_transform(self) -> None:
         """SPARK-41203: Support DF.transform"""
 
