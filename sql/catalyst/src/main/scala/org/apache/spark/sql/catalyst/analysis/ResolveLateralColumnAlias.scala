@@ -102,9 +102,9 @@ object ResolveLateralColumnAlias extends Rule[LogicalPlan] {
         if (referencedAliases.isEmpty) {
           p
         } else {
-          val outerProjectList = projectList.to[collection.mutable.Seq]
+          val outerProjectList = collection.mutable.Seq(projectList: _*)
           val innerProjectList =
-            child.output.map(_.asInstanceOf[NamedExpression]).to[collection.mutable.ArrayBuffer]
+            collection.mutable.ArrayBuffer(child.output.map(_.asInstanceOf[NamedExpression]): _*)
           referencedAliases.foreach { case AliasEntry(alias: Alias, idx) =>
             outerProjectList.update(idx, alias.toAttribute)
             innerProjectList += alias
