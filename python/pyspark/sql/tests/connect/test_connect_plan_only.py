@@ -71,6 +71,14 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertEqual(plan.root.filter.condition.unresolved_function.parts, [">"])
         self.assertEqual(len(plan.root.filter.condition.unresolved_function.arguments), 2)
 
+    def test_filter_with_string_expr(self):
+        """SPARK-41297: filter supports SQL expression"""
+        df = self.connect.readTable(table_name=self.tbl_name)
+        plan = df.filter("id < 10")._plan.to_proto(self.connect)
+        self.assertIsNotNone(plan.root.filter)
+        self.assertIsNotNone(plan.root.filter.condition.expression_string)
+        self.assertEqual(plan.root.filter.condition.expression_string.expression, "id < 10")
+
     def test_fill_na(self):
         # SPARK-41128: Test fill na
         df = self.connect.readTable(table_name=self.tbl_name)
