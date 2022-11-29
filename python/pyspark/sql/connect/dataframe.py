@@ -368,9 +368,7 @@ class DataFrame(object):
             expr = SQLExpression(condition)
         else:
             expr = condition
-        return DataFrame.withPlan(
-            plan.Filter(child=self._plan, filter=expr), session=self._session
-        )
+        return DataFrame.withPlan(plan.Filter(child=self._plan, filter=expr), session=self._session)
 
     def first(self) -> Optional[Row]:
         """Returns the first row as a :class:`Row`.
