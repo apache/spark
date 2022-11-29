@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.benchmark
 
 import org.apache.spark.benchmark.Benchmark
-import org.apache.spark.sql.internal.SQLConf.WINDOW_GROUP_LIMIT_ENABLE
+import org.apache.spark.sql.internal.SQLConf.WINDOW_GROUP_LIMIT_THRESHOLD
 
 /**
  * Benchmark to measure performance for top-k computation.
@@ -57,16 +57,14 @@ object TopKBenchmark extends SqlBasedBenchmark {
           Seq("", "PARTITION BY b").foreach { partition =>
             benchmark.addCase(
               s"$function (PARTITION: $partition, WindowGroupLimit: false)") { _ =>
-              withSQLConf(WINDOW_GROUP_LIMIT_ENABLE.key -> "false") {
+              withSQLConf(WINDOW_GROUP_LIMIT_THRESHOLD.key -> "-1") {
                 f(function, partition)
               }
             }
 
             benchmark.addCase(
               s"$function (PARTITION: $partition, WindowGroupLimit: true)") { _ =>
-              withSQLConf(WINDOW_GROUP_LIMIT_ENABLE.key -> "true") {
-                f(function, partition)
-              }
+              f(function, partition)
             }
           }
         }
