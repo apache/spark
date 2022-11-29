@@ -2215,11 +2215,6 @@
       "Cannot read table property '<key>' as it's corrupted.<details>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1093" : {
-    "message" : [
-      "Schema should be specified in DDL format as a string literal or output of the schema_of_json/schema_of_csv functions instead of <expr>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1094" : {
     "message" : [
       "Schema should be struct type but got <dataType>."
