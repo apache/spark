@@ -361,6 +361,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "UNSUPPORTED_DATATYPE",
+  "sqlState" : "0A000",
   "messageParameters" : {
     "typeName" : "baz"
   },
@@ -382,6 +383,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "UNSUPPORTED_DATATYPE",
+  "sqlState" : "0A000",
   "messageParameters" : {
     "typeName" : "ordinality"
   },
