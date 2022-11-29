@@ -438,12 +438,12 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
                 .newBuilder()
                 .addName("test")
                 .setExpr(proto.Expression.newBuilder
-                  .setLiteral(proto.Expression.Literal.newBuilder.setI32(32))))
+                  .setLiteral(proto.Expression.Literal.newBuilder.setInteger(32))))
               .addNameExprList(proto.Expression.Alias
                 .newBuilder()
                 .addName("test")
                 .setExpr(proto.Expression.newBuilder
-                  .setLiteral(proto.Expression.Literal.newBuilder.setI32(32)))))
+                  .setLiteral(proto.Expression.Literal.newBuilder.setInteger(32)))))
           .build())
     }
   }
@@ -463,7 +463,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
                   .addName("part1")
                   .addName("part2")
                   .setExpr(proto.Expression.newBuilder
-                    .setLiteral(proto.Expression.Literal.newBuilder.setI32(32)))))
+                    .setLiteral(proto.Expression.Literal.newBuilder.setInteger(32)))))
           .build())
     }
     assert(e.getMessage.contains("part1, part2"))
