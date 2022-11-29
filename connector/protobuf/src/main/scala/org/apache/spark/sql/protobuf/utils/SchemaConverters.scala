@@ -99,7 +99,7 @@ object SchemaConverters {
 
         Option(
           fd.getMessageType.getFields.asScala
-            .flatMap(structFieldFor(_, newRecordNames.toSet))
+            .flatMap(structFieldFor(_, newRecordNames))
             .toSeq)
           .filter(_.nonEmpty)
           .map(StructType.apply)

@@ -637,13 +637,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def invalidFunctionArgumentsError(
-      name: String, expectedInfo: String, actualNumber: Int): Throwable = {
+      name: String, expectedNum: String, actualNum: Int): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1042",
+      errorClass = "WRONG_NUM_ARGS",
       messageParameters = Map(
-        "name" -> name,
-        "expectedInfo" -> expectedInfo,
-        "actualNumber" -> actualNumber.toString))
+        "functionName" -> toSQLId(name),
+        "expectedNum" -> expectedNum,
+        "actualNum" -> actualNum.toString))
   }
 
   def invalidFunctionArgumentNumberError(
@@ -656,8 +656,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       val expectedNumberOfParameters = if (validParametersCount.length == 1) {
         validParametersCount.head.toString
       } else {
-        validParametersCount.init.mkString("one of ", ", ", " and ") +
-          validParametersCount.last
+        validParametersCount.mkString("[", ", ", "]")
       }
       invalidFunctionArgumentsError(name, expectedNumberOfParameters, actualNumber)
     }
@@ -994,10 +993,20 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("key" -> key, "details" -> details))
   }
 
-  def invalidSchemaStringError(exp: Expression): Throwable = {
+  def schemaFailToParseError(schema: String, e: Throwable): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1092",
-      messageParameters = Map("expr" -> exp.sql))
+      errorClass = "INVALID_SCHEMA.PARSE_ERROR",
+      messageParameters = Map(
+        "inputSchema" -> toSQLSchema(schema),
+        "reason" -> e.getMessage
+      ),
+      cause = Some(e))
+  }
+
+  def unexpectedSchemaTypeError(exp: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_SCHEMA.NON_STRING_LITERAL",
+      messageParameters = Map("inputSchema" -> toSQLExpr(exp)))
   }
 
   def schemaNotFoldableError(exp: Expression): Throwable = {
@@ -1014,13 +1023,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def keyValueInMapNotStringError(m: CreateMap): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1095",
-      messageParameters = Map("map" -> m.dataType.catalogString))
+      errorClass = "INVALID_OPTIONS.NON_STRING_TYPE",
+      messageParameters = Map("mapType" -> toSQLType(m.dataType)))
   }
 
   def nonMapFunctionNotAllowedError(): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1096",
+      errorClass = "INVALID_OPTIONS.NON_MAP_FUNCTION",
       messageParameters = Map.empty)
   }
 
@@ -1073,10 +1082,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def literalTypeUnsupportedForSourceTypeError(field: String, source: Expression): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1102",
+      errorClass = "INVALID_EXTRACT_FIELD",
       messageParameters = Map(
-        "field" -> field,
-        "srcDataType" -> source.dataType.catalogString))
+        "field" -> toSQLId(field),
+        "expr" -> toSQLExpr(source)))
   }
 
   def arrayComponentTypeUnsupportedError(clz: Class[_]): Throwable = {
@@ -1378,7 +1387,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def dataPathNotExistError(path: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1130",
+      errorClass = "PATH_NOT_FOUND",
       messageParameters = Map("path" -> path))
   }
 
@@ -2143,17 +2152,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def escapeCharacterInTheMiddleError(pattern: String, char: String): Throwable = {
     new AnalysisException(
-      errorClass = "INVALID_LIKE_PATTERN.ESC_IN_THE_MIDDLE",
+      errorClass = "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
       messageParameters = Map(
-        "pattern" -> toSQLValue(pattern, StringType),
+        "format" -> toSQLValue(pattern, StringType),
         "char" -> toSQLValue(char, StringType)))
   }
 
   def escapeCharacterAtTheEndError(pattern: String): Throwable = {
     new AnalysisException(
-      errorClass = "INVALID_LIKE_PATTERN.ESC_AT_THE_END",
-      messageParameters = Map(
-        "pattern" -> toSQLValue(pattern, StringType)))
+      errorClass = "INVALID_FORMAT.ESC_AT_THE_END",
+      messageParameters = Map("format" -> toSQLValue(pattern, StringType)))
   }
 
   def tableIdentifierExistsError(tableIdentifier: TableIdentifier): Throwable = {
@@ -2229,13 +2237,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "configName" -> configName,
         "version" -> version,
         "comment" -> comment))
-  }
-
-  def failedFallbackParsingError(msg: String, e1: Throwable, e2: Throwable): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1227",
-      messageParameters = Map("msg" -> msg, "e1" -> e1.getMessage, "e2" -> e2.getMessage),
-      cause = Some(e1.getCause))
   }
 
   def decimalCannotGreaterThanPrecisionError(scale: Int, precision: Int): Throwable = {

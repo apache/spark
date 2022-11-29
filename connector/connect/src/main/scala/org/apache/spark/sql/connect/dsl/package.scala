@@ -48,32 +48,6 @@ package object dsl {
               .newBuilder()
               .setUnparsedIdentifier(s))
           .build()
-
-      def struct(attrs: Expression.QualifiedAttribute*): Expression.QualifiedAttribute = {
-        val structExpr = DataType.Struct.newBuilder()
-        for (attr <- attrs) {
-          val structField = DataType.StructField.newBuilder()
-          structField.setName(attr.getName)
-          structField.setType(attr.getType)
-          structExpr.addFields(structField)
-        }
-        Expression.QualifiedAttribute
-          .newBuilder()
-          .setName(s)
-          .setType(DataType.newBuilder().setStruct(structExpr))
-          .build()
-      }
-
-      /** Creates a new AttributeReference of type int */
-      def int: Expression.QualifiedAttribute = protoQualifiedAttrWithType(
-        DataType.newBuilder().setI32(DataType.I32.newBuilder()).build())
-
-      private def protoQualifiedAttrWithType(dataType: DataType): Expression.QualifiedAttribute =
-        Expression.QualifiedAttribute
-          .newBuilder()
-          .setName(s)
-          .setType(dataType)
-          .build()
     }
 
     implicit class DslExpression(val expr: Expression) {
@@ -170,7 +144,7 @@ package object dsl {
     implicit def intToLiteral(i: Int): Expression =
       Expression
         .newBuilder()
-        .setLiteral(Expression.Literal.newBuilder().setI32(i))
+        .setLiteral(Expression.Literal.newBuilder().setInteger(i))
         .build()
   }
 
@@ -259,8 +233,8 @@ package object dsl {
       private def convertValue(value: Any) = {
         value match {
           case b: Boolean => Expression.Literal.newBuilder().setBoolean(b).build()
-          case l: Long => Expression.Literal.newBuilder().setI64(l).build()
-          case d: Double => Expression.Literal.newBuilder().setFp64(d).build()
+          case l: Long => Expression.Literal.newBuilder().setLong(l).build()
+          case d: Double => Expression.Literal.newBuilder().setDouble(d).build()
           case s: String => Expression.Literal.newBuilder().setString(s).build()
           case o => throw new Exception(s"Unsupported value type: $o")
         }
@@ -302,6 +276,39 @@ package object dsl {
               .addAllCols(cols.asJava)
               .addAllValues(values.asJava)
               .build())
+          .build()
+      }
+
+      def drop(
+          how: Option[String] = None,
+          minNonNulls: Option[Int] = None,
+          cols: Seq[String] = Seq.empty): Relation = {
+        require(!(how.nonEmpty && minNonNulls.nonEmpty))
+        require(how.isEmpty || Seq("any", "all").contains(how.get))
+
+        val dropna = proto.NADrop
+          .newBuilder()
+          .setInput(logicalPlan)
+
+        if (cols.nonEmpty) {
+          dropna.addAllCols(cols.asJava)
+        }
+
+        var _minNonNulls = -1
+        how match {
+          case Some("all") => _minNonNulls = 1
+          case _ =>
+        }
+        if (minNonNulls.nonEmpty) {
+          _minNonNulls = minNonNulls.get
+        }
+        if (_minNonNulls > 0) {
+          dropna.setMinNonNulls(_minNonNulls)
+        }
+
+        Relation
+          .newBuilder()
+          .setDropNa(dropna.build())
           .build()
       }
     }
@@ -352,6 +359,17 @@ package object dsl {
             .setExpressionString(ExpressionString.newBuilder().setExpression(expr))
             .build()
         }: _*)
+
+      def tail(limit: Int): Relation = {
+        Relation
+          .newBuilder()
+          .setTail(
+            Tail
+              .newBuilder()
+              .setInput(logicalPlan)
+              .setLimit(limit))
+          .build()
+      }
 
       def limit(limit: Int): Relation = {
         Relation
@@ -624,6 +642,19 @@ package object dsl {
               .newBuilder()
               .setInput(logicalPlan)
               .putAllRenameColumnsMap(renameColumnsMap.asJava))
+          .build()
+      }
+
+      def withColumns(colsMap: Map[String, Expression]): Relation = {
+        Relation
+          .newBuilder()
+          .setWithColumns(
+            WithColumns
+              .newBuilder()
+              .setInput(logicalPlan)
+              .addAllNameExprList(colsMap.map { case (k, v) =>
+                Expression.Alias.newBuilder().addName(k).setExpr(v).build()
+              }.asJava))
           .build()
       }
 

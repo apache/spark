@@ -223,49 +223,14 @@
           "Input to <functionName> should all be the same type, but it's <dataType>."
         ]
       },
-      "FORMAT_CONT_THOUSANDS_SEPS" : {
-        "message" : [
-          "Thousands separators (, or G) must have digits in between them in the number format: <format>."
-        ]
-      },
-      "FORMAT_CUR_MUST_BEFORE_DEC" : {
-        "message" : [
-          "Currency characters must appear before any decimal point in the number format: <format>."
-        ]
-      },
-      "FORMAT_CUR_MUST_BEFORE_DIGIT" : {
-        "message" : [
-          "Currency characters must appear before digits in the number format: <format>."
-        ]
-      },
-      "FORMAT_EMPTY" : {
-        "message" : [
-          "The number format string cannot be empty."
-        ]
-      },
-      "FORMAT_THOUSANDS_SEPS_MUST_BEFORE_DEC" : {
-        "message" : [
-          "Thousands separators (, or G) may not appear after the decimal point in the number format: <format>."
-        ]
-      },
-      "FORMAT_UNEXPECTED_TOKEN" : {
-        "message" : [
-          "Unexpected <token> found in the format string <format>; the structure of the format string must match: [MI|S] [$] [0|9|G|,]* [.|D] [0|9]* [$] [PR|MI|S]."
-        ]
-      },
-      "FORMAT_WRONG_NUM_DIGIT" : {
-        "message" : [
-          "The format string requires at least one number digit."
-        ]
-      },
-      "FORMAT_WRONG_NUM_TOKEN" : {
-        "message" : [
-          "At most one <token> is allowed in the number format: <format>."
-        ]
-      },
       "HASH_MAP_TYPE" : {
         "message" : [
           "Input to the function <functionName> cannot contain elements of the \"MAP\" type. In Spark, same maps may have different hashcode, thus hash expressions are prohibited on \"MAP\" elements. To restore previous behavior set \"spark.sql.legacy.allowHashOnMapType\" to \"true\"."
+        ]
+      },
+      "INVALID_ARG_VALUE" : {
+        "message" : [
+          "The <inputName> value must to be a <requireType> literal of <validValues>, but got <inputValue>."
         ]
       },
       "INVALID_JSON_MAP_KEY_TYPE" : {
@@ -393,7 +358,7 @@
       },
       "UNEXPECTED_INPUT_TYPE" : {
         "message" : [
-          "parameter <paramIndex> requires <requiredType> type, however, <inputSql> is of <inputType> type."
+          "Parameter <paramIndex> requires the <requiredType> type, however <inputSql> has the type <inputType>."
         ]
       },
       "UNEXPECTED_NULL" : {
@@ -675,11 +640,73 @@
       "The location name cannot be empty string, but `<location>` was given."
     ]
   },
+  "INVALID_EXTRACT_FIELD" : {
+    "message" : [
+      "Cannot extract <field> from <expr>."
+    ]
+  },
   "INVALID_FIELD_NAME" : {
     "message" : [
       "Field name <fieldName> is invalid: <path> is not a struct."
     ],
     "sqlState" : "42000"
+  },
+  "INVALID_FORMAT" : {
+    "message" : [
+      "The format is invalid: <format>."
+    ],
+    "subClass" : {
+      "CONT_THOUSANDS_SEPS" : {
+        "message" : [
+          "Thousands separators (, or G) must have digits in between them in the number format."
+        ]
+      },
+      "CUR_MUST_BEFORE_DEC" : {
+        "message" : [
+          "Currency characters must appear before any decimal point in the number format."
+        ]
+      },
+      "CUR_MUST_BEFORE_DIGIT" : {
+        "message" : [
+          "Currency characters must appear before digits in the number format."
+        ]
+      },
+      "EMPTY" : {
+        "message" : [
+          "The number format string cannot be empty."
+        ]
+      },
+      "ESC_AT_THE_END" : {
+        "message" : [
+          "The escape character is not allowed to end with."
+        ]
+      },
+      "ESC_IN_THE_MIDDLE" : {
+        "message" : [
+          "The escape character is not allowed to precede <char>."
+        ]
+      },
+      "THOUSANDS_SEPS_MUST_BEFORE_DEC" : {
+        "message" : [
+          "Thousands separators (, or G) may not appear after the decimal point in the number format."
+        ]
+      },
+      "UNEXPECTED_TOKEN" : {
+        "message" : [
+          "Found the unexpected <token> in the format string; the structure of the format string must match: [MI|S] [$] [0|9|G|,]* [.|D] [0|9]* [$] [PR|MI|S]."
+        ]
+      },
+      "WRONG_NUM_DIGIT" : {
+        "message" : [
+          "The format string requires at least one number digit."
+        ]
+      },
+      "WRONG_NUM_TOKEN" : {
+        "message" : [
+          "At most one <token> is allowed in the number format."
+        ]
+      }
+    }
   },
   "INVALID_FRACTION_OF_SECOND" : {
     "message" : [
@@ -702,19 +729,19 @@
       "The <joinType> JOIN with LATERAL correlation is not allowed because an OUTER subquery cannot correlate to its join partner. Remove the LATERAL correlation or use an INNER JOIN, or LEFT OUTER JOIN instead."
     ]
   },
-  "INVALID_LIKE_PATTERN" : {
+  "INVALID_OPTIONS" : {
     "message" : [
-      "The pattern <pattern> is invalid."
+      "Invalid options:"
     ],
     "subClass" : {
-      "ESC_AT_THE_END" : {
+      "NON_MAP_FUNCTION" : {
         "message" : [
-          "the escape character is not allowed to end with."
+          "Must use the `map()` function for options."
         ]
       },
-      "ESC_IN_THE_MIDDLE" : {
+      "NON_STRING_TYPE" : {
         "message" : [
-          "the escape character is not allowed to precede <char>."
+          "A type of keys and values in `map()` must be string, but got <mapType>."
         ]
       }
     }
@@ -744,6 +771,24 @@
     "message" : [
       "<protobufClassName> is not a Protobuf message type"
     ]
+  },
+  "INVALID_SCHEMA" : {
+    "message" : [
+      "The input schema <inputSchema> is not a valid schema string."
+    ],
+    "subClass" : {
+      "NON_STRING_LITERAL" : {
+        "message" : [
+          "The input expression must be string literal and not null."
+        ]
+      },
+      "PARSE_ERROR" : {
+        "message" : [
+          "Cannot parse the schema:",
+          "<reason>"
+        ]
+      }
+    }
   },
   "INVALID_SQL_SYNTAX" : {
     "message" : [
@@ -864,6 +909,11 @@
       "The comparison result is null. If you want to handle null as 0 (equal), you can set \"spark.sql.legacy.allowNullComparisonResultInArraySort\" to \"true\"."
     ]
   },
+  "NULL_MAP_KEY" : {
+    "message" : [
+      "Cannot use null as map key."
+    ]
+  },
   "NUMERIC_OUT_OF_SUPPORTED_RANGE" : {
     "message" : [
       "The value <value> cannot be interpreted as a numeric since it has more than 38 digits."
@@ -912,6 +962,11 @@
       "To tolerate the error on drop use ALTER TABLE … DROP IF EXISTS PARTITION."
     ],
     "sqlState" : "42000"
+  },
+  "PATH_NOT_FOUND" : {
+    "message" : [
+      "Path does not exist: <path>."
+    ]
   },
   "PIVOT_VALUE_DATA_TYPE_MISMATCH" : {
     "message" : [
@@ -1148,7 +1203,7 @@
   },
   "UNRESOLVED_MAP_KEY" : {
     "message" : [
-      "Cannot resolve column <objectName> as a map key. If the key is a string literal, please add single quotes around it."
+      "Cannot resolve column <objectName> as a map key. If the key is a string literal, add the single quotes '' around it."
     ],
     "subClass" : {
       "WITHOUT_SUGGESTION" : {
@@ -1463,6 +1518,11 @@
       "To tolerate the error on drop use DROP VIEW IF EXISTS."
     ],
     "sqlState" : "42000"
+  },
+  "WRONG_NUM_ARGS" : {
+    "message" : [
+      "The <functionName> requires <expectedNum> parameters but the actual number is <actualNum>."
+    ]
   },
   "_LEGACY_ERROR_TEMP_0001" : {
     "message" : [
@@ -1946,11 +2006,6 @@
       "Undefined function <name>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1042" : {
-    "message" : [
-      "Invalid number of arguments for function <name>. Expected: <expectedInfo>; Found: <actualNumber>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1043" : {
     "message" : [
       "Invalid arguments for function <name>."
@@ -2161,11 +2216,6 @@
       "Cannot read table property '<key>' as it's corrupted.<details>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1092" : {
-    "message" : [
-      "The expression '<expr>' is not a valid schema string."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1093" : {
     "message" : [
       "Schema should be specified in DDL format as a string literal or output of the schema_of_json/schema_of_csv functions instead of <expr>."
@@ -2174,16 +2224,6 @@
   "_LEGACY_ERROR_TEMP_1094" : {
     "message" : [
       "Schema should be struct type but got <dataType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1095" : {
-    "message" : [
-      "A type of keys and values in map() must be string, but got <map>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1096" : {
-    "message" : [
-      "Must use a map() function for options."
     ]
   },
   "_LEGACY_ERROR_TEMP_1097" : {
@@ -2209,11 +2249,6 @@
   "_LEGACY_ERROR_TEMP_1101" : {
     "message" : [
       "Invalid value for the '<argName>' parameter of function '<funcName>': <invalidValue>.<endingMsg>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1102" : {
-    "message" : [
-      "Literals of type '<field>' are currently not supported for the <srcDataType> type."
     ]
   },
   "_LEGACY_ERROR_TEMP_1103" : {
@@ -2331,11 +2366,6 @@
   "_LEGACY_ERROR_TEMP_1129" : {
     "message" : [
       "Unable to infer schema for <format>. It must be specified manually."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1130" : {
-    "message" : [
-      "Path does not exist: <path>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1131" : {
@@ -2826,12 +2856,6 @@
   "_LEGACY_ERROR_TEMP_1226" : {
     "message" : [
       "The SQL config '<configName>' was removed in the version <version>. <comment>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1227" : {
-    "message" : [
-      "<msg><e1>",
-      "Failed fallback parsing: <e2>"
     ]
   },
   "_LEGACY_ERROR_TEMP_1228" : {
@@ -3491,11 +3515,6 @@
   "_LEGACY_ERROR_TEMP_2018" : {
     "message" : [
       "class `<cls>` is not supported by `MapObjects` as resulting collection."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2019" : {
-    "message" : [
-      "Cannot use null as map key!"
     ]
   },
   "_LEGACY_ERROR_TEMP_2020" : {

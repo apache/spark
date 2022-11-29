@@ -76,7 +76,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
 
         plan = df.fillna(value=1)._plan.to_proto(self.connect)
         self.assertEqual(len(plan.root.fill_na.values), 1)
-        self.assertEqual(plan.root.fill_na.values[0].i64, 1)
+        self.assertEqual(plan.root.fill_na.values[0].long, 1)
         self.assertEqual(plan.root.fill_na.cols, [])
 
         plan = df.na.fill(value="xyz")._plan.to_proto(self.connect)
@@ -98,9 +98,25 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
 
         plan = df.fillna({"col_a": 1.5, "col_b": "abc"})._plan.to_proto(self.connect)
         self.assertEqual(len(plan.root.fill_na.values), 2)
-        self.assertEqual(plan.root.fill_na.values[0].fp64, 1.5)
+        self.assertEqual(plan.root.fill_na.values[0].double, 1.5)
         self.assertEqual(plan.root.fill_na.values[1].string, "abc")
         self.assertEqual(plan.root.fill_na.cols, ["col_a", "col_b"])
+
+    def test_drop_na(self):
+        # SPARK-41148: Test drop na
+        df = self.connect.readTable(table_name=self.tbl_name)
+
+        plan = df.dropna()._plan.to_proto(self.connect)
+        self.assertEqual(plan.root.drop_na.cols, [])
+        self.assertEqual(plan.root.drop_na.HasField("min_non_nulls"), False)
+
+        plan = df.na.drop(thresh=2, subset=("col_a", "col_b"))._plan.to_proto(self.connect)
+        self.assertEqual(plan.root.drop_na.cols, ["col_a", "col_b"])
+        self.assertEqual(plan.root.drop_na.min_non_nulls, 2)
+
+        plan = df.dropna(how="all", subset="col_c")._plan.to_proto(self.connect)
+        self.assertEqual(plan.root.drop_na.cols, ["col_c"])
+        self.assertEqual(plan.root.drop_na.min_non_nulls, 1)
 
     def test_summary(self):
         df = self.connect.readTable(table_name=self.tbl_name)
@@ -312,6 +328,28 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         with self.assertRaises(ValueError) as context:
             df.repartition(-1)._plan.to_proto(self.connect)
         self.assertTrue("numPartitions must be positive" in str(context.exception))
+
+    def test_unsupported_functions(self):
+        # SPARK-41225: Disable unsupported functions.
+        df = self.connect.readTable(table_name=self.tbl_name)
+        for f in (
+            "rdd",
+            "unpersist",
+            "cache",
+            "persist",
+            "withWatermark",
+            "observe",
+            "foreach",
+            "foreachPartition",
+            "toLocalIterator",
+            "checkpoint",
+            "localCheckpoint",
+            "_repr_html_",
+            "semanticHash",
+            "sameSemantics",
+        ):
+            with self.assertRaises(NotImplementedError):
+                getattr(df, f)()
 
 
 if __name__ == "__main__":

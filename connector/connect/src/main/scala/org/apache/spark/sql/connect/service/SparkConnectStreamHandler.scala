@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connect.service
 
 import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
 
 import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver
@@ -32,6 +33,7 @@ import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, QueryStageExec}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ThreadUtils
 
 class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResponse])
     extends Logging {
@@ -71,20 +73,83 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
       var numSent = 0
 
       if (numPartitions > 0) {
+        type Batch = (Array[Byte], Long)
+
         val batches = rows.mapPartitionsInternal(
           SparkConnectStreamHandler
             .rowToArrowConverter(schema, maxRecordsPerBatch, maxBatchSize, timeZoneId))
 
-        batches.collect().foreach { case (bytes, count) =>
-          val response = proto.ExecutePlanResponse.newBuilder().setClientId(clientId)
-          val batch = proto.ExecutePlanResponse.ArrowBatch
-            .newBuilder()
-            .setRowCount(count)
-            .setData(ByteString.copyFrom(bytes))
-            .build()
-          response.setArrowBatch(batch)
-          responseObserver.onNext(response.build())
-          numSent += 1
+        val signal = new Object
+        val partitions = new Array[Array[Batch]](numPartitions)
+        var error: Option[Throwable] = None
+
+        // This callback is executed by the DAGScheduler thread.
+        // After fetching a partition, it inserts the partition into the Map, and then
+        // wakes up the main thread.
+        val resultHandler = (partitionId: Int, partition: Array[Batch]) => {
+          signal.synchronized {
+            partitions(partitionId) = partition
+            signal.notify()
+          }
+          ()
+        }
+
+        val future = spark.sparkContext.submitJob(
+          rdd = batches,
+          processPartition = (iter: Iterator[Batch]) => iter.toArray,
+          partitions = Seq.range(0, numPartitions),
+          resultHandler = resultHandler,
+          resultFunc = () => ())
+
+        // Collect errors and propagate them to the main thread.
+        future.onComplete { result =>
+          result.failed.foreach { throwable =>
+            signal.synchronized {
+              error = Some(throwable)
+              signal.notify()
+            }
+          }
+        }(ThreadUtils.sameThread)
+
+        // The main thread will wait until 0-th partition is available,
+        // then send it to client and wait for the next partition.
+        // Different from the implementation of [[Dataset#collectAsArrowToPython]], it sends
+        // the arrow batches in main thread to avoid DAGScheduler thread been blocked for
+        // tasks not related to scheduling. This is particularly important if there are
+        // multiple users or clients running code at the same time.
+        var currentPartitionId = 0
+        while (currentPartitionId < numPartitions) {
+          val partition = signal.synchronized {
+            var part = partitions(currentPartitionId)
+            while (part == null && error.isEmpty) {
+              signal.wait()
+              part = partitions(currentPartitionId)
+            }
+            partitions(currentPartitionId) = null
+
+            error.foreach {
+              case NonFatal(e) =>
+                responseObserver.onError(e)
+                logError("Error while processing query.", e)
+                return
+              case other => throw other
+            }
+            part
+          }
+
+          partition.foreach { case (bytes, count) =>
+            val response = proto.ExecutePlanResponse.newBuilder().setClientId(clientId)
+            val batch = proto.ExecutePlanResponse.ArrowBatch
+              .newBuilder()
+              .setRowCount(count)
+              .setData(ByteString.copyFrom(bytes))
+              .build()
+            response.setArrowBatch(batch)
+            responseObserver.onNext(response.build())
+            numSent += 1
+          }
+
+          currentPartitionId += 1
         }
       }
 
@@ -126,7 +191,7 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
 object SparkConnectStreamHandler {
   type Batch = (Array[Byte], Long)
 
-  private[service] def rowToArrowConverter(
+  private def rowToArrowConverter(
       schema: StructType,
       maxRecordsPerBatch: Int,
       maxBatchSize: Long,

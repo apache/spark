@@ -14,18 +14,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import uuid
-from typing import cast, get_args, TYPE_CHECKING, Callable, Any
+from typing import get_args, TYPE_CHECKING, Callable, Any
 
 import json
 import decimal
 import datetime
 
+from pyspark.sql.types import TimestampType, DayTimeIntervalType, DateType
+
 import pyspark.sql.connect.proto as proto
-from pyspark.sql.connect._typing import PrimitiveType
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect.client import RemoteSparkSession
+    from pyspark.sql.connect.client import SparkConnectClient
     import pyspark.sql.connect.proto as proto
 
 
@@ -33,6 +33,8 @@ def _bin_op(
     name: str, doc: str = "binary function", reverse: bool = False
 ) -> Callable[["Column", Any], "Expression"]:
     def _(self: "Column", other: Any) -> "Expression":
+        from pyspark.sql.connect._typing import PrimitiveType
+
         if isinstance(other, get_args(PrimitiveType)):
             other = LiteralExpression(other)
         if not reverse:
@@ -70,6 +72,8 @@ class Expression(object):
         """Returns a binary expression with the current column as the left
         side and the other expression as the right side.
         """
+        from pyspark.sql.connect._typing import PrimitiveType
+
         if isinstance(other, get_args(PrimitiveType)):
             other = LiteralExpression(other)
         return ScalarFunctionExpression("==", self, other)
@@ -77,7 +81,7 @@ class Expression(object):
     def __init__(self) -> None:
         pass
 
-    def to_plan(self, session: "RemoteSparkSession") -> "proto.Expression":
+    def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
         ...
 
     def __str__(self) -> str:
@@ -128,7 +132,7 @@ class ColumnAlias(Expression):
         self._metadata = metadata
         self._parent = parent
 
-    def to_plan(self, session: "RemoteSparkSession") -> "proto.Expression":
+    def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
         if len(self._alias) == 1:
             exp = proto.Expression()
             exp.alias.name.append(self._alias[0])
@@ -159,71 +163,70 @@ class LiteralExpression(Expression):
         super().__init__()
         self._value = value
 
-    def to_plan(self, session: "RemoteSparkSession") -> "proto.Expression":
+    def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
         """Converts the literal expression to the literal in proto.
 
         TODO(SPARK-40533) This method always assumes the largest type and can thus
              create weird interpretations of the literal."""
-        value_type = type(self._value)
-        exp = proto.Expression()
-        if value_type is int:
-            exp.literal.i64 = cast(int, self._value)
-        elif value_type is bool:
-            exp.literal.boolean = cast(bool, self._value)
-        elif value_type is str:
-            exp.literal.string = cast(str, self._value)
-        elif value_type is float:
-            exp.literal.fp64 = cast(float, self._value)
-        elif value_type is decimal.Decimal:
-            d_v = cast(decimal.Decimal, self._value)
-            v_tuple = d_v.as_tuple()
-            exp.literal.decimal.scale = abs(v_tuple.exponent)
-            exp.literal.decimal.precision = len(v_tuple.digits) - abs(v_tuple.exponent)
-            # Two complement yeah...
-            raise ValueError("Python Decimal not supported.")
-        elif value_type is bytes:
-            exp.literal.binary = self._value
-        elif value_type is datetime.datetime:
-            # Microseconds since epoch.
-            dt = cast(datetime.datetime, self._value)
-            v = dt - datetime.datetime(1970, 1, 1, 0, 0, 0, 0)
-            exp.literal.timestamp = int(v / datetime.timedelta(microseconds=1))
-        elif value_type is datetime.time:
-            # Nanoseconds of the day.
-            tv = cast(datetime.time, self._value)
-            offset = (tv.second + tv.minute * 60 + tv.hour * 3600) * 1000 + tv.microsecond
-            exp.literal.time = int(offset * 1000)
-        elif value_type is datetime.date:
-            # Days since epoch.
-            days_since_epoch = (cast(datetime.date, self._value) - datetime.date(1970, 1, 1)).days
-            exp.literal.date = days_since_epoch
-        elif value_type is uuid.UUID:
-            raise ValueError("Python UUID type not supported.")
-        elif value_type is list:
-            lv = cast(list, self._value)
-            for k in lv:
-                if type(k) is LiteralExpression:
-                    exp.literal.list.values.append(k.to_plan(session).literal)
+        expr = proto.Expression()
+        if self._value is None:
+            expr.literal.null = True
+        elif isinstance(self._value, (bytes, bytearray)):
+            expr.literal.binary = bytes(self._value)
+        elif isinstance(self._value, bool):
+            expr.literal.boolean = bool(self._value)
+        elif isinstance(self._value, int):
+            expr.literal.long = int(self._value)
+        elif isinstance(self._value, float):
+            expr.literal.double = float(self._value)
+        elif isinstance(self._value, str):
+            expr.literal.string = str(self._value)
+        elif isinstance(self._value, decimal.Decimal):
+            expr.literal.decimal.value = str(self._value)
+            expr.literal.decimal.precision = int(decimal.getcontext().prec)
+        elif isinstance(self._value, datetime.datetime):
+            expr.literal.timestamp = TimestampType().toInternal(self._value)
+        elif isinstance(self._value, datetime.date):
+            expr.literal.date = DateType().toInternal(self._value)
+        elif isinstance(self._value, datetime.timedelta):
+            interval = DayTimeIntervalType().toInternal(self._value)
+            assert interval is not None
+            expr.literal.day_time_interval = int(interval)
+        elif isinstance(self._value, list):
+            expr.literal.array.SetInParent()
+            for item in list(self._value):
+                if isinstance(item, LiteralExpression):
+                    expr.literal.array.values.append(item.to_plan(session).literal)
                 else:
-                    exp.literal.list.values.append(LiteralExpression(k).to_plan(session).literal)
-        elif value_type is dict:
-            mv = cast(dict, self._value)
-            for k in mv:
-                kv = proto.Expression.Literal.Map.KeyValue()
-                if type(k) is LiteralExpression:
-                    kv.key.CopyFrom(k.to_plan(session).literal)
+                    expr.literal.array.values.append(
+                        LiteralExpression(item).to_plan(session).literal
+                    )
+        elif isinstance(self._value, tuple):
+            expr.literal.struct.SetInParent()
+            for item in list(self._value):
+                if isinstance(item, LiteralExpression):
+                    expr.literal.struct.fields.append(item.to_plan(session).literal)
                 else:
-                    kv.key.CopyFrom(LiteralExpression(k).to_plan(session).literal)
-
-                if type(mv[k]) is LiteralExpression:
-                    kv.value.CopyFrom(mv[k].to_plan(session).literal)
+                    expr.literal.struct.fields.append(
+                        LiteralExpression(item).to_plan(session).literal
+                    )
+        elif isinstance(self._value, dict):
+            expr.literal.map.SetInParent()
+            for key, value in dict(self._value).items():
+                pair = proto.Expression.Literal.Map.Pair()
+                if isinstance(key, LiteralExpression):
+                    pair.key.CopyFrom(key.to_plan(session).literal)
                 else:
-                    kv.value.CopyFrom(LiteralExpression(mv[k]).to_plan(session).literal)
-                exp.literal.map.key_values.append(kv)
+                    pair.key.CopyFrom(LiteralExpression(key).to_plan(session).literal)
+                if isinstance(value, LiteralExpression):
+                    pair.value.CopyFrom(value.to_plan(session).literal)
+                else:
+                    pair.value.CopyFrom(LiteralExpression(value).to_plan(session).literal)
+                expr.literal.map.pairs.append(pair)
         else:
             raise ValueError(f"Could not convert literal for type {type(self._value)}")
 
-        return exp
+        return expr
 
     def __str__(self) -> str:
         return f"Literal({self._value})"
@@ -247,7 +250,7 @@ class Column(Expression):
         """Returns the qualified name of the column reference."""
         return self._unparsed_identifier
 
-    def to_plan(self, session: "RemoteSparkSession") -> proto.Expression:
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
         """Returns the Proto representation of the expression."""
         expr = proto.Expression()
         expr.unresolved_attribute.unparsed_identifier = self._unparsed_identifier
@@ -272,7 +275,7 @@ class SQLExpression(Expression):
         super().__init__()
         self._expr: str = expr
 
-    def to_plan(self, session: "RemoteSparkSession") -> proto.Expression:
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
         """Returns the Proto representation of the SQL expression."""
         expr = proto.Expression()
         expr.expression_string.expression = self._expr
@@ -289,7 +292,7 @@ class SortOrder(Expression):
     def __str__(self) -> str:
         return str(self.ref) + " ASC" if self.ascending else " DESC"
 
-    def to_plan(self, session: "RemoteSparkSession") -> proto.Expression:
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
         return self.ref.to_plan(session)
 
 
@@ -303,7 +306,7 @@ class ScalarFunctionExpression(Expression):
         self._args = args
         self._op = op
 
-    def to_plan(self, session: "RemoteSparkSession") -> proto.Expression:
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
         fun = proto.Expression()
         fun.unresolved_function.parts.append(self._op)
         fun.unresolved_function.arguments.extend([x.to_plan(session) for x in self._args])
