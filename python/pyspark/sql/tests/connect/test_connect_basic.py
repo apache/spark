@@ -671,9 +671,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         # SPARK-41230: test dataframe.agg()
         self.assert_eq(
             self.connect.read.table(self.tbl_name).agg({"name": "min", "id": "max"}).toPandas(),
-            self.spark.read.table(self.tbl_name)  # type: ignore[attr-defined]
-            .agg({"name": "min", "id": "max"})
-            .toPandas(),
+            self.spark.read.table(self.tbl_name).agg({"name": "min", "id": "max"}).toPandas(),
         )
 
 

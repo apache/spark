@@ -447,4 +447,25 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
           .build())
     }
   }
+
+  test("Test multi nameparts for column names in WithColumns") {
+    val e = intercept[InvalidPlanInput] {
+      transform(
+        proto.Relation
+          .newBuilder()
+          .setWithColumns(
+            proto.WithColumns
+              .newBuilder()
+              .setInput(readRel)
+              .addNameExprList(
+                proto.Expression.Alias
+                  .newBuilder()
+                  .addName("part1")
+                  .addName("part2")
+                  .setExpr(proto.Expression.newBuilder
+                    .setLiteral(proto.Expression.Literal.newBuilder.setI32(32)))))
+          .build())
+    }
+    assert(e.getMessage.contains("part1, part2"))
+  }
 }

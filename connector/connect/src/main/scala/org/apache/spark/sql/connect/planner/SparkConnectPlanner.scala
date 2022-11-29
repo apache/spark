@@ -265,7 +265,15 @@ class SparkConnectPlanner(session: SparkSession) {
   private def transformWithColumns(rel: proto.WithColumns): LogicalPlan = {
     val (names, cols) =
       rel.getNameExprListList.asScala
-        .map(e => (e.getName(0), Column(transformExpression(e.getExpr))))
+        .map(e => {
+          if (e.getNameCount() == 1) {
+            (e.getName(0), Column(transformExpression(e.getExpr)))
+          } else {
+            throw InvalidPlanInput(
+              s"""WithColumns require column name only contains one name part,
+                 |but got ${e.getNameList.toString}""".stripMargin)
+          }
+        })
         .unzip
     Dataset
       .ofRows(session, transformRelation(rel.getInput))
