@@ -51,6 +51,7 @@ class SparkConnectSQLTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLT
     tbl_name: str
     tbl_name_empty: str
     df_text: "DataFrame"
+    spark: SparkSession
 
     @classmethod
     def setUpClass(cls: Any):
@@ -574,6 +575,13 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         expectResult = set(writeDf.collect())
         pandasResult = set(readDf.collect())
         self.assertEqual(expectResult, pandasResult)
+
+    def test_count(self) -> None:
+        # SPARK-41308: test count() API.
+        self.assertEqual(
+            self.connect.read.table(self.tbl_name).count(),
+            self.spark.read.table(self.tbl_name).count(),
+        )
 
     def test_simple_transform(self) -> None:
         """SPARK-41203: Support DF.transform"""

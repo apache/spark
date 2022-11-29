@@ -209,10 +209,16 @@ class DataFrame(object):
         return self._session
 
     def count(self) -> int:
-        """Returns the number of rows in the data frame"""
+        """Returns the number of rows in this :class:`DataFrame`.
+
+        .. versionadded:: 3.4.0
+
+        Returns
+        -------
+        int
+            Number of rows.
+        """
         pdd = self.agg(ScalarFunctionExpression("count", LiteralExpression(1))).toPandas()
-        if pdd is None:
-            raise Exception("Empty result")
         return pdd.iloc[0, 0]
 
     def crossJoin(self, other: "DataFrame") -> "DataFrame":
