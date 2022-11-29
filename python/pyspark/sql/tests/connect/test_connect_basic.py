@@ -185,6 +185,13 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             self.connect.sql(query).schema,
         )
 
+        # test DayTimeIntervalType
+        query = """ SELECT INTERVAL '100 10:30' DAY TO MINUTE AS interval """
+        self.assertEqual(
+            self.spark.sql(query).schema,
+            self.connect.sql(query).schema,
+        )
+
         # test MapType
         query = """
             SELECT * FROM VALUES
