@@ -100,6 +100,16 @@ class SparkConnectColumnExpressionSuite(PlanOnlyTestFixture):
         self.assertIsNotNone(float_lit.to_plan(None))
         self.assertIsNotNone(decimal_lit.to_plan(None))
 
+    def test_float_nan_inf(self):
+        na_lit = fun.lit(float("nan"))
+        self.assertIsNotNone(na_lit.to_plan(None))
+
+        inf_lit = fun.lit(float("inf"))
+        self.assertIsNotNone(inf_lit.to_plan(None))
+
+        inf_lit = fun.lit(float("-inf"))
+        self.assertIsNotNone(inf_lit.to_plan(None))
+
     def test_datetime_literal_types(self):
         """Test the different timestamp, date, and timedelta types."""
         datetime_lit = fun.lit(datetime.datetime.now())
