@@ -623,20 +623,22 @@ class SparkConnectTests(SparkConnectSQLTestCase):
 
     def test_write_operations(self):
         with tempfile.TemporaryDirectory() as d:
-            df = self.connect.range(1, 100)
+            df = self.connect.range(50)
             df.write.mode("overwrite").format("csv").save(d)
 
-            ndf = self.connect.read.schema("id INT").load(d, format="csv")
-            self.assertEqual(set(df.collect()), set(ndf.collect()))
+            ndf = self.connect.read.schema("id int").load(d, format="csv")
+            self.assertEqual(50, len(ndf.collect()))
+            cd = ndf.collect()
+            self.assertEqual(set(df.collect()), set(cd))
 
         with tempfile.TemporaryDirectory() as d:
-            df = self.connect.range(1, 100)
+            df = self.connect.range(50)
             df.write.mode("overwrite").csv(d, lineSep="|")
 
-            ndf = self.connect.read.load(d, format="csv", lineSep="|")
+            ndf = self.connect.read.schema("id int").load(d, format="csv", lineSep="|")
             self.assertEqual(set(df.collect()), set(ndf.collect()))
 
-        df = self.connect.range(1, 100)
+        df = self.connect.range(50)
         df.write.format("parquet").saveAsTable("parquet_test")
 
         ndf = self.connect.read.table("parquet_test")
