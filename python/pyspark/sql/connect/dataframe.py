@@ -32,6 +32,7 @@ from typing import (
 import pandas
 
 import pyspark.sql.connect.plan as plan
+from pyspark.sql.connect.readwriter import DataFrameWriter
 from pyspark.sql.connect.column import (
     Column,
     Expression,
@@ -108,6 +109,11 @@ class DataFrame(object):
 
     def __repr__(self) -> str:
         return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
+
+    @property
+    def write(self) -> "DataFrameWriter":
+        assert self._plan is not None
+        return DataFrameWriter(self._plan, self._session)
 
     @classmethod
     def withPlan(cls, plan: plan.LogicalPlan, session: "SparkSession") -> "DataFrame":
@@ -209,10 +215,16 @@ class DataFrame(object):
         return self._session
 
     def count(self) -> int:
-        """Returns the number of rows in the data frame"""
+        """Returns the number of rows in this :class:`DataFrame`.
+
+        .. versionadded:: 3.4.0
+
+        Returns
+        -------
+        int
+            Number of rows.
+        """
         pdd = self.agg(ScalarFunctionExpression("count", LiteralExpression(1))).toPandas()
-        if pdd is None:
-            raise Exception("Empty result")
         return pdd.iloc[0, 0]
 
     def crossJoin(self, other: "DataFrame") -> "DataFrame":
@@ -309,6 +321,21 @@ class DataFrame(object):
         )
 
     def drop(self, *cols: "ColumnOrName") -> "DataFrame":
+        """Returns a new :class:`DataFrame` without specified columns.
+        This is a no-op if schema doesn't contain the given column name(s).
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        cols: str or :class:`Column`
+            a name of the column, or the :class:`Column` to drop
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame without given columns.
+        """
         _cols = list(cols)
         if any(not isinstance(c, (str, Column)) for c in _cols):
             raise TypeError(
@@ -326,6 +353,23 @@ class DataFrame(object):
         )
 
     def filter(self, condition: Expression) -> "DataFrame":
+        """Filters rows using the given condition.
+
+        :func:`where` is an alias for :func:`filter`.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        condition : :class:`Column` or str
+            a :class:`Column` of :class:`types.BooleanType`
+            or a string of SQL expression.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Filtered DataFrame.
+        """
         return DataFrame.withPlan(
             plan.Filter(child=self._plan, filter=condition), session=self._session
         )
@@ -409,9 +453,39 @@ class DataFrame(object):
         )
 
     def limit(self, n: int) -> "DataFrame":
+        """Limits the result count to the number specified.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        num : int
+            Number of records to return. Will return this number of records
+            or whatever number is available.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Subset of the records
+        """
         return DataFrame.withPlan(plan.Limit(child=self._plan, limit=n), session=self._session)
 
     def offset(self, n: int) -> "DataFrame":
+        """Returns a new :class: `DataFrame` by skipping the first `n` rows.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        num : int
+            Number of records to return. Will return this number of records
+            or all records if the DataFrame contains less than this number of records.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Subset of the records
+        """
         return DataFrame.withPlan(plan.Offset(child=self._plan, offset=n), session=self._session)
 
     def tail(self, num: int) -> List[Row]:
@@ -427,7 +501,7 @@ class DataFrame(object):
         ----------
         num : int
             Number of records to return. Will return this number of records
-            or whataver number is available.
+            or all records if the DataFrame contains less than this number of records.
 
         Returns
         -------
@@ -457,6 +531,31 @@ class DataFrame(object):
         withReplacement: bool = False,
         seed: Optional[int] = None,
     ) -> "DataFrame":
+        """Returns a sampled subset of this :class:`DataFrame`.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        withReplacement : bool, optional
+            Sample with replacement or not (default ``False``).
+        fraction : float
+            Fraction of rows to generate, range [0.0, 1.0].
+        seed : int, optional
+            Seed for sampling (default a random seed).
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Sampled rows from given DataFrame.
+
+        Notes
+        -----
+        This is not guaranteed to provide exactly the fraction specified of the total
+        count of the given :class:`DataFrame`.
+
+        `fraction` is required and, `withReplacement` and `seed` are optional.
+        """
         if not isinstance(fraction, float):
             raise TypeError(f"'fraction' must be float, but got {type(fraction).__name__}")
         if not isinstance(withReplacement, bool):
@@ -476,6 +575,54 @@ class DataFrame(object):
             ),
             session=self._session,
         )
+
+    def withColumnRenamed(self, existing: str, new: str) -> "DataFrame":
+        """Returns a new :class:`DataFrame` by renaming an existing column.
+        This is a no-op if schema doesn't contain the given column name.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        existing : str
+            string, name of the existing column to rename.
+        new : str
+            string, new name of the column.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with renamed column.
+        """
+        return self.withColumnsRenamed({existing: new})
+
+    def withColumnsRenamed(self, colsMap: Dict[str, str]) -> "DataFrame":
+        """
+        Returns a new :class:`DataFrame` by renaming multiple columns.
+        This is a no-op if schema doesn't contain the given column names.
+
+        .. versionadded:: 3.4.0
+           Added support for multiple columns renaming
+
+        Parameters
+        ----------
+        colsMap : dict
+            a dict of existing column names and corresponding desired column names.
+            Currently, only single map is supported.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with renamed columns.
+
+        See Also
+        --------
+        :meth:`withColumnRenamed`
+        """
+        if not isinstance(colsMap, dict):
+            raise TypeError("colsMap must be dict of existing column name and new column name.")
+
+        return DataFrame.withPlan(plan.RenameColumnsNameByName(self._plan, colsMap), self._session)
 
     def _show_string(
         self, n: int = 20, truncate: Union[bool, int] = True, vertical: bool = False
@@ -503,6 +650,63 @@ class DataFrame(object):
         assert pdf is not None
         return pdf["show_string"][0]
 
+    def withColumns(self, colsMap: Dict[str, Expression]) -> "DataFrame":
+        """
+        Returns a new :class:`DataFrame` by adding multiple columns or replacing the
+        existing columns that have the same names.
+
+        The colsMap is a map of column name and column, the column must only refer to attributes
+        supplied by this Dataset. It is an error to add columns that refer to some other Dataset.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        colsMap : dict
+            a dict of column name and :class:`Column`.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with new or replaced columns.
+        """
+        if not isinstance(colsMap, dict):
+            raise TypeError("colsMap must be dict of column name and column.")
+
+        return DataFrame.withPlan(
+            plan.WithColumns(self._plan, colsMap),
+            session=self._session,
+        )
+
+    def withColumn(self, colName: str, col: Expression) -> "DataFrame":
+        """
+        Returns a new :class:`DataFrame` by adding a column or replacing the
+        existing column that has the same name.
+
+        The column expression must be an expression over this :class:`DataFrame`; attempting to add
+        a column from some other :class:`DataFrame` will raise an error.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        colName : str
+            string, name of the new column.
+        col : :class:`Column`
+            a :class:`Column` expression for the new column.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with new or replaced column.
+        """
+        if not isinstance(col, Expression):
+            raise TypeError("col should be Column")
+        return DataFrame.withPlan(
+            plan.WithColumns(self._plan, {colName: col}),
+            session=self._session,
+        )
+
     def show(self, n: int = 20, truncate: Union[bool, int] = True, vertical: bool = False) -> None:
         """
         Prints the first ``n`` rows to the console.
@@ -524,9 +728,62 @@ class DataFrame(object):
         print(self._show_string(n, truncate, vertical))
 
     def union(self, other: "DataFrame") -> "DataFrame":
+        """Return a new :class:`DataFrame` containing union of rows in this and another
+        :class:`DataFrame`.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            Another :class:`DataFrame` that needs to be unioned
+
+        Returns
+        -------
+        :class:`DataFrame`
+
+        See Also
+        --------
+        DataFrame.unionAll
+
+        Notes
+        -----
+        This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union
+        (that does deduplication of elements), use this function followed by :func:`distinct`.
+
+        Also as standard in SQL, this function resolves columns by position (not by name).
+        """
         return self.unionAll(other)
 
     def unionAll(self, other: "DataFrame") -> "DataFrame":
+        """Return a new :class:`DataFrame` containing union of rows in this and another
+        :class:`DataFrame`.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            Another :class:`DataFrame` that needs to be combined
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Combined DataFrame
+
+        Notes
+        -----
+        This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union
+        (that does deduplication of elements), use this function followed by :func:`distinct`.
+
+        Also as standard in SQL, this function resolves columns by position (not by name).
+
+        :func:`unionAll` is an alias to :func:`union`
+
+        See Also
+        --------
+        DataFrame.union
+        """
         if other._plan is None:
             raise ValueError("Argument to Union does not contain a valid plan.")
         return DataFrame.withPlan(
@@ -727,6 +984,77 @@ class DataFrame(object):
             session=self._session,
         )
 
+    def dropna(
+        self,
+        how: str = "any",
+        thresh: Optional[int] = None,
+        subset: Optional[Union[str, Tuple[str, ...], List[str]]] = None,
+    ) -> "DataFrame":
+        """Returns a new :class:`DataFrame` omitting rows with null values.
+        :func:`DataFrame.dropna` and :func:`DataFrameNaFunctions.drop` are aliases of each other.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        how : str, optional
+            'any' or 'all'.
+            If 'any', drop a row if it contains any nulls.
+            If 'all', drop a row only if all its values are null.
+        thresh: int, optional
+            default None
+            If specified, drop rows that have less than `thresh` non-null values.
+            This overwrites the `how` parameter.
+        subset : str, tuple or list, optional
+            optional list of column names to consider.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with null only rows excluded.
+        """
+        min_non_nulls: Optional[int] = None
+
+        if how is not None:
+            if not isinstance(how, str):
+                raise TypeError(f"how should be a str, but got {type(how).__name__}")
+            if how == "all":
+                min_non_nulls = 1
+            elif how == "any":
+                min_non_nulls = None
+            else:
+                raise ValueError("how ('" + how + "') should be 'any' or 'all'")
+
+        if thresh is not None:
+            if not isinstance(thresh, int):
+                raise TypeError(f"thresh should be a int, but got {type(thresh).__name__}")
+
+            # 'thresh' overwrites 'how'
+            min_non_nulls = thresh
+
+        _cols: List[str] = []
+        if subset is not None:
+            if isinstance(subset, str):
+                _cols = [subset]
+            elif isinstance(subset, (tuple, list)):
+                for c in subset:
+                    if not isinstance(c, str):
+                        raise TypeError(
+                            f"cols should be a str, tuple[str] or list[str], "
+                            f"but got {type(c).__name__}"
+                        )
+                _cols = list(subset)
+            else:
+                raise TypeError(
+                    f"cols should be a str, tuple[str] or list[str], "
+                    f"but got {type(subset).__name__}"
+                )
+
+        return DataFrame.withPlan(
+            plan.NADrop(child=self._plan, cols=_cols, min_non_nulls=min_non_nulls),
+            session=self._session,
+        )
+
     @property
     def stat(self) -> "DataFrameStatFunctions":
         """Returns a :class:`DataFrameStatFunctions` for statistic functions.
@@ -921,6 +1249,23 @@ class DataFrame(object):
             raise Exception("Cannot analyze on empty plan.")
         query = self._plan.to_proto(self._session.client)
         return self._session.client._analyze(query).input_files
+
+    def toDF(self, *cols: str) -> "DataFrame":
+        """Returns a new :class:`DataFrame` that with new specified column names
+
+        Parameters
+        ----------
+        *cols : tuple
+            a tuple of string new column name or :class:`Column`. The length of the
+            list needs to be the same as the number of columns in the initial
+            :class:`DataFrame`
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with new column names.
+        """
+        return DataFrame.withPlan(plan.RenameColumns(self._plan, list(cols)), self._session)
 
     def transform(self, func: Callable[..., "DataFrame"], *args: Any, **kwargs: Any) -> "DataFrame":
         """Returns a new :class:`DataFrame`. Concise syntax for chaining custom transformations.
@@ -1165,6 +1510,16 @@ class DataFrameNaFunctions:
         return self.df.fillna(value=value, subset=subset)
 
     fill.__doc__ = DataFrame.fillna.__doc__
+
+    def drop(
+        self,
+        how: str = "any",
+        thresh: Optional[int] = None,
+        subset: Optional[Union[str, Tuple[str, ...], List[str]]] = None,
+    ) -> DataFrame:
+        return self.df.dropna(how=how, thresh=thresh, subset=subset)
+
+    drop.__doc__ = DataFrame.dropna.__doc__
 
 
 class DataFrameStatFunctions:

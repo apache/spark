@@ -157,6 +157,7 @@ object ScanOperation extends OperationHelper {
 }
 
 object NodeWithOnlyDeterministicProjectAndFilter {
+  @scala.annotation.tailrec
   def unapply(plan: LogicalPlan): Option[LogicalPlan] = plan match {
     case Project(projectList, child) if projectList.forall(_.deterministic) => unapply(child)
     case Filter(cond, child) if cond.deterministic => unapply(child)
