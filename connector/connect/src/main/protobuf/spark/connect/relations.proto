@@ -461,7 +461,7 @@ message NADrop {
   // 'how' options ('all', 'any') can be easily converted to this field:
   //   - 'all' -> set 'min_non_nulls' 1;
   //   - 'any' -> keep 'min_non_nulls' unset;
-  optional int32 min_non_nulls = 4;
+  optional int32 min_non_nulls = 3;
 }
 
 
