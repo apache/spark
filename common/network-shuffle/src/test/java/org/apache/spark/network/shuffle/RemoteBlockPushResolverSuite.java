@@ -145,7 +145,7 @@ public class RemoteBlockPushResolverSuite {
     validateMergeStatuses(statuses, new int[] {0}, new long[] {9});
     MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
     validateChunks(TEST_APP, 0, 0, 0, blockMeta, new int[]{4, 5}, new int[][]{{0}, {1}});
-    verifyMetrics(9, 0, 0,  0);
+    verifyMetrics(9, 0, 0, 0);
   }
 
   @Test
@@ -192,6 +192,7 @@ public class RemoteBlockPushResolverSuite {
         new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 0, 1, 0, 0));
     // This should be deferred
     stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[3]));
+    verifyMetrics(2, 0, 0, 3);
     assertEquals("cached bytes", 3L,
       ((Counter) pushResolver.getMetrics().getMetrics()
         .get(PushMergeMetrics.DEFERRED_BLOCK_BYTES_METRIC)).getCount());
@@ -219,6 +220,7 @@ public class RemoteBlockPushResolverSuite {
     // This should be deferred
     stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[3]));
     stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[3]));
+    verifyMetrics(2, 0, 0, 6);
     assertEquals("cached bytes", 6L,
       ((Counter) pushResolver.getMetrics().getMetrics()
         .get(PushMergeMetrics.DEFERRED_BLOCK_BYTES_METRIC)).getCount());
@@ -439,7 +441,7 @@ public class RemoteBlockPushResolverSuite {
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 0));
     MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
     validateChunks(TEST_APP, 0, 0, 0, blockMeta, new int[] {4}, new int[][] {{0}});
-    verifyMetrics(4, 1,0, 0);
+    verifyMetrics(4, 1, 0, 0);
   }
 
   @Test
