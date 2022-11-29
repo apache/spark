@@ -18,9 +18,9 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, NamedExpression}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_ATTRIBUTE
+import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE_EXPRESSION, UNRESOLVED_ATTRIBUTE}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -114,6 +114,75 @@ object ResolveLateralColumnAlias extends Rule[LogicalPlan] {
             child = Project(innerProjectList.toSeq, child)
           )
         }
+
+      /**
+       * Implementation notes:
+       * SELECT dept AS a, count(id) AS b, a, b, a + avg(age), b + avg(age), a + b, b + dept
+       * GROUP BY dept
+       *
+       * Project [a, b, a, b, a_plus_avg_age, b + avg_age, a + b, b + dept]
+       * +- Aggregate [dept]
+       *    [a, count(id) AS b, a, a + avg(age) AS a_plus_avg_age, avg(age) AS avg_age, dept]
+       *    +- Project [child output, dept AS a]
+       *
+       * Careful: Doesn't need to create duplicate avg(age), or grouping dept in the Aggregate
+       *
+       * Push down: non-aggregate referenced LCA
+       * Add to Aggregate: Grouping expression (dept) and aggregate expressions (avg(age)),
+       *   if it is used in push-ups.
+       * Remove from Aggregate: push-up expressions.
+       * Push up: reference an aggregate LCA
+       */
+      case agg @ Aggregate(groupingExpressions, aggregateExpressions, _)
+        if agg.childrenResolved
+          && groupingExpressions.forall(_.resolved)
+          && !Analyzer.containsStar(aggregateExpressions)
+          && aggregateExpressions.exists(_.containsPattern(UNRESOLVED_ATTRIBUTE)) =>
+        var aliasMap = CaseInsensitiveMap(Map[String, Seq[AliasEntry]]())
+        def insertIntoAliasMap(a: Alias, idx: Int): Unit = {
+          val prevAliases = aliasMap.getOrElse(a.name, Seq.empty[AliasEntry])
+          aliasMap += (a.name -> (prevAliases :+ AliasEntry(a, idx)))
+        }
+        def lookUpLCA(e: Expression): Option[AliasEntry] = {
+          var matchedLCA: Option[AliasEntry] = None
+          e.transformWithPruning(_.containsPattern(UNRESOLVED_ATTRIBUTE)) {
+            case u: UnresolvedAttribute if aliasMap.contains(u.nameParts.head) &&
+              // First resolve using child output
+              Analyzer.resolveExpressionByPlanChildren(u, agg, resolver)
+                .isInstanceOf[UnresolvedAttribute] =>
+              val aliases = aliasMap.get(u.nameParts.head).get
+              aliases.size match {
+                case n if n > 1 =>
+                  throw QueryCompilationErrors.ambiguousLateralColumnAlias(u.name, n)
+                case _ =>
+                  val referencedAlias = aliases.head
+                  // Only resolved alias can be the lateral column alias
+                  if (referencedAlias.alias.resolved) {
+                    matchedLCA = Some(referencedAlias)
+                  }
+              }
+              u
+          }
+          matchedLCA
+        }
+        val downExps =
+          collection.mutable.Set(agg.child.output.map(_.asInstanceOf[NamedExpression]): _*)
+        val upExps = collection.mutable.Seq()
+        aggregateExpressions.zipWithIndex.foreach {
+          case (a: Alias, idx) =>
+            val matchedLCA = lookUpLCA(a)
+            insertIntoAliasMap(a, idx)
+            if (matchedLCA.isDefined) {
+              val alias = matchedLCA.get.alias
+              if (!alias.containsPattern(AGGREGATE_EXPRESSION)) {
+                downExps += alias
+              } else {
+
+              }
+            }
+        }
+        agg
+
     }
   }
 
