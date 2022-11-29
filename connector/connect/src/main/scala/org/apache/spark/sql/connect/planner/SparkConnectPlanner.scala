@@ -30,7 +30,7 @@ import org.apache.spark.sql.{Column, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.AliasIdentifier
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Expression, NamedExpression, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.{logical, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
@@ -42,6 +42,7 @@ import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.command.CreateViewCommand
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.Utils
 
 final case class InvalidPlanInput(
@@ -174,17 +175,17 @@ class SparkConnectPlanner(session: SparkSession) {
           } else {
             dataset.na.fill(value = value.getBoolean).logicalPlan
           }
-        case proto.Expression.Literal.LiteralTypeCase.I64 =>
+        case proto.Expression.Literal.LiteralTypeCase.LONG =>
           if (cols.nonEmpty) {
-            dataset.na.fill(value = value.getI64, cols = cols).logicalPlan
+            dataset.na.fill(value = value.getLong, cols = cols).logicalPlan
           } else {
-            dataset.na.fill(value = value.getI64).logicalPlan
+            dataset.na.fill(value = value.getLong).logicalPlan
           }
-        case proto.Expression.Literal.LiteralTypeCase.FP64 =>
+        case proto.Expression.Literal.LiteralTypeCase.DOUBLE =>
           if (cols.nonEmpty) {
-            dataset.na.fill(value = value.getFp64, cols = cols).logicalPlan
+            dataset.na.fill(value = value.getDouble, cols = cols).logicalPlan
           } else {
-            dataset.na.fill(value = value.getFp64).logicalPlan
+            dataset.na.fill(value = value.getDouble).logicalPlan
           }
         case proto.Expression.Literal.LiteralTypeCase.STRING =>
           if (cols.nonEmpty) {
@@ -200,10 +201,10 @@ class SparkConnectPlanner(session: SparkSession) {
         value.getLiteralTypeCase match {
           case proto.Expression.Literal.LiteralTypeCase.BOOLEAN =>
             valueMap.update(col, value.getBoolean)
-          case proto.Expression.Literal.LiteralTypeCase.I64 =>
-            valueMap.update(col, value.getI64)
-          case proto.Expression.Literal.LiteralTypeCase.FP64 =>
-            valueMap.update(col, value.getFp64)
+          case proto.Expression.Literal.LiteralTypeCase.LONG =>
+            valueMap.update(col, value.getLong)
+          case proto.Expression.Literal.LiteralTypeCase.DOUBLE =>
+            valueMap.update(col, value.getDouble)
           case proto.Expression.Literal.LiteralTypeCase.STRING =>
             valueMap.update(col, value.getString)
           case other => throw InvalidPlanInput(s"Unsupported value type: $other")
@@ -371,34 +372,89 @@ class SparkConnectPlanner(session: SparkSession) {
 
   /**
    * Transforms the protocol buffers literals into the appropriate Catalyst literal expression.
-   *
-   * TODO(SPARK-40533): Missing support for Instant, BigDecimal, LocalDate, LocalTimestamp,
-   * Duration, Period.
-   * @param lit
    * @return
    *   Expression
    */
   private def transformLiteral(lit: proto.Expression.Literal): Expression = {
     lit.getLiteralTypeCase match {
-      case proto.Expression.Literal.LiteralTypeCase.BOOLEAN => expressions.Literal(lit.getBoolean)
-      case proto.Expression.Literal.LiteralTypeCase.I8 => expressions.Literal(lit.getI8, ByteType)
-      case proto.Expression.Literal.LiteralTypeCase.I16 =>
-        expressions.Literal(lit.getI16, ShortType)
-      case proto.Expression.Literal.LiteralTypeCase.I32 => expressions.Literal(lit.getI32)
-      case proto.Expression.Literal.LiteralTypeCase.I64 => expressions.Literal(lit.getI64)
-      case proto.Expression.Literal.LiteralTypeCase.FP32 =>
-        expressions.Literal(lit.getFp32, FloatType)
-      case proto.Expression.Literal.LiteralTypeCase.FP64 =>
-        expressions.Literal(lit.getFp64, DoubleType)
-      case proto.Expression.Literal.LiteralTypeCase.STRING => expressions.Literal(lit.getString)
+      case proto.Expression.Literal.LiteralTypeCase.NULL =>
+        expressions.Literal(null, NullType)
+
       case proto.Expression.Literal.LiteralTypeCase.BINARY =>
-        expressions.Literal(lit.getBinary, BinaryType)
-      // Microseconds since unix epoch.
-      case proto.Expression.Literal.LiteralTypeCase.TIME =>
-        expressions.Literal(lit.getTime, TimestampType)
-      // Days since UNIX epoch.
+        expressions.Literal(lit.getBinary.toByteArray, BinaryType)
+
+      case proto.Expression.Literal.LiteralTypeCase.BOOLEAN =>
+        expressions.Literal(lit.getBoolean, BooleanType)
+
+      case proto.Expression.Literal.LiteralTypeCase.BYTE =>
+        expressions.Literal(lit.getByte, ByteType)
+
+      case proto.Expression.Literal.LiteralTypeCase.SHORT =>
+        expressions.Literal(lit.getShort, ShortType)
+
+      case proto.Expression.Literal.LiteralTypeCase.INTEGER =>
+        expressions.Literal(lit.getInteger, IntegerType)
+
+      case proto.Expression.Literal.LiteralTypeCase.LONG =>
+        expressions.Literal(lit.getLong, LongType)
+
+      case proto.Expression.Literal.LiteralTypeCase.FLOAT =>
+        expressions.Literal(lit.getFloat, FloatType)
+
+      case proto.Expression.Literal.LiteralTypeCase.DOUBLE =>
+        expressions.Literal(lit.getDouble, DoubleType)
+
+      case proto.Expression.Literal.LiteralTypeCase.DECIMAL =>
+        val decimal = Decimal.apply(lit.getDecimal.getValue)
+        var precision = decimal.precision
+        if (lit.getDecimal.hasPrecision) {
+          precision = math.max(precision, lit.getDecimal.getPrecision)
+        }
+        var scale = decimal.scale
+        if (lit.getDecimal.hasScale) {
+          scale = math.max(scale, lit.getDecimal.getScale)
+        }
+        expressions.Literal(decimal, DecimalType(math.max(precision, scale), scale))
+
+      case proto.Expression.Literal.LiteralTypeCase.STRING =>
+        expressions.Literal(UTF8String.fromString(lit.getString), StringType)
+
       case proto.Expression.Literal.LiteralTypeCase.DATE =>
         expressions.Literal(lit.getDate, DateType)
+
+      case proto.Expression.Literal.LiteralTypeCase.TIMESTAMP =>
+        expressions.Literal(lit.getTimestamp, TimestampType)
+
+      case proto.Expression.Literal.LiteralTypeCase.TIMESTAMP_NTZ =>
+        expressions.Literal(lit.getTimestampNtz, TimestampNTZType)
+
+      case proto.Expression.Literal.LiteralTypeCase.CALENDAR_INTERVAL =>
+        val interval = new CalendarInterval(
+          lit.getCalendarInterval.getMonths,
+          lit.getCalendarInterval.getDays,
+          lit.getCalendarInterval.getMicroseconds)
+        expressions.Literal(interval, CalendarIntervalType)
+
+      case proto.Expression.Literal.LiteralTypeCase.YEAR_MONTH_INTERVAL =>
+        expressions.Literal(lit.getYearMonthInterval, YearMonthIntervalType())
+
+      case proto.Expression.Literal.LiteralTypeCase.DAY_TIME_INTERVAL =>
+        expressions.Literal(lit.getDayTimeInterval, DayTimeIntervalType())
+
+      case proto.Expression.Literal.LiteralTypeCase.ARRAY =>
+        val literals = lit.getArray.getValuesList.asScala.toArray.map(transformLiteral)
+        CreateArray(literals)
+
+      case proto.Expression.Literal.LiteralTypeCase.STRUCT =>
+        val literals = lit.getStruct.getFieldsList.asScala.toArray.map(transformLiteral)
+        CreateStruct(literals)
+
+      case proto.Expression.Literal.LiteralTypeCase.MAP =>
+        val literals = lit.getMap.getPairsList.asScala.toArray.flatMap { pair =>
+          transformLiteral(pair.getKey) :: transformLiteral(pair.getValue) :: Nil
+        }
+        CreateMap(literals)
+
       case _ =>
         throw InvalidPlanInput(
           s"Unsupported Literal Type: ${lit.getLiteralTypeCase.getNumber}" +

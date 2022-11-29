@@ -144,7 +144,7 @@ package object dsl {
     implicit def intToLiteral(i: Int): Expression =
       Expression
         .newBuilder()
-        .setLiteral(Expression.Literal.newBuilder().setI32(i))
+        .setLiteral(Expression.Literal.newBuilder().setInteger(i))
         .build()
   }
 
@@ -233,8 +233,8 @@ package object dsl {
       private def convertValue(value: Any) = {
         value match {
           case b: Boolean => Expression.Literal.newBuilder().setBoolean(b).build()
-          case l: Long => Expression.Literal.newBuilder().setI64(l).build()
-          case d: Double => Expression.Literal.newBuilder().setFp64(d).build()
+          case l: Long => Expression.Literal.newBuilder().setLong(l).build()
+          case d: Double => Expression.Literal.newBuilder().setDouble(d).build()
           case s: String => Expression.Literal.newBuilder().setString(s).build()
           case o => throw new Exception(s"Unsupported value type: $o")
         }

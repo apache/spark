@@ -27,7 +27,7 @@ class ConnectProtoMessagesSuite extends SparkFunSuite {
     // Create the extension value.
     val lit = proto.Expression
       .newBuilder()
-      .setLiteral(proto.Expression.Literal.newBuilder().setI32(32).build())
+      .setLiteral(proto.Expression.Literal.newBuilder().setInteger(32).build())
     // Pack the extension into Any.
     val aval = com.google.protobuf.Any.pack(lit.build())
     // Add Any to the repeated field list.
@@ -45,7 +45,7 @@ class ConnectProtoMessagesSuite extends SparkFunSuite {
     assert(ext.is(classOf[proto.Expression]))
     val extLit = ext.unpack(classOf[proto.Expression])
     assert(extLit.hasLiteral)
-    assert(extLit.getLiteral.hasI32)
-    assert(extLit.getLiteral.getI32 == 32)
+    assert(extLit.getLiteral.hasInteger)
+    assert(extLit.getLiteral.getInteger == 32)
   }
 }
