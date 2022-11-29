@@ -1582,6 +1582,10 @@ class NADrop(google.protobuf.message.Message):
 
     When not set, it is equivalent to the number of considered columns, which means
     a row will be kept only if all columns are non-null.
+
+    'how' options ('all', 'any') can be easily converted to this fields:
+      - 'all' -> set 'min_non_nulls' 1;
+      - 'any' -> keep 'min_non_nulls' unset;
     """
     def __init__(
         self,

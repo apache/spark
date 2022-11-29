@@ -513,29 +513,21 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         # | null|   3| 3.0|
         # +-----+----+----+
 
-        self.assertTrue(
-            self.connect.sql(query)
-            .dropna()
-            .toPandas()
-            .equals(self.spark.sql(query).dropna().toPandas())
+        self.assert_eq(
+            self.connect.sql(query).dropna().toPandas(),
+            self.spark.sql(query).dropna().toPandas(),
         )
-        self.assertTrue(
-            self.connect.sql(query)
-            .na.drop(how="all", thresh=1)
-            .toPandas()
-            .equals(self.spark.sql(query).na.drop(how="all", thresh=1).toPandas())
+        self.assert_eq(
+            self.connect.sql(query).na.drop(how="all", thresh=1).toPandas(),
+            self.spark.sql(query).na.drop(how="all", thresh=1).toPandas(),
         )
-        self.assertTrue(
-            self.connect.sql(query)
-            .dropna(thresh=1, subset=("a", "b"))
-            .toPandas()
-            .equals(self.spark.sql(query).dropna(thresh=1, subset=("a", "b")).toPandas())
+        self.assert_eq(
+            self.connect.sql(query).dropna(thresh=1, subset=("a", "b")).toPandas(),
+            self.spark.sql(query).dropna(thresh=1, subset=("a", "b")).toPandas(),
         )
-        self.assertTrue(
-            self.connect.sql(query)
-            .na.drop(how="any", thresh=2, subset="a")
-            .toPandas()
-            .equals(self.spark.sql(query).na.drop(how="any", thresh=2, subset="a").toPandas())
+        self.assert_eq(
+            self.connect.sql(query).na.drop(how="any", thresh=2, subset="a").toPandas(),
+            self.spark.sql(query).na.drop(how="any", thresh=2, subset="a").toPandas(),
         )
 
     def test_empty_dataset(self):
