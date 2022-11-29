@@ -1083,6 +1083,7 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
   }
 
   private object ExtractOnlyRef {
+    @scala.annotation.tailrec
     def unapply(expr: Expression): Option[Attribute] = expr match {
       case a: Alias => unapply(a.child)
       case e: ExtractValue => unapply(e.children.head)
