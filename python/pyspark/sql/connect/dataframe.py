@@ -51,7 +51,7 @@ if TYPE_CHECKING:
 
 
 class GroupedData(object):
-    def __init__(self, df: "DataFrame", *grouping_cols: Union[Column, str]) -> None:
+    def __init__(self, df: "DataFrame", *grouping_cols: Union[Expression, str]) -> None:
         self._df = df
         self._grouping_cols = [x if isinstance(x, Expression) else df[x] for x in grouping_cols]
 

@@ -652,7 +652,7 @@ class Aggregate(LogicalPlan):
     def __init__(
         self,
         child: Optional["LogicalPlan"],
-        grouping_cols: List[Column],
+        grouping_cols: List[Expression],
         measures: Sequence[Expression],
     ) -> None:
         super().__init__(child)
