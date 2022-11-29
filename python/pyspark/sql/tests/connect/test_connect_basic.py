@@ -35,6 +35,7 @@ if have_pandas:
     from pyspark.sql.connect.function_builder import udf
     from pyspark.sql.connect.functions import lit, col
 from pyspark.sql.dataframe import DataFrame
+import pyspark.sql.functions
 from pyspark.sql.connect.dataframe import DataFrame as CDataFrame
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
@@ -122,6 +123,21 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         # Check Row has schema column names.
         self.assertTrue("name" in data[0])
         self.assertTrue("id" in data[0])
+
+    def test_with_columns_renamed(self):
+        # SPARK-41312: test DataFrame.withColumnsRenamed()
+        self.assertEqual(
+            self.connect.read.table(self.tbl_name).withColumnRenamed("id", "id_new").schema,
+            self.spark.read.table(self.tbl_name).withColumnRenamed("id", "id_new").schema,
+        )
+        self.assertEqual(
+            self.connect.read.table(self.tbl_name)
+            .withColumnsRenamed({"id": "id_new", "name": "name_new"})
+            .schema,
+            self.spark.read.table(self.tbl_name)
+            .withColumnsRenamed({"id": "id_new", "name": "name_new"})
+            .schema,
+        )
 
     def test_simple_udf(self):
         def conv_udf(x) -> str:
@@ -232,6 +248,13 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertEqual(
             self.spark.sql(query).schema.__repr__(),
             self.connect.sql(query).schema.__repr__(),
+        )
+
+    def test_toDF(self):
+        # SPARK-41310: test DataFrame.toDF()
+        self.assertEqual(
+            self.connect.read.table(self.tbl_name).toDF("col1", "col2").schema,
+            self.spark.read.table(self.tbl_name).toDF("col1", "col2").schema,
         )
 
     def test_print_schema(self):
@@ -498,6 +521,61 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             self.spark.sql(query).na.fill({"a": True, "b": 2}).toPandas(),
         )
 
+    def test_drop_na(self):
+        # SPARK-41148: Test drop na
+        query = """
+            SELECT * FROM VALUES
+            (false, 1, NULL), (false, NULL, 2.0), (NULL, 3, 3.0)
+            AS tab(a, b, c)
+            """
+        # +-----+----+----+
+        # |    a|   b|   c|
+        # +-----+----+----+
+        # |false|   1|null|
+        # |false|null| 2.0|
+        # | null|   3| 3.0|
+        # +-----+----+----+
+
+        self.assert_eq(
+            self.connect.sql(query).dropna().toPandas(),
+            self.spark.sql(query).dropna().toPandas(),
+        )
+        self.assert_eq(
+            self.connect.sql(query).na.drop(how="all", thresh=1).toPandas(),
+            self.spark.sql(query).na.drop(how="all", thresh=1).toPandas(),
+        )
+        self.assert_eq(
+            self.connect.sql(query).dropna(thresh=1, subset=("a", "b")).toPandas(),
+            self.spark.sql(query).dropna(thresh=1, subset=("a", "b")).toPandas(),
+        )
+        self.assert_eq(
+            self.connect.sql(query).na.drop(how="any", thresh=2, subset="a").toPandas(),
+            self.spark.sql(query).na.drop(how="any", thresh=2, subset="a").toPandas(),
+        )
+
+    def test_with_columns(self):
+        # SPARK-41256: test withColumn(s).
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name).withColumn("id", lit(False)).toPandas(),
+            self.spark.read.table(self.tbl_name)
+            .withColumn("id", pyspark.sql.functions.lit(False))
+            .toPandas(),
+        )
+
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name)
+            .withColumns({"id": lit(False), "col_not_exist": lit(False)})
+            .toPandas(),
+            self.spark.read.table(self.tbl_name)
+            .withColumns(
+                {
+                    "id": pyspark.sql.functions.lit(False),
+                    "col_not_exist": pyspark.sql.functions.lit(False),
+                }
+            )
+            .toPandas(),
+        )
+
     def test_empty_dataset(self):
         # SPARK-41005: Test arrow based collection with empty dataset.
         self.assertTrue(
@@ -611,7 +689,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             self.connect.range(1, 10).select(col("id").alias("this", "is", "not")).collect()
         self.assertIn("(this, is, not)", str(exc.exception))
 
-    def test_agg_with_two_agg_exprs(self):
+    def test_agg_with_two_agg_exprs(self) -> None:
         # SPARK-41230: test dataframe.agg()
         self.assert_eq(
             self.connect.read.table(self.tbl_name).agg({"name": "min", "id": "max"}).toPandas(),

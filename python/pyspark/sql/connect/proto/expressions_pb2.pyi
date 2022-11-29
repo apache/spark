@@ -35,12 +35,11 @@ limitations under the License.
 """
 import builtins
 import collections.abc
-import google.protobuf.any_pb2
 import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.message
-import pyspark.sql.connect.proto.types_pb2
 import sys
+import typing
 
 if sys.version_info >= (3, 8):
     import typing as typing_extensions
@@ -59,33 +58,14 @@ class Expression(google.protobuf.message.Message):
     class Literal(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        class VarChar(google.protobuf.message.Message):
-            DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-            VALUE_FIELD_NUMBER: builtins.int
-            LENGTH_FIELD_NUMBER: builtins.int
-            value: builtins.str
-            length: builtins.int
-            def __init__(
-                self,
-                *,
-                value: builtins.str = ...,
-                length: builtins.int = ...,
-            ) -> None: ...
-            def ClearField(
-                self, field_name: typing_extensions.Literal["length", b"length", "value", b"value"]
-            ) -> None: ...
-
         class Decimal(google.protobuf.message.Message):
             DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
             VALUE_FIELD_NUMBER: builtins.int
             PRECISION_FIELD_NUMBER: builtins.int
             SCALE_FIELD_NUMBER: builtins.int
-            value: builtins.bytes
-            """little-endian twos-complement integer representation of complete value
-            (ignoring precision) Always 16 bytes in length
-            """
+            value: builtins.str
+            """the string representation."""
             precision: builtins.int
             """The maximum number of digits allowed in the value.
             the maximum precision is 38.
@@ -95,96 +75,67 @@ class Expression(google.protobuf.message.Message):
             def __init__(
                 self,
                 *,
-                value: builtins.bytes = ...,
-                precision: builtins.int = ...,
-                scale: builtins.int = ...,
+                value: builtins.str = ...,
+                precision: builtins.int | None = ...,
+                scale: builtins.int | None = ...,
             ) -> None: ...
+            def HasField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "_precision",
+                    b"_precision",
+                    "_scale",
+                    b"_scale",
+                    "precision",
+                    b"precision",
+                    "scale",
+                    b"scale",
+                ],
+            ) -> builtins.bool: ...
             def ClearField(
                 self,
                 field_name: typing_extensions.Literal[
-                    "precision", b"precision", "scale", b"scale", "value", b"value"
+                    "_precision",
+                    b"_precision",
+                    "_scale",
+                    b"_scale",
+                    "precision",
+                    b"precision",
+                    "scale",
+                    b"scale",
+                    "value",
+                    b"value",
                 ],
             ) -> None: ...
+            @typing.overload
+            def WhichOneof(
+                self, oneof_group: typing_extensions.Literal["_precision", b"_precision"]
+            ) -> typing_extensions.Literal["precision"] | None: ...
+            @typing.overload
+            def WhichOneof(
+                self, oneof_group: typing_extensions.Literal["_scale", b"_scale"]
+            ) -> typing_extensions.Literal["scale"] | None: ...
 
-        class Map(google.protobuf.message.Message):
+        class CalendarInterval(google.protobuf.message.Message):
             DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-            class KeyValue(google.protobuf.message.Message):
-                DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-                KEY_FIELD_NUMBER: builtins.int
-                VALUE_FIELD_NUMBER: builtins.int
-                @property
-                def key(self) -> global___Expression.Literal: ...
-                @property
-                def value(self) -> global___Expression.Literal: ...
-                def __init__(
-                    self,
-                    *,
-                    key: global___Expression.Literal | None = ...,
-                    value: global___Expression.Literal | None = ...,
-                ) -> None: ...
-                def HasField(
-                    self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
-                ) -> builtins.bool: ...
-                def ClearField(
-                    self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
-                ) -> None: ...
-
-            KEY_VALUES_FIELD_NUMBER: builtins.int
-            @property
-            def key_values(
-                self,
-            ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-                global___Expression.Literal.Map.KeyValue
-            ]: ...
-            def __init__(
-                self,
-                *,
-                key_values: collections.abc.Iterable[global___Expression.Literal.Map.KeyValue]
-                | None = ...,
-            ) -> None: ...
-            def ClearField(
-                self, field_name: typing_extensions.Literal["key_values", b"key_values"]
-            ) -> None: ...
-
-        class IntervalYearToMonth(google.protobuf.message.Message):
-            DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-            YEARS_FIELD_NUMBER: builtins.int
             MONTHS_FIELD_NUMBER: builtins.int
-            years: builtins.int
-            months: builtins.int
-            def __init__(
-                self,
-                *,
-                years: builtins.int = ...,
-                months: builtins.int = ...,
-            ) -> None: ...
-            def ClearField(
-                self, field_name: typing_extensions.Literal["months", b"months", "years", b"years"]
-            ) -> None: ...
-
-        class IntervalDayToSecond(google.protobuf.message.Message):
-            DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
             DAYS_FIELD_NUMBER: builtins.int
-            SECONDS_FIELD_NUMBER: builtins.int
             MICROSECONDS_FIELD_NUMBER: builtins.int
+            months: builtins.int
             days: builtins.int
-            seconds: builtins.int
             microseconds: builtins.int
             def __init__(
                 self,
                 *,
+                months: builtins.int = ...,
                 days: builtins.int = ...,
-                seconds: builtins.int = ...,
                 microseconds: builtins.int = ...,
             ) -> None: ...
             def ClearField(
                 self,
                 field_name: typing_extensions.Literal[
-                    "days", b"days", "microseconds", b"microseconds", "seconds", b"seconds"
+                    "days", b"days", "microseconds", b"microseconds", "months", b"months"
                 ],
             ) -> None: ...
 
@@ -208,7 +159,7 @@ class Expression(google.protobuf.message.Message):
                 self, field_name: typing_extensions.Literal["fields", b"fields"]
             ) -> None: ...
 
-        class List(google.protobuf.message.Message):
+        class Array(google.protobuf.message.Message):
             DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
             VALUES_FIELD_NUMBER: builtins.int
@@ -228,106 +179,97 @@ class Expression(google.protobuf.message.Message):
                 self, field_name: typing_extensions.Literal["values", b"values"]
             ) -> None: ...
 
-        class UserDefined(google.protobuf.message.Message):
+        class Map(google.protobuf.message.Message):
             DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-            TYPE_REFERENCE_FIELD_NUMBER: builtins.int
-            VALUE_FIELD_NUMBER: builtins.int
-            type_reference: builtins.int
-            """points to a type_anchor defined in this plan"""
+            class Pair(google.protobuf.message.Message):
+                DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+                KEY_FIELD_NUMBER: builtins.int
+                VALUE_FIELD_NUMBER: builtins.int
+                @property
+                def key(self) -> global___Expression.Literal: ...
+                @property
+                def value(self) -> global___Expression.Literal: ...
+                def __init__(
+                    self,
+                    *,
+                    key: global___Expression.Literal | None = ...,
+                    value: global___Expression.Literal | None = ...,
+                ) -> None: ...
+                def HasField(
+                    self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+                ) -> builtins.bool: ...
+                def ClearField(
+                    self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+                ) -> None: ...
+
+            PAIRS_FIELD_NUMBER: builtins.int
             @property
-            def value(self) -> google.protobuf.any_pb2.Any:
-                """the value of the literal, serialized using some type-specific
-                protobuf message
-                """
+            def pairs(
+                self,
+            ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+                global___Expression.Literal.Map.Pair
+            ]: ...
             def __init__(
                 self,
                 *,
-                type_reference: builtins.int = ...,
-                value: google.protobuf.any_pb2.Any | None = ...,
+                pairs: collections.abc.Iterable[global___Expression.Literal.Map.Pair] | None = ...,
             ) -> None: ...
-            def HasField(
-                self, field_name: typing_extensions.Literal["value", b"value"]
-            ) -> builtins.bool: ...
             def ClearField(
-                self,
-                field_name: typing_extensions.Literal[
-                    "type_reference", b"type_reference", "value", b"value"
-                ],
+                self, field_name: typing_extensions.Literal["pairs", b"pairs"]
             ) -> None: ...
 
-        BOOLEAN_FIELD_NUMBER: builtins.int
-        I8_FIELD_NUMBER: builtins.int
-        I16_FIELD_NUMBER: builtins.int
-        I32_FIELD_NUMBER: builtins.int
-        I64_FIELD_NUMBER: builtins.int
-        FP32_FIELD_NUMBER: builtins.int
-        FP64_FIELD_NUMBER: builtins.int
-        STRING_FIELD_NUMBER: builtins.int
+        NULL_FIELD_NUMBER: builtins.int
         BINARY_FIELD_NUMBER: builtins.int
-        TIMESTAMP_FIELD_NUMBER: builtins.int
-        DATE_FIELD_NUMBER: builtins.int
-        TIME_FIELD_NUMBER: builtins.int
-        INTERVAL_YEAR_TO_MONTH_FIELD_NUMBER: builtins.int
-        INTERVAL_DAY_TO_SECOND_FIELD_NUMBER: builtins.int
-        FIXED_CHAR_FIELD_NUMBER: builtins.int
-        VAR_CHAR_FIELD_NUMBER: builtins.int
-        FIXED_BINARY_FIELD_NUMBER: builtins.int
+        BOOLEAN_FIELD_NUMBER: builtins.int
+        BYTE_FIELD_NUMBER: builtins.int
+        SHORT_FIELD_NUMBER: builtins.int
+        INTEGER_FIELD_NUMBER: builtins.int
+        LONG_FIELD_NUMBER: builtins.int
+        FLOAT_FIELD_NUMBER: builtins.int
+        DOUBLE_FIELD_NUMBER: builtins.int
         DECIMAL_FIELD_NUMBER: builtins.int
+        STRING_FIELD_NUMBER: builtins.int
+        DATE_FIELD_NUMBER: builtins.int
+        TIMESTAMP_FIELD_NUMBER: builtins.int
+        TIMESTAMP_NTZ_FIELD_NUMBER: builtins.int
+        CALENDAR_INTERVAL_FIELD_NUMBER: builtins.int
+        YEAR_MONTH_INTERVAL_FIELD_NUMBER: builtins.int
+        DAY_TIME_INTERVAL_FIELD_NUMBER: builtins.int
+        ARRAY_FIELD_NUMBER: builtins.int
         STRUCT_FIELD_NUMBER: builtins.int
         MAP_FIELD_NUMBER: builtins.int
-        TIMESTAMP_TZ_FIELD_NUMBER: builtins.int
-        UUID_FIELD_NUMBER: builtins.int
-        NULL_FIELD_NUMBER: builtins.int
-        LIST_FIELD_NUMBER: builtins.int
-        EMPTY_ARRAY_FIELD_NUMBER: builtins.int
-        EMPTY_MAP_FIELD_NUMBER: builtins.int
-        USER_DEFINED_FIELD_NUMBER: builtins.int
         NULLABLE_FIELD_NUMBER: builtins.int
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        boolean: builtins.bool
-        i8: builtins.int
-        i16: builtins.int
-        i32: builtins.int
-        i64: builtins.int
-        fp32: builtins.float
-        fp64: builtins.float
-        string: builtins.str
+        null: builtins.bool
         binary: builtins.bytes
-        timestamp: builtins.int
-        """Timestamp in units of microseconds since the UNIX epoch."""
-        date: builtins.int
-        """Date in units of days since the UNIX epoch."""
-        time: builtins.int
-        """Time in units of microseconds past midnight"""
-        @property
-        def interval_year_to_month(self) -> global___Expression.Literal.IntervalYearToMonth: ...
-        @property
-        def interval_day_to_second(self) -> global___Expression.Literal.IntervalDayToSecond: ...
-        fixed_char: builtins.str
-        @property
-        def var_char(self) -> global___Expression.Literal.VarChar: ...
-        fixed_binary: builtins.bytes
+        boolean: builtins.bool
+        byte: builtins.int
+        short: builtins.int
+        integer: builtins.int
+        long: builtins.int
+        float: builtins.float
+        double: builtins.float
         @property
         def decimal(self) -> global___Expression.Literal.Decimal: ...
+        string: builtins.str
+        date: builtins.int
+        """Date in units of days since the UNIX epoch."""
+        timestamp: builtins.int
+        """Timestamp in units of microseconds since the UNIX epoch."""
+        timestamp_ntz: builtins.int
+        """Timestamp in units of microseconds since the UNIX epoch (without timezone information)."""
+        @property
+        def calendar_interval(self) -> global___Expression.Literal.CalendarInterval: ...
+        year_month_interval: builtins.int
+        day_time_interval: builtins.int
+        @property
+        def array(self) -> global___Expression.Literal.Array: ...
         @property
         def struct(self) -> global___Expression.Literal.Struct: ...
         @property
         def map(self) -> global___Expression.Literal.Map: ...
-        timestamp_tz: builtins.int
-        """Timestamp in units of microseconds since the UNIX epoch."""
-        uuid: builtins.bytes
-        @property
-        def null(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
-            """a typed null literal"""
-        @property
-        def list(self) -> global___Expression.Literal.List: ...
-        @property
-        def empty_array(self) -> pyspark.sql.connect.proto.types_pb2.DataType.Array: ...
-        @property
-        def empty_map(self) -> pyspark.sql.connect.proto.types_pb2.DataType.Map: ...
-        @property
-        def user_defined(self) -> global___Expression.Literal.UserDefined: ...
         nullable: builtins.bool
         """whether the literal type should be treated as a nullable type. Applies to
         all members of union other than the Typed null (which should directly
@@ -341,192 +283,150 @@ class Expression(google.protobuf.message.Message):
         def __init__(
             self,
             *,
-            boolean: builtins.bool = ...,
-            i8: builtins.int = ...,
-            i16: builtins.int = ...,
-            i32: builtins.int = ...,
-            i64: builtins.int = ...,
-            fp32: builtins.float = ...,
-            fp64: builtins.float = ...,
-            string: builtins.str = ...,
+            null: builtins.bool = ...,
             binary: builtins.bytes = ...,
-            timestamp: builtins.int = ...,
-            date: builtins.int = ...,
-            time: builtins.int = ...,
-            interval_year_to_month: global___Expression.Literal.IntervalYearToMonth | None = ...,
-            interval_day_to_second: global___Expression.Literal.IntervalDayToSecond | None = ...,
-            fixed_char: builtins.str = ...,
-            var_char: global___Expression.Literal.VarChar | None = ...,
-            fixed_binary: builtins.bytes = ...,
+            boolean: builtins.bool = ...,
+            byte: builtins.int = ...,
+            short: builtins.int = ...,
+            integer: builtins.int = ...,
+            long: builtins.int = ...,
+            float: builtins.float = ...,
+            double: builtins.float = ...,
             decimal: global___Expression.Literal.Decimal | None = ...,
+            string: builtins.str = ...,
+            date: builtins.int = ...,
+            timestamp: builtins.int = ...,
+            timestamp_ntz: builtins.int = ...,
+            calendar_interval: global___Expression.Literal.CalendarInterval | None = ...,
+            year_month_interval: builtins.int = ...,
+            day_time_interval: builtins.int = ...,
+            array: global___Expression.Literal.Array | None = ...,
             struct: global___Expression.Literal.Struct | None = ...,
             map: global___Expression.Literal.Map | None = ...,
-            timestamp_tz: builtins.int = ...,
-            uuid: builtins.bytes = ...,
-            null: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
-            list: global___Expression.Literal.List | None = ...,
-            empty_array: pyspark.sql.connect.proto.types_pb2.DataType.Array | None = ...,
-            empty_map: pyspark.sql.connect.proto.types_pb2.DataType.Map | None = ...,
-            user_defined: global___Expression.Literal.UserDefined | None = ...,
             nullable: builtins.bool = ...,
             type_variation_reference: builtins.int = ...,
         ) -> None: ...
         def HasField(
             self,
             field_name: typing_extensions.Literal[
+                "array",
+                b"array",
                 "binary",
                 b"binary",
                 "boolean",
                 b"boolean",
+                "byte",
+                b"byte",
+                "calendar_interval",
+                b"calendar_interval",
                 "date",
                 b"date",
+                "day_time_interval",
+                b"day_time_interval",
                 "decimal",
                 b"decimal",
-                "empty_array",
-                b"empty_array",
-                "empty_map",
-                b"empty_map",
-                "fixed_binary",
-                b"fixed_binary",
-                "fixed_char",
-                b"fixed_char",
-                "fp32",
-                b"fp32",
-                "fp64",
-                b"fp64",
-                "i16",
-                b"i16",
-                "i32",
-                b"i32",
-                "i64",
-                b"i64",
-                "i8",
-                b"i8",
-                "interval_day_to_second",
-                b"interval_day_to_second",
-                "interval_year_to_month",
-                b"interval_year_to_month",
-                "list",
-                b"list",
+                "double",
+                b"double",
+                "float",
+                b"float",
+                "integer",
+                b"integer",
                 "literal_type",
                 b"literal_type",
+                "long",
+                b"long",
                 "map",
                 b"map",
                 "null",
                 b"null",
+                "short",
+                b"short",
                 "string",
                 b"string",
                 "struct",
                 b"struct",
-                "time",
-                b"time",
                 "timestamp",
                 b"timestamp",
-                "timestamp_tz",
-                b"timestamp_tz",
-                "user_defined",
-                b"user_defined",
-                "uuid",
-                b"uuid",
-                "var_char",
-                b"var_char",
+                "timestamp_ntz",
+                b"timestamp_ntz",
+                "year_month_interval",
+                b"year_month_interval",
             ],
         ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
+                "array",
+                b"array",
                 "binary",
                 b"binary",
                 "boolean",
                 b"boolean",
+                "byte",
+                b"byte",
+                "calendar_interval",
+                b"calendar_interval",
                 "date",
                 b"date",
+                "day_time_interval",
+                b"day_time_interval",
                 "decimal",
                 b"decimal",
-                "empty_array",
-                b"empty_array",
-                "empty_map",
-                b"empty_map",
-                "fixed_binary",
-                b"fixed_binary",
-                "fixed_char",
-                b"fixed_char",
-                "fp32",
-                b"fp32",
-                "fp64",
-                b"fp64",
-                "i16",
-                b"i16",
-                "i32",
-                b"i32",
-                "i64",
-                b"i64",
-                "i8",
-                b"i8",
-                "interval_day_to_second",
-                b"interval_day_to_second",
-                "interval_year_to_month",
-                b"interval_year_to_month",
-                "list",
-                b"list",
+                "double",
+                b"double",
+                "float",
+                b"float",
+                "integer",
+                b"integer",
                 "literal_type",
                 b"literal_type",
+                "long",
+                b"long",
                 "map",
                 b"map",
                 "null",
                 b"null",
                 "nullable",
                 b"nullable",
+                "short",
+                b"short",
                 "string",
                 b"string",
                 "struct",
                 b"struct",
-                "time",
-                b"time",
                 "timestamp",
                 b"timestamp",
-                "timestamp_tz",
-                b"timestamp_tz",
+                "timestamp_ntz",
+                b"timestamp_ntz",
                 "type_variation_reference",
                 b"type_variation_reference",
-                "user_defined",
-                b"user_defined",
-                "uuid",
-                b"uuid",
-                "var_char",
-                b"var_char",
+                "year_month_interval",
+                b"year_month_interval",
             ],
         ) -> None: ...
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["literal_type", b"literal_type"]
         ) -> typing_extensions.Literal[
-            "boolean",
-            "i8",
-            "i16",
-            "i32",
-            "i64",
-            "fp32",
-            "fp64",
-            "string",
+            "null",
             "binary",
-            "timestamp",
-            "date",
-            "time",
-            "interval_year_to_month",
-            "interval_day_to_second",
-            "fixed_char",
-            "var_char",
-            "fixed_binary",
+            "boolean",
+            "byte",
+            "short",
+            "integer",
+            "long",
+            "float",
+            "double",
             "decimal",
+            "string",
+            "date",
+            "timestamp",
+            "timestamp_ntz",
+            "calendar_interval",
+            "year_month_interval",
+            "day_time_interval",
+            "array",
             "struct",
             "map",
-            "timestamp_tz",
-            "uuid",
-            "null",
-            "list",
-            "empty_array",
-            "empty_map",
-            "user_defined",
         ] | None: ...
 
     class UnresolvedAttribute(google.protobuf.message.Message):

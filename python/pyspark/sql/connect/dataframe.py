@@ -570,6 +570,54 @@ class DataFrame(object):
             session=self._session,
         )
 
+    def withColumnRenamed(self, existing: str, new: str) -> "DataFrame":
+        """Returns a new :class:`DataFrame` by renaming an existing column.
+        This is a no-op if schema doesn't contain the given column name.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        existing : str
+            string, name of the existing column to rename.
+        new : str
+            string, new name of the column.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with renamed column.
+        """
+        return self.withColumnsRenamed({existing: new})
+
+    def withColumnsRenamed(self, colsMap: Dict[str, str]) -> "DataFrame":
+        """
+        Returns a new :class:`DataFrame` by renaming multiple columns.
+        This is a no-op if schema doesn't contain the given column names.
+
+        .. versionadded:: 3.4.0
+           Added support for multiple columns renaming
+
+        Parameters
+        ----------
+        colsMap : dict
+            a dict of existing column names and corresponding desired column names.
+            Currently, only single map is supported.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with renamed columns.
+
+        See Also
+        --------
+        :meth:`withColumnRenamed`
+        """
+        if not isinstance(colsMap, dict):
+            raise TypeError("colsMap must be dict of existing column name and new column name.")
+
+        return DataFrame.withPlan(plan.RenameColumnsNameByName(self._plan, colsMap), self._session)
+
     def _show_string(
         self, n: int = 20, truncate: Union[bool, int] = True, vertical: bool = False
     ) -> str:
@@ -595,6 +643,63 @@ class DataFrame(object):
         ).toPandas()
         assert pdf is not None
         return pdf["show_string"][0]
+
+    def withColumns(self, colsMap: Dict[str, Expression]) -> "DataFrame":
+        """
+        Returns a new :class:`DataFrame` by adding multiple columns or replacing the
+        existing columns that have the same names.
+
+        The colsMap is a map of column name and column, the column must only refer to attributes
+        supplied by this Dataset. It is an error to add columns that refer to some other Dataset.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        colsMap : dict
+            a dict of column name and :class:`Column`.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with new or replaced columns.
+        """
+        if not isinstance(colsMap, dict):
+            raise TypeError("colsMap must be dict of column name and column.")
+
+        return DataFrame.withPlan(
+            plan.WithColumns(self._plan, colsMap),
+            session=self._session,
+        )
+
+    def withColumn(self, colName: str, col: Expression) -> "DataFrame":
+        """
+        Returns a new :class:`DataFrame` by adding a column or replacing the
+        existing column that has the same name.
+
+        The column expression must be an expression over this :class:`DataFrame`; attempting to add
+        a column from some other :class:`DataFrame` will raise an error.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        colName : str
+            string, name of the new column.
+        col : :class:`Column`
+            a :class:`Column` expression for the new column.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with new or replaced column.
+        """
+        if not isinstance(col, Expression):
+            raise TypeError("col should be Column")
+        return DataFrame.withPlan(
+            plan.WithColumns(self._plan, {colName: col}),
+            session=self._session,
+        )
 
     def show(self, n: int = 20, truncate: Union[bool, int] = True, vertical: bool = False) -> None:
         """
@@ -873,6 +978,77 @@ class DataFrame(object):
             session=self._session,
         )
 
+    def dropna(
+        self,
+        how: str = "any",
+        thresh: Optional[int] = None,
+        subset: Optional[Union[str, Tuple[str, ...], List[str]]] = None,
+    ) -> "DataFrame":
+        """Returns a new :class:`DataFrame` omitting rows with null values.
+        :func:`DataFrame.dropna` and :func:`DataFrameNaFunctions.drop` are aliases of each other.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        how : str, optional
+            'any' or 'all'.
+            If 'any', drop a row if it contains any nulls.
+            If 'all', drop a row only if all its values are null.
+        thresh: int, optional
+            default None
+            If specified, drop rows that have less than `thresh` non-null values.
+            This overwrites the `how` parameter.
+        subset : str, tuple or list, optional
+            optional list of column names to consider.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with null only rows excluded.
+        """
+        min_non_nulls: Optional[int] = None
+
+        if how is not None:
+            if not isinstance(how, str):
+                raise TypeError(f"how should be a str, but got {type(how).__name__}")
+            if how == "all":
+                min_non_nulls = 1
+            elif how == "any":
+                min_non_nulls = None
+            else:
+                raise ValueError("how ('" + how + "') should be 'any' or 'all'")
+
+        if thresh is not None:
+            if not isinstance(thresh, int):
+                raise TypeError(f"thresh should be a int, but got {type(thresh).__name__}")
+
+            # 'thresh' overwrites 'how'
+            min_non_nulls = thresh
+
+        _cols: List[str] = []
+        if subset is not None:
+            if isinstance(subset, str):
+                _cols = [subset]
+            elif isinstance(subset, (tuple, list)):
+                for c in subset:
+                    if not isinstance(c, str):
+                        raise TypeError(
+                            f"cols should be a str, tuple[str] or list[str], "
+                            f"but got {type(c).__name__}"
+                        )
+                _cols = list(subset)
+            else:
+                raise TypeError(
+                    f"cols should be a str, tuple[str] or list[str], "
+                    f"but got {type(subset).__name__}"
+                )
+
+        return DataFrame.withPlan(
+            plan.NADrop(child=self._plan, cols=_cols, min_non_nulls=min_non_nulls),
+            session=self._session,
+        )
+
     @property
     def stat(self) -> "DataFrameStatFunctions":
         """Returns a :class:`DataFrameStatFunctions` for statistic functions.
@@ -1067,6 +1243,23 @@ class DataFrame(object):
             raise Exception("Cannot analyze on empty plan.")
         query = self._plan.to_proto(self._session.client)
         return self._session.client._analyze(query).input_files
+
+    def toDF(self, *cols: str) -> "DataFrame":
+        """Returns a new :class:`DataFrame` that with new specified column names
+
+        Parameters
+        ----------
+        *cols : tuple
+            a tuple of string new column name or :class:`Column`. The length of the
+            list needs to be the same as the number of columns in the initial
+            :class:`DataFrame`
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with new column names.
+        """
+        return DataFrame.withPlan(plan.RenameColumns(self._plan, list(cols)), self._session)
 
     def transform(self, func: Callable[..., "DataFrame"], *args: Any, **kwargs: Any) -> "DataFrame":
         """Returns a new :class:`DataFrame`. Concise syntax for chaining custom transformations.
@@ -1311,6 +1504,16 @@ class DataFrameNaFunctions:
         return self.df.fillna(value=value, subset=subset)
 
     fill.__doc__ = DataFrame.fillna.__doc__
+
+    def drop(
+        self,
+        how: str = "any",
+        thresh: Optional[int] = None,
+        subset: Optional[Union[str, Tuple[str, ...], List[str]]] = None,
+    ) -> DataFrame:
+        return self.df.dropna(how=how, thresh=thresh, subset=subset)
+
+    drop.__doc__ = DataFrame.dropna.__doc__
 
 
 class DataFrameStatFunctions:

@@ -24,7 +24,7 @@ import com.google.protobuf.ByteString
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression.UnresolvedStar
-import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.{AnalysisException, Dataset}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical
@@ -275,7 +275,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       .setInput(readRel)
       .addExpressions(
         proto.Expression.newBuilder
-          .setLiteral(proto.Expression.Literal.newBuilder.setI32(32))
+          .setLiteral(proto.Expression.Literal.newBuilder.setInteger(32))
           .build())
       .build()
 
@@ -423,5 +423,49 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
               .build())
           .build())
     }
+  }
+
+  test("Test duplicated names in WithColumns") {
+    intercept[AnalysisException] {
+      transform(
+        proto.Relation
+          .newBuilder()
+          .setWithColumns(
+            proto.WithColumns
+              .newBuilder()
+              .setInput(readRel)
+              .addNameExprList(proto.Expression.Alias
+                .newBuilder()
+                .addName("test")
+                .setExpr(proto.Expression.newBuilder
+                  .setLiteral(proto.Expression.Literal.newBuilder.setInteger(32))))
+              .addNameExprList(proto.Expression.Alias
+                .newBuilder()
+                .addName("test")
+                .setExpr(proto.Expression.newBuilder
+                  .setLiteral(proto.Expression.Literal.newBuilder.setInteger(32)))))
+          .build())
+    }
+  }
+
+  test("Test multi nameparts for column names in WithColumns") {
+    val e = intercept[InvalidPlanInput] {
+      transform(
+        proto.Relation
+          .newBuilder()
+          .setWithColumns(
+            proto.WithColumns
+              .newBuilder()
+              .setInput(readRel)
+              .addNameExprList(
+                proto.Expression.Alias
+                  .newBuilder()
+                  .addName("part1")
+                  .addName("part2")
+                  .setExpr(proto.Expression.newBuilder
+                    .setLiteral(proto.Expression.Literal.newBuilder.setInteger(32)))))
+          .build())
+    }
+    assert(e.getMessage.contains("part1, part2"))
   }
 }
