@@ -569,6 +569,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertEqual(expectResult, pandasResult)
 
     def test_count(self) -> None:
+        # SPARK-41308: test count() API.
         self.assertEqual(
             self.connect.read.table(self.tbl_name).count(),
             self.spark.read.table(self.tbl_name).count(),
