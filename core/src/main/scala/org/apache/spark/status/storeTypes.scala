@@ -138,16 +138,16 @@ private[spark] object TaskIndexNames {
   final val SHUFFLE_WRITE_RECORDS = "swr"
   final val SHUFFLE_WRITE_SIZE = "sws"
   final val SHUFFLE_WRITE_TIME = "swt"
-  final val PUSH_BASED_SHUFFLE_CORRUPT_MERGED_BLOCK_CHUNKS = "pbscmbc"
-  final val PUSH_BASED_SHUFFLE_FALLBACK_COUNT = "pbsfc"
-  final val PUSH_BASED_SHUFFLE_MERGED_REMOTE_BLOCKS = "pbsmrb"
-  final val PUSH_BASED_SHUFFLE_MERGED_LOCAL_BLOCKS = "pbsmlb"
-  final val PUSH_BASED_SHUFFLE_MERGED_REMOTE_CHUNKS = "pbsmrc"
-  final val PUSH_BASED_SHUFFLE_MERGED_LOCAL_CHUNKS = "pbsmlc"
-  final val PUSH_BASED_SHUFFLE_MERGED_REMOTE_READS = "pbsmrr"
-  final val PUSH_BASED_SHUFFLE_MERGED_LOCAL_READS = "pbsmlr"
-  final val PUSH_BASED_SHUFFLE_REMOTE_REQS_DURATION = "pbsrrd"
-  final val PUSH_BASED_SHUFFLE_MERGED_REMOTE_REQS_DURATION = "pbsmrrd"
+  final val SHUFFLE_REMOTE_REQS_DURATION = "srrd"
+  final val SHUFFLE_PUSH_CORRUPT_MERGED_BLOCK_CHUNKS = "spcmbc"
+  final val SHUFFLE_PUSH_MERGED_FETCH_FALLBACK_COUNT = "spmffc"
+  final val SHUFFLE_PUSH_MERGED_REMOTE_BLOCKS = "spmrb"
+  final val SHUFFLE_PUSH_MERGED_LOCAL_BLOCKS = "spmlb"
+  final val SHUFFLE_PUSH_MERGED_REMOTE_CHUNKS = "spmrc"
+  final val SHUFFLE_PUSH_MERGED_LOCAL_CHUNKS = "spmlc"
+  final val SHUFFLE_PUSH_MERGED_REMOTE_READS = "spmrr"
+  final val SHUFFLE_PUSH_MERGED_LOCAL_READS = "spmlr"
+  final val SHUFFLE_PUSH_MERGED_REMOTE_REQS_DURATION = "spmrrd"
   final val STAGE = "stage"
   final val STATUS = "sta"
   final val TASK_INDEX = "idx"
@@ -244,35 +244,35 @@ private[spark] class TaskDataWrapper(
     @KVIndexParam(value = TaskIndexNames.SHUFFLE_READ_RECORDS, parent = TaskIndexNames.STAGE)
     val shuffleRecordsRead: Long,
     @KVIndexParam(
-      value = TaskIndexNames.PUSH_BASED_SHUFFLE_CORRUPT_MERGED_BLOCK_CHUNKS,
+      value = TaskIndexNames.SHUFFLE_PUSH_CORRUPT_MERGED_BLOCK_CHUNKS,
       parent = TaskIndexNames.STAGE)
     val shuffleCorruptMergedBlockChunks: Long,
-    @KVIndexParam(value = TaskIndexNames.PUSH_BASED_SHUFFLE_FALLBACK_COUNT,
+    @KVIndexParam(value = TaskIndexNames.SHUFFLE_PUSH_MERGED_FETCH_FALLBACK_COUNT,
       parent = TaskIndexNames.STAGE)
-    val shuffleFallbackCount: Long,
+    val shuffleMergedFetchFallbackCount: Long,
     @KVIndexParam(
-      value = TaskIndexNames.PUSH_BASED_SHUFFLE_MERGED_REMOTE_BLOCKS, parent = TaskIndexNames.STAGE)
+      value = TaskIndexNames.SHUFFLE_PUSH_MERGED_REMOTE_BLOCKS, parent = TaskIndexNames.STAGE)
     val shuffleMergedRemoteBlocksFetched: Long,
     @KVIndexParam(
-      value = TaskIndexNames.PUSH_BASED_SHUFFLE_MERGED_LOCAL_BLOCKS, parent = TaskIndexNames.STAGE)
+      value = TaskIndexNames.SHUFFLE_PUSH_MERGED_LOCAL_BLOCKS, parent = TaskIndexNames.STAGE)
     val shuffleMergedLocalBlocksFetched: Long,
     @KVIndexParam(
-      value = TaskIndexNames.PUSH_BASED_SHUFFLE_MERGED_REMOTE_CHUNKS, parent = TaskIndexNames.STAGE)
+      value = TaskIndexNames.SHUFFLE_PUSH_MERGED_REMOTE_CHUNKS, parent = TaskIndexNames.STAGE)
     val shuffleMergedRemoteChunksFetched: Long,
     @KVIndexParam(
-      value = TaskIndexNames.PUSH_BASED_SHUFFLE_MERGED_LOCAL_CHUNKS, parent = TaskIndexNames.STAGE)
+      value = TaskIndexNames.SHUFFLE_PUSH_MERGED_LOCAL_CHUNKS, parent = TaskIndexNames.STAGE)
     val shuffleMergedLocalChunksFetched: Long,
     @KVIndexParam(
-      value = TaskIndexNames.PUSH_BASED_SHUFFLE_MERGED_REMOTE_READS, parent = TaskIndexNames.STAGE)
-    val shuffleMergedRemoteBlocksBytesRead: Long,
+      value = TaskIndexNames.SHUFFLE_PUSH_MERGED_REMOTE_READS, parent = TaskIndexNames.STAGE)
+    val shuffleMergedRemoteBytesRead: Long,
     @KVIndexParam(
-      value = TaskIndexNames.PUSH_BASED_SHUFFLE_MERGED_LOCAL_READS, parent = TaskIndexNames.STAGE)
-    val shuffleMergedLocalBlocksBytesRead: Long,
+      value = TaskIndexNames.SHUFFLE_PUSH_MERGED_LOCAL_READS, parent = TaskIndexNames.STAGE)
+    val shuffleMergedLocalBytesRead: Long,
     @KVIndexParam(
-      value = TaskIndexNames.PUSH_BASED_SHUFFLE_REMOTE_REQS_DURATION, parent = TaskIndexNames.STAGE)
+      value = TaskIndexNames.SHUFFLE_REMOTE_REQS_DURATION, parent = TaskIndexNames.STAGE)
     val shuffleRemoteReqsDuration: Long,
     @KVIndexParam(
-      value = TaskIndexNames.PUSH_BASED_SHUFFLE_MERGED_REMOTE_REQS_DURATION,
+      value = TaskIndexNames.SHUFFLE_PUSH_MERGED_REMOTE_REQS_DURATION,
       parent = TaskIndexNames.STAGE)
     val shuffleMergedRemoteReqDuration: Long,
     @KVIndexParam(value = TaskIndexNames.SHUFFLE_WRITE_SIZE, parent = TaskIndexNames.STAGE)
@@ -324,13 +324,13 @@ private[spark] class TaskDataWrapper(
           getMetricValue(shuffleRemoteReqsDuration),
           new ShufflePushReadMetrics(
             getMetricValue(shuffleCorruptMergedBlockChunks),
-            getMetricValue(shuffleFallbackCount),
+            getMetricValue(shuffleMergedFetchFallbackCount),
             getMetricValue(shuffleMergedRemoteBlocksFetched),
             getMetricValue(shuffleMergedLocalBlocksFetched),
             getMetricValue(shuffleMergedRemoteChunksFetched),
             getMetricValue(shuffleMergedLocalChunksFetched),
-            getMetricValue(shuffleMergedRemoteBlocksBytesRead),
-            getMetricValue(shuffleMergedLocalBlocksBytesRead),
+            getMetricValue(shuffleMergedRemoteBytesRead),
+            getMetricValue(shuffleMergedLocalBytesRead),
             getMetricValue(shuffleMergedRemoteReqDuration))),
         new ShuffleWriteMetrics(
           getMetricValue(shuffleBytesWritten),
@@ -575,13 +575,13 @@ private[spark] class CachedQuantile(
     val shuffleRemoteBytesReadToDisk: Double,
     val shuffleTotalBlocksFetched: Double,
     val shuffleCorruptMergedBlockChunks: Double,
-    val shuffleFallbackCount: Double,
+    val shuffleMergedFetchFallbackCount: Double,
     val shuffleMergedRemoteBlocksFetched: Double,
     val shuffleMergedLocalBlocksFetched: Double,
     val shuffleMergedRemoteChunksFetched: Double,
     val shuffleMergedLocalChunksFetched: Double,
-    val shuffleMergedRemoteBlocksBytesRead: Double,
-    val shuffleMergedLocalBlocksBytesRead: Double,
+    val shuffleMergedRemoteBytesRead: Double,
+    val shuffleMergedLocalBytesRead: Double,
     val shuffleRemoteReqsDuration: Double,
     val shuffleMergedRemoteReqsDuration: Double,
 

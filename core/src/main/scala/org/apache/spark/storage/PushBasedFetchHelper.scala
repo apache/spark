@@ -110,6 +110,15 @@ private class PushBasedFetchHelper(
   }
 
   /**
+   * Get the number of map blocks in a ShuffleBlockChunk
+   * @param blockId
+   * @return
+   */
+  def getShuffleChunkCardinality(blockId: ShuffleBlockChunkId): Int = {
+    getRoaringBitMap(blockId).map(_.getCardinality).getOrElse(0)
+  }
+
+  /**
    * This is executed by the task thread when the `iterator.next()` is invoked and the iterator
    * processes a response of type [[ShuffleBlockFetcherIterator.PushMergedRemoteMetaFetchResult]].
    *
@@ -304,7 +313,7 @@ private class PushBasedFetchHelper(
       address: BlockManagerId): Unit = {
     assert(blockId.isInstanceOf[ShuffleMergedBlockId] || blockId.isInstanceOf[ShuffleBlockChunkId])
     logWarning(s"Falling back to fetch the original blocks for push-merged block $blockId")
-    shuffleMetrics.incFallbackCount(1)
+    shuffleMetrics.incMergedFetchFallbackCount(1)
     // Increase the blocks processed since we will process another block in the next iteration of
     // the while loop in ShuffleBlockFetcherIterator.next().
     val fallbackBlocksByAddr: Iterator[(BlockManagerId, collection.Seq[(BlockId, Long, Int)])] =
@@ -329,7 +338,7 @@ private class PushBasedFetchHelper(
             val pendingShuffleChunks = iterator.removePendingChunks(shuffleChunkId, address)
             pendingShuffleChunks.foreach { pendingBlockId =>
               logInfo(s"Falling back immediately for shuffle chunk $pendingBlockId")
-              shuffleMetrics.incFallbackCount(1)
+              shuffleMetrics.incMergedFetchFallbackCount(1)
               val bitmapOfPendingChunk: RoaringBitmap = chunksMetaMap.remove(pendingBlockId).get
               chunkBitmap.or(bitmapOfPendingChunk)
             }

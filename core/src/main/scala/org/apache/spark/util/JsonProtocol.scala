@@ -407,7 +407,7 @@ private[spark] object JsonProtocol {
     g.writeFieldName("Accumulables")
     accumulablesToJson(stageInfo.accumulables.values, g)
     g.writeNumberField("Resource Profile Id", stageInfo.resourceProfileId)
-    g.writeBooleanField("Push Based Shuffle Enabled", stageInfo.isPushBasedShuffleEnabled)
+    g.writeBooleanField("Shuffle Push Enabled", stageInfo.isShufflePushEnabled)
     g.writeNumberField("Shuffle Push Mergers Count", stageInfo.shuffleMergerCount)
     g.writeEndObject()
   }
@@ -514,7 +514,8 @@ private[spark] object JsonProtocol {
       g.writeStartObject()
       g.writeNumberField("Corrupt Merged Block Chunks",
         taskMetrics.shuffleReadMetrics.corruptMergedBlockChunks)
-      g.writeNumberField("Fallback Count", taskMetrics.shuffleReadMetrics.fallbackCount)
+      g.writeNumberField("Merged Fetch Fallback Count",
+        taskMetrics.shuffleReadMetrics.mergedFetchFallbackCount)
       g.writeNumberField("Merged Remote Blocks Fetched",
         taskMetrics.shuffleReadMetrics.remoteMergedBlocksFetched)
       g.writeNumberField("Merged Local Blocks Fetched",
@@ -524,9 +525,9 @@ private[spark] object JsonProtocol {
       g.writeNumberField("Merged Local Chunks Fetched",
         taskMetrics.shuffleReadMetrics.localMergedChunksFetched)
       g.writeNumberField("Merged Remote Bytes Read",
-        taskMetrics.shuffleReadMetrics.remoteMergedBlocksBytesRead)
+        taskMetrics.shuffleReadMetrics.remoteMergedBytesRead)
       g.writeNumberField("Merged Local Bytes Read",
-        taskMetrics.shuffleReadMetrics.localMergedBlocksBytesRead)
+        taskMetrics.shuffleReadMetrics.localMergedBytesRead)
       g.writeNumberField("Merged Remote Requests Duration",
         taskMetrics.shuffleReadMetrics.remoteMergedReqsDuration)
       g.writeEndObject()
@@ -544,7 +545,7 @@ private[spark] object JsonProtocol {
       g.writeNumberField("Total Records Read", taskMetrics.shuffleReadMetrics.recordsRead)
       g.writeNumberField("Remote Requests Duration",
         taskMetrics.shuffleReadMetrics.remoteReqsDuration)
-      g.writeFieldName("Push Based")
+      g.writeFieldName("Push Based Shuffle")
       writeShufflePushReadMetrics()
       g.writeEndObject()
     }
@@ -1132,8 +1133,8 @@ private[spark] object JsonProtocol {
         case None => Seq.empty[AccumulableInfo]
       }
     }
-    val isPushBasedShuffleEnabled =
-      jsonOption(json.get("Push Based Shuffle Enabled")).map(_.extractBoolean).getOrElse(false)
+    val isShufflePushEnabled =
+      jsonOption(json.get("Shuffle Push Enabled")).map(_.extractBoolean).getOrElse(false)
     val shufflePushMergersCount =
       jsonOption(json.get("Shuffle Push Mergers Count")).map(_.extractInt).getOrElse(0)
 
@@ -1141,7 +1142,7 @@ private[spark] object JsonProtocol {
     val stageProf = rpId.getOrElse(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     val stageInfo = new StageInfo(stageId, attemptId, stageName, numTasks, rddInfos,
       parentIds, details, resourceProfileId = stageProf,
-      isPushBasedShuffleEnabled = isPushBasedShuffleEnabled,
+      isShufflePushEnabled = isShufflePushEnabled,
       shuffleMergerCount = shufflePushMergersCount)
     stageInfo.submissionTime = submissionTime
     stageInfo.completionTime = completionTime
@@ -1260,28 +1261,28 @@ private[spark] object JsonProtocol {
         jsonOption(readJson.get("Total Records Read")).map(_.extractLong).getOrElse(0L))
       readMetrics.incRemoteReqsDuration(jsonOption(readJson.get("Remote Requests Duration"))
         .map(_.extractLong).getOrElse(0L))
-      jsonOption(readJson.get("Push Based")).foreach { pushBasedShuffleReadJson =>
+      jsonOption(readJson.get("Shuffle Push Read Metrics")).foreach { shufflePushReadJson =>
         readMetrics.incCorruptMergedBlockChunks(jsonOption(
-          pushBasedShuffleReadJson.get("Corrupt Merged Block Chunks"))
+          shufflePushReadJson.get("Corrupt Merged Block Chunks"))
             .map(_.extractLong).getOrElse(0L))
-        readMetrics.incFallbackCount(jsonOption(
-          pushBasedShuffleReadJson.get("Fallback Count")).map(_.extractLong).getOrElse(0L))
-        readMetrics.incRemoteMergedBlocksFetched(jsonOption(pushBasedShuffleReadJson
+        readMetrics.incMergedFetchFallbackCount(jsonOption(
+          shufflePushReadJson.get("Merged Fallback Count")).map(_.extractLong).getOrElse(0L))
+        readMetrics.incRemoteMergedBlocksFetched(jsonOption(shufflePushReadJson
           .get("Merged Remote Blocks Fetched")).map(_.extractLong).getOrElse(0L))
-        readMetrics.incLocalMergedBlocksFetched(jsonOption(pushBasedShuffleReadJson
+        readMetrics.incLocalMergedBlocksFetched(jsonOption(shufflePushReadJson
           .get("Merged Local Blocks Fetched")).map(_.extractLong).getOrElse(0L))
-        readMetrics.incRemoteMergedChunksFetched(jsonOption(pushBasedShuffleReadJson
+        readMetrics.incRemoteMergedChunksFetched(jsonOption(shufflePushReadJson
           .get("Merged Remote Chunks Fetched")).map(_.extractLong).getOrElse(0L))
-        readMetrics.incLocalMergedChunksFetched(jsonOption(pushBasedShuffleReadJson
+        readMetrics.incLocalMergedChunksFetched(jsonOption(shufflePushReadJson
           .get("Merged Local Chunks Fetched")).map(_.extractLong).getOrElse(0L))
-        readMetrics.incRemoteMergedBlocksBytesRead(jsonOption(pushBasedShuffleReadJson
+        readMetrics.incRemoteMergedBytesRead(jsonOption(shufflePushReadJson
           .get("Merged Remote Bytes Read")).map(_.extractLong).getOrElse(0L))
-        readMetrics.incLocalMergedBlocksBytesRead(jsonOption(pushBasedShuffleReadJson
+        readMetrics.incLocalMergedBytesRead(jsonOption(shufflePushReadJson
           .get("Merged Local Bytes Read")).map(_.extractLong).getOrElse(0L))
-        readMetrics.incRemoteMergedReqsDuration(jsonOption(pushBasedShuffleReadJson
+        readMetrics.incRemoteMergedReqsDuration(jsonOption(shufflePushReadJson
           .get("Merged Remote Requests Duration")).map(_.extractLong).getOrElse(0L))
-        metrics.mergeShuffleReadMetrics()
       }
+      metrics.mergeShuffleReadMetrics()
     }
 
     // Shuffle write metrics

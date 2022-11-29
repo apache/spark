@@ -115,10 +115,12 @@ class ExecutorSource(
     metricRegistry.counter(MetricRegistry.name("shuffleBytesWritten"))
   val METRIC_SHUFFLE_RECORDS_WRITTEN =
     metricRegistry.counter(MetricRegistry.name("shuffleRecordsWritten"))
+  val METRIC_SHUFFLE_REMOTE_REQS_DURATION =
+    metricRegistry.counter(MetricRegistry.name("shuffleRemoteReqsDuration"))
   val METRIC_PUSH_BASED_SHUFFLE_CORRUPT_MERGED_BLOCK_CHUNKS =
     metricRegistry.counter(MetricRegistry.name("shuffleCorruptMergedBlockChunks"))
-  val METRIC_PUSH_BASED_SHUFFLE_FALLBACK_COUNT =
-    metricRegistry.counter(MetricRegistry.name("shuffleFallbackCount"))
+  val METRIC_PUSH_BASED_SHUFFLE_MERGED_FETCH_FALLBACK_COUNT =
+    metricRegistry.counter(MetricRegistry.name("shuffleMergedFetchFallbackCount"))
   val METRIC_PUSH_BASED_SHUFFLE_MERGED_REMOTE_BLOCKS_FETCHED =
     metricRegistry.counter(MetricRegistry.name("shuffleMergedRemoteBlocksFetched"))
   val METRIC_PUSH_BASED_SHUFFLE_MERGED_LOCAL_BLOCKS_FETCHED =
@@ -131,8 +133,6 @@ class ExecutorSource(
     metricRegistry.counter(MetricRegistry.name("shuffleMergedRemoteBytesRead"))
   val METRIC_PUSH_BASED_SHUFFLE_MERGED_LOCAL_BYTES_READ =
     metricRegistry.counter(MetricRegistry.name("shuffleMergedLocalBytesRead"))
-  val METRIC_PUSH_BASED_SHUFFLE_REMOTE_REQS_DURATION =
-    metricRegistry.counter(MetricRegistry.name("shuffleRemoteReqsDuration"))
   val METRIC_PUSH_BASED_SHUFFLE_MERGED_REMOTE_REQS_DURATION =
     metricRegistry.counter(MetricRegistry.name("shuffleMergedRemoteReqsDuration"))
   val METRIC_INPUT_BYTES_READ =

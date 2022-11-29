@@ -22,24 +22,24 @@
     "recordsWritten" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ]
   },
   "shuffleReadMetrics" : {
-    "readBytes" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
-    "readRecords" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+    "readBytes" : [ 17100.0, 17100.0, 17100.0, 17100.0, 17100.0 ],
+    "readRecords" : [ 100.0, 100.0, 100.0, 100.0, 100.0 ],
     "remoteBlocksFetched" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
-    "localBlocksFetched" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
-    "fetchWaitTime" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+    "localBlocksFetched" : [ 100.0, 100.0, 100.0, 100.0, 100.0 ],
+    "fetchWaitTime" : [ 0.0, 0.0, 0.0, 1.0, 1.0 ],
     "remoteBytesRead" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
     "remoteBytesReadToDisk" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
-    "totalBlocksFetched" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+    "totalBlocksFetched" : [ 100.0, 100.0, 100.0, 100.0, 100.0 ],
     "remoteReqsDuration" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
-    "pushBased" : {
+    "shufflePushReadMetricsDist" : {
       "corruptMergedBlockChunks" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
-      "fallbackCount" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+      "mergedFetchFallbackCount" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
       "remoteMergedBlocksFetched" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
       "localMergedBlocksFetched" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
       "remoteMergedChunksFetched" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
       "localMergedChunksFetched" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
-      "remoteMergedBlocksBytesRead" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
-      "localMergedBlocksBytesRead" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+      "remoteMergedBytesRead" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+      "localMergedBytesRead" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
       "remoteMergedReqsDuration" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ]
     }
   },

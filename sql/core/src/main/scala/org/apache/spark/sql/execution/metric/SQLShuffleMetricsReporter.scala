@@ -46,8 +46,8 @@ class SQLShuffleReadMetricsReporter(
     metrics(SQLShuffleReadMetricsReporter.RECORDS_READ)
   private[this] val _corruptMergedBlockChunks =
     metrics(SQLShuffleReadMetricsReporter.CORRUPT_MERGED_BLOCK_CHUNKS)
-  private[this] val _fallbackCount =
-    metrics(SQLShuffleReadMetricsReporter.FALLBACK_COUNT)
+  private[this] val _mergedFetchFallbackCount =
+    metrics(SQLShuffleReadMetricsReporter.MERGED_FETCH_FALLBACK_COUNT)
   private[this] val _remoteMergedBlocksFetched =
     metrics(SQLShuffleReadMetricsReporter.REMOTE_MERGED_BLOCKS_FETCHED)
   private[this] val _localMergedBlocksFetched =
@@ -56,10 +56,10 @@ class SQLShuffleReadMetricsReporter(
     metrics(SQLShuffleReadMetricsReporter.REMOTE_MERGED_CHUNKS_FETCHED)
   private[this] val _localMergedChunksFetched =
     metrics(SQLShuffleReadMetricsReporter.LOCAL_MERGED_CHUNKS_FETCHED)
-  private[this] val _remoteMergedBlocksBytesRead =
-    metrics(SQLShuffleReadMetricsReporter.REMOTE_MERGED_BLOCKS_BYTES_READ)
-  private[this] val _localMergedBlocksBytesRead =
-    metrics(SQLShuffleReadMetricsReporter.LOCAL_MERGED_BLOCKS_BYTES_READ)
+  private[this] val _remoteMergedBytesRead =
+    metrics(SQLShuffleReadMetricsReporter.REMOTE_MERGED_BYTES_READ)
+  private[this] val _localMergedBytesRead =
+    metrics(SQLShuffleReadMetricsReporter.LOCAL_MERGED_BYTES_READ)
   private[this] val _remoteReqsDuration =
     metrics(SQLShuffleReadMetricsReporter.REMOTE_REQS_DURATION)
   private[this] val _remoteMergedReqsDuration =
@@ -97,9 +97,9 @@ class SQLShuffleReadMetricsReporter(
     _corruptMergedBlockChunks.add(v)
     tempMetrics.incCorruptMergedBlockChunks(v)
   }
-  override def incFallbackCount(v: Long): Unit = {
-    _fallbackCount.add(v)
-    tempMetrics.incFallbackCount(v)
+  override def incMergedFetchFallbackCount(v: Long): Unit = {
+    _mergedFetchFallbackCount.add(v)
+    tempMetrics.incMergedFetchFallbackCount(v)
   }
   override def incRemoteMergedBlocksFetched(v: Long): Unit = {
     _remoteMergedBlocksFetched.add(v)
@@ -117,13 +117,13 @@ class SQLShuffleReadMetricsReporter(
     _localMergedChunksFetched.add(v)
     tempMetrics.incLocalMergedChunksFetched(v)
   }
-  override def incRemoteMergedBlocksBytesRead(v: Long): Unit = {
-    _remoteMergedBlocksBytesRead.add(v)
-    tempMetrics.incRemoteMergedBlocksBytesRead(v)
+  override def incRemoteMergedBytesRead(v: Long): Unit = {
+    _remoteMergedBytesRead.add(v)
+    tempMetrics.incRemoteMergedBytesRead(v)
   }
-  override def incLocalMergedBlocksBytesRead(v: Long): Unit = {
-    _localMergedBlocksBytesRead.add(v)
-    tempMetrics.incLocalMergedBlocksBytesRead(v)
+  override def incLocalMergedBytesRead(v: Long): Unit = {
+    _localMergedBytesRead.add(v)
+    tempMetrics.incLocalMergedBytesRead(v)
   }
   override def incRemoteReqsDuration(v: Long): Unit = {
     _remoteReqsDuration.add(v)
@@ -144,13 +144,13 @@ object SQLShuffleReadMetricsReporter {
   val FETCH_WAIT_TIME = "fetchWaitTime"
   val RECORDS_READ = "recordsRead"
   val CORRUPT_MERGED_BLOCK_CHUNKS = "corruptMergedBlockChunks"
-  val FALLBACK_COUNT = "fallbackCount"
+  val MERGED_FETCH_FALLBACK_COUNT = "mergedFetchFallbackCount"
   val REMOTE_MERGED_BLOCKS_FETCHED = "remoteMergedBlocksFetched"
   val LOCAL_MERGED_BLOCKS_FETCHED = "localMergedBlocksFetched"
   val REMOTE_MERGED_CHUNKS_FETCHED = "remoteMergedChunksFetched"
   val LOCAL_MERGED_CHUNKS_FETCHED = "localMergedChunksFetched"
-  val REMOTE_MERGED_BLOCKS_BYTES_READ = "remoteMergedBlocksBytesRead"
-  val LOCAL_MERGED_BLOCKS_BYTES_READ = "localMergedBlocksBytesRead"
+  val REMOTE_MERGED_BYTES_READ = "remoteMergedBytesRead"
+  val LOCAL_MERGED_BYTES_READ = "localMergedBytesRead"
   val REMOTE_REQS_DURATION = "remoteReqsDuration"
   val REMOTE_MERGED_REQS_DURATION = "remoteMergedReqsDuration"
 
@@ -166,15 +166,15 @@ object SQLShuffleReadMetricsReporter {
     FETCH_WAIT_TIME -> SQLMetrics.createTimingMetric(sc, "fetch wait time"),
     RECORDS_READ -> SQLMetrics.createMetric(sc, "records read"),
     CORRUPT_MERGED_BLOCK_CHUNKS -> SQLMetrics.createMetric(sc, "corrupt merged block chunks"),
-    FALLBACK_COUNT -> SQLMetrics.createMetric(sc, "fallback count"),
+    MERGED_FETCH_FALLBACK_COUNT -> SQLMetrics.createMetric(sc, "merged fetch fallback count"),
     REMOTE_MERGED_BLOCKS_FETCHED -> SQLMetrics.createMetric(sc, "remote merged blocks fetched"),
     LOCAL_MERGED_BLOCKS_FETCHED -> SQLMetrics.createMetric(sc, "local merged blocks fetched"),
     REMOTE_MERGED_CHUNKS_FETCHED -> SQLMetrics.createMetric(sc, "remote merged chunks fetched"),
     LOCAL_MERGED_CHUNKS_FETCHED -> SQLMetrics.createMetric(sc, "local merged chunks fetched"),
-    REMOTE_MERGED_BLOCKS_BYTES_READ -> SQLMetrics.createSizeMetric(sc,
-      "remote merged blocks bytes read"),
-    LOCAL_MERGED_BLOCKS_BYTES_READ -> SQLMetrics.createSizeMetric(sc,
-      "local merged blocks bytes read"),
+    REMOTE_MERGED_BYTES_READ -> SQLMetrics.createSizeMetric(sc,
+      "remote merged bytes read"),
+    LOCAL_MERGED_BYTES_READ -> SQLMetrics.createSizeMetric(sc,
+      "local merged bytes read"),
     REMOTE_REQS_DURATION -> SQLMetrics.createTimingMetric(sc, "remote reqs duration"),
     REMOTE_MERGED_REQS_DURATION -> SQLMetrics.createTimingMetric(sc, "remote merged reqs duration"))
 }

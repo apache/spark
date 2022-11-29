@@ -791,14 +791,16 @@ private[spark] class Executor(
         .inc(metrics.shuffleReadMetrics.remoteBlocksFetched)
       executorSource.METRIC_SHUFFLE_LOCAL_BLOCKS_FETCHED
         .inc(metrics.shuffleReadMetrics.localBlocksFetched)
+      executorSource.METRIC_SHUFFLE_REMOTE_REQS_DURATION
+        .inc(metrics.shuffleReadMetrics.remoteReqsDuration)
       executorSource.METRIC_SHUFFLE_BYTES_WRITTEN
         .inc(metrics.shuffleWriteMetrics.bytesWritten)
       executorSource.METRIC_SHUFFLE_RECORDS_WRITTEN
         .inc(metrics.shuffleWriteMetrics.recordsWritten)
       executorSource.METRIC_PUSH_BASED_SHUFFLE_CORRUPT_MERGED_BLOCK_CHUNKS
         .inc(metrics.shuffleReadMetrics.corruptMergedBlockChunks)
-      executorSource.METRIC_PUSH_BASED_SHUFFLE_FALLBACK_COUNT
-        .inc(metrics.shuffleReadMetrics.fallbackCount)
+      executorSource.METRIC_PUSH_BASED_SHUFFLE_MERGED_FETCH_FALLBACK_COUNT
+        .inc(metrics.shuffleReadMetrics.mergedFetchFallbackCount)
       executorSource.METRIC_PUSH_BASED_SHUFFLE_MERGED_REMOTE_BLOCKS_FETCHED
         .inc(metrics.shuffleReadMetrics.remoteMergedBlocksFetched)
       executorSource.METRIC_PUSH_BASED_SHUFFLE_MERGED_LOCAL_BLOCKS_FETCHED
@@ -808,11 +810,9 @@ private[spark] class Executor(
       executorSource.METRIC_PUSH_BASED_SHUFFLE_MERGED_LOCAL_CHUNKS_FETCHED
         .inc(metrics.shuffleReadMetrics.localMergedChunksFetched)
       executorSource.METRIC_PUSH_BASED_SHUFFLE_MERGED_REMOTE_BYTES_READ
-        .inc(metrics.shuffleReadMetrics.remoteMergedBlocksBytesRead)
-      executorSource.METRIC_PUSH_BASED_SHUFFLE_MERGED_LOCAL_BLOCKS_FETCHED
-        .inc(metrics.shuffleReadMetrics.localMergedBlocksBytesRead)
-      executorSource.METRIC_PUSH_BASED_SHUFFLE_REMOTE_REQS_DURATION
-        .inc(metrics.shuffleReadMetrics.remoteReqsDuration)
+        .inc(metrics.shuffleReadMetrics.remoteMergedBytesRead)
+      executorSource.METRIC_PUSH_BASED_SHUFFLE_MERGED_LOCAL_BYTES_READ
+        .inc(metrics.shuffleReadMetrics.localMergedBytesRead)
       executorSource.METRIC_PUSH_BASED_SHUFFLE_MERGED_REMOTE_REQS_DURATION
         .inc(metrics.shuffleReadMetrics.remoteMergedReqsDuration)
     }

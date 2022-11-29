@@ -60,19 +60,22 @@ class JsonProtocolSuite extends SparkFunSuite {
       new ExecutorMetrics(Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
         321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L,
         0, 0, 0, 0, 80001L)),
-      makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = false, hasOutput = false))
+      makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, 0,
+        hasHadoopInput = false, hasOutput = false))
     val taskEndWithHadoopInput = SparkListenerTaskEnd(1, 0, "ShuffleMapTask", Success,
       makeTaskInfo(123L, 234, 67, 234, 345L, false),
       new ExecutorMetrics(Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
         321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L,
         0, 0, 0, 0, 80001L)),
-      makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true, hasOutput = false))
+      makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, 0,
+        hasHadoopInput = true, hasOutput = false))
     val taskEndWithOutput = SparkListenerTaskEnd(1, 0, "ResultTask", Success,
       makeTaskInfo(123L, 234, 67, 234, 345L, false),
       new ExecutorMetrics(Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
         321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L,
         0, 0, 0, 0, 80001L)),
-      makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true, hasOutput = true))
+      makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, 0,
+        hasHadoopInput = true, hasOutput = true))
     val jobStart = {
       val stageIds = Seq[Int](1, 2, 3, 4)
       val stageInfos = stageIds.map(x =>
@@ -127,7 +130,8 @@ class JsonProtocolSuite extends SparkFunSuite {
     val executorMetricsUpdate = {
       // Use custom accum ID for determinism
       val accumUpdates =
-        makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true, hasOutput = true)
+        makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, 0,
+          hasHadoopInput = true, hasOutput = true)
           .accumulators().map(AccumulatorSuite.makeInfo)
           .zipWithIndex.map { case (a, i) => a.copy(id = i) }
       val executorUpdates = new ExecutorMetrics(
@@ -201,7 +205,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     testStageInfo(makeStageInfo(10, 20, 30, 40L, 50L))
     testTaskInfo(makeTaskInfo(999L, 888, 55, 888, 777L, false))
     testTaskMetrics(makeTaskMetrics(
-      33333L, 44444L, 55555L, 66666L, 7, 8, hasHadoopInput = false, hasOutput = false))
+      33333L, 44444L, 55555L, 66666L, 7, 8, 0, hasHadoopInput = false, hasOutput = false))
     testBlockManagerId(BlockManagerId("Hong", "Kong", 500))
     testExecutorInfo(new ExecutorInfo("host", 43, logUrlMap, attributes))
     testExecutorInfo(new ExecutorInfo("host", 43, logUrlMap, attributes,
@@ -299,7 +303,7 @@ class JsonProtocolSuite extends SparkFunSuite {
 
   test("InputMetrics backward compatibility") {
     // InputMetrics were added after 1.0.1.
-    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, hasHadoopInput = true, hasOutput = false)
+    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, 0, hasHadoopInput = true, hasOutput = false)
     val newJson = toJsonString(JsonProtocol.taskMetricsToJson(metrics, _))
     val oldJson = newJson.removeField("Input Metrics")
     val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
@@ -309,7 +313,7 @@ class JsonProtocolSuite extends SparkFunSuite {
 
   test("Input/Output records backwards compatibility") {
     // records read were added after 1.2
-    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6,
+    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, 0,
       hasHadoopInput = true, hasOutput = true, hasRecords = false)
     val newJson = toJsonString(JsonProtocol.taskMetricsToJson(metrics, _))
     val oldJson = newJson
@@ -323,7 +327,7 @@ class JsonProtocolSuite extends SparkFunSuite {
   test("Shuffle Read/Write records backwards compatibility") {
     // records read were added after 1.2
     // "Remote Bytes Read To Disk" was added in 2.3.0
-    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6,
+    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, 0,
       hasHadoopInput = false, hasOutput = false, hasRecords = false)
     val newJson = toJsonString(JsonProtocol.taskMetricsToJson(metrics, _))
     val oldJson = newJson
@@ -338,7 +342,7 @@ class JsonProtocolSuite extends SparkFunSuite {
 
   test("OutputMetrics backward compatibility") {
     // OutputMetrics were added after 1.1
-    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, hasHadoopInput = false, hasOutput = true)
+    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, 0, hasHadoopInput = false, hasOutput = true)
     val newJson = toJsonString(JsonProtocol.taskMetricsToJson(metrics, _))
     val oldJson = newJson.removeField("Output Metrics")
     val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
@@ -349,7 +353,7 @@ class JsonProtocolSuite extends SparkFunSuite {
   test("TaskMetrics backward compatibility") {
     // "Executor Deserialize CPU Time" and "Executor CPU Time" were introduced in Spark 2.1.0
     // "Peak Execution Memory" was introduced in Spark 3.0.0
-    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, hasHadoopInput = false, hasOutput = true)
+    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, 0, hasHadoopInput = false, hasOutput = true)
     metrics.setExecutorDeserializeCpuTime(100L)
     metrics.setExecutorCpuTime(100L)
     metrics.setPeakExecutionMemory(100L)
@@ -425,7 +429,7 @@ class JsonProtocolSuite extends SparkFunSuite {
 
   test("ShuffleReadMetrics: Local bytes read backwards compatibility") {
     // Metrics about local shuffle bytes read were added in 1.3.1.
-    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6,
+    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, 0,
       hasHadoopInput = false, hasOutput = false, hasRecords = false)
     val newJson = toJsonString(JsonProtocol.taskMetricsToJson(metrics, _))
     val oldJson = newJson.removeField("Local Bytes Read")
@@ -548,7 +552,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     // "Task Metrics" was replaced with "Accumulator Updates" in 2.0.0. For older event logs,
     // we should still be able to fallback to constructing the accumulator updates from the
     // "Task Metrics" field, if it exists.
-    val tm = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, hasHadoopInput = true, hasOutput = true)
+    val tm = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, 0, hasHadoopInput = true, hasOutput = true)
     val tmJson = toJsonString(JsonProtocol.taskMetricsToJson(tm, _))
     val accumUpdates = tm.accumulators().map(AccumulatorSuite.makeInfo)
     val exception = new SparkException("sentimental")
@@ -572,7 +576,7 @@ class JsonProtocolSuite extends SparkFunSuite {
   test("TaskKilled backward compatibility") {
     // The "Kill Reason" field was added in Spark 2.2.0
     // The "Accumulator Updates" field was added in Spark 2.4.0
-    val tm = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, hasHadoopInput = true, hasOutput = true)
+    val tm = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, 0, hasHadoopInput = true, hasOutput = true)
     val accumUpdates = tm.accumulators().map(AccumulatorSuite.makeInfo)
     val taskKilled = TaskKilled(reason = "test", accumUpdates)
     val taskKilledJson = toJsonString(JsonProtocol.taskEndReasonToJson(taskKilled, _))
@@ -1285,6 +1289,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       d: Long,
       e: Int,
       f: Int,
+      g: Int,
       hasHadoopInput: Boolean,
       hasOutput: Boolean,
       hasRecords: Boolean = true) = {
@@ -1314,9 +1319,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
       sr.incRecordsRead(if (hasRecords) (b + d) / 100 else -1)
       sr.incLocalBytesRead(a + f)
       sr.incCorruptMergedBlockChunks(if (f > e) f - e else e - f)
-      sr.incFallbackCount(if (f > e) f - e else e - f)
+      sr.incMergedFetchFallbackCount(if (f > e) f - e else e - f)
       sr.incRemoteReqsDuration(a + d)
-      sr.incRemoteMergedReqsDuration(a + d)
+      sr.incRemoteMergedReqsDuration(g)
       t.mergeShuffleReadMetrics()
     }
     if (hasOutput) {
@@ -1371,7 +1376,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      }
       |    ],
       |    "Resource Profile Id" : 0,
-      |    "Push Based Shuffle Enabled" : false,
+      |    "Shuffle Push Enabled" : false,
       |    "Shuffle Push Mergers Count" : 0
       |  },
       |  "Properties": {
@@ -1414,7 +1419,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      }
       |    ],
       |    "Resource Profile Id" : 0,
-      |    "Push Based Shuffle Enabled" : false,
+      |    "Shuffle Push Enabled" : false,
       |    "Shuffle Push Mergers Count" : 0
       |  }
       |}
@@ -1471,7 +1476,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      }
       |    ],
       |    "Resource Profile Id" : 0,
-      |    "Push Based Shuffle Enabled" : false,
+      |    "Shuffle Push Enabled" : false,
       |    "Shuffle Push Mergers Count" : 0
       |  }
       |}
@@ -1669,16 +1674,16 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      "Local Bytes Read": 1100,
       |      "Total Records Read": 10,
       |      "Remote Requests Duration": 900,
-      |      "Push Based": {
+      |      "Push Based Shuffle": {
       |         "Corrupt Merged Block Chunks" : 100,
-      |         "Fallback Count" : 100,
+      |         "Merged Fetch Fallback Count" : 100,
       |         "Merged Remote Blocks Fetched" : 0,
       |         "Merged Local Blocks Fetched" : 0,
       |         "Merged Remote Chunks Fetched" : 0,
       |         "Merged Local Chunks Fetched" : 0,
       |         "Merged Remote Bytes Read" : 0,
       |         "Merged Local Bytes Read" : 0,
-      |         "Merged Remote Requests Duration": 900
+      |         "Merged Remote Requests Duration": 0
       |      }
       |    },
       |    "Shuffle Write Metrics": {
@@ -1808,9 +1813,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      "Local Bytes Read" : 0,
       |      "Total Records Read" : 0,
       |      "Remote Requests Duration": 0,
-      |      "Push Based": {
+      |      "Push Based Shuffle": {
       |         "Corrupt Merged Block Chunks" : 0,
-      |         "Fallback Count" : 0,
+      |         "Merged Fetch Fallback Count" : 0,
       |         "Merged Remote Blocks Fetched" : 0,
       |         "Merged Local Blocks Fetched" : 0,
       |         "Merged Remote Chunks Fetched" : 0,
@@ -1947,9 +1952,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      "Local Bytes Read" : 0,
       |      "Total Records Read" : 0,
       |      "Remote Requests Duration": 0,
-      |      "Push Based": {
+      |      "Push Based Shuffle": {
       |         "Corrupt Merged Block Chunks" : 0,
-      |         "Fallback Count" : 0,
+      |         "Merged Fetch Fallback Count" : 0,
       |         "Merged Remote Blocks Fetched" : 0,
       |         "Merged Local Blocks Fetched" : 0,
       |         "Merged Remote Chunks Fetched" : 0,
@@ -2046,7 +2051,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        }
       |      ],
       |      "Resource Profile Id" : 0,
-      |      "Push Based Shuffle Enabled" : false,
+      |      "Shuffle Push Enabled" : false,
       |      "Shuffle Push Mergers Count" : 0
       |    },
       |    {
@@ -2115,7 +2120,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        }
       |      ],
       |      "Resource Profile Id" : 0,
-      |      "Push Based Shuffle Enabled" : false,
+      |      "Shuffle Push Enabled" : false,
       |      "Shuffle Push Mergers Count" : 0
       |    },
       |    {
@@ -2203,7 +2208,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        }
       |      ],
       |      "Resource Profile Id" : 0,
-      |      "Push Based Shuffle Enabled" : false,
+      |      "Shuffle Push Enabled" : false,
       |      "Shuffle Push Mergers Count" : 0
       |    },
       |    {
@@ -2310,7 +2315,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        }
       |      ],
       |      "Resource Profile Id" : 0,
-      |      "Push Based Shuffle Enabled" : false,
+      |      "Shuffle Push Enabled" : false,
       |      "Shuffle Push Mergers Count" : 0
       |    }
       |  ],
@@ -2681,7 +2686,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        },
       |        {
       |          "ID": 19,
-      |          "Name": "${shuffleRead.FALLBACK_COUNT}",
+      |          "Name": "${shuffleRead.MERGED_FETCH_FALLBACK_COUNT}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true

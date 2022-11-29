@@ -34,7 +34,7 @@
   "shuffleReadBytes" : 0,
   "shuffleReadRecords" : 0,
   "shuffleCorruptMergedBlockChunks" : 0,
-  "shuffleFallbackCount" : 0,
+  "shuffleMergedFetchFallbackCount" : 0,
   "shuffleMergedRemoteBlocksFetched": 0,
   "shuffleMergedLocalBlocksFetched": 0,
   "shuffleMergedRemoteChunksFetched": 0,
@@ -80,6 +80,6 @@
     "MajorGCTime" : 0,
     "TotalGCTime" : 0
   },
-  "isPushBasedShuffleEnabled" : false,
+  "isShufflePushEnabled" : false,
   "shuffleMergersCount" : 0
 } ]

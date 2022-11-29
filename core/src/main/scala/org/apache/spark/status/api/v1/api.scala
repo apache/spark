@@ -283,7 +283,7 @@ class StageData private[spark](
     val shuffleReadBytes: Long,
     val shuffleReadRecords: Long,
     val shuffleCorruptMergedBlockChunks: Long,
-    val shuffleFallbackCount: Long,
+    val shuffleMergedFetchFallbackCount: Long,
     val shuffleMergedRemoteBlocksFetched: Long,
     val shuffleMergedLocalBlocksFetched: Long,
     val shuffleMergedRemoteChunksFetched: Long,
@@ -313,7 +313,7 @@ class StageData private[spark](
     val peakExecutorMetrics: Option[ExecutorMetrics],
     val taskMetricsDistributions: Option[TaskMetricDistributions],
     val executorMetricsDistributions: Option[ExecutorMetricsDistributions],
-    val isPushBasedShuffleEnabled: Boolean,
+    val isShufflePushEnabled: Boolean,
     val shuffleMergersCount: Int)
 
 class TaskData private[spark](
@@ -363,13 +363,13 @@ class OutputMetrics private[spark](
 
 class ShufflePushReadMetrics private[spark](
   val corruptMergedBlockChunks: Long,
-  val fallbackCount: Long,
+  val mergedFetchFallbackCount: Long,
   val remoteMergedBlocksFetched: Long,
   val localMergedBlocksFetched: Long,
   val remoteMergedChunksFetched: Long,
   val localMergedChunksFetched: Long,
-  val remoteMergedBlocksBytesRead: Long,
-  val localMergedBlocksBytesRead: Long,
+  val remoteMergedBytesRead: Long,
+  val localMergedBytesRead: Long,
   val remoteMergedReqsDuration: Long)
 
 class ShuffleReadMetrics private[spark](
@@ -381,7 +381,7 @@ class ShuffleReadMetrics private[spark](
     val localBytesRead: Long,
     val recordsRead: Long,
     val remoteReqsDuration: Long,
-    val pushBased: ShufflePushReadMetrics)
+    val shufflePushReadMetrics: ShufflePushReadMetrics)
 
 class ShuffleWriteMetrics private[spark](
     val bytesWritten: Long,
@@ -420,13 +420,13 @@ class OutputMetricDistributions private[spark](
 
 class ShufflePushReadMetricDistributions private[spark](
   val corruptMergedBlockChunks: IndexedSeq[Double],
-  val fallbackCount: IndexedSeq[Double],
+  val mergedFetchFallbackCount: IndexedSeq[Double],
   val remoteMergedBlocksFetched: IndexedSeq[Double],
   val localMergedBlocksFetched: IndexedSeq[Double],
   val remoteMergedChunksFetched: IndexedSeq[Double],
   val localMergedChunksFetched: IndexedSeq[Double],
-  val remoteMergedBlocksBytesRead: IndexedSeq[Double],
-  val localMergedBlocksBytesRead: IndexedSeq[Double],
+  val remoteMergedBytesRead: IndexedSeq[Double],
+  val localMergedBytesRead: IndexedSeq[Double],
   val remoteMergedReqsDuration: IndexedSeq[Double])
 
 class ExecutorMetricsDistributions private[spark](
@@ -474,7 +474,7 @@ class ShuffleReadMetricDistributions private[spark](
     val remoteBytesReadToDisk: IndexedSeq[Double],
     val totalBlocksFetched: IndexedSeq[Double],
     val remoteReqsDuration: IndexedSeq[Double],
-    val pushBased: ShufflePushReadMetricDistributions)
+    val shufflePushReadMetricsDist: ShufflePushReadMetricDistributions)
 
 class ShuffleWriteMetricDistributions private[spark](
     val writeBytes: IndexedSeq[Double],

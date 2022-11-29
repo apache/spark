@@ -279,7 +279,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
           shuffleReadBytes = 0L,
           shuffleReadRecords = 0L,
           shuffleCorruptMergedBlockChunks = 0L,
-          shuffleFallbackCount = 0L,
+          shuffleMergedFetchFallbackCount = 0L,
           shuffleMergedRemoteBlocksFetched = 0L,
           shuffleMergedLocalBlocksFetched = 0L,
           shuffleMergedRemoteChunksFetched = 0L,
@@ -307,7 +307,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
           peakExecutorMetrics = None,
           taskMetricsDistributions = None,
           executorMetricsDistributions = None,
-          isPushBasedShuffleEnabled = false,
+          isShufflePushEnabled = false,
           shuffleMergersCount = 0)
       }
     }

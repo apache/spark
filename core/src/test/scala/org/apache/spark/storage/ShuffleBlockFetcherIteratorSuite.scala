@@ -1236,7 +1236,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     val (id4, _) = iterator.next()
     assert(id4 === ShuffleBlockId(0, 2, 2))
     assert(!iterator.hasNext)
-    assert(shuffleMetrics.fallbackCount === 1)
+    assert(shuffleMetrics.mergedFetchFallbackCount === 1)
   }
 
   test("SPARK-32922: iterator has just 1 push-merged block and fails to fetch the meta") {
@@ -1278,7 +1278,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     val (id2, _) = iterator.next()
     assert(id2 === ShuffleBlockId(0, 1, 2))
     assert(!iterator.hasNext)
-    assert(shuffleMetrics.fallbackCount === 1)
+    assert(shuffleMetrics.mergedFetchFallbackCount === 1)
   }
 
   private def createMockPushMergedBlockMeta(
@@ -1389,7 +1389,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       taskContext = Some(taskContext),
       shuffleMetrics = Some(shuffleMetrics))
     verifyLocalBlocksFromFallback(iterator)
-    assert(shuffleMetrics.fallbackCount === 1)
+    assert(shuffleMetrics.mergedFetchFallbackCount === 1)
   }
 
   test("SPARK-32922: failure to fetch push-merged-local data should fallback to fetch " +
@@ -1408,7 +1408,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       taskContext = Some(taskContext),
       shuffleMetrics = Some(shuffleMetrics))
     verifyLocalBlocksFromFallback(iterator)
-    assert(shuffleMetrics.fallbackCount === 1)
+    assert(shuffleMetrics.mergedFetchFallbackCount === 1)
   }
 
   test("SPARK-32922: failure to fetch push-merged-local meta of a single merged block " +
@@ -1454,10 +1454,10 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     assert(!iterator.hasNext)
     assert(shuffleMetrics.localBlocksFetched === 5)
     assert(shuffleMetrics.localBytesRead === 6)
-    assert(shuffleMetrics.fallbackCount === 1)
+    assert(shuffleMetrics.mergedFetchFallbackCount === 1)
     assert(shuffleMetrics.localMergedBlocksFetched === 1)
     assert(shuffleMetrics.localMergedChunksFetched === 1)
-    assert(shuffleMetrics.localMergedBlocksBytesRead === 2)
+    assert(shuffleMetrics.localMergedBytesRead === 2)
   }
 
   test("SPARK-32922: failure to fetch push-merged block as well as fallback block should throw " +
@@ -1582,7 +1582,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       taskContext = Some(taskContext),
       shuffleMetrics = Some(shuffleMetrics))
     verifyLocalBlocksFromFallback(iterator)
-    assert(shuffleMetrics.fallbackCount === 1)
+    assert(shuffleMetrics.mergedFetchFallbackCount === 1)
     assert(shuffleMetrics.localMergedBlocksFetched === 2)
     assert(shuffleMetrics.localMergedChunksFetched === 1)
   }
@@ -1608,11 +1608,11 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       shuffleMetrics = Some(shuffleMetrics),
       streamWrapperLimitSize = Some(100))
     verifyLocalBlocksFromFallback(iterator)
-    assert(shuffleMetrics.fallbackCount === 1)
+    assert(shuffleMetrics.mergedFetchFallbackCount === 1)
     assert(shuffleMetrics.localBlocksFetched === 6)
     assert(shuffleMetrics.localMergedChunksFetched === 1)
     assert(shuffleMetrics.corruptMergedBlockChunks === 1)
-    assert(shuffleMetrics.localMergedBlocksBytesRead === 2)
+    assert(shuffleMetrics.localMergedBytesRead === 2)
   }
 
   test("SPARK-32922: fallback to original blocks when failed to fetch remote shuffle chunk") {

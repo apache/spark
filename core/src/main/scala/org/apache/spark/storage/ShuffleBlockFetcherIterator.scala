@@ -235,7 +235,7 @@ final class ShuffleBlockFetcherIterator(
       result match {
         case SuccessFetchResult(blockId, mapIndex, address, _, buf, _) =>
           if (address != blockManager.blockManagerId) {
-            if (isLocalMergedBlockAddress(address) ||
+            if (pushBasedFetchHelper.isLocalPushMergedBlockAddress(address) ||
               hostLocalBlocks.contains(blockId -> mapIndex)) {
               shuffleMetricsUpdate(blockId, buf, local = true)
             } else {
@@ -736,20 +736,6 @@ final class ShuffleBlockFetcherIterator(
     }
   }
 
-  // Number of map blocks in a ShuffleBlockChunk
-  private def getShuffleChunkCardinality(blockId: ShuffleBlockChunkId): Int = {
-    val chunkTracker = pushBasedFetchHelper.getRoaringBitMap(blockId)
-    chunkTracker match {
-      case Some(bitmap) => bitmap.getCardinality
-      case None => 0
-    }
-  }
-
-  // Check if the merged block is local to the host or not
-  private def isLocalMergedBlockAddress(address: BlockManagerId): Boolean = {
-    address.executorId.isEmpty && address.host == blockManager.blockManagerId.host
-  }
-
   private def shuffleMetricsUpdate(
       blockId: BlockId,
       buf: ManagedBuffer,
@@ -762,15 +748,12 @@ final class ShuffleBlockFetcherIterator(
   }
 
   private def shuffleLocalMetricsUpdate(blockId: BlockId, buf: ManagedBuffer): Unit = {
-    // Check if the block is within the host-local blocks set, or if it is a merged local
-    // block. In either case, it is local read and we need to increase the local
-    // shuffle read metrics.
     blockId match {
       case chunkId: ShuffleBlockChunkId =>
-        val chunkCardinality = getShuffleChunkCardinality(chunkId)
+        val chunkCardinality = pushBasedFetchHelper.getShuffleChunkCardinality(chunkId)
         shuffleMetrics.incLocalMergedChunksFetched(1)
         shuffleMetrics.incLocalMergedBlocksFetched(chunkCardinality)
-        shuffleMetrics.incLocalMergedBlocksBytesRead(buf.size)
+        shuffleMetrics.incLocalMergedBytesRead(buf.size)
         shuffleMetrics.incLocalBlocksFetched(chunkCardinality)
       case _ =>
         shuffleMetrics.incLocalBlocksFetched(1)
@@ -781,10 +764,10 @@ final class ShuffleBlockFetcherIterator(
   private def shuffleRemoteMetricsUpdate(blockId: BlockId, buf: ManagedBuffer): Unit = {
     blockId match {
       case chunkId: ShuffleBlockChunkId =>
-        val chunkCardinality = getShuffleChunkCardinality(chunkId)
+        val chunkCardinality = pushBasedFetchHelper.getShuffleChunkCardinality(chunkId)
         shuffleMetrics.incRemoteMergedChunksFetched(1)
         shuffleMetrics.incRemoteMergedBlocksFetched(chunkCardinality)
-        shuffleMetrics.incRemoteMergedBlocksBytesRead(buf.size)
+        shuffleMetrics.incRemoteMergedBytesRead(buf.size)
         shuffleMetrics.incRemoteBlocksFetched(chunkCardinality)
       case _ =>
         shuffleMetrics.incRemoteBlocksFetched(1)
@@ -868,6 +851,7 @@ final class ShuffleBlockFetcherIterator(
               // available and we can opt to fallback immediately.
               logWarning(msg)
               pushBasedFetchHelper.initiateFallbackFetchForPushMergedBlock(blockId, address)
+              shuffleMetrics.incCorruptMergedBlockChunks(1)
               // Set result to null to trigger another iteration of the while loop to get either.
               result = null
               null

@@ -322,13 +322,13 @@ private[spark] class AppStatusStore(
           toValues(_.shuffleRemoteReqsDuration),
           new v1.ShufflePushReadMetricDistributions(
             toValues(_.shuffleCorruptMergedBlockChunks),
-            toValues(_.shuffleFallbackCount),
+            toValues(_.shuffleMergedFetchFallbackCount),
             toValues(_.shuffleMergedRemoteBlocksFetched),
             toValues(_.shuffleMergedLocalBlocksFetched),
             toValues(_.shuffleMergedRemoteChunksFetched),
             toValues(_.shuffleMergedLocalChunksFetched),
-            toValues(_.shuffleMergedRemoteBlocksBytesRead),
-            toValues(_.shuffleMergedLocalBlocksBytesRead),
+            toValues(_.shuffleMergedRemoteBytesRead),
+            toValues(_.shuffleMergedLocalBytesRead),
             toValues(_.shuffleMergedRemoteReqsDuration))),
         shuffleWriteMetrics = new v1.ShuffleWriteMetricDistributions(
           toValues(_.shuffleWriteBytes),
@@ -416,35 +416,35 @@ private[spark] class AppStatusStore(
         scanTasks(TaskIndexNames.SHUFFLE_TOTAL_BLOCKS) { m =>
           m.shuffleLocalBlocksFetched + m.shuffleRemoteBlocksFetched
         },
-        scanTasks(TaskIndexNames.PUSH_BASED_SHUFFLE_REMOTE_REQS_DURATION) {
+        scanTasks(TaskIndexNames.SHUFFLE_REMOTE_REQS_DURATION) {
           t => t.shuffleRemoteReqsDuration
         },
         new v1.ShufflePushReadMetricDistributions(
-          scanTasks(TaskIndexNames.PUSH_BASED_SHUFFLE_CORRUPT_MERGED_BLOCK_CHUNKS) { t =>
+          scanTasks(TaskIndexNames.SHUFFLE_PUSH_CORRUPT_MERGED_BLOCK_CHUNKS) { t =>
             t.shuffleCorruptMergedBlockChunks
           },
-          scanTasks(TaskIndexNames.PUSH_BASED_SHUFFLE_FALLBACK_COUNT) {
-            t => t.shuffleFallbackCount
+          scanTasks(TaskIndexNames.SHUFFLE_PUSH_MERGED_FETCH_FALLBACK_COUNT) {
+            t => t.shuffleMergedFetchFallbackCount
           },
-          scanTasks(TaskIndexNames.PUSH_BASED_SHUFFLE_MERGED_REMOTE_BLOCKS) { t =>
+          scanTasks(TaskIndexNames.SHUFFLE_PUSH_MERGED_REMOTE_BLOCKS) { t =>
             t.shuffleMergedRemoteBlocksFetched
           },
-          scanTasks(TaskIndexNames.PUSH_BASED_SHUFFLE_MERGED_LOCAL_BLOCKS) { t =>
+          scanTasks(TaskIndexNames.SHUFFLE_PUSH_MERGED_LOCAL_BLOCKS) { t =>
             t.shuffleMergedLocalBlocksFetched
           },
-          scanTasks(TaskIndexNames.PUSH_BASED_SHUFFLE_MERGED_REMOTE_CHUNKS) { t =>
+          scanTasks(TaskIndexNames.SHUFFLE_PUSH_MERGED_REMOTE_CHUNKS) { t =>
             t.shuffleMergedRemoteChunksFetched
           },
-          scanTasks(TaskIndexNames.PUSH_BASED_SHUFFLE_MERGED_LOCAL_CHUNKS) { t =>
+          scanTasks(TaskIndexNames.SHUFFLE_PUSH_MERGED_LOCAL_CHUNKS) { t =>
             t.shuffleMergedLocalChunksFetched
           },
-          scanTasks(TaskIndexNames.PUSH_BASED_SHUFFLE_MERGED_REMOTE_READS) { t =>
-            t.shuffleMergedRemoteBlocksBytesRead
+          scanTasks(TaskIndexNames.SHUFFLE_PUSH_MERGED_REMOTE_READS) { t =>
+            t.shuffleMergedRemoteBytesRead
           },
-          scanTasks(TaskIndexNames.PUSH_BASED_SHUFFLE_MERGED_LOCAL_READS) { t =>
-            t.shuffleMergedLocalBlocksBytesRead
+          scanTasks(TaskIndexNames.SHUFFLE_PUSH_MERGED_LOCAL_READS) { t =>
+            t.shuffleMergedLocalBytesRead
           },
-          scanTasks(TaskIndexNames.PUSH_BASED_SHUFFLE_MERGED_REMOTE_REQS_DURATION) { t =>
+          scanTasks(TaskIndexNames.SHUFFLE_PUSH_MERGED_REMOTE_REQS_DURATION) { t =>
             t.shuffleMergedRemoteReqDuration
           })),
         shuffleWriteMetrics = new v1.ShuffleWriteMetricDistributions(
@@ -488,25 +488,34 @@ private[spark] class AppStatusStore(
             computedQuantiles.shuffleReadMetrics.remoteBytesReadToDisk(idx),
           shuffleTotalBlocksFetched = computedQuantiles.shuffleReadMetrics.totalBlocksFetched(idx),
           shuffleCorruptMergedBlockChunks =
-            computedQuantiles.shuffleReadMetrics.pushBased.corruptMergedBlockChunks(idx),
-          shuffleFallbackCount =
-            computedQuantiles.shuffleReadMetrics.pushBased.fallbackCount(idx),
+            computedQuantiles.shuffleReadMetrics.shufflePushReadMetricsDist
+              .corruptMergedBlockChunks(idx),
+          shuffleMergedFetchFallbackCount =
+            computedQuantiles.shuffleReadMetrics.shufflePushReadMetricsDist
+              .mergedFetchFallbackCount(idx),
           shuffleMergedRemoteBlocksFetched =
-            computedQuantiles.shuffleReadMetrics.pushBased.remoteMergedBlocksFetched(idx),
+            computedQuantiles.shuffleReadMetrics.shufflePushReadMetricsDist
+              .remoteMergedBlocksFetched(idx),
           shuffleMergedLocalBlocksFetched =
-            computedQuantiles.shuffleReadMetrics.pushBased.localMergedBlocksFetched(idx),
+            computedQuantiles.shuffleReadMetrics.shufflePushReadMetricsDist
+              .localMergedBlocksFetched(idx),
           shuffleMergedRemoteChunksFetched =
-            computedQuantiles.shuffleReadMetrics.pushBased.remoteMergedChunksFetched(idx),
+            computedQuantiles.shuffleReadMetrics.shufflePushReadMetricsDist
+              .remoteMergedChunksFetched(idx),
           shuffleMergedLocalChunksFetched =
-            computedQuantiles.shuffleReadMetrics.pushBased.localMergedChunksFetched(idx),
-          shuffleMergedRemoteBlocksBytesRead =
-            computedQuantiles.shuffleReadMetrics.pushBased.remoteMergedBlocksBytesRead(idx),
-          shuffleMergedLocalBlocksBytesRead =
-            computedQuantiles.shuffleReadMetrics.pushBased.localMergedBlocksBytesRead(idx),
+            computedQuantiles.shuffleReadMetrics.shufflePushReadMetricsDist
+              .localMergedChunksFetched(idx),
+          shuffleMergedRemoteBytesRead =
+            computedQuantiles.shuffleReadMetrics.shufflePushReadMetricsDist
+              .remoteMergedBytesRead(idx),
+          shuffleMergedLocalBytesRead =
+            computedQuantiles.shuffleReadMetrics.shufflePushReadMetricsDist
+              .localMergedBytesRead(idx),
           shuffleRemoteReqsDuration =
             computedQuantiles.shuffleReadMetrics.remoteReqsDuration(idx),
           shuffleMergedRemoteReqsDuration =
-            computedQuantiles.shuffleReadMetrics.pushBased.remoteMergedReqsDuration(idx),
+            computedQuantiles.shuffleReadMetrics.shufflePushReadMetricsDist
+              .remoteMergedReqsDuration(idx),
 
           shuffleWriteBytes = computedQuantiles.shuffleWriteMetrics.writeBytes(idx),
           shuffleWriteRecords = computedQuantiles.shuffleWriteMetrics.writeRecords(idx),
@@ -690,7 +699,7 @@ private[spark] class AppStatusStore(
         shuffleReadBytes = stage.shuffleReadBytes,
         shuffleReadRecords = stage.shuffleReadRecords,
         shuffleCorruptMergedBlockChunks = stage.shuffleCorruptMergedBlockChunks,
-        shuffleFallbackCount = stage.shuffleFallbackCount,
+        shuffleMergedFetchFallbackCount = stage.shuffleMergedFetchFallbackCount,
         shuffleMergedRemoteBlocksFetched = stage.shuffleMergedRemoteBlocksFetched,
         shuffleMergedLocalBlocksFetched = stage.shuffleMergedLocalBlocksFetched,
         shuffleMergedRemoteChunksFetched = stage.shuffleMergedRemoteChunksFetched,
@@ -716,7 +725,7 @@ private[spark] class AppStatusStore(
         peakExecutorMetrics = stage.peakExecutorMetrics,
         taskMetricsDistributions = taskMetricsDistribution,
         executorMetricsDistributions = executorMetricsDistributions,
-        isPushBasedShuffleEnabled = stage.isPushBasedShuffleEnabled,
+        isShufflePushEnabled = stage.isShufflePushEnabled,
         shuffleMergersCount = stage.shuffleMergersCount)
     }
   }

@@ -79,7 +79,7 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
         shuffleReadBytes = 1L,
         shuffleReadRecords = 1L,
         shuffleCorruptMergedBlockChunks = 1L,
-        shuffleFallbackCount = 1L,
+        shuffleMergedFetchFallbackCount = 1L,
         shuffleMergedRemoteBlocksFetched = 1L,
         shuffleMergedLocalBlocksFetched = 1L,
         shuffleMergedRemoteChunksFetched = 1L,
@@ -107,7 +107,7 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
         peakExecutorMetrics = None,
         taskMetricsDistributions = None,
         executorMetricsDistributions = None,
-        isPushBasedShuffleEnabled = false,
+        isShufflePushEnabled = false,
         shuffleMergersCount = 0
       )
       val taskTable = new TaskPagedTable(
