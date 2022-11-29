@@ -28,9 +28,13 @@ from pyspark.sql.connect.column import (
 
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect.typing import ColumnOrString, ExpressionOrString
-    from pyspark.sql.connect.client import RemoteSparkSession
-    from pyspark.sql.connect.typing import FunctionBuilderCallable, UserDefinedFunctionCallable
+    from pyspark.sql.connect._typing import (
+        ColumnOrName,
+        ExpressionOrString,
+        FunctionBuilderCallable,
+        UserDefinedFunctionCallable,
+    )
+    from pyspark.sql.connect.client import SparkConnectClient
 
 
 def _build(name: str, *args: "ExpressionOrString") -> ScalarFunctionExpression:
@@ -87,7 +91,7 @@ class UserDefinedFunction(Expression):
             self._args = []
         self._func_name = None
 
-    def to_plan(self, session: "RemoteSparkSession") -> proto.Expression:
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
         if session is None:
             raise Exception("CAnnot create UDF without remote Session.")
         # Needs to materialize the UDF to the server
@@ -103,7 +107,7 @@ class UserDefinedFunction(Expression):
 def _create_udf(
     function: Any, return_type: Union[str, pyspark.sql.types.DataType]
 ) -> "UserDefinedFunctionCallable":
-    def wrapper(*cols: "ColumnOrString") -> UserDefinedFunction:
+    def wrapper(*cols: "ColumnOrName") -> UserDefinedFunction:
         return UserDefinedFunction(func=function, return_type=return_type, args=cols)
 
     return wrapper

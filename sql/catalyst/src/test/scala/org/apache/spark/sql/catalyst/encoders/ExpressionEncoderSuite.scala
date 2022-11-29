@@ -24,7 +24,7 @@ import java.util.Arrays
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.SparkArithmeticException
+import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
 import org.apache.spark.sql.{Encoder, Encoders}
 import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, OptionalData, PrimitiveData, ScroogeLikeExample}
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
@@ -539,14 +539,24 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
 
   test("null check for map key: String") {
     val toRow = ExpressionEncoder[Map[String, Int]]().createSerializer()
-    val e = intercept[RuntimeException](toRow(Map(("a", 1), (null, 2))))
-    assert(e.getMessage.contains("Cannot use null as map key"))
+    val e = intercept[SparkRuntimeException](toRow(Map(("a", 1), (null, 2))))
+    assert(e.getCause.isInstanceOf[SparkRuntimeException])
+    checkError(
+      exception = e.getCause.asInstanceOf[SparkRuntimeException],
+      errorClass = "NULL_MAP_KEY",
+      parameters = Map.empty
+    )
   }
 
   test("null check for map key: Integer") {
     val toRow = ExpressionEncoder[Map[Integer, String]]().createSerializer()
-    val e = intercept[RuntimeException](toRow(Map((1, "a"), (null, "b"))))
-    assert(e.getMessage.contains("Cannot use null as map key"))
+    val e = intercept[SparkRuntimeException](toRow(Map((1, "a"), (null, "b"))))
+    assert(e.getCause.isInstanceOf[SparkRuntimeException])
+    checkError(
+      exception = e.getCause.asInstanceOf[SparkRuntimeException],
+      errorClass = "NULL_MAP_KEY",
+      parameters = Map.empty
+    )
   }
 
   test("throw exception for tuples with more than 22 elements") {

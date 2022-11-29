@@ -122,11 +122,15 @@ object MimaExcludes {
     // [SPARK-41072][SS] Add the error class STREAM_FAILED to StreamingQueryException
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.streaming.StreamingQueryException.this"),
 
+
     // [SPARK-41192] add taskIndex in SparkListenerSpeculativeTaskSubmitted Event
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.SparkListenerSpeculativeTaskSubmitted.apply"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.SparkListenerSpeculativeTaskSubmitted.copy"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.SparkListenerSpeculativeTaskSubmitted.this"),
     ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.scheduler.SparkListenerSpeculativeTaskSubmitted$")
+
+    // [SPARK-41180][SQL] Reuse INVALID_SCHEMA instead of _LEGACY_ERROR_TEMP_1227
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.DataType.parseTypeWithFallback")
   )
 
   // Defulat exclude rules

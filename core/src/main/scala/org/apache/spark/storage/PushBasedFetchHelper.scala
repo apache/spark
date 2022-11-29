@@ -285,6 +285,8 @@ private class PushBasedFetchHelper(
    * 2. There is a failure when fetching remote shuffle chunks.
    * 3. There is a failure when processing SuccessFetchResult which is for a shuffle chunk
    *    (local or remote).
+   * 4. There is a zero-size buffer when processing SuccessFetchResult for a shuffle chunk
+   *    (local or remote).
    */
   def initiateFallbackFetchForPushMergedBlock(
       blockId: BlockId,

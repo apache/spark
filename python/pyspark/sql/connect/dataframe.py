@@ -25,6 +25,7 @@ from typing import (
     Union,
     TYPE_CHECKING,
     overload,
+    Callable,
     cast,
 )
 
@@ -35,6 +36,8 @@ from pyspark.sql.connect.column import (
     Column,
     Expression,
     LiteralExpression,
+    SQLExpression,
+    ScalarFunctionExpression,
 )
 from pyspark.sql.types import (
     StructType,
@@ -42,31 +45,17 @@ from pyspark.sql.types import (
 )
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect.typing import ColumnOrString, ExpressionOrString, LiteralType
-    from pyspark.sql.connect.client import RemoteSparkSession
-
-ColumnOrName = Union[Column, str]
+    from pyspark.sql.connect._typing import ColumnOrName, ExpressionOrString, LiteralType
+    from pyspark.sql.connect.session import SparkSession
 
 
-class GroupingFrame(object):
-
-    MeasuresType = Union[Sequence[Tuple["ExpressionOrString", str]], Dict[str, str]]
-    OptMeasuresType = Optional[MeasuresType]
-
+class GroupedData(object):
     def __init__(self, df: "DataFrame", *grouping_cols: Union[Column, str]) -> None:
         self._df = df
         self._grouping_cols = [x if isinstance(x, Column) else df[x] for x in grouping_cols]
 
-    def agg(self, exprs: Optional[MeasuresType] = None) -> "DataFrame":
-
-        # Normalize the dictionary into a list of tuples.
-        if isinstance(exprs, Dict):
-            measures = list(exprs.items())
-        elif isinstance(exprs, List):
-            measures = exprs
-        else:
-            measures = []
-
+    def agg(self, measures: Sequence[Expression]) -> "DataFrame":
+        assert len(measures) > 0, "exprs should not be empty"
         res = DataFrame.withPlan(
             plan.Aggregate(
                 child=self._df._plan,
@@ -77,23 +66,27 @@ class GroupingFrame(object):
         )
         return res
 
-    def _map_cols_to_dict(self, fun: str, cols: List[Union[Column, str]]) -> Dict[str, str]:
-        return {x if isinstance(x, str) else x.name(): fun for x in cols}
+    def _map_cols_to_expression(
+        self, fun: str, col: Union[Expression, str]
+    ) -> Sequence[Expression]:
+        return [
+            ScalarFunctionExpression(fun, Column(col)) if isinstance(col, str) else col,
+        ]
 
-    def min(self, *cols: Union[Column, str]) -> "DataFrame":
-        expr = self._map_cols_to_dict("min", list(cols))
+    def min(self, col: Union[Expression, str]) -> "DataFrame":
+        expr = self._map_cols_to_expression("min", col)
         return self.agg(expr)
 
-    def max(self, *cols: Union[Column, str]) -> "DataFrame":
-        expr = self._map_cols_to_dict("max", list(cols))
+    def max(self, col: Union[Expression, str]) -> "DataFrame":
+        expr = self._map_cols_to_expression("max", col)
         return self.agg(expr)
 
-    def sum(self, *cols: Union[Column, str]) -> "DataFrame":
-        expr = self._map_cols_to_dict("sum", list(cols))
+    def sum(self, col: Union[Expression, str]) -> "DataFrame":
+        expr = self._map_cols_to_expression("sum", col)
         return self.agg(expr)
 
     def count(self) -> "DataFrame":
-        return self.agg([(LiteralExpression(1), "count")])
+        return self.agg([ScalarFunctionExpression("count", LiteralExpression(1))])
 
 
 class DataFrame(object):
@@ -104,28 +97,75 @@ class DataFrame(object):
 
     def __init__(
         self,
-        session: "RemoteSparkSession",
+        session: "SparkSession",
         data: Optional[List[Any]] = None,
         schema: Optional[StructType] = None,
     ):
         """Creates a new data frame"""
         self._schema = schema
         self._plan: Optional[plan.LogicalPlan] = None
-        self._cache: Dict[str, Any] = {}
-        self._session: "RemoteSparkSession" = session
+        self._session: "SparkSession" = session
+
+    def __repr__(self) -> str:
+        return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
 
     @classmethod
-    def withPlan(cls, plan: plan.LogicalPlan, session: "RemoteSparkSession") -> "DataFrame":
+    def withPlan(cls, plan: plan.LogicalPlan, session: "SparkSession") -> "DataFrame":
         """Main initialization method used to construct a new data frame with a child plan."""
         new_frame = DataFrame(session=session)
         new_frame._plan = plan
         return new_frame
 
+    def isEmpty(self) -> bool:
+        """Returns ``True`` if this :class:`DataFrame` is empty.
+
+        .. versionadded:: 3.4.0
+
+        Returns
+        -------
+        bool
+            Whether it's empty DataFrame or not.
+        """
+        return len(self.take(1)) == 0
+
     def select(self, *cols: "ExpressionOrString") -> "DataFrame":
         return DataFrame.withPlan(plan.Project(self._plan, *cols), session=self._session)
 
-    def agg(self, exprs: Optional[GroupingFrame.MeasuresType]) -> "DataFrame":
-        return self.groupBy().agg(exprs)
+    def selectExpr(self, *expr: Union[str, List[str]]) -> "DataFrame":
+        """Projects a set of SQL expressions and returns a new :class:`DataFrame`.
+
+        This is a variant of :func:`select` that accepts SQL expressions.
+
+        .. versionadded:: 3.4.0
+
+        Returns
+        -------
+        :class:`DataFrame`
+            A DataFrame with new/old columns transformed by expressions.
+        """
+        sql_expr = []
+        if len(expr) == 1 and isinstance(expr[0], list):
+            expr = expr[0]  # type: ignore[assignment]
+        for element in expr:
+            if isinstance(element, str):
+                sql_expr.append(SQLExpression(element))
+            else:
+                sql_expr.extend([SQLExpression(e) for e in element])
+
+        return DataFrame.withPlan(plan.Project(self._plan, *sql_expr), session=self._session)
+
+    def agg(self, *exprs: Union[Expression, Dict[str, str]]) -> "DataFrame":
+        if not exprs:
+            raise ValueError("Argument 'exprs' must not be empty")
+
+        if len(exprs) == 1 and isinstance(exprs[0], dict):
+            measures = [ScalarFunctionExpression(f, Column(e)) for e, f in exprs[0].items()]
+            return self.groupBy().agg(measures)
+        else:
+            # other expressions
+            assert all(isinstance(c, Expression) for c in exprs), "all exprs should be Expression"
+            exprs = cast(Tuple[Expression, ...], exprs)
+            return self.groupBy().agg(exprs)
 
     def alias(self, alias: str) -> "DataFrame":
         return DataFrame.withPlan(plan.SubqueryAlias(self._plan, alias), session=self._session)
@@ -137,27 +177,40 @@ class DataFrame(object):
         ...
 
     @property
+    def dtypes(self) -> List[Tuple[str, str]]:
+        """Returns all column names and their data types as a list.
+
+        .. versionadded:: 3.4.0
+
+        Returns
+        -------
+        list
+            List of columns as tuple pairs.
+        """
+        return [(str(f.name), f.dataType.simpleString()) for f in self.schema.fields]
+
+    @property
     def columns(self) -> List[str]:
         """Returns the list of columns of the current data frame."""
         if self._plan is None:
             return []
 
-        return self.schema().names
+        return self.schema.names
 
-    def sparkSession(self) -> "RemoteSparkSession":
+    def sparkSession(self) -> "SparkSession":
         """Returns Spark session that created this :class:`DataFrame`.
 
         .. versionadded:: 3.4.0
 
         Returns
         -------
-        :class:`RemoteSparkSession`
+        :class:`SparkSession`
         """
         return self._session
 
     def count(self) -> int:
         """Returns the number of rows in the data frame"""
-        pdd = self.agg([(LiteralExpression(1), "count")]).toPandas()
+        pdd = self.agg(ScalarFunctionExpression("count", LiteralExpression(1))).toPandas()
         if pdd is None:
             raise Exception("Empty result")
         return pdd.iloc[0, 0]
@@ -255,13 +308,56 @@ class DataFrame(object):
             plan.Deduplicate(child=self._plan, all_columns_as_keys=True), session=self._session
         )
 
-    def drop(self, *cols: "ColumnOrString") -> "DataFrame":
-        all_cols = self.columns
-        dropped = set([c.name() if isinstance(c, Column) else self[c].name() for c in cols])
-        dropped_cols = filter(lambda x: x in dropped, all_cols)
-        return DataFrame.withPlan(plan.Project(self._plan, *dropped_cols), session=self._session)
+    def drop(self, *cols: "ColumnOrName") -> "DataFrame":
+        """Returns a new :class:`DataFrame` without specified columns.
+        This is a no-op if schema doesn't contain the given column name(s).
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        cols: str or :class:`Column`
+            a name of the column, or the :class:`Column` to drop
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame without given columns.
+        """
+        _cols = list(cols)
+        if any(not isinstance(c, (str, Column)) for c in _cols):
+            raise TypeError(
+                f"'cols' must contains strings or Columns, but got {type(cols).__name__}"
+            )
+        if len(_cols) == 0:
+            raise ValueError("'cols' must be non-empty")
+
+        return DataFrame.withPlan(
+            plan.Drop(
+                child=self._plan,
+                columns=_cols,
+            ),
+            session=self._session,
+        )
 
     def filter(self, condition: Expression) -> "DataFrame":
+        """Filters rows using the given condition.
+
+        :func:`where` is an alias for :func:`filter`.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        condition : :class:`Column` or str
+            a :class:`Column` of :class:`types.BooleanType`
+            or a string of SQL expression.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Filtered DataFrame.
+        """
         return DataFrame.withPlan(
             plan.Filter(child=self._plan, filter=condition), session=self._session
         )
@@ -278,8 +374,8 @@ class DataFrame(object):
         """
         return self.head()
 
-    def groupBy(self, *cols: "ColumnOrString") -> GroupingFrame:
-        return GroupingFrame(self, *cols)
+    def groupBy(self, *cols: "ColumnOrName") -> GroupedData:
+        return GroupedData(self, *cols)
 
     @overload
     def head(self) -> Optional[Row]:
@@ -345,18 +441,72 @@ class DataFrame(object):
         )
 
     def limit(self, n: int) -> "DataFrame":
+        """Limits the result count to the number specified.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        num : int
+            Number of records to return. Will return this number of records
+            or whatever number is available.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Subset of the records
+        """
         return DataFrame.withPlan(plan.Limit(child=self._plan, limit=n), session=self._session)
 
     def offset(self, n: int) -> "DataFrame":
+        """Returns a new :class: `DataFrame` by skipping the first `n` rows.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        num : int
+            Number of records to return. Will return this number of records
+            or all records if the DataFrame contains less than this number of records.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Subset of the records
+        """
         return DataFrame.withPlan(plan.Offset(child=self._plan, offset=n), session=self._session)
 
-    def sort(self, *cols: "ColumnOrString") -> "DataFrame":
+    def tail(self, num: int) -> List[Row]:
+        """
+        Returns the last ``num`` rows as a :class:`list` of :class:`Row`.
+
+        Running tail requires moving data into the application's driver process, and doing so with
+        a very large ``num`` can crash the driver process with OutOfMemoryError.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        num : int
+            Number of records to return. Will return this number of records
+            or all records if the DataFrame contains less than this number of records.
+
+        Returns
+        -------
+        list
+            List of rows
+        """
+        return DataFrame.withPlan(
+            plan.Tail(child=self._plan, limit=num), session=self._session
+        ).collect()
+
+    def sort(self, *cols: "ColumnOrName") -> "DataFrame":
         """Sort by a specific column"""
         return DataFrame.withPlan(
             plan.Sort(self._plan, columns=list(cols), is_global=True), session=self._session
         )
 
-    def sortWithinPartitions(self, *cols: "ColumnOrString") -> "DataFrame":
+    def sortWithinPartitions(self, *cols: "ColumnOrName") -> "DataFrame":
         """Sort within each partition by a specific column"""
         return DataFrame.withPlan(
             plan.Sort(self._plan, columns=list(cols), is_global=False), session=self._session
@@ -369,6 +519,31 @@ class DataFrame(object):
         withReplacement: bool = False,
         seed: Optional[int] = None,
     ) -> "DataFrame":
+        """Returns a sampled subset of this :class:`DataFrame`.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        withReplacement : bool, optional
+            Sample with replacement or not (default ``False``).
+        fraction : float
+            Fraction of rows to generate, range [0.0, 1.0].
+        seed : int, optional
+            Seed for sampling (default a random seed).
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Sampled rows from given DataFrame.
+
+        Notes
+        -----
+        This is not guaranteed to provide exactly the fraction specified of the total
+        count of the given :class:`DataFrame`.
+
+        `fraction` is required and, `withReplacement` and `seed` are optional.
+        """
         if not isinstance(fraction, float):
             raise TypeError(f"'fraction' must be float, but got {type(fraction).__name__}")
         if not isinstance(withReplacement, bool):
@@ -436,9 +611,62 @@ class DataFrame(object):
         print(self._show_string(n, truncate, vertical))
 
     def union(self, other: "DataFrame") -> "DataFrame":
+        """Return a new :class:`DataFrame` containing union of rows in this and another
+        :class:`DataFrame`.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            Another :class:`DataFrame` that needs to be unioned
+
+        Returns
+        -------
+        :class:`DataFrame`
+
+        See Also
+        --------
+        DataFrame.unionAll
+
+        Notes
+        -----
+        This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union
+        (that does deduplication of elements), use this function followed by :func:`distinct`.
+
+        Also as standard in SQL, this function resolves columns by position (not by name).
+        """
         return self.unionAll(other)
 
     def unionAll(self, other: "DataFrame") -> "DataFrame":
+        """Return a new :class:`DataFrame` containing union of rows in this and another
+        :class:`DataFrame`.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            Another :class:`DataFrame` that needs to be combined
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Combined DataFrame
+
+        Notes
+        -----
+        This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union
+        (that does deduplication of elements), use this function followed by :func:`distinct`.
+
+        Also as standard in SQL, this function resolves columns by position (not by name).
+
+        :func:`unionAll` is an alias to :func:`union`
+
+        See Also
+        --------
+        DataFrame.union
+        """
         if other._plan is None:
             raise ValueError("Argument to Union does not contain a valid plan.")
         return DataFrame.withPlan(
@@ -727,14 +955,15 @@ class DataFrame(object):
         else:
             return []
 
-    def toPandas(self) -> Optional["pandas.DataFrame"]:
+    def toPandas(self) -> "pandas.DataFrame":
         if self._plan is None:
             raise Exception("Cannot collect on empty plan.")
         if self._session is None:
             raise Exception("Cannot collect on empty session.")
-        query = self._plan.to_proto(self._session)
-        return self._session._to_pandas(query)
+        query = self._plan.to_proto(self._session.client)
+        return self._session.client._to_pandas(query)
 
+    @property
     def schema(self) -> StructType:
         """Returns the schema of this :class:`DataFrame` as a :class:`pyspark.sql.types.StructType`.
 
@@ -746,39 +975,149 @@ class DataFrame(object):
         """
         if self._schema is None:
             if self._plan is not None:
-                query = self._plan.to_proto(self._session)
+                query = self._plan.to_proto(self._session.client)
                 if self._session is None:
-                    raise Exception("Cannot analyze without RemoteSparkSession.")
-                self._schema = self._session.schema(query)
+                    raise Exception("Cannot analyze without SparkSession.")
+                self._schema = self._session.client.schema(query)
                 return self._schema
             else:
                 raise Exception("Empty plan.")
         else:
             return self._schema
 
-    def explain(
-        self, extended: Optional[Union[bool, str]] = None, mode: Optional[str] = None
-    ) -> str:
-        """Retruns plans in string for debugging purpose.
+    @property
+    def isLocal(self) -> bool:
+        """Returns ``True`` if the :func:`collect` and :func:`take` methods can be run locally
+        (without any Spark executors).
+
+        .. versionadded:: 3.4.0
+
+        Returns
+        -------
+        bool
+        """
+        if self._plan is None:
+            raise Exception("Cannot analyze on empty plan.")
+        query = self._plan.to_proto(self._session.client)
+        return self._session.client._analyze(query).is_local
+
+    @property
+    def isStreaming(self) -> bool:
+        """Returns ``True`` if this :class:`DataFrame` contains one or more sources that
+        continuously return data as it arrives. A :class:`DataFrame` that reads data from a
+        streaming source must be executed as a :class:`StreamingQuery` using the :func:`start`
+        method in :class:`DataStreamWriter`.  Methods that return a single answer, (e.g.,
+        :func:`count` or :func:`collect`) will throw an :class:`AnalysisException` when there
+        is a streaming source present.
+
+        .. versionadded:: 3.4.0
+
+        Notes
+        -----
+        This API is evolving.
+
+        Returns
+        -------
+        bool
+            Whether it's streaming DataFrame or not.
+        """
+        if self._plan is None:
+            raise Exception("Cannot analyze on empty plan.")
+        query = self._plan.to_proto(self._session.client)
+        return self._session.client._analyze(query).is_streaming
+
+    def _tree_string(self) -> str:
+        if self._plan is None:
+            raise Exception("Cannot analyze on empty plan.")
+        query = self._plan.to_proto(self._session.client)
+        return self._session.client._analyze(query).tree_string
+
+    def printSchema(self) -> None:
+        """Prints out the schema in the tree format.
+
+        .. versionadded:: 3.4.0
+
+        Returns
+        -------
+        None
+        """
+        print(self._tree_string())
+
+    def inputFiles(self) -> List[str]:
+        """
+        Returns a best-effort snapshot of the files that compose this :class:`DataFrame`.
+        This method simply asks each constituent BaseRelation for its respective files and
+        takes the union of all results. Depending on the source relations, this may not find
+        all input files. Duplicates are removed.
+
+        .. versionadded:: 3.4.0
+
+        Returns
+        -------
+        list
+            List of file paths.
+        """
+        if self._plan is None:
+            raise Exception("Cannot analyze on empty plan.")
+        query = self._plan.to_proto(self._session.client)
+        return self._session.client._analyze(query).input_files
+
+    def transform(self, func: Callable[..., "DataFrame"], *args: Any, **kwargs: Any) -> "DataFrame":
+        """Returns a new :class:`DataFrame`. Concise syntax for chaining custom transformations.
 
         .. versionadded:: 3.4.0
 
         Parameters
         ----------
-        extended : bool, optional
-            default ``False``. If ``False``, returns only the physical plan.
-            When this is a string without specifying the ``mode``, it works as the mode is
-            specified.
-        mode : str, optional
-            specifies the expected output format of plans.
+        func : function
+            a function that takes and returns a :class:`DataFrame`.
+        *args
+            Positional arguments to pass to func.
 
-            * ``simple``: Print only a physical plan.
-            * ``extended``: Print both logical and physical plans.
-            * ``codegen``: Print a physical plan and generated codes if they are available.
-            * ``cost``: Print a logical plan and statistics if they are available.
-            * ``formatted``: Split explain output into two sections: a physical plan outline \
-                and node details.
+        **kwargs
+            Keyword arguments to pass to func.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Transformed DataFrame.
+
+        Examples
+        --------
+        >>> from pyspark.sql.connect.functions import col
+        >>> df = spark.createDataFrame([(1, 1.0), (2, 2.0)], ["int", "float"])
+        >>> def cast_all_to_int(input_df):
+        ...     return input_df.select([col(col_name).cast("int") for col_name in input_df.columns])
+        >>> def sort_columns_asc(input_df):
+        ...     return input_df.select(*sorted(input_df.columns))
+        >>> df.transform(cast_all_to_int).transform(sort_columns_asc).show()
+        +-----+---+
+        |float|int|
+        +-----+---+
+        |    1|  1|
+        |    2|  2|
+        +-----+---+
+
+        >>> def add_n(input_df, n):
+        ...     return input_df.select([(col(col_name) + n).alias(col_name)
+        ...                             for col_name in input_df.columns])
+        >>> df.transform(add_n, 1).transform(add_n, n=10).show()
+        +---+-----+
+        |int|float|
+        +---+-----+
+        | 12| 12.0|
+        | 13| 13.0|
+        +---+-----+
         """
+        result = func(self, *args, **kwargs)
+        assert isinstance(
+            result, DataFrame
+        ), "Func returned an instance of type [%s], " "should have been DataFrame." % type(result)
+        return result
+
+    def _explain_string(
+        self, extended: Optional[Union[bool, str]] = None, mode: Optional[str] = None
+    ) -> str:
         if extended is not None and mode is not None:
             raise ValueError("extended and mode should not be set together.")
 
@@ -816,12 +1155,37 @@ class DataFrame(object):
             explain_mode = cast(str, extended)
 
         if self._plan is not None:
-            query = self._plan.to_proto(self._session)
+            query = self._plan.to_proto(self._session.client)
             if self._session is None:
-                raise Exception("Cannot analyze without RemoteSparkSession.")
-            return self._session.explain_string(query, explain_mode)
+                raise Exception("Cannot analyze without SparkSession.")
+            return self._session.client.explain_string(query, explain_mode)
         else:
             return ""
+
+    def explain(
+        self, extended: Optional[Union[bool, str]] = None, mode: Optional[str] = None
+    ) -> None:
+        """Retruns plans in string for debugging purpose.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        extended : bool, optional
+            default ``False``. If ``False``, returns only the physical plan.
+            When this is a string without specifying the ``mode``, it works as the mode is
+            specified.
+        mode : str, optional
+            specifies the expected output format of plans.
+
+            * ``simple``: Print only a physical plan.
+            * ``extended``: Print both logical and physical plans.
+            * ``codegen``: Print a physical plan and generated codes if they are available.
+            * ``cost``: Print a logical plan and statistics if they are available.
+            * ``formatted``: Split explain output into two sections: a physical plan outline \
+                and node details.
+        """
+        print(self._explain_string(extended=extended, mode=mode))
 
     def createGlobalTempView(self, name: str) -> None:
         """Creates a global temporary view with this :class:`DataFrame`.
@@ -837,8 +1201,8 @@ class DataFrame(object):
         """
         command = plan.CreateView(
             child=self._plan, name=name, is_global=True, replace=False
-        ).command(session=self._session)
-        self._session.execute_command(command)
+        ).command(session=self._session.client)
+        self._session.client.execute_command(command)
 
     def createOrReplaceGlobalTempView(self, name: str) -> None:
         """Creates or replaces a global temporary view using the given name.
@@ -854,8 +1218,74 @@ class DataFrame(object):
         """
         command = plan.CreateView(
             child=self._plan, name=name, is_global=True, replace=True
-        ).command(session=self._session)
-        self._session.execute_command(command)
+        ).command(session=self._session.client)
+        self._session.client.execute_command(command)
+
+    def rdd(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("RDD Support for Spark Connect is not implemented.")
+
+    def unpersist(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("unpersist() is not implemented.")
+
+    def cache(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("cache() is not implemented.")
+
+    def persist(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("persist() is not implemented.")
+
+    def withWatermark(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("withWatermark() is not implemented.")
+
+    def observe(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("observe() is not implemented.")
+
+    def foreach(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("foreach() is not implemented.")
+
+    def foreachPartition(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("foreachPartition() is not implemented.")
+
+    def toLocalIterator(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("toLocalIterator() is not implemented.")
+
+    def checkpoint(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("checkpoint() is not implemented.")
+
+    def localCheckpoint(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("localCheckpoint() is not implemented.")
+
+    def to_pandas_on_spark(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("to_pandas_on_spark() is not implemented.")
+
+    def pandas_api(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("pandas_api() is not implemented.")
+
+    def registerTempTable(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("registerTempTable() is not implemented.")
+
+    def storageLevel(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("storageLevel() is not implemented.")
+
+    def mapInPandas(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("mapInPandas() is not implemented.")
+
+    def mapInArrow(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("mapInArrow() is not implemented.")
+
+    def writeStream(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("writeStream() is not implemented.")
+
+    def toJSON(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("toJSON() is not implemented.")
+
+    def _repr_html_(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("_repr_html_() is not implemented.")
+
+    def semanticHash(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("semanticHash() is not implemented.")
+
+    def sameSemantics(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("sameSemantics() is not implemented.")
 
 
 class DataFrameNaFunctions:

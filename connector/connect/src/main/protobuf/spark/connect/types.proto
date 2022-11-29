@@ -26,31 +26,46 @@ option java_package = "org.apache.spark.connect.proto";
 // itself but only describes it.
 message DataType {
   oneof kind {
-    Boolean bool = 1;
-    I8 i8 = 2;
-    I16 i16 = 3;
-    I32 i32 = 5;
-    I64 i64 = 7;
-    FP32 fp32 = 10;
-    FP64 fp64 = 11;
-    String string = 12;
-    Binary binary = 13;
-    Timestamp timestamp = 14;
-    Date date = 16;
-    Time time = 17;
-    IntervalYear interval_year = 19;
-    IntervalDay interval_day = 20;
-    TimestampTZ timestamp_tz = 29;
-    UUID uuid = 32;
+    NULL null = 1;
 
-    FixedChar fixed_char = 21;
-    VarChar varchar = 22;
-    FixedBinary fixed_binary = 23;
-    Decimal decimal = 24;
+    Binary binary = 2;
 
-    Struct struct = 25;
-    List list = 27;
-    Map map = 28;
+    Boolean boolean = 3;
+
+    // Numeric types
+    Byte byte = 4;
+    Short short = 5;
+    Integer integer = 6;
+    Long long = 7;
+
+    Float float = 8;
+    Double double = 9;
+    Decimal decimal = 10;
+
+    // String types
+    String string = 11;
+    Char char = 12;
+    VarChar var_char = 13;
+
+    // Datatime types
+    Date date = 14;
+    Timestamp timestamp = 15;
+    TimestampNTZ timestamp_ntz = 16;
+
+    // Interval types
+    CalendarInterval calendar_interval = 17;
+    YearMonthInterval year_month_interval = 18;
+    DayTimeInterval day_time_interval = 19;
+
+    // Complex types
+    Array array = 20;
+    Struct struct = 21;
+    Map map = 22;
+
+
+    UUID uuid = 25;
+
+    FixedBinary fixed_binary = 26;
 
     uint32 user_defined_type_reference = 31;
   }
@@ -59,27 +74,27 @@ message DataType {
     uint32 type_variation_reference = 1;
   }
 
-  message I8 {
+  message Byte {
     uint32 type_variation_reference = 1;
   }
 
-  message I16 {
+  message Short {
     uint32 type_variation_reference = 1;
   }
 
-  message I32 {
+  message Integer {
     uint32 type_variation_reference = 1;
   }
 
-  message I64 {
+  message Long {
     uint32 type_variation_reference = 1;
   }
 
-  message FP32 {
+  message Float {
     uint32 type_variation_reference = 1;
   }
 
-  message FP64 {
+  message Double {
     uint32 type_variation_reference = 1;
   }
 
@@ -91,6 +106,10 @@ message DataType {
     uint32 type_variation_reference = 1;
   }
 
+  message NULL {
+    uint32 type_variation_reference = 1;
+  }
+
   message Timestamp {
     uint32 type_variation_reference = 1;
   }
@@ -99,20 +118,24 @@ message DataType {
     uint32 type_variation_reference = 1;
   }
 
-  message Time {
+  message TimestampNTZ {
     uint32 type_variation_reference = 1;
   }
 
-  message TimestampTZ {
+  message CalendarInterval {
     uint32 type_variation_reference = 1;
   }
 
-  message IntervalYear {
-    uint32 type_variation_reference = 1;
+  message YearMonthInterval {
+    optional int32 start_field = 1;
+    optional int32 end_field = 2;
+    uint32 type_variation_reference = 3;
   }
 
-  message IntervalDay {
-    uint32 type_variation_reference = 1;
+  message DayTimeInterval {
+    optional int32 start_field = 1;
+    optional int32 end_field = 2;
+    uint32 type_variation_reference = 3;
   }
 
   message UUID {
@@ -120,7 +143,7 @@ message DataType {
   }
 
   // Start compound types.
-  message FixedChar {
+  message Char {
     int32 length = 1;
     uint32 type_variation_reference = 2;
   }
@@ -136,14 +159,14 @@ message DataType {
   }
 
   message Decimal {
-    int32 scale = 1;
-    int32 precision = 2;
+    optional int32 scale = 1;
+    optional int32 precision = 2;
     uint32 type_variation_reference = 3;
   }
 
   message StructField {
-    DataType type = 1;
-    string name = 2;
+    string name = 1;
+    DataType data_type = 2;
     bool nullable = 3;
     map<string, string> metadata = 4;
   }
@@ -153,16 +176,16 @@ message DataType {
     uint32 type_variation_reference = 2;
   }
 
-  message List {
-    DataType DataType = 1;
-    uint32 type_variation_reference = 2;
-    bool element_nullable = 3;
+  message Array {
+    DataType element_type = 1;
+    bool contains_null = 2;
+    uint32 type_variation_reference = 3;
   }
 
   message Map {
-    DataType key = 1;
-    DataType value = 2;
-    uint32 type_variation_reference = 3;
-    bool value_nullable = 4;
+    DataType key_type = 1;
+    DataType value_type = 2;
+    bool value_contains_null = 3;
+    uint32 type_variation_reference = 4;
   }
 }

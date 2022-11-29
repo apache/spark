@@ -962,15 +962,18 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
   test("SPARK-20460 Check name duplication in buckets") {
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-        var errorMsg = intercept[AnalysisException] {
-          Seq((1, 1)).toDF("col", c0).write.bucketBy(2, c0, c1).saveAsTable("t")
-        }.getMessage
-        assert(errorMsg.contains("Found duplicate column(s) in the bucket definition"))
-
-        errorMsg = intercept[AnalysisException] {
-          Seq((1, 1)).toDF("col", c0).write.bucketBy(2, "col").sortBy(c0, c1).saveAsTable("t")
-        }.getMessage
-        assert(errorMsg.contains("Found duplicate column(s) in the sort definition"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            Seq((1, 1)).toDF("col", c0).write.bucketBy(2, c0, c1).saveAsTable("t")
+          },
+          errorClass = "COLUMN_ALREADY_EXISTS",
+          parameters = Map("columnName" -> s"`${c1.toLowerCase(Locale.ROOT)}`"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            Seq((1, 1)).toDF("col", c0).write.bucketBy(2, "col").sortBy(c0, c1).saveAsTable("t")
+          },
+          errorClass = "COLUMN_ALREADY_EXISTS",
+          parameters = Map("columnName" -> s"`${c1.toLowerCase(Locale.ROOT)}`"))
       }
     }
   }
@@ -978,22 +981,26 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
   test("SPARK-20460 Check name duplication in schema") {
     def checkWriteDataColumnDuplication(
         format: String, colName0: String, colName1: String, tempDir: File): Unit = {
-      val errorMsg = intercept[AnalysisException] {
-        Seq((1, 1)).toDF(colName0, colName1).write.format(format).mode("overwrite")
-          .save(tempDir.getAbsolutePath)
-      }.getMessage
-      assert(errorMsg.contains("Found duplicate column(s) when inserting into"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          Seq((1, 1)).toDF(colName0, colName1).write.format(format).mode("overwrite")
+            .save(tempDir.getAbsolutePath)
+        },
+        errorClass = "COLUMN_ALREADY_EXISTS",
+        parameters = Map("columnName" -> s"`${colName1.toLowerCase(Locale.ROOT)}`"))
     }
 
     def checkReadUserSpecifiedDataColumnDuplication(
         df: DataFrame, format: String, colName0: String, colName1: String, tempDir: File): Unit = {
       val testDir = Utils.createTempDir(tempDir.getAbsolutePath)
       df.write.format(format).mode("overwrite").save(testDir.getAbsolutePath)
-      val errorMsg = intercept[AnalysisException] {
-        spark.read.format(format).schema(s"$colName0 INT, $colName1 INT")
-          .load(testDir.getAbsolutePath)
-      }.getMessage
-      assert(errorMsg.contains("Found duplicate column(s) in the data schema:"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.read.format(format).schema(s"$colName0 INT, $colName1 INT")
+            .load(testDir.getAbsolutePath)
+        },
+        errorClass = "COLUMN_ALREADY_EXISTS",
+        parameters = Map("columnName" -> s"`${colName1.toLowerCase(Locale.ROOT)}`"))
     }
 
     def checkReadPartitionColumnDuplication(
@@ -1001,10 +1008,12 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
       val testDir = Utils.createTempDir(tempDir.getAbsolutePath)
       Seq(1).toDF("col").write.format(format).mode("overwrite")
         .save(s"${testDir.getAbsolutePath}/$colName0=1/$colName1=1")
-      val errorMsg = intercept[AnalysisException] {
-        spark.read.format(format).load(testDir.getAbsolutePath)
-      }.getMessage
-      assert(errorMsg.contains("Found duplicate column(s) in the partition schema:"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.read.format(format).load(testDir.getAbsolutePath)
+        },
+        errorClass = "COLUMN_ALREADY_EXISTS",
+        parameters = Map("columnName" -> s"`${colName1.toLowerCase(Locale.ROOT)}`"))
     }
 
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
@@ -1030,10 +1039,12 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
           testDir = Utils.createTempDir(src.getAbsolutePath)
           Seq(s"""{"$c0":3, "$c1":5}""").toDF().write.mode("overwrite")
             .text(testDir.getAbsolutePath)
-          val errorMsg = intercept[AnalysisException] {
-            spark.read.format("json").option("inferSchema", true).load(testDir.getAbsolutePath)
-          }.getMessage
-          assert(errorMsg.contains("Found duplicate column(s) in the data schema:"))
+          checkError(
+            exception = intercept[AnalysisException] {
+              spark.read.format("json").option("inferSchema", true).load(testDir.getAbsolutePath)
+            },
+            errorClass = "COLUMN_ALREADY_EXISTS",
+            parameters = Map("columnName" -> s"`${c1.toLowerCase(Locale.ROOT)}`"))
           checkReadPartitionColumnDuplication("json", c0, c1, src)
 
           // Check Parquet format

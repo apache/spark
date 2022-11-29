@@ -181,6 +181,22 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         )
         self.assertEqual(plan.root.sort.is_global, False)
 
+    def test_drop(self):
+        # SPARK-41169: test drop
+        df = self.connect.readTable(table_name=self.tbl_name)
+
+        plan = df.filter(df.col_name > 3).drop("col_a", "col_b")._plan.to_proto(self.connect)
+        self.assertEqual(
+            [f.unresolved_attribute.unparsed_identifier for f in plan.root.drop.cols],
+            ["col_a", "col_b"],
+        )
+
+        plan = df.filter(df.col_name > 3).drop(df.col_x, "col_b")._plan.to_proto(self.connect)
+        self.assertEqual(
+            [f.unresolved_attribute.unparsed_identifier for f in plan.root.drop.cols],
+            ["col_x", "col_b"],
+        )
+
     def test_deduplicate(self):
         df = self.connect.readTable(table_name=self.tbl_name)
 
@@ -296,6 +312,28 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         with self.assertRaises(ValueError) as context:
             df.repartition(-1)._plan.to_proto(self.connect)
         self.assertTrue("numPartitions must be positive" in str(context.exception))
+
+    def test_unsupported_functions(self):
+        # SPARK-41225: Disable unsupported functions.
+        df = self.connect.readTable(table_name=self.tbl_name)
+        for f in (
+            "rdd",
+            "unpersist",
+            "cache",
+            "persist",
+            "withWatermark",
+            "observe",
+            "foreach",
+            "foreachPartition",
+            "toLocalIterator",
+            "checkpoint",
+            "localCheckpoint",
+            "_repr_html_",
+            "semanticHash",
+            "sameSemantics",
+        ):
+            with self.assertRaises(NotImplementedError):
+                getattr(df, f)()
 
 
 if __name__ == "__main__":

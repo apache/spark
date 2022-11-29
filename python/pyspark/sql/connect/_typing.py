@@ -14,8 +14,41 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Union
-from datetime import date, time, datetime
 
-PrimitiveType = Union[str, int, bool, float]
-LiteralType = Union[PrimitiveType, Union[date, time, datetime]]
+import sys
+
+if sys.version_info >= (3, 8):
+    from typing import Protocol
+else:
+    from typing_extensions import Protocol
+
+from typing import Union, Optional
+import datetime
+import decimal
+
+from pyspark.sql.connect.column import ScalarFunctionExpression, Expression, Column
+from pyspark.sql.connect.function_builder import UserDefinedFunction
+
+ExpressionOrString = Union[Expression, str]
+
+ColumnOrName = Union[Column, str]
+
+PrimitiveType = Union[bool, float, int, str]
+
+OptionalPrimitiveType = Optional[PrimitiveType]
+
+LiteralType = PrimitiveType
+
+DecimalLiteral = decimal.Decimal
+
+DateTimeLiteral = Union[datetime.datetime, datetime.date]
+
+
+class FunctionBuilderCallable(Protocol):
+    def __call__(self, *_: ExpressionOrString) -> ScalarFunctionExpression:
+        ...
+
+
+class UserDefinedFunctionCallable(Protocol):
+    def __call__(self, *_: ColumnOrName) -> UserDefinedFunction:
+        ...

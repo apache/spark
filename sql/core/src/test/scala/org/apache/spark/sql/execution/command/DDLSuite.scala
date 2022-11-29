@@ -519,12 +519,12 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
   test("create table - duplicate column names in the table definition") {
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-        val errMsg = intercept[AnalysisException] {
-          sql(s"CREATE TABLE t($c0 INT, $c1 INT) USING parquet")
-        }.getMessage
-        assert(errMsg.contains(
-          "Found duplicate column(s) in the table definition of " +
-            s"`$SESSION_CATALOG_NAME`.`default`.`t`"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"CREATE TABLE t($c0 INT, $c1 INT) USING parquet")
+          },
+          errorClass = "COLUMN_ALREADY_EXISTS",
+          parameters = Map("columnName" -> s"`${c1.toLowerCase(Locale.ROOT)}`"))
       }
     }
   }
@@ -558,10 +558,12 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
   test("create table - column repeated in partition columns") {
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-        val errMsg = intercept[AnalysisException] {
-          sql(s"CREATE TABLE t($c0 INT) USING parquet PARTITIONED BY ($c0, $c1)")
-        }.getMessage
-        assert(errMsg.contains("Found duplicate column(s) in the partition schema"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"CREATE TABLE t($c0 INT) USING parquet PARTITIONED BY ($c0, $c1)")
+          },
+          errorClass = "COLUMN_ALREADY_EXISTS",
+          parameters = Map("columnName" -> s"`${c1.toLowerCase(Locale.ROOT)}`"))
       }
     }
   }
@@ -569,18 +571,22 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
   test("create table - column repeated in bucket/sort columns") {
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-        var errMsg = intercept[AnalysisException] {
-          sql(s"CREATE TABLE t($c0 INT) USING parquet CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS")
-        }.getMessage
-        assert(errMsg.contains("Found duplicate column(s) in the bucket definition"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"CREATE TABLE t($c0 INT) USING parquet CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS")
+          },
+          errorClass = "COLUMN_ALREADY_EXISTS",
+          parameters = Map("columnName" -> s"`${c1.toLowerCase(Locale.ROOT)}`"))
 
-        errMsg = intercept[AnalysisException] {
-          sql(s"""
-              |CREATE TABLE t($c0 INT, col INT) USING parquet CLUSTERED BY (col)
-              |  SORTED BY ($c0, $c1) INTO 2 BUCKETS
-             """.stripMargin)
-        }.getMessage
-        assert(errMsg.contains("Found duplicate column(s) in the sort definition"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"""
+                |CREATE TABLE t($c0 INT, col INT) USING parquet CLUSTERED BY (col)
+                |  SORTED BY ($c0, $c1) INTO 2 BUCKETS
+               """.stripMargin)
+          },
+          errorClass = "COLUMN_ALREADY_EXISTS",
+          parameters = Map("columnName" -> s"`${c1.toLowerCase(Locale.ROOT)}`"))
       }
     }
   }
@@ -667,10 +673,12 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
   test("create view - duplicate column names in the view definition") {
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-        val errMsg = intercept[AnalysisException] {
-          sql(s"CREATE VIEW t AS SELECT * FROM VALUES (1, 1) AS t($c0, $c1)")
-        }.getMessage
-        assert(errMsg.contains("Found duplicate column(s) in the view definition"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"CREATE VIEW t AS SELECT * FROM VALUES (1, 1) AS t($c0, $c1)")
+          },
+          errorClass = "COLUMN_ALREADY_EXISTS",
+          parameters = Map("columnName" -> s"`${c1.toLowerCase(Locale.ROOT)}`"))
       }
     }
   }
@@ -1905,10 +1913,12 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
   test("alter table add columns with existing column name") {
     withTable("t1") {
       sql("CREATE TABLE t1 (c1 int) USING PARQUET")
-      val e = intercept[AnalysisException] {
-        sql("ALTER TABLE t1 ADD COLUMNS (c1 string)")
-      }.getMessage
-      assert(e.contains("Found duplicate column(s)"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("ALTER TABLE t1 ADD COLUMNS (c1 string)")
+        },
+        errorClass = "COLUMN_ALREADY_EXISTS",
+        parameters = Map("columnName" -> "`c1`"))
     }
   }
 
@@ -1918,10 +1928,12 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         withTable("t1") {
           sql("CREATE TABLE t1 (c1 int) USING PARQUET")
           if (!caseSensitive) {
-            val e = intercept[AnalysisException] {
-              sql("ALTER TABLE t1 ADD COLUMNS (C1 string)")
-            }.getMessage
-            assert(e.contains("Found duplicate column(s)"))
+            checkError(
+              exception = intercept[AnalysisException] {
+                sql("ALTER TABLE t1 ADD COLUMNS (C1 string)")
+              },
+              errorClass = "COLUMN_ALREADY_EXISTS",
+              parameters = Map("columnName" -> "`c1`"))
           } else {
             sql("ALTER TABLE t1 ADD COLUMNS (C1 string)")
             assert(spark.table("t1").schema ==
@@ -2092,10 +2104,16 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       val function = CatalogFunction(func, "test.non.exists.udf", Seq.empty)
       spark.sessionState.catalog.createFunction(function, false)
       assert(!spark.sessionState.catalog.isRegisteredFunction(func))
-      val err = intercept[AnalysisException] {
-        sql("REFRESH FUNCTION func1")
-      }.getMessage
-      assert(err.contains("Can not load class"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("REFRESH FUNCTION func1")
+        },
+        errorClass = "CANNOT_LOAD_FUNCTION_CLASS",
+        parameters = Map(
+          "className" -> "test.non.exists.udf",
+          "functionName" -> "`spark_catalog`.`default`.`func1`"
+        )
+      )
       assert(!spark.sessionState.catalog.isRegisteredFunction(func))
     }
   }

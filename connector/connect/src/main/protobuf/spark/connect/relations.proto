@@ -50,6 +50,8 @@ message Relation {
     RenameColumnsBySameLengthNames rename_columns_by_same_length_names = 18;
     RenameColumnsByNameToNameMap rename_columns_by_name_to_name_map = 19;
     ShowString show_string = 20;
+    Drop drop = 21;
+    Tail tail = 22;
 
     // NA functions
     NAFill fill_na = 90;
@@ -213,6 +215,15 @@ message Offset {
   int32 offset = 2;
 }
 
+// Relation of type [[Tail]] that is used to fetch `limit` rows from the last of the input relation.
+message Tail {
+  // (Required) Input relation for an Tail.
+  Relation input = 1;
+
+  // (Required) the limit.
+  int32 limit = 2;
+}
+
 // Relation of type [[Aggregate]].
 message Aggregate {
   // (Required) Input relation for a Aggregate.
@@ -252,6 +263,19 @@ message Sort {
   }
 }
 
+
+// Drop specified columns.
+message Drop {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) columns to drop.
+  //
+  // Should contain at least 1 item.
+  repeated Expression cols = 2;
+}
+
+
 // Relation of type [[Deduplicate]] which have duplicate rows removed, could consider either only
 // the subset of columns or all the columns.
 message Deduplicate {
@@ -271,9 +295,9 @@ message Deduplicate {
 
 // A relation that does not need to be qualified by name.
 message LocalRelation {
-  // (Optional) A list qualified attributes.
-  repeated Expression.QualifiedAttribute attributes = 1;
-  // TODO: support local data.
+  // Local collection data serialized into Arrow IPC streaming format which contains
+  // the schema of the data.
+  bytes data = 1;
 }
 
 // Relation of type [[Sample]] that samples a fraction of the dataset.

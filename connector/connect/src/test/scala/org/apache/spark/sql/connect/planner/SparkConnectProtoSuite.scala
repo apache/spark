@@ -18,6 +18,8 @@ package org.apache.spark.sql.connect.planner
 
 import java.nio.file.{Files, Paths}
 
+import com.google.protobuf.ByteString
+
 import org.apache.spark.SparkClassNotFoundException
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Join.JoinType
@@ -31,6 +33,7 @@ import org.apache.spark.sql.connect.dsl.MockRemoteSession
 import org.apache.spark.sql.connect.dsl.commands._
 import org.apache.spark.sql.connect.dsl.expressions._
 import org.apache.spark.sql.connect.dsl.plans._
+import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{IntegerType, MapType, Metadata, StringType, StructField, StructType}
 
@@ -44,14 +47,18 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
 
   lazy val connectTestRelation =
     createLocalRelationProto(
-      Seq(AttributeReference("id", IntegerType)(), AttributeReference("name", StringType)()))
+      Seq(AttributeReference("id", IntegerType)(), AttributeReference("name", StringType)()),
+      Seq.empty)
 
   lazy val connectTestRelation2 =
     createLocalRelationProto(
-      Seq(AttributeReference("id", IntegerType)(), AttributeReference("name", StringType)()))
+      Seq(AttributeReference("id", IntegerType)(), AttributeReference("name", StringType)()),
+      Seq.empty)
 
   lazy val connectTestRelationMap =
-    createLocalRelationProto(Seq(AttributeReference("id", MapType(StringType, StringType))()))
+    createLocalRelationProto(
+      Seq(AttributeReference("id", MapType(StringType, StringType))()),
+      Seq.empty)
 
   lazy val sparkTestRelation: DataFrame =
     spark.createDataFrame(
@@ -68,7 +75,8 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       new java.util.ArrayList[Row](),
       StructType(Seq(StructField("id", MapType(StringType, StringType)))))
 
-  lazy val localRelation = createLocalRelationProto(Seq(AttributeReference("id", IntegerType)()))
+  lazy val localRelation =
+    createLocalRelationProto(Seq(AttributeReference("id", IntegerType)()), Seq.empty)
 
   test("Basic select") {
     val connectPlan = connectTestRelation.select("id".protoAttr)
@@ -148,6 +156,23 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(connectPlan2, sparkPlan2)
   }
 
+  test("SPARK-41169: Test drop") {
+    // single column
+    val connectPlan = connectTestRelation.drop("id")
+    val sparkPlan = sparkTestRelation.drop("id")
+    comparePlans(connectPlan, sparkPlan)
+
+    // all columns
+    val connectPlan2 = connectTestRelation.drop("id", "name")
+    val sparkPlan2 = sparkTestRelation.drop("id", "name")
+    comparePlans(connectPlan2, sparkPlan2)
+
+    // non-existing column
+    val connectPlan3 = connectTestRelation.drop("id2", "name")
+    val sparkPlan3 = sparkTestRelation.drop("id2", "name")
+    comparePlans(connectPlan3, sparkPlan3)
+  }
+
   test("SPARK-40809: column alias") {
     // Simple Test.
     val connectPlan = connectTestRelation.select("id".protoAttr.as("id2"))
@@ -208,7 +233,8 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   }
 
   test("Test StructType in LocalRelation") {
-    val connectPlan = createLocalRelationProtoByQualifiedAttributes(Seq("a".struct("id".int)))
+    val connectPlan = createLocalRelationProtoByAttributeReferences(
+      Seq(AttributeReference("a", StructType(Seq(StructField("id", IntegerType))))()))
     val sparkPlan =
       LocalRelation(AttributeReference("a", StructType(Seq(StructField("id", IntegerType))))())
     comparePlans(connectPlan, sparkPlan)
@@ -346,10 +372,14 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       connectTestRelation.withColumnsRenamed(Map("id" -> "id1", "id" -> "id2")),
       sparkTestRelation.withColumnsRenamed(Map("id" -> "id1", "id" -> "id2")))
 
-    val e = intercept[AnalysisException](
-      transform(connectTestRelation.withColumnsRenamed(
-        Map("id" -> "duplicatedCol", "name" -> "duplicatedCol"))))
-    assert(e.getMessage.contains("Found duplicate column(s)"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        transform(
+          connectTestRelation.withColumnsRenamed(
+            Map("id" -> "duplicatedCol", "name" -> "duplicatedCol")))
+      },
+      errorClass = "COLUMN_ALREADY_EXISTS",
+      parameters = Map("columnName" -> "`duplicatedcol`"))
   }
 
   test("Writes fails without path or table") {
@@ -476,13 +506,23 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(select(1), spark.sql("SELECT 1"))
   }
 
-  private def createLocalRelationProtoByQualifiedAttributes(
-      attrs: Seq[proto.Expression.QualifiedAttribute]): proto.Relation = {
+  private def createLocalRelationProtoByAttributeReferences(
+      attrs: Seq[AttributeReference]): proto.Relation = {
     val localRelationBuilder = proto.LocalRelation.newBuilder()
-    for (attr <- attrs) {
-      localRelationBuilder.addAttributes(attr)
-    }
-    proto.Relation.newBuilder().setLocalRelation(localRelationBuilder.build()).build()
+
+    val attributes = attrs.map(exp => AttributeReference(exp.name, exp.dataType)())
+    val buffer = ArrowConverters
+      .toBatchWithSchemaIterator(
+        Iterator.empty,
+        StructType.fromAttributes(attributes),
+        Long.MaxValue,
+        Long.MaxValue,
+        null)
+      .next()
+    proto.Relation
+      .newBuilder()
+      .setLocalRelation(localRelationBuilder.setData(ByteString.copyFrom(buffer)).build())
+      .build()
   }
 
   // This is a function for testing only. This is used when the plan is ready and it only waits

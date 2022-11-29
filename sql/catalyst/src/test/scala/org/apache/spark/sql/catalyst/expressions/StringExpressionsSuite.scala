@@ -21,7 +21,7 @@ import java.math.{BigDecimal => JavaBigDecimal}
 
 import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, InvalidFormat}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
@@ -64,10 +64,27 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       .checkInputDataTypes().isSuccess)
     assert(Concat(Literal.create("a".getBytes) :: Literal.create("b".getBytes) :: Nil)
       .checkInputDataTypes().isSuccess)
-    assert(Concat(Literal.create(1) :: Literal.create(2) :: Nil)
-      .checkInputDataTypes().isFailure)
+    assert(Concat(Literal.create(1) :: Literal.create(2) :: Nil).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "1",
+          "requiredType" -> "(\"STRING\" or \"BINARY\" or \"ARRAY\")",
+          "inputSql" -> "\"1\"",
+          "inputType" -> "\"INT\""
+        )
+      )
+    )
     assert(Concat(Literal.create("a") :: Literal.create("b".getBytes) :: Nil)
-      .checkInputDataTypes().isFailure)
+      .checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "DATA_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> "`concat`",
+          "dataType" -> "(\"STRING\" or \"BINARY\")"
+        )
+      )
+    )
   }
 
   test("concat_ws") {
@@ -132,10 +149,38 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     // type checking
-    assert(Elt(Seq.empty).checkInputDataTypes().isFailure)
-    assert(Elt(Seq(Literal(1))).checkInputDataTypes().isFailure)
+    assert(Elt(Seq.empty).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "WRONG_NUM_ARGS",
+        messageParameters = Map(
+          "functionName" -> "`elt`",
+          "expectedNum" -> "> 1",
+          "actualNum" -> "0"
+        )
+      )
+    )
+    assert(Elt(Seq(Literal(1))).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "WRONG_NUM_ARGS",
+        messageParameters = Map(
+          "functionName" -> "`elt`",
+          "expectedNum" -> "> 1",
+          "actualNum" -> "1"
+        )
+      )
+    )
     assert(Elt(Seq(Literal(1), Literal("A"))).checkInputDataTypes().isSuccess)
-    assert(Elt(Seq(Literal(1), Literal(2))).checkInputDataTypes().isFailure)
+    assert(Elt(Seq(Literal(1), Literal(2))).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "2...",
+          "requiredType" -> "\"STRING\" or \"BINARY\"",
+          "inputSql" -> "\"2\"",
+          "inputType" -> "\"INT\""
+        )
+      )
+    )
   }
 
   test("SPARK-22550: Elt should not generate codes beyond 64KB") {
@@ -553,9 +598,29 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create(7, IntegerType), Literal.create(0, IntegerType))
       .checkInputDataTypes().isSuccess)
     assert(new Overlay(Literal.create(1), Literal.create(2), Literal.create(0, IntegerType))
-      .checkInputDataTypes().isFailure)
+      .checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "1",
+          "requiredType" -> "(\"STRING\" or \"BINARY\")",
+          "inputSql" -> "\"1\"",
+          "inputType" -> "\"INT\""
+        )
+      )
+    )
     assert(Overlay(Literal("Spark SQL"), Literal.create(2), Literal.create(7, IntegerType),
-      Literal.create(0, IntegerType)).checkInputDataTypes().isFailure)
+      Literal.create(0, IntegerType)).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "2",
+          "requiredType" -> "(\"STRING\" or \"BINARY\")",
+          "inputSql" -> "\"2\"",
+          "inputType" -> "\"INT\""
+        )
+      )
+    )
   }
 
   test("translate") {
@@ -1024,155 +1089,155 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("ToNumber and ToCharacter: negative tests (the format string is invalid)") {
     Seq(
       // The format string must not be empty.
-      ("454", "") -> DataTypeMismatch(
-        errorSubClass = "FORMAT_EMPTY",
-        messageParameters = Map.empty),
+      ("454", "") -> InvalidFormat(
+        errorSubClass = "EMPTY",
+        messageParameters = Map("format" -> "''")),
       // Make sure the format string does not contain any unrecognized characters.
       ("454", "999@") ->
-        DataTypeMismatch(
-          errorSubClass = "FORMAT_UNEXPECTED_TOKEN",
+        InvalidFormat(
+          errorSubClass = "UNEXPECTED_TOKEN",
           messageParameters = Map(
             "token" -> "character '@''",
             "format" -> toSQLValue("999@", StringType))
         ),
       ("454", "999M") ->
-        DataTypeMismatch(
-          errorSubClass = "FORMAT_UNEXPECTED_TOKEN",
+        InvalidFormat(
+          errorSubClass = "UNEXPECTED_TOKEN",
           messageParameters = Map(
             "token" -> "character 'M''",
             "format" -> toSQLValue("999M", StringType)
           )
         ),
       ("454", "999P") ->
-        DataTypeMismatch(
-          errorSubClass = "FORMAT_UNEXPECTED_TOKEN",
+        InvalidFormat(
+          errorSubClass = "UNEXPECTED_TOKEN",
           messageParameters = Map(
             "token" -> "character 'P''",
             "format" -> toSQLValue("999P", StringType))
         ),
       // Make sure the format string contains at least one digit.
-      ("454", "$") -> DataTypeMismatch(
-        errorSubClass = "FORMAT_WRONG_NUM_DIGIT",
-        messageParameters = Map.empty),
+      ("454", "$") -> InvalidFormat(
+        errorSubClass = "WRONG_NUM_DIGIT",
+        messageParameters = Map("format" -> "'$'")),
       // Make sure the format string contains at most one decimal point.
       ("454", "99.99.99") ->
-        DataTypeMismatch(
-          errorSubClass = "FORMAT_WRONG_NUM_TOKEN",
+        InvalidFormat(
+          errorSubClass = "WRONG_NUM_TOKEN",
           messageParameters = Map(
             "token" -> ". or D",
             "format" -> toSQLValue("99.99.99", StringType))
         ),
       // Make sure the format string contains at most one dollar sign.
       ("454", "$$99") ->
-        DataTypeMismatch(
-          errorSubClass = "FORMAT_WRONG_NUM_TOKEN",
+        InvalidFormat(
+          errorSubClass = "WRONG_NUM_TOKEN",
           messageParameters = Map(
             "token" -> "$", "" +
             "format" -> toSQLValue("$$99", StringType))
         ),
       // Make sure the format string contains at most one minus sign at the beginning or end.
       ("$4-4", "$9MI9") ->
-        DataTypeMismatch(
-          errorSubClass = "FORMAT_UNEXPECTED_TOKEN",
+        InvalidFormat(
+          errorSubClass = "UNEXPECTED_TOKEN",
           messageParameters = Map(
             "token" -> "digit sequence",
             "format" -> toSQLValue("$9MI9", StringType))
         ),
       ("--4", "SMI9") ->
-        DataTypeMismatch(
-          errorSubClass = "FORMAT_UNEXPECTED_TOKEN",
+        InvalidFormat(
+          errorSubClass = "UNEXPECTED_TOKEN",
           messageParameters = Map(
             "token" -> "digit sequence",
             "format" -> toSQLValue("SMI9", StringType))
         ),
       ("--$54", "SS$99") ->
-        DataTypeMismatch(
-          errorSubClass = "FORMAT_WRONG_NUM_TOKEN",
+        InvalidFormat(
+          errorSubClass = "WRONG_NUM_TOKEN",
           messageParameters = Map(
             "token" -> "S",
             "format" -> toSQLValue("SS$99", StringType))
         ),
       ("-$54", "MI$99MI") ->
-        DataTypeMismatch(
-          errorSubClass = "FORMAT_WRONG_NUM_TOKEN",
+        InvalidFormat(
+          errorSubClass = "WRONG_NUM_TOKEN",
           messageParameters = Map(
             "token" -> "MI",
             "format" -> toSQLValue("MI$99MI", StringType))
         ),
       ("$4-4", "$9MI9MI") ->
-        DataTypeMismatch(
-          errorSubClass = "FORMAT_WRONG_NUM_TOKEN",
+        InvalidFormat(
+          errorSubClass = "WRONG_NUM_TOKEN",
           messageParameters = Map("token" -> "MI",
             "format" -> toSQLValue("$9MI9MI", StringType))
         ),
       // Make sure the format string contains at most one closing angle bracket at the end.
       ("<$45>", "PR$99") ->
-        DataTypeMismatch(
-          errorSubClass = "FORMAT_UNEXPECTED_TOKEN",
+        InvalidFormat(
+          errorSubClass = "UNEXPECTED_TOKEN",
           messageParameters = Map(
             "token" -> "$",
             "format" -> toSQLValue("PR$99", StringType))
         ),
       ("$4<4>", "$9PR9") ->
-        DataTypeMismatch(
-          errorSubClass = "FORMAT_UNEXPECTED_TOKEN",
+        InvalidFormat(
+          errorSubClass = "UNEXPECTED_TOKEN",
           messageParameters = Map(
             "token" -> "digit sequence",
             "format" -> toSQLValue("$9PR9", StringType))
         ),
       ("<<454>>", "999PRPR") ->
-        DataTypeMismatch(
-          errorSubClass = "FORMAT_WRONG_NUM_TOKEN",
+        InvalidFormat(
+          errorSubClass = "WRONG_NUM_TOKEN",
           messageParameters = Map(
             "token" -> "PR",
             "format" -> toSQLValue("999PRPR", StringType))
         ),
       // Make sure that any dollar sign in the format string occurs before any digits.
-      ("4$54", "9$99") -> DataTypeMismatch(
-        errorSubClass = "FORMAT_CUR_MUST_BEFORE_DIGIT",
+      ("4$54", "9$99") -> InvalidFormat(
+        errorSubClass = "CUR_MUST_BEFORE_DIGIT",
         messageParameters = Map("format" -> toSQLValue("9$99", StringType))),
       // Make sure that any dollar sign in the format string occurs before any decimal point.
-      (".$99", ".$99") -> DataTypeMismatch(
-        errorSubClass = "FORMAT_CUR_MUST_BEFORE_DEC",
+      (".$99", ".$99") -> InvalidFormat(
+        errorSubClass = "CUR_MUST_BEFORE_DEC",
         messageParameters = Map("format" -> toSQLValue(".$99", StringType))),
       // Thousands separators must have digits in between them.
-      (",123", ",099") -> DataTypeMismatch(
-        errorSubClass = "FORMAT_CONT_THOUSANDS_SEPS",
+      (",123", ",099") -> InvalidFormat(
+        errorSubClass = "CONT_THOUSANDS_SEPS",
         messageParameters = Map("format" -> toSQLValue(",099", StringType))),
-      (",123,456", ",999,099") -> DataTypeMismatch(
-        errorSubClass = "FORMAT_CONT_THOUSANDS_SEPS",
+      (",123,456", ",999,099") -> InvalidFormat(
+        errorSubClass = "CONT_THOUSANDS_SEPS",
         messageParameters = Map("format" -> toSQLValue(",999,099", StringType))),
-      (",,345", "9,,09.99") -> DataTypeMismatch(
-        errorSubClass = "FORMAT_CONT_THOUSANDS_SEPS",
+      (",,345", "9,,09.99") -> InvalidFormat(
+        errorSubClass = "CONT_THOUSANDS_SEPS",
         messageParameters = Map("format" -> toSQLValue("9,,09.99", StringType))),
-      (",,345", "9,99,.99") -> DataTypeMismatch(
-        errorSubClass = "FORMAT_CONT_THOUSANDS_SEPS",
+      (",,345", "9,99,.99") -> InvalidFormat(
+        errorSubClass = "CONT_THOUSANDS_SEPS",
         messageParameters = Map("format" -> toSQLValue("9,99,.99", StringType))),
-      (",,345", "9,99,") -> DataTypeMismatch(
-        errorSubClass = "FORMAT_CONT_THOUSANDS_SEPS",
+      (",,345", "9,99,") -> InvalidFormat(
+        errorSubClass = "CONT_THOUSANDS_SEPS",
         messageParameters = Map("format" -> toSQLValue("9,99,", StringType))),
-      (",,345", ",,999,099.99") -> DataTypeMismatch(
-        errorSubClass = "FORMAT_CONT_THOUSANDS_SEPS",
+      (",,345", ",,999,099.99") -> InvalidFormat(
+        errorSubClass = "CONT_THOUSANDS_SEPS",
         messageParameters = Map("format" -> toSQLValue(",,999,099.99", StringType))),
       // Thousands separators must not appear after the decimal point.
-      ("123.45,6", "099.99,9") -> DataTypeMismatch(
-        errorSubClass = "FORMAT_THOUSANDS_SEPS_MUST_BEFORE_DEC",
+      ("123.45,6", "099.99,9") -> InvalidFormat(
+        errorSubClass = "THOUSANDS_SEPS_MUST_BEFORE_DEC",
         messageParameters = Map("format" -> toSQLValue("099.99,9", StringType)))
-    ).foreach { case ((str: String, format: String), dataTypeMismatch: DataTypeMismatch) =>
+    ).foreach { case ((str: String, format: String), invalidFormat: InvalidFormat) =>
       val toNumberResult = ToNumber(Literal(str), Literal(format)).checkInputDataTypes()
       assert(toNumberResult != TypeCheckResult.TypeCheckSuccess,
         s"The format string should have been invalid: $format")
-      assert(toNumberResult == dataTypeMismatch)
+      assert(toNumberResult == invalidFormat)
 
       val tryToNumberResult = TryToNumber(Literal(str), Literal(format)).checkInputDataTypes()
       assert(tryToNumberResult != TypeCheckResult.TypeCheckSuccess,
         s"The format string should have been invalid: $format")
-      assert(tryToNumberResult == dataTypeMismatch)
+      assert(tryToNumberResult == invalidFormat)
 
       val toCharResult = ToCharacter(Decimal(456), Literal(format)).checkInputDataTypes()
       assert(toCharResult != TypeCheckResult.TypeCheckSuccess,
         s"The format string should have been invalid: $format")
-      assert(toCharResult == dataTypeMismatch)
+      assert(toCharResult == invalidFormat)
     }
   }
 
@@ -1186,6 +1251,21 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           "inputName" -> "`attributereference`",
           "inputType" -> toSQLType(right.dataType),
           "inputExpr" -> toSQLExpr(right)
+        )
+      )
+    )
+  }
+
+  test("ToBinary: fails analysis if fmt is not foldable") {
+    val wrongFmt = AttributeReference("invalidFormat", StringType)()
+    val toBinaryExpr = ToBinary(Literal("abc"), Some(wrongFmt))
+    assert(toBinaryExpr.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> "fmt",
+          "inputType" -> toSQLType(wrongFmt.dataType),
+          "inputExpr" -> toSQLExpr(wrongFmt)
         )
       )
     )
