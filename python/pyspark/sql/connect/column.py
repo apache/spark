@@ -14,12 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import get_args, TYPE_CHECKING, Callable, Any
+from typing import get_args, TYPE_CHECKING, Callable, Any, cast, Tuple, overload, Union
 
 import json
 import decimal
 import datetime
 
+from pyspark.sql.connect._typing import PrimitiveType
 from pyspark.sql.types import TimestampType, DayTimeIntervalType, DateType
 
 import pyspark.sql.connect.proto as proto
@@ -29,10 +30,16 @@ if TYPE_CHECKING:
     import pyspark.sql.connect.proto as proto
 
 
+def _func_op(name: str, doc: str = "") -> Callable[["Expression"], "Expression"]:
+    def _(self: "Expression") -> "Expression":
+        return ScalarFunctionExpression(name, self)
+    return _
+
+
 def _bin_op(
     name: str, doc: str = "binary function", reverse: bool = False
-) -> Callable[["Column", Any], "Expression"]:
-    def _(self: "Column", other: Any) -> "Expression":
+) -> Callable[["Expression", Any], "Expression"]:
+    def _(self: "Expression", other: Any) -> "Expression":
         from pyspark.sql.connect._typing import PrimitiveType
 
         if isinstance(other, get_args(PrimitiveType)):
@@ -67,6 +74,370 @@ class Expression(object):
     __rpow__ = _bin_op("pow", reverse=True)
     __ge__ = _bin_op(">=")
     __le__ = _bin_op("<=")
+
+    _eqNullSafe_doc = """
+        Equality test that is safe for null values.
+
+        .. versionadded:: 2.3.0
+
+        Parameters
+        ----------
+        other
+            a value or :class:`Column`
+
+        Examples
+        --------
+        >>> from pyspark.sql import Row
+        >>> df1 = spark.createDataFrame([
+        ...     Row(id=1, value='foo'),
+        ...     Row(id=2, value=None)
+        ... ])
+        >>> df1.select(
+        ...     df1['value'] == 'foo',
+        ...     df1['value'].eqNullSafe('foo'),
+        ...     df1['value'].eqNullSafe(None)
+        ... ).show()
+        +-------------+---------------+----------------+
+        |(value = foo)|(value <=> foo)|(value <=> NULL)|
+        +-------------+---------------+----------------+
+        |         true|           true|           false|
+        |         null|          false|            true|
+        +-------------+---------------+----------------+
+        >>> df2 = spark.createDataFrame([
+        ...     Row(value = 'bar'),
+        ...     Row(value = None)
+        ... ])
+        >>> df1.join(df2, df1["value"] == df2["value"]).count()
+        0
+        >>> df1.join(df2, df1["value"].eqNullSafe(df2["value"])).count()
+        1
+        >>> df2 = spark.createDataFrame([
+        ...     Row(id=1, value=float('NaN')),
+        ...     Row(id=2, value=42.0),
+        ...     Row(id=3, value=None)
+        ... ])
+        >>> df2.select(
+        ...     df2['value'].eqNullSafe(None),
+        ...     df2['value'].eqNullSafe(float('NaN')),
+        ...     df2['value'].eqNullSafe(42.0)
+        ... ).show()
+        +----------------+---------------+----------------+
+        |(value <=> NULL)|(value <=> NaN)|(value <=> 42.0)|
+        +----------------+---------------+----------------+
+        |           false|           true|           false|
+        |           false|          false|            true|
+        |            true|          false|           false|
+        +----------------+---------------+----------------+
+
+        Notes
+        -----
+        Unlike Pandas, PySpark doesn't consider NaN values to be NULL. See the
+        `NaN Semantics <https://spark.apache.org/docs/latest/sql-ref-datatypes.html#nan-semantics>`_
+        for details.
+        """
+    eqNullSafe = _bin_op("eqNullSafe", _eqNullSafe_doc)
+
+    __neg__ = _func_op("negate")
+
+    # `and`, `or`, `not` cannot be overloaded in Python,
+    # so use bitwise operators as boolean operators
+    __and__ = _bin_op("and")
+    __or__ = _bin_op("or")
+    __invert__ = _func_op("not")
+    __rand__ = _bin_op("and")
+    __ror__ = _bin_op("or")
+
+    # bitwise operators
+    _bitwiseOR_doc = """
+        Compute bitwise OR of this expression with another expression.
+
+        Parameters
+        ----------
+        other
+            a value or :class:`Column` to calculate bitwise or(|) with
+            this :class:`Column`.
+
+        Examples
+        --------
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(a=170, b=75)])
+        >>> df.select(df.a.bitwiseOR(df.b)).collect()
+        [Row((a | b)=235)]
+        """
+    _bitwiseAND_doc = """
+        Compute bitwise AND of this expression with another expression.
+
+        Parameters
+        ----------
+        other
+            a value or :class:`Column` to calculate bitwise and(&) with
+            this :class:`Column`.
+
+        Examples
+        --------
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(a=170, b=75)])
+        >>> df.select(df.a.bitwiseAND(df.b)).collect()
+        [Row((a & b)=10)]
+        """
+    _bitwiseXOR_doc = """
+        Compute bitwise XOR of this expression with another expression.
+
+        Parameters
+        ----------
+        other
+            a value or :class:`Column` to calculate bitwise xor(^) with
+            this :class:`Column`.
+
+        Examples
+        --------
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(a=170, b=75)])
+        >>> df.select(df.a.bitwiseXOR(df.b)).collect()
+        [Row((a ^ b)=225)]
+        """
+
+    bitwiseOR = _bin_op("bitwiseOR", _bitwiseOR_doc)
+    bitwiseAND = _bin_op("bitwiseAND", _bitwiseAND_doc)
+    bitwiseXOR = _bin_op("bitwiseXOR", _bitwiseXOR_doc)
+
+    # string methods
+    def contains(self, other: Union[PrimitiveType, "Expression"]) -> "Expression":
+        """
+        Contains the other element. Returns a boolean :class:`Column` based on a string match.
+
+        Parameters
+        ----------
+        other
+            string in line. A value as a literal or a :class:`Column`.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
+        >>> df.filter(df.name.contains('o')).collect()
+        [Row(age=5, name='Bob')]
+        """
+        return _bin_op("contains")(self, other)
+
+    def startswith(self, other: Union[PrimitiveType, "Expression"]) -> "Expression":
+        """
+        String starts with. Returns a boolean :class:`Column` based on a string match.
+
+        Parameters
+        ----------
+        other : :class:`Column` or str
+            string at start of line (do not use a regex `^`)
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
+        >>> df.filter(df.name.startswith('Al')).collect()
+        [Row(age=2, name='Alice')]
+        >>> df.filter(df.name.startswith('^Al')).collect()
+        []
+        """
+        return _bin_op("startsWith")(self, other)
+
+    def endswith(self, other: Union[PrimitiveType, "Expression"]) -> "Expression":
+        """
+        String ends with. Returns a boolean :class:`Column` based on a string match.
+
+        Parameters
+        ----------
+        other : :class:`Column` or str
+            string at end of line (do not use a regex `$`)
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
+        >>> df.filter(df.name.endswith('ice')).collect()
+        [Row(age=2, name='Alice')]
+        >>> df.filter(df.name.endswith('ice$')).collect()
+        []
+        """
+        return _bin_op("endsWith")(self, other)
+
+    def like(self: "Expression", other: str) -> "Expression":
+        """
+        SQL like expression. Returns a boolean :class:`Column` based on a SQL LIKE match.
+
+        Parameters
+        ----------
+        other : str
+            a SQL LIKE pattern
+
+        See Also
+        --------
+        pyspark.sql.Column.rlike
+
+        Returns
+        -------
+        :class:`Column`
+            Column of booleans showing whether each element
+            in the Column is matched by SQL LIKE pattern.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
+        >>> df.filter(df.name.like('Al%')).collect()
+        [Row(age=2, name='Alice')]
+        """
+        return _bin_op("like")(self, LiteralExpression(other))
+
+    def rlike(self: "Expression", other: str) -> "Expression":
+        """
+        SQL RLIKE expression (LIKE with Regex). Returns a boolean :class:`Column` based on a regex
+        match.
+
+        Parameters
+        ----------
+        other : str
+            an extended regex expression
+
+        Returns
+        -------
+        :class:`Column`
+            Column of booleans showing whether each element
+            in the Column is matched by extended regex expression.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
+        >>> df.filter(df.name.rlike('ice$')).collect()
+        [Row(age=2, name='Alice')]
+        """
+        return _bin_op("like")(self, LiteralExpression(other))
+
+    def ilike(self: "Expression", other: str) -> "Expression":
+        """
+        SQL ILIKE expression (case insensitive LIKE). Returns a boolean :class:`Column`
+        based on a case insensitive match.
+
+        .. versionadded:: 3.3.0
+
+        Parameters
+        ----------
+        other : str
+            a SQL LIKE pattern
+
+        See Also
+        --------
+        pyspark.sql.Column.rlike
+
+        Returns
+        -------
+        :class:`Column`
+            Column of booleans showing whether each element
+            in the Column is matched by SQL LIKE pattern.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
+        >>> df.filter(df.name.ilike('%Ice')).collect()
+        [Row(age=2, name='Alice')]
+        """
+        return _bin_op("ilike")(self, LiteralExpression(other))
+
+    @overload
+    def substr(self, startPos: int, length: int) -> "Expression":
+        ...
+
+    @overload
+    def substr(self, startPos: "Expression", length: "Expression") -> "Expression":
+        ...
+
+    def substr(
+        self, startPos: Union[int, "Expression"], length: Union[int, "Expression"]
+    ) -> "Expression":
+        """
+        Return a :class:`Column` which is a substring of the column.
+
+        .. versionadded:: 1.3.0
+
+        Parameters
+        ----------
+        startPos : :class:`Column` or int
+            start position
+        length : :class:`Column` or int
+            length of the substring
+
+        Returns
+        -------
+        :class:`Column`
+            Column representing whether each element of Column is substr of origin Column.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
+        >>> df.select(df.name.substr(1, 3).alias("col")).collect()
+        [Row(col='Ali'), Row(col='Bob')]
+        """
+        if type(startPos) != type(length):
+            raise TypeError(
+                "startPos and length must be the same type. "
+                "Got {startPos_t} and {length_t}, respectively.".format(
+                    startPos_t=type(startPos),
+                    length_t=type(length),
+                )
+            )
+        from pyspark.sql.connect.function_builder import functions as F
+
+        if isinstance(length, int):
+            length_exp = cast(Expression, LiteralExpression(length))
+        elif isinstance(length, Expression):
+            length_exp = length
+        else:
+            raise TypeError("Unsupported type for substr() expression.")
+
+        if isinstance(startPos, int):
+            start_exp = cast(Expression, LiteralExpression(startPos))
+        else:
+            start_exp = startPos
+
+        return F.substr(self, start_exp, length_exp)
+
+    def isin(self, *cols: Any) -> "Expression":
+        """
+        A boolean expression that is evaluated to true if the value of this
+        expression is contained by the evaluated values of the arguments.
+
+        .. versionadded:: 1.5.0
+
+        Parameters
+        ----------
+        cols
+            The result will only be true at a location if any value matches in the Column.
+
+        Returns
+        -------
+        :class:`Column`
+            Column of booleans showing whether each element in the Column is contained in cols.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
+        >>> df[df.name.isin("Bob", "Mike")].collect()
+        [Row(age=5, name='Bob')]
+        >>> df[df.age.isin([1, 2, 3])].collect()
+        [Row(age=2, name='Alice')]
+        """
+        if len(cols) == 1 and isinstance(cols[0], (list, set)):
+            cols = cast(Tuple, cols[0])
+        cols = cast(
+            Tuple,
+            [c if isinstance(c, Expression) else LiteralExpression(c) for c in cols],
+        )
+        from pyspark.sql.connect.function_builder import functions as F
+
+        return ScalarFunctionExpression("in", self, LiteralExpression(cols))
 
     def __eq__(self, other: Any) -> "Expression":  # type: ignore[override]
         """Returns a binary expression with the current column as the left
