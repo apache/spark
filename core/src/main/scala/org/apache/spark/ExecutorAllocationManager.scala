@@ -644,11 +644,11 @@ private[spark] class ExecutorAllocationManager(
     private val stageAttemptToNumRunningTask = new mutable.HashMap[StageAttempt, Int]
     private val stageAttemptToTaskIndices = new mutable.HashMap[StageAttempt, mutable.HashSet[Int]]
     // Number of speculative tasks running in each stageAttempt
-    // TODO(SPARK-14492): We simply need an Int for this.
+    // TODO(SPARK-41192): We simply need an Int for this.
     private val stageAttemptToSpeculativeTaskIndices =
       new mutable.HashMap[StageAttempt, mutable.HashSet[Int]]()
     // Number of speculative tasks pending in each stageAttempt
-    private val stageAttemptToUnsubmittedSpeculativeTasks =
+    private val stageAttemptToPendingSpeculativeTasks =
       new mutable.HashMap[StageAttempt, mutable.HashSet[Int]]
 
     private val resourceProfileIdToStageAttempt =
@@ -725,7 +725,7 @@ private[spark] class ExecutorAllocationManager(
         // even after another attempt for the stage is submitted.
         stageAttemptToNumTasks -= stageAttempt
         stageAttemptToSpeculativeTaskIndices -= stageAttempt
-        stageAttemptToUnsubmittedSpeculativeTasks -= stageAttempt
+        stageAttemptToPendingSpeculativeTasks -= stageAttempt
         stageAttemptToTaskIndices -= stageAttempt
         stageAttemptToExecutorPlacementHints -= stageAttempt
         removeStageFromResourceProfileIfUnused(stageAttempt)
@@ -735,7 +735,7 @@ private[spark] class ExecutorAllocationManager(
 
         // If this is the last stage with pending tasks, mark the scheduler queue as empty
         // This is needed in case the stage is aborted for any reason
-        if (stageAttemptToNumTasks.isEmpty && stageAttemptToUnsubmittedSpeculativeTasks.isEmpty) {
+        if (stageAttemptToNumTasks.isEmpty && stageAttemptToPendingSpeculativeTasks.isEmpty) {
           allocationManager.onSchedulerQueueEmpty()
         }
       }
@@ -753,7 +753,7 @@ private[spark] class ExecutorAllocationManager(
         if (taskStart.taskInfo.speculative) {
           stageAttemptToSpeculativeTaskIndices
             .getOrElseUpdate(stageAttempt, new mutable.HashSet[Int]).add(taskIndex)
-          stageAttemptToUnsubmittedSpeculativeTasks
+          stageAttemptToPendingSpeculativeTasks
             .get(stageAttempt).foreach(_.remove(taskIndex))
         } else {
           stageAttemptToTaskIndices.getOrElseUpdate(stageAttempt,
@@ -784,8 +784,9 @@ private[spark] class ExecutorAllocationManager(
 
         taskEnd.reason match {
           case Success =>
-            // remove speculative task for task finished.
-            stageAttemptToUnsubmittedSpeculativeTasks.get(stageAttempt).foreach(_.remove(taskIndex))
+            // Remove pending speculative task in case the normal task
+            // is finished before starting the speculative task
+            stageAttemptToPendingSpeculativeTasks.get(stageAttempt).foreach(_.remove(taskIndex))
           case _: TaskKilled =>
           case _ =>
             if (!hasPendingTasks) {
@@ -814,7 +815,7 @@ private[spark] class ExecutorAllocationManager(
       val stageAttempt = StageAttempt(stageId, stageAttemptId)
       val taskIndex = speculativeTask.taskIndex
       allocationManager.synchronized {
-        stageAttemptToUnsubmittedSpeculativeTasks.getOrElseUpdate(stageAttempt,
+        stageAttemptToPendingSpeculativeTasks.getOrElseUpdate(stageAttempt,
           new mutable.HashSet[Int]).add(taskIndex)
         allocationManager.onSchedulerBacklogged()
       }
@@ -847,7 +848,7 @@ private[spark] class ExecutorAllocationManager(
       if (!stageAttemptToNumRunningTask.contains(stageAttempt) &&
           !stageAttemptToNumTasks.contains(stageAttempt) &&
           !stageAttemptToSpeculativeTaskIndices.contains(stageAttempt) &&
-          !stageAttemptToUnsubmittedSpeculativeTasks.contains(stageAttempt) &&
+          !stageAttemptToPendingSpeculativeTasks.contains(stageAttempt) &&
           !stageAttemptToTaskIndices.contains(stageAttempt)
       ) {
         val rpForStage = resourceProfileIdToStageAttempt.filter { case (k, v) =>
@@ -899,7 +900,7 @@ private[spark] class ExecutorAllocationManager(
     }
 
     private def getPendingSpeculativeTaskSum(attempt: StageAttempt): Int = {
-      stageAttemptToUnsubmittedSpeculativeTasks.get(attempt).map(_.size).getOrElse(0)
+      stageAttemptToPendingSpeculativeTasks.get(attempt).map(_.size).getOrElse(0)
     }
 
     /**
