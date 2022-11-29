@@ -897,8 +897,7 @@ private[spark] class ExecutorAllocationManager(
     }
 
     private def getPendingSpeculativeTaskSum(attempt: StageAttempt): Int = {
-      stageAttemptToUnsubmittedSpeculativeTasks
-        .getOrElse(attempt, mutable.HashSet.empty[Int]).size
+      stageAttemptToUnsubmittedSpeculativeTasks.get(attempt).map(_.size).getOrElse(0)
     }
 
     /**
