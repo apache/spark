@@ -51,6 +51,7 @@ class SparkConnectSQLTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLT
     tbl_name: str
     tbl_name_empty: str
     df_text: "DataFrame"
+    spark: SparkSession
 
     @classmethod
     def setUpClass(cls: Any):
