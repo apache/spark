@@ -392,13 +392,8 @@ class SparkConnectPlanner(session: SparkSession) {
     } else {
       logical.OneRowRelation()
     }
-    // TODO: support the target field for *.
     val projection =
-      if (rel.getExpressionsCount == 1 && rel.getExpressions(0).hasUnresolvedStar) {
-        Seq(UnresolvedStar(Option.empty))
-      } else {
-        rel.getExpressionsList.asScala.map(transformExpression).map(UnresolvedAlias(_))
-      }
+      rel.getExpressionsList.asScala.map(transformExpression).map(UnresolvedAlias(_))
     logical.Project(projectList = projection.toSeq, child = baseRel)
   }
 
@@ -416,6 +411,8 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Expression.ExprTypeCase.ALIAS => transformAlias(exp.getAlias)
       case proto.Expression.ExprTypeCase.EXPRESSION_STRING =>
         transformExpressionString(exp.getExpressionString)
+      case proto.Expression.ExprTypeCase.UNRESOLVED_STAR =>
+        transformUnresolvedStar(exp.getUnresolvedStar)
       case _ =>
         throw InvalidPlanInput(
           s"Expression with ID: ${exp.getExprTypeCase.getNumber} is not supported")
@@ -571,6 +568,14 @@ class SparkConnectPlanner(session: SparkSession) {
 
   private def transformExpressionString(expr: proto.Expression.ExpressionString): Expression = {
     session.sessionState.sqlParser.parseExpression(expr.getExpression)
+  }
+
+  private def transformUnresolvedStar(regex: proto.Expression.UnresolvedStar): Expression = {
+    if (regex.getTargetList.isEmpty) {
+      UnresolvedStar(Option.empty)
+    } else {
+      UnresolvedStar(Some(regex.getTargetList.asScala.toSeq))
+    }
   }
 
   private def transformSetOperation(u: proto.SetOperation): LogicalPlan = {
