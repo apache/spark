@@ -140,10 +140,12 @@ class GroupState:
                 if isinstance(v, np.generic):
                     converted.append(v.tolist())
                 # Address a couple of pandas dtypes too.
-                if hasattr(v, "to_pytimedelta"):
+                elif hasattr(v, "to_pytimedelta"):
                     converted.append(v.to_pytimedelta())
-                if hasattr(v, "to_pydatetime"):
+                elif hasattr(v, "to_pydatetime"):
                     converted.append(v.to_pydatetime())
+                else:
+                    converted.append(v)
         else:
             converted = list(newValue)
 
