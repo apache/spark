@@ -61,8 +61,8 @@ object ResolveLateralColumnAlias extends Rule[LogicalPlan] {
           val prevAliases = aliasMap.getOrElse(a.name, Seq.empty[AliasEntry])
           aliasMap += (a.name -> (prevAliases :+ AliasEntry(a, idx)))
         }
-        def lookUpLCA(e: Expression): Option[AliasEntry] = {
-          var matchedLCA: Option[AliasEntry] = None
+        def lookUpLCA(e: Expression): Seq[AliasEntry] = {
+          var matchedLCA: Seq[AliasEntry] = Seq.empty[AliasEntry]
           e.transformWithPruning(_.containsPattern(UNRESOLVED_ATTRIBUTE)) {
             case u: UnresolvedAttribute if aliasMap.contains(u.nameParts.head) &&
               Analyzer.resolveExpressionByPlanChildren(u, p, resolver)
@@ -75,7 +75,7 @@ object ResolveLateralColumnAlias extends Rule[LogicalPlan] {
                   val referencedAlias = aliases.head
                   // Only resolved alias can be the lateral column alias
                   if (referencedAlias.alias.resolved) {
-                    matchedLCA = Some(referencedAlias)
+                    matchedLCA :+= referencedAlias
                   }
               }
               u
