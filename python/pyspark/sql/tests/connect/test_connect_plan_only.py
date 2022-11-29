@@ -17,6 +17,7 @@
 from typing import cast
 import unittest
 
+from pyspark.sql.connect.plan import WriteOperation
 from pyspark.testing.connectutils import PlanOnlyTestFixture
 from pyspark.testing.sqlutils import have_pandas, pandas_requirement_message
 
@@ -350,6 +351,40 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         ):
             with self.assertRaises(NotImplementedError):
                 getattr(df, f)()
+
+    def test_write_operation(self):
+        wo = WriteOperation(self.connect.readTable("name")._plan)
+        wo.mode = "overwrite"
+        wo.source = "parquet"
+
+        # Missing path or table name.
+        with self.assertRaises(AssertionError):
+            wo.command(None)
+
+        wo.path = "path"
+        p = wo.command(None)
+        self.assertIsNotNone(p)
+        self.assertTrue(p.write_operation.HasField("path"))
+        self.assertFalse(p.write_operation.HasField("table_name"))
+
+        wo.path = None
+        wo.table_name = "table"
+        p = wo.command(None)
+        self.assertFalse(p.write_operation.HasField("path"))
+        self.assertTrue(p.write_operation.HasField("table_name"))
+
+        wo.bucket_cols = ["a", "b", "c"]
+        p = wo.command(None)
+        self.assertFalse(p.write_operation.HasField("bucket_by"))
+
+        wo.num_buckets = 10
+        p = wo.command(None)
+        self.assertTrue(p.write_operation.HasField("bucket_by"))
+
+        # Unsupported save mode
+        wo.mode = "unknown"
+        with self.assertRaises(ValueError):
+            wo.command(None)
 
 
 if __name__ == "__main__":

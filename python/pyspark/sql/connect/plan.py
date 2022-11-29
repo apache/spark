@@ -1227,3 +1227,89 @@ class CreateView(LogicalPlan):
            </li>
         </ul>
         """
+
+
+class WriteOperation(LogicalPlan):
+    def __init__(self, child: "LogicalPlan") -> None:
+        super(WriteOperation, self).__init__(child)
+        self.source: Optional[str] = None
+        self.path: Optional[str] = None
+        self.table_name: Optional[str] = None
+        self.mode: Optional[str] = None
+        self.sort_cols: List[str] = []
+        self.partitioning_cols: List[str] = []
+        self.options: dict[str, Optional[str]] = {}
+        self.num_buckets: int = -1
+        self.bucket_cols: List[str] = []
+
+    def command(self, session: "SparkConnectClient") -> proto.Command:
+        assert self._child is not None
+        plan = proto.Command()
+        plan.write_operation.input.CopyFrom(self._child.plan(session))
+        if self.source is not None:
+            plan.write_operation.source = self.source
+        plan.write_operation.sort_column_names.extend(self.sort_cols)
+        plan.write_operation.partitioning_columns.extend(self.partitioning_cols)
+
+        if self.num_buckets > 0:
+            plan.write_operation.bucket_by.bucket_column_names.extend(self.bucket_cols)
+            plan.write_operation.bucket_by.num_buckets = self.num_buckets
+
+        for k in self.options:
+            if self.options[k] is None:
+                del plan.write_operation.options[k]
+            else:
+                plan.write_operation.options[k] = cast(str, self.options[k])
+
+        if self.table_name is not None:
+            plan.write_operation.table_name = self.table_name
+        elif self.path is not None:
+            plan.write_operation.path = self.path
+        else:
+            raise AssertionError(
+                "Invalid configuration of WriteCommand, neither path or table_name present."
+            )
+
+        if self.mode is not None:
+            wm = self.mode.lower()
+            if wm == "append":
+                plan.write_operation.mode = proto.WriteOperation.SaveMode.SAVE_MODE_APPEND
+            elif wm == "overwrite":
+                plan.write_operation.mode = proto.WriteOperation.SaveMode.SAVE_MODE_OVERWRITE
+            elif wm == "error":
+                plan.write_operation.mode = proto.WriteOperation.SaveMode.SAVE_MODE_ERROR_IF_EXISTS
+            elif wm == "ignore":
+                plan.write_operation.mode = proto.WriteOperation.SaveMode.SAVE_MODE_IGNORE
+            else:
+                raise ValueError(f"Unknown SaveMode value for DataFrame: {self.mode}")
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return (
+            f"{i}"
+            f"<WriteOperation source='{self.source}' "
+            f"path='{self.path} "
+            f"table_name='{self.table_name}' "
+            f"mode='{self.mode}' "
+            f"sort_cols='{self.sort_cols}' "
+            f"partitioning_cols='{self.partitioning_cols}' "
+            f"num_buckets='{self.num_buckets}' "
+            f"bucket_cols='{self.bucket_cols}' "
+            f"options='{self.options}'>"
+        )
+
+    def _repr_html_(self) -> str:
+        return (
+            f"<uL><li>WriteOperation <br />source='{self.source}'<br />"
+            f"path: '{self.path}<br />"
+            f"table_name: '{self.table_name}' <br />"
+            f"mode: '{self.mode}' <br />"
+            f"sort_cols: '{self.sort_cols}' <br />"
+            f"partitioning_cols: '{self.partitioning_cols}' <br />"
+            f"num_buckets: '{self.num_buckets}' <br />"
+            f"bucket_cols: '{self.bucket_cols}' <br />"
+            f"options: '{self.options}'<br />"
+            f"</li></ul>"
+        )
+        pass

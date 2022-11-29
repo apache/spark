@@ -42,6 +42,9 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.utils import ReusedPySparkTestCase
 
 
+import tempfile
+
+
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
 class SparkConnectSQLTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLTestUtils):
     """Parent test fixture class for all Spark Connect related
@@ -695,6 +698,29 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             self.connect.read.table(self.tbl_name).agg({"name": "min", "id": "max"}).toPandas(),
             self.spark.read.table(self.tbl_name).agg({"name": "min", "id": "max"}).toPandas(),
         )
+
+    def test_write_operations(self):
+        with tempfile.TemporaryDirectory() as d:
+            df = self.connect.range(50)
+            df.write.mode("overwrite").format("csv").save(d)
+
+            ndf = self.connect.read.schema("id int").load(d, format="csv")
+            self.assertEqual(50, len(ndf.collect()))
+            cd = ndf.collect()
+            self.assertEqual(set(df.collect()), set(cd))
+
+        with tempfile.TemporaryDirectory() as d:
+            df = self.connect.range(50)
+            df.write.mode("overwrite").csv(d, lineSep="|")
+
+            ndf = self.connect.read.schema("id int").load(d, format="csv", lineSep="|")
+            self.assertEqual(set(df.collect()), set(ndf.collect()))
+
+        df = self.connect.range(50)
+        df.write.format("parquet").saveAsTable("parquet_test")
+
+        ndf = self.connect.read.table("parquet_test")
+        self.assertEqual(set(df.collect()), set(ndf.collect()))
 
 
 class ChannelBuilderTests(ReusedPySparkTestCase):
