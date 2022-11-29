@@ -250,6 +250,13 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             self.connect.sql(query).schema.__repr__(),
         )
 
+    def test_toDF(self):
+        # SPARK-41310: test DataFrame.toDF()
+        self.assertEqual(
+            self.connect.read.table(self.tbl_name).toDF("col1", "col2").schema,
+            self.spark.read.table(self.tbl_name).toDF("col1", "col2").schema,
+        )
+
     def test_print_schema(self):
         # SPARK-41216: Test print schema
         tree_str = self.connect.sql("SELECT 1 AS X, 2 AS Y")._tree_string()

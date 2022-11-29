@@ -1158,6 +1158,35 @@ class StatCrosstab(LogicalPlan):
         """
 
 
+class RenameColumns(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], cols: Sequence[str]) -> None:
+        super().__init__(child)
+        self._cols = cols
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+
+        plan = proto.Relation()
+        plan.rename_columns_by_same_length_names.input.CopyFrom(self._child.plan(session))
+        plan.rename_columns_by_same_length_names.column_names.extend(self._cols)
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return f"""{i}<RenameColumns cols='{self._cols}'>"""
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>RenameColumns</b><br />
+              cols: {self._cols} <br />
+              {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
 class CreateView(LogicalPlan):
     def __init__(
         self, child: Optional["LogicalPlan"], name: str, is_global: bool, replace: bool

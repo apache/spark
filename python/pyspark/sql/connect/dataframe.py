@@ -1244,6 +1244,23 @@ class DataFrame(object):
         query = self._plan.to_proto(self._session.client)
         return self._session.client._analyze(query).input_files
 
+    def toDF(self, *cols: str) -> "DataFrame":
+        """Returns a new :class:`DataFrame` that with new specified column names
+
+        Parameters
+        ----------
+        *cols : tuple
+            a tuple of string new column name or :class:`Column`. The length of the
+            list needs to be the same as the number of columns in the initial
+            :class:`DataFrame`
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with new column names.
+        """
+        return DataFrame.withPlan(plan.RenameColumns(self._plan, list(cols)), self._session)
+
     def transform(self, func: Callable[..., "DataFrame"], *args: Any, **kwargs: Any) -> "DataFrame":
         """Returns a new :class:`DataFrame`. Concise syntax for chaining custom transformations.
 
