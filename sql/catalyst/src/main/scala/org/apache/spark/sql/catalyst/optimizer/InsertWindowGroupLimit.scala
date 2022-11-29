@@ -53,14 +53,14 @@ object InsertWindowGroupLimit extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   private def supports(
-      windowExpressions: Seq[NamedExpression]): Boolean = windowExpressions.forall {
+      windowExpressions: Seq[NamedExpression]): Boolean = windowExpressions.exists {
     case Alias(WindowExpression(_: Rank | _: DenseRank | _: RowNumber, WindowSpecDefinition(_, _,
       SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))), _) => true
     case _ => false
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = {
-    if (!conf.windowGroupLimitEnabled) return plan
+    if (conf.windowGroupLimitThreshold == -1) return plan
 
     plan.transformWithPruning(
       _.containsAllPatterns(FILTER, WINDOW), ruleId) {
@@ -79,7 +79,7 @@ object InsertWindowGroupLimit extends Rule[LogicalPlan] with PredicateHelper {
         }
         val minLimit = limits.sortBy(_.get._1).head
         minLimit match {
-          case Some((limit, rankLikeFunction)) =>
+          case Some((limit, rankLikeFunction)) if limit <= conf.windowGroupLimitThreshold =>
             if (limit > 0) {
               val windowGroupLimit =
                 WindowGroupLimit(partitionSpec, orderSpec, rankLikeFunction, limit, child)

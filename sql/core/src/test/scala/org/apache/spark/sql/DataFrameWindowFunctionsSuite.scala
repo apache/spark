@@ -1284,8 +1284,8 @@ class DataFrameWindowFunctionsSuite extends QueryTest
 
     val window = Window.partitionBy($"key").orderBy($"order".asc_nulls_first)
 
-    Seq(false, true).foreach { enabled =>
-      withSQLConf(SQLConf.WINDOW_GROUP_LIMIT_ENABLE.key -> enabled.toString) {
+    Seq(-1, 100).foreach { enabled =>
+      withSQLConf(SQLConf.WINDOW_GROUP_LIMIT_THRESHOLD.key -> enabled.toString) {
         Seq($"rn" === 0, $"rn" < 1, $"rn" <= 0).foreach { condition =>
           checkAnswer(df.withColumn("rn", row_number().over(window)).where(condition),
             Seq.empty[Row]

@@ -57,13 +57,28 @@ class InsertWindowGroupLimitSuite extends PlanTest {
   private val unsupportedConditions = Seq($"rn" > 2, $"rn" === 1 || b > 2)
 
   test("window without filter") {
-    withSQLConf(SQLConf.WINDOW_GROUP_LIMIT_ENABLE.key -> "true") {
-      for (function <- rankLikeFunctions) {
+    for (function <- rankLikeFunctions) {
+      val originalQuery =
+        testRelation
+          .select(a, b, c,
+            windowExpr(function,
+              windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
+
+      comparePlans(
+        Optimize.execute(originalQuery.analyze),
+        WithoutOptimize.execute(originalQuery.analyze))
+    }
+  }
+
+  test("spark.sql.window.group.limit.threshold = -1") {
+    withSQLConf(SQLConf.WINDOW_GROUP_LIMIT_THRESHOLD.key -> "-1") {
+      for (condition <- supportedConditions; function <- rankLikeFunctions) {
         val originalQuery =
           testRelation
             .select(a, b, c,
               windowExpr(function,
                 windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
+            .where(condition)
 
         comparePlans(
           Optimize.execute(originalQuery.analyze),
@@ -72,8 +87,54 @@ class InsertWindowGroupLimitSuite extends PlanTest {
     }
   }
 
-  test("spark.sql.window.group.limit.enabled = false") {
+  test("Insert window group limit node for top-k computation") {
     for (condition <- supportedConditions; function <- rankLikeFunctions) {
+      val originalQuery =
+        testRelation
+          .select(a, b, c,
+            windowExpr(function,
+              windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
+          .where(condition)
+
+      val correctAnswer =
+        testRelation
+          .windowGroupLimit(a :: Nil, c.desc :: Nil, function, 2)
+          .select(a, b, c,
+            windowExpr(function,
+              windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
+          .where(condition)
+
+      comparePlans(
+        Optimize.execute(originalQuery.analyze),
+        WithoutOptimize.execute(correctAnswer.analyze))
+    }
+  }
+
+  test("Insert window group limit node for top-k computation: supported condition && b > 0") {
+    for (condition <- supportedConditions; function <- rankLikeFunctions) {
+      val originalQuery =
+        testRelation
+          .select(a, b, c,
+            windowExpr(function,
+              windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
+          .where(condition && b > 0)
+
+      val correctAnswer =
+        testRelation
+          .windowGroupLimit(a :: Nil, c.desc :: Nil, function, 2)
+          .select(a, b, c,
+            windowExpr(function,
+              windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
+          .where(condition && b > 0)
+
+      comparePlans(
+        Optimize.execute(originalQuery.analyze),
+        WithoutOptimize.execute(correctAnswer.analyze))
+    }
+  }
+
+  test("Unsupported conditions") {
+    for (condition <- unsupportedConditions; function <- rankLikeFunctions) {
       val originalQuery =
         testRelation
           .select(a, b, c,
@@ -87,173 +148,14 @@ class InsertWindowGroupLimitSuite extends PlanTest {
     }
   }
 
-  test("Insert window group limit node for top-k computation") {
-    withSQLConf(SQLConf.WINDOW_GROUP_LIMIT_ENABLE.key -> "true") {
-      for (condition <- supportedConditions; function <- rankLikeFunctions) {
-        val originalQuery =
-          testRelation
-            .select(a, b, c,
-              windowExpr(function,
-                windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
-            .where(condition)
-
-        val correctAnswer =
-          testRelation
-            .windowGroupLimit(a :: Nil, c.desc :: Nil, function, 2)
-            .select(a, b, c,
-              windowExpr(function,
-                windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
-            .where(condition)
-
-        comparePlans(
-          Optimize.execute(originalQuery.analyze),
-          WithoutOptimize.execute(correctAnswer.analyze))
-      }
-    }
-  }
-
-  test("Insert window group limit node for top-k computation: supported condition && b > 0") {
-    withSQLConf(SQLConf.WINDOW_GROUP_LIMIT_ENABLE.key -> "true") {
-      for (condition <- supportedConditions; function <- rankLikeFunctions) {
-        val originalQuery =
-          testRelation
-            .select(a, b, c,
-              windowExpr(function,
-                windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
-            .where(condition && b > 0)
-
-        val correctAnswer =
-          testRelation
-            .windowGroupLimit(a :: Nil, c.desc :: Nil, function, 2)
-            .select(a, b, c,
-              windowExpr(function,
-                windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
-            .where(condition && b > 0)
-
-        comparePlans(
-          Optimize.execute(originalQuery.analyze),
-          WithoutOptimize.execute(correctAnswer.analyze))
-      }
-    }
-  }
-
-  test("Unsupported conditions") {
-    withSQLConf(SQLConf.WINDOW_GROUP_LIMIT_ENABLE.key -> "true") {
-      for (condition <- unsupportedConditions; function <- rankLikeFunctions) {
-        val originalQuery =
-          testRelation
-            .select(a, b, c,
-              windowExpr(function,
-                windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
-            .where(condition)
-
-        comparePlans(
-          Optimize.execute(originalQuery.analyze),
-          WithoutOptimize.execute(originalQuery.analyze))
-      }
-    }
-  }
-
   test("Unsupported window functions") {
-    withSQLConf(SQLConf.WINDOW_GROUP_LIMIT_ENABLE.key -> "true") {
-      for (condition <- supportedConditions; function <- unsupportedFunctions) {
-        val originalQuery =
-          testRelation
-            .select(a, b, c,
-              windowExpr(function,
-                windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
-            .where(condition)
-
-        comparePlans(
-          Optimize.execute(originalQuery.analyze),
-          WithoutOptimize.execute(originalQuery.analyze))
-      }
-    }
-  }
-
-  test("Insert window group limit node for top-k computation: Empty partitionSpec") {
-    withSQLConf(SQLConf.WINDOW_GROUP_LIMIT_ENABLE.key -> "true") {
-      rankLikeFunctions.foreach { function =>
-        val originalQuery =
-          testRelation
-            .select(a, b, c,
-              windowExpr(function,
-                windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))
-            .where('rn <= 4)
-
-        val correctAnswer =
-          testRelation
-            .windowGroupLimit(Nil, c.desc :: Nil, function, 4)
-            .select(a, b, c,
-              windowExpr(function,
-                windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))
-            .where('rn <= 4)
-
-        comparePlans(
-          Optimize.execute(originalQuery.analyze),
-          WithoutOptimize.execute(correctAnswer.analyze))
-      }
-    }
-  }
-
-  test("Insert window group limit node for top-k computation: multiple rank-like functions") {
-    withSQLConf(SQLConf.WINDOW_GROUP_LIMIT_ENABLE.key -> "true") {
-      rankLikeFunctions.foreach { function =>
-        val originalQuery =
-          testRelation
-            .select(a, b, c,
-              windowExpr(function,
-                windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"),
-              windowExpr(function,
-                windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn2"))
-            .where('rn < 2 && 'rn2 === 3)
-
-        val correctAnswer =
-          testRelation
-            .windowGroupLimit(a :: Nil, c.desc :: Nil, function, 1)
-            .select(a, b, c,
-              windowExpr(function,
-                windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"),
-              windowExpr(function,
-                windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn2"))
-            .where('rn < 2 && 'rn2 === 3)
-
-        comparePlans(
-          Optimize.execute(originalQuery.analyze),
-          WithoutOptimize.execute(correctAnswer.analyze))
-      }
-    }
-  }
-
-  test("Insert window group limit node for top-k computation: different window specification") {
-    withSQLConf(SQLConf.WINDOW_GROUP_LIMIT_ENABLE.key -> "true") {
-      rankLikeFunctions.foreach { function =>
-        val originalQuery =
-          testRelation
-            .select(a, b, c,
-              windowExpr(function,
-                windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"),
-              windowExpr(function,
-                windowSpec(a :: Nil, c.asc :: Nil, windowFrame)).as("rn2"))
-            .where('rn < 2 && 'rn2 === 1)
-
-        comparePlans(
-          Optimize.execute(originalQuery.analyze),
-          WithoutOptimize.execute(originalQuery.analyze))
-      }
-    }
-  }
-
-  test("multiple different rank-like window function") {
-    withSQLConf(SQLConf.WINDOW_GROUP_LIMIT_ENABLE.key -> "true") {
+    for (condition <- supportedConditions; function <- unsupportedFunctions) {
       val originalQuery =
         testRelation
           .select(a, b, c,
-            windowExpr(RowNumber(),
-              windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"),
-            windowExpr(Rank(c :: Nil),
-              windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rank"))
-          .where('rn < 2 && 'rank === 1)
+            windowExpr(function,
+              windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
+          .where(condition)
 
       comparePlans(
         Optimize.execute(originalQuery.analyze),
@@ -261,23 +163,103 @@ class InsertWindowGroupLimitSuite extends PlanTest {
     }
   }
 
+  test("Insert window group limit node for top-k computation: Empty partitionSpec") {
+    rankLikeFunctions.foreach { function =>
+      val originalQuery =
+        testRelation
+          .select(a, b, c,
+            windowExpr(function,
+              windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))
+          .where('rn <= 4)
+
+      val correctAnswer =
+        testRelation
+          .windowGroupLimit(Nil, c.desc :: Nil, function, 4)
+          .select(a, b, c,
+            windowExpr(function,
+              windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))
+          .where('rn <= 4)
+
+      comparePlans(
+        Optimize.execute(originalQuery.analyze),
+        WithoutOptimize.execute(correctAnswer.analyze))
+    }
+  }
+
+  test("Insert window group limit node for top-k computation: multiple rank-like functions") {
+    rankLikeFunctions.foreach { function =>
+      val originalQuery =
+        testRelation
+          .select(a, b, c,
+            windowExpr(function,
+              windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"),
+            windowExpr(function,
+              windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn2"))
+          .where('rn < 2 && 'rn2 === 3)
+
+      val correctAnswer =
+        testRelation
+          .windowGroupLimit(a :: Nil, c.desc :: Nil, function, 1)
+          .select(a, b, c,
+            windowExpr(function,
+              windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"),
+            windowExpr(function,
+              windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn2"))
+          .where('rn < 2 && 'rn2 === 3)
+
+      comparePlans(
+        Optimize.execute(originalQuery.analyze),
+        WithoutOptimize.execute(correctAnswer.analyze))
+    }
+  }
+
+  test("Insert window group limit node for top-k computation: different window specification") {
+    rankLikeFunctions.foreach { function =>
+      val originalQuery =
+        testRelation
+          .select(a, b, c,
+            windowExpr(function,
+              windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"),
+            windowExpr(function,
+              windowSpec(a :: Nil, c.asc :: Nil, windowFrame)).as("rn2"))
+          .where('rn < 2 && 'rn2 === 1)
+
+      comparePlans(
+        Optimize.execute(originalQuery.analyze),
+        WithoutOptimize.execute(originalQuery.analyze))
+    }
+  }
+
+  test("multiple different rank-like window function") {
+    val originalQuery =
+      testRelation
+        .select(a, b, c,
+          windowExpr(RowNumber(),
+            windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"),
+          windowExpr(Rank(c :: Nil),
+            windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rank"))
+        .where('rn < 2 && 'rank === 1)
+
+    comparePlans(
+      Optimize.execute(originalQuery.analyze),
+      WithoutOptimize.execute(originalQuery.analyze))
+  }
+
   test("Insert window group limit node for top-k computation: empty relation") {
-    withSQLConf(SQLConf.WINDOW_GROUP_LIMIT_ENABLE.key -> "true") {
-      Seq($"rn" === 0, $"rn" < 1, $"rn" <= 0).foreach { condition =>
-        rankLikeFunctions.foreach { function =>
-          val originalQuery =
-            testRelation
-              .select(a, b, c,
-                windowExpr(function,
-                  windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
-              .where(condition)
+    Seq($"rn" === 0, $"rn" < 1, $"rn" <= 0).foreach { condition =>
+      rankLikeFunctions.foreach { function =>
+        val originalQuery =
+          testRelation
+            .select(a, b, c,
+              windowExpr(function,
+                windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
+            .where(condition)
 
-          val correctAnswer = LocalRelation(originalQuery.output)
+        val correctAnswer = LocalRelation(originalQuery.output)
 
-          comparePlans(
-            Optimize.execute(originalQuery.analyze),
-            WithoutOptimize.execute(correctAnswer.analyze))
-        }
+        comparePlans(
+          Optimize.execute(originalQuery.analyze),
+          WithoutOptimize.execute(correctAnswer.analyze))
       }
     }
   }

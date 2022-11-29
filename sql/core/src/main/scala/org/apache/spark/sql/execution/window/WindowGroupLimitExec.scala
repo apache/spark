@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, DenseRank, Expression, Rank, RowNumber, SortOrder, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
-import org.apache.spark.sql.execution.{ExternalAppendOnlyUnsafeRowArray, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 
 sealed trait WindowGroupLimitMode
 
@@ -68,8 +68,6 @@ case class WindowGroupLimitExec(
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val inMemoryThreshold = conf.windowExecBufferInMemoryThreshold
-    val spillThreshold = conf.windowExecBufferSpillThreshold
 
     abstract class WindowIterator extends Iterator[InternalRow] {
 
@@ -81,7 +79,7 @@ case class WindowGroupLimitExec(
       var nextRow: UnsafeRow = null
       var nextGroup: UnsafeRow = null
       var nextRowAvailable: Boolean = false
-      private[this] def fetchNextRow(): Unit = {
+      protected[this] def fetchNextRow(): Unit = {
         nextRowAvailable = stream.hasNext
         if (nextRowAvailable) {
           nextRow = stream.next().asInstanceOf[UnsafeRow]
@@ -93,38 +91,24 @@ case class WindowGroupLimitExec(
       }
       fetchNextRow()
 
-      // Manage the current partition.
-      val buffer: ExternalAppendOnlyUnsafeRowArray =
-        new ExternalAppendOnlyUnsafeRowArray(inMemoryThreshold, spillThreshold)
+      // Whether or not the rank exceeding the window group limit value.
+      def exceedingLimit(): Boolean
 
-      var bufferIterator: Iterator[UnsafeRow] = _
+      // Increase the rank value.
+      def increaseRank(): Unit
 
-      def clearBuffer(): Unit
-      def fillBuffer(): Unit
+      // Clear the rank value.
+      def clearRank(): Unit
+
+      var bufferIterator: Iterator[InternalRow] = _
 
       private[this] def fetchNextPartition(): Unit = {
-        // Collect all the rows in the current partition.
-        // Before we start to fetch new input rows, make a copy of nextGroup.
-        val currentGroup = nextGroup.copy()
-
-        // clear last partition
-        clearBuffer()
-
-        while (nextRowAvailable && nextGroup == currentGroup) {
-          fillBuffer()
-          fetchNextRow()
-        }
-
-        // Setup iteration
-        bufferIterator = buffer.generateIterator()
+        clearRank()
+        bufferIterator = createGroupIterator()
       }
 
       override final def hasNext: Boolean = {
         val found = (bufferIterator != null && bufferIterator.hasNext) || nextRowAvailable
-        if (!found) {
-          // clear final partition
-          buffer.clear()
-        }
         found
       }
 
@@ -135,25 +119,53 @@ case class WindowGroupLimitExec(
         }
 
         if (bufferIterator.hasNext) {
-          val current = bufferIterator.next()
-
-          // Return the row.
-          current
+          bufferIterator.next()
         } else {
           throw new NoSuchElementException
+        }
+      }
+
+      private def createGroupIterator(): Iterator[InternalRow] = {
+        new Iterator[InternalRow] {
+          // Before we start to fetch new input rows, make a copy of nextGroup.
+          val currentGroup = nextGroup.copy()
+
+          def hasNext: Boolean = {
+            if (nextRowAvailable) {
+              if (exceedingLimit() && nextGroup == currentGroup) {
+                do {
+                  fetchNextRow()
+                } while (nextRowAvailable && nextGroup == currentGroup)
+              }
+              nextRowAvailable && nextGroup == currentGroup
+            } else {
+              nextRowAvailable
+            }
+          }
+
+          def next(): InternalRow = {
+            val currentRow = nextRow.copy()
+            increaseRank()
+            fetchNextRow()
+            currentRow
+          }
         }
       }
     }
 
     case class SimpleGroupLimitIterator(stream: Iterator[InternalRow]) extends WindowIterator {
-      override def clearBuffer(): Unit = {
-        buffer.clear()
+      var count = 0
+
+      override def exceedingLimit(): Boolean = {
+        count >= limit
       }
 
-      override def fillBuffer(): Unit = {
-        if (buffer.length < limit) {
-          buffer.add(nextRow)
-        }
+      override def increaseRank(): Unit = {
+        count += 1
+      }
+
+      override def clearRank(): Unit = {
+        count = 0
       }
     }
 
@@ -163,30 +175,26 @@ case class WindowGroupLimitExec(
       var rank = 0
       var currentRank: UnsafeRow = null
 
-      override def clearBuffer(): Unit = {
-        count = 0
-        rank = 0
-        currentRank = null
-        buffer.clear()
+      override def exceedingLimit(): Boolean = {
+        rank >= limit
       }
 
-      override def fillBuffer(): Unit = {
-        if (rank >= limit) {
-          return
-        }
+      override def increaseRank(): Unit = {
         if (count == 0) {
           currentRank = nextRow.copy()
-          buffer.add(nextRow)
         } else {
           if (ordering.compare(currentRank, nextRow) != 0) {
             rank = count
             currentRank = nextRow.copy()
           }
-          if (rank < limit) {
-            buffer.add(nextRow)
-          }
         }
         count += 1
+      }
+
+      override def clearRank(): Unit = {
+        count = 0
+        rank = 0
+        currentRank = null
       }
     }
 
@@ -195,28 +203,24 @@ case class WindowGroupLimitExec(
       var rank = 0
       var currentRank: UnsafeRow = null
 
-      override def clearBuffer(): Unit = {
-        rank = 0
-        currentRank = null
-        buffer.clear()
+      override def exceedingLimit(): Boolean = {
+        rank >= limit
       }
 
-      override def fillBuffer(): Unit = {
-        if (rank >= limit) {
-          return
-        }
+      override def increaseRank(): Unit = {
         if (currentRank == null) {
           currentRank = nextRow.copy()
-          buffer.add(nextRow)
         } else {
           if (ordering.compare(currentRank, nextRow) != 0) {
             rank += 1
             currentRank = nextRow.copy()
           }
-          if (rank < limit) {
-            buffer.add(nextRow)
-          }
         }
+      }
+
+      override def clearRank(): Unit = {
+        rank = 0
+        currentRank = null
       }
     }
 
