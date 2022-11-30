@@ -615,10 +615,11 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         val e = intercept[AnalysisException] {
           spark.sql(s"$statement $tableDefinition USING $doesNotSupportGeneratedColumn")
         }
-        assert(e.getMessage.contains("target data source with table provider: " +
-          "\"org.apache.spark.sql.connector.SimpleWritableDataSource\"\n" +
-          "does not support creating generated columns with GENERATED ALWAYS AS expressions in\n" +
+        assert(e.getMessage.contains("Target data source with table provider: " +
+          "\"org.apache.spark.sql.connector.SimpleWritableDataSource\" " +
+          "does not support creating generated columns with GENERATED ALWAYS AS expressions in " +
           "create/replace table statements"))
+        assert(e.getErrorClass == "UNSUPPORTED_FEATURE.GENERATED_COLUMN_ON_TABLE_CREATION")
       }
     }
   }

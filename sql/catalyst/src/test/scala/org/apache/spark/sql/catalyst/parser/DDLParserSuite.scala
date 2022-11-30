@@ -2739,7 +2739,7 @@ class DDLParserSuite extends AnalysisTest {
       val fragment = "b INT NOT NULL GENERATED ALWAYS AS (a+1)"
       checkError(
         exception = parseException(sql),
-        errorClass = "_LEGACY_ERROR_TEMP_0065",
+        errorClass = "UNSUPPORTED_FEATURE.SET_COLUMN_GENERATION_EXPRESSION",
         parameters = Map.empty,
         context = ExpectedContext(
           fragment = fragment,

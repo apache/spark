@@ -3406,11 +3406,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def generatedColumnsOnCreationUnsupportedForDataSource(provider: String): Throwable = {
     new AnalysisException(
-      s"""
-        |Failed to execute command because target data source with table provider: \"$provider\"
-        |does not support creating generated columns with GENERATED ALWAYS AS expressions in
-        |create/replace table statements.
-        f|""".stripMargin
+      errorClass = "UNSUPPORTED_FEATURE.GENERATED_COLUMN_ON_TABLE_CREATION",
+      messageParameters = Map("provider" -> provider)
     )
   }
 }

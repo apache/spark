@@ -652,6 +652,6 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def generatedColumnNotEnabledError(ctx: ParserRuleContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0065", ctx)
+    new ParseException(errorClass = "UNSUPPORTED_FEATURE.SET_COLUMN_GENERATION_EXPRESSION", ctx)
   }
 }

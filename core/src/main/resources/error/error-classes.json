@@ -1266,6 +1266,11 @@
           "DISTRIBUTE BY clause."
         ]
       },
+      "GENERATED_COLUMN_ON_TABLE_CREATION": {
+        "message" : [
+          "Target data source with table provider: \"<provider>\" does not support creating generated columns with GENERATED ALWAYS AS expressions in create/replace table statements."
+        ]
+      },
       "INSERT_PARTITION_SPEC_IF_NOT_EXISTS" : {
         "message" : [
           "INSERT INTO <tableName> IF NOT EXISTS in the PARTITION spec."
@@ -1329,6 +1334,11 @@
       "REPEATED_PIVOT" : {
         "message" : [
           "Repeated PIVOT operation."
+        ]
+      },
+      "SET_COLUMN_GENERATION_EXPRESSION" : {
+        "message" : [
+          "Specifying a generation expression for a column with GENERATED ALWAYS AS expr is disabled by configuration spark.sql.generatedColumn.enabled=false"
         ]
       },
       "SET_NAMESPACE_PROPERTY" : {
@@ -1801,11 +1811,6 @@
   "_LEGACY_ERROR_TEMP_0064" : {
     "message" : [
       "<msg>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0065" : {
-    "message" : [
-      "Creating generated columns with GENERATED ALWAYS AS is not supported."
     ]
   },
   "_LEGACY_ERROR_TEMP_1000" : {
