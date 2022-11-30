@@ -70,6 +70,7 @@ class SparkConnectSQLTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLT
         cls.df_text = cls.sc.parallelize(cls.testDataStr).toDF()
 
         cls.tbl_name = "test_connect_basic_table_1"
+        cls.tbl_name2 = "test_connect_basic_table_2"
         cls.tbl_name_empty = "test_connect_basic_table_empty"
 
         # Cleanup test data
@@ -90,6 +91,8 @@ class SparkConnectSQLTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLT
         # Since we might create multiple Spark sessions, we need to create global temporary view
         # that is specifically maintained in the "global_temp" schema.
         df.write.saveAsTable(cls.tbl_name)
+        df2 = cls.spark.createDataFrame([(x, f"{x}") for x in range(100)], ["col1", "col2"])
+        df2.write.saveAsTable(cls.tbl_name2)
         empty_table_schema = StructType(
             [
                 StructField("firstname", StringType(), True),
@@ -104,6 +107,7 @@ class SparkConnectSQLTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLT
     @classmethod
     def spark_connect_clean_up_test_data(cls: Any) -> None:
         cls.spark.sql("DROP TABLE IF EXISTS {}".format(cls.tbl_name))
+        cls.spark.sql("DROP TABLE IF EXISTS {}".format(cls.tbl_name2))
         cls.spark.sql("DROP TABLE IF EXISTS {}".format(cls.tbl_name_empty))
 
 
@@ -113,6 +117,34 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         data = df.limit(10).toPandas()
         # Check that the limit is applied
         self.assertEqual(len(data.index), 10)
+
+    def test_join_condition_column_list_columns(self):
+        left_connect_df = self.connect.read.table(self.tbl_name)
+        right_connect_df = self.connect.read.table(self.tbl_name2)
+        left_spark_df = self.spark.read.table(self.tbl_name)
+        right_spark_df = self.spark.read.table(self.tbl_name2)
+        joined_plan = left_connect_df.join(
+            other=right_connect_df, on=left_connect_df.id == right_connect_df.col1, how="inner"
+        )
+        joined_plan2 = left_spark_df.join(
+            other=right_spark_df, on=left_spark_df.id == right_spark_df.col1, how="inner"
+        )
+        self.assert_eq(joined_plan.toPandas(), joined_plan2.toPandas())
+
+        joined_plan3 = left_connect_df.join(
+            other=right_connect_df,
+            on=[
+                left_connect_df.id == right_connect_df.col1,
+                left_connect_df.name == right_connect_df.col2,
+            ],
+            how="inner",
+        )
+        joined_plan4 = left_spark_df.join(
+            other=right_spark_df,
+            on=[left_spark_df.id == right_spark_df.col1, left_spark_df.name == right_spark_df.col2],
+            how="inner",
+        )
+        self.assert_eq(joined_plan3.toPandas(), joined_plan4.toPandas())
 
     def test_columns(self):
         # SPARK-41036: test `columns` API for python client.

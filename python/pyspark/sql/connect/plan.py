@@ -675,7 +675,7 @@ class Join(LogicalPlan):
         self,
         left: Optional["LogicalPlan"],
         right: "LogicalPlan",
-        on: Optional[Union[str, List[str], Column]],
+        on: Optional[Union[str, List[str], Column, List[Column]]],
         how: Optional[str],
     ) -> None:
         super().__init__(left)
@@ -721,8 +721,17 @@ class Join(LogicalPlan):
                     rel.join.using_columns.append(self.on)
                 else:
                     rel.join.join_condition.CopyFrom(self.to_attr_or_expression(self.on, session))
-            else:
-                rel.join.using_columns.extend(self.on)
+            elif len(self.on) > 0:
+                if isinstance(self.on[0], str):
+                    rel.join.using_columns.extend(self.on)
+                else:
+                    merge_column = None
+                    for c in self.on:
+                        if merge_column is not None:
+                            merge_column = merge_column & c
+                        else:
+                            merge_column = c
+                    rel.join.join_condition.CopyFrom(merge_column.to_plan(session))
         rel.join.join_type = self.how
         return rel
 

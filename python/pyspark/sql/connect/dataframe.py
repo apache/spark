@@ -468,7 +468,7 @@ class DataFrame(object):
     def join(
         self,
         other: "DataFrame",
-        on: Optional[Union[str, List[str], Column]] = None,
+        on: Optional[Union[str, List[str], Column, List[Column]]] = None,
         how: Optional[str] = None,
     ) -> "DataFrame":
         if self._plan is None:
