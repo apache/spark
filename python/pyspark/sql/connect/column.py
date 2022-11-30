@@ -29,8 +29,8 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.client import SparkConnectClient
     import pyspark.sql.connect.proto as proto
 
-# TODO: solve the circular import between _typing and this class if we want to
-# reuse _type.PrimitiveType
+# TODO(SPARK-41329): solve the circular import between _typing and this class
+# if we want to reuse _type.PrimitiveType
 PrimitiveType = Union[bool, float, int, str]
 
 
@@ -369,8 +369,6 @@ class Column(object):
     _eqNullSafe_doc = """
         Equality test that is safe for null values.
 
-        .. versionadded:: 2.3.0
-
         Parameters
         ----------
         other
@@ -605,8 +603,6 @@ class Column(object):
         SQL ILIKE expression (case insensitive LIKE). Returns a boolean :class:`Column`
         based on a case insensitive match.
 
-        .. versionadded:: 3.4.0
-
         Parameters
         ----------
         other : str
@@ -640,8 +636,6 @@ class Column(object):
     def substr(self, startPos: Union[int, "Column"], length: Union[int, "Column"]) -> "Column":
         """
         Return a :class:`Column` which is a substring of the column.
-
-        .. versionadded:: 3.4.0
 
         Parameters
         ----------
@@ -708,8 +702,8 @@ class Column(object):
     def name(self) -> str:
         return self._expr.name()
 
-    # TODO: solve the circular import between functions.py and this class if we want to
-    # reuse functions.lit
+    # TODO(SPARK-41329): solve the circular import between functions.py and
+    # this class if we want to reuse functions.lit
     def _lit(self, x: Any) -> "Column":
         return Column(LiteralExpression(x))
 
