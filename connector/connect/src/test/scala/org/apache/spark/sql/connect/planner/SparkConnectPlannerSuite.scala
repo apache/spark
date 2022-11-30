@@ -567,7 +567,8 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
             .build())
         .build()
 
-    val logical = transform(proto.Relation.newBuilder.setProject(project).build())
-    assert(logical.schema.fields.toSeq.map(_.name) == Seq("id"))
+    val df =
+      Dataset.ofRows(spark, transform(proto.Relation.newBuilder.setProject(project).build()))
+    assert(df.schema.fields.toSeq.map(_.name) == Seq("id"))
   }
 }
