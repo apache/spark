@@ -23,7 +23,7 @@ import com.google.protobuf.ByteString
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.Expression.{ExpressionString, UnresolvedStar}
+import org.apache.spark.connect.proto.Expression.{Alias, ExpressionString, UnresolvedStar}
 import org.apache.spark.sql.{AnalysisException, Dataset}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeProjection}
@@ -546,5 +546,28 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       assert(i == array(i).getInt(0))
       assert(i + 1 == array(i).getInt(1))
     }
+  }
+
+  test("transform Project with Alias") {
+    val input = proto.Expression
+      .newBuilder()
+      .setLiteral(
+        proto.Expression.Literal
+          .newBuilder()
+          .setInteger(1)
+          .build())
+
+    val project =
+      proto.Project
+        .newBuilder()
+        .addExpressions(
+          proto.Expression
+            .newBuilder()
+            .setAlias(Alias.newBuilder().setExpr(input).addName("id").build())
+            .build())
+        .build()
+
+    val logical = transform(proto.Relation.newBuilder.setProject(project).build())
+    assert(logical.schema.fields.toSeq.map(_.name) == Seq("id"))
   }
 }

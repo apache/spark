@@ -510,7 +510,7 @@ class Expression(google.protobuf.message.Message):
         def target(
             self,
         ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
-            """The target of the expansion, either be a table name or struct name, this
+            """(Optional) The target of the expansion, either be a table name or struct name, this
             is a list of identifiers that is the path of the expansion.
             """
         def __init__(
