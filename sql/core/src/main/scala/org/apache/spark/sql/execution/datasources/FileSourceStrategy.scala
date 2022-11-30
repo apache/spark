@@ -235,7 +235,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
                 s"${FileFormat.METADATA_NAME}.${FileFormat.ROW_INDEX} column.")
             }
             Some(AttributeReference(
-              FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME, LongType, nullable = false)())
+              FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME, LongType)())
           case _ => None
         }
 
@@ -273,7 +273,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
             case FileFormat.ROW_INDEX =>
               fileFormatReaderGeneratedMetadataColumns
                 .find(_.name == FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME)
-                .get.withName(FileFormat.ROW_INDEX)
+                .get.withName(FileFormat.ROW_INDEX).withNullability(false)
           }
         }
         // SPARK-41151: metadata column is not nullable for file sources.
