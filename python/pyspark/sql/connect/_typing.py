@@ -26,7 +26,7 @@ from typing import Union, Optional
 import datetime
 import decimal
 
-from pyspark.sql.connect.column import ScalarFunctionExpression, Column
+from pyspark.sql.connect.column import Column
 
 ColumnOrName = Union[Column, str]
 
@@ -42,7 +42,7 @@ DateTimeLiteral = Union[datetime.datetime, datetime.date]
 
 
 class FunctionBuilderCallable(Protocol):
-    def __call__(self, *_: ColumnOrName) -> ScalarFunctionExpression:
+    def __call__(self, *_: ColumnOrName) -> Column:
         ...
 
 

@@ -33,7 +33,7 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.client import SparkConnectClient
 
 
-def _build(name: str, *args: "ColumnOrName") -> ScalarFunctionExpression:
+def _build(name: str, *args: "ColumnOrName") -> Column:
     """
     Simple wrapper function that converts the arguments into the appropriate types.
     Parameters
@@ -46,14 +46,14 @@ def _build(name: str, *args: "ColumnOrName") -> ScalarFunctionExpression:
     :class:`ScalarFunctionExpression`
     """
     cols = [x if isinstance(x, Column) else col(x) for x in args]
-    return ScalarFunctionExpression(name, *cols)
+    return Column(ScalarFunctionExpression(name, *cols))
 
 
 class FunctionBuilder:
     """This class is used to build arbitrary functions used in expressions"""
 
     def __getattr__(self, name: str) -> "FunctionBuilderCallable":
-        def _(*args: "ColumnOrName") -> ScalarFunctionExpression:
+        def _(*args: "ColumnOrName") -> Column:
             return _build(name, *args)
 
         _.__doc__ = f"""Function to apply {name}"""

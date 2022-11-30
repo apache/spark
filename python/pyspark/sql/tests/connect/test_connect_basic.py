@@ -116,8 +116,35 @@ class SparkConnectTests(SparkConnectSQLTestCase):
 
     def test_columns(self):
         # SPARK-41036: test `columns` API for python client.
-        columns = self.connect.read.table(self.tbl_name).columns
-        self.assertEqual(["id", "name"], columns)
+        df = self.connect.read.table(self.tbl_name)
+        df2 = self.spark.read.table(self.tbl_name)
+        self.assertEqual(["id", "name"], df.columns)
+
+        self.assert_eq(
+            df.filter(df.name.rlike("20")).toPandas(), df2.filter(df2.name.rlike("20")).toPandas()
+        )
+        self.assert_eq(
+            df.filter(df.name.like("20")).toPandas(), df2.filter(df2.name.like("20")).toPandas()
+        )
+        self.assert_eq(
+            df.filter(df.name.ilike("20")).toPandas(), df2.filter(df2.name.ilike("20")).toPandas()
+        )
+        self.assert_eq(
+            df.filter(df.name.contains("20")).toPandas(),
+            df2.filter(df2.name.contains("20")).toPandas(),
+        )
+        self.assert_eq(
+            df.filter(df.name.startswith("2")).toPandas(),
+            df2.filter(df2.name.startswith("2")).toPandas(),
+        )
+        self.assert_eq(
+            df.filter(df.name.endswith("0")).toPandas(),
+            df2.filter(df2.name.endswith("0")).toPandas(),
+        )
+        self.assert_eq(
+            df.select(df.name.substr(0, 1).alias("col")).toPandas(),
+            df2.select(df2.name.substr(0, 1).alias("col")).toPandas(),
+        )
 
     def test_collect(self):
         df = self.connect.read.table(self.tbl_name)
