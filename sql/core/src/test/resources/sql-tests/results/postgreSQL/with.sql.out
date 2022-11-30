@@ -363,7 +363,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "UNSUPPORTED_DATATYPE",
   "sqlState" : "0A000",
   "messageParameters" : {
-    "typeName" : "baz"
+    "typeName" : "\"BAZ\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -385,7 +385,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "UNSUPPORTED_DATATYPE",
   "sqlState" : "0A000",
   "messageParameters" : {
-    "typeName" : "ordinality"
+    "typeName" : "\"ORDINALITY\""
   },
   "queryContext" : [ {
     "objectType" : "",

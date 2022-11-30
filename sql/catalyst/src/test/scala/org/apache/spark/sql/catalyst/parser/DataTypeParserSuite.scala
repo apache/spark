@@ -139,12 +139,12 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
     checkError(
       exception = intercept("unknown"),
       errorClass = "UNSUPPORTED_DATATYPE",
-      parameters = Map("typeName" -> "unknown")
+      parameters = Map("typeName" -> "\"UNKNOWN\"")
     )
     checkError(
       exception = intercept("unknown(1,2,3)"),
       errorClass = "UNSUPPORTED_DATATYPE",
-      parameters = Map("typeName" -> "unknown(1,2,3)")
+      parameters = Map("typeName" -> "\"UNKNOWN(1,2,3)\"")
     )
   }
 

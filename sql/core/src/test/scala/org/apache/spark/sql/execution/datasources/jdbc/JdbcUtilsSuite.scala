@@ -60,7 +60,7 @@ class JdbcUtilsSuite extends SparkFunSuite {
         JdbcUtils.getCustomSchema(tableSchema, "c3 DATEE, C2 STRING", caseInsensitive)
       },
       errorClass = "UNSUPPORTED_DATATYPE",
-      parameters = Map("typeName" -> "datee"))
+      parameters = Map("typeName" -> "\"DATEE\""))
 
     checkError(
       exception = intercept[ParseException]{
