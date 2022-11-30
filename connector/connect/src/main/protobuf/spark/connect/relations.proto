@@ -57,6 +57,7 @@ message Relation {
     // NA functions
     NAFill fill_na = 90;
     NADrop drop_na = 91;
+    NAReplace replace = 92;
 
     // stat functions
     StatSummary summary = 100;
@@ -463,6 +464,35 @@ message NADrop {
   //   - 'all' -> set 'min_non_nulls' 1;
   //   - 'any' -> keep 'min_non_nulls' unset;
   optional int32 min_non_nulls = 3;
+}
+
+
+// Replaces old values with the corresponding values.
+// It will invoke 'Dataset.na.replace' (same as 'DataFrameNaFunctions.replace')
+// to compute the results.
+message NAReplace {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Optional) List of column names to consider.
+  //
+  // When it is empty, all the type-compatible columns in the input relation will be considered.
+  repeated string cols = 2;
+
+  // (Optional) The value replacement mapping.
+  repeated Replacement replacements = 3;
+
+  message Replacement {
+    // (Required) The old value.
+    //
+    // Only 4 data types are supported now: null, bool, double, string.
+    Expression.Literal old_value = 1;
+
+    // (Required) The new value.
+    //
+    // Should be of the same data type with the old value.
+    Expression.Literal new_value = 2;
+  }
 }
 
 

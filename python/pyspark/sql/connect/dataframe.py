@@ -27,9 +27,12 @@ from typing import (
     overload,
     Callable,
     cast,
+    Type,
 )
 
 import pandas
+import warnings
+from collections.abc import Iterable
 
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.readwriter import DataFrameWriter
@@ -39,9 +42,11 @@ from pyspark.sql.types import (
     StructType,
     Row,
 )
+from pyspark import _NoValue
+from pyspark._globals import _NoValueType
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import ColumnOrName, LiteralType
+    from pyspark.sql.connect._typing import ColumnOrName, LiteralType, OptionalPrimitiveType
     from pyspark.sql.connect.session import SparkSession
 
 
@@ -1054,6 +1059,137 @@ class DataFrame(object):
             session=self._session,
         )
 
+    def replace(
+        self,
+        to_replace: Union[
+            "LiteralType", List["LiteralType"], Dict["LiteralType", "OptionalPrimitiveType"]
+        ],
+        value: Optional[
+            Union["OptionalPrimitiveType", List["OptionalPrimitiveType"], _NoValueType]
+        ] = _NoValue,
+        subset: Optional[List[str]] = None,
+    ) -> "DataFrame":
+        """Returns a new :class:`DataFrame` replacing a value with another value.
+        :func:`DataFrame.replace` and :func:`DataFrameNaFunctions.replace` are
+        aliases of each other.
+        Values to_replace and value must have the same type and can only be numerics, booleans,
+        or strings. Value can have None. When replacing, the new value will be cast
+        to the type of the existing column.
+        For numeric replacements all values to be replaced should have unique
+        floating point representation. In case of conflicts (for example with `{42: -1, 42.0: 1}`)
+        and arbitrary replacement will be used.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        to_replace : bool, int, float, string, list or dict
+            Value to be replaced.
+            If the value is a dict, then `value` is ignored or can be omitted, and `to_replace`
+            must be a mapping between a value and a replacement.
+        value : bool, int, float, string or None, optional
+            The replacement value must be a bool, int, float, string or None. If `value` is a
+            list, `value` should be of the same length and type as `to_replace`.
+            If `value` is a scalar and `to_replace` is a sequence, then `value` is
+            used as a replacement for each item in `to_replace`.
+        subset : list, optional
+            optional list of column names to consider.
+            Columns specified in subset that do not have matching data type are ignored.
+            For example, if `value` is a string, and subset contains a non-string column,
+            then the non-string column is simply ignored.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with replaced values.
+        """
+        if value is _NoValue:
+            if isinstance(to_replace, dict):
+                value = None
+            else:
+                raise TypeError("value argument is required when to_replace is not a dictionary.")
+
+        # Helper functions
+        def all_of(types: Union[Type, Tuple[Type, ...]]) -> Callable[[Iterable], bool]:
+            """Given a type or tuple of types and a sequence of xs
+            check if each x is instance of type(s)
+
+            >>> all_of(bool)([True, False])
+            True
+            >>> all_of(str)(["a", 1])
+            False
+            """
+
+            def all_of_(xs: Iterable) -> bool:
+                return all(isinstance(x, types) for x in xs)
+
+            return all_of_
+
+        all_of_bool = all_of(bool)
+        all_of_str = all_of(str)
+        all_of_numeric = all_of((float, int))
+
+        # Validate input types
+        valid_types = (bool, float, int, str, list, tuple)
+        if not isinstance(to_replace, valid_types + (dict,)):
+            raise TypeError(
+                "to_replace should be a bool, float, int, string, list, tuple, or dict. "
+                "Got {0}".format(type(to_replace))
+            )
+
+        if (
+            not isinstance(value, valid_types)
+            and value is not None
+            and not isinstance(to_replace, dict)
+        ):
+            raise TypeError(
+                "If to_replace is not a dict, value should be "
+                "a bool, float, int, string, list, tuple or None. "
+                "Got {0}".format(type(value))
+            )
+
+        if isinstance(to_replace, (list, tuple)) and isinstance(value, (list, tuple)):
+            if len(to_replace) != len(value):
+                raise ValueError(
+                    "to_replace and value lists should be of the same length. "
+                    "Got {0} and {1}".format(len(to_replace), len(value))
+                )
+
+        if not (subset is None or isinstance(subset, (list, tuple, str))):
+            raise TypeError(
+                "subset should be a list or tuple of column names, "
+                "column name or None. Got {0}".format(type(subset))
+            )
+
+        # Reshape input arguments if necessary
+        if isinstance(to_replace, (float, int, str)):
+            to_replace = [to_replace]
+
+        if isinstance(to_replace, dict):
+            rep_dict = to_replace
+            if value is not None:
+                warnings.warn("to_replace is a dict and value is not None. value will be ignored.")
+        else:
+            if isinstance(value, (float, int, str)) or value is None:
+                value = [value for _ in range(len(to_replace))]
+            rep_dict = dict(zip(to_replace, cast("Iterable[Optional[Union[float, str]]]", value)))
+
+        if isinstance(subset, str):
+            subset = [subset]
+
+        # Verify we were not passed in mixed type generics.
+        if not any(
+            all_of_type(rep_dict.keys())
+            and all_of_type(x for x in rep_dict.values() if x is not None)
+            for all_of_type in [all_of_bool, all_of_str, all_of_numeric]
+        ):
+            raise ValueError("Mixed type replacements are not supported")
+
+        return DataFrame.withPlan(
+            plan.NAReplace(child=self._plan, cols=subset, replacements=rep_dict),
+            session=self._session,
+        )
+
     @property
     def stat(self) -> "DataFrameStatFunctions":
         """Returns a :class:`DataFrameStatFunctions` for statistic functions.
@@ -1519,6 +1655,18 @@ class DataFrameNaFunctions:
         return self.df.dropna(how=how, thresh=thresh, subset=subset)
 
     drop.__doc__ = DataFrame.dropna.__doc__
+
+    def replace(
+        self,
+        to_replace: Union[List["LiteralType"], Dict["LiteralType", "OptionalPrimitiveType"]],
+        value: Optional[
+            Union["OptionalPrimitiveType", List["OptionalPrimitiveType"], _NoValueType]
+        ] = _NoValue,
+        subset: Optional[List[str]] = None,
+    ) -> DataFrame:
+        return self.df.replace(to_replace, value, subset)
+
+    replace.__doc__ = DataFrame.replace.__doc__
 
 
 class DataFrameStatFunctions:

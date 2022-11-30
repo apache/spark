@@ -583,6 +583,52 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             self.spark.sql(query).na.drop(how="any", thresh=2, subset="a").toPandas(),
         )
 
+    def test_replace(self):
+        # SPARK-41315: Test replace
+        query = """
+            SELECT * FROM VALUES
+            (false, 1, NULL), (false, NULL, 2.0), (NULL, 3, 3.0)
+            AS tab(a, b, c)
+            """
+        # +-----+----+----+
+        # |    a|   b|   c|
+        # +-----+----+----+
+        # |false|   1|null|
+        # |false|null| 2.0|
+        # | null|   3| 3.0|
+        # +-----+----+----+
+
+        self.assert_eq(
+            self.connect.sql(query).replace(2, 3).toPandas(),
+            self.spark.sql(query).replace(2, 3).toPandas(),
+        )
+        self.assert_eq(
+            self.connect.sql(query).na.replace(False, True).toPandas(),
+            self.spark.sql(query).na.replace(False, True).toPandas(),
+        )
+        self.assert_eq(
+            self.connect.sql(query).replace({1: 2, 3: -1}, subset=("a", "b")).toPandas(),
+            self.spark.sql(query).replace({1: 2, 3: -1}, subset=("a", "b")).toPandas(),
+        )
+        self.assert_eq(
+            self.connect.sql(query).na.replace((1, 2), (3, 1)).toPandas(),
+            self.spark.sql(query).na.replace((1, 2), (3, 1)).toPandas(),
+        )
+        self.assert_eq(
+            self.connect.sql(query).na.replace((1, 2), (3, 1), subset=("c", "b")).toPandas(),
+            self.spark.sql(query).na.replace((1, 2), (3, 1), subset=("c", "b")).toPandas(),
+        )
+
+        with self.assertRaises(ValueError) as context:
+            self.connect.sql(query).replace({None: 1}, subset="a").toPandas()
+            self.assertTrue("Mixed type replacements are not supported" in str(context.exception))
+
+        with self.assertRaises(grpc.RpcError) as context:
+            self.connect.sql(query).replace({1: 2, 3: -1}, subset=("a", "x")).toPandas()
+            self.assertIn(
+                """Cannot resolve column name "x" among (a, b, c)""", str(context.exception)
+            )
+
     def test_with_columns(self):
         # SPARK-41256: test withColumn(s).
         self.assert_eq(

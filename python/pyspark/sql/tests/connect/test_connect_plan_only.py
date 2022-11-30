@@ -128,6 +128,33 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertEqual(plan.root.drop_na.cols, ["col_c"])
         self.assertEqual(plan.root.drop_na.min_non_nulls, 1)
 
+    def test_replace(self):
+        # SPARK-41315: Test replace
+        df = self.connect.readTable(table_name=self.tbl_name)
+
+        plan = df.replace(10, 20)._plan.to_proto(self.connect)
+        self.assertEqual(plan.root.replace.cols, [])
+        self.assertEqual(plan.root.replace.replacements[0].old_value.double, 10.0)
+        self.assertEqual(plan.root.replace.replacements[0].new_value.double, 20.0)
+
+        plan = df.na.replace((1, 2, 3), (4, 5, 6), subset=("col_a", "col_b"))._plan.to_proto(
+            self.connect
+        )
+        self.assertEqual(plan.root.replace.cols, ["col_a", "col_b"])
+        self.assertEqual(plan.root.replace.replacements[0].old_value.double, 1.0)
+        self.assertEqual(plan.root.replace.replacements[0].new_value.double, 4.0)
+        self.assertEqual(plan.root.replace.replacements[1].old_value.double, 2.0)
+        self.assertEqual(plan.root.replace.replacements[1].new_value.double, 5.0)
+        self.assertEqual(plan.root.replace.replacements[2].old_value.double, 3.0)
+        self.assertEqual(plan.root.replace.replacements[2].new_value.double, 6.0)
+
+        plan = df.replace(["Alice", "Bob"], ["A", "B"], subset="col_x")._plan.to_proto(self.connect)
+        self.assertEqual(plan.root.replace.cols, ["col_x"])
+        self.assertEqual(plan.root.replace.replacements[0].old_value.string, "Alice")
+        self.assertEqual(plan.root.replace.replacements[0].new_value.string, "A")
+        self.assertEqual(plan.root.replace.replacements[1].old_value.string, "Bob")
+        self.assertEqual(plan.root.replace.replacements[1].new_value.string, "B")
+
     def test_summary(self):
         df = self.connect.readTable(table_name=self.tbl_name)
         plan = df.filter(df.col_name > 3).summary()._plan.to_proto(self.connect)

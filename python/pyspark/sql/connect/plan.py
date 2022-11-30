@@ -15,16 +15,7 @@
 # limitations under the License.
 #
 
-from typing import (
-    Any,
-    List,
-    Optional,
-    Sequence,
-    Union,
-    cast,
-    TYPE_CHECKING,
-    Mapping,
-)
+from typing import Any, List, Optional, Sequence, Union, cast, TYPE_CHECKING, Mapping, Dict
 import pandas
 import pyarrow as pa
 import pyspark.sql.connect.proto as proto
@@ -1089,6 +1080,67 @@ class NADrop(LogicalPlan):
               <b>NADrop</b><br />
               Cols: {self.cols} <br />
               Min_non_nulls: {self.min_non_nulls} <br />
+              {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
+class NAReplace(LogicalPlan):
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        cols: Optional[List[str]],
+        replacements: Dict[Any, Any],
+    ) -> None:
+        super().__init__(child)
+
+        for old_value, new_value in replacements.items():
+            if old_value is not None:
+                assert isinstance(old_value, (bool, int, float, str))
+            if new_value is not None:
+                assert isinstance(new_value, (bool, int, float, str))
+
+        self.cols = cols
+        self.replacements = replacements
+
+    def _convert_value(self, v: Any) -> proto.Expression.Literal:
+        value = proto.Expression.Literal()
+        if v is None:
+            value.null = True
+        elif isinstance(v, bool):
+            value.boolean = v
+        elif isinstance(v, (int, float)):
+            value.double = float(v)
+        else:
+            value.string = v
+        return value
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+        plan = proto.Relation()
+        plan.replace.input.CopyFrom(self._child.plan(session))
+        if self.cols is not None and len(self.cols) > 0:
+            plan.replace.cols.extend(self.cols)
+        if len(self.replacements) > 0:
+            for old_value, new_value in self.replacements.items():
+                replacement = proto.NAReplace.Replacement()
+                replacement.old_value.CopyFrom(self._convert_value(old_value))
+                replacement.new_value.CopyFrom(self._convert_value(new_value))
+                plan.replace.replacements.append(replacement)
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return f"{i}" f"<NAReplace cols='{self.cols}' " f"replacements='{self.replacements}'>"
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>NADrop</b><br />
+              Cols: {self.cols} <br />
+              Replacements: {self.replacements} <br />
               {self._child_repr_()}
            </li>
         </ul>
