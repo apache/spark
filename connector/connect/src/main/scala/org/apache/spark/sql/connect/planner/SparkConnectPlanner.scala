@@ -682,8 +682,8 @@ class SparkConnectPlanner(session: SparkSession) {
       rel.getGroupingExpressionsList.asScala
         .map(transformExpression)
         .map {
-          case x @ UnresolvedAttribute(_) => x
-          case x @ Alias(_, _) => x
+          case ua @ UnresolvedAttribute(_) => ua
+          case a @ Alias(_, _) => a
           case x => UnresolvedAlias(x)
         }
 

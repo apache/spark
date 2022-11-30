@@ -796,7 +796,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertEqual(set(df.collect()), set(ndf.collect()))
 
     def test_agg_with_avg(self):
-        """SPARK-41325: groupby.avg()"""
+        # SPARK-41325: groupby.avg()
         df = (
             self.connect.range(10)
             .groupBy((col("id") % lit(2)).alias("moded"))
