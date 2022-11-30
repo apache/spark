@@ -1698,8 +1698,7 @@ class NAReplace(google.protobuf.message.Message):
     ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
         """(Optional) List of column names to consider.
 
-        When it is empty, all the string, numeric and boolean columns in the input relation
-        will be considered.
+        When it is empty, all the type-compatible columns in the input relation will be considered.
         """
     @property
     def replacements(

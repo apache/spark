@@ -476,8 +476,7 @@ message NAReplace {
 
   // (Optional) List of column names to consider.
   //
-  // When it is empty, all the string, numeric and boolean columns in the input relation
-  // will be considered.
+  // When it is empty, all the type-compatible columns in the input relation will be considered.
   repeated string cols = 2;
 
   // (Optional) The value replacement mapping.

@@ -592,6 +592,16 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             self.spark.sql(query).na.replace((1, 2), (3, 1), subset=("c", "b")).toPandas(),
         )
 
+        with self.assertRaises(ValueError) as context:
+            self.connect.sql(query).replace({None: 1}, subset="a").toPandas()
+            self.assertTrue("Mixed type replacements are not supported" in str(context.exception))
+
+        with self.assertRaises(grpc.RpcError) as context:
+            self.connect.sql(query).replace({1: 2, 3: -1}, subset=("a", "x")).toPandas()
+            self.assertIn(
+                """Cannot resolve column name "x" among (a, b, c)""", str(context.exception)
+            )
+
     def test_with_columns(self):
         # SPARK-41256: test withColumn(s).
         self.assert_eq(
