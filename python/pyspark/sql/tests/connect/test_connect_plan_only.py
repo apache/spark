@@ -227,6 +227,8 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         df = self.connect.readTable(table_name=self.tbl_name)
 
         distinct_plan = df.distinct()._plan.to_proto(self.connect)
+        self.assertTrue(distinct_plan.root.deduplicate.HasField("input"), "input must be set")
+
         self.assertEqual(distinct_plan.root.deduplicate.all_columns_as_keys, True)
         self.assertEqual(len(distinct_plan.root.deduplicate.column_names), 0)
 

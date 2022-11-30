@@ -462,6 +462,7 @@ class Deduplicate(LogicalPlan):
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
         plan = proto.Relation()
+        plan.deduplicate.input.CopyFrom(self._child.plan(session))
         plan.deduplicate.all_columns_as_keys = self.all_columns_as_keys
         if self.column_names is not None:
             plan.deduplicate.column_names.extend(self.column_names)
