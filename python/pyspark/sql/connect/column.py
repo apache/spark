@@ -58,6 +58,13 @@ def _bin_op(
     return _
 
 
+def _unary_op(name: str, doc: str = "unary function") -> Callable[["Column"], "Column"]:
+    def _(self: "Column") -> "Column":
+        return scalar_function(name, self)
+
+    return _
+
+
 def scalar_function(op: str, *args: "Column") -> "Column":
     return Column(ScalarFunctionExpression(op, *args))
 
@@ -500,6 +507,16 @@ class Column(object):
     bitwiseOR = _bin_op("bitwiseOR", _bitwiseOR_doc)
     bitwiseAND = _bin_op("bitwiseAND", _bitwiseAND_doc)
     bitwiseXOR = _bin_op("bitwiseXOR", _bitwiseXOR_doc)
+
+    _isNull_doc = """
+    True if the current expression is null.
+    """
+    _isNotNull_doc = """
+    True if the current expression is NOT null.
+    """
+
+    isNull = _unary_op("isNull", _isNull_doc)
+    isNotNull = _unary_op("isNotNull", _isNotNull_doc)
 
     # string methods
     def contains(self, other: Union[PrimitiveType, "Column"]) -> "Column":

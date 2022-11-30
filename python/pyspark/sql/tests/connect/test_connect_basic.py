@@ -145,6 +145,16 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             df.select(df.name.substr(0, 1).alias("col")).toPandas(),
             df2.select(df2.name.substr(0, 1).alias("col")).toPandas(),
         )
+        df3 = self.connect.sql("SELECT cast(null as int) as name")
+        df4 = self.spark.sql("SELECT cast(null as int) as name")
+        self.assert_eq(
+            df3.filter(df3.name.isNull()).toPandas(),
+            df4.filter(df4.name.isNull()).toPandas(),
+        )
+        self.assert_eq(
+            df3.filter(df3.name.isNotNull()).toPandas(),
+            df4.filter(df4.name.isNotNull()).toPandas(),
+        )
 
     def test_collect(self):
         df = self.connect.read.table(self.tbl_name)
