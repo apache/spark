@@ -1408,6 +1408,8 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     sql("USE hive_test_db")
     assert("hive_test_db" == sql("select current_database()").first().getString(0))
 
+    assert("hive_test_db" == sql("select current_schema()").first().getString(0))
+
     checkError(
       exception = intercept[AnalysisException] {
         sql("USE not_existing_db")

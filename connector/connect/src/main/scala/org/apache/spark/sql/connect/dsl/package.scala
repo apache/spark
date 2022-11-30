@@ -311,6 +311,31 @@ package object dsl {
           .setDropNa(dropna.build())
           .build()
       }
+
+      def replace(cols: Seq[String], replacement: Map[Any, Any]): Relation = {
+        require(cols.nonEmpty)
+
+        val replace = proto.NAReplace
+          .newBuilder()
+          .setInput(logicalPlan)
+
+        if (!(cols.length == 1 && cols.head == "*")) {
+          replace.addAllCols(cols.asJava)
+        }
+
+        replacement.foreach { case (oldValue, newValue) =>
+          replace.addReplacements(
+            proto.NAReplace.Replacement
+              .newBuilder()
+              .setOldValue(convertValue(oldValue))
+              .setNewValue(convertValue(newValue)))
+        }
+
+        Relation
+          .newBuilder()
+          .setReplace(replace.build())
+          .build()
+      }
     }
 
     implicit class DslStatFunctions(val logicalPlan: Relation) {
