@@ -119,6 +119,7 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
     parser.legacy_exponent_literal_as_decimal_enabled = conf.exponentLiteralAsDecimalEnabled
     parser.SQL_standard_keyword_behavior = conf.enforceReservedKeywords
     parser.double_quoted_identifiers = conf.doubleQuotedIdentifiers
+    parser.parameters_enabled = conf.parametersEnabled
 
     try {
       try {

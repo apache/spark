@@ -1297,11 +1297,13 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-41271: bind named parameters to literals") {
-    val plan = Bind(
-      args = Map("limitA" -> Literal(10)),
-      parsePlan("SELECT * FROM a LIMIT @limitA"))
-    comparePlans(
-      BindParameters.apply(plan),
-      parsePlan("SELECT * FROM a LIMIT 10"))
+    withSQLConf(SQLConf.PARAMETERS_ENABLED.key -> "true") {
+      val plan = Bind(
+        args = Map("limitA" -> Literal(10)),
+        parsePlan("SELECT * FROM a LIMIT @limitA"))
+      comparePlans(
+        BindParameters.apply(plan),
+        parsePlan("SELECT * FROM a LIMIT 10"))
+    }
   }
 }

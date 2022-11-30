@@ -4133,12 +4133,15 @@ object RemoveTempResolvedColumn extends Rule[LogicalPlan] {
  */
 object BindParameters extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    plan.resolveOperatorsUpWithPruning(_.containsPattern(BIND), ruleId) {
-      case Bind(args, child) =>
-        child.transformAllExpressionsWithPruning(_.containsPattern(PARAMETER), ruleId) {
-          case NamedParameter(name) if args.contains(name) =>
-            args(name)
-        }
+    if (SQLConf.get.parametersEnabled) {
+      plan.resolveOperatorsUpWithPruning(_.containsPattern(BIND), ruleId) {
+        case Bind(args, child) =>
+          child.transformAllExpressionsWithPruning(_.containsPattern(PARAMETER), ruleId) {
+            case NamedParameter(name) if args.contains(name) => args(name)
+          }
+      }
+    } else {
+      plan
     }
   }
 }
