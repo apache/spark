@@ -19,40 +19,37 @@ package org.apache.spark.sql.catalyst.types
 
 import org.apache.spark.sql.types._
 
-sealed abstract class PhysicalDataType {}
+sealed abstract class PhysicalDataType
 
-case class PhysicalArrayType(elementType: DataType, containsNull: Boolean)
-    extends PhysicalDataType {}
+case class PhysicalArrayType(elementType: DataType, containsNull: Boolean) extends PhysicalDataType
 
-case class PhysicalBinaryType() extends PhysicalDataType {}
+case class PhysicalBinaryType() extends PhysicalDataType
 
-case class PhysicalBooleanType() extends PhysicalDataType {}
+case class PhysicalBooleanType() extends PhysicalDataType
 
-case class PhysicalByteType() extends PhysicalDataType {}
+case class PhysicalByteType() extends PhysicalDataType
 
-case class PhysicalCalendarIntervalType() extends PhysicalDataType {}
+case class PhysicalCalendarIntervalType() extends PhysicalDataType
 
-case class PhysicalDecimalType(precision: Int, scale: Int) extends PhysicalDataType {}
+case class PhysicalDecimalType(precision: Int, scale: Int) extends PhysicalDataType
 
-case class PhysicalDoubleType() extends PhysicalDataType {}
+case class PhysicalDoubleType() extends PhysicalDataType
 
-case class PhysicalFloatType() extends PhysicalDataType {}
+case class PhysicalFloatType() extends PhysicalDataType
 
-case class PhysicalIntegerType() extends PhysicalDataType {}
+case class PhysicalIntegerType() extends PhysicalDataType
 
-case class PhysicalLongType() extends PhysicalDataType {}
+case class PhysicalLongType() extends PhysicalDataType
 
 case class PhysicalMapType(keyType: DataType, valueType: DataType, valueContainsNull: Boolean)
-    extends PhysicalDataType {}
+    extends PhysicalDataType
 
-case class PhysicalNullType() extends PhysicalDataType {}
+case class PhysicalNullType() extends PhysicalDataType
 
-case class PhysicalObjectType(cls: Class[_]) extends PhysicalDataType {}
+case class PhysicalShortType() extends PhysicalDataType
 
-case class PhysicalShortType() extends PhysicalDataType {}
+case class PhysicalStringType() extends PhysicalDataType
 
-case class PhysicalStringType() extends PhysicalDataType {}
+case class PhysicalStructType(fields: Array[StructField]) extends PhysicalDataType
 
-case class PhysicalStructType(fields: Array[StructField]) extends PhysicalDataType {}
-
-object UninitializedPhysicalType extends PhysicalDataType {}
+object UninitializedPhysicalType extends PhysicalDataType

@@ -215,6 +215,7 @@ object RowEncoder {
       } else {
         nonNullOutput
       }
+    // For other data types, return the internal catalyst value as it is.
     case _ => inputObject
   }
 
@@ -263,6 +264,7 @@ object RowEncoder {
       case _: PhysicalMapType => ObjectType(classOf[scala.collection.Map[_, _]])
       case _: PhysicalStringType => ObjectType(classOf[java.lang.String])
       case _: PhysicalStructType => ObjectType(classOf[Row])
+      // For other data types, return the data type as it is.
       case _ => dt
     }
   }
@@ -363,6 +365,8 @@ object RowEncoder {
       If(IsNull(input),
         Literal.create(null, externalDataTypeFor(input.dataType)),
         CreateExternalRow(convertedFields, schema))
+
+    // For other data types, return the internal catalyst value as it is.
     case _ => input
   }
 

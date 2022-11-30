@@ -206,6 +206,7 @@ object Literal {
   private[expressions] def validateLiteralValue(value: Any, dataType: DataType): Unit = {
     def doValidate(v: Any, dataType: DataType): Boolean = dataType match {
       case _ if v == null => true
+      case ObjectType(cls) => cls.isInstance(v)
       case udt: UserDefinedType[_] => doValidate(v, udt.sqlType)
       case dt => dataType.physicalDataType match {
         case PhysicalArrayType(et, _) =>
@@ -229,7 +230,6 @@ object Literal {
             doValidate(map.valueArray(), ArrayType(vt))
           }
         case _: PhysicalNullType => true
-        case PhysicalObjectType(cls) => cls.isInstance(v)
         case _: PhysicalShortType => v.isInstanceOf[Short]
         case _: PhysicalStringType => v.isInstanceOf[UTF8String]
         case st: PhysicalStructType =>

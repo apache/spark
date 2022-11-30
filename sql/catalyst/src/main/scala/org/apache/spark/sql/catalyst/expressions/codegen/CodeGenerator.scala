@@ -1905,6 +1905,8 @@ object CodeGenerator extends Logging {
    */
   def javaType(dt: DataType): String = dt match {
     case udt: UserDefinedType[_] => javaType(udt.sqlType)
+    case ObjectType(cls) if cls.isArray => s"${javaType(ObjectType(cls.getComponentType))}[]"
+    case ObjectType(cls) => cls.getName
     case _ => dt.physicalDataType match {
       case _: PhysicalArrayType => "ArrayData"
       case _: PhysicalBinaryType => "byte[]"
@@ -1917,9 +1919,6 @@ object CodeGenerator extends Logging {
       case _: PhysicalFloatType => JAVA_FLOAT
       case _: PhysicalLongType => JAVA_LONG
       case _: PhysicalMapType => "MapData"
-      case PhysicalObjectType(cls) if cls.isArray =>
-        s"${javaType(ObjectType(cls.getComponentType))}[]"
-      case PhysicalObjectType(cls) => cls.getName
       case _: PhysicalShortType => JAVA_SHORT
       case _: PhysicalStringType => "UTF8String"
       case _: PhysicalStructType => "InternalRow"
