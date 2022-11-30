@@ -421,7 +421,7 @@ class DataFrame(object):
         ----------
         num : int
             Number of records to return. Will return this number of records
-            or whataver number is available.
+            or all records if the DataFrame contains less than this number of records..
 
         Returns
         -------
@@ -456,7 +456,7 @@ class DataFrame(object):
         ----------
         num : int
             Number of records to return. Will return this number of records
-            or whatever number is available.
+            or all records if the DataFrame contains less than this number of records.
 
         Returns
         -------
