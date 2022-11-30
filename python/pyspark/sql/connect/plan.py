@@ -19,7 +19,7 @@ from typing import Any, List, Optional, Sequence, Union, cast, TYPE_CHECKING, Ma
 import pandas
 import pyarrow as pa
 import pyspark.sql.connect.proto as proto
-from pyspark.sql.connect.column import Column
+from pyspark.sql.connect.column import Column, SortOrder, ColumnReference
 
 
 if TYPE_CHECKING:
@@ -483,7 +483,7 @@ class Sort(LogicalPlan):
     def __init__(
         self,
         child: Optional["LogicalPlan"],
-        columns: List[Union[Column, str]],
+        columns: List["ColumnOrName"],
         is_global: bool,
     ) -> None:
         super().__init__(child)
@@ -491,32 +491,19 @@ class Sort(LogicalPlan):
         self.is_global = is_global
 
     def col_to_sort_field(
-        self, col: Union[Column, str], session: "SparkConnectClient"
+        self, col: "ColumnOrName", session: "SparkConnectClient"
     ) -> proto.Sort.SortField:
+        sort: Optional[SortOrder] = None
         if isinstance(col, Column):
-            sf = proto.Sort.SortField()
-            sf.expression.CopyFrom(col.to_plan(session))
-            sf.direction = (
-                proto.Sort.SortDirection.SORT_DIRECTION_ASCENDING
-                if col._expr.ascending
-                else proto.Sort.SortDirection.SORT_DIRECTION_DESCENDING
-            )
-            sf.nulls = (
-                proto.Sort.SortNulls.SORT_NULLS_FIRST
-                if not col._expr.nullsLast
-                else proto.Sort.SortNulls.SORT_NULLS_LAST
-            )
-            return sf
-        else:
-            sf = proto.Sort.SortField()
-            # Check string
-            if isinstance(col, Column):
-                sf.expression.CopyFrom(col.to_plan(session))
+            if isinstance(col._expr, SortOrder):
+                sort = col._expr
             else:
-                sf.expression.CopyFrom(self.unresolved_attr(col))
-            sf.direction = proto.Sort.SortDirection.SORT_DIRECTION_ASCENDING
-            sf.nulls = proto.Sort.SortNulls.SORT_NULLS_LAST
-            return sf
+                sort = SortOrder(col._expr)
+        else:
+            sort = SortOrder(ColumnReference(name=col))
+        assert sort is not None
+
+        return cast(proto.Sort.SortField, sort.to_plan(session))
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None

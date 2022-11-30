@@ -219,6 +219,22 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
             ["col_a", "col_b"],
         )
         self.assertEqual(plan.root.sort.is_global, True)
+        self.assertEqual(
+            plan.root.sort.sort_fields[0].direction,
+            proto.Sort.SortDirection.SORT_DIRECTION_ASCENDING,
+        )
+        self.assertEqual(
+            plan.root.sort.sort_fields[0].direction,
+            proto.Sort.SortNulls.SORT_NULLS_FIRST,
+        )
+        self.assertEqual(
+            plan.root.sort.sort_fields[1].direction,
+            proto.Sort.SortDirection.SORT_DIRECTION_ASCENDING,
+        )
+        self.assertEqual(
+            plan.root.sort.sort_fields[1].direction,
+            proto.Sort.SortNulls.SORT_NULLS_FIRST,
+        )
 
         plan = df.filter(df.col_name > 3).orderBy("col_a", "col_b")._plan.to_proto(self.connect)
         self.assertEqual(
@@ -232,7 +248,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
 
         plan = (
             df.filter(df.col_name > 3)
-            .sortWithinPartitions("col_a", "col_b")
+            .sortWithinPartitions(df.col_a.desc(), df.col_b.asc())
             ._plan.to_proto(self.connect)
         )
         self.assertEqual(
@@ -243,6 +259,22 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
             ["col_a", "col_b"],
         )
         self.assertEqual(plan.root.sort.is_global, False)
+        self.assertEqual(
+            plan.root.sort.sort_fields[0].direction,
+            proto.Sort.SortDirection.SORT_DIRECTION_DESCENDING,
+        )
+        self.assertEqual(
+            plan.root.sort.sort_fields[0].direction,
+            proto.Sort.SortNulls.SORT_NULLS_LAST,
+        )
+        self.assertEqual(
+            plan.root.sort.sort_fields[1].direction,
+            proto.Sort.SortDirection.SORT_DIRECTION_ASCENDING,
+        )
+        self.assertEqual(
+            plan.root.sort.sort_fields[1].direction,
+            proto.Sort.SortNulls.SORT_NULLS_FIRST,
+        )
 
     def test_drop(self):
         # SPARK-41169: test drop
