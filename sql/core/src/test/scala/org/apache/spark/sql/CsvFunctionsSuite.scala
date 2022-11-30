@@ -357,16 +357,22 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq("""1,"a"""").toDS().select(from_csv($"value", schema, options)),
       Row(Row(1, "a")))
 
-    val errMsg = intercept[AnalysisException] {
-      Seq(("1", "i int")).toDF("csv", "schema")
-        .select(from_csv($"csv", $"schema", options)).collect()
-    }.getMessage
-    assert(errMsg.contains("Schema should be specified in DDL format as a string literal"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        Seq(("1", "i int")).toDF("csv", "schema")
+          .select(from_csv($"csv", $"schema", options)).collect()
+      },
+      errorClass = "INVALID_SCHEMA.NON_STRING_LITERAL",
+      parameters = Map("inputSchema" -> "\"schema\"")
+    )
 
-    val errMsg2 = intercept[AnalysisException] {
-      Seq("1").toDF("csv").select(from_csv($"csv", lit(1), options)).collect()
-    }.getMessage
-    assert(errMsg2.contains("The expression '1' is not a valid schema string"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        Seq("1").toDF("csv").select(from_csv($"csv", lit(1), options)).collect()
+      },
+      errorClass = "INVALID_SCHEMA.NON_STRING_LITERAL",
+      parameters = Map("inputSchema" -> "\"1\"")
+    )
   }
 
   test("schema_of_csv - infers the schema of foldable CSV string") {

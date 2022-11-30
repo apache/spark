@@ -21,7 +21,7 @@ import scala.collection.convert.ImplicitConversions._
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.SaveMode
-import org.apache.spark.sql.types.{DataType, IntegerType, LongType, MapType, StringType, StructField, StructType}
+import org.apache.spark.sql.types._
 
 /**
  * This object offers methods to convert to/from connect proto to catalyst types.
@@ -29,65 +29,264 @@ import org.apache.spark.sql.types.{DataType, IntegerType, LongType, MapType, Str
 object DataTypeProtoConverter {
   def toCatalystType(t: proto.DataType): DataType = {
     t.getKindCase match {
-      case proto.DataType.KindCase.I32 => IntegerType
+      case proto.DataType.KindCase.NULL => NullType
+
+      case proto.DataType.KindCase.BINARY => BinaryType
+
+      case proto.DataType.KindCase.BOOLEAN => BooleanType
+
+      case proto.DataType.KindCase.BYTE => ByteType
+      case proto.DataType.KindCase.SHORT => ShortType
+      case proto.DataType.KindCase.INTEGER => IntegerType
+      case proto.DataType.KindCase.LONG => LongType
+
+      case proto.DataType.KindCase.FLOAT => FloatType
+      case proto.DataType.KindCase.DOUBLE => DoubleType
+      case proto.DataType.KindCase.DECIMAL => toCatalystDecimalType(t.getDecimal)
+
       case proto.DataType.KindCase.STRING => StringType
-      case proto.DataType.KindCase.STRUCT => convertProtoDataTypeToCatalyst(t.getStruct)
-      case proto.DataType.KindCase.MAP => convertProtoDataTypeToCatalyst(t.getMap)
+      case proto.DataType.KindCase.CHAR => CharType(t.getChar.getLength)
+      case proto.DataType.KindCase.VAR_CHAR => VarcharType(t.getVarChar.getLength)
+
+      case proto.DataType.KindCase.DATE => DateType
+      case proto.DataType.KindCase.TIMESTAMP => TimestampType
+      case proto.DataType.KindCase.TIMESTAMP_NTZ => TimestampNTZType
+
+      case proto.DataType.KindCase.CALENDAR_INTERVAL => CalendarIntervalType
+      case proto.DataType.KindCase.YEAR_MONTH_INTERVAL =>
+        toCatalystYearMonthIntervalType(t.getYearMonthInterval)
+      case proto.DataType.KindCase.DAY_TIME_INTERVAL =>
+        toCatalystDayTimeIntervalType(t.getDayTimeInterval)
+
+      case proto.DataType.KindCase.ARRAY => toCatalystArrayType(t.getArray)
+      case proto.DataType.KindCase.STRUCT => toCatalystStructType(t.getStruct)
+      case proto.DataType.KindCase.MAP => toCatalystMapType(t.getMap)
       case _ =>
         throw InvalidPlanInput(s"Does not support convert ${t.getKindCase} to catalyst types.")
     }
   }
 
-  private def convertProtoDataTypeToCatalyst(t: proto.DataType.Struct): StructType = {
-    // TODO: handle nullability
-    val structFields =
-      t.getFieldsList.map(f => StructField(f.getName, toCatalystType(f.getType))).toList
-    StructType.apply(structFields)
+  private def toCatalystDecimalType(t: proto.DataType.Decimal): DecimalType = {
+    (t.hasPrecision, t.hasScale) match {
+      case (true, true) => DecimalType(t.getPrecision, t.getScale)
+      case (true, false) => new DecimalType(t.getPrecision)
+      case _ => new DecimalType()
+    }
   }
 
-  private def convertProtoDataTypeToCatalyst(t: proto.DataType.Map): MapType = {
-    MapType(toCatalystType(t.getKey), toCatalystType(t.getValue))
+  private def toCatalystYearMonthIntervalType(t: proto.DataType.YearMonthInterval) = {
+    (t.hasStartField, t.hasEndField) match {
+      case (true, true) => YearMonthIntervalType(t.getStartField.toByte, t.getEndField.toByte)
+      case (true, false) => YearMonthIntervalType(t.getStartField.toByte)
+      case _ => YearMonthIntervalType()
+    }
+  }
+
+  private def toCatalystDayTimeIntervalType(t: proto.DataType.DayTimeInterval) = {
+    (t.hasStartField, t.hasEndField) match {
+      case (true, true) => DayTimeIntervalType(t.getStartField.toByte, t.getEndField.toByte)
+      case (true, false) => DayTimeIntervalType(t.getStartField.toByte)
+      case _ => DayTimeIntervalType()
+    }
+  }
+
+  private def toCatalystArrayType(t: proto.DataType.Array): ArrayType = {
+    ArrayType(toCatalystType(t.getElementType), t.getContainsNull)
+  }
+
+  private def toCatalystStructType(t: proto.DataType.Struct): StructType = {
+    // TODO: support metadata
+    val fields = t.getFieldsList.toSeq.map { protoField =>
+      StructField(
+        name = protoField.getName,
+        dataType = toCatalystType(protoField.getDataType),
+        nullable = protoField.getNullable,
+        metadata = Metadata.empty)
+    }
+    StructType.apply(fields)
+  }
+
+  private def toCatalystMapType(t: proto.DataType.Map): MapType = {
+    MapType(toCatalystType(t.getKeyType), toCatalystType(t.getValueType), t.getValueContainsNull)
   }
 
   def toConnectProtoType(t: DataType): proto.DataType = {
     t match {
+      case NullType =>
+        proto.DataType
+          .newBuilder()
+          .setNull(proto.DataType.NULL.getDefaultInstance)
+          .build()
+
+      case BooleanType =>
+        proto.DataType
+          .newBuilder()
+          .setBoolean(proto.DataType.Boolean.getDefaultInstance)
+          .build()
+
+      case BinaryType =>
+        proto.DataType
+          .newBuilder()
+          .setBinary(proto.DataType.Binary.getDefaultInstance)
+          .build()
+
+      case ByteType =>
+        proto.DataType
+          .newBuilder()
+          .setByte(proto.DataType.Byte.getDefaultInstance)
+          .build()
+
+      case ShortType =>
+        proto.DataType
+          .newBuilder()
+          .setShort(proto.DataType.Short.getDefaultInstance)
+          .build()
+
       case IntegerType =>
-        proto.DataType.newBuilder().setI32(proto.DataType.I32.getDefaultInstance).build()
-      case StringType =>
-        proto.DataType.newBuilder().setString(proto.DataType.String.getDefaultInstance).build()
+        proto.DataType
+          .newBuilder()
+          .setInteger(proto.DataType.Integer.getDefaultInstance)
+          .build()
+
       case LongType =>
-        proto.DataType.newBuilder().setI64(proto.DataType.I64.getDefaultInstance).build()
-      case struct: StructType =>
-        toConnectProtoStructType(struct)
-      case map: MapType => toConnectProtoMapType(map)
+        proto.DataType
+          .newBuilder()
+          .setLong(proto.DataType.Long.getDefaultInstance)
+          .build()
+
+      case FloatType =>
+        proto.DataType
+          .newBuilder()
+          .setFloat(proto.DataType.Float.getDefaultInstance)
+          .build()
+
+      case DoubleType =>
+        proto.DataType
+          .newBuilder()
+          .setDouble(proto.DataType.Double.getDefaultInstance)
+          .build()
+
+      case DecimalType.Fixed(precision, scale) =>
+        proto.DataType
+          .newBuilder()
+          .setDecimal(
+            proto.DataType.Decimal.newBuilder().setPrecision(precision).setScale(scale).build())
+          .build()
+
+      case StringType =>
+        proto.DataType
+          .newBuilder()
+          .setString(proto.DataType.String.getDefaultInstance)
+          .build()
+
+      case CharType(length) =>
+        proto.DataType
+          .newBuilder()
+          .setChar(proto.DataType.Char.newBuilder().setLength(length).build())
+          .build()
+
+      case VarcharType(length) =>
+        proto.DataType
+          .newBuilder()
+          .setVarChar(proto.DataType.VarChar.newBuilder().setLength(length).build())
+          .build()
+
+      case DateType =>
+        proto.DataType
+          .newBuilder()
+          .setDate(proto.DataType.Date.getDefaultInstance)
+          .build()
+
+      case TimestampType =>
+        proto.DataType
+          .newBuilder()
+          .setTimestamp(proto.DataType.Timestamp.getDefaultInstance)
+          .build()
+
+      case TimestampNTZType =>
+        proto.DataType
+          .newBuilder()
+          .setTimestampNtz(proto.DataType.TimestampNTZ.getDefaultInstance)
+          .build()
+
+      case CalendarIntervalType =>
+        proto.DataType
+          .newBuilder()
+          .setCalendarInterval(proto.DataType.CalendarInterval.getDefaultInstance)
+          .build()
+
+      case YearMonthIntervalType(startField, endField) =>
+        proto.DataType
+          .newBuilder()
+          .setYearMonthInterval(
+            proto.DataType.YearMonthInterval
+              .newBuilder()
+              .setStartField(startField)
+              .setEndField(endField)
+              .build())
+          .build()
+
+      case DayTimeIntervalType(startField, endField) =>
+        proto.DataType
+          .newBuilder()
+          .setDayTimeInterval(
+            proto.DataType.DayTimeInterval
+              .newBuilder()
+              .setStartField(startField)
+              .setEndField(endField)
+              .build())
+          .build()
+
+      case ArrayType(elementType: DataType, containsNull: Boolean) =>
+        proto.DataType
+          .newBuilder()
+          .setArray(
+            proto.DataType.Array
+              .newBuilder()
+              .setElementType(toConnectProtoType(elementType))
+              .setContainsNull(containsNull)
+              .build())
+          .build()
+
+      case StructType(fields: Array[StructField]) =>
+        // TODO: support metadata
+        val protoFields = fields.toSeq.map {
+          case StructField(
+                name: String,
+                dataType: DataType,
+                nullable: Boolean,
+                metadata: Metadata) =>
+            proto.DataType.StructField
+              .newBuilder()
+              .setName(name)
+              .setDataType(toConnectProtoType(dataType))
+              .setNullable(nullable)
+              .build()
+        }
+        proto.DataType
+          .newBuilder()
+          .setStruct(
+            proto.DataType.Struct
+              .newBuilder()
+              .addAllFields(protoFields)
+              .build())
+          .build()
+
+      case MapType(keyType: DataType, valueType: DataType, valueContainsNull: Boolean) =>
+        proto.DataType
+          .newBuilder()
+          .setMap(
+            proto.DataType.Map
+              .newBuilder()
+              .setKeyType(toConnectProtoType(keyType))
+              .setValueType(toConnectProtoType(valueType))
+              .setValueContainsNull(valueContainsNull)
+              .build())
+          .build()
+
       case _ =>
         throw InvalidPlanInput(s"Does not support convert ${t.typeName} to connect proto types.")
     }
-  }
-
-  def toConnectProtoMapType(schema: MapType): proto.DataType = {
-    proto.DataType
-      .newBuilder()
-      .setMap(
-        proto.DataType.Map
-          .newBuilder()
-          .setKey(toConnectProtoType(schema.keyType))
-          .setValue(toConnectProtoType(schema.valueType))
-          .build())
-      .build()
-  }
-
-  def toConnectProtoStructType(schema: StructType): proto.DataType = {
-    val struct = proto.DataType.Struct.newBuilder()
-    for (structField <- schema.fields) {
-      struct.addFields(
-        proto.DataType.StructField
-          .newBuilder()
-          .setName(structField.name)
-          .setType(toConnectProtoType(structField.dataType))
-          .setNullable(structField.nullable))
-    }
-    proto.DataType.newBuilder().setStruct(struct).build()
   }
 
   def toSaveMode(mode: proto.WriteOperation.SaveMode): SaveMode = {

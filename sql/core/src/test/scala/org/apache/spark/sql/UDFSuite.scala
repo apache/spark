@@ -29,6 +29,7 @@ import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, OuterScopes}
 import org.apache.spark.sql.catalyst.expressions.{Literal, ScalaUDF}
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.{QueryExecution, SimpleMode}
@@ -100,19 +101,41 @@ class UDFSuite extends QueryTest with SharedSparkSession {
 
   test("error reporting for incorrect number of arguments - builtin function") {
     val df = spark.emptyDataFrame
-    val e = intercept[AnalysisException] {
-      df.selectExpr("substr('abcd', 2, 3, 4)")
-    }
-    assert(e.getMessage.contains("Invalid number of arguments for function substr. Expected:"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("substr('abcd', 2, 3, 4)")
+      },
+      errorClass = "WRONG_NUM_ARGS",
+      parameters = Map(
+        "functionName" -> toSQLId("substr"),
+        "expectedNum" -> "[2, 3]",
+        "actualNum" -> "4"
+      ),
+      context = ExpectedContext(
+        fragment = "substr('abcd', 2, 3, 4)",
+        start = 0,
+        stop = 22)
+    )
   }
 
   test("error reporting for incorrect number of arguments - udf") {
     val df = spark.emptyDataFrame
-    val e = intercept[AnalysisException] {
-      spark.udf.register("foo", (_: String).length)
-      df.selectExpr("foo(2, 3, 4)")
-    }
-    assert(e.getMessage.contains("Invalid number of arguments for function foo. Expected:"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.udf.register("foo", (_: String).length)
+        df.selectExpr("foo(2, 3, 4)")
+      },
+      errorClass = "WRONG_NUM_ARGS",
+      parameters = Map(
+        "functionName" -> toSQLId("foo"),
+        "expectedNum" -> "1",
+        "actualNum" -> "3"
+      ),
+      context = ExpectedContext(
+        fragment = "foo(2, 3, 4)",
+        start = 0,
+        stop = 11)
+    )
   }
 
   test("error reporting for undefined functions") {

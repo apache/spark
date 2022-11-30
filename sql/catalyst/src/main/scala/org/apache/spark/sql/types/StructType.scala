@@ -555,7 +555,7 @@ object StructType extends AbstractDataType {
 
   def apply(fields: java.util.List[StructField]): StructType = {
     import scala.collection.JavaConverters._
-    StructType(fields.asScala.toSeq)
+    StructType(fields.asScala.toArray)
   }
 
   private[sql] def fromAttributes(attributes: Seq[Attribute]): StructType =
