@@ -46,7 +46,7 @@ object SchemaConverters {
 
   def toSqlTypeHelper(descriptor: Descriptor): SchemaType = ScalaReflectionLock.synchronized {
     SchemaType(
-      StructType(descriptor.getFields.asScala.flatMap(structFieldFor(_, Set.empty)).toSeq),
+      StructType(descriptor.getFields.asScala.flatMap(structFieldFor(_, Set.empty)).toArray),
       nullable = true)
   }
 
