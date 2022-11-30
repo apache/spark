@@ -368,11 +368,14 @@ class Column(object):
 
     _eqNullSafe_doc = """
         Equality test that is safe for null values.
+
         .. versionadded:: 2.3.0
+
         Parameters
         ----------
         other
             a value or :class:`Column`
+
         Examples
         --------
         >>> from pyspark.sql import Row
@@ -437,11 +440,13 @@ class Column(object):
     # bitwise operators
     _bitwiseOR_doc = """
         Compute bitwise OR of this expression with another expression.
+
         Parameters
         ----------
         other
             a value or :class:`Column` to calculate bitwise or(|) with
             this :class:`Column`.
+
         Examples
         --------
         >>> from pyspark.sql import Row
@@ -451,11 +456,13 @@ class Column(object):
         """
     _bitwiseAND_doc = """
         Compute bitwise AND of this expression with another expression.
+
         Parameters
         ----------
         other
             a value or :class:`Column` to calculate bitwise and(&) with
             this :class:`Column`.
+
         Examples
         --------
         >>> from pyspark.sql import Row
@@ -465,11 +472,13 @@ class Column(object):
         """
     _bitwiseXOR_doc = """
         Compute bitwise XOR of this expression with another expression.
+
         Parameters
         ----------
         other
             a value or :class:`Column` to calculate bitwise xor(^) with
             this :class:`Column`.
+
         Examples
         --------
         >>> from pyspark.sql import Row
@@ -486,10 +495,12 @@ class Column(object):
     def contains(self, other: Union[PrimitiveType, "Column"]) -> "Column":
         """
         Contains the other element. Returns a boolean :class:`Column` based on a string match.
+
         Parameters
         ----------
         other
             string in line. A value as a literal or a :class:`Column`.
+
         Examples
         --------
         >>> df = spark.createDataFrame(
@@ -502,10 +513,12 @@ class Column(object):
     def startswith(self, other: Union[PrimitiveType, "Column"]) -> "Column":
         """
         String starts with. Returns a boolean :class:`Column` based on a string match.
+
         Parameters
         ----------
         other : :class:`Column` or str
             string at start of line (do not use a regex `^`)
+
         Examples
         --------
         >>> df = spark.createDataFrame(
@@ -520,10 +533,12 @@ class Column(object):
     def endswith(self, other: Union[PrimitiveType, "Column"]) -> "Column":
         """
         String ends with. Returns a boolean :class:`Column` based on a string match.
+
         Parameters
         ----------
         other : :class:`Column` or str
             string at end of line (do not use a regex `$`)
+
         Examples
         --------
         >>> df = spark.createDataFrame(
@@ -538,6 +553,7 @@ class Column(object):
     def like(self: "Column", other: str) -> "Column":
         """
         SQL like expression. Returns a boolean :class:`Column` based on a SQL LIKE match.
+
         Parameters
         ----------
         other : str
@@ -550,6 +566,7 @@ class Column(object):
         :class:`Column`
             Column of booleans showing whether each element
             in the Column is matched by SQL LIKE pattern.
+
         Examples
         --------
         >>> df = spark.createDataFrame(
@@ -563,6 +580,7 @@ class Column(object):
         """
         SQL RLIKE expression (LIKE with Regex). Returns a boolean :class:`Column` based on a regex
         match.
+
         Parameters
         ----------
         other : str
@@ -572,6 +590,7 @@ class Column(object):
         :class:`Column`
             Column of booleans showing whether each element
             in the Column is matched by extended regex expression.
+
         Examples
         --------
         >>> df = spark.createDataFrame(
@@ -585,7 +604,9 @@ class Column(object):
         """
         SQL ILIKE expression (case insensitive LIKE). Returns a boolean :class:`Column`
         based on a case insensitive match.
+
         .. versionadded:: 3.4.0
+
         Parameters
         ----------
         other : str
@@ -598,6 +619,7 @@ class Column(object):
         :class:`Column`
             Column of booleans showing whether each element
             in the Column is matched by SQL LIKE pattern.
+
         Examples
         --------
         >>> df = spark.createDataFrame(
@@ -618,7 +640,9 @@ class Column(object):
     def substr(self, startPos: Union[int, "Column"], length: Union[int, "Column"]) -> "Column":
         """
         Return a :class:`Column` which is a substring of the column.
+
         .. versionadded:: 3.4.0
+
         Parameters
         ----------
         startPos : :class:`Column` or int
@@ -629,6 +653,7 @@ class Column(object):
         -------
         :class:`Column`
             Column representing whether each element of Column is substr of origin Column.
+
         Examples
         --------
         >>> df = spark.createDataFrame(
