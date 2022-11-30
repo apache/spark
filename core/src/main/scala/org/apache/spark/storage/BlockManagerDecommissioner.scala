@@ -126,10 +126,8 @@ private[storage] class BlockManagerDecommissioner(
                   logDebug(s"Migrated sub-block $blockId")
                 }
               }
-              lazy val endTime = System.currentTimeMillis()
-              lazy val totalBlockSize = Utils.bytesToString(blocks.map(b => b._2.size()).sum)
               logInfo(s"Migrated $shuffleBlockInfo (" +
-                s"size: $totalBlockSize) to $peer in ${endTime - startTime} ms")
+                s"size: ${Utils.bytesToString(blocks.map(b => b._2.size()).sum)}) to $peer in ${System.currentTimeMillis() - startTime} ms")
             } catch {
               case e @ ( _ : IOException | _ : SparkException) =>
                 // If a block got deleted before netty opened the file handle, then trying to
