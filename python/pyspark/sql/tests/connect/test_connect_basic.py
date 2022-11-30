@@ -361,6 +361,16 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         df2 = self.connect.read.table(self.tbl_name_empty)
         self.assertIsNone(df2.head())
 
+    def test_deduplicate(self):
+        # SPARK-41326: test distinct and dropDuplicates.
+        df = self.connect.read.table(self.tbl_name)
+        df2 = self.spark.read.table(self.tbl_name)
+        self.assert_eq(df.distinct().toPandas(), df2.distinct().toPandas())
+        self.assert_eq(df.dropDuplicates().toPandas(), df2.dropDuplicates().toPandas())
+        self.assert_eq(
+            df.dropDuplicates(["name"]).toPandas(), df2.dropDuplicates(["name"]).toPandas()
+        )
+
     def test_first(self):
         # SPARK-41002: test `first` API in Python Client
         df = self.connect.read.table(self.tbl_name)
