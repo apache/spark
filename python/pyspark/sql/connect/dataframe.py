@@ -299,6 +299,8 @@ class DataFrame(object):
                 plan.Deduplicate(child=self._plan, column_names=subset), session=self._session
             )
 
+    drop_duplicates = dropDuplicates
+
     def distinct(self) -> "DataFrame":
         """Returns a new :class:`DataFrame` containing the distinct rows in this :class:`DataFrame`.
 
@@ -512,6 +514,8 @@ class DataFrame(object):
         return DataFrame.withPlan(
             plan.Sort(self._plan, columns=list(cols), is_global=True), session=self._session
         )
+
+    orderBy = sort
 
     def sortWithinPartitions(self, *cols: "ColumnOrName") -> "DataFrame":
         """Sort within each partition by a specific column"""
