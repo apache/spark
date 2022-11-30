@@ -58,9 +58,7 @@ def _bin_op(
     return _
 
 
-def _unary_op(
-    name: str, doc: str = "unary function", reverse: bool = False
-) -> Callable[["Column"], "Column"]:
+def _unary_op(name: str, doc: str = "unary function") -> Callable[["Column"], "Column"]:
     def _(self: "Column") -> "Column":
         return scalar_function(name, self)
 
