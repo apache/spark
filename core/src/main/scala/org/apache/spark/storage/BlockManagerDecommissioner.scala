@@ -126,8 +126,8 @@ private[storage] class BlockManagerDecommissioner(
                   logDebug(s"Migrated sub-block $blockId")
                 }
               }
-              val endTime = System.currentTimeMillis()
-              val totalBlockSize = Utils.bytesToString(blocks.map(b => b._2.size()).sum)
+              lazy val endTime = System.currentTimeMillis()
+              lazy val totalBlockSize = Utils.bytesToString(blocks.map(b => b._2.size()).sum)
               logInfo(s"Migrated $shuffleBlockInfo (" +
                 s"size: $totalBlockSize) to $peer in ${endTime - startTime} ms")
             } catch {
