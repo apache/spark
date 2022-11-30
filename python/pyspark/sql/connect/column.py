@@ -305,21 +305,21 @@ class SortOrder(Expression):
         return str(self.ref) + " ASC" if self.ascending else " DESC"
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
-        # TODO: move SortField from relations.proto to expression.proto
-        expr = proto.Sort.SortField()
-        expr.expression.CopyFrom(self.ref.to_plan(session))
+        # TODO(SPARK-41334): move SortField from relations.proto to expressions.proto
+        sort = proto.Sort.SortField()
+        sort.expression.CopyFrom(self.ref.to_plan(session))
 
         if self._ascending:
-            expr.direction = proto.Sort.SortDirection.SORT_DIRECTION_ASCENDING
+            sort.direction = proto.Sort.SortDirection.SORT_DIRECTION_ASCENDING
         else:
-            expr.direction = proto.Sort.SortDirection.SORT_DIRECTION_DESCENDING
+            sort.direction = proto.Sort.SortDirection.SORT_DIRECTION_DESCENDING
 
         if self._nullsLast:
-            expr.nulls = proto.Sort.SortNulls.SORT_NULLS_LAST
+            sort.nulls = proto.Sort.SortNulls.SORT_NULLS_LAST
         else:
-            expr.nulls = proto.Sort.SortNulls.SORT_NULLS_FIRST
+            sort.nulls = proto.Sort.SortNulls.SORT_NULLS_FIRST
 
-        return cast(proto.Expression, expr)
+        return cast(proto.Expression, sort)
 
     def ascending(self) -> bool:
         return self._ascending
