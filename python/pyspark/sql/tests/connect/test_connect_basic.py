@@ -875,12 +875,12 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         connect_df = self.connect.read.table(self.tbl_name)
         spark_df = self.spark.read.table(self.tbl_name)
         self.assertEqual(
-            connect_df.join(other=connect_df, how="cross").toPandas(),
-            spark_df.join(other=spark_df, how="cross").toPandas(),
+            set(connect_df.join(other=connect_df, how="cross").collect()),
+            set(spark_df.join(other=spark_df, how="cross").collect()),
         )
         self.assertEqual(
-            connect_df.crossJoin(other=connect_df).toPandas(),
-            spark_df.crossJoin(other=spark_df).toPandas(),
+            set(connect_df.crossJoin(other=connect_df).collect()),
+            set(spark_df.crossJoin(other=spark_df).collect()),
         )
 
 
