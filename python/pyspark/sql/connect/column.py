@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from typing import get_args, TYPE_CHECKING, Callable, Any, Union, overload
+from typing import get_args, TYPE_CHECKING, Callable, Any, Union, overload, cast
 
 import json
 import decimal
@@ -269,10 +269,10 @@ class ColumnReference(Expression):
         return expr
 
     def desc(self) -> "SortOrder":
-        return SortOrder(self, ascending=False)
+        return SortOrder(self, ascending=False, nullsLast=True)
 
     def asc(self) -> "SortOrder":
-        return SortOrder(self, ascending=True)
+        return SortOrder(self, ascending=True, nullsLast=False)
 
     def __str__(self) -> str:
         return f"ColumnReference({self._unparsed_identifier})"
@@ -295,9 +295,7 @@ class SQLExpression(Expression):
 
 
 class SortOrder(Expression):
-    def __init__(
-        self, col: ColumnReference, ascending: bool = True, nullsLast: bool = True
-    ) -> None:
+    def __init__(self, col: Expression, ascending: bool = True, nullsLast: bool = False) -> None:
         super().__init__()
         self.ref = col
         self._ascending = ascending
@@ -307,7 +305,21 @@ class SortOrder(Expression):
         return str(self.ref) + " ASC" if self.ascending else " DESC"
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
-        return self.ref.to_plan(session)
+        # TODO: move SortField from relations.proto to expression.proto
+        expr = proto.Sort.SortField()
+        expr.expression.CopyFrom(self.ref.to_plan(session))
+
+        if self._ascending:
+            expr.direction = proto.Sort.SortDirection.SORT_DIRECTION_ASCENDING
+        else:
+            expr.direction = proto.Sort.SortDirection.SORT_DIRECTION_DESCENDING
+
+        if self._nullsLast:
+            expr.nulls = proto.Sort.SortNulls.SORT_NULLS_LAST
+        else:
+            expr.nulls = proto.Sort.SortNulls.SORT_NULLS_FIRST
+
+        return cast(proto.Expression, expr)
 
     def ascending(self) -> bool:
         return self._ascending

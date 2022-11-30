@@ -411,6 +411,48 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         )
         self.assertTrue("special_alias" in plan_text)
 
+    def test_sort(self):
+        # SPARK-41332: test sort
+        query = """
+            SELECT * FROM VALUES
+            (false, 1, NULL), (false, NULL, 2.0), (NULL, 3, 3.0)
+            AS tab(a, b, c)
+            """
+        # +-----+----+----+
+        # |    a|   b|   c|
+        # +-----+----+----+
+        # |false|   1|null|
+        # |false|null| 2.0|
+        # | null|   3| 3.0|
+        # +-----+----+----+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+        self.assert_eq(
+            cdf.sort("a").toPandas(),
+            sdf.sort("a").toPandas(),
+        )
+        self.assert_eq(
+            cdf.sort("c").toPandas(),
+            sdf.sort("c").toPandas(),
+        )
+        self.assert_eq(
+            cdf.sort("b").toPandas(),
+            sdf.sort("b").toPandas(),
+        )
+        self.assert_eq(
+            cdf.sort(cdf.c, "b").toPandas(),
+            sdf.sort(sdf.c, "b").toPandas(),
+        )
+        self.assert_eq(
+            cdf.sort(cdf.c.desc(), "b").toPandas(),
+            sdf.sort(sdf.c.desc(), "b").toPandas(),
+        )
+        self.assert_eq(
+            cdf.sort(cdf.c.desc(), cdf.a.asc()).toPandas(),
+            sdf.sort(sdf.c.desc(), sdf.a.asc()).toPandas(),
+        )
+
     def test_range(self):
         self.assert_eq(
             self.connect.range(start=0, end=10).toPandas(),
