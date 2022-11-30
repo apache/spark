@@ -872,15 +872,17 @@ class SparkConnectTests(SparkConnectSQLTestCase):
 
     def test_crossjoin(self):
         # SPARK-41227: Test CrossJoin
-        connect_df = self.connect.read.table(self.tbl_name)
-        spark_df = self.spark.read.table(self.tbl_name)
-        self.assertEqual(
-            set(connect_df.join(other=connect_df, how="cross").collect()),
-            set(spark_df.join(other=spark_df, how="cross").collect()),
+        connect_df = self.connect.range(start=0, end=10)
+        connect_df2 = connect_df.withColumnRenamed(existing="id", new="id2")
+        spark_df = self.spark.range(start=0, end=10)
+        spark_df2 = spark_df.withColumnRenamed(existing="id", new="id2")
+        self.assert_eq(
+            set(connect_df.join(other=connect_df2, how="cross").toPandas()),
+            set(spark_df.join(other=spark_df2, how="cross").toPandas()),
         )
-        self.assertEqual(
-            set(connect_df.crossJoin(other=connect_df).collect()),
-            set(spark_df.crossJoin(other=spark_df).collect()),
+        self.assert_eq(
+            set(connect_df.crossJoin(other=connect_df2).toPandas()),
+            set(spark_df.crossJoin(other=spark_df2).toPandas()),
         )
 
 
