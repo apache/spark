@@ -127,7 +127,8 @@ private[storage] class BlockManagerDecommissioner(
                 }
               }
               logInfo(s"Migrated $shuffleBlockInfo (" +
-                s"size: ${Utils.bytesToString(blocks.map(b => b._2.size()).sum)}) to $peer in ${System.currentTimeMillis() - startTime} ms")
+                s"size: ${Utils.bytesToString(blocks.map(b => b._2.size()).sum)}) to $peer " +
+                s"in ${System.currentTimeMillis() - startTime} ms")
             } catch {
               case e @ ( _ : IOException | _ : SparkException) =>
                 // If a block got deleted before netty opened the file handle, then trying to
