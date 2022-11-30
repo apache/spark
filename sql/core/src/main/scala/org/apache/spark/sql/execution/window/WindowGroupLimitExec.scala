@@ -104,10 +104,8 @@ case class WindowGroupLimitExec(
         bufferIterator = createGroupIterator()
       }
 
-      override final def hasNext: Boolean = {
-        val found = (bufferIterator != null && bufferIterator.hasNext) || nextRowAvailable
-        found
-      }
+      override final def hasNext: Boolean =
+        (bufferIterator != null && bufferIterator.hasNext) || nextRowAvailable
 
       override final def next(): InternalRow = {
         // Load the next partition if we need to.

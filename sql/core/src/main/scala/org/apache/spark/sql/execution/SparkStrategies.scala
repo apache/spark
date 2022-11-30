@@ -628,19 +628,83 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
-  object WindowGroupLimit extends Strategy {
-    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.WindowGroupLimit(partitionSpec, orderSpec, rankLikeFunction, limit, child) =>
-        // TODO: add a physical rule to remove the partialWindowGroupLimit node, if there is no
-        // shuffle between the two nodes (partialWindowGroupLimit's outputPartitioning satisfies
-        // the finalWindowGroupLimit's requiredChildDistribution)
-        val partialWindowGroupLimit = execution.window.WindowGroupLimitExec(partitionSpec,
-          orderSpec, rankLikeFunction, limit, execution.window.Partial, planLater(child))
-        val finalWindowGroupLimit = execution.window.WindowGroupLimitExec(partitionSpec, orderSpec,
-          rankLikeFunction, limit, execution.window.Final, partialWindowGroupLimit)
-        finalWindowGroupLimit :: Nil
+  /**
+   * Optimize the filter based on rank-like window function by reduce not required rows.
+   * This rule optimizes the following cases:
+   * {{{
+   *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE rn = 5
+   *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE 5 = rn
+   *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE rn < 5
+   *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE 5 > rn
+   *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE rn <= 5
+   *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE 5 >= rn
+   * }}}
+   */
+  object WindowGroupLimit extends Strategy with PredicateHelper {
 
-      case _ => Nil
+    /**
+     * Extract all the limit values from predicates.
+     */
+    def extractLimits(condition: Expression, attr: Attribute): Option[Int] = {
+      val limits = splitConjunctivePredicates(condition).collect {
+        case EqualTo(IntegerLiteral(limit), e) if e.semanticEquals(attr) => limit
+        case EqualTo(e, IntegerLiteral(limit)) if e.semanticEquals(attr) => limit
+        case LessThan(e, IntegerLiteral(limit)) if e.semanticEquals(attr) => limit - 1
+        case GreaterThan(IntegerLiteral(limit), e) if e.semanticEquals(attr) => limit - 1
+        case LessThanOrEqual(e, IntegerLiteral(limit)) if e.semanticEquals(attr) => limit
+        case GreaterThanOrEqual(IntegerLiteral(limit), e) if e.semanticEquals(attr) => limit
+      }
+
+      if (limits.nonEmpty) Some(limits.min) else None
+    }
+
+    private def supports(
+        windowExpressions: Seq[NamedExpression]): Boolean = windowExpressions.exists {
+      case Alias(WindowExpression(_: Rank | _: DenseRank | _: RowNumber, WindowSpecDefinition(_, _,
+      SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))), _) => true
+      case _ => false
+    }
+
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = {
+      if (conf.windowGroupLimitThreshold == -1) return Nil
+
+      plan match {
+        case filter @ Filter(condition,
+          logical.Window(windowExpressions, partitionSpec, orderSpec, child))
+          if !child.isInstanceOf[logical.Window] &&
+            supports(windowExpressions) && orderSpec.nonEmpty =>
+          val limits = windowExpressions.collect {
+            case alias @ Alias(WindowExpression(rankLikeFunction, _), _) =>
+              extractLimits(condition, alias.toAttribute).map((_, rankLikeFunction))
+          }.filter(_.isDefined)
+
+          // non rank-like functions or multiple different rank-like functions unsupported.
+          if (limits.isEmpty || limits.groupBy(_.get._2).size > 1) {
+            return Nil
+          }
+          val minLimit = limits.minBy(_.get._1)
+          minLimit match {
+            case Some((limit, rankLikeFunction)) if limit <= conf.windowGroupLimitThreshold =>
+              if (limit > 0) {
+                // TODO: add a physical rule to remove the partialLimitExec node,
+                // if there is no shuffle between the two nodes (partialLimitExec's
+                // outputPartitioning satisfies the finalLimitExec's requiredChildDistribution)
+                val partialLimitExec = execution.window.WindowGroupLimitExec(partitionSpec,
+                  orderSpec, rankLikeFunction, limit, execution.window.Partial, planLater(child))
+                val finalLimitExec = execution.window.WindowGroupLimitExec(partitionSpec,
+                  orderSpec, rankLikeFunction, limit, execution.window.Final, partialLimitExec)
+                val windowExec = execution.window.WindowExec(
+                  windowExpressions, partitionSpec, orderSpec, finalLimitExec)
+                val filterExec = execution.FilterExec(condition, windowExec)
+                filterExec :: Nil
+              } else {
+                val localTableScanExec = LocalTableScanExec(filter.output, Seq.empty)
+                localTableScanExec :: Nil
+              }
+            case _ => Nil
+          }
+        case _ => Nil
+      }
     }
   }
 
