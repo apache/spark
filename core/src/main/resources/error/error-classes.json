@@ -1266,7 +1266,7 @@
           "DISTRIBUTE BY clause."
         ]
       },
-      "GENERATED_COLUMN_ON_TABLE_CREATION": {
+      "GENERATED_COLUMN_ON_TABLE_CREATION" : {
         "message" : [
           "Target data source with table provider: \"<provider>\" does not support creating generated columns with GENERATED ALWAYS AS expressions in create/replace table statements."
         ]
