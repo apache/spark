@@ -145,6 +145,14 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             df.select(df.name.substr(0, 1).alias("col")).toPandas(),
             df2.select(df2.name.substr(0, 1).alias("col")).toPandas(),
         )
+        self.assert_eq(
+            df.filter(df.name.isNull()).toPandas(),
+            df2.filter(df2.name.isNull()).toPandas(),
+        )
+        self.assert_eq(
+            df.filter(df.name.isNotNull()).toPandas(),
+            df2.filter(df2.name.isNotNull()).toPandas(),
+        )
 
     def test_collect(self):
         df = self.connect.read.table(self.tbl_name)
