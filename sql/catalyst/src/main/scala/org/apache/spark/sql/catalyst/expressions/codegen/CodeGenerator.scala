@@ -1627,12 +1627,12 @@ object CodeGenerator extends Logging {
       case _ if isPrimitiveType(jt) => s"$input.get${primitiveTypeName(jt)}($ordinal)"
       case _ => dataType.physicalDataType match {
         case _: PhysicalArrayType => s"$input.getArray($ordinal)"
-        case _: PhysicalBinaryType => s"$input.getBinary($ordinal)"
-        case _: PhysicalCalendarIntervalType => s"$input.getInterval($ordinal)"
+        case PhysicalBinaryType => s"$input.getBinary($ordinal)"
+        case PhysicalCalendarIntervalType => s"$input.getInterval($ordinal)"
         case t: PhysicalDecimalType => s"$input.getDecimal($ordinal, ${t.precision}, ${t.scale})"
         case _: PhysicalMapType => s"$input.getMap($ordinal)"
-        case _: PhysicalNullType => "null"
-        case _: PhysicalStringType => s"$input.getUTF8String($ordinal)"
+        case PhysicalNullType => "null"
+        case PhysicalStringType => s"$input.getUTF8String($ordinal)"
         case t: PhysicalStructType => s"$input.getStruct($ordinal, ${t.fields.size})"
         case _ => s"($jt)$input.get($ordinal, null)"
       }
@@ -1909,18 +1909,18 @@ object CodeGenerator extends Logging {
     case ObjectType(cls) => cls.getName
     case _ => dt.physicalDataType match {
       case _: PhysicalArrayType => "ArrayData"
-      case _: PhysicalBinaryType => "byte[]"
-      case _: PhysicalBooleanType => JAVA_BOOLEAN
-      case _: PhysicalByteType => JAVA_BYTE
-      case _: PhysicalCalendarIntervalType => "CalendarInterval"
-      case _: PhysicalIntegerType => JAVA_INT
+      case PhysicalBinaryType => "byte[]"
+      case PhysicalBooleanType => JAVA_BOOLEAN
+      case PhysicalByteType => JAVA_BYTE
+      case PhysicalCalendarIntervalType => "CalendarInterval"
+      case PhysicalIntegerType => JAVA_INT
       case _: PhysicalDecimalType => "Decimal"
-      case _: PhysicalDoubleType => JAVA_DOUBLE
-      case _: PhysicalFloatType => JAVA_FLOAT
-      case _: PhysicalLongType => JAVA_LONG
+      case PhysicalDoubleType => JAVA_DOUBLE
+      case PhysicalFloatType => JAVA_FLOAT
+      case PhysicalLongType => JAVA_LONG
       case _: PhysicalMapType => "MapData"
-      case _: PhysicalShortType => JAVA_SHORT
-      case _: PhysicalStringType => "UTF8String"
+      case PhysicalShortType => JAVA_SHORT
+      case PhysicalStringType => "UTF8String"
       case _: PhysicalStructType => "InternalRow"
       case _ => "Object"
     }

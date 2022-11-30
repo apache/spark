@@ -262,7 +262,7 @@ object RowEncoder {
       case _: PhysicalArrayType => ObjectType(classOf[scala.collection.Seq[_]])
       case _: PhysicalDecimalType => ObjectType(classOf[java.math.BigDecimal])
       case _: PhysicalMapType => ObjectType(classOf[scala.collection.Map[_, _]])
-      case _: PhysicalStringType => ObjectType(classOf[java.lang.String])
+      case PhysicalStringType => ObjectType(classOf[java.lang.String])
       case _: PhysicalStructType => ObjectType(classOf[Row])
       // For other data types, return the data type as it is.
       case _ => dt

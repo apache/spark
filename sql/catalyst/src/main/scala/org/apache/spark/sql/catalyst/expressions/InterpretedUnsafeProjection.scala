@@ -150,38 +150,28 @@ object InterpretedUnsafeProjection {
     val unsafeWriter: (SpecializedGetters, Int) => Unit = dt match {
       case udt: UserDefinedType[_] => generateFieldWriter(writer, udt.sqlType, nullable)
       case _ => dt.physicalDataType match {
-        case _: PhysicalBooleanType =>
-          (v, i) => writer.write(i, v.getBoolean(i))
+        case PhysicalBooleanType => (v, i) => writer.write(i, v.getBoolean(i))
 
-        case _: PhysicalByteType =>
-          (v, i) => writer.write(i, v.getByte(i))
+        case PhysicalByteType => (v, i) => writer.write(i, v.getByte(i))
 
-        case _: PhysicalShortType =>
-          (v, i) => writer.write(i, v.getShort(i))
+        case PhysicalShortType => (v, i) => writer.write(i, v.getShort(i))
 
-        case _: PhysicalIntegerType =>
-          (v, i) => writer.write(i, v.getInt(i))
+        case PhysicalIntegerType => (v, i) => writer.write(i, v.getInt(i))
 
-        case _: PhysicalLongType =>
-          (v, i) => writer.write(i, v.getLong(i))
+        case PhysicalLongType => (v, i) => writer.write(i, v.getLong(i))
 
-        case _: PhysicalFloatType =>
-          (v, i) => writer.write(i, v.getFloat(i))
+        case PhysicalFloatType => (v, i) => writer.write(i, v.getFloat(i))
 
-        case _: PhysicalDoubleType =>
-          (v, i) => writer.write(i, v.getDouble(i))
+        case PhysicalDoubleType => (v, i) => writer.write(i, v.getDouble(i))
 
         case PhysicalDecimalType(precision, scale) =>
           (v, i) => writer.write(i, v.getDecimal(i, precision, scale), precision, scale)
 
-        case _: PhysicalCalendarIntervalType =>
-          (v, i) => writer.write(i, v.getInterval(i))
+        case PhysicalCalendarIntervalType => (v, i) => writer.write(i, v.getInterval(i))
 
-        case _: PhysicalBinaryType =>
-          (v, i) => writer.write(i, v.getBinary(i))
+        case PhysicalBinaryType => (v, i) => writer.write(i, v.getBinary(i))
 
-        case _: PhysicalStringType =>
-          (v, i) => writer.write(i, v.getUTF8String(i))
+        case PhysicalStringType => (v, i) => writer.write(i, v.getUTF8String(i))
 
         case PhysicalStructType(fields) =>
           val numFields = fields.length
@@ -249,8 +239,7 @@ object InterpretedUnsafeProjection {
             }
           }
 
-        case _: PhysicalNullType =>
-          (_, _) => {}
+        case PhysicalNullType => (_, _) => {}
 
         case _ =>
           throw new IllegalStateException(s"The data type '${dt.typeName}' is not supported in " +

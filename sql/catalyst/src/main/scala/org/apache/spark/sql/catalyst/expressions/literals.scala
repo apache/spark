@@ -214,24 +214,24 @@ object Literal {
             val ar = v.asInstanceOf[ArrayData]
             ar.numElements() == 0 || doValidate(ar.get(0, et), et)
           }
-        case _: PhysicalBinaryType => v.isInstanceOf[Array[Byte]]
-        case _: PhysicalBooleanType => v.isInstanceOf[Boolean]
-        case _: PhysicalByteType => v.isInstanceOf[Byte]
-        case _: PhysicalCalendarIntervalType => v.isInstanceOf[CalendarInterval]
-        case _: PhysicalIntegerType => v.isInstanceOf[Int]
+        case PhysicalBinaryType => v.isInstanceOf[Array[Byte]]
+        case PhysicalBooleanType => v.isInstanceOf[Boolean]
+        case PhysicalByteType => v.isInstanceOf[Byte]
+        case PhysicalCalendarIntervalType => v.isInstanceOf[CalendarInterval]
+        case PhysicalIntegerType => v.isInstanceOf[Int]
         case _: PhysicalDecimalType => v.isInstanceOf[Decimal]
-        case _: PhysicalDoubleType => v.isInstanceOf[Double]
-        case _: PhysicalFloatType => v.isInstanceOf[Float]
-        case _: PhysicalLongType => v.isInstanceOf[Long]
+        case PhysicalDoubleType => v.isInstanceOf[Double]
+        case PhysicalFloatType => v.isInstanceOf[Float]
+        case PhysicalLongType => v.isInstanceOf[Long]
         case PhysicalMapType(kt, vt, _) =>
           v.isInstanceOf[MapData] && {
             val map = v.asInstanceOf[MapData]
             doValidate(map.keyArray(), ArrayType(kt)) &&
             doValidate(map.valueArray(), ArrayType(vt))
           }
-        case _: PhysicalNullType => true
-        case _: PhysicalShortType => v.isInstanceOf[Short]
-        case _: PhysicalStringType => v.isInstanceOf[UTF8String]
+        case PhysicalNullType => true
+        case PhysicalShortType => v.isInstanceOf[Short]
+        case PhysicalStringType => v.isInstanceOf[UTF8String]
         case st: PhysicalStructType =>
           v.isInstanceOf[InternalRow] && {
             val row = v.asInstanceOf[InternalRow]

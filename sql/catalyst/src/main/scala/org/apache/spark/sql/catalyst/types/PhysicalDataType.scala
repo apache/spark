@@ -23,32 +23,43 @@ sealed abstract class PhysicalDataType
 
 case class PhysicalArrayType(elementType: DataType, containsNull: Boolean) extends PhysicalDataType
 
-case class PhysicalBinaryType() extends PhysicalDataType
+class PhysicalBinaryType() extends PhysicalDataType
+case object PhysicalBinaryType extends PhysicalBinaryType
 
-case class PhysicalBooleanType() extends PhysicalDataType
+class PhysicalBooleanType() extends PhysicalDataType
+case object PhysicalBooleanType extends PhysicalBooleanType
 
-case class PhysicalByteType() extends PhysicalDataType
+class PhysicalByteType() extends PhysicalDataType
+case object PhysicalByteType extends PhysicalByteType
 
-case class PhysicalCalendarIntervalType() extends PhysicalDataType
+class PhysicalCalendarIntervalType() extends PhysicalDataType
+case object PhysicalCalendarIntervalType extends PhysicalCalendarIntervalType
 
 case class PhysicalDecimalType(precision: Int, scale: Int) extends PhysicalDataType
 
-case class PhysicalDoubleType() extends PhysicalDataType
+class PhysicalDoubleType() extends PhysicalDataType
+case object PhysicalDoubleType extends PhysicalDoubleType
 
-case class PhysicalFloatType() extends PhysicalDataType
+class PhysicalFloatType() extends PhysicalDataType
+case object PhysicalFloatType extends PhysicalFloatType
 
-case class PhysicalIntegerType() extends PhysicalDataType
+class PhysicalIntegerType() extends PhysicalDataType
+case object PhysicalIntegerType extends PhysicalIntegerType
 
-case class PhysicalLongType() extends PhysicalDataType
+class PhysicalLongType() extends PhysicalDataType
+case object PhysicalLongType extends PhysicalLongType
 
 case class PhysicalMapType(keyType: DataType, valueType: DataType, valueContainsNull: Boolean)
     extends PhysicalDataType
 
-case class PhysicalNullType() extends PhysicalDataType
+class PhysicalNullType() extends PhysicalDataType
+case object PhysicalNullType extends PhysicalNullType
 
-case class PhysicalShortType() extends PhysicalDataType
+class PhysicalShortType() extends PhysicalDataType
+case object PhysicalShortType extends PhysicalShortType
 
-case class PhysicalStringType() extends PhysicalDataType
+class PhysicalStringType() extends PhysicalDataType
+case object PhysicalStringType extends PhysicalStringType
 
 case class PhysicalStructType(fields: Array[StructField]) extends PhysicalDataType
 
