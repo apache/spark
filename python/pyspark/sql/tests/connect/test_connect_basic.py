@@ -837,6 +837,19 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         ndf = self.connect.read.table("parquet_test")
         self.assertEqual(set(df.collect()), set(ndf.collect()))
 
+    def test_agg_with_avg(self):
+        # SPARK-41325: groupby.avg()
+        df = (
+            self.connect.range(10)
+            .groupBy((col("id") % lit(2)).alias("moded"))
+            .avg("id")
+            .sort("moded")
+        )
+        res = df.collect()
+        self.assertEqual(2, len(res))
+        self.assertEqual(4.0, res[0][1])
+        self.assertEqual(5.0, res[1][1])
+
 
 class ChannelBuilderTests(ReusedPySparkTestCase):
     def test_invalid_connection_strings(self):

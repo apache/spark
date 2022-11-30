@@ -84,6 +84,10 @@ class GroupedData(object):
         expr = self._map_cols_to_expression("sum", col)
         return self.agg(expr)
 
+    def avg(self, col: Union[Column, str]) -> "DataFrame":
+        expr = self._map_cols_to_expression("avg", col)
+        return self.agg(expr)
+
     def count(self) -> "DataFrame":
         return self.agg([scalar_function("count", lit(1))])
 
