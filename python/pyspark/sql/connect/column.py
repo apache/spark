@@ -14,7 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import get_args, TYPE_CHECKING, Callable, Any
+
+from typing import get_args, TYPE_CHECKING, Callable, Any, Union
 
 import json
 import decimal
@@ -31,52 +32,33 @@ if TYPE_CHECKING:
 
 def _bin_op(
     name: str, doc: str = "binary function", reverse: bool = False
-) -> Callable[["Column", Any], "Expression"]:
-    def _(self: "Column", other: Any) -> "Expression":
+) -> Callable[["Column", Any], "Column"]:
+    def _(self: "Column", other: Any) -> "Column":
         from pyspark.sql.connect._typing import PrimitiveType
+        from pyspark.sql.connect.functions import lit
 
         if isinstance(other, get_args(PrimitiveType)):
-            other = LiteralExpression(other)
+            other = lit(other)
         if not reverse:
-            return ScalarFunctionExpression(name, self, other)
+            return scalar_function(name, self, other)
         else:
-            return ScalarFunctionExpression(name, other, self)
+            return scalar_function(name, other, self)
 
     return _
+
+
+def scalar_function(op: str, *args: "Column") -> "Column":
+    return Column(ScalarFunctionExpression(op, *args))
+
+
+def sql_expression(expr: str) -> "Column":
+    return Column(SQLExpression(expr))
 
 
 class Expression(object):
     """
     Expression base class.
     """
-
-    __gt__ = _bin_op(">")
-    __lt__ = _bin_op("<")
-    __add__ = _bin_op("+")
-    __sub__ = _bin_op("-")
-    __mul__ = _bin_op("*")
-    __div__ = _bin_op("/")
-    __truediv__ = _bin_op("/")
-    __mod__ = _bin_op("%")
-    __radd__ = _bin_op("+", reverse=True)
-    __rsub__ = _bin_op("-", reverse=True)
-    __rmul__ = _bin_op("*", reverse=True)
-    __rdiv__ = _bin_op("/", reverse=True)
-    __rtruediv__ = _bin_op("/", reverse=True)
-    __pow__ = _bin_op("pow")
-    __rpow__ = _bin_op("pow", reverse=True)
-    __ge__ = _bin_op(">=")
-    __le__ = _bin_op("<=")
-
-    def __eq__(self, other: Any) -> "Expression":  # type: ignore[override]
-        """Returns a binary expression with the current column as the left
-        side and the other expression as the right side.
-        """
-        from pyspark.sql.connect._typing import PrimitiveType
-
-        if isinstance(other, get_args(PrimitiveType)):
-            other = LiteralExpression(other)
-        return ScalarFunctionExpression("==", self, other)
 
     def __init__(self) -> None:
         pass
@@ -124,6 +106,21 @@ class Expression(object):
         assert not kwargs, "Unexpected kwargs where passed: %s" % kwargs
         return ColumnAlias(self, list(alias), metadata)
 
+    def desc(self) -> "SortOrder":
+        ...
+
+    def asc(self) -> "SortOrder":
+        ...
+
+    def ascending(self) -> bool:
+        ...
+
+    def nullsLast(self) -> bool:
+        ...
+
+    def name(self) -> str:
+        ...
+
 
 class ColumnAlias(Expression):
     def __init__(self, parent: Expression, alias: list[str], metadata: Any):
@@ -168,6 +165,9 @@ class LiteralExpression(Expression):
 
         TODO(SPARK-40533) This method always assumes the largest type and can thus
              create weird interpretations of the literal."""
+
+        from pyspark.sql.connect.functions import lit
+
         expr = proto.Expression()
         if self._value is None:
             expr.literal.null = True
@@ -195,33 +195,29 @@ class LiteralExpression(Expression):
         elif isinstance(self._value, list):
             expr.literal.array.SetInParent()
             for item in list(self._value):
-                if isinstance(item, LiteralExpression):
+                if isinstance(item, Column):
                     expr.literal.array.values.append(item.to_plan(session).literal)
                 else:
-                    expr.literal.array.values.append(
-                        LiteralExpression(item).to_plan(session).literal
-                    )
+                    expr.literal.array.values.append(lit(item).to_plan(session).literal)
         elif isinstance(self._value, tuple):
             expr.literal.struct.SetInParent()
             for item in list(self._value):
-                if isinstance(item, LiteralExpression):
+                if isinstance(item, Column):
                     expr.literal.struct.fields.append(item.to_plan(session).literal)
                 else:
-                    expr.literal.struct.fields.append(
-                        LiteralExpression(item).to_plan(session).literal
-                    )
+                    expr.literal.struct.fields.append(lit(item).to_plan(session).literal)
         elif isinstance(self._value, dict):
             expr.literal.map.SetInParent()
             for key, value in dict(self._value).items():
                 pair = proto.Expression.Literal.Map.Pair()
-                if isinstance(key, LiteralExpression):
+                if isinstance(key, Column):
                     pair.key.CopyFrom(key.to_plan(session).literal)
                 else:
-                    pair.key.CopyFrom(LiteralExpression(key).to_plan(session).literal)
-                if isinstance(value, LiteralExpression):
+                    pair.key.CopyFrom(lit(key).to_plan(session).literal)
+                if isinstance(value, Column):
                     pair.value.CopyFrom(value.to_plan(session).literal)
                 else:
-                    pair.value.CopyFrom(LiteralExpression(value).to_plan(session).literal)
+                    pair.value.CopyFrom(lit(value).to_plan(session).literal)
                 expr.literal.map.pairs.append(pair)
         else:
             raise ValueError(f"Could not convert literal for type {type(self._value)}")
@@ -232,19 +228,22 @@ class LiteralExpression(Expression):
         return f"Literal({self._value})"
 
 
-class Column(Expression):
+class ColumnReference(Expression):
     """Represents a column reference. There is no guarantee that this column
     actually exists. In the context of this project, we refer by its name and
     treat it as an unresolved attribute. Attributes that have the same fully
     qualified name are identical"""
 
     @classmethod
-    def from_qualified_name(cls, name: str) -> "Column":
-        return Column(name)
+    def from_qualified_name(cls, name: str) -> "ColumnReference":
+        return ColumnReference(name)
 
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: Union[str, "Column"]) -> None:
         super().__init__()
-        self._unparsed_identifier: str = name
+        if isinstance(name, str):
+            self._unparsed_identifier = name
+        else:
+            self._unparsed_identifier = name.name()
 
     def name(self) -> str:
         """Returns the qualified name of the column reference."""
@@ -263,7 +262,7 @@ class Column(Expression):
         return SortOrder(self, ascending=True)
 
     def __str__(self) -> str:
-        return f"Column({self._unparsed_identifier})"
+        return f"ColumnReference({self._unparsed_identifier})"
 
 
 class SQLExpression(Expression):
@@ -283,11 +282,13 @@ class SQLExpression(Expression):
 
 
 class SortOrder(Expression):
-    def __init__(self, col: Column, ascending: bool = True, nullsLast: bool = True) -> None:
+    def __init__(
+        self, col: ColumnReference, ascending: bool = True, nullsLast: bool = True
+    ) -> None:
         super().__init__()
         self.ref = col
-        self.ascending = ascending
-        self.nullsLast = nullsLast
+        self._ascending = ascending
+        self._nullsLast = nullsLast
 
     def __str__(self) -> str:
         return str(self.ref) + " ASC" if self.ascending else " DESC"
@@ -295,12 +296,18 @@ class SortOrder(Expression):
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
         return self.ref.to_plan(session)
 
+    def ascending(self) -> bool:
+        return self._ascending
+
+    def nullsLast(self) -> bool:
+        return self._nullsLast
+
 
 class ScalarFunctionExpression(Expression):
     def __init__(
         self,
         op: str,
-        *args: Expression,
+        *args: "Column",
     ) -> None:
         super().__init__()
         self._args = args
@@ -314,3 +321,64 @@ class ScalarFunctionExpression(Expression):
 
     def __str__(self) -> str:
         return f"({self._op} ({', '.join([str(x) for x in self._args])}))"
+
+
+class Column(object):
+    """
+    A column in a DataFrame. Column can refer to different things based on the
+    wrapped expression. Some common examples include attribute references, functions,
+    literals, etc.
+
+    .. versionadded:: 3.4.0
+    """
+
+    def __init__(self, expr: Expression) -> None:
+        self._expr = expr
+
+    __gt__ = _bin_op(">")
+    __lt__ = _bin_op("<")
+    __add__ = _bin_op("+")
+    __sub__ = _bin_op("-")
+    __mul__ = _bin_op("*")
+    __div__ = _bin_op("/")
+    __truediv__ = _bin_op("/")
+    __mod__ = _bin_op("%")
+    __radd__ = _bin_op("+", reverse=True)
+    __rsub__ = _bin_op("-", reverse=True)
+    __rmul__ = _bin_op("*", reverse=True)
+    __rdiv__ = _bin_op("/", reverse=True)
+    __rtruediv__ = _bin_op("/", reverse=True)
+    __pow__ = _bin_op("pow")
+    __rpow__ = _bin_op("pow", reverse=True)
+    __ge__ = _bin_op(">=")
+    __le__ = _bin_op("<=")
+    # __eq__ = _bin_op("==")  # ignore [assignment]
+
+    def __eq__(self, other: Any) -> "Column":  # type: ignore[override]
+        """Returns a binary expression with the current column as the left
+        side and the other expression as the right side.
+        """
+        from pyspark.sql.connect._typing import PrimitiveType
+        from pyspark.sql.connect.functions import lit
+
+        if isinstance(other, get_args(PrimitiveType)):
+            other = lit(other)
+        return scalar_function("==", self, other)
+
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
+        return self._expr.to_plan(session)
+
+    def alias(self, *alias: str, **kwargs: Any) -> "Column":
+        return Column(self._expr.alias(*alias, **kwargs))
+
+    def desc(self) -> "Column":
+        return Column(self._expr.desc())
+
+    def asc(self) -> "Column":
+        return Column(self._expr.asc())
+
+    def name(self) -> str:
+        return self._expr.name()
+
+    def __str__(self) -> str:
+        return self._expr.__str__()

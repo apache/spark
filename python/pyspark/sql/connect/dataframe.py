@@ -33,20 +33,15 @@ import pandas
 
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.readwriter import DataFrameWriter
-from pyspark.sql.connect.column import (
-    Column,
-    Expression,
-    LiteralExpression,
-    SQLExpression,
-    ScalarFunctionExpression,
-)
+from pyspark.sql.connect.column import Column, scalar_function, sql_expression
+from pyspark.sql.connect.functions import col, lit
 from pyspark.sql.types import (
     StructType,
     Row,
 )
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import ColumnOrName, ExpressionOrString, LiteralType
+    from pyspark.sql.connect._typing import ColumnOrName, LiteralType
     from pyspark.sql.connect.session import SparkSession
 
 
@@ -55,7 +50,7 @@ class GroupedData(object):
         self._df = df
         self._grouping_cols = [x if isinstance(x, Column) else df[x] for x in grouping_cols]
 
-    def agg(self, measures: Sequence[Expression]) -> "DataFrame":
+    def agg(self, measures: Sequence[Column]) -> "DataFrame":
         assert len(measures) > 0, "exprs should not be empty"
         res = DataFrame.withPlan(
             plan.Aggregate(
@@ -67,27 +62,25 @@ class GroupedData(object):
         )
         return res
 
-    def _map_cols_to_expression(
-        self, fun: str, col: Union[Expression, str]
-    ) -> Sequence[Expression]:
+    def _map_cols_to_expression(self, fun: str, param: Union[Column, str]) -> Sequence[Column]:
         return [
-            ScalarFunctionExpression(fun, Column(col)) if isinstance(col, str) else col,
+            scalar_function(fun, col(param)) if isinstance(param, str) else param,
         ]
 
-    def min(self, col: Union[Expression, str]) -> "DataFrame":
+    def min(self, col: Union[Column, str]) -> "DataFrame":
         expr = self._map_cols_to_expression("min", col)
         return self.agg(expr)
 
-    def max(self, col: Union[Expression, str]) -> "DataFrame":
+    def max(self, col: Union[Column, str]) -> "DataFrame":
         expr = self._map_cols_to_expression("max", col)
         return self.agg(expr)
 
-    def sum(self, col: Union[Expression, str]) -> "DataFrame":
+    def sum(self, col: Union[Column, str]) -> "DataFrame":
         expr = self._map_cols_to_expression("sum", col)
         return self.agg(expr)
 
     def count(self) -> "DataFrame":
-        return self.agg([ScalarFunctionExpression("count", LiteralExpression(1))])
+        return self.agg([scalar_function("count", lit(1))])
 
 
 class DataFrame(object):
@@ -134,7 +127,7 @@ class DataFrame(object):
         """
         return len(self.take(1)) == 0
 
-    def select(self, *cols: "ExpressionOrString") -> "DataFrame":
+    def select(self, *cols: "ColumnOrName") -> "DataFrame":
         return DataFrame.withPlan(plan.Project(self._plan, *cols), session=self._session)
 
     def selectExpr(self, *expr: Union[str, List[str]]) -> "DataFrame":
@@ -154,23 +147,23 @@ class DataFrame(object):
             expr = expr[0]  # type: ignore[assignment]
         for element in expr:
             if isinstance(element, str):
-                sql_expr.append(SQLExpression(element))
+                sql_expr.append(sql_expression(element))
             else:
-                sql_expr.extend([SQLExpression(e) for e in element])
+                sql_expr.extend([sql_expression(e) for e in element])
 
         return DataFrame.withPlan(plan.Project(self._plan, *sql_expr), session=self._session)
 
-    def agg(self, *exprs: Union[Expression, Dict[str, str]]) -> "DataFrame":
+    def agg(self, *exprs: Union[Column, Dict[str, str]]) -> "DataFrame":
         if not exprs:
             raise ValueError("Argument 'exprs' must not be empty")
 
         if len(exprs) == 1 and isinstance(exprs[0], dict):
-            measures = [ScalarFunctionExpression(f, Column(e)) for e, f in exprs[0].items()]
+            measures = [scalar_function(f, col(e)) for e, f in exprs[0].items()]
             return self.groupBy().agg(measures)
         else:
             # other expressions
-            assert all(isinstance(c, Expression) for c in exprs), "all exprs should be Expression"
-            exprs = cast(Tuple[Expression, ...], exprs)
+            assert all(isinstance(c, Column) for c in exprs), "all exprs should be Expression"
+            exprs = cast(Tuple[Column, ...], exprs)
             return self.groupBy().agg(exprs)
 
     def alias(self, alias: str) -> "DataFrame":
@@ -224,7 +217,7 @@ class DataFrame(object):
         int
             Number of rows.
         """
-        pdd = self.agg(ScalarFunctionExpression("count", LiteralExpression(1))).toPandas()
+        pdd = self.agg(scalar_function("count", lit(1))).toPandas()
         return pdd.iloc[0, 0]
 
     def crossJoin(self, other: "DataFrame") -> "DataFrame":
@@ -352,7 +345,7 @@ class DataFrame(object):
             session=self._session,
         )
 
-    def filter(self, condition: Union[Expression, str]) -> "DataFrame":
+    def filter(self, condition: Union[Column, str]) -> "DataFrame":
         """Filters rows using the given condition.
 
         :func:`where` is an alias for :func:`filter`.
@@ -371,7 +364,7 @@ class DataFrame(object):
             Filtered DataFrame.
         """
         if isinstance(condition, str):
-            expr = cast(Expression, SQLExpression(condition))
+            expr = sql_expression(condition)
         else:
             expr = condition
         return DataFrame.withPlan(plan.Filter(child=self._plan, filter=expr), session=self._session)
@@ -652,7 +645,7 @@ class DataFrame(object):
         assert pdf is not None
         return pdf["show_string"][0]
 
-    def withColumns(self, colsMap: Dict[str, Expression]) -> "DataFrame":
+    def withColumns(self, colsMap: Dict[str, Column]) -> "DataFrame":
         """
         Returns a new :class:`DataFrame` by adding multiple columns or replacing the
         existing columns that have the same names.
@@ -680,7 +673,7 @@ class DataFrame(object):
             session=self._session,
         )
 
-    def withColumn(self, colName: str, col: Expression) -> "DataFrame":
+    def withColumn(self, colName: str, col: Column) -> "DataFrame":
         """
         Returns a new :class:`DataFrame` by adding a column or replacing the
         existing column that has the same name.
@@ -702,7 +695,7 @@ class DataFrame(object):
         :class:`DataFrame`
             DataFrame with new or replaced column.
         """
-        if not isinstance(col, Expression):
+        if not isinstance(col, Column):
             raise TypeError("col should be Column")
         return DataFrame.withPlan(
             plan.WithColumns(self._plan, {colName: col}),
@@ -895,7 +888,7 @@ class DataFrame(object):
             session=self._session,
         )
 
-    def where(self, condition: Union[Expression, str]) -> "DataFrame":
+    def where(self, condition: Union[Column, str]) -> "DataFrame":
         return self.filter(condition)
 
     @property
@@ -1129,9 +1122,9 @@ class DataFrame(object):
         # Check for alias
         alias = self._get_alias()
         if alias is not None:
-            return Column(alias)
+            return col(alias)
         else:
-            return Column(name)
+            return col(name)
 
     def _print_plan(self) -> str:
         if self._plan:

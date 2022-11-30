@@ -28,15 +28,11 @@ from typing import (
 import pandas
 import pyarrow as pa
 import pyspark.sql.connect.proto as proto
-from pyspark.sql.connect.column import (
-    Column,
-    Expression,
-    SortOrder,
-)
+from pyspark.sql.connect.column import Column
 
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import ColumnOrName, ExpressionOrString
+    from pyspark.sql.connect._typing import ColumnOrName
     from pyspark.sql.connect.client import SparkConnectClient
 
 
@@ -258,7 +254,7 @@ class Project(LogicalPlan):
 
     """
 
-    def __init__(self, child: Optional["LogicalPlan"], *columns: "ExpressionOrString") -> None:
+    def __init__(self, child: Optional["LogicalPlan"], *columns: "ColumnOrName") -> None:
         super().__init__(child)
         self._raw_columns = list(columns)
         self.alias: Optional[str] = None
@@ -267,16 +263,16 @@ class Project(LogicalPlan):
     def _verify_expressions(self) -> None:
         """Ensures that all input arguments are instances of Expression or String."""
         for c in self._raw_columns:
-            if not isinstance(c, (Expression, str)):
+            if not isinstance(c, (Column, str)):
                 raise InputValidationError(
-                    f"Only Expressions or String can be used for projections: '{c}'."
+                    f"Only Column or String can be used for projections: '{c}'."
                 )
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
         proj_exprs = []
         for c in self._raw_columns:
-            if isinstance(c, Expression):
+            if isinstance(c, Column):
                 proj_exprs.append(c.to_plan(session))
             elif c == "*":
                 exp = proto.Expression()
@@ -309,7 +305,7 @@ class Project(LogicalPlan):
 class WithColumns(LogicalPlan):
     """Logical plan object for a withColumns operation."""
 
-    def __init__(self, child: Optional["LogicalPlan"], cols_map: Mapping[str, Expression]) -> None:
+    def __init__(self, child: Optional["LogicalPlan"], cols_map: Mapping[str, Column]) -> None:
         super().__init__(child)
         self._cols_map = cols_map
 
@@ -341,7 +337,7 @@ class WithColumns(LogicalPlan):
 
 
 class Filter(LogicalPlan):
-    def __init__(self, child: Optional["LogicalPlan"], filter: Expression) -> None:
+    def __init__(self, child: Optional["LogicalPlan"], filter: Column) -> None:
         super().__init__(child)
         self.filter = filter
 
@@ -495,7 +491,7 @@ class Sort(LogicalPlan):
     def __init__(
         self,
         child: Optional["LogicalPlan"],
-        columns: List[Union[SortOrder, Column, str]],
+        columns: List[Union[Column, str]],
         is_global: bool,
     ) -> None:
         super().__init__(child)
@@ -503,19 +499,19 @@ class Sort(LogicalPlan):
         self.is_global = is_global
 
     def col_to_sort_field(
-        self, col: Union[SortOrder, Column, str], session: "SparkConnectClient"
+        self, col: Union[Column, str], session: "SparkConnectClient"
     ) -> proto.Sort.SortField:
-        if isinstance(col, SortOrder):
+        if isinstance(col, Column):
             sf = proto.Sort.SortField()
-            sf.expression.CopyFrom(col.ref.to_plan(session))
+            sf.expression.CopyFrom(col.to_plan(session))
             sf.direction = (
                 proto.Sort.SortDirection.SORT_DIRECTION_ASCENDING
-                if col.ascending
+                if col._expr.ascending
                 else proto.Sort.SortDirection.SORT_DIRECTION_DESCENDING
             )
             sf.nulls = (
                 proto.Sort.SortNulls.SORT_NULLS_FIRST
-                if not col.nullsLast
+                if not col._expr.nullsLast
                 else proto.Sort.SortNulls.SORT_NULLS_LAST
             )
             return sf
@@ -653,13 +649,13 @@ class Aggregate(LogicalPlan):
         self,
         child: Optional["LogicalPlan"],
         grouping_cols: List[Column],
-        measures: Sequence[Expression],
+        measures: Sequence[Column],
     ) -> None:
         super().__init__(child)
         self.grouping_cols = grouping_cols
         self.measures = measures
 
-    def _convert_measure(self, m: Expression, session: "SparkConnectClient") -> proto.Expression:
+    def _convert_measure(self, m: Column, session: "SparkConnectClient") -> proto.Expression:
         proto_expr = proto.Expression()
         proto_expr.CopyFrom(m.to_plan(session))
         return proto_expr
