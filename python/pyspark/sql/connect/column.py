@@ -520,45 +520,24 @@ class Column(object):
         """
         return _bin_op("contains")(self, other)
 
-    def startswith(self, other: Union[PrimitiveType, "Column"]) -> "Column":
-        """
-        String starts with. Returns a boolean :class:`Column` based on a string match.
+    _startswith_doc = """
+    String starts with. Returns a boolean :class:`Column` based on a string match.
 
-        Parameters
-        ----------
-        other : :class:`Column` or str
-            string at start of line (do not use a regex `^`)
+    Parameters
+    ----------
+    other : :class:`Column` or str
+        string at start of line (do not use a regex `^`)
+    """
+    _endswith_doc = """
+    String ends with. Returns a boolean :class:`Column` based on a string match.
 
-        Examples
-        --------
-        >>> df = spark.createDataFrame(
-        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
-        >>> df.filter(df.name.startswith('Al')).collect()
-        [Row(age=2, name='Alice')]
-        >>> df.filter(df.name.startswith('^Al')).collect()
-        []
-        """
-        return _bin_op("startsWith")(self, other)
-
-    def endswith(self, other: Union[PrimitiveType, "Column"]) -> "Column":
-        """
-        String ends with. Returns a boolean :class:`Column` based on a string match.
-
-        Parameters
-        ----------
-        other : :class:`Column` or str
-            string at end of line (do not use a regex `$`)
-
-        Examples
-        --------
-        >>> df = spark.createDataFrame(
-        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
-        >>> df.filter(df.name.endswith('ice')).collect()
-        [Row(age=2, name='Alice')]
-        >>> df.filter(df.name.endswith('ice$')).collect()
-        []
-        """
-        return _bin_op("endsWith")(self, other)
+    Parameters
+    ----------
+    other : :class:`Column` or str
+        string at end of line (do not use a regex `$`)
+    """
+    startswith = _bin_op("startsWith", _startswith_doc)
+    endswith = _bin_op("endsWith", _endswith_doc)
 
     def like(self: "Column", other: str) -> "Column":
         """
