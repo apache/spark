@@ -3404,12 +3404,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     }
   }
 
-  def generatedColumnsNotAllowedInDataSource(provider: String): Throwable = {
+  def generatedColumnsOnCreationUnsupportedForDataSource(provider: String): Throwable = {
     new AnalysisException(
       s"""
-        |Failed to execute command because GENERATED ALWAYS AS expressions are not supported for
-        |target data source with table provider: \"$provider\"
-        |""".stripMargin
+        |Failed to execute command because target data source with table provider: \"$provider\"
+        |does not support creating generated columns with GENERATED ALWAYS AS expressions in
+        |create/replace table statements.
+        f|""".stripMargin
     )
   }
 }

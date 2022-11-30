@@ -1805,7 +1805,7 @@
   },
   "_LEGACY_ERROR_TEMP_0065" : {
     "message" : [
-      "Support for GENERATED ALWAYS AS column is not allowed."
+      "Creating generated columns with GENERATED ALWAYS AS is not supported."
     ]
   },
   "_LEGACY_ERROR_TEMP_1000" : {
