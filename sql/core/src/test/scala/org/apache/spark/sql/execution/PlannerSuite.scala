@@ -30,6 +30,7 @@ import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableS
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, REPARTITION_BY_COL, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
+import org.apache.spark.sql.execution.window.{Final, Partial, WindowGroupLimitExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -1313,6 +1314,220 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     }
     assert(topKs.size == 1)
     assert(sorts.isEmpty)
+  }
+
+  private val rankLikeFunctions = Seq("row_number()", "rank(value)", "dense_rank(value)")
+  private val supportedConditions = Seq("rn == 2", "rn < 3", "rn <= 2")
+  private val unsupportedConditions = Seq("rn > 2", "rn == 1 OR length(value) > 2")
+
+  test("SPARK-37099: " +
+    "Introduce the group limit of Window for rank-based filter to optimize top-k computation") {
+
+    def checkWindowGroupLimitExec(planned: SparkPlan): Unit = {
+      val windowGroupLimits = collect(planned) {
+        case windowGroupLimit: WindowGroupLimitExec => windowGroupLimit
+      }
+
+      assert(windowGroupLimits.size == 2)
+      assert(windowGroupLimits.exists(_.mode == Partial))
+      assert(windowGroupLimits.exists(_.mode == Final))
+    }
+
+    withTempView("testWindowGroupLimit") {
+      testData.createOrReplaceTempView("testWindowGroupLimit")
+
+      // Cannot apply window group limit node: window without filter
+      for (function <- rankLikeFunctions) {
+        val planned = sql(
+          s"""
+             | SELECT key, value, $function OVER w AS rn
+             | FROM testWindowGroupLimit
+             | WINDOW w AS (PARTITION BY key ORDER BY value)
+           """.stripMargin).queryExecution.executedPlan
+
+        assert(!planned.exists(_.isInstanceOf[WindowGroupLimitExec]))
+      }
+
+      // Cannot apply window group limit node: spark.sql.window.group.limit.threshold = -1
+      withSQLConf(SQLConf.WINDOW_GROUP_LIMIT_THRESHOLD.key -> "-1") {
+        for (condition <- supportedConditions; function <- rankLikeFunctions) {
+          val planned = sql(
+            s"""
+               | SELECT *
+               | FROM (
+               |     SELECT key, value, $function OVER w AS rn
+               |     FROM testWindowGroupLimit
+               |     WINDOW w AS (PARTITION BY key ORDER BY value)
+               | )
+               | WHERE $condition
+           """.stripMargin).queryExecution.executedPlan
+
+          assert(!planned.exists(_.isInstanceOf[WindowGroupLimitExec]))
+        }
+      }
+
+      // Cannot apply window group limit node: spark.sql.window.group.limit.threshold = -1
+      withSQLConf(SQLConf.WINDOW_GROUP_LIMIT_THRESHOLD.key -> "-1") {
+        for (condition <- supportedConditions; function <- rankLikeFunctions) {
+          val planned = sql(
+            s"""
+               | SELECT *
+               | FROM (
+               |     SELECT key, value, $function OVER w AS rn
+               |     FROM testWindowGroupLimit
+               |     WINDOW w AS (PARTITION BY key ORDER BY value)
+               | )
+               | WHERE $condition
+           """.stripMargin).queryExecution.executedPlan
+
+          assert(!planned.exists(_.isInstanceOf[WindowGroupLimitExec]))
+        }
+      }
+
+      for (condition <- supportedConditions; function <- rankLikeFunctions) {
+        val planned = sql(
+          s"""
+             | SELECT *
+             | FROM (
+             |     SELECT key, value, $function OVER w AS rn
+             |     FROM testWindowGroupLimit
+             |     WINDOW w AS (PARTITION BY key ORDER BY value)
+             | )
+             | WHERE $condition
+           """.stripMargin).queryExecution.executedPlan
+
+        checkWindowGroupLimitExec(planned)
+      }
+
+      for (condition <- supportedConditions; function <- rankLikeFunctions) {
+        val planned = sql(
+          s"""
+             | SELECT *
+             | FROM (
+             |     SELECT key, value, $function OVER w AS rn
+             |     FROM testWindowGroupLimit
+             |     WINDOW w AS (PARTITION BY key ORDER BY value)
+             | )
+             | WHERE $condition AND length(value) > 0
+           """.stripMargin).queryExecution.executedPlan
+
+        checkWindowGroupLimitExec(planned)
+      }
+
+      // Cannot apply window group limit node: unsupported conditions
+      for (condition <- unsupportedConditions; function <- rankLikeFunctions) {
+        val planned = sql(
+          s"""
+             | SELECT *
+             | FROM (
+             |     SELECT key, value, $function OVER w AS rn
+             |     FROM testWindowGroupLimit
+             |     WINDOW w AS (PARTITION BY key ORDER BY value)
+             | )
+             | WHERE $condition
+           """.stripMargin).queryExecution.executedPlan
+
+        assert(!planned.exists(_.isInstanceOf[WindowGroupLimitExec]))
+      }
+
+      for (condition <- supportedConditions; function <- rankLikeFunctions) {
+        val planned = sql(
+          s"""
+             | SELECT *
+             | FROM (
+             |     SELECT key, value, $function OVER w AS rn
+             |     FROM testWindowGroupLimit
+             |     WINDOW w AS (ORDER BY value)
+             | )
+             | WHERE $condition
+           """.stripMargin).queryExecution.executedPlan
+
+        checkWindowGroupLimitExec(planned)
+      }
+
+      // multiple the same rank-like functions
+      for (condition <- supportedConditions; function <- rankLikeFunctions) {
+        val planned = sql(
+          s"""
+             | SELECT *
+             | FROM (
+             |     SELECT key, value, $function OVER w AS rn, $function OVER w AS rn2
+             |     FROM testWindowGroupLimit
+             |     WINDOW w AS (PARTITION BY key ORDER BY value)
+             | )
+             | WHERE $condition AND rn2 == 3
+           """.stripMargin).queryExecution.executedPlan
+
+        checkWindowGroupLimitExec(planned)
+      }
+
+      // multiple different rank-like window function and only one used in filter
+      for (condition <- supportedConditions) {
+        val planned = sql(
+          s"""
+             | SELECT *
+             | FROM (
+             |     SELECT key, value, row_number() OVER w AS rn, rank() OVER w AS rank
+             |     FROM testWindowGroupLimit
+             |     WINDOW w AS (PARTITION BY key ORDER BY value)
+             | )
+             | WHERE $condition
+           """.stripMargin).queryExecution.executedPlan
+
+        checkWindowGroupLimitExec(planned)
+      }
+
+      // Cannot apply window group limit node: multiple different rank-like window function
+      for (condition <- supportedConditions) {
+        val planned = sql(
+          s"""
+             | SELECT *
+             | FROM (
+             |     SELECT key, value, row_number() OVER w AS rn, rank() OVER w AS rank
+             |     FROM testWindowGroupLimit
+             |     WINDOW w AS (PARTITION BY key ORDER BY value)
+             | )
+             | WHERE $condition AND rank == 1
+           """.stripMargin).queryExecution.executedPlan
+
+        assert(!planned.exists(_.isInstanceOf[WindowGroupLimitExec]))
+      }
+
+      // Cannot apply window group limit node: different window specification
+      for (condition <- supportedConditions; function <- rankLikeFunctions) {
+        val planned = sql(
+          s"""
+             | SELECT *
+             | FROM (
+             |     SELECT key, value, $function OVER w1 AS rn, $function OVER w2 AS rn2
+             |     FROM testWindowGroupLimit
+             |     WINDOW
+             |         w1 AS (PARTITION BY key ORDER BY value),
+             |         w2 AS (PARTITION BY key ORDER BY value DESC)
+             | )
+             | WHERE $condition AND rn2 == 1
+           """.stripMargin).queryExecution.executedPlan
+
+        assert(!planned.exists(_.isInstanceOf[WindowGroupLimitExec]))
+      }
+
+      // empty relation
+      Seq("rn == 0", "rn < 1", "rn <= 0").foreach { condition =>
+        val planned = sql(
+          s"""
+             | SELECT *
+             | FROM (
+             |     SELECT key, value, row_number() OVER w AS rn
+             |     FROM testWindowGroupLimit
+             |     WINDOW w AS (PARTITION BY key ORDER BY value)
+             | )
+             | WHERE $condition
+           """.stripMargin).queryExecution.executedPlan
+
+        assert(!planned.exists(_.isInstanceOf[WindowGroupLimitExec]))
+        assert(planned.exists(_.isInstanceOf[LocalTableScanExec]))
+      }
+    }
   }
 }
 
