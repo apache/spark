@@ -118,8 +118,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         # SPARK-41036: test `columns` API for python client.
         df = self.connect.read.table(self.tbl_name)
         df2 = self.spark.read.table(self.tbl_name)
-        columns = df.columns
-        self.assertEqual(["id", "name"], columns)
+        self.assertEqual(["id", "name"], df.columns)
 
         self.assert_eq(
             df.filter(df.name.rlike("20")).toPandas(), df2.filter(df2.name.rlike("20")).toPandas()

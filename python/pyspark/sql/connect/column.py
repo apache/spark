@@ -683,6 +683,8 @@ class Column(object):
     def name(self) -> str:
         return self._expr.name()
 
+    # TODO: solve the circular import between functions.py and this class if we want to
+    # reuse functions.lit
     def _lit(self, x: Any) -> "Column":
         return Column(LiteralExpression(x))
 
