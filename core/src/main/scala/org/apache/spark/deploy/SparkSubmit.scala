@@ -157,6 +157,9 @@ private[spark] class SparkSubmit extends Logging {
 
     def doRunMain(): Unit = {
       if (args.proxyUser != null) {
+        // Here we are checking for client mode because when job is sumbitted in cluster
+        // deploy mode with k8s resource manager, the spark submit in the driver container
+        // is done in client mode.
         val isKubernetesClusterModeDriver = args.master.startsWith("k8s") &&
           args.deployMode.equals("client") &&
           args.toSparkConf().getBoolean("spark.kubernetes.submitInDriver", false)
