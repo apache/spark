@@ -876,6 +876,13 @@
     ],
     "sqlState" : "42000"
   },
+  "NOT_ENOUGH_DATA_COLUMNS" : {
+    "message" : [
+      "Cannot write to <tableName>, not enough data columns:",
+      "Table columns: <tableCols>",
+      "Data columns: <dataCols>"
+    ]
+  },
   "NO_HANDLER_FOR_UDAF" : {
     "message" : [
       "No handler for UDAF '<functionName>'. Use sparkSession.udf.register(...) instead."
@@ -2554,11 +2561,6 @@
       "Bucket sorting column '<sortCol>' should not be part of partition columns '<normalizedPartCols>'."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1168" : {
-    "message" : [
-      "<tableName> requires that the data to be inserted have the same number of columns as the target table: target table has <targetColumns> column(s) but the inserted data has <insertedColumns> column(s), including <staticPartCols> partition column(s) having constant value(s)."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1169" : {
     "message" : [
       "Requested partitioning does not match the table <tableName>:",
@@ -2732,13 +2734,6 @@
   "_LEGACY_ERROR_TEMP_1202" : {
     "message" : [
       "Cannot write to '<tableName>', too many data columns:",
-      "Table columns: <tableColumns>",
-      "Data columns: <dataColumns>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1203" : {
-    "message" : [
-      "Cannot write to '<tableName>', not enough data columns:",
       "Table columns: <tableColumns>",
       "Data columns: <dataColumns>"
     ]

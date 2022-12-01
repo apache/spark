@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogTable, InvalidUDFClassExcep
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, CreateStruct, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.plans.JoinType
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, Join, LogicalPlan, SerdeInfo, Window}
+import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, SerdeInfo, Window}
 import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, FailFastMode, ParseMode, PermissiveMode}
 import org.apache.spark.sql.connector.catalog._
@@ -1680,17 +1680,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "normalizedPartCols" -> normalizedPartCols.mkString(", ")))
   }
 
-  def mismatchedInsertedDataColumnNumberError(
-      tableName: String, insert: InsertIntoStatement, staticPartCols: Set[String]): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1168",
-      messageParameters = Map(
-        "tableName" -> tableName,
-        "targetColumns" -> insert.table.output.size.toString,
-        "insertedColumns" -> (insert.query.output.length + staticPartCols.size).toString,
-        "staticPartCols" -> staticPartCols.size.toString))
-  }
-
   def requestedPartitionsMismatchTablePartitionsError(
       tableName: String,
       normalizedPartSpec: Map[String, Option[String]],
@@ -2028,13 +2017,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def cannotWriteNotEnoughColumnsToTableError(
-      tableName: String, expected: Seq[Attribute], query: LogicalPlan): Throwable = {
+      tableName: String,
+      targetColumns: Seq[Attribute],
+      insertedColumns: Seq[Attribute],
+      staticPartCols: Set[String] = Set.empty): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1203",
+      errorClass = "NOT_ENOUGH_DATA_COLUMNS",
       messageParameters = Map(
-        "tableName" -> tableName,
-        "tableColumns" -> expected.map(c => s"'${c.name}'").mkString(", "),
-        "dataColumns" -> query.output.map(c => s"'${c.name}'").mkString(", ")))
+        "tableName" -> toSQLId(tableName),
+        "tableCols" -> targetColumns.map(c => toSQLId(c.name)).mkString("[", ", ", "]"),
+        "dataCols" -> (insertedColumns.map(c => toSQLId(c.name)) ++
+          staticPartCols.map(c => toSQLId(c))).mkString("[", ", ", "]")
+      )
+    )
   }
 
   def cannotWriteIncompatibleDataToTableError(tableName: String, errors: Seq[String]): Throwable = {

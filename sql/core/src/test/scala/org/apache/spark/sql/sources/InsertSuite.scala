@@ -143,13 +143,19 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("SELECT clause generating a different number of columns is not allowed.") {
-    val message = intercept[AnalysisException] {
-      sql(
-        s"""
-        |INSERT OVERWRITE TABLE jsonTable SELECT a FROM jt
-      """.stripMargin)
-    }.getMessage
-    assert(message.contains("target table has 2 column(s) but the inserted data has 1 column(s)")
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(
+          s"""
+             |INSERT OVERWRITE TABLE jsonTable SELECT a FROM jt
+            """.stripMargin)
+      },
+      errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+      parameters = Map(
+        "tableName" -> "`unknown`",
+        "tableCols" -> "[`a`, `b`]",
+        "dataCols" -> "[`a`]"
+      )
     )
   }
 
@@ -639,19 +645,29 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         }.getMessage
         assert(msg.contains("Cannot safely cast 'd': decimal(2,1) to double"))
 
-        msg = intercept[AnalysisException] {
-          sql("insert into t select 1, 2.0D, 3")
-        }.getMessage
-        assert(msg.contains("`t` requires that the data to be inserted have the same number of " +
-          "columns as the target table: target table has 2 column(s)" +
-          " but the inserted data has 3 column(s)"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("insert into t select 1, 2.0D, 3")
+          },
+          errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+          parameters = Map(
+            "tableName" -> "`spark_catalog`.`default`.`t`",
+            "tableCols" -> "[`i`, `d`]",
+            "dataCols" -> "[`1`, `2`.`0`, `3`]"
+          )
+        )
 
-        msg = intercept[AnalysisException] {
-          sql("insert into t select 1")
-        }.getMessage
-        assert(msg.contains("`t` requires that the data to be inserted have the same number of " +
-          "columns as the target table: target table has 2 column(s)" +
-          " but the inserted data has 1 column(s)"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("insert into t select 1")
+          },
+          errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+          parameters = Map(
+            "tableName" -> "`spark_catalog`.`default`.`t`",
+            "tableCols" -> "[`i`, `d`]",
+            "dataCols" -> "[`1`]"
+          )
+        )
 
         // Insert into table successfully.
         sql("insert into t select 1, 2.0D")
@@ -883,10 +899,17 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       )
     }
 
-    val message = intercept[AnalysisException] {
-      sql("INSERT OVERWRITE TABLE jsonTable(a) SELECT a FROM jt")
-    }.getMessage
-    assert(message.contains("target table has 2 column(s) but the inserted data has 1 column(s)"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("INSERT OVERWRITE TABLE jsonTable(a) SELECT a FROM jt")
+      },
+      errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+      parameters = Map(
+        "tableName" -> "`unknown`",
+        "tableCols" -> "[`a`, `b`]",
+        "dataCols" -> "[`a`]"
+      )
+    )
   }
 
   test("SPARK-38336 INSERT INTO statements with tables with default columns: positive tests") {
@@ -1109,11 +1132,18 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     withTable("t") {
       sql("create table num_data(id int, val decimal(38,10)) using parquet")
       sql("create table t(id1 int, int2 int, result decimal(38,10)) using parquet")
-      assert(intercept[AnalysisException] {
-        sql("insert into t select t1.id, t2.id, t1.val, t2.val, t1.val * t2.val " +
-          "from num_data t1, num_data t2")
-      }.getMessage.contains(
-        "requires that the data to be inserted have the same number of columns as the target"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("insert into t select t1.id, t2.id, t1.val, t2.val, t1.val * t2.val " +
+            "from num_data t1, num_data t2")
+        },
+        errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+        parameters = Map(
+          "tableName" -> "`spark_catalog`.`default`.`t`",
+          "tableCols" -> "[`id1`, `int2`, `result`]",
+          "dataCols" -> "[`id`, `id`, `val`, `val`, `(val * val)`]"
+        )
+      )
     }
     // The default value is disabled per configuration.
     withTable("t") {
@@ -1150,9 +1180,17 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
       withTable("t") {
         sql("create table t(i boolean, s bigint) using parquet")
-        assert(intercept[AnalysisException] {
-          sql("insert into t values(true)")
-        }.getMessage.contains("target table has 2 column(s) but the inserted data has 1 column(s)"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("insert into t values(true)")
+          },
+          errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+          parameters = Map(
+            "tableName" -> "`spark_catalog`.`default`.`t`",
+            "tableCols" -> "[`i`, `s`]",
+            "dataCols" -> "[`col1`]"
+          )
+        )
       }
     }
   }
@@ -1227,32 +1265,60 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("SPARK- 38795 INSERT INTO with user specified columns and defaults: negative tests") {
-    val addOneColButExpectedTwo = "target table has 2 column(s) but the inserted data has 1 col"
-    val addTwoColButExpectedThree = "target table has 3 column(s) but the inserted data has 2 col"
     // The missing columns in these INSERT INTO commands do not have explicit default values.
     withTable("t") {
       sql("create table t(i boolean, s bigint) using parquet")
-      assert(intercept[AnalysisException] {
-        sql("insert into t (i) values (true)")
-      }.getMessage.contains(addOneColButExpectedTwo))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("insert into t (i) values (true)")
+        },
+        errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+        parameters = Map(
+          "tableName" -> "`spark_catalog`.`default`.`t`",
+          "tableCols" -> "[`i`, `s`]",
+          "dataCols" -> "[`col1`]"
+        )
+      )
     }
     withTable("t") {
       sql("create table t(i boolean default true, s bigint) using parquet")
-      assert(intercept[AnalysisException] {
-        sql("insert into t (i) values (default)")
-      }.getMessage.contains(addOneColButExpectedTwo))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("insert into t (i) values (default)")
+        },
+        errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+        parameters = Map(
+          "tableName" -> "`spark_catalog`.`default`.`t`",
+          "tableCols" -> "[`i`, `s`]",
+          "dataCols" -> "[`col1`]"
+        )
+      )
     }
     withTable("t") {
       sql("create table t(i boolean, s bigint default 42) using parquet")
-      assert(intercept[AnalysisException] {
-        sql("insert into t (s) values (default)")
-      }.getMessage.contains(addOneColButExpectedTwo))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("insert into t (s) values (default)")
+        },
+        errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+        parameters = Map(
+          "tableName" -> "`spark_catalog`.`default`.`t`",
+          "tableCols" -> "[`i`, `s`]", "dataCols" -> "[`col1`]")
+      )
     }
     withTable("t") {
       sql("create table t(i boolean, s bigint, q int default 43) using parquet")
-      assert(intercept[AnalysisException] {
-        sql("insert into t (i, q) select true from (select 1)")
-      }.getMessage.contains(addTwoColButExpectedThree))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("insert into t (i, q) select true from (select 1)")
+        },
+        errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+        parameters = Map(
+          "tableName" -> "`spark_catalog`.`default`.`t`",
+          "tableCols" -> "[`i`, `s`, `q`]",
+          "dataCols" -> "[`true`, `i`]"
+        )
+      )
     }
     // When the USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES configuration is disabled, and no
     // explicit DEFAULT value is available when the INSERT INTO statement provides fewer
@@ -1260,39 +1326,87 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
       withTable("t") {
         sql("create table t(i boolean, s bigint) using parquet")
-        assert(intercept[AnalysisException] {
-          sql("insert into t (i) values (true)")
-        }.getMessage.contains(addOneColButExpectedTwo))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("insert into t (i) values (true)")
+          },
+          errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+          parameters = Map(
+            "tableName" -> "`spark_catalog`.`default`.`t`",
+            "tableCols" -> "[`i`, `s`]",
+            "dataCols" -> "[`col1`]"
+          )
+        )
       }
       withTable("t") {
         sql("create table t(i boolean default true, s bigint) using parquet")
-        assert(intercept[AnalysisException] {
-          sql("insert into t (i) values (default)")
-        }.getMessage.contains(addOneColButExpectedTwo))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("insert into t (i) values (default)")
+          },
+          errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+          parameters = Map(
+            "tableName" -> "`spark_catalog`.`default`.`t`",
+            "tableCols" -> "[`i`, `s`]",
+            "dataCols" -> "[`col1`]"
+          )
+        )
       }
       withTable("t") {
         sql("create table t(i boolean, s bigint default 42) using parquet")
-        assert(intercept[AnalysisException] {
-          sql("insert into t (s) values (default)")
-        }.getMessage.contains(addOneColButExpectedTwo))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("insert into t (s) values (default)")
+          },
+          errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+          parameters = Map(
+            "tableName" -> "`spark_catalog`.`default`.`t`",
+            "tableCols" -> "[`i`, `s`]",
+            "dataCols" -> "[`col1`]"
+          )
+        )
       }
       withTable("t") {
         sql("create table t(i boolean, s bigint, q int) using parquet partitioned by (i)")
-        assert(intercept[AnalysisException] {
-          sql("insert into t partition(i='true') (s) values(5)")
-        }.getMessage.contains(addTwoColButExpectedThree))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("insert into t partition(i='true') (s) values(5)")
+          },
+          errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+          parameters = Map(
+            "tableName" -> "`spark_catalog`.`default`.`t`",
+            "tableCols" -> "[`s`, `q`, `i`]",
+            "dataCols" -> "[`col1`, `i`]"
+          )
+        )
       }
       withTable("t") {
         sql("create table t(i boolean, s bigint, q int) using parquet partitioned by (i)")
-        assert(intercept[AnalysisException] {
-          sql("insert into t partition(i='false') (q) select 43")
-        }.getMessage.contains(addTwoColButExpectedThree))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("insert into t partition(i='false') (q) select 43")
+          },
+          errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+          parameters = Map(
+            "tableName" -> "`spark_catalog`.`default`.`t`",
+            "tableCols" -> "[`s`, `q`, `i`]",
+            "dataCols" -> "[`43`, `i`]"
+          )
+        )
       }
       withTable("t") {
         sql("create table t(i boolean, s bigint, q int) using parquet partitioned by (i)")
-        assert(intercept[AnalysisException] {
-          sql("insert into t partition(i='false') (q) select default")
-        }.getMessage.contains(addTwoColButExpectedThree))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("insert into t partition(i='false') (q) select default")
+          },
+          errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+          parameters = Map(
+            "tableName" -> "`spark_catalog`.`default`.`t`",
+            "tableCols" -> "[`s`, `q`, `i`]",
+            "dataCols" -> "[`default`, `i`]"
+          )
+        )
       }
     }
     // When the CASE_SENSITIVE configuration is enabled, then using different cases for the required

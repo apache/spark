@@ -378,8 +378,8 @@ object PreprocessTableInsertion extends Rule[LogicalPlan] {
     val expectedColumns = insert.table.output.filterNot(a => staticPartCols.contains(a.name))
 
     if (expectedColumns.length != insert.query.schema.length) {
-      throw QueryCompilationErrors.mismatchedInsertedDataColumnNumberError(
-        tblName, insert, staticPartCols)
+      throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
+        tblName, insert.table.output, insert.query.output, staticPartCols)
     }
 
     val partitionsTrackedByCatalog = catalogTable.isDefined &&

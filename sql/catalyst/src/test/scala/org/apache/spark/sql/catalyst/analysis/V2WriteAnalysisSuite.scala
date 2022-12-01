@@ -521,10 +521,15 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val parsedPlan = byPosition(requiredTable, query)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write", "'table-name'", "not enough data columns",
-      "Table columns: 'x', 'y'",
-      "Data columns: 'y'"))
+    assertAnalysisErrorClass(
+      parsedPlan,
+      "NOT_ENOUGH_DATA_COLUMNS",
+      Map(
+        "tableName" -> "`table-name`",
+        "tableCols" -> "[`x`, `y`]",
+        "dataCols" -> "[`y`]"
+      )
+    )
   }
 
   test("byPosition: missing optional columns cause failure") {
@@ -535,10 +540,15 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val parsedPlan = byPosition(table, query)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write", "'table-name'", "not enough data columns",
-      "Table columns: 'x', 'y'",
-      "Data columns: 'y'"))
+    assertAnalysisErrorClass(
+      parsedPlan,
+      "NOT_ENOUGH_DATA_COLUMNS",
+      Map(
+        "tableName" -> "`table-name`",
+        "tableCols" -> "[`x`, `y`]",
+        "dataCols" -> "[`y`]"
+      )
+    )
   }
 
   test("byPosition: insert safe cast") {

@@ -46,7 +46,7 @@ object TableOutputResolver {
     } else {
       if (expected.size > query.output.size) {
         throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
-          tableName, expected, query)
+          tableName, expected, query.output)
       }
 
       query.output.zip(expected).flatMap {

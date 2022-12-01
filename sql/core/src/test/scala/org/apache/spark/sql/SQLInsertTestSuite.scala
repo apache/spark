@@ -202,26 +202,37 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
   }
 
   test("insert with column list - mismatched target table out size after rewritten query") {
-    val v2Msg = "expected 2 columns but found"
     val cols = Seq("c1", "c2", "c3", "c4")
-
+    val tableName = format match {
+      case "foo" => "`testcat`.`t1`"
+      case _ => "`spark_catalog`.`default`.`t1`"
+    }
     withTable("t1") {
       createTable("t1", cols, Seq.fill(4)("int"))
-      val e1 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1) values(1)"))
-      assert(e1.getMessage.contains("target table has 4 column(s) but the inserted data has 1") ||
-        e1.getMessage.contains("expected 4 columns but found 1") ||
-        e1.getMessage.contains("not enough data columns") ||
-        e1.getMessage.contains(v2Msg))
+      checkError(
+        exception = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1) values(1)")),
+        errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+        parameters = Map(
+          "tableName" -> tableName,
+          "tableCols" -> "[`c1`, `c2`, `c3`, `c4`]",
+          "dataCols" -> "[`col1`]"
+        )
+      )
     }
 
     withTable("t1") {
       createTable("t1", cols, Seq.fill(4)("int"), cols.takeRight(2))
-      val e1 = intercept[AnalysisException] {
-        sql(s"INSERT INTO t1 partition(c3=3, c4=4) (c1) values(1)")
-      }
-      assert(e1.getMessage.contains("target table has 4 column(s) but the inserted data has 3") ||
-        e1.getMessage.contains("not enough data columns") ||
-        e1.getMessage.contains(v2Msg))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"INSERT INTO t1 partition(c3=3, c4=4) (c1) values(1)")
+        },
+        errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+        parameters = Map(
+          "tableName" -> tableName,
+          "tableCols" -> "[`c1`, `c2`, `c3`, `c4`]",
+          "dataCols" -> "[`col1`, `c3`, `c4`]"
+        )
+      )
     }
   }
 
