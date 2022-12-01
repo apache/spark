@@ -906,7 +906,7 @@ object Range {
   }
 
   def getOutputAttrs: Seq[Attribute] = {
-    StructType(StructField("id", LongType, nullable = false) :: Nil).toAttributes
+    StructType(Array(StructField("id", LongType, nullable = false))).toAttributes
   }
 
   private def typeCoercion: TypeCoercionBase = {

@@ -80,7 +80,11 @@ class Relation(google.protobuf.message.Message):
     RENAME_COLUMNS_BY_NAME_TO_NAME_MAP_FIELD_NUMBER: builtins.int
     SHOW_STRING_FIELD_NUMBER: builtins.int
     DROP_FIELD_NUMBER: builtins.int
+    TAIL_FIELD_NUMBER: builtins.int
+    WITH_COLUMNS_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
+    DROP_NA_FIELD_NUMBER: builtins.int
+    REPLACE_FIELD_NUMBER: builtins.int
     SUMMARY_FIELD_NUMBER: builtins.int
     CROSSTAB_FIELD_NUMBER: builtins.int
     UNKNOWN_FIELD_NUMBER: builtins.int
@@ -127,8 +131,16 @@ class Relation(google.protobuf.message.Message):
     @property
     def drop(self) -> global___Drop: ...
     @property
+    def tail(self) -> global___Tail: ...
+    @property
+    def with_columns(self) -> global___WithColumns: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
+    @property
+    def drop_na(self) -> global___NADrop: ...
+    @property
+    def replace(self) -> global___NAReplace: ...
     @property
     def summary(self) -> global___StatSummary:
         """stat functions"""
@@ -160,7 +172,11 @@ class Relation(google.protobuf.message.Message):
         rename_columns_by_name_to_name_map: global___RenameColumnsByNameToNameMap | None = ...,
         show_string: global___ShowString | None = ...,
         drop: global___Drop | None = ...,
+        tail: global___Tail | None = ...,
+        with_columns: global___WithColumns | None = ...,
         fill_na: global___NAFill | None = ...,
+        drop_na: global___NADrop | None = ...,
+        replace: global___NAReplace | None = ...,
         summary: global___StatSummary | None = ...,
         crosstab: global___StatCrosstab | None = ...,
         unknown: global___Unknown | None = ...,
@@ -178,6 +194,8 @@ class Relation(google.protobuf.message.Message):
             b"deduplicate",
             "drop",
             b"drop",
+            "drop_na",
+            b"drop_na",
             "fill_na",
             b"fill_na",
             "filter",
@@ -204,6 +222,8 @@ class Relation(google.protobuf.message.Message):
             b"rename_columns_by_same_length_names",
             "repartition",
             b"repartition",
+            "replace",
+            b"replace",
             "sample",
             b"sample",
             "set_op",
@@ -218,8 +238,12 @@ class Relation(google.protobuf.message.Message):
             b"subquery_alias",
             "summary",
             b"summary",
+            "tail",
+            b"tail",
             "unknown",
             b"unknown",
+            "with_columns",
+            b"with_columns",
         ],
     ) -> builtins.bool: ...
     def ClearField(
@@ -235,6 +259,8 @@ class Relation(google.protobuf.message.Message):
             b"deduplicate",
             "drop",
             b"drop",
+            "drop_na",
+            b"drop_na",
             "fill_na",
             b"fill_na",
             "filter",
@@ -261,6 +287,8 @@ class Relation(google.protobuf.message.Message):
             b"rename_columns_by_same_length_names",
             "repartition",
             b"repartition",
+            "replace",
+            b"replace",
             "sample",
             b"sample",
             "set_op",
@@ -275,8 +303,12 @@ class Relation(google.protobuf.message.Message):
             b"subquery_alias",
             "summary",
             b"summary",
+            "tail",
+            b"tail",
             "unknown",
             b"unknown",
+            "with_columns",
+            b"with_columns",
         ],
     ) -> None: ...
     def WhichOneof(
@@ -302,7 +334,11 @@ class Relation(google.protobuf.message.Message):
         "rename_columns_by_name_to_name_map",
         "show_string",
         "drop",
+        "tail",
+        "with_columns",
         "fill_na",
+        "drop_na",
+        "replace",
         "summary",
         "crosstab",
         "unknown",
@@ -567,6 +603,7 @@ class Join(google.protobuf.message.Message):
         JOIN_TYPE_RIGHT_OUTER: Join._JoinType.ValueType  # 4
         JOIN_TYPE_LEFT_ANTI: Join._JoinType.ValueType  # 5
         JOIN_TYPE_LEFT_SEMI: Join._JoinType.ValueType  # 6
+        JOIN_TYPE_CROSS: Join._JoinType.ValueType  # 7
 
     class JoinType(_JoinType, metaclass=_JoinTypeEnumTypeWrapper): ...
     JOIN_TYPE_UNSPECIFIED: Join.JoinType.ValueType  # 0
@@ -576,6 +613,7 @@ class Join(google.protobuf.message.Message):
     JOIN_TYPE_RIGHT_OUTER: Join.JoinType.ValueType  # 4
     JOIN_TYPE_LEFT_ANTI: Join.JoinType.ValueType  # 5
     JOIN_TYPE_LEFT_SEMI: Join.JoinType.ValueType  # 6
+    JOIN_TYPE_CROSS: Join.JoinType.ValueType  # 7
 
     LEFT_FIELD_NUMBER: builtins.int
     RIGHT_FIELD_NUMBER: builtins.int
@@ -801,6 +839,33 @@ class Offset(google.protobuf.message.Message):
     ) -> None: ...
 
 global___Offset = Offset
+
+class Tail(google.protobuf.message.Message):
+    """Relation of type [[Tail]] that is used to fetch `limit` rows from the last of the input relation."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    LIMIT_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) Input relation for an Tail."""
+    limit: builtins.int
+    """(Required) the limit."""
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        limit: builtins.int = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["input", b"input", "limit", b"limit"]
+    ) -> None: ...
+
+global___Tail = Tail
 
 class Aggregate(google.protobuf.message.Message):
     """Relation of type [[Aggregate]]."""
@@ -1075,27 +1140,17 @@ class LocalRelation(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    ATTRIBUTES_FIELD_NUMBER: builtins.int
-    @property
-    def attributes(
-        self,
-    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-        pyspark.sql.connect.proto.expressions_pb2.Expression.QualifiedAttribute
-    ]:
-        """(Optional) A list qualified attributes.
-        TODO: support local data.
-        """
+    DATA_FIELD_NUMBER: builtins.int
+    data: builtins.bytes
+    """Local collection data serialized into Arrow IPC streaming format which contains
+    the schema of the data.
+    """
     def __init__(
         self,
         *,
-        attributes: collections.abc.Iterable[
-            pyspark.sql.connect.proto.expressions_pb2.Expression.QualifiedAttribute
-        ]
-        | None = ...,
+        data: builtins.bytes = ...,
     ) -> None: ...
-    def ClearField(
-        self, field_name: typing_extensions.Literal["attributes", b"attributes"]
-    ) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["data", b"data"]) -> None: ...
 
 global___LocalRelation = LocalRelation
 
@@ -1521,6 +1576,158 @@ class NAFill(google.protobuf.message.Message):
 
 global___NAFill = NAFill
 
+class NADrop(google.protobuf.message.Message):
+    """Drop rows containing null values.
+    It will invoke 'Dataset.na.drop' (same as 'DataFrameNaFunctions.drop') to compute the results.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    COLS_FIELD_NUMBER: builtins.int
+    MIN_NON_NULLS_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    @property
+    def cols(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """(Optional) Optional list of column names to consider.
+
+        When it is empty, all the columns in the input relation will be considered.
+        """
+    min_non_nulls: builtins.int
+    """(Optional) The minimum number of non-null and non-NaN values required to keep.
+
+    When not set, it is equivalent to the number of considered columns, which means
+    a row will be kept only if all columns are non-null.
+
+    'how' options ('all', 'any') can be easily converted to this field:
+      - 'all' -> set 'min_non_nulls' 1;
+      - 'any' -> keep 'min_non_nulls' unset;
+    """
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        cols: collections.abc.Iterable[builtins.str] | None = ...,
+        min_non_nulls: builtins.int | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_min_non_nulls",
+            b"_min_non_nulls",
+            "input",
+            b"input",
+            "min_non_nulls",
+            b"min_non_nulls",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_min_non_nulls",
+            b"_min_non_nulls",
+            "cols",
+            b"cols",
+            "input",
+            b"input",
+            "min_non_nulls",
+            b"min_non_nulls",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_min_non_nulls", b"_min_non_nulls"]
+    ) -> typing_extensions.Literal["min_non_nulls"] | None: ...
+
+global___NADrop = NADrop
+
+class NAReplace(google.protobuf.message.Message):
+    """Replaces old values with the corresponding values.
+    It will invoke 'Dataset.na.replace' (same as 'DataFrameNaFunctions.replace')
+    to compute the results.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class Replacement(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        OLD_VALUE_FIELD_NUMBER: builtins.int
+        NEW_VALUE_FIELD_NUMBER: builtins.int
+        @property
+        def old_value(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression.Literal:
+            """(Required) The old value.
+
+            Only 4 data types are supported now: null, bool, double, string.
+            """
+        @property
+        def new_value(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression.Literal:
+            """(Required) The new value.
+
+            Should be of the same data type with the old value.
+            """
+        def __init__(
+            self,
+            *,
+            old_value: pyspark.sql.connect.proto.expressions_pb2.Expression.Literal | None = ...,
+            new_value: pyspark.sql.connect.proto.expressions_pb2.Expression.Literal | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "new_value", b"new_value", "old_value", b"old_value"
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "new_value", b"new_value", "old_value", b"old_value"
+            ],
+        ) -> None: ...
+
+    INPUT_FIELD_NUMBER: builtins.int
+    COLS_FIELD_NUMBER: builtins.int
+    REPLACEMENTS_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    @property
+    def cols(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """(Optional) List of column names to consider.
+
+        When it is empty, all the type-compatible columns in the input relation will be considered.
+        """
+    @property
+    def replacements(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___NAReplace.Replacement
+    ]:
+        """(Optional) The value replacement mapping."""
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        cols: collections.abc.Iterable[builtins.str] | None = ...,
+        replacements: collections.abc.Iterable[global___NAReplace.Replacement] | None = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "cols", b"cols", "input", b"input", "replacements", b"replacements"
+        ],
+    ) -> None: ...
+
+global___NAReplace = NAReplace
+
 class RenameColumnsBySameLengthNames(google.protobuf.message.Message):
     """Rename columns on the input relation by the same length of names."""
 
@@ -1611,3 +1818,50 @@ class RenameColumnsByNameToNameMap(google.protobuf.message.Message):
     ) -> None: ...
 
 global___RenameColumnsByNameToNameMap = RenameColumnsByNameToNameMap
+
+class WithColumns(google.protobuf.message.Message):
+    """Adding columns or replacing the existing columns that have the same names."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    NAME_EXPR_LIST_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    @property
+    def name_expr_list(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.expressions_pb2.Expression.Alias
+    ]:
+        """(Required)
+
+        Given a column name, apply the corresponding expression on the column. If column
+        name exists in the input relation, then replace the column. If the column name
+        does not exist in the input relation, then adds it as a new column.
+
+        Only one name part is expected from each Expression.Alias.
+
+        An exception is thrown when duplicated names are present in the mapping.
+        """
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        name_expr_list: collections.abc.Iterable[
+            pyspark.sql.connect.proto.expressions_pb2.Expression.Alias
+        ]
+        | None = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "input", b"input", "name_expr_list", b"name_expr_list"
+        ],
+    ) -> None: ...
+
+global___WithColumns = WithColumns

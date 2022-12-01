@@ -318,10 +318,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1102",
+  "errorClass" : "INVALID_EXTRACT_FIELD",
   "messageParameters" : {
-    "field" : "not_supported",
-    "srcDataType" : "string"
+    "expr" : "\"c\"",
+    "field" : "`not_supported`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -340,10 +340,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1102",
+  "errorClass" : "INVALID_EXTRACT_FIELD",
   "messageParameters" : {
-    "field" : "not_supported",
-    "srcDataType" : "interval year to month"
+    "expr" : "\"i\"",
+    "field" : "`not_supported`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -362,10 +362,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1102",
+  "errorClass" : "INVALID_EXTRACT_FIELD",
   "messageParameters" : {
-    "field" : "not_supported",
-    "srcDataType" : "interval day to second"
+    "expr" : "\"j\"",
+    "field" : "`not_supported`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -375,7 +375,6 @@ org.apache.spark.sql.AnalysisException
     "fragment" : "extract(not_supported from j)"
   } ]
 }
-
 
 -- !query
 select date_part('year', c), date_part('year', ntz), date_part('year', i) from t
@@ -688,10 +687,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1102",
+  "errorClass" : "INVALID_EXTRACT_FIELD",
   "messageParameters" : {
-    "field" : "not_supported",
-    "srcDataType" : "string"
+    "expr" : "\"c\"",
+    "field" : "`not_supported`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -964,10 +963,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1102",
+  "errorClass" : "INVALID_EXTRACT_FIELD",
   "messageParameters" : {
-    "field" : "DAY",
-    "srcDataType" : "interval year to month"
+    "expr" : "\"INTERVAL '2-1' YEAR TO MONTH\"",
+    "field" : "`DAY`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -986,10 +985,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1102",
+  "errorClass" : "INVALID_EXTRACT_FIELD",
   "messageParameters" : {
-    "field" : "DAY",
-    "srcDataType" : "interval year to month"
+    "expr" : "\"INTERVAL '2-1' YEAR TO MONTH\"",
+    "field" : "`DAY`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1008,10 +1007,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1102",
+  "errorClass" : "INVALID_EXTRACT_FIELD",
   "messageParameters" : {
-    "field" : "not_supported",
-    "srcDataType" : "interval year to month"
+    "expr" : "\"INTERVAL '2-1' YEAR TO MONTH\"",
+    "field" : "`not_supported`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1134,10 +1133,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1102",
+  "errorClass" : "INVALID_EXTRACT_FIELD",
   "messageParameters" : {
-    "field" : "MONTH",
-    "srcDataType" : "interval day to second"
+    "expr" : "\"INTERVAL '123 12:34:56.789123' DAY TO SECOND\"",
+    "field" : "`MONTH`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1148,7 +1147,6 @@ org.apache.spark.sql.AnalysisException
   } ]
 }
 
-
 -- !query
 select date_part('not_supported', interval '123 12:34:56.789123123' DAY TO SECOND)
 -- !query schema
@@ -1156,10 +1154,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1102",
+  "errorClass" : "INVALID_EXTRACT_FIELD",
   "messageParameters" : {
-    "field" : "not_supported",
-    "srcDataType" : "interval day to second"
+    "expr" : "\"INTERVAL '123 12:34:56.789123' DAY TO SECOND\"",
+    "field" : "`not_supported`"
   },
   "queryContext" : [ {
     "objectType" : "",
