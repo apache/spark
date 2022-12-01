@@ -1643,11 +1643,6 @@
       "Cannot mix year-month and day-time fields: <literal>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0030" : {
-    "message" : [
-      "DataType <dataType> is not supported."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0031" : {
     "message" : [
       "Invalid number of buckets: <describe>."

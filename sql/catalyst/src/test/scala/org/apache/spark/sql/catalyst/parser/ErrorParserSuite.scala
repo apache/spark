@@ -265,8 +265,8 @@ class ErrorParserSuite extends AnalysisTest {
     // general bad types
     checkError(
       exception = parseException("SELECT cast(1 as badtype)"),
-      errorClass = "_LEGACY_ERROR_TEMP_0030",
-      parameters = Map("dataType" -> "badtype"),
+      errorClass = "UNSUPPORTED_DATATYPE",
+      parameters = Map("typeName" -> "\"BADTYPE\""),
       context = ExpectedContext(fragment = "badtype", start = 17, stop = 23))
     // special handling on char and varchar
     checkError(

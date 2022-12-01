@@ -233,7 +233,6 @@ org.apache.spark.sql.AnalysisException
 }
 
 
-
 -- !query
 select to_csv(named_struct('a', 1, 'b', 2), map('mode', 1))
 -- !query schema
