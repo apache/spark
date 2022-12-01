@@ -157,7 +157,7 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
   "messageParameters" : {
-    "sqlExprs" : "min(outer(t2a#x)) AS min(outer(t2.t2a))#x"
+    "sqlExprs" : "\"min(t2a) AS `min(outer(t2.t2a))`\""
   },
   "queryContext" : [ {
     "objectType" : "",
