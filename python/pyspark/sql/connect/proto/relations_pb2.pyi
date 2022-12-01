@@ -82,6 +82,7 @@ class Relation(google.protobuf.message.Message):
     DROP_FIELD_NUMBER: builtins.int
     TAIL_FIELD_NUMBER: builtins.int
     WITH_COLUMNS_FIELD_NUMBER: builtins.int
+    HINT_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -135,6 +136,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def with_columns(self) -> global___WithColumns: ...
     @property
+    def hint(self) -> global___Hint: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -174,6 +177,7 @@ class Relation(google.protobuf.message.Message):
         drop: global___Drop | None = ...,
         tail: global___Tail | None = ...,
         with_columns: global___WithColumns | None = ...,
+        hint: global___Hint | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -200,6 +204,8 @@ class Relation(google.protobuf.message.Message):
             b"fill_na",
             "filter",
             b"filter",
+            "hint",
+            b"hint",
             "join",
             b"join",
             "limit",
@@ -265,6 +271,8 @@ class Relation(google.protobuf.message.Message):
             b"fill_na",
             "filter",
             b"filter",
+            "hint",
+            b"hint",
             "join",
             b"join",
             "limit",
@@ -336,6 +344,7 @@ class Relation(google.protobuf.message.Message):
         "drop",
         "tail",
         "with_columns",
+        "hint",
         "fill_na",
         "drop_na",
         "replace",

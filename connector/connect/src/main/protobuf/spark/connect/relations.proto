@@ -53,6 +53,7 @@ message Relation {
     Drop drop = 21;
     Tail tail = 22;
     WithColumns with_columns = 23;
+    Hint hint = 24;
 
     // NA functions
     NAFill fill_na = 90;
