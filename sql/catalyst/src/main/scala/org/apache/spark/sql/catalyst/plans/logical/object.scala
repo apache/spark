@@ -690,13 +690,3 @@ case class CoGroup(
   override protected def withNewChildrenInternal(
       newLeft: LogicalPlan, newRight: LogicalPlan): CoGroup = copy(left = newLeft, right = newRight)
 }
-
-case class Bind(args: Map[String, Literal], child: LogicalPlan) extends UnaryNode {
-
-  override def output: Seq[Attribute] = child.output
-
-  final override val nodePatterns: Seq[TreePattern] = Seq(BIND)
-
-  override protected def withNewChildInternal(newChild: LogicalPlan): Bind =
-    copy(child = newChild)
-}
