@@ -38,6 +38,7 @@ import collections.abc
 import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.message
+import pyspark.sql.connect.proto.types_pb2
 import sys
 import typing
 
@@ -54,6 +55,32 @@ class Expression(google.protobuf.message.Message):
     """
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class Cast(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        EXPR_FIELD_NUMBER: builtins.int
+        CAST_TO_TYPE_FIELD_NUMBER: builtins.int
+        @property
+        def expr(self) -> global___Expression:
+            """(Required) the expression to be casted."""
+        @property
+        def cast_to_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+            """(Required) the data type that the expr to be casted to."""
+        def __init__(
+            self,
+            *,
+            expr: global___Expression | None = ...,
+            cast_to_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal["cast_to_type", b"cast_to_type", "expr", b"expr"],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal["cast_to_type", b"cast_to_type", "expr", b"expr"],
+        ) -> None: ...
 
     class Literal(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -582,6 +609,7 @@ class Expression(google.protobuf.message.Message):
     EXPRESSION_STRING_FIELD_NUMBER: builtins.int
     UNRESOLVED_STAR_FIELD_NUMBER: builtins.int
     ALIAS_FIELD_NUMBER: builtins.int
+    CAST_FIELD_NUMBER: builtins.int
     @property
     def literal(self) -> global___Expression.Literal: ...
     @property
@@ -594,6 +622,8 @@ class Expression(google.protobuf.message.Message):
     def unresolved_star(self) -> global___Expression.UnresolvedStar: ...
     @property
     def alias(self) -> global___Expression.Alias: ...
+    @property
+    def cast(self) -> global___Expression.Cast: ...
     def __init__(
         self,
         *,
@@ -603,12 +633,15 @@ class Expression(google.protobuf.message.Message):
         expression_string: global___Expression.ExpressionString | None = ...,
         unresolved_star: global___Expression.UnresolvedStar | None = ...,
         alias: global___Expression.Alias | None = ...,
+        cast: global___Expression.Cast | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
             "alias",
             b"alias",
+            "cast",
+            b"cast",
             "expr_type",
             b"expr_type",
             "expression_string",
@@ -628,6 +661,8 @@ class Expression(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "alias",
             b"alias",
+            "cast",
+            b"cast",
             "expr_type",
             b"expr_type",
             "expression_string",
@@ -651,6 +686,7 @@ class Expression(google.protobuf.message.Message):
         "expression_string",
         "unresolved_star",
         "alias",
+        "cast",
     ] | None: ...
 
 global___Expression = Expression

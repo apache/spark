@@ -539,6 +539,13 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       sparkTestRelation.withColumns(Map("id" -> lit(1024), "col_not_exist" -> lit(2048))))
   }
 
+  test("Test cast") {
+    comparePlans(
+      connectTestRelation.select("id".protoAttr.cast(
+        proto.DataType.newBuilder().setString(proto.DataType.String.getDefaultInstance).build())),
+      sparkTestRelation.select(col("id").cast(StringType)))
+  }
+
   private def createLocalRelationProtoByAttributeReferences(
       attrs: Seq[AttributeReference]): proto.Relation = {
     val localRelationBuilder = proto.LocalRelation.newBuilder()

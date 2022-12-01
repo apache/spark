@@ -35,6 +35,15 @@ message Expression {
     ExpressionString expression_string = 4;
     UnresolvedStar unresolved_star = 5;
     Alias alias = 6;
+    Cast cast = 7;
+  }
+
+  message Cast {
+    // (Required) the expression to be casted.
+    Expression expr = 1;
+
+    // (Required) the data type that the expr to be casted to.
+    DataType cast_to_type = 2;
   }
 
   message Literal {

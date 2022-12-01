@@ -87,6 +87,16 @@ package object dsl {
               .addArguments(expr)
               .addArguments(other))
           .build()
+
+      def cast(dataType: DataType): Expression =
+        Expression
+          .newBuilder()
+          .setCast(
+            Expression.Cast
+              .newBuilder()
+              .setExpr(expr)
+              .setCastToType(dataType))
+          .build()
     }
 
     def proto_min(e: Expression): Expression =
