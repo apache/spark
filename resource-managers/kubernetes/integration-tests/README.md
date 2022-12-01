@@ -286,7 +286,7 @@ to the wrapper scripts and using the wrapper scripts will simply set these appro
   <tr>
     <td><code>spark.kubernetes.test.volcano.maxConcurrencyJobNum</code></td>
     <td>
-      Set maximum number for concurrency job, it helps developers setting suitable resources according to test env in
+      Set maximum number for concurrency jobs, It helps developers setting suitable resources according to test env in
       volcano test.
     </td>
     <td></td>

@@ -313,7 +313,7 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
 
   test("SPARK-38187: Run SparkPi Jobs with minCPU", k8sTestTag, volcanoTag) {
     val groupName = generateGroupName("min-cpu")
-    // Create a queue with drvier + executor CPU capacity
+    // Create a queue with driver + executor CPU capacity
     val jobCores = driverCores + executorCores
     val queueName = s"queue-$jobCores"
     createOrReplaceQueue(name = queueName, cpu = Some(s"$jobCores"))
@@ -327,8 +327,8 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
          |  minResources:
          |    cpu: $jobCores
          |""".stripMargin
-    val file = Utils.createTempFile(testContent, HOST_PATH)
-    val path = HOST_PATH + file
+    val file = Utils.createTempFile(testContent, TEMP_DIR)
+    val path = TEMP_DIR + file
     // Submit 3 jobs with minCPU = 2
     val jobNum = 3
     (1 to jobNum).map { i =>
@@ -470,5 +470,5 @@ private[spark] object VolcanoTestsSuite extends SparkFunSuite {
   val DRIVER_REQUEST_CORES = sys.props.get(CONFIG_DRIVER_REQUEST_CORES).getOrElse("1")
   val EXECUTOR_REQUEST_CORES = sys.props.get(CONFIG_EXECUTOR_REQUEST_CORES).getOrElse("1")
   val VOLCANO_MAX_JOB_NUM = sys.props.get(CONFIG_KEY_VOLCANO_MAX_JOB_NUM).getOrElse("2")
-  val HOST_PATH = "/tmp/"
+  val TEMP_DIR = "/tmp/"
 }
