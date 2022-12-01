@@ -731,9 +731,7 @@ class Join(LogicalPlan):
                             merge_column = merge_column & c
                         else:
                             merge_column = c
-                    rel.join.join_condition.CopyFrom(
-                        cast(Column, merge_column).to_plan(session)  # ignore: union-attr
-                    )
+                    rel.join.join_condition.CopyFrom(cast(Column, merge_column).to_plan(session))
         rel.join.join_type = self.how
         return rel
 
