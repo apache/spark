@@ -126,11 +126,17 @@ message Expression {
   // An unresolved function is not explicitly bound to one explicit function, but the function
   // is resolved during analysis following Sparks name resolution rules.
   message UnresolvedFunction {
-    // (Required) Names parts for the unresolved function.
-    repeated string parts = 1;
+    // (Required) name (or unparsed name for user defined function) for the unresolved function.
+    string function_name = 1;
 
     // (Optional) Function arguments. Empty arguments are allowed.
     repeated Expression arguments = 2;
+
+    // (Required) Indicate if this is a user defined function.
+    //
+    // When it is not a user defined function, Connect will use the function name directly.
+    // When it is a user defined function, Connect will parse the function name first.
+    bool is_user_defined_function = 3;
   }
 
   // Expression as string.
