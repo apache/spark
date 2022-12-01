@@ -37,7 +37,7 @@ import org.scalatest.concurrent.Eventually
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.features.VolcanoFeatureStep
-import org.apache.spark.deploy.k8s.integrationtest.TestConstants.{CONFIG_DRIVER_REQUEST_CORES, CONFIG_EXECUTOR_REQUEST_CORES}
+import org.apache.spark.deploy.k8s.integrationtest.TestConstants.{CONFIG_DRIVER_REQUEST_CORES, CONFIG_EXECUTOR_REQUEST_CORES, CONFIG_KEY_VOLCANO_MAX_JOB_NUM}
 import org.apache.spark.internal.config.NETWORK_AUTH_ENABLED
 
 private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: KubernetesSuite =>
@@ -54,6 +54,7 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
   private val testResources: mutable.Set[HasMetadata] = mutable.Set.empty
   private val driverCores = java.lang.Double.parseDouble(DRIVER_REQUEST_CORES)
   private val executorCores = java.lang.Double.parseDouble(EXECUTOR_REQUEST_CORES)
+  private val maxConcurrencyJobNum = VOLCANO_MAX_JOB_NUM.toInt
 
   private def deletePodInTestGroup(): Unit = {
     testGroups.foreach { g =>
@@ -362,9 +363,10 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     // Disabled queue0 and enabled queue1
     createOrReplaceQueue(name = "queue0", cpu = Some("0.001"))
     createOrReplaceQueue(name = "queue1")
+    val QUEUE_NUMBER = 2
     // Submit jobs into disabled queue0 and enabled queue1
-    // Due to GA resource limited, only submit one job in each queue
-    val jobNum = if (sys.env.contains("GITHUB_ACTIONS")) 2 else 4
+    // By default is 4 (2 jobs in each queue)
+    val jobNum = maxConcurrencyJobNum * QUEUE_NUMBER
     (1 to jobNum).foreach { i =>
       Future {
         val queueName = s"queue${i % 2}"
@@ -386,8 +388,10 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     // Enable all queues
     createOrReplaceQueue(name = "queue1")
     createOrReplaceQueue(name = "queue0")
-    // Due to GA resource limited, only submit one job in each queue
-    val jobNum = if (sys.env.contains("GITHUB_ACTIONS")) 2 else 4
+    val QUEUE_NUMBER = 2
+    // Submit jobs into disabled queue0 and enabled queue1
+    // By default is 4 (2 jobs in each queue)
+    val jobNum = maxConcurrencyJobNum * QUEUE_NUMBER
     // Submit jobs into these two queues
     (1 to jobNum).foreach { i =>
       Future {
@@ -465,5 +469,6 @@ private[spark] object VolcanoTestsSuite extends SparkFunSuite {
   ).getAbsolutePath
   val DRIVER_REQUEST_CORES = sys.props.get(CONFIG_DRIVER_REQUEST_CORES).getOrElse("1")
   val EXECUTOR_REQUEST_CORES = sys.props.get(CONFIG_EXECUTOR_REQUEST_CORES).getOrElse("1")
+  val VOLCANO_MAX_JOB_NUM = sys.props.get(CONFIG_KEY_VOLCANO_MAX_JOB_NUM).getOrElse("2")
   val HOST_PATH = "/tmp/"
 }
