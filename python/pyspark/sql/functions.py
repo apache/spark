@@ -6839,6 +6839,36 @@ def array_distinct(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("array_distinct", col)
 
 
+def array_insert(col1: "ColumnOrName", col2: "ColumnOrName", col3: "ColumnOrName") -> Column:
+    """
+    Collection function: returns an array of the elements in the intersection of col1 and col2,
+    without duplicates.
+
+    .. versionadded:: 2.4.0
+
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or str
+        name of column containing array
+    col2 : :class:`~pyspark.sql.Column` or str
+        name of column containing array
+    col2 : :class:`~pyspark.sql.Column` or str
+        name of column containing array
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        an array of values in the intersection of two arrays.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([([1, 2, 3, 2],), ([4, 5, 5, 4],)], ['data'])
+    >>> df.select(array_distinct(df.data)).collect()
+    [Row(array_distinct(data)=[1, 2, 3]), Row(array_distinct(data)=[4, 5])]
+    """
+    return _invoke_function_over_columns("array_insert", col1, col2, col3)
+
+
 def array_intersect(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """
     Collection function: returns an array of the elements in the intersection of col1 and col2,

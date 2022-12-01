@@ -4041,6 +4041,17 @@ object functions {
   }
 
   /**
+   * Returns an array of the elements in the intersection of the given two arrays,
+   * without duplicates.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_insert(col1: Column, col2: Column, col3: Column): Column = withExpr {
+    ArrayInsert(col1.expr, col2.expr, col3.expr)
+  }
+
+  /**
    * Returns an array of the elements in the union of the given two arrays, without duplicates.
    *
    * @group collection_funcs

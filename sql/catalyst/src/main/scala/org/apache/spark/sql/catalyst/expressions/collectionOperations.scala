@@ -4600,3 +4600,28 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): ArrayExcept = copy(left = newLeft, right = newRight)
 }
+
+
+case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: Expression)
+  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
+
+  @transient protected lazy val elementType: DataType =
+    inputTypes.head.asInstanceOf[ArrayType].elementType
+
+  override def nullSafeEval(arr: Any, pos: Any, item: Any): Any = {
+    val newArray = new Array[Any](arr.asInstanceOf[ArrayData].numElements())
+    new GenericArrayData(newArray.slice(0, pos))
+  }
+
+  override def dataType: DataType = srcArrayExpr.dataType
+  override def inputTypes: Seq[DataType] = Seq(ArrayType, IntegerType, IntegerType)
+  override def first: Expression = srcArrayExpr
+  override def second: Expression = posExpr
+  override def third: Expression = itemExpr
+
+  override def prettyName: String = "array_insert"
+
+  override protected def withNewChildrenInternal(
+      newSrcArrayExpr: Expression, newPosExpr: Expression, newItemExpr: Expression): StringReplace =
+    copy(srcArrayExpr = newSrcArrayExpr, posExpr = newPosExpr, itemExpr = newItemExpr)
+}
