@@ -359,10 +359,13 @@ class AnalysisErrorSuite extends AnalysisTest {
     testRelation.join(testRelation, condition = Some(Literal(1))),
     "condition" :: "'1'" :: "not a boolean" :: Literal(1).dataType.simpleString :: Nil)
 
-  errorTest(
+  errorClassTest(
     "missing group by",
     testRelation2.groupBy($"a")($"b"),
-    "\"b\"" :: "COLUMN_NOT_IN_GROUP_BY_CLAUSE" :: Nil
+    "MISSING_AGGREGATION",
+    messageParameters = Map(
+      "expression" -> "\"b\"",
+      "expressionAnyValue" -> "\"any_value(b)\"")
   )
 
   errorTest(
