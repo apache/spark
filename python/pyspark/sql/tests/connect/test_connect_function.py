@@ -131,14 +131,14 @@ class SparkConnectFunctionTests(SparkConnectSQLTestCase):
 
         query = """
             SELECT * FROM VALUES
-            (false, 1, NULL), (false, NULL, 2.0), (NULL, 3, 3.0)
+            (false, 1, NULL), (true, NULL, 2.0), (NULL, 3, 3.0)
             AS tab(a, b, c)
             """
         # +-----+----+----+
         # |    a|   b|   c|
         # +-----+----+----+
         # |false|   1|null|
-        # |false|null| 2.0|
+        # | true|null| 2.0|
         # | null|   3| 3.0|
         # +-----+----+----+
 
