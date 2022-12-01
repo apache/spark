@@ -412,6 +412,7 @@ class SparkConnectPlanner(session: SparkSession) {
         transformExpressionString(exp.getExpressionString)
       case proto.Expression.ExprTypeCase.UNRESOLVED_STAR =>
         transformUnresolvedStar(exp.getUnresolvedStar)
+      case proto.Expression.ExprTypeCase.CAST => transformCast(exp.getCast)
       case _ =>
         throw InvalidPlanInput(
           s"Expression with ID: ${exp.getExprTypeCase.getNumber} is not supported")
@@ -578,6 +579,12 @@ class SparkConnectPlanner(session: SparkSession) {
     } else {
       UnresolvedStar(Some(regex.getTargetList.asScala.toSeq))
     }
+  }
+
+  private def transformCast(cast: proto.Expression.Cast): Expression = {
+    Cast(
+      transformExpression(cast.getExpr),
+      DataTypeProtoConverter.toCatalystType(cast.getCastToType))
   }
 
   private def transformSetOperation(u: proto.SetOperation): LogicalPlan = {
