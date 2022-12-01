@@ -4844,6 +4844,6 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   override def visitParameterLiteral(ctx: ParameterLiteralContext): Expression = withOrigin(ctx) {
     val name = ctx.getText
     assert(name.length > 1)
-    NamedParameter(name.substring(1))
+    Parameter(name.substring(1))
   }
 }

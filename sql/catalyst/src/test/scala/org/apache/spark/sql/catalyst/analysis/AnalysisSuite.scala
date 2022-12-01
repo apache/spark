@@ -1299,7 +1299,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   test("SPARK-41271: bind named parameters to literals") {
     withSQLConf(SQLConf.PARAMETERS_ENABLED.key -> "true") {
       comparePlans(
-        BindParameters(
+        Parameter.bind(
           plan = parsePlan("SELECT * FROM a LIMIT @limitA"),
           args = Map("limitA" -> Literal(10))),
         parsePlan("SELECT * FROM a LIMIT 10"))

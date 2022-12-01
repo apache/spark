@@ -1573,18 +1573,18 @@ class PlanParserSuite extends AnalysisTest {
     withSQLConf(SQLConf.PARAMETERS_ENABLED.key -> "true") {
       comparePlans(
         parsePlan("SELECT @param_1"),
-        Project(UnresolvedAlias(NamedParameter("param_1"), None) :: Nil, OneRowRelation()))
+        Project(UnresolvedAlias(Parameter("param_1"), None) :: Nil, OneRowRelation()))
       comparePlans(
         parsePlan("SELECT abs(@1Abc)"),
         Project(UnresolvedAlias(
           UnresolvedFunction(
             "abs" :: Nil,
-            NamedParameter("1Abc") :: Nil,
+            Parameter("1Abc") :: Nil,
             isDistinct = false), None) :: Nil,
           OneRowRelation()))
       comparePlans(
         parsePlan("SELECT * FROM a LIMIT @limitA"),
-        table("a").select(star()).limit(NamedParameter("limitA")))
+        table("a").select(star()).limit(Parameter("limitA")))
       // Invalid empty name and invalid symbol in a name
       Seq("@", "@-").foreach { name =>
         checkError(

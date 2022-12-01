@@ -19,17 +19,21 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.AnalysisErrorAt
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreePattern.{PARAMETER, TreePattern}
+import org.apache.spark.sql.errors.QueryErrorsBase
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, NullType}
 
 /**
  * The expression represents a named parameter that should be bound later
  * to a literal with concrete value and type.
  *
- * @param name The identifier of the parameter without the marker '@'.
+ * @param name The identifier of the parameter without the marker.
  */
-case class NamedParameter(name: String) extends LeafExpression {
+case class Parameter(name: String) extends LeafExpression {
   override def dataType: DataType = NullType
   override def nullable: Boolean = true
 
@@ -41,5 +45,36 @@ case class NamedParameter(name: String) extends LeafExpression {
 
   def eval(input: InternalRow): Any = {
     throw SparkException.internalError(s"Found the unbound parameter: $name.")
+  }
+}
+
+
+/**
+ * Finds all named parameters in the given plan and substitutes them by literal values
+ * evaluated from `args` values.
+ */
+object Parameter extends QueryErrorsBase {
+  def bind(plan: LogicalPlan, args: Map[String, Expression]): LogicalPlan = {
+    if (!args.isEmpty && SQLConf.get.parametersEnabled) {
+      args.filter(!_._2.foldable).headOption.foreach { case (name, expr) =>
+        expr.failAnalysis(
+          errorClass = "NON_FOLDABLE_SQL_ARG",
+          messageParameters = Map(
+            "name" -> name,
+            "expr" -> toSQLExpr(expr)))
+      }
+      plan.transformAllExpressionsWithPruning(_.containsPattern(PARAMETER)) {
+        case param @ Parameter(name) =>
+          if (args.contains(name)) {
+            args(name)
+          } else {
+            param.failAnalysis(
+              errorClass = "UNBOUND_PARAMETER",
+              messageParameters = Map("name" -> name))
+          }
+      }
+    } else {
+      plan
+    }
   }
 }
