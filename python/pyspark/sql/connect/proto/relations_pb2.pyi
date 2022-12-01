@@ -82,8 +82,10 @@ class Relation(google.protobuf.message.Message):
     DROP_FIELD_NUMBER: builtins.int
     TAIL_FIELD_NUMBER: builtins.int
     WITH_COLUMNS_FIELD_NUMBER: builtins.int
+    HINT_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
+    REPLACE_FIELD_NUMBER: builtins.int
     SUMMARY_FIELD_NUMBER: builtins.int
     CROSSTAB_FIELD_NUMBER: builtins.int
     UNKNOWN_FIELD_NUMBER: builtins.int
@@ -134,10 +136,14 @@ class Relation(google.protobuf.message.Message):
     @property
     def with_columns(self) -> global___WithColumns: ...
     @property
+    def hint(self) -> global___Hint: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
     def drop_na(self) -> global___NADrop: ...
+    @property
+    def replace(self) -> global___NAReplace: ...
     @property
     def summary(self) -> global___StatSummary:
         """stat functions"""
@@ -171,8 +177,10 @@ class Relation(google.protobuf.message.Message):
         drop: global___Drop | None = ...,
         tail: global___Tail | None = ...,
         with_columns: global___WithColumns | None = ...,
+        hint: global___Hint | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
+        replace: global___NAReplace | None = ...,
         summary: global___StatSummary | None = ...,
         crosstab: global___StatCrosstab | None = ...,
         unknown: global___Unknown | None = ...,
@@ -196,6 +204,8 @@ class Relation(google.protobuf.message.Message):
             b"fill_na",
             "filter",
             b"filter",
+            "hint",
+            b"hint",
             "join",
             b"join",
             "limit",
@@ -218,6 +228,8 @@ class Relation(google.protobuf.message.Message):
             b"rename_columns_by_same_length_names",
             "repartition",
             b"repartition",
+            "replace",
+            b"replace",
             "sample",
             b"sample",
             "set_op",
@@ -259,6 +271,8 @@ class Relation(google.protobuf.message.Message):
             b"fill_na",
             "filter",
             b"filter",
+            "hint",
+            b"hint",
             "join",
             b"join",
             "limit",
@@ -281,6 +295,8 @@ class Relation(google.protobuf.message.Message):
             b"rename_columns_by_same_length_names",
             "repartition",
             b"repartition",
+            "replace",
+            b"replace",
             "sample",
             b"sample",
             "set_op",
@@ -328,8 +344,10 @@ class Relation(google.protobuf.message.Message):
         "drop",
         "tail",
         "with_columns",
+        "hint",
         "fill_na",
         "drop_na",
+        "replace",
         "summary",
         "crosstab",
         "unknown",
@@ -594,6 +612,7 @@ class Join(google.protobuf.message.Message):
         JOIN_TYPE_RIGHT_OUTER: Join._JoinType.ValueType  # 4
         JOIN_TYPE_LEFT_ANTI: Join._JoinType.ValueType  # 5
         JOIN_TYPE_LEFT_SEMI: Join._JoinType.ValueType  # 6
+        JOIN_TYPE_CROSS: Join._JoinType.ValueType  # 7
 
     class JoinType(_JoinType, metaclass=_JoinTypeEnumTypeWrapper): ...
     JOIN_TYPE_UNSPECIFIED: Join.JoinType.ValueType  # 0
@@ -603,6 +622,7 @@ class Join(google.protobuf.message.Message):
     JOIN_TYPE_RIGHT_OUTER: Join.JoinType.ValueType  # 4
     JOIN_TYPE_LEFT_ANTI: Join.JoinType.ValueType  # 5
     JOIN_TYPE_LEFT_SEMI: Join.JoinType.ValueType  # 6
+    JOIN_TYPE_CROSS: Join.JoinType.ValueType  # 7
 
     LEFT_FIELD_NUMBER: builtins.int
     RIGHT_FIELD_NUMBER: builtins.int
@@ -1633,6 +1653,90 @@ class NADrop(google.protobuf.message.Message):
 
 global___NADrop = NADrop
 
+class NAReplace(google.protobuf.message.Message):
+    """Replaces old values with the corresponding values.
+    It will invoke 'Dataset.na.replace' (same as 'DataFrameNaFunctions.replace')
+    to compute the results.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class Replacement(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        OLD_VALUE_FIELD_NUMBER: builtins.int
+        NEW_VALUE_FIELD_NUMBER: builtins.int
+        @property
+        def old_value(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression.Literal:
+            """(Required) The old value.
+
+            Only 4 data types are supported now: null, bool, double, string.
+            """
+        @property
+        def new_value(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression.Literal:
+            """(Required) The new value.
+
+            Should be of the same data type with the old value.
+            """
+        def __init__(
+            self,
+            *,
+            old_value: pyspark.sql.connect.proto.expressions_pb2.Expression.Literal | None = ...,
+            new_value: pyspark.sql.connect.proto.expressions_pb2.Expression.Literal | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "new_value", b"new_value", "old_value", b"old_value"
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "new_value", b"new_value", "old_value", b"old_value"
+            ],
+        ) -> None: ...
+
+    INPUT_FIELD_NUMBER: builtins.int
+    COLS_FIELD_NUMBER: builtins.int
+    REPLACEMENTS_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    @property
+    def cols(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """(Optional) List of column names to consider.
+
+        When it is empty, all the type-compatible columns in the input relation will be considered.
+        """
+    @property
+    def replacements(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___NAReplace.Replacement
+    ]:
+        """(Optional) The value replacement mapping."""
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        cols: collections.abc.Iterable[builtins.str] | None = ...,
+        replacements: collections.abc.Iterable[global___NAReplace.Replacement] | None = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "cols", b"cols", "input", b"input", "replacements", b"replacements"
+        ],
+    ) -> None: ...
+
+global___NAReplace = NAReplace
+
 class RenameColumnsBySameLengthNames(google.protobuf.message.Message):
     """Rename columns on the input relation by the same length of names."""
 
@@ -1770,3 +1874,50 @@ class WithColumns(google.protobuf.message.Message):
     ) -> None: ...
 
 global___WithColumns = WithColumns
+
+class Hint(google.protobuf.message.Message):
+    """Specify a hint over a relation. Hint should have a name and optional parameters."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    NAME_FIELD_NUMBER: builtins.int
+    PARAMETERS_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    name: builtins.str
+    """(Required) Hint name.
+
+    Supported Join hints include BROADCAST, MERGE, SHUFFLE_HASH, SHUFFLE_REPLICATE_NL.
+
+    Supported partitioning hints include COALESCE, REPARTITION, REPARTITION_BY_RANGE.
+    """
+    @property
+    def parameters(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
+    ]:
+        """(Optional) Hint parameters."""
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        name: builtins.str = ...,
+        parameters: collections.abc.Iterable[
+            pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
+        ]
+        | None = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "input", b"input", "name", b"name", "parameters", b"parameters"
+        ],
+    ) -> None: ...
+
+global___Hint = Hint

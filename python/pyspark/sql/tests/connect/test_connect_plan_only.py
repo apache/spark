@@ -23,6 +23,7 @@ from pyspark.testing.sqlutils import have_pandas, pandas_requirement_message
 
 if have_pandas:
     import pyspark.sql.connect.proto as proto
+    from pyspark.sql.connect.column import Column
     from pyspark.sql.connect.readwriter import DataFrameReader
     from pyspark.sql.connect.function_builder import UserDefinedFunction, udf
     from pyspark.sql.types import StringType
@@ -59,6 +60,14 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         )._plan.to_proto(self.connect)
         self.assertIsNotNone(plan.root.join.join_condition)
 
+    def test_crossjoin(self):
+        # SPARK-41227: Test CrossJoin
+        left_input = self.connect.readTable(table_name=self.tbl_name)
+        right_input = self.connect.readTable(table_name=self.tbl_name)
+        crossJoin_plan = left_input.crossJoin(other=right_input)._plan.to_proto(self.connect)
+        join_plan = left_input.join(other=right_input, how="cross")._plan.to_proto(self.connect)
+        self.assertEqual(crossJoin_plan, join_plan)
+
     def test_filter(self):
         df = self.connect.readTable(table_name=self.tbl_name)
         plan = df.filter(df.col_name > 3)._plan.to_proto(self.connect)
@@ -68,8 +77,16 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
                 plan.root.filter.condition.unresolved_function, proto.Expression.UnresolvedFunction
             )
         )
-        self.assertEqual(plan.root.filter.condition.unresolved_function.parts, [">"])
+        self.assertEqual(plan.root.filter.condition.unresolved_function.function_name, ">")
         self.assertEqual(len(plan.root.filter.condition.unresolved_function.arguments), 2)
+
+    def test_filter_with_string_expr(self):
+        """SPARK-41297: filter supports SQL expression"""
+        df = self.connect.readTable(table_name=self.tbl_name)
+        plan = df.filter("id < 10")._plan.to_proto(self.connect)
+        self.assertIsNotNone(plan.root.filter)
+        self.assertIsNotNone(plan.root.filter.condition.expression_string)
+        self.assertEqual(plan.root.filter.condition.expression_string.expression, "id < 10")
 
     def test_fill_na(self):
         # SPARK-41128: Test fill na
@@ -118,6 +135,33 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         plan = df.dropna(how="all", subset="col_c")._plan.to_proto(self.connect)
         self.assertEqual(plan.root.drop_na.cols, ["col_c"])
         self.assertEqual(plan.root.drop_na.min_non_nulls, 1)
+
+    def test_replace(self):
+        # SPARK-41315: Test replace
+        df = self.connect.readTable(table_name=self.tbl_name)
+
+        plan = df.replace(10, 20)._plan.to_proto(self.connect)
+        self.assertEqual(plan.root.replace.cols, [])
+        self.assertEqual(plan.root.replace.replacements[0].old_value.double, 10.0)
+        self.assertEqual(plan.root.replace.replacements[0].new_value.double, 20.0)
+
+        plan = df.na.replace((1, 2, 3), (4, 5, 6), subset=("col_a", "col_b"))._plan.to_proto(
+            self.connect
+        )
+        self.assertEqual(plan.root.replace.cols, ["col_a", "col_b"])
+        self.assertEqual(plan.root.replace.replacements[0].old_value.double, 1.0)
+        self.assertEqual(plan.root.replace.replacements[0].new_value.double, 4.0)
+        self.assertEqual(plan.root.replace.replacements[1].old_value.double, 2.0)
+        self.assertEqual(plan.root.replace.replacements[1].new_value.double, 5.0)
+        self.assertEqual(plan.root.replace.replacements[2].old_value.double, 3.0)
+        self.assertEqual(plan.root.replace.replacements[2].new_value.double, 6.0)
+
+        plan = df.replace(["Alice", "Bob"], ["A", "B"], subset="col_x")._plan.to_proto(self.connect)
+        self.assertEqual(plan.root.replace.cols, ["col_x"])
+        self.assertEqual(plan.root.replace.replacements[0].old_value.string, "Alice")
+        self.assertEqual(plan.root.replace.replacements[0].new_value.string, "A")
+        self.assertEqual(plan.root.replace.replacements[1].old_value.string, "Bob")
+        self.assertEqual(plan.root.replace.replacements[1].new_value.string, "B")
 
     def test_summary(self):
         df = self.connect.readTable(table_name=self.tbl_name)
@@ -183,10 +227,36 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
             ["col_a", "col_b"],
         )
         self.assertEqual(plan.root.sort.is_global, True)
+        self.assertEqual(
+            plan.root.sort.sort_fields[0].direction,
+            proto.Sort.SortDirection.SORT_DIRECTION_ASCENDING,
+        )
+        self.assertEqual(
+            plan.root.sort.sort_fields[0].direction,
+            proto.Sort.SortNulls.SORT_NULLS_FIRST,
+        )
+        self.assertEqual(
+            plan.root.sort.sort_fields[1].direction,
+            proto.Sort.SortDirection.SORT_DIRECTION_ASCENDING,
+        )
+        self.assertEqual(
+            plan.root.sort.sort_fields[1].direction,
+            proto.Sort.SortNulls.SORT_NULLS_FIRST,
+        )
+
+        plan = df.filter(df.col_name > 3).orderBy("col_a", "col_b")._plan.to_proto(self.connect)
+        self.assertEqual(
+            [
+                f.expression.unresolved_attribute.unparsed_identifier
+                for f in plan.root.sort.sort_fields
+            ],
+            ["col_a", "col_b"],
+        )
+        self.assertEqual(plan.root.sort.is_global, True)
 
         plan = (
             df.filter(df.col_name > 3)
-            .sortWithinPartitions("col_a", "col_b")
+            .sortWithinPartitions(df.col_a.desc(), df.col_b.asc())
             ._plan.to_proto(self.connect)
         )
         self.assertEqual(
@@ -197,6 +267,22 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
             ["col_a", "col_b"],
         )
         self.assertEqual(plan.root.sort.is_global, False)
+        self.assertEqual(
+            plan.root.sort.sort_fields[0].direction,
+            proto.Sort.SortDirection.SORT_DIRECTION_DESCENDING,
+        )
+        self.assertEqual(
+            plan.root.sort.sort_fields[0].direction,
+            proto.Sort.SortNulls.SORT_NULLS_LAST,
+        )
+        self.assertEqual(
+            plan.root.sort.sort_fields[1].direction,
+            proto.Sort.SortDirection.SORT_DIRECTION_ASCENDING,
+        )
+        self.assertEqual(
+            plan.root.sort.sort_fields[1].direction,
+            proto.Sort.SortNulls.SORT_NULLS_FIRST,
+        )
 
     def test_drop(self):
         # SPARK-41169: test drop
@@ -218,10 +304,16 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         df = self.connect.readTable(table_name=self.tbl_name)
 
         distinct_plan = df.distinct()._plan.to_proto(self.connect)
+        self.assertTrue(distinct_plan.root.deduplicate.HasField("input"), "input must be set")
+
         self.assertEqual(distinct_plan.root.deduplicate.all_columns_as_keys, True)
         self.assertEqual(len(distinct_plan.root.deduplicate.column_names), 0)
 
         deduplicate_on_all_columns_plan = df.dropDuplicates()._plan.to_proto(self.connect)
+        self.assertEqual(deduplicate_on_all_columns_plan.root.deduplicate.all_columns_as_keys, True)
+        self.assertEqual(len(deduplicate_on_all_columns_plan.root.deduplicate.column_names), 0)
+
+        deduplicate_on_all_columns_plan = df.drop_duplicates()._plan.to_proto(self.connect)
         self.assertEqual(deduplicate_on_all_columns_plan.root.deduplicate.all_columns_as_keys, True)
         self.assertEqual(len(deduplicate_on_all_columns_plan.root.deduplicate.column_names), 0)
 
@@ -270,7 +362,8 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         u = udf(lambda x: "Martin", StringType())
         self.assertIsNotNone(u)
         expr = u("ThisCol", "ThatCol", "OtherCol")
-        self.assertTrue(isinstance(expr, UserDefinedFunction))
+        self.assertTrue(isinstance(expr, Column))
+        self.assertTrue(isinstance(cast(Column, expr)._expr, UserDefinedFunction))
         u_plan = expr.to_plan(self.connect)
         self.assertIsNotNone(u_plan)
 

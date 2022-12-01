@@ -27,13 +27,12 @@ import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.WriteOperation
 import org.apache.spark.sql.{Column, Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.AliasIdentifier
+import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedStar}
-import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.catalyst.plans.{logical, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
+import org.apache.spark.sql.catalyst.plans.{logical, Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, SubqueryAlias, Union}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -85,6 +84,7 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Relation.RelTypeCase.REPARTITION => transformRepartition(rel.getRepartition)
       case proto.Relation.RelTypeCase.FILL_NA => transformNAFill(rel.getFillNa)
       case proto.Relation.RelTypeCase.DROP_NA => transformNADrop(rel.getDropNa)
+      case proto.Relation.RelTypeCase.REPLACE => transformReplace(rel.getReplace)
       case proto.Relation.RelTypeCase.SUMMARY => transformStatSummary(rel.getSummary)
       case proto.Relation.RelTypeCase.CROSSTAB =>
         transformStatCrosstab(rel.getCrosstab)
@@ -232,6 +232,37 @@ class SparkConnectPlanner(session: SparkSession) {
     }
   }
 
+  private def transformReplace(rel: proto.NAReplace): LogicalPlan = {
+    def convert(value: proto.Expression.Literal): Any = {
+      value.getLiteralTypeCase match {
+        case proto.Expression.Literal.LiteralTypeCase.NULL => null
+        case proto.Expression.Literal.LiteralTypeCase.BOOLEAN => value.getBoolean
+        case proto.Expression.Literal.LiteralTypeCase.DOUBLE => value.getDouble
+        case proto.Expression.Literal.LiteralTypeCase.STRING => value.getString
+        case other => throw InvalidPlanInput(s"Unsupported value type: $other")
+      }
+    }
+
+    val replacement = mutable.Map.empty[Any, Any]
+    rel.getReplacementsList.asScala.foreach { replace =>
+      replacement.update(convert(replace.getOldValue), convert(replace.getNewValue))
+    }
+
+    if (rel.getColsCount == 0) {
+      Dataset
+        .ofRows(session, transformRelation(rel.getInput))
+        .na
+        .replace("*", replacement.toMap)
+        .logicalPlan
+    } else {
+      Dataset
+        .ofRows(session, transformRelation(rel.getInput))
+        .na
+        .replace(rel.getColsList.asScala.toSeq, replacement.toMap)
+        .logicalPlan
+    }
+  }
+
   private def transformStatSummary(rel: proto.StatSummary): LogicalPlan = {
     Dataset
       .ofRows(session, transformRelation(rel.getInput))
@@ -360,13 +391,8 @@ class SparkConnectPlanner(session: SparkSession) {
     } else {
       logical.OneRowRelation()
     }
-    // TODO: support the target field for *.
     val projection =
-      if (rel.getExpressionsCount == 1 && rel.getExpressions(0).hasUnresolvedStar) {
-        Seq(UnresolvedStar(Option.empty))
-      } else {
-        rel.getExpressionsList.asScala.map(transformExpression).map(UnresolvedAlias(_))
-      }
+      rel.getExpressionsList.asScala.map(transformExpression).map(UnresolvedAlias(_))
     logical.Project(projectList = projection.toSeq, child = baseRel)
   }
 
@@ -384,6 +410,9 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Expression.ExprTypeCase.ALIAS => transformAlias(exp.getAlias)
       case proto.Expression.ExprTypeCase.EXPRESSION_STRING =>
         transformExpressionString(exp.getExpressionString)
+      case proto.Expression.ExprTypeCase.UNRESOLVED_STAR =>
+        transformUnresolvedStar(exp.getUnresolvedStar)
+      case proto.Expression.ExprTypeCase.CAST => transformCast(exp.getCast)
       case _ =>
         throw InvalidPlanInput(
           s"Expression with ID: ${exp.getExprTypeCase.getNumber} is not supported")
@@ -510,14 +539,17 @@ class SparkConnectPlanner(session: SparkSession) {
    * @return
    */
   private def transformScalarFunction(fun: proto.Expression.UnresolvedFunction): Expression = {
-    if (fun.getPartsCount == 1 && fun.getParts(0).contains(".")) {
-      throw new IllegalArgumentException(
-        "Function identifier must be passed as sequence of name parts.")
+    if (fun.getIsUserDefinedFunction) {
+      UnresolvedFunction(
+        session.sessionState.sqlParser.parseFunctionIdentifier(fun.getFunctionName),
+        fun.getArgumentsList.asScala.map(transformExpression).toSeq,
+        isDistinct = false)
+    } else {
+      UnresolvedFunction(
+        FunctionIdentifier(fun.getFunctionName),
+        fun.getArgumentsList.asScala.map(transformExpression).toSeq,
+        isDistinct = false)
     }
-    UnresolvedFunction(
-      fun.getPartsList.asScala.toSeq,
-      fun.getArgumentsList.asScala.map(transformExpression).toSeq,
-      isDistinct = false)
   }
 
   private def transformAlias(alias: proto.Expression.Alias): NamedExpression = {
@@ -539,6 +571,20 @@ class SparkConnectPlanner(session: SparkSession) {
 
   private def transformExpressionString(expr: proto.Expression.ExpressionString): Expression = {
     session.sessionState.sqlParser.parseExpression(expr.getExpression)
+  }
+
+  private def transformUnresolvedStar(regex: proto.Expression.UnresolvedStar): Expression = {
+    if (regex.getTargetList.isEmpty) {
+      UnresolvedStar(Option.empty)
+    } else {
+      UnresolvedStar(Some(regex.getTargetList.asScala.toSeq))
+    }
+  }
+
+  private def transformCast(cast: proto.Expression.Cast): Expression = {
+    Cast(
+      transformExpression(cast.getExpr),
+      DataTypeProtoConverter.toCatalystType(cast.getCastToType))
   }
 
   private def transformSetOperation(u: proto.SetOperation): LogicalPlan = {
@@ -604,6 +650,7 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Join.JoinType.JOIN_TYPE_LEFT_OUTER => LeftOuter
       case proto.Join.JoinType.JOIN_TYPE_RIGHT_OUTER => RightOuter
       case proto.Join.JoinType.JOIN_TYPE_LEFT_SEMI => LeftSemi
+      case proto.Join.JoinType.JOIN_TYPE_CROSS => Cross
       case _ => throw InvalidPlanInput(s"Join type ${t} is not supported")
     }
   }
@@ -650,7 +697,8 @@ class SparkConnectPlanner(session: SparkSession) {
       rel.getGroupingExpressionsList.asScala
         .map(transformExpression)
         .map {
-          case x @ UnresolvedAttribute(_) => x
+          case ua @ UnresolvedAttribute(_) => ua
+          case a @ Alias(_, _) => a
           case x => UnresolvedAlias(x)
         }
 

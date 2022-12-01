@@ -26,7 +26,7 @@ from pyspark.testing.sqlutils import have_pandas, pandas_requirement_message
 if have_pandas:
     from pyspark.sql.connect.proto import Expression as ProtoExpression
     import pyspark.sql.connect.plan as p
-    import pyspark.sql.connect.column as col
+    from pyspark.sql.connect.column import Column
     import pyspark.sql.connect.functions as fun
 
 
@@ -36,11 +36,11 @@ class SparkConnectColumnExpressionSuite(PlanOnlyTestFixture):
         df = self.connect.with_plan(p.Read("table"))
 
         c1 = df.col_name
-        self.assertIsInstance(c1, col.Column)
+        self.assertIsInstance(c1, Column)
         c2 = df["col_name"]
-        self.assertIsInstance(c2, col.Column)
+        self.assertIsInstance(c2, Column)
         c3 = fun.col("col_name")
-        self.assertIsInstance(c3, col.Column)
+        self.assertIsInstance(c3, Column)
 
         # All Protos should be identical
         cp1 = c1.to_plan(None)
@@ -182,7 +182,7 @@ class SparkConnectColumnExpressionSuite(PlanOnlyTestFixture):
     def test_column_alias(self) -> None:
         # SPARK-40809: Support for Column Aliases
         col0 = fun.col("a").alias("martin")
-        self.assertEqual("Alias(Column(a), (martin))", str(col0))
+        self.assertEqual("Column<'Alias(ColumnReference(a), (martin))'>", str(col0))
 
         col0 = fun.col("a").alias("martin", metadata={"pii": True})
         plan = col0.to_plan(self.session.client)
@@ -197,12 +197,12 @@ class SparkConnectColumnExpressionSuite(PlanOnlyTestFixture):
         expr = fun.lit(10) < fun.lit(10)
         expr_plan = expr.to_plan(None)
         self.assertIsNotNone(expr_plan.unresolved_function)
-        self.assertEqual(expr_plan.unresolved_function.parts[0], "<")
+        self.assertEqual(expr_plan.unresolved_function.function_name, "<")
 
         expr = df.id % fun.lit(10) == fun.lit(10)
         expr_plan = expr.to_plan(None)
         self.assertIsNotNone(expr_plan.unresolved_function)
-        self.assertEqual(expr_plan.unresolved_function.parts[0], "==")
+        self.assertEqual(expr_plan.unresolved_function.function_name, "==")
 
         lit_fun = expr_plan.unresolved_function.arguments[1]
         self.assertIsInstance(lit_fun, ProtoExpression)

@@ -18,7 +18,6 @@
 syntax = 'proto3';
 
 import "spark/connect/types.proto";
-import "google/protobuf/any.proto";
 
 package spark.connect;
 
@@ -36,6 +35,15 @@ message Expression {
     ExpressionString expression_string = 4;
     UnresolvedStar unresolved_star = 5;
     Alias alias = 6;
+    Cast cast = 7;
+  }
+
+  message Cast {
+    // (Required) the expression to be casted.
+    Expression expr = 1;
+
+    // (Required) the data type that the expr to be casted to.
+    DataType cast_to_type = 2;
   }
 
   message Literal {
@@ -127,11 +135,17 @@ message Expression {
   // An unresolved function is not explicitly bound to one explicit function, but the function
   // is resolved during analysis following Sparks name resolution rules.
   message UnresolvedFunction {
-    // (Required) Names parts for the unresolved function.
-    repeated string parts = 1;
+    // (Required) name (or unparsed name for user defined function) for the unresolved function.
+    string function_name = 1;
 
     // (Optional) Function arguments. Empty arguments are allowed.
     repeated Expression arguments = 2;
+
+    // (Required) Indicate if this is a user defined function.
+    //
+    // When it is not a user defined function, Connect will use the function name directly.
+    // When it is a user defined function, Connect will parse the function name first.
+    bool is_user_defined_function = 3;
   }
 
   // Expression as string.
@@ -142,6 +156,9 @@ message Expression {
 
   // UnresolvedStar is used to expand all the fields of a relation or struct.
   message UnresolvedStar {
+    // (Optional) The target of the expansion, either be a table name or struct name, this
+    // is a list of identifiers that is the path of the expansion.
+    repeated string target = 1;
   }
 
   message Alias {

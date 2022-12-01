@@ -48,6 +48,7 @@ class SparkConnectToProtoSuite(PlanOnlyTestFixture):
             ("rightouter", proto.Join.JoinType.JOIN_TYPE_RIGHT_OUTER),
             ("leftanti", proto.Join.JoinType.JOIN_TYPE_LEFT_ANTI),
             ("leftsemi", proto.Join.JoinType.JOIN_TYPE_LEFT_SEMI),
+            ("cross", proto.Join.JoinType.JOIN_TYPE_CROSS),
         ]:
             joined_df = df_left.join(df_right, on=col("name"), how=join_type_str)._plan.to_proto(
                 self.connect
