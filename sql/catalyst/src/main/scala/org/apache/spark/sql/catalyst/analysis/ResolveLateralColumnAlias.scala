@@ -17,21 +17,20 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, LateralColumnAliasReference, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_ATTRIBUTE
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, CaseInsensitiveMap}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, UNRESOLVED_ATTRIBUTE}
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.MetadataBuilder
 
 /**
- * Resolve lateral column alias, which references the alias defined previously in the SELECT list,
- * - in Project inserting a new Project node with the referenced alias so that it can be
+ * Resolve lateral column alias, which references the alias defined previously in the SELECT list.
+ * - in Project, inserting a new Project node below with the referenced alias so that it can be
  *   resolved by other rules
- * - in Aggregate TODO.
+ * - in Aggregate, inserting the Project node above and fall back to the resolution of Project
  *
  * For Project, it rewrites by inserting a newly created Project plan between the original Project
  * and its child, pushing the referenced lateral column aliases to this new Project, and updating
@@ -46,14 +45,41 @@ import org.apache.spark.sql.types.MetadataBuilder
  * +- Project [child output, age AS a]
  *    +- Child
  *
- * For Aggregate TODO.
+ * For Aggregate, it first wraps the attribute resolved by lateral alias with
+ * [[LateralColumnAliasReference]].
+ * Before wrap (omit some cast or alias):
+ * Aggregate [dept#14] [dept#14 AS a#12, 'a + 1, avg(salary#16) AS b#13, 'b + avg(bonus#17)]
+ * +- Child [dept#14,name#15,salary#16,bonus#17]
+ *
+ * After wrap:
+ * Aggregate [dept#14] [dept#14 AS a#12, lca(a) + 1, avg(salary#16) AS b#13, lca(b) + avg(bonus#17)]
+ * +- Child [dept#14,name#15,salary#16,bonus#17]
+ *
+ * When the whole Aggregate is resolved, it inserts a [[Project]] above with the aggregation
+ * expression list, but extracts the [[AggregateExpression]] and grouping expressions in the
+ * list to the current Aggregate. It restores all the [[LateralColumnAliasReference]] back to
+ * [[UnresolvedAttribute]]. The problem falls back to the lateral alias resolution in Project.
+ *
+ * After restore:
+ * Project [dept#14 AS a#12, 'a + 1, avg(salary)#26 AS b#13, 'b + avg(bonus)#27]
+ * +- Aggregate [dept#14] [avg(salary#16) AS avg(salary)#26, avg(bonus#17) AS avg(bonus)#27,dept#14]
+ *    +- Child [dept#14,name#15,salary#16,bonus#17]
  */
 object ResolveLateralColumnAlias extends Rule[LogicalPlan] {
   private case class AliasEntry(alias: Alias, index: Int)
   def resolver: Resolver = conf.resolver
 
+  def unwrapLCAReference(exprs: Seq[NamedExpression]): Seq[NamedExpression] = {
+    exprs.map { expr =>
+      expr.transformWithPruning(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
+        case l: LateralColumnAliasReference =>
+          UnresolvedAttribute(l.nameParts)
+      }.asInstanceOf[NamedExpression]
+    }
+  }
   private def rewriteLateralColumnAlias(plan: LogicalPlan): LogicalPlan = {
-    plan.resolveOperatorsUpWithPruning(_.containsPattern(UNRESOLVED_ATTRIBUTE), ruleId) {
+    plan.resolveOperatorsUpWithPruning(
+      _.containsAnyPattern(UNRESOLVED_ATTRIBUTE, LATERAL_COLUMN_ALIAS_REFERENCE), ruleId) {
       case p @ Project(projectList, child) if p.childrenResolved
         && !Analyzer.containsStar(projectList)
         && projectList.exists(_.containsPattern(UNRESOLVED_ATTRIBUTE)) =>
@@ -72,7 +98,7 @@ object ResolveLateralColumnAlias extends Rule[LogicalPlan] {
               val aliases = aliasMap.get(u.nameParts.head).get
               aliases.size match {
                 case n if n > 1 =>
-                  throw QueryCompilationErrors.ambiguousLateralColumnAlias(u.name, n)
+                  throw QueryCompilationErrors.ambiguousLateralColumnAliasError(u.name, n)
                 case _ =>
                   val referencedAlias = aliases.head
                   // Only resolved alias can be the lateral column alias
@@ -117,58 +143,91 @@ object ResolveLateralColumnAlias extends Rule[LogicalPlan] {
           )
         }
 
+      // wrap LCA
+      // Implementation notes:
+      // In Aggregate, introducing and wrapping this resolved leaf expression
+      // LateralColumnAliasReference is especially needed because it needs an accurate condition to
+      // trigger adding a Project above and extracting aggregate functions or grouping expressions.
+      // Such operation can only be done once. With this LateralColumnAliasReference, the condition
+      // can simply be when the whole Aggregate is resolved. Otherwise, it can't really tell if
+      // all aggregate functions are created and resolved, because the lateral alias reference
+      // itself is unresolved.
       case agg @ Aggregate(groupingExpressions, aggregateExpressions, child)
         if agg.childrenResolved
-          && groupingExpressions.forall(_.resolved)
           && !Analyzer.containsStar(aggregateExpressions)
           && aggregateExpressions.exists(_.containsPattern(UNRESOLVED_ATTRIBUTE)) =>
-        val newAggNode = agg
 
-        // make sure all aggregate expressions are constructed and resolved, then push them down
-        val aggFuncCandidates = newAggNode.aggregateExpressions.flatMap { exp =>
-          exp.map {
-            // TODO: This is problematic. All functions operate on the lca won't be resolved, e.g.
-            //  concat(string(dept_salary_sum), ': dept', string(dept))
-            //  But without this condition, it may miss certain complex cases like
-            //  SELECT count(bonus), count(salary * 1.5 + 10000 + bonus * 1.0) AS a, a
-            //  when the second count is not resolved to aggregate expression, this rule incorrectly
-            //  applies
-            case unresolvedFunc: UnresolvedFunction => Some(unresolvedFunc)
-            case aggExp: AggregateExpression => Some(aggExp)
-            case _ => None
-          }.flatten
+        var aliasMap = CaseInsensitiveMap(Map[String, Seq[AliasEntry]]())
+        def insertIntoAliasMap(a: Alias, idx: Int): Unit = {
+          val prevAliases = aliasMap.getOrElse(a.name, Seq.empty[AliasEntry])
+          aliasMap += (a.name -> (prevAliases :+ AliasEntry(a, idx)))
         }
+        def wrapLCAReference(e: NamedExpression): NamedExpression = {
+          e.transformWithPruning(_.containsPattern(UNRESOLVED_ATTRIBUTE)) {
+            case u: UnresolvedAttribute if aliasMap.contains(u.nameParts.head) &&
+              Analyzer.resolveExpressionByPlanChildren(u, agg, resolver)
+                .isInstanceOf[UnresolvedAttribute] =>
+              val aliases = aliasMap.get(u.nameParts.head).get
+              aliases.size match {
+                case n if n > 1 =>
+                  throw QueryCompilationErrors.ambiguousLateralColumnAliasError(u.name, n)
+                case n if n == 1 && aliases.head.alias.resolved =>
+                  LateralColumnAliasReference(aliases.head.alias, u.nameParts)
+                case _ =>
+                  u
+              }
+          }.asInstanceOf[NamedExpression]
+        }
+
+        val newAggExprs = aggregateExpressions.zipWithIndex.map {
+          case (a: Alias, idx) =>
+            val LCAResolved = wrapLCAReference(a).asInstanceOf[Alias]
+            // insert the LCA-resolved alias instead of the unresolved one into map. If it is
+            // resolved, it can be referenced as LCA by later expressions
+            insertIntoAliasMap(LCAResolved, idx)
+            LCAResolved
+          case (e, _) =>
+            wrapLCAReference(e)
+        }
+        agg.copy(aggregateExpressions = newAggExprs)
+
+      case agg @ Aggregate(groupingExpressions, aggregateExpressions, _)
+        if agg.resolved
+          && aggregateExpressions.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
+
         val newAggExprs = collection.mutable.Set.empty[NamedExpression]
-        if (!aggFuncCandidates.isEmpty && aggFuncCandidates.forall(_.resolved)) {
-          val upExprs = newAggNode.aggregateExpressions.map { exp =>
-            exp.transformDown {
-              // TODO: dedup these aggregate expressions
-              case aggExp: AggregateExpression =>
-                val alias = Alias(aggExp, toPrettySQL(aggExp))(
-                  explicitMetadata = Some(new MetadataBuilder()
-                    .putString("__autoGeneratedAlias", "true")
-                    .build()))
-                newAggExprs += alias
-                alias.toAttribute
-              case e if e.resolved && groupingExpressions.exists(_.semanticEquals(e)) =>
-                // TODO: dedup these grouping expressions
-                val alias = Alias(e, toPrettySQL(e))(
-                  explicitMetadata = Some(new MetadataBuilder()
-                    .putString("__autoGeneratedAlias", "true")
-                    .build()))
-                newAggExprs += alias
-                alias.toAttribute
-            }.asInstanceOf[NamedExpression]
-          }
-          Project(
-            projectList = upExprs,
-            child = newAggNode.copy(
-              aggregateExpressions = newAggExprs.toSeq
-            )
-          )
-      } else {
-        newAggNode
-      }
+        val projectExprs = aggregateExpressions.map { exp =>
+          exp.transformDown {
+            case aggExpr: AggregateExpression =>
+              // TODO (improvement) dedup
+              // Doesn't support referencing a lateral alias in aggregate function
+              if (aggExpr.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
+                aggExpr.collectFirst {
+                  case lcaRef: LateralColumnAliasReference =>
+                    throw QueryCompilationErrors.LateralColumnAliasInAggFuncUnsupportedError(
+                      lcaRef.nameParts, aggExpr)
+                }
+              }
+              val ne = ResolveAliases.assignAliases(Seq(UnresolvedAlias(aggExpr))).head
+              newAggExprs += ne
+              ne.toAttribute
+            case e if groupingExpressions.exists(_.semanticEquals(e)) =>
+              // TODO (improvement) dedup
+              val alias = ResolveAliases.assignAliases(Seq(UnresolvedAlias(e))).head
+              newAggExprs += alias
+              alias.toAttribute
+          }.asInstanceOf[NamedExpression]
+        }
+        val unwrappedAggExprs = unwrapLCAReference(newAggExprs.toSeq)
+        val unwrappedProjectExprs = unwrapLCAReference(projectExprs)
+        Project(
+          projectList = unwrappedProjectExprs,
+          child = agg.copy(aggregateExpressions = unwrappedAggExprs)
+        )
+        // TODO: think about a corner case, when the Alias passed to LateralColumnAliasReference
+        //  contains a LateralColumnAliasReference. Is it safe to do a.toAttribute when resolving
+        //  the LateralColumnAliasReference?
+        // TODO withOrigin?
     }
   }
 

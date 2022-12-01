@@ -1227,6 +1227,11 @@
           "The target JDBC server does not support transactions and can only support ALTER TABLE with a single action."
         ]
       },
+      "LATERAL_COLUMN_ALIAS_IN_AGGREGATE_FUNC" : {
+        "message" : [
+          "Referencing a lateral column alias <lca> in the aggregate function <aggFunc>."
+        ]
+      },
       "LATERAL_JOIN_USING" : {
         "message" : [
           "JOIN USING with LATERAL correlation."
