@@ -603,6 +603,7 @@ class Join(google.protobuf.message.Message):
         JOIN_TYPE_RIGHT_OUTER: Join._JoinType.ValueType  # 4
         JOIN_TYPE_LEFT_ANTI: Join._JoinType.ValueType  # 5
         JOIN_TYPE_LEFT_SEMI: Join._JoinType.ValueType  # 6
+        JOIN_TYPE_CROSS: Join._JoinType.ValueType  # 7
 
     class JoinType(_JoinType, metaclass=_JoinTypeEnumTypeWrapper): ...
     JOIN_TYPE_UNSPECIFIED: Join.JoinType.ValueType  # 0
@@ -612,6 +613,7 @@ class Join(google.protobuf.message.Message):
     JOIN_TYPE_RIGHT_OUTER: Join.JoinType.ValueType  # 4
     JOIN_TYPE_LEFT_ANTI: Join.JoinType.ValueType  # 5
     JOIN_TYPE_LEFT_SEMI: Join.JoinType.ValueType  # 6
+    JOIN_TYPE_CROSS: Join.JoinType.ValueType  # 7
 
     LEFT_FIELD_NUMBER: builtins.int
     RIGHT_FIELD_NUMBER: builtins.int

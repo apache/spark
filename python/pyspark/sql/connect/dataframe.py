@@ -230,7 +230,30 @@ class DataFrame(object):
         return pdd.iloc[0, 0]
 
     def crossJoin(self, other: "DataFrame") -> "DataFrame":
-        ...
+        """
+        Returns the cartesian product with another :class:`DataFrame`.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            Right side of the cartesian product.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Joined DataFrame.
+        """
+        if self._plan is None:
+            raise Exception("Cannot cartesian join when self._plan is empty.")
+        if other._plan is None:
+            raise Exception("Cannot cartesian join when other._plan is empty.")
+
+        return DataFrame.withPlan(
+            plan.Join(left=self._plan, right=other._plan, on=None, how="cross"),
+            session=self._session,
+        )
 
     def coalesce(self, numPartitions: int) -> "DataFrame":
         """
