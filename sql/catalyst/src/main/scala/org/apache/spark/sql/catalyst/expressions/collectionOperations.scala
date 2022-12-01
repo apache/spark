@@ -4619,7 +4619,7 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
   override def second: Expression = posExpr
   override def third: Expression = itemExpr
 
-  override def prettyName: String = "array_insert"
+  override def prettyName: String = "array_inserts"
 
   override protected def withNewChildrenInternal(
       newSrcArrayExpr: Expression, newPosExpr: Expression, newItemExpr: Expression): StringReplace =
