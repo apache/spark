@@ -510,7 +510,7 @@ class Column:
             other: Any,
     ) -> "Column":
         """binary function"""
-        return _bin_op("notEqual")(self, other)
+        return _bin_op("!=")(self, other)
 
     # string methods
     def contains(self, other: Union[PrimitiveType, "Column"]) -> "Column":
