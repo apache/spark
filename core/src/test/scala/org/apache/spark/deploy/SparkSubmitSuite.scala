@@ -486,6 +486,34 @@ class SparkSubmitSuite
     conf.get("spark.kubernetes.driver.container.image") should be ("bar")
   }
 
+  test("SPARK-35084: includes jars passed in through --packages in k8s client driver mode") {
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val main = MavenCoordinate("my.great.lib", "mylib", "0.1")
+    val dep = MavenCoordinate("my.great.dep", "mylib", "0.1")
+    IvyTestUtils.withRepository(main, Some(dep.toString), None) { repo =>
+      val clArgs = Seq(
+        "--class", JarCreationTest.getClass.getName.stripSuffix("$"),
+        "--name", "testApp",
+        "--deploy-mode", "client",
+        "--proxy-user", "test.user",
+        "--class", "org.SomeClass",
+        "--master", "k8s://host:port",
+        "--packages", Seq(main, dep).mkString(","),
+        "--repositories", repo,
+        "--conf", "spark.ui.enabled=false",
+        "--conf", "spark.master.rest.enabled=false",
+        "--conf", "spark.kubernetes.namespace=spark",
+        "--conf", "spark.kubernetes.submitInDriver=true",
+        "--conf", s"spark.jars.ivySettings=${emptyIvySettings.getAbsolutePath()}",
+        unusedJar.toString,
+        "my.great.lib.MyLib", "my.great.dep.MyLib")
+
+      val appArgs = new SparkSubmitArguments(clArgs)
+      val (_, _, sparkConf, _) = submit.prepareSubmitEnvironment(appArgs)
+      sparkConf.get("spark.jars").contains("mylib") shouldBe true
+    }
+  }
+
   /**
    * Helper function for testing main class resolution on remote JAR files.
    *
