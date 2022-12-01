@@ -954,7 +954,8 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
             checkError(e,
               errorClass = "MISSING_AGGREGATION",
               parameters = Map(
-                "expression" -> "\"c1\""))
+                "expression" -> "\"c1\"",
+                "expressionAnyValue" -> "\"any_value(c1)\""))
           }
           withSQLConf(GROUP_BY_ALIASES.key -> "false") {
             val e = intercept[AnalysisException] {

@@ -245,7 +245,8 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "MISSING_AGGREGATION",
   "sqlState" : "42000",
   "messageParameters" : {
-    "expression" : "\"a\""
+    "expression" : "\"a\"",
+    "expressionAnyValue" : "\"any_value(a)\""
   }
 }
 
@@ -731,7 +732,8 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "MISSING_AGGREGATION",
   "sqlState" : "42000",
   "messageParameters" : {
-    "expression" : "\"a\""
+    "expression" : "\"a\"",
+    "expressionAnyValue" : "\"any_value(a)\""
   }
 }
 

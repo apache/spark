@@ -363,7 +363,9 @@ class AnalysisErrorSuite extends AnalysisTest {
     "missing group by",
     testRelation2.groupBy($"a")($"b"),
     "MISSING_AGGREGATION",
-    messageParameters = Map("expression" -> "\"b\"")
+    messageParameters = Map(
+      "expression" -> "\"b\"",
+      "expressionAnyValue" -> "\"any_value(b)\"")
   )
 
   errorTest(

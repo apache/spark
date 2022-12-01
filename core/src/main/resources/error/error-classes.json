@@ -827,7 +827,7 @@
   "MISSING_AGGREGATION" : {
     "message" : [
       "The non-aggregating expression <expression> is based on columns which are not participating in the GROUP BY clause.",
-      "Add the columns or the expression to the GROUP BY, aggregate the expression, or use \"any_value(<expression>)\" if you do not care which of the values within a group is returned."
+      "Add the columns or the expression to the GROUP BY, aggregate the expression, or use <expressionAnyValue> if you do not care which of the values within a group is returned."
     ],
     "sqlState" : "42000"
   },
