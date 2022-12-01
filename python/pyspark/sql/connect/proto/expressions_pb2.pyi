@@ -505,8 +505,21 @@ class Expression(google.protobuf.message.Message):
 
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+        TARGET_FIELD_NUMBER: builtins.int
+        @property
+        def target(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+            """(Optional) The target of the expansion, either be a table name or struct name, this
+            is a list of identifiers that is the path of the expansion.
+            """
         def __init__(
             self,
+            *,
+            target: collections.abc.Iterable[builtins.str] | None = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["target", b"target"]
         ) -> None: ...
 
     class Alias(google.protobuf.message.Message):
