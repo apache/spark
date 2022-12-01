@@ -723,7 +723,7 @@ class Join(LogicalPlan):
                     rel.join.join_condition.CopyFrom(self.to_attr_or_expression(self.on, session))
             elif len(self.on) > 0:
                 if isinstance(self.on[0], str):
-                    rel.join.using_columns.extend(self.on)
+                    rel.join.using_columns.extend(self.on)  # ignore: arg-type
                 else:
                     merge_column = None
                     for c in self.on:
@@ -731,7 +731,9 @@ class Join(LogicalPlan):
                             merge_column = merge_column & c
                         else:
                             merge_column = c
-                    rel.join.join_condition.CopyFrom(merge_column.to_plan(session))
+                    rel.join.join_condition.CopyFrom(
+                        merge_column.to_plan(session)  # ignore: union-attr
+                    )
         rel.join.join_type = self.how
         return rel
 
