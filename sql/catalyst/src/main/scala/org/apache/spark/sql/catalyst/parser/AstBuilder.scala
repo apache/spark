@@ -4842,6 +4842,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    * Create a named parameter which represents a literal with a non-bound value and unknown type.
    * */
   override def visitParameterLiteral(ctx: ParameterLiteralContext): Expression = withOrigin(ctx) {
-    NamedParameter(ctx.getText.stripPrefix("@"))
+    val name = ctx.getText
+    assert(name.length > 1)
+    NamedParameter(name.substring(1))
   }
 }
