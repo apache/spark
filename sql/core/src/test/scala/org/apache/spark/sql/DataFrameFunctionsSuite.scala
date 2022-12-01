@@ -5237,6 +5237,46 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       )
     )
   }
+
+  test("SPARK-41232 array_append -> Unit Test cases for the function ") {
+    val df1 = Seq((Array[Int](3, 2, 5, 1, 2), 3)).toDF("a", "b")
+    checkAnswer(df1.select(array_append(col("a"), lit(3))), Seq(Row(Seq(3, 2, 5, 1, 2, 3))))
+    val df2 = Seq((Array[String]("a", "b", "c"), "d")).toDF("a", "b")
+    checkAnswer(df2.select(array_append(col("a"), col("b"))), Seq(Row(Seq("a", "b", "c", "d"))))
+    val df3 = Seq((Array[String]("a", "b", "c"), 3)).toDF("a", "b")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df3.select(array_append(col("a"), col("b")))
+      },
+      errorClass = "DATATYPE_MISMATCH.ARRAY_ELEMENT_DIFF_TYPES",
+      parameters = Map(
+        "functionName" -> "array_append",
+        "arrayType" -> ArrayType(StringType).sql,
+        "elementType" -> IntegerType.sql,
+        "sqlExpr" -> "\"array_append(a, b)\"")
+    )
+
+    checkAnswer(df1.selectExpr("array_append(a, 3)"), Seq(Row(Seq(3, 2, 5, 1, 2, 3))))
+
+    checkAnswer(df2.selectExpr("array_append(a, b)"), Seq(Row(Seq("a", "b", "c", "d"))))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df3.selectExpr("array_append(a, b)")
+      },
+      errorClass = "DATATYPE_MISMATCH.ARRAY_ELEMENT_DIFF_TYPES",
+      parameters = Map(
+        "functionName" -> "array_append",
+        "arrayType" -> ArrayType(StringType).sql,
+        "elementType" -> IntegerType.sql,
+        "sqlExpr" -> "\"array_append(a, b)\""),
+      context = ExpectedContext(
+        fragment = "array_append(a, b)",
+        start = 0,
+        stop = 17
+      )
+    )
+  }
 }
 
 object DataFrameFunctionsSuite {

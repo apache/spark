@@ -264,6 +264,11 @@
           "The key of map cannot be/contain <keyType>."
         ]
       },
+      "ARRAY_ELEMENT_DIFF_TYPES" : {
+        "message" : [
+          "The array element type is <arrayType> and element to be added is of type <elementType>, should be same."
+        ]
+      },
       "INVALID_ORDERING_TYPE" : {
         "message" : [
           "The <functionName> does not support ordering on type <dataType>."

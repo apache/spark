@@ -4600,3 +4600,69 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): ArrayExcept = copy(left = newLeft, right = newRight)
 }
+
+/**
+ * Given an array, and another element append the element at the end of the array.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(expr, expr) - Prepend the element",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array('b', 'd', 'c', 'a'), array(1, 2, 3, 4));
+
+  """,
+  since = "3.4.0",
+  group = "collection_funcs")
+case class ArrayAppend(left: Expression, right: Expression)
+    extends BinaryExpression
+    with ImplicitCastInputTypes {
+  override def prettyName: String = "array_append"
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, AnyDataType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    (left.dataType, right.dataType) match {
+      case (ArrayType(e1, _), (e2)) if e1.sameType(e2) =>
+        TypeCheckResult.TypeCheckSuccess
+      case _ =>
+        DataTypeMismatch(
+          errorSubClass = "ARRAY_ELEMENT_DIFF_TYPES",
+          messageParameters = Map(
+            "functionName" -> prettyName,
+            "arrayType" -> left.dataType.sql,
+            "elementType" -> right.dataType.sql))
+    }
+  }
+  protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
+    copy(left = newLeft, right = newRight)
+
+  override protected def nullSafeEval(input1: Any, input2: Any): Any = {
+    val arrayData = input1.asInstanceOf[ArrayData]
+    val arrayElementType = left.dataType.asInstanceOf[ArrayType].elementType
+    val elementData = input2.asInstanceOf[AnyRef]
+    val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
+    val numberOfElements = arrayData.numElements() + 1
+    if (numberOfElements > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+      throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(numberOfElements)
+    }
+    val finalData = new Array[AnyRef](numberOfElements.toInt)
+    val arr = arrayData.toObjectArray(arrayElementType)
+    Array.copy(arr, 0, finalData, 0, arr.length)
+    finalData.update(numberOfElements - 1, elementData)
+    new GenericArrayData(finalData)
+  }
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(
+      ctx,
+      ev,
+      (left, right) => {
+        val expr = ctx.addReferenceObj("arraysAppendExpr", this)
+        s"${ev.value} = (ArrayData)$expr.nullSafeEval($left, $right);"
+      })
+  }
+
+  /**
+   * Returns the [[DataType]] of the result of evaluating this expression. It is invalid to query
+   * the dataType of an unresolved expression (i.e., when `resolved` == false).
+   */
+  override def dataType: DataType = left.dataType
+}

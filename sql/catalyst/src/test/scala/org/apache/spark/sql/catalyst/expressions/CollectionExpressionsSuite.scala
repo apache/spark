@@ -2596,4 +2596,47 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
           Date.valueOf("2017-02-12")))
     }
   }
+
+  test("SPARK-41232 ArrayAppend Expression Test") {
+    checkEvaluation(
+      ArrayAppend(
+        Literal.create(Seq(Double.NaN, 1d, 2d), ArrayType(DoubleType)),
+        Literal.create(3d, DoubleType)),
+      Seq(Double.NaN, 1d, 2d, 3d))
+    // Null entry check
+    checkEvaluation(
+      ArrayAppend(
+        Literal.create(Seq(null, 1d, 2d), ArrayType(DoubleType)),
+        Literal.create(3d, DoubleType)),
+      Seq(null, 1d, 2d, 3d))
+    checkEvaluation(
+      ArrayAppend(
+        Literal.create(
+          Seq(Date.valueOf("2017-04-06"), Date.valueOf("2017-03-23"), Date.valueOf("2017-03-10")),
+          ArrayType(DateType)),
+        Literal.create(Date.valueOf("2017-03-10"), DateType)),
+      Seq(
+        Date.valueOf("2017-04-06"),
+        Date.valueOf("2017-03-23"),
+        Date.valueOf("2017-03-10"),
+        Date.valueOf("2017-03-10")))
+    checkEvaluation(
+      ArrayAppend(
+        Literal.create(Seq("a", "b", "c"), ArrayType(StringType)),
+        Literal.create("c", StringType)),
+      Seq("a", "b", "c", "c"))
+
+    // Mixed type check
+    assert(
+      ArrayAppend(
+        Literal.create(Seq(null, 1d, 2d), ArrayType(DoubleType)),
+        Literal.create(3, IntegerType))
+        .checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "ARRAY_ELEMENT_DIFF_TYPES",
+          messageParameters = Map(
+            "functionName" -> "array_append",
+            "arrayType" -> ArrayType(DoubleType).sql,
+            "elementType" -> IntegerType.sql)))
+  }
 }
