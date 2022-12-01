@@ -234,8 +234,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
                 " is a reserved column name that cannot be read in combination with " +
                 s"${FileFormat.METADATA_NAME}.${FileFormat.ROW_INDEX} column.")
             }
-            Some(AttributeReference(
-              FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME, LongType)())
+            Some(AttributeReference(FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME, LongType)())
           case _ => None
         }
 
@@ -273,6 +272,9 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
             case FileFormat.ROW_INDEX =>
               fileFormatReaderGeneratedMetadataColumns
                 .find(_.name == FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME)
+                // Change the `_tmp_metadata_row_index` to `row_index`,
+                // and also change the nullability to not nullable,
+                // which is consistent with the nullability of `row_index` field
                 .get.withName(FileFormat.ROW_INDEX).withNullability(false)
           }
         }
