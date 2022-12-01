@@ -26,6 +26,7 @@ from pyspark.sql.types import TimestampType, DayTimeIntervalType, DateType
 import pyspark.sql.connect.proto as proto
 
 if TYPE_CHECKING:
+    from pyspark.sql.connect._typing import ColumnOrName
     from pyspark.sql.connect.client import SparkConnectClient
     import pyspark.sql.connect.proto as proto
 
@@ -73,7 +74,7 @@ def sql_expression(expr: str) -> "Column":
     return Column(SQLExpression(expr))
 
 
-class Expression(object):
+class Expression:
     """
     Expression base class.
     """
@@ -84,7 +85,7 @@ class Expression(object):
     def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
         ...
 
-    def __str__(self) -> str:
+    def __repr__(self) -> str:
         ...
 
     def alias(self, *alias: str, **kwargs: Any) -> "ColumnAlias":
@@ -124,18 +125,6 @@ class Expression(object):
         assert not kwargs, "Unexpected kwargs where passed: %s" % kwargs
         return ColumnAlias(self, list(alias), metadata)
 
-    def desc(self) -> "SortOrder":
-        ...
-
-    def asc(self) -> "SortOrder":
-        ...
-
-    def ascending(self) -> bool:
-        ...
-
-    def nullsLast(self) -> bool:
-        ...
-
     def name(self) -> str:
         ...
 
@@ -164,7 +153,7 @@ class ColumnAlias(Expression):
             exp.alias.expr.CopyFrom(self._parent.to_plan(session))
             return exp
 
-    def __str__(self) -> str:
+    def __repr__(self) -> str:
         return f"Alias({self._parent}, ({','.join(self._alias)}))"
 
 
@@ -244,7 +233,7 @@ class LiteralExpression(Expression):
 
         return expr
 
-    def __str__(self) -> str:
+    def __repr__(self) -> str:
         return f"Literal({self._value})"
 
 
@@ -258,7 +247,7 @@ class ColumnReference(Expression):
     def from_qualified_name(cls, name: str) -> "ColumnReference":
         return ColumnReference(name)
 
-    def __init__(self, name: Union[str, "Column"]) -> None:
+    def __init__(self, name: "ColumnOrName") -> None:
         super().__init__()
         if isinstance(name, str):
             self._unparsed_identifier = name
@@ -281,7 +270,7 @@ class ColumnReference(Expression):
     def asc(self) -> "SortOrder":
         return SortOrder(self, ascending=True, nullsLast=False)
 
-    def __str__(self) -> str:
+    def __repr__(self) -> str:
         return f"ColumnReference({self._unparsed_identifier})"
 
 
@@ -302,19 +291,23 @@ class SQLExpression(Expression):
 
 
 class SortOrder(Expression):
-    def __init__(self, col: Expression, ascending: bool = True, nullsLast: bool = False) -> None:
+    def __init__(self, child: Expression, ascending: bool = True, nullsLast: bool = False) -> None:
         super().__init__()
-        self.ref = col
+        self._child = child
         self._ascending = ascending
         self._nullsLast = nullsLast
 
-    def __str__(self) -> str:
-        return str(self.ref) + " ASC" if self.ascending else " DESC"
+    def __repr__(self) -> str:
+        return (
+            str(self._child)
+            + (" ASC" if self._ascending else " DESC")
+            + (" NULLS LAST" if self._nullsLast else " NULLS FIRST")
+        )
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
         # TODO(SPARK-41334): move SortField from relations.proto to expressions.proto
         sort = proto.Sort.SortField()
-        sort.expression.CopyFrom(self.ref.to_plan(session))
+        sort.expression.CopyFrom(self._child.to_plan(session))
 
         if self._ascending:
             sort.direction = proto.Sort.SortDirection.SORT_DIRECTION_ASCENDING
@@ -327,12 +320,6 @@ class SortOrder(Expression):
             sort.nulls = proto.Sort.SortNulls.SORT_NULLS_FIRST
 
         return cast(proto.Expression, sort)
-
-    def ascending(self) -> bool:
-        return self._ascending
-
-    def nullsLast(self) -> bool:
-        return self._nullsLast
 
 
 class ScalarFunctionExpression(Expression):
@@ -351,11 +338,11 @@ class ScalarFunctionExpression(Expression):
         fun.unresolved_function.arguments.extend([x.to_plan(session) for x in self._args])
         return fun
 
-    def __str__(self) -> str:
+    def __repr__(self) -> str:
         return f"({self._op} ({', '.join([str(x) for x in self._args])}))"
 
 
-class Column(object):
+class Column:
     """
     A column in a DataFrame. Column can refer to different things based on the
     wrapped expression. Some common examples include attribute references, functions,
@@ -701,11 +688,23 @@ class Column(object):
     def alias(self, *alias: str, **kwargs: Any) -> "Column":
         return Column(self._expr.alias(*alias, **kwargs))
 
-    def desc(self) -> "Column":
-        return Column(self._expr.desc())
-
     def asc(self) -> "Column":
-        return Column(self._expr.asc())
+        return self.asc_nulls_first()
+
+    def asc_nulls_first(self) -> "Column":
+        return Column(SortOrder(self._expr, ascending=True, nullsLast=False))
+
+    def asc_nulls_last(self) -> "Column":
+        return Column(SortOrder(self._expr, ascending=True, nullsLast=True))
+
+    def desc(self) -> "Column":
+        return self.desc_nulls_last()
+
+    def desc_nulls_first(self) -> "Column":
+        return Column(SortOrder(self._expr, ascending=False, nullsLast=False))
+
+    def desc_nulls_last(self) -> "Column":
+        return Column(SortOrder(self._expr, ascending=False, nullsLast=True))
 
     def name(self) -> str:
         return self._expr.name()
@@ -715,5 +714,5 @@ class Column(object):
     def _lit(self, x: Any) -> "Column":
         return Column(LiteralExpression(x))
 
-    def __str__(self) -> str:
-        return self._expr.__str__()
+    def __repr__(self) -> str:
+        return "Column<'%s'>" % self._expr.__repr__()
