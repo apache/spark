@@ -17,6 +17,7 @@
 
 from threading import RLock
 from typing import Optional, Any, Union, Dict, cast, overload
+import pandas as pd
 
 import pyspark.sql.types
 from pyspark.sql.connect.client import SparkConnectClient
@@ -24,6 +25,7 @@ from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.connect.plan import SQL, Range
 from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.utils import to_str
+from . import plan
 from ._typing import OptionalPrimitiveType
 
 
@@ -202,8 +204,69 @@ class SparkSession(object):
         # Parse the connection string.
         self._client = SparkConnectClient(connectionString)
 
-        # Create the reader
-        self.read = DataFrameReader(self)
+    @property
+    def read(self) -> "DataFrameReader":
+        """
+        Returns a :class:`DataFrameReader` that can be used to read data
+        in as a :class:`DataFrame`.
+
+        .. versionadded:: 3.4.0
+
+        Returns
+        -------
+        :class:`DataFrameReader`
+
+        Examples
+        --------
+        >>> spark.read
+        <pyspark.sql.connect.readwriter.DataFrameReader object ...>
+
+        Write a DataFrame into a JSON file and read it back.
+
+        >>> import tempfile
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     # Write a DataFrame into a JSON file
+        ...     spark.createDataFrame(
+        ...         [{"age": 100, "name": "Hyukjin Kwon"}]
+        ...     ).write.mode("overwrite").format("json").save(d)
+        ...
+        ...     # Read the JSON file as a DataFrame.
+        ...     spark.read.format('json').load(d).show()
+        +---+------------+
+        |age|        name|
+        +---+------------+
+        |100|Hyukjin Kwon|
+        +---+------------+
+        """
+        return DataFrameReader(self)
+
+    def createDataFrame(self, data: "pd.DataFrame") -> "DataFrame":
+        """
+        Creates a :class:`DataFrame` from a :class:`pandas.DataFrame`.
+
+        .. versionadded:: 3.4.0
+
+
+        Parameters
+        ----------
+        data : :class:`pandas.DataFrame`
+
+        Returns
+        -------
+        :class:`DataFrame`
+
+        Examples
+        --------
+        >>> import pandas
+        >>> pdf = pandas.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]})
+        >>> self.connect.createDataFrame(pdf).collect()
+        [Row(a=1, b='a'), Row(a=2, b='b'), Row(a=3, b='c')]
+
+        """
+        assert data is not None
+        if len(data) == 0:
+            raise ValueError("Input data cannot be empty")
+        return DataFrame.withPlan(plan.LocalRelation(data), self)
 
     @property
     def client(self) -> "SparkConnectClient":
@@ -227,7 +290,7 @@ class SparkSession(object):
     def range(
         self,
         start: int,
-        end: int,
+        end: Optional[int] = None,
         step: int = 1,
         numPartitions: Optional[int] = None,
     ) -> DataFrame:
@@ -253,6 +316,12 @@ class SparkSession(object):
         -------
         :class:`DataFrame`
         """
+        if end is None:
+            actual_end = start
+            start = 0
+        else:
+            actual_end = end
+
         return DataFrame.withPlan(
-            Range(start=start, end=end, step=step, num_partitions=numPartitions), self
+            Range(start=start, end=actual_end, step=step, num_partitions=numPartitions), self
         )

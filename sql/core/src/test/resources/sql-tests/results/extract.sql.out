@@ -376,6 +376,7 @@ org.apache.spark.sql.AnalysisException
   } ]
 }
 
+
 -- !query
 select date_part('year', c), date_part('year', ntz), date_part('year', i) from t
 -- !query schema
@@ -1146,6 +1147,7 @@ org.apache.spark.sql.AnalysisException
     "fragment" : "extract(MONTH from interval '123 12:34:56.789123123' DAY TO SECOND)"
   } ]
 }
+
 
 -- !query
 select date_part('not_supported', interval '123 12:34:56.789123123' DAY TO SECOND)

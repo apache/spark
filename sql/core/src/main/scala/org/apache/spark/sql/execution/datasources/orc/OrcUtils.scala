@@ -120,7 +120,7 @@ object OrcUtils extends Logging {
           val catalystType = toCatalystType(fieldType)
           fields += StructField(fieldName, catalystType)
       }
-      StructType(fields.toSeq)
+      StructType(fields.toArray)
     }
 
     def toArrayType(orcType: TypeDescription): ArrayType = {

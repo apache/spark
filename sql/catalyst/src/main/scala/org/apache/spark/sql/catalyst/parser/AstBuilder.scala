@@ -2918,7 +2918,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       case SqlBaseParser.MAP =>
         MapType(typedVisit(ctx.dataType(0)), typedVisit(ctx.dataType(1)))
       case SqlBaseParser.STRUCT =>
-        StructType(Option(ctx.complexColTypeList).toSeq.flatMap(visitComplexColTypeList))
+        StructType(Option(ctx.complexColTypeList).toArray.flatMap(visitComplexColTypeList))
     }
   }
 
@@ -2926,14 +2926,14 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    * Create top level table schema.
    */
   protected def createSchema(ctx: ColTypeListContext): StructType = {
-    StructType(Option(ctx).toSeq.flatMap(visitColTypeList))
+    StructType(Option(ctx).toArray.flatMap(visitColTypeList))
   }
 
   /**
    * Create top level table schema.
    */
   protected def createSchema(ctx: CreateOrReplaceTableColTypeListContext): StructType = {
-    StructType(Option(ctx).toSeq.flatMap(visitCreateOrReplaceTableColTypeList))
+    StructType(Option(ctx).toArray.flatMap(visitCreateOrReplaceTableColTypeList))
   }
 
   /**
@@ -3034,7 +3034,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    * Create a [[StructType]] from a sequence of [[StructField]]s.
    */
   protected def createStructType(ctx: ComplexColTypeListContext): StructType = {
-    StructType(Option(ctx).toSeq.flatMap(visitComplexColTypeList))
+    StructType(Option(ctx).toArray.flatMap(visitComplexColTypeList))
   }
 
   /**

@@ -24,7 +24,7 @@ import org.scalactic.TripleEqualsSupport.Spread
 import org.scalatest.exceptions.TestFailedException
 import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkFunSuite, SparkThrowable}
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
@@ -144,6 +144,47 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
       case (result: Row, expected: InternalRow) => result.toSeq == expected.toSeq(result.schema)
       case _ =>
         result == expected
+    }
+  }
+
+  protected def checkErrorInExpression[T <: SparkThrowable : ClassTag](
+      expression: => Expression,
+      errorClass: String,
+      parameters: Map[String, String] = Map.empty): Unit = {
+    checkErrorInExpression[T](expression, InternalRow.empty, errorClass, parameters)
+  }
+
+  protected def checkErrorInExpression[T <: SparkThrowable : ClassTag](
+      expression: => Expression,
+      inputRow: InternalRow,
+      errorClass: String,
+      parameters: Map[String, String]): Unit = {
+
+    def checkException(eval: => Unit, testMode: String): Unit = {
+      val modes = Seq(CodegenObjectFactoryMode.CODEGEN_ONLY, CodegenObjectFactoryMode.NO_CODEGEN)
+      withClue(s"($testMode)") {
+        val e = intercept[T] {
+          for (fallbackMode <- modes) {
+            withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> fallbackMode.toString) {
+              eval
+            }
+          }
+        }
+        checkError(
+          exception = e,
+          errorClass = errorClass,
+          parameters = parameters
+        )
+      }
+    }
+
+    // Make it as method to obtain fresh expression everytime.
+    def expr = prepareEvaluation(expression)
+
+    checkException(evaluateWithoutCodegen(expr, inputRow), "non-codegen mode")
+    checkException(evaluateWithMutableProjection(expr, inputRow), "codegen mode")
+    if (GenerateUnsafeProjection.canSupport(expr.dataType)) {
+      checkException(evaluateWithUnsafeProjection(expr, inputRow), "unsafe mode")
     }
   }
 

@@ -20,6 +20,7 @@ import scala.math.Ordering
 import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalStringType}
 import org.apache.spark.unsafe.types.UTF8String
 
 @Experimental
@@ -27,6 +28,7 @@ case class VarcharType(length: Int) extends AtomicType {
   require(length >= 0, "The length of varchar type cannot be negative.")
 
   private[sql] type InternalType = UTF8String
+  override def physicalDataType: PhysicalDataType = PhysicalStringType
   @transient private[sql] lazy val tag = typeTag[InternalType]
   private[sql] val ordering = implicitly[Ordering[InternalType]]
 

@@ -211,10 +211,10 @@ class SparkConnectServiceSuite extends SharedSparkSession {
                 .setUnresolvedFunction(
                   proto.Expression.UnresolvedFunction
                     .newBuilder()
-                    .addParts("abs")
+                    .setFunctionName("abs")
                     .addArguments(proto.Expression
                       .newBuilder()
-                      .setLiteral(proto.Expression.Literal.newBuilder().setI32(-1)))))
+                      .setLiteral(proto.Expression.Literal.newBuilder().setInteger(-1)))))
             .setInput(
               proto.Relation
                 .newBuilder()
