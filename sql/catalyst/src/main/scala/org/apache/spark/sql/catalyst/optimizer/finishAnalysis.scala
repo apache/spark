@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import java.time.{Instant, LocalDateTime}
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -140,18 +139,6 @@ object SpecialDatetimeValues extends Rule[LogicalPlan] {
           .flatMap(s => conv(dt)(s.toString, cast.zoneId))
           .map(Literal(_, dt))
           .getOrElse(cast)
-    }
-  }
-}
-
-object CheckUnboundParameters extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = {
-    plan.transformAllExpressionsWithPruning(_.containsPattern(PARAMETER)) {
-      case param @ NamedParameter(name) =>
-        throw new AnalysisException(
-          errorClass = "UNBOUND_PARAMETER",
-          messageParameters = Map("name" -> name),
-          origin = param.origin)
     }
   }
 }

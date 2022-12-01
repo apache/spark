@@ -48,7 +48,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.{After, ColumnPosition}
 import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction => V2AggregateFunction, ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{PartitionOverwriteMode, StoreAssignmentPolicy}
@@ -268,8 +268,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       CTESubstitution,
       WindowsSubstitution,
       EliminateUnions,
-      SubstituteUnresolvedOrdinals,
-      BindParameters),
+      SubstituteUnresolvedOrdinals),
     Batch("Disable Hints", Once,
       new ResolveHints.DisableHints),
     Batch("Hints", fixedPoint,
@@ -4136,16 +4135,27 @@ object RemoveTempResolvedColumn extends Rule[LogicalPlan] {
 }
 
 /**
- * The rule `BindParameters` in the `Substitution` batch substitutes named parameters by
- * theirs linked literals.
+ * Finds all named parameters in the given plan and substitudes them by literal values
+ * evaluated from `args` values.
  */
-object BindParameters extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = {
-    if (SQLConf.get.parametersEnabled) {
-      plan.resolveOperatorsUpWithPruning(_.containsPattern(BIND), ruleId) {
-        case Bind(args, child) =>
-          child.transformAllExpressionsWithPruning(_.containsPattern(PARAMETER), ruleId) {
-            case NamedParameter(name) if args.contains(name) => args(name)
+object BindParameters extends QueryErrorsBase {
+  def apply(plan: LogicalPlan, args: Map[String, Expression]): LogicalPlan = {
+    if (!args.isEmpty && SQLConf.get.parametersEnabled) {
+      args.filter(!_._2.foldable).headOption.foreach { case (name, expr) =>
+        expr.failAnalysis(
+          errorClass = "NON_FOLDABLE_SQL_ARG",
+          messageParameters = Map(
+            "name" -> name,
+            "expr" -> toSQLExpr(expr)))
+      }
+      plan.transformAllExpressionsWithPruning(_.containsPattern(PARAMETER)) {
+        case param @ NamedParameter(name) =>
+          if (args.contains(name)) {
+            args(name)
+          } else {
+            param.failAnalysis(
+              errorClass = "UNBOUND_PARAMETER",
+              messageParameters = Map("name" -> name))
           }
       }
     } else {

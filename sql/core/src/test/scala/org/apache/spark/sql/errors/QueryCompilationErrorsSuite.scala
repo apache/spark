@@ -671,14 +671,14 @@ class QueryCompilationErrorsSuite
   test("UNBOUND_PARAMETER - SPARK-41271: non-substituted parameters") {
     checkError(
       exception = intercept[AnalysisException] {
-        sql("select @abc").collect()
+        spark.sql("select @abc, @def", Map("abc" -> "1"))
       },
       errorClass = "UNBOUND_PARAMETER",
-      parameters = Map("name" -> "abc"),
+      parameters = Map("name" -> "def"),
       context = ExpectedContext(
-        fragment = "@abc",
-        start = 7,
-        stop = 10))
+        fragment = "@def",
+        start = 13,
+        stop = 16))
   }
 }
 

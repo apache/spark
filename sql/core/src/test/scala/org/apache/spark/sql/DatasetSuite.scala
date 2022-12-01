@@ -2248,13 +2248,16 @@ class DatasetSuite extends QueryTest
 
   test("SPARK-41271: bind parameters") {
     withSQLConf(SQLConf.PARAMETERS_ENABLED.key -> "true") {
-      val input = spark.range(10)
-        .selectExpr("id", "id % @div as c0")
-        .where("c0 = @constA")
-      val df = input.bind(Map(
-        "div" -> (3, IntegerType),
-        "constA" -> (1L, LongType)))
-      checkAnswer(df, Row(1, 1) :: Row(4, 1) :: Row(7, 1) :: Nil)
+      val sqlText =
+        """
+          |SELECT id, id % @div as c0
+          |FROM VALUES (0), (1), (2), (3), (4), (5), (6), (7), (8), (9) AS t(id)
+          |WHERE id < @constA
+          |""".stripMargin
+      val args = Map("div" -> "3", "constA" -> "4L")
+      checkAnswer(
+        spark.sql(sqlText, args),
+        Row(0, 0) :: Row(1, 1) :: Row(2, 2) :: Row(3, 0) :: Nil)
     }
   }
 }
