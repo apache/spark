@@ -204,8 +204,41 @@ class SparkSession(object):
         # Parse the connection string.
         self._client = SparkConnectClient(connectionString)
 
-        # Create the reader
-        self.read = DataFrameReader(self)
+    @property
+    def read(self) -> "DataFrameReader":
+        """
+        Returns a :class:`DataFrameReader` that can be used to read data
+        in as a :class:`DataFrame`.
+
+        .. versionadded:: 3.4.0
+
+        Returns
+        -------
+        :class:`DataFrameReader`
+
+        Examples
+        --------
+        >>> spark.read
+        <pyspark.sql.connect.readwriter.DataFrameReader object ...>
+
+        Write a DataFrame into a JSON file and read it back.
+
+        >>> import tempfile
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     # Write a DataFrame into a JSON file
+        ...     spark.createDataFrame(
+        ...         [{"age": 100, "name": "Hyukjin Kwon"}]
+        ...     ).write.mode("overwrite").format("json").save(d)
+        ...
+        ...     # Read the JSON file as a DataFrame.
+        ...     spark.read.format('json').load(d).show()
+        +---+------------+
+        |age|        name|
+        +---+------------+
+        |100|Hyukjin Kwon|
+        +---+------------+
+        """
+        return DataFrameReader(self)
 
     def createDataFrame(self, data: "pd.DataFrame") -> "DataFrame":
         """

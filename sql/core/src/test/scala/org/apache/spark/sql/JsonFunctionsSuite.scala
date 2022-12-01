@@ -848,11 +848,14 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq("""{"id":1,"city":"Moscow"}""").toDS().select(from_json($"value", schema, options)),
       Row(Row(1, "Moscow")))
 
-    val errMsg = intercept[AnalysisException] {
-      Seq(("""{"i":1}""", "i int")).toDF("json", "schema")
-        .select(from_json($"json", $"schema", options)).collect()
-    }.getMessage
-    assert(errMsg.contains("Schema should be specified in DDL format as a string literal"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        Seq(("""{"i":1}""", "i int")).toDF("json", "schema")
+          .select(from_json($"json", $"schema", options)).collect()
+      },
+      errorClass = "INVALID_SCHEMA.NON_STRING_LITERAL",
+      parameters = Map("inputSchema" -> "\"schema\"")
+    )
   }
 
   test("schema_of_json - infers the schema of foldable JSON string") {

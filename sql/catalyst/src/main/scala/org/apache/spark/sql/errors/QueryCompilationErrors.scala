@@ -1009,12 +1009,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("inputSchema" -> toSQLExpr(exp)))
   }
 
-  def schemaNotFoldableError(exp: Expression): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1093",
-      messageParameters = Map("expr" -> exp.sql))
-  }
-
   def schemaIsNotStructTypeError(dataType: DataType): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1094",

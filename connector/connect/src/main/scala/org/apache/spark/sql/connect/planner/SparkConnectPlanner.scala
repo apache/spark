@@ -85,6 +85,7 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Relation.RelTypeCase.REPARTITION => transformRepartition(rel.getRepartition)
       case proto.Relation.RelTypeCase.FILL_NA => transformNAFill(rel.getFillNa)
       case proto.Relation.RelTypeCase.DROP_NA => transformNADrop(rel.getDropNa)
+      case proto.Relation.RelTypeCase.REPLACE => transformReplace(rel.getReplace)
       case proto.Relation.RelTypeCase.SUMMARY => transformStatSummary(rel.getSummary)
       case proto.Relation.RelTypeCase.CROSSTAB =>
         transformStatCrosstab(rel.getCrosstab)
@@ -229,6 +230,37 @@ class SparkConnectPlanner(session: SparkSession) {
         dataset.na.drop(minNonNulls = rel.getMinNonNulls).logicalPlan
       case (false, false) =>
         dataset.na.drop().logicalPlan
+    }
+  }
+
+  private def transformReplace(rel: proto.NAReplace): LogicalPlan = {
+    def convert(value: proto.Expression.Literal): Any = {
+      value.getLiteralTypeCase match {
+        case proto.Expression.Literal.LiteralTypeCase.NULL => null
+        case proto.Expression.Literal.LiteralTypeCase.BOOLEAN => value.getBoolean
+        case proto.Expression.Literal.LiteralTypeCase.DOUBLE => value.getDouble
+        case proto.Expression.Literal.LiteralTypeCase.STRING => value.getString
+        case other => throw InvalidPlanInput(s"Unsupported value type: $other")
+      }
+    }
+
+    val replacement = mutable.Map.empty[Any, Any]
+    rel.getReplacementsList.asScala.foreach { replace =>
+      replacement.update(convert(replace.getOldValue), convert(replace.getNewValue))
+    }
+
+    if (rel.getColsCount == 0) {
+      Dataset
+        .ofRows(session, transformRelation(rel.getInput))
+        .na
+        .replace("*", replacement.toMap)
+        .logicalPlan
+    } else {
+      Dataset
+        .ofRows(session, transformRelation(rel.getInput))
+        .na
+        .replace(rel.getColsList.asScala.toSeq, replacement.toMap)
+        .logicalPlan
     }
   }
 
@@ -650,7 +682,8 @@ class SparkConnectPlanner(session: SparkSession) {
       rel.getGroupingExpressionsList.asScala
         .map(transformExpression)
         .map {
-          case x @ UnresolvedAttribute(_) => x
+          case ua @ UnresolvedAttribute(_) => ua
+          case a @ Alias(_, _) => a
           case x => UnresolvedAlias(x)
         }
 

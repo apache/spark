@@ -589,7 +589,7 @@ object StructType extends AbstractDataType {
           leftField.copy(
             dataType = unionLikeMerge(leftField.dataType, rightField.dataType),
             nullable = leftField.nullable || rightField.nullable)
-      }.toSeq
+      }
       StructType(newFields)
     })
 
@@ -626,7 +626,7 @@ object StructType extends AbstractDataType {
           newFields += f
         }
 
-      StructType(newFields.toSeq)
+      StructType(newFields.toArray)
     })
 
   private def mergeInternal(
@@ -713,7 +713,7 @@ object StructType extends AbstractDataType {
     if (newFields.isEmpty) {
       None
     } else {
-      Some(StructType(newFields.toSeq))
+      Some(StructType(newFields.toArray))
     }
   }
 }

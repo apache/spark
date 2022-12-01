@@ -15,28 +15,15 @@
 # limitations under the License.
 #
 
-from typing import (
-    Any,
-    List,
-    Optional,
-    Sequence,
-    Union,
-    cast,
-    TYPE_CHECKING,
-    Mapping,
-)
+from typing import Any, List, Optional, Sequence, Union, cast, TYPE_CHECKING, Mapping, Dict
 import pandas
 import pyarrow as pa
 import pyspark.sql.connect.proto as proto
-from pyspark.sql.connect.column import (
-    Column,
-    Expression,
-    SortOrder,
-)
+from pyspark.sql.connect.column import Column, SortOrder, ColumnReference
 
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import ColumnOrName, ExpressionOrString
+    from pyspark.sql.connect._typing import ColumnOrName
     from pyspark.sql.connect.client import SparkConnectClient
 
 
@@ -258,7 +245,7 @@ class Project(LogicalPlan):
 
     """
 
-    def __init__(self, child: Optional["LogicalPlan"], *columns: "ExpressionOrString") -> None:
+    def __init__(self, child: Optional["LogicalPlan"], *columns: "ColumnOrName") -> None:
         super().__init__(child)
         self._raw_columns = list(columns)
         self.alias: Optional[str] = None
@@ -267,16 +254,16 @@ class Project(LogicalPlan):
     def _verify_expressions(self) -> None:
         """Ensures that all input arguments are instances of Expression or String."""
         for c in self._raw_columns:
-            if not isinstance(c, (Expression, str)):
+            if not isinstance(c, (Column, str)):
                 raise InputValidationError(
-                    f"Only Expressions or String can be used for projections: '{c}'."
+                    f"Only Column or String can be used for projections: '{c}'."
                 )
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
         proj_exprs = []
         for c in self._raw_columns:
-            if isinstance(c, Expression):
+            if isinstance(c, Column):
                 proj_exprs.append(c.to_plan(session))
             elif c == "*":
                 exp = proto.Expression()
@@ -309,7 +296,7 @@ class Project(LogicalPlan):
 class WithColumns(LogicalPlan):
     """Logical plan object for a withColumns operation."""
 
-    def __init__(self, child: Optional["LogicalPlan"], cols_map: Mapping[str, Expression]) -> None:
+    def __init__(self, child: Optional["LogicalPlan"], cols_map: Mapping[str, Column]) -> None:
         super().__init__(child)
         self._cols_map = cols_map
 
@@ -341,7 +328,7 @@ class WithColumns(LogicalPlan):
 
 
 class Filter(LogicalPlan):
-    def __init__(self, child: Optional["LogicalPlan"], filter: Expression) -> None:
+    def __init__(self, child: Optional["LogicalPlan"], filter: Column) -> None:
         super().__init__(child)
         self.filter = filter
 
@@ -466,6 +453,7 @@ class Deduplicate(LogicalPlan):
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
         plan = proto.Relation()
+        plan.deduplicate.input.CopyFrom(self._child.plan(session))
         plan.deduplicate.all_columns_as_keys = self.all_columns_as_keys
         if self.column_names is not None:
             plan.deduplicate.column_names.extend(self.column_names)
@@ -495,7 +483,7 @@ class Sort(LogicalPlan):
     def __init__(
         self,
         child: Optional["LogicalPlan"],
-        columns: List[Union[SortOrder, Column, str]],
+        columns: List["ColumnOrName"],
         is_global: bool,
     ) -> None:
         super().__init__(child)
@@ -503,32 +491,19 @@ class Sort(LogicalPlan):
         self.is_global = is_global
 
     def col_to_sort_field(
-        self, col: Union[SortOrder, Column, str], session: "SparkConnectClient"
+        self, col: "ColumnOrName", session: "SparkConnectClient"
     ) -> proto.Sort.SortField:
-        if isinstance(col, SortOrder):
-            sf = proto.Sort.SortField()
-            sf.expression.CopyFrom(col.ref.to_plan(session))
-            sf.direction = (
-                proto.Sort.SortDirection.SORT_DIRECTION_ASCENDING
-                if col.ascending
-                else proto.Sort.SortDirection.SORT_DIRECTION_DESCENDING
-            )
-            sf.nulls = (
-                proto.Sort.SortNulls.SORT_NULLS_FIRST
-                if not col.nullsLast
-                else proto.Sort.SortNulls.SORT_NULLS_LAST
-            )
-            return sf
-        else:
-            sf = proto.Sort.SortField()
-            # Check string
-            if isinstance(col, Column):
-                sf.expression.CopyFrom(col.to_plan(session))
+        sort: Optional[SortOrder] = None
+        if isinstance(col, Column):
+            if isinstance(col._expr, SortOrder):
+                sort = col._expr
             else:
-                sf.expression.CopyFrom(self.unresolved_attr(col))
-            sf.direction = proto.Sort.SortDirection.SORT_DIRECTION_ASCENDING
-            sf.nulls = proto.Sort.SortNulls.SORT_NULLS_LAST
-            return sf
+                sort = SortOrder(col._expr)
+        else:
+            sort = SortOrder(ColumnReference(name=col))
+        assert sort is not None
+
+        return cast(proto.Sort.SortField, sort.to_plan(session))
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
@@ -653,13 +628,13 @@ class Aggregate(LogicalPlan):
         self,
         child: Optional["LogicalPlan"],
         grouping_cols: List[Column],
-        measures: Sequence[Expression],
+        measures: Sequence[Column],
     ) -> None:
         super().__init__(child)
         self.grouping_cols = grouping_cols
         self.measures = measures
 
-    def _convert_measure(self, m: Expression, session: "SparkConnectClient") -> proto.Expression:
+    def _convert_measure(self, m: Column, session: "SparkConnectClient") -> proto.Expression:
         proto_expr = proto.Expression()
         proto_expr.CopyFrom(m.to_plan(session))
         return proto_expr
@@ -1098,6 +1073,67 @@ class NADrop(LogicalPlan):
         """
 
 
+class NAReplace(LogicalPlan):
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        cols: Optional[List[str]],
+        replacements: Dict[Any, Any],
+    ) -> None:
+        super().__init__(child)
+
+        for old_value, new_value in replacements.items():
+            if old_value is not None:
+                assert isinstance(old_value, (bool, int, float, str))
+            if new_value is not None:
+                assert isinstance(new_value, (bool, int, float, str))
+
+        self.cols = cols
+        self.replacements = replacements
+
+    def _convert_value(self, v: Any) -> proto.Expression.Literal:
+        value = proto.Expression.Literal()
+        if v is None:
+            value.null = True
+        elif isinstance(v, bool):
+            value.boolean = v
+        elif isinstance(v, (int, float)):
+            value.double = float(v)
+        else:
+            value.string = v
+        return value
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+        plan = proto.Relation()
+        plan.replace.input.CopyFrom(self._child.plan(session))
+        if self.cols is not None and len(self.cols) > 0:
+            plan.replace.cols.extend(self.cols)
+        if len(self.replacements) > 0:
+            for old_value, new_value in self.replacements.items():
+                replacement = proto.NAReplace.Replacement()
+                replacement.old_value.CopyFrom(self._convert_value(old_value))
+                replacement.new_value.CopyFrom(self._convert_value(new_value))
+                plan.replace.replacements.append(replacement)
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return f"{i}" f"<NAReplace cols='{self.cols}' " f"replacements='{self.replacements}'>"
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>NADrop</b><br />
+              Cols: {self.cols} <br />
+              Replacements: {self.replacements} <br />
+              {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
 class StatSummary(LogicalPlan):
     def __init__(self, child: Optional["LogicalPlan"], statistics: List[str]) -> None:
         super().__init__(child)
@@ -1227,3 +1263,89 @@ class CreateView(LogicalPlan):
            </li>
         </ul>
         """
+
+
+class WriteOperation(LogicalPlan):
+    def __init__(self, child: "LogicalPlan") -> None:
+        super(WriteOperation, self).__init__(child)
+        self.source: Optional[str] = None
+        self.path: Optional[str] = None
+        self.table_name: Optional[str] = None
+        self.mode: Optional[str] = None
+        self.sort_cols: List[str] = []
+        self.partitioning_cols: List[str] = []
+        self.options: dict[str, Optional[str]] = {}
+        self.num_buckets: int = -1
+        self.bucket_cols: List[str] = []
+
+    def command(self, session: "SparkConnectClient") -> proto.Command:
+        assert self._child is not None
+        plan = proto.Command()
+        plan.write_operation.input.CopyFrom(self._child.plan(session))
+        if self.source is not None:
+            plan.write_operation.source = self.source
+        plan.write_operation.sort_column_names.extend(self.sort_cols)
+        plan.write_operation.partitioning_columns.extend(self.partitioning_cols)
+
+        if self.num_buckets > 0:
+            plan.write_operation.bucket_by.bucket_column_names.extend(self.bucket_cols)
+            plan.write_operation.bucket_by.num_buckets = self.num_buckets
+
+        for k in self.options:
+            if self.options[k] is None:
+                del plan.write_operation.options[k]
+            else:
+                plan.write_operation.options[k] = cast(str, self.options[k])
+
+        if self.table_name is not None:
+            plan.write_operation.table_name = self.table_name
+        elif self.path is not None:
+            plan.write_operation.path = self.path
+        else:
+            raise AssertionError(
+                "Invalid configuration of WriteCommand, neither path or table_name present."
+            )
+
+        if self.mode is not None:
+            wm = self.mode.lower()
+            if wm == "append":
+                plan.write_operation.mode = proto.WriteOperation.SaveMode.SAVE_MODE_APPEND
+            elif wm == "overwrite":
+                plan.write_operation.mode = proto.WriteOperation.SaveMode.SAVE_MODE_OVERWRITE
+            elif wm == "error":
+                plan.write_operation.mode = proto.WriteOperation.SaveMode.SAVE_MODE_ERROR_IF_EXISTS
+            elif wm == "ignore":
+                plan.write_operation.mode = proto.WriteOperation.SaveMode.SAVE_MODE_IGNORE
+            else:
+                raise ValueError(f"Unknown SaveMode value for DataFrame: {self.mode}")
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return (
+            f"{i}"
+            f"<WriteOperation source='{self.source}' "
+            f"path='{self.path} "
+            f"table_name='{self.table_name}' "
+            f"mode='{self.mode}' "
+            f"sort_cols='{self.sort_cols}' "
+            f"partitioning_cols='{self.partitioning_cols}' "
+            f"num_buckets='{self.num_buckets}' "
+            f"bucket_cols='{self.bucket_cols}' "
+            f"options='{self.options}'>"
+        )
+
+    def _repr_html_(self) -> str:
+        return (
+            f"<uL><li>WriteOperation <br />source='{self.source}'<br />"
+            f"path: '{self.path}<br />"
+            f"table_name: '{self.table_name}' <br />"
+            f"mode: '{self.mode}' <br />"
+            f"sort_cols: '{self.sort_cols}' <br />"
+            f"partitioning_cols: '{self.partitioning_cols}' <br />"
+            f"num_buckets: '{self.num_buckets}' <br />"
+            f"bucket_cols: '{self.bucket_cols}' <br />"
+            f"options: '{self.options}'<br />"
+            f"</li></ul>"
+        )
+        pass
