@@ -875,7 +875,11 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         connect_df = self.connect.read.table(self.tbl_name)
         spark_df = self.spark.read.table(self.tbl_name)
         self.assert_eq(
-            set(connect_df.select("id").join(other=connect_df.select("name"), how="cross").toPandas()),
+            set(
+                connect_df.select("id")
+                .join(other=connect_df.select("name"), how="cross")
+                .toPandas()
+            ),
             set(spark_df.select("id").join(other=spark_df.select("name"), how="cross").toPandas()),
         )
         self.assert_eq(
