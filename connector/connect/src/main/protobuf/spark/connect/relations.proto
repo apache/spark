@@ -53,6 +53,7 @@ message Relation {
     Drop drop = 21;
     Tail tail = 22;
     WithColumns with_columns = 23;
+    Hint hint = 24;
 
     // NA functions
     NAFill fill_na = 90;
@@ -540,4 +541,20 @@ message WithColumns {
   //
   // An exception is thrown when duplicated names are present in the mapping.
   repeated Expression.Alias name_expr_list = 2;
+}
+
+// Specify a hint over a relation. Hint should have a name and optional parameters.
+message Hint {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) Hint name.
+  //
+  // Supported Join hints include BROADCAST, MERGE, SHUFFLE_HASH, SHUFFLE_REPLICATE_NL.
+  //
+  // Supported partitioning hints include COALESCE, REPARTITION, REPARTITION_BY_RANGE.
+  string name = 2;
+
+  // (Optional) Hint parameters.
+  repeated Expression.Literal parameters = 3;
 }
