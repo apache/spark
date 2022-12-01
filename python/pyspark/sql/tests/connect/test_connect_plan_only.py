@@ -77,7 +77,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
                 plan.root.filter.condition.unresolved_function, proto.Expression.UnresolvedFunction
             )
         )
-        self.assertEqual(plan.root.filter.condition.unresolved_function.parts, [">"])
+        self.assertEqual(plan.root.filter.condition.unresolved_function.function_name, ">")
         self.assertEqual(len(plan.root.filter.condition.unresolved_function.arguments), 2)
 
     def test_filter_with_string_expr(self):

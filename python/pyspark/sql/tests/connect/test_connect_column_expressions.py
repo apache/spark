@@ -197,12 +197,12 @@ class SparkConnectColumnExpressionSuite(PlanOnlyTestFixture):
         expr = fun.lit(10) < fun.lit(10)
         expr_plan = expr.to_plan(None)
         self.assertIsNotNone(expr_plan.unresolved_function)
-        self.assertEqual(expr_plan.unresolved_function.parts[0], "<")
+        self.assertEqual(expr_plan.unresolved_function.function_name, "<")
 
         expr = df.id % fun.lit(10) == fun.lit(10)
         expr_plan = expr.to_plan(None)
         self.assertIsNotNone(expr_plan.unresolved_function)
-        self.assertEqual(expr_plan.unresolved_function.parts[0], "==")
+        self.assertEqual(expr_plan.unresolved_function.function_name, "==")
 
         lit_fun = expr_plan.unresolved_function.arguments[1]
         self.assertIsInstance(lit_fun, ProtoExpression)

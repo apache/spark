@@ -347,7 +347,7 @@ class ScalarFunctionExpression(Expression):
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
         fun = proto.Expression()
-        fun.unresolved_function.parts.append(self._op)
+        fun.unresolved_function.function_name = self._op
         fun.unresolved_function.arguments.extend([x.to_plan(session) for x in self._args])
         return fun
 
