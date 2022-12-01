@@ -2636,7 +2636,8 @@ object SQLConf {
         " disabled.")
       .version("3.4.0")
       .intConf
-      .checkValue(_ >= -1, "The threshold of window group limit must be 0 or positive integer.")
+      .checkValue(_ >= -1,
+        "The threshold of window group limit must be -1, 0 or positive integer.")
       .createWithDefault(1000)
 
   val SESSION_WINDOW_BUFFER_IN_MEMORY_THRESHOLD =

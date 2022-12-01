@@ -1380,6 +1380,10 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   test("SPARK-37099: " +
     "Introduce the group limit of Window for rank-based filter to optimize top-k computation") {
 
+    val rankLikeFunctions = Seq("row_number()", "rank(value)", "dense_rank(value)")
+    val supportedConditions = Seq("rn == 2", "rn < 3", "rn <= 2")
+    val unsupportedConditions = Seq("rn > 2", "rn == 1 OR length(value) > 2")
+
     def checkWindowGroupLimitExec(planned: SparkPlan): Unit = {
       val windowGroupLimits = collect(planned) {
         case windowGroupLimit: WindowGroupLimitExec => windowGroupLimit
