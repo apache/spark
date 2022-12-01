@@ -26,10 +26,7 @@ from typing import Union, Optional
 import datetime
 import decimal
 
-from pyspark.sql.connect.column import ScalarFunctionExpression, Expression, Column
-from pyspark.sql.connect.function_builder import UserDefinedFunction
-
-ExpressionOrString = Union[Expression, str]
+from pyspark.sql.connect.column import Column
 
 ColumnOrName = Union[Column, str]
 
@@ -45,10 +42,10 @@ DateTimeLiteral = Union[datetime.datetime, datetime.date]
 
 
 class FunctionBuilderCallable(Protocol):
-    def __call__(self, *_: ExpressionOrString) -> ScalarFunctionExpression:
+    def __call__(self, *_: ColumnOrName) -> Column:
         ...
 
 
 class UserDefinedFunctionCallable(Protocol):
-    def __call__(self, *_: ColumnOrName) -> UserDefinedFunction:
+    def __call__(self, *_: ColumnOrName) -> Column:
         ...

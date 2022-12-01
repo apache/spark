@@ -26,10 +26,12 @@ import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.annotation.{JsonDeserialize, JsonSerialize}
 import com.fasterxml.jackson.databind.node._
 
+import org.apache.spark.SparkThrowable
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.util.DataTypeJsonUtils.{DataTypeJsonDeserializer, DataTypeJsonSerializer}
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -117,6 +119,8 @@ abstract class DataType extends AbstractDataType {
   override private[sql] def defaultConcreteType: DataType = this
 
   override private[sql] def acceptsType(other: DataType): Boolean = sameType(other)
+
+  def physicalDataType: PhysicalDataType = UninitializedPhysicalType
 }
 
 
@@ -134,7 +138,6 @@ object DataType {
     parseTypeWithFallback(
       ddl,
       CatalystSqlParser.parseDataType,
-      "Cannot parse the data type: ",
       fallbackParser = str => CatalystSqlParser.parseTableSchema(str))
   }
 
@@ -145,24 +148,25 @@ object DataType {
    *
    * @param schema The schema string to parse by `parser` or `fallbackParser`.
    * @param parser The function that should be invoke firstly.
-   * @param errorMsg The error message for `parser`.
    * @param fallbackParser The function that is called when `parser` fails.
    * @return The data type parsed from the `schema` schema.
    */
   def parseTypeWithFallback(
       schema: String,
       parser: String => DataType,
-      errorMsg: String,
       fallbackParser: String => DataType): DataType = {
     try {
       parser(schema)
     } catch {
-      case NonFatal(e1) =>
+      case NonFatal(e) =>
         try {
           fallbackParser(schema)
         } catch {
-          case NonFatal(e2) =>
-            throw QueryCompilationErrors.failedFallbackParsingError(errorMsg, e1, e2)
+          case NonFatal(_) =>
+            if (e.isInstanceOf[SparkThrowable]) {
+              throw e
+            }
+            throw QueryCompilationErrors.schemaFailToParseError(schema, e)
         }
     }
   }

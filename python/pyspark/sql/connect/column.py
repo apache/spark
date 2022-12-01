@@ -14,34 +14,63 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import uuid
-from typing import cast, get_args, TYPE_CHECKING, Callable, Any
+
+from typing import get_args, TYPE_CHECKING, Callable, Any, Union, overload, cast
 
 import json
 import decimal
 import datetime
 
+from pyspark.sql.types import TimestampType, DayTimeIntervalType, DateType
+
 import pyspark.sql.connect.proto as proto
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect.client import RemoteSparkSession
+    from pyspark.sql.connect.client import SparkConnectClient
     import pyspark.sql.connect.proto as proto
+
+# TODO(SPARK-41329): solve the circular import between _typing and this class
+# if we want to reuse _type.PrimitiveType
+PrimitiveType = Union[bool, float, int, str]
+
+
+def _func_op(name: str, doc: str = "") -> Callable[["Column"], "Column"]:
+    def _(self: "Column") -> "Column":
+        return scalar_function(name, self)
+
+    return _
 
 
 def _bin_op(
     name: str, doc: str = "binary function", reverse: bool = False
-) -> Callable[["Column", Any], "Expression"]:
-    def _(self: "Column", other: Any) -> "Expression":
+) -> Callable[["Column", Any], "Column"]:
+    def _(self: "Column", other: Any) -> "Column":
         from pyspark.sql.connect._typing import PrimitiveType
+        from pyspark.sql.connect.functions import lit
 
         if isinstance(other, get_args(PrimitiveType)):
-            other = LiteralExpression(other)
+            other = lit(other)
         if not reverse:
-            return ScalarFunctionExpression(name, self, other)
+            return scalar_function(name, self, other)
         else:
-            return ScalarFunctionExpression(name, other, self)
+            return scalar_function(name, other, self)
 
     return _
+
+
+def _unary_op(name: str, doc: str = "unary function") -> Callable[["Column"], "Column"]:
+    def _(self: "Column") -> "Column":
+        return scalar_function(name, self)
+
+    return _
+
+
+def scalar_function(op: str, *args: "Column") -> "Column":
+    return Column(ScalarFunctionExpression(op, *args))
+
+
+def sql_expression(expr: str) -> "Column":
+    return Column(SQLExpression(expr))
 
 
 class Expression(object):
@@ -49,38 +78,10 @@ class Expression(object):
     Expression base class.
     """
 
-    __gt__ = _bin_op(">")
-    __lt__ = _bin_op("<")
-    __add__ = _bin_op("+")
-    __sub__ = _bin_op("-")
-    __mul__ = _bin_op("*")
-    __div__ = _bin_op("/")
-    __truediv__ = _bin_op("/")
-    __mod__ = _bin_op("%")
-    __radd__ = _bin_op("+", reverse=True)
-    __rsub__ = _bin_op("-", reverse=True)
-    __rmul__ = _bin_op("*", reverse=True)
-    __rdiv__ = _bin_op("/", reverse=True)
-    __rtruediv__ = _bin_op("/", reverse=True)
-    __pow__ = _bin_op("pow")
-    __rpow__ = _bin_op("pow", reverse=True)
-    __ge__ = _bin_op(">=")
-    __le__ = _bin_op("<=")
-
-    def __eq__(self, other: Any) -> "Expression":  # type: ignore[override]
-        """Returns a binary expression with the current column as the left
-        side and the other expression as the right side.
-        """
-        from pyspark.sql.connect._typing import PrimitiveType
-
-        if isinstance(other, get_args(PrimitiveType)):
-            other = LiteralExpression(other)
-        return ScalarFunctionExpression("==", self, other)
-
     def __init__(self) -> None:
         pass
 
-    def to_plan(self, session: "RemoteSparkSession") -> "proto.Expression":
+    def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
         ...
 
     def __str__(self) -> str:
@@ -123,6 +124,21 @@ class Expression(object):
         assert not kwargs, "Unexpected kwargs where passed: %s" % kwargs
         return ColumnAlias(self, list(alias), metadata)
 
+    def desc(self) -> "SortOrder":
+        ...
+
+    def asc(self) -> "SortOrder":
+        ...
+
+    def ascending(self) -> bool:
+        ...
+
+    def nullsLast(self) -> bool:
+        ...
+
+    def name(self) -> str:
+        ...
+
 
 class ColumnAlias(Expression):
     def __init__(self, parent: Expression, alias: list[str], metadata: Any):
@@ -131,7 +147,7 @@ class ColumnAlias(Expression):
         self._metadata = metadata
         self._parent = parent
 
-    def to_plan(self, session: "RemoteSparkSession") -> "proto.Expression":
+    def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
         if len(self._alias) == 1:
             exp = proto.Expression()
             exp.alias.name.append(self._alias[0])
@@ -162,108 +178,111 @@ class LiteralExpression(Expression):
         super().__init__()
         self._value = value
 
-    def to_plan(self, session: "RemoteSparkSession") -> "proto.Expression":
+    def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
         """Converts the literal expression to the literal in proto.
 
         TODO(SPARK-40533) This method always assumes the largest type and can thus
              create weird interpretations of the literal."""
-        value_type = type(self._value)
-        exp = proto.Expression()
-        if value_type is int:
-            exp.literal.i64 = cast(int, self._value)
-        elif value_type is bool:
-            exp.literal.boolean = cast(bool, self._value)
-        elif value_type is str:
-            exp.literal.string = cast(str, self._value)
-        elif value_type is float:
-            exp.literal.fp64 = cast(float, self._value)
-        elif value_type is decimal.Decimal:
-            d_v = cast(decimal.Decimal, self._value)
-            v_tuple = d_v.as_tuple()
-            exp.literal.decimal.scale = abs(v_tuple.exponent)
-            exp.literal.decimal.precision = len(v_tuple.digits) - abs(v_tuple.exponent)
-            # Two complement yeah...
-            raise ValueError("Python Decimal not supported.")
-        elif value_type is bytes:
-            exp.literal.binary = self._value
-        elif value_type is datetime.datetime:
-            # Microseconds since epoch.
-            dt = cast(datetime.datetime, self._value)
-            v = dt - datetime.datetime(1970, 1, 1, 0, 0, 0, 0)
-            exp.literal.timestamp = int(v / datetime.timedelta(microseconds=1))
-        elif value_type is datetime.time:
-            # Nanoseconds of the day.
-            tv = cast(datetime.time, self._value)
-            offset = (tv.second + tv.minute * 60 + tv.hour * 3600) * 1000 + tv.microsecond
-            exp.literal.time = int(offset * 1000)
-        elif value_type is datetime.date:
-            # Days since epoch.
-            days_since_epoch = (cast(datetime.date, self._value) - datetime.date(1970, 1, 1)).days
-            exp.literal.date = days_since_epoch
-        elif value_type is uuid.UUID:
-            raise ValueError("Python UUID type not supported.")
-        elif value_type is list:
-            lv = cast(list, self._value)
-            for k in lv:
-                if type(k) is LiteralExpression:
-                    exp.literal.list.values.append(k.to_plan(session).literal)
-                else:
-                    exp.literal.list.values.append(LiteralExpression(k).to_plan(session).literal)
-        elif value_type is dict:
-            mv = cast(dict, self._value)
-            for k in mv:
-                kv = proto.Expression.Literal.Map.KeyValue()
-                if type(k) is LiteralExpression:
-                    kv.key.CopyFrom(k.to_plan(session).literal)
-                else:
-                    kv.key.CopyFrom(LiteralExpression(k).to_plan(session).literal)
 
-                if type(mv[k]) is LiteralExpression:
-                    kv.value.CopyFrom(mv[k].to_plan(session).literal)
+        from pyspark.sql.connect.functions import lit
+
+        expr = proto.Expression()
+        if self._value is None:
+            expr.literal.null = True
+        elif isinstance(self._value, (bytes, bytearray)):
+            expr.literal.binary = bytes(self._value)
+        elif isinstance(self._value, bool):
+            expr.literal.boolean = bool(self._value)
+        elif isinstance(self._value, int):
+            expr.literal.long = int(self._value)
+        elif isinstance(self._value, float):
+            expr.literal.double = float(self._value)
+        elif isinstance(self._value, str):
+            expr.literal.string = str(self._value)
+        elif isinstance(self._value, decimal.Decimal):
+            expr.literal.decimal.value = str(self._value)
+            expr.literal.decimal.precision = int(decimal.getcontext().prec)
+        elif isinstance(self._value, datetime.datetime):
+            expr.literal.timestamp = TimestampType().toInternal(self._value)
+        elif isinstance(self._value, datetime.date):
+            expr.literal.date = DateType().toInternal(self._value)
+        elif isinstance(self._value, datetime.timedelta):
+            interval = DayTimeIntervalType().toInternal(self._value)
+            assert interval is not None
+            expr.literal.day_time_interval = int(interval)
+        elif isinstance(self._value, list):
+            expr.literal.array.SetInParent()
+            for item in list(self._value):
+                if isinstance(item, Column):
+                    expr.literal.array.values.append(item.to_plan(session).literal)
                 else:
-                    kv.value.CopyFrom(LiteralExpression(mv[k]).to_plan(session).literal)
-                exp.literal.map.key_values.append(kv)
+                    expr.literal.array.values.append(lit(item).to_plan(session).literal)
+        elif isinstance(self._value, tuple):
+            expr.literal.struct.SetInParent()
+            for item in list(self._value):
+                if isinstance(item, Column):
+                    expr.literal.struct.fields.append(item.to_plan(session).literal)
+                else:
+                    expr.literal.struct.fields.append(lit(item).to_plan(session).literal)
+        elif isinstance(self._value, dict):
+            expr.literal.map.SetInParent()
+            for key, value in dict(self._value).items():
+                pair = proto.Expression.Literal.Map.Pair()
+                if isinstance(key, Column):
+                    pair.key.CopyFrom(key.to_plan(session).literal)
+                else:
+                    pair.key.CopyFrom(lit(key).to_plan(session).literal)
+                if isinstance(value, Column):
+                    pair.value.CopyFrom(value.to_plan(session).literal)
+                else:
+                    pair.value.CopyFrom(lit(value).to_plan(session).literal)
+                expr.literal.map.pairs.append(pair)
+        elif isinstance(self._value, Column):
+            expr.CopyFrom(self._value.to_plan(session))
         else:
             raise ValueError(f"Could not convert literal for type {type(self._value)}")
 
-        return exp
+        return expr
 
     def __str__(self) -> str:
         return f"Literal({self._value})"
 
 
-class Column(Expression):
+class ColumnReference(Expression):
     """Represents a column reference. There is no guarantee that this column
     actually exists. In the context of this project, we refer by its name and
     treat it as an unresolved attribute. Attributes that have the same fully
     qualified name are identical"""
 
     @classmethod
-    def from_qualified_name(cls, name: str) -> "Column":
-        return Column(name)
+    def from_qualified_name(cls, name: str) -> "ColumnReference":
+        return ColumnReference(name)
 
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: Union[str, "Column"]) -> None:
         super().__init__()
-        self._unparsed_identifier: str = name
+        if isinstance(name, str):
+            self._unparsed_identifier = name
+        else:
+            self._unparsed_identifier = name.name()
 
     def name(self) -> str:
         """Returns the qualified name of the column reference."""
         return self._unparsed_identifier
 
-    def to_plan(self, session: "RemoteSparkSession") -> proto.Expression:
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
         """Returns the Proto representation of the expression."""
         expr = proto.Expression()
         expr.unresolved_attribute.unparsed_identifier = self._unparsed_identifier
         return expr
 
     def desc(self) -> "SortOrder":
-        return SortOrder(self, ascending=False)
+        return SortOrder(self, ascending=False, nullsLast=True)
 
     def asc(self) -> "SortOrder":
-        return SortOrder(self, ascending=True)
+        return SortOrder(self, ascending=True, nullsLast=False)
 
     def __str__(self) -> str:
-        return f"Column({self._unparsed_identifier})"
+        return f"ColumnReference({self._unparsed_identifier})"
 
 
 class SQLExpression(Expression):
@@ -275,7 +294,7 @@ class SQLExpression(Expression):
         super().__init__()
         self._expr: str = expr
 
-    def to_plan(self, session: "RemoteSparkSession") -> proto.Expression:
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
         """Returns the Proto representation of the SQL expression."""
         expr = proto.Expression()
         expr.expression_string.expression = self._expr
@@ -283,30 +302,50 @@ class SQLExpression(Expression):
 
 
 class SortOrder(Expression):
-    def __init__(self, col: Column, ascending: bool = True, nullsLast: bool = True) -> None:
+    def __init__(self, col: Expression, ascending: bool = True, nullsLast: bool = False) -> None:
         super().__init__()
         self.ref = col
-        self.ascending = ascending
-        self.nullsLast = nullsLast
+        self._ascending = ascending
+        self._nullsLast = nullsLast
 
     def __str__(self) -> str:
         return str(self.ref) + " ASC" if self.ascending else " DESC"
 
-    def to_plan(self, session: "RemoteSparkSession") -> proto.Expression:
-        return self.ref.to_plan(session)
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
+        # TODO(SPARK-41334): move SortField from relations.proto to expressions.proto
+        sort = proto.Sort.SortField()
+        sort.expression.CopyFrom(self.ref.to_plan(session))
+
+        if self._ascending:
+            sort.direction = proto.Sort.SortDirection.SORT_DIRECTION_ASCENDING
+        else:
+            sort.direction = proto.Sort.SortDirection.SORT_DIRECTION_DESCENDING
+
+        if self._nullsLast:
+            sort.nulls = proto.Sort.SortNulls.SORT_NULLS_LAST
+        else:
+            sort.nulls = proto.Sort.SortNulls.SORT_NULLS_FIRST
+
+        return cast(proto.Expression, sort)
+
+    def ascending(self) -> bool:
+        return self._ascending
+
+    def nullsLast(self) -> bool:
+        return self._nullsLast
 
 
 class ScalarFunctionExpression(Expression):
     def __init__(
         self,
         op: str,
-        *args: Expression,
+        *args: "Column",
     ) -> None:
         super().__init__()
         self._args = args
         self._op = op
 
-    def to_plan(self, session: "RemoteSparkSession") -> proto.Expression:
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
         fun = proto.Expression()
         fun.unresolved_function.parts.append(self._op)
         fun.unresolved_function.arguments.extend([x.to_plan(session) for x in self._args])
@@ -314,3 +353,367 @@ class ScalarFunctionExpression(Expression):
 
     def __str__(self) -> str:
         return f"({self._op} ({', '.join([str(x) for x in self._args])}))"
+
+
+class Column(object):
+    """
+    A column in a DataFrame. Column can refer to different things based on the
+    wrapped expression. Some common examples include attribute references, functions,
+    literals, etc.
+
+    .. versionadded:: 3.4.0
+    """
+
+    def __init__(self, expr: Expression) -> None:
+        self._expr = expr
+
+    __gt__ = _bin_op(">")
+    __lt__ = _bin_op("<")
+    __add__ = _bin_op("+")
+    __sub__ = _bin_op("-")
+    __mul__ = _bin_op("*")
+    __div__ = _bin_op("/")
+    __truediv__ = _bin_op("/")
+    __mod__ = _bin_op("%")
+    __radd__ = _bin_op("+", reverse=True)
+    __rsub__ = _bin_op("-", reverse=True)
+    __rmul__ = _bin_op("*", reverse=True)
+    __rdiv__ = _bin_op("/", reverse=True)
+    __rtruediv__ = _bin_op("/", reverse=True)
+    __pow__ = _bin_op("pow")
+    __rpow__ = _bin_op("pow", reverse=True)
+    __ge__ = _bin_op(">=")
+    __le__ = _bin_op("<=")
+
+    _eqNullSafe_doc = """
+        Equality test that is safe for null values.
+
+        Parameters
+        ----------
+        other
+            a value or :class:`Column`
+
+        Examples
+        --------
+        >>> from pyspark.sql import Row
+        >>> df1 = spark.createDataFrame([
+        ...     Row(id=1, value='foo'),
+        ...     Row(id=2, value=None)
+        ... ])
+        >>> df1.select(
+        ...     df1['value'] == 'foo',
+        ...     df1['value'].eqNullSafe('foo'),
+        ...     df1['value'].eqNullSafe(None)
+        ... ).show()
+        +-------------+---------------+----------------+
+        |(value = foo)|(value <=> foo)|(value <=> NULL)|
+        +-------------+---------------+----------------+
+        |         true|           true|           false|
+        |         null|          false|            true|
+        +-------------+---------------+----------------+
+        >>> df2 = spark.createDataFrame([
+        ...     Row(value = 'bar'),
+        ...     Row(value = None)
+        ... ])
+        >>> df1.join(df2, df1["value"] == df2["value"]).count()
+        0
+        >>> df1.join(df2, df1["value"].eqNullSafe(df2["value"])).count()
+        1
+        >>> df2 = spark.createDataFrame([
+        ...     Row(id=1, value=float('NaN')),
+        ...     Row(id=2, value=42.0),
+        ...     Row(id=3, value=None)
+        ... ])
+        >>> df2.select(
+        ...     df2['value'].eqNullSafe(None),
+        ...     df2['value'].eqNullSafe(float('NaN')),
+        ...     df2['value'].eqNullSafe(42.0)
+        ... ).show()
+        +----------------+---------------+----------------+
+        |(value <=> NULL)|(value <=> NaN)|(value <=> 42.0)|
+        +----------------+---------------+----------------+
+        |           false|           true|           false|
+        |           false|          false|            true|
+        |            true|          false|           false|
+        +----------------+---------------+----------------+
+        Notes
+        -----
+        Unlike Pandas, PySpark doesn't consider NaN values to be NULL. See the
+        `NaN Semantics <https://spark.apache.org/docs/latest/sql-ref-datatypes.html#nan-semantics>`_
+        for details.
+        """
+    eqNullSafe = _bin_op("eqNullSafe", _eqNullSafe_doc)
+
+    __neg__ = _func_op("negate")
+
+    # `and`, `or`, `not` cannot be overloaded in Python,
+    # so use bitwise operators as boolean operators
+    __and__ = _bin_op("and")
+    __or__ = _bin_op("or")
+    __invert__ = _func_op("not")
+    __rand__ = _bin_op("and")
+    __ror__ = _bin_op("or")
+
+    # bitwise operators
+    _bitwiseOR_doc = """
+        Compute bitwise OR of this expression with another expression.
+
+        Parameters
+        ----------
+        other
+            a value or :class:`Column` to calculate bitwise or(|) with
+            this :class:`Column`.
+
+        Examples
+        --------
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(a=170, b=75)])
+        >>> df.select(df.a.bitwiseOR(df.b)).collect()
+        [Row((a | b)=235)]
+        """
+    _bitwiseAND_doc = """
+        Compute bitwise AND of this expression with another expression.
+
+        Parameters
+        ----------
+        other
+            a value or :class:`Column` to calculate bitwise and(&) with
+            this :class:`Column`.
+
+        Examples
+        --------
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(a=170, b=75)])
+        >>> df.select(df.a.bitwiseAND(df.b)).collect()
+        [Row((a & b)=10)]
+        """
+    _bitwiseXOR_doc = """
+        Compute bitwise XOR of this expression with another expression.
+
+        Parameters
+        ----------
+        other
+            a value or :class:`Column` to calculate bitwise xor(^) with
+            this :class:`Column`.
+
+        Examples
+        --------
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([Row(a=170, b=75)])
+        >>> df.select(df.a.bitwiseXOR(df.b)).collect()
+        [Row((a ^ b)=225)]
+        """
+
+    bitwiseOR = _bin_op("bitwiseOR", _bitwiseOR_doc)
+    bitwiseAND = _bin_op("bitwiseAND", _bitwiseAND_doc)
+    bitwiseXOR = _bin_op("bitwiseXOR", _bitwiseXOR_doc)
+
+    _isNull_doc = """
+    True if the current expression is null.
+    """
+    _isNotNull_doc = """
+    True if the current expression is NOT null.
+    """
+
+    isNull = _unary_op("isNull", _isNull_doc)
+    isNotNull = _unary_op("isNotNull", _isNotNull_doc)
+
+    # string methods
+    def contains(self, other: Union[PrimitiveType, "Column"]) -> "Column":
+        """
+        Contains the other element. Returns a boolean :class:`Column` based on a string match.
+
+        Parameters
+        ----------
+        other
+            string in line. A value as a literal or a :class:`Column`.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
+        >>> df.filter(df.name.contains('o')).collect()
+        [Row(age=5, name='Bob')]
+        """
+        return _bin_op("contains")(self, other)
+
+    _startswith_doc = """
+    String starts with. Returns a boolean :class:`Column` based on a string match.
+
+    Parameters
+    ----------
+    other : :class:`Column` or str
+        string at start of line (do not use a regex `^`)
+    """
+    _endswith_doc = """
+    String ends with. Returns a boolean :class:`Column` based on a string match.
+
+    Parameters
+    ----------
+    other : :class:`Column` or str
+        string at end of line (do not use a regex `$`)
+    """
+    startswith = _bin_op("startsWith", _startswith_doc)
+    endswith = _bin_op("endsWith", _endswith_doc)
+
+    def like(self: "Column", other: str) -> "Column":
+        """
+        SQL like expression. Returns a boolean :class:`Column` based on a SQL LIKE match.
+
+        Parameters
+        ----------
+        other : str
+            a SQL LIKE pattern
+        See Also
+        --------
+        pyspark.sql.Column.rlike
+        Returns
+        -------
+        :class:`Column`
+            Column of booleans showing whether each element
+            in the Column is matched by SQL LIKE pattern.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
+        >>> df.filter(df.name.like('Al%')).collect()
+        [Row(age=2, name='Alice')]
+        """
+        return _bin_op("like")(self, other)
+
+    def rlike(self: "Column", other: str) -> "Column":
+        """
+        SQL RLIKE expression (LIKE with Regex). Returns a boolean :class:`Column` based on a regex
+        match.
+
+        Parameters
+        ----------
+        other : str
+            an extended regex expression
+        Returns
+        -------
+        :class:`Column`
+            Column of booleans showing whether each element
+            in the Column is matched by extended regex expression.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
+        >>> df.filter(df.name.rlike('ice$')).collect()
+        [Row(age=2, name='Alice')]
+        """
+        return _bin_op("like")(self, other)
+
+    def ilike(self: "Column", other: str) -> "Column":
+        """
+        SQL ILIKE expression (case insensitive LIKE). Returns a boolean :class:`Column`
+        based on a case insensitive match.
+
+        Parameters
+        ----------
+        other : str
+            a SQL LIKE pattern
+        See Also
+        --------
+        pyspark.sql.Column.rlike
+        Returns
+        -------
+        :class:`Column`
+            Column of booleans showing whether each element
+            in the Column is matched by SQL LIKE pattern.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
+        >>> df.filter(df.name.ilike('%Ice')).collect()
+        [Row(age=2, name='Alice')]
+        """
+        return _bin_op("ilike")(self, other)
+
+    @overload
+    def substr(self, startPos: int, length: int) -> "Column":
+        ...
+
+    @overload
+    def substr(self, startPos: "Column", length: "Column") -> "Column":
+        ...
+
+    def substr(self, startPos: Union[int, "Column"], length: Union[int, "Column"]) -> "Column":
+        """
+        Return a :class:`Column` which is a substring of the column.
+
+        Parameters
+        ----------
+        startPos : :class:`Column` or int
+            start position
+        length : :class:`Column` or int
+            length of the substring
+        Returns
+        -------
+        :class:`Column`
+            Column representing whether each element of Column is substr of origin Column.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
+        >>> df.select(df.name.substr(1, 3).alias("col")).collect()
+        [Row(col='Ali'), Row(col='Bob')]
+        """
+        if type(startPos) != type(length):
+            raise TypeError(
+                "startPos and length must be the same type. "
+                "Got {startPos_t} and {length_t}, respectively.".format(
+                    startPos_t=type(startPos),
+                    length_t=type(length),
+                )
+            )
+        from pyspark.sql.connect.function_builder import functions as F
+
+        if isinstance(length, int):
+            length_exp = self._lit(length)
+        elif isinstance(length, Column):
+            length_exp = length
+        else:
+            raise TypeError("Unsupported type for substr().")
+
+        if isinstance(startPos, int):
+            start_exp = self._lit(startPos)
+        else:
+            start_exp = startPos
+
+        return F.substr(self, start_exp, length_exp)
+
+    def __eq__(self, other: Any) -> "Column":  # type: ignore[override]
+        """Returns a binary expression with the current column as the left
+        side and the other expression as the right side.
+        """
+        if isinstance(other, get_args(PrimitiveType)):
+            other = self._lit(other)
+        return scalar_function("==", self, other)
+
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
+        return self._expr.to_plan(session)
+
+    def alias(self, *alias: str, **kwargs: Any) -> "Column":
+        return Column(self._expr.alias(*alias, **kwargs))
+
+    def desc(self) -> "Column":
+        return Column(self._expr.desc())
+
+    def asc(self) -> "Column":
+        return Column(self._expr.asc())
+
+    def name(self) -> str:
+        return self._expr.name()
+
+    # TODO(SPARK-41329): solve the circular import between functions.py and
+    # this class if we want to reuse functions.lit
+    def _lit(self, x: Any) -> "Column":
+        return Column(LiteralExpression(x))
+
+    def __str__(self) -> str:
+        return self._expr.__str__()

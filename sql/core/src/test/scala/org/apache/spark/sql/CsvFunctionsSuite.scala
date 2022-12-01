@@ -357,18 +357,21 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq("""1,"a"""").toDS().select(from_csv($"value", schema, options)),
       Row(Row(1, "a")))
 
-    val errMsg = intercept[AnalysisException] {
-      Seq(("1", "i int")).toDF("csv", "schema")
-        .select(from_csv($"csv", $"schema", options)).collect()
-    }.getMessage
-    assert(errMsg.contains("Schema should be specified in DDL format as a string literal"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        Seq(("1", "i int")).toDF("csv", "schema")
+          .select(from_csv($"csv", $"schema", options)).collect()
+      },
+      errorClass = "INVALID_SCHEMA.NON_STRING_LITERAL",
+      parameters = Map("inputSchema" -> "\"schema\"")
+    )
 
     checkError(
       exception = intercept[AnalysisException] {
         Seq("1").toDF("csv").select(from_csv($"csv", lit(1), options)).collect()
       },
-      errorClass = "INVALID_SCHEMA",
-      parameters = Map("expr" -> "\"1\"")
+      errorClass = "INVALID_SCHEMA.NON_STRING_LITERAL",
+      parameters = Map("inputSchema" -> "\"1\"")
     )
   }
 

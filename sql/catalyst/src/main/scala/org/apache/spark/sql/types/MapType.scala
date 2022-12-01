@@ -20,6 +20,7 @@ package org.apache.spark.sql.types
 import com.fasterxml.jackson.databind.JsonNode
 
 import org.apache.spark.annotation.Stable
+import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalMapType}
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 import org.apache.spark.util.JacksonUtils
 
@@ -69,6 +70,9 @@ case class MapType(
    * We assume that there is only 1 element on average in a map. See SPARK-18853.
    */
   override def defaultSize: Int = 1 * (keyType.defaultSize + valueType.defaultSize)
+
+  override def physicalDataType: PhysicalDataType =
+    PhysicalMapType(keyType, valueType, valueContainsNull)
 
   override def simpleString: String = s"map<${keyType.simpleString},${valueType.simpleString}>"
 
