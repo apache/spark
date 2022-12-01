@@ -93,7 +93,7 @@ def asc_nulls_first(col: "ColumnOrName") -> Column:
     Returns a sort expression based on the ascending order of the given
     column name, and null values return before non-null values.
 
-    .. versionadded:: 2.4.0
+    .. versionadded:: 3.4.0
 
     Parameters
     ----------
@@ -128,7 +128,7 @@ def asc_nulls_last(col: "ColumnOrName") -> Column:
     Returns a sort expression based on the ascending order of the given
     column name, and null values appear after non-null values.
 
-    .. versionadded:: 2.4.0
+    .. versionadded:: 3.4.0
 
     Parameters
     ----------
@@ -197,7 +197,7 @@ def desc_nulls_first(col: "ColumnOrName") -> Column:
     Returns a sort expression based on the descending order of the given
     column name, and null values appear before non-null values.
 
-    .. versionadded:: 2.4.0
+    .. versionadded:: 3.4.0
 
     Parameters
     ----------
@@ -232,7 +232,7 @@ def desc_nulls_last(col: "ColumnOrName") -> Column:
     Returns a sort expression based on the descending order of the given
     column name, and null values appear after non-null values.
 
-    .. versionadded:: 2.4.0
+    .. versionadded:: 3.4.0
 
     Parameters
     ----------
