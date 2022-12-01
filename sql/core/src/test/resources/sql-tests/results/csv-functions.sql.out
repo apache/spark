@@ -60,6 +60,28 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+select from_csv('1', 'Array<int>')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_SCHEMA.NON_STRUCT_TYPE",
+  "messageParameters" : {
+    "dataType" : "\"ARRAY<INT>\"",
+    "inputSchema" : "\"Array<int>\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 34,
+    "fragment" : "from_csv('1', 'Array<int>')"
+  } ]
+}
+
+
+-- !query
 select from_csv('1', 'a INT', named_struct('mode', 'PERMISSIVE'))
 -- !query schema
 struct<>

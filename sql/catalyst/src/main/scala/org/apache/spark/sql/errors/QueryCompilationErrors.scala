@@ -1010,10 +1010,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("inputSchema" -> toSQLExpr(exp)))
   }
 
-  def schemaIsNotStructTypeError(dataType: DataType): Throwable = {
+  def schemaIsNotStructTypeError(exp: Expression, dataType: DataType): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1094",
-      messageParameters = Map("dataType" -> dataType.toString))
+      errorClass = "INVALID_SCHEMA.NON_STRUCT_TYPE",
+      messageParameters = Map(
+        "inputSchema" -> toSQLExpr(exp),
+        "dataType" -> toSQLType(dataType)
+      ))
   }
 
   def keyValueInMapNotStringError(m: CreateMap): Throwable = {

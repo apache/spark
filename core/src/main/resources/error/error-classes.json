@@ -782,6 +782,11 @@
           "The input expression must be string literal and not null."
         ]
       },
+      "NON_STRUCT_TYPE" : {
+        "message" : [
+          "The input expression should be evaluated to struct type, but got <dataType>."
+        ]
+      },
       "PARSE_ERROR" : {
         "message" : [
           "Cannot parse the schema:",
@@ -2209,11 +2214,6 @@
   "_LEGACY_ERROR_TEMP_1091" : {
     "message" : [
       "Cannot read table property '<key>' as it's corrupted.<details>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1094" : {
-    "message" : [
-      "Schema should be struct type but got <dataType>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1097" : {
