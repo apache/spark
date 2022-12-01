@@ -356,11 +356,17 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
   testPartitionedTable(
     "SPARK-16036: better error message when insert into a table with mismatch schema") {
     tableName =>
-      val e = intercept[AnalysisException] {
-        sql(s"INSERT INTO TABLE $tableName PARTITION(b=1, c=2) SELECT 1, 2, 3")
-      }
-      assert(e.message.contains(
-        "target table has 4 column(s) but the inserted data has 5 column(s)"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"INSERT INTO TABLE $tableName PARTITION(b=1, c=2) SELECT 1, 2, 3")
+        },
+        errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+        parameters = Map(
+          "tableName" -> s"`spark_catalog`.`default`.`$tableName`",
+          "tableCols" -> "[`a`, `d`, `b`, `c`]",
+          "dataCols" -> "[`1`, `2`, `3`, `b`, `c`]"
+        )
+      )
   }
 
   testPartitionedTable("SPARK-16037: INSERT statement should match columns by position") {
