@@ -21,6 +21,7 @@ import scala.math.{Integral, Numeric, Ordering}
 import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.annotation.Stable
+import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalIntegerType}
 
 /**
  * The data type representing `Int` values. Please use the singleton `DataTypes.IntegerType`.
@@ -43,6 +44,8 @@ class IntegerType private() extends IntegralType {
    * The default size of a value of the IntegerType is 4 bytes.
    */
   override def defaultSize: Int = 4
+
+  override def physicalDataType: PhysicalDataType = PhysicalIntegerType
 
   override def simpleString: String = "int"
 

@@ -1176,7 +1176,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         num : int
             Number of records to return. Will return this number of records
-            or whataver number is available.
+            or all records if the DataFrame contains less than this number of records.
 
         Returns
         -------
@@ -1211,7 +1211,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         num : int
             Number of records to return. Will return this number of records
-            or whataver number is available.
+            or all records if the DataFrame contains less than this number of records..
 
         Returns
         -------
@@ -1243,7 +1243,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         num : int
             Number of records to return. Will return this number of records
-            or whataver number is available.
+            or all records if the DataFrame contains less than this number of records.
 
         Returns
         -------
@@ -4575,13 +4575,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         return DataFrame(jdf, self.sparkSession)
 
-    def toDF(self, *cols: "ColumnOrName") -> "DataFrame":
+    def toDF(self, *cols: str) -> "DataFrame":
         """Returns a new :class:`DataFrame` that with new specified column names
 
         Parameters
         ----------
         *cols : tuple
-            a tuple of string new column name or :class:`Column`. The length of the
+            a tuple of string new column name. The length of the
             list needs to be the same as the number of columns in the initial
             :class:`DataFrame`
 

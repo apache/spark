@@ -19,12 +19,19 @@ package org.apache.spark.sql.connect.planner
 
 import scala.collection.JavaConverters._
 
+import com.google.protobuf.ByteString
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.Expression.UnresolvedStar
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.connect.proto.Expression.{Alias, ExpressionString, UnresolvedStar}
+import org.apache.spark.sql.{AnalysisException, Dataset}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical
+import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Testing trait for SparkConnect tests with some helper methods to make it easier to create new
@@ -55,17 +62,26 @@ trait SparkConnectPlanTest extends SharedSparkSession {
    * equivalent in Catalyst and can be easily used for planner testing.
    *
    * @param attrs
+   *   the attributes of LocalRelation
+   * @param data
+   *   the data of LocalRelation
    * @return
    */
-  def createLocalRelationProto(attrs: Seq[AttributeReference]): proto.Relation = {
+  def createLocalRelationProto(
+      attrs: Seq[AttributeReference],
+      data: Seq[InternalRow]): proto.Relation = {
     val localRelationBuilder = proto.LocalRelation.newBuilder()
-    for (attr <- attrs) {
-      localRelationBuilder.addAttributes(
-        proto.Expression.QualifiedAttribute
-          .newBuilder()
-          .setName(attr.name)
-          .setType(DataTypeProtoConverter.toConnectProtoType(attr.dataType)))
-    }
+
+    val bytes = ArrowConverters
+      .toBatchWithSchemaIterator(
+        data.iterator,
+        StructType.fromAttributes(attrs.map(_.toAttribute)),
+        Long.MaxValue,
+        Long.MaxValue,
+        null)
+      .next()
+
+    localRelationBuilder.setData(ByteString.copyFrom(bytes))
     proto.Relation.newBuilder().setLocalRelation(localRelationBuilder.build()).build()
   }
 }
@@ -96,7 +112,6 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       new SparkConnectPlanner(None.orNull)
         .transformRelation(
           proto.Relation.newBuilder.setUnknown(proto.Unknown.newBuilder().build()).build()))
-
   }
 
   test("Simple Read") {
@@ -199,7 +214,6 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   }
 
   test("Simple Join") {
-
     val incompleteJoin =
       proto.Relation.newBuilder.setJoin(proto.Join.newBuilder.setLeft(readRel)).build()
     intercept[AssertionError](transform(incompleteJoin))
@@ -221,7 +235,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
     val joinCondition = proto.Expression.newBuilder.setUnresolvedFunction(
       proto.Expression.UnresolvedFunction.newBuilder
-        .addAllParts(Seq("==").asJava)
+        .setFunctionName("==")
         .addArguments(unresolvedAttribute)
         .addArguments(unresolvedAttribute)
         .build())
@@ -261,13 +275,12 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       .setInput(readRel)
       .addExpressions(
         proto.Expression.newBuilder
-          .setLiteral(proto.Expression.Literal.newBuilder.setI32(32))
+          .setLiteral(proto.Expression.Literal.newBuilder.setInteger(32))
           .build())
       .build()
 
     val res = transform(proto.Relation.newBuilder.setProject(project).build())
     assert(res.nodeName == "Project")
-
   }
 
   test("Simple Aggregation") {
@@ -283,7 +296,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
         .setUnresolvedFunction(
           proto.Expression.UnresolvedFunction
             .newBuilder()
-            .addParts("sum")
+            .setFunctionName("sum")
             .addArguments(unresolvedAttribute))
         .build()
 
@@ -353,5 +366,209 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     val e2 = intercept[InvalidPlanInput](
       transform(proto.Relation.newBuilder.setSetOp(intersect).build()))
     assert(e2.getMessage.contains("Intersect does not support union_by_name"))
+  }
+
+  test("transform LocalRelation") {
+    val rows = (0 until 10).map { i =>
+      InternalRow(i, UTF8String.fromString(s"str-$i"), InternalRow(i))
+    }
+
+    val schema = StructType(
+      Seq(
+        StructField("int", IntegerType),
+        StructField("str", StringType),
+        StructField("struct", StructType(Seq(StructField("inner", IntegerType))))))
+    val inputRows = rows.map { row =>
+      val proj = UnsafeProjection.create(schema)
+      proj(row).copy()
+    }
+
+    val localRelation = createLocalRelationProto(schema.toAttributes, inputRows)
+    val df = Dataset.ofRows(spark, transform(localRelation))
+    val array = df.collect()
+    assertResult(10)(array.length)
+    assert(schema == df.schema)
+    for (i <- 0 until 10) {
+      assert(i == array(i).getInt(0))
+      assert(s"str-$i" == array(i).getString(1))
+      assert(i == array(i).getStruct(2).getInt(0))
+    }
+  }
+
+  test("Empty ArrowBatch") {
+    val schema = StructType(Seq(StructField("int", IntegerType)))
+    val data = ArrowConverters.createEmptyArrowBatch(schema, null)
+    val localRelation = proto.Relation
+      .newBuilder()
+      .setLocalRelation(
+        proto.LocalRelation
+          .newBuilder()
+          .setData(ByteString.copyFrom(data))
+          .build())
+      .build()
+    val df = Dataset.ofRows(spark, transform(localRelation))
+    assert(schema == df.schema)
+    assert(df.isEmpty)
+  }
+
+  test("Illegal LocalRelation data") {
+    intercept[Exception] {
+      transform(
+        proto.Relation
+          .newBuilder()
+          .setLocalRelation(
+            proto.LocalRelation
+              .newBuilder()
+              .setData(ByteString.copyFrom("illegal".getBytes()))
+              .build())
+          .build())
+    }
+  }
+
+  test("Test duplicated names in WithColumns") {
+    intercept[AnalysisException] {
+      transform(
+        proto.Relation
+          .newBuilder()
+          .setWithColumns(
+            proto.WithColumns
+              .newBuilder()
+              .setInput(readRel)
+              .addNameExprList(proto.Expression.Alias
+                .newBuilder()
+                .addName("test")
+                .setExpr(proto.Expression.newBuilder
+                  .setLiteral(proto.Expression.Literal.newBuilder.setInteger(32))))
+              .addNameExprList(proto.Expression.Alias
+                .newBuilder()
+                .addName("test")
+                .setExpr(proto.Expression.newBuilder
+                  .setLiteral(proto.Expression.Literal.newBuilder.setInteger(32)))))
+          .build())
+    }
+  }
+
+  test("Test multi nameparts for column names in WithColumns") {
+    val e = intercept[InvalidPlanInput] {
+      transform(
+        proto.Relation
+          .newBuilder()
+          .setWithColumns(
+            proto.WithColumns
+              .newBuilder()
+              .setInput(readRel)
+              .addNameExprList(
+                proto.Expression.Alias
+                  .newBuilder()
+                  .addName("part1")
+                  .addName("part2")
+                  .setExpr(proto.Expression.newBuilder
+                    .setLiteral(proto.Expression.Literal.newBuilder.setInteger(32)))))
+          .build())
+    }
+    assert(e.getMessage.contains("part1, part2"))
+  }
+
+  test("transform UnresolvedStar and ExpressionString") {
+    val sql =
+      "SELECT * FROM VALUES (1,'spark',1), (2,'hadoop',2), (3,'kafka',3) AS tab(id, name, value)"
+    val input = proto.Relation
+      .newBuilder()
+      .setSql(
+        proto.SQL
+          .newBuilder()
+          .setQuery(sql)
+          .build())
+
+    val project =
+      proto.Project
+        .newBuilder()
+        .setInput(input)
+        .addExpressions(
+          proto.Expression
+            .newBuilder()
+            .setUnresolvedStar(UnresolvedStar.newBuilder().build())
+            .build())
+        .addExpressions(
+          proto.Expression
+            .newBuilder()
+            .setExpressionString(ExpressionString.newBuilder().setExpression("name").build())
+            .build())
+        .build()
+
+    val df =
+      Dataset.ofRows(spark, transform(proto.Relation.newBuilder.setProject(project).build()))
+    val array = df.collect()
+    assert(array.length == 3)
+    assert(array(0).toString == InternalRow(1, "spark", 1, "spark").toString)
+    assert(array(1).toString == InternalRow(2, "hadoop", 2, "hadoop").toString)
+    assert(array(2).toString == InternalRow(3, "kafka", 3, "kafka").toString)
+  }
+
+  test("transform UnresolvedStar with target field") {
+    val rows = (0 until 10).map { i =>
+      InternalRow(InternalRow(InternalRow(i, i + 1)))
+    }
+
+    val schema = StructType(
+      Seq(
+        StructField(
+          "a",
+          StructType(Seq(StructField(
+            "b",
+            StructType(Seq(StructField("c", IntegerType), StructField("d", IntegerType)))))))))
+    val inputRows = rows.map { row =>
+      val proj = UnsafeProjection.create(schema)
+      proj(row).copy()
+    }
+
+    val localRelation = createLocalRelationProto(schema.toAttributes, inputRows)
+
+    val project =
+      proto.Project
+        .newBuilder()
+        .setInput(localRelation)
+        .addExpressions(
+          proto.Expression
+            .newBuilder()
+            .setUnresolvedStar(UnresolvedStar.newBuilder().addTarget("a").addTarget("b").build())
+            .build())
+        .build()
+
+    val df =
+      Dataset.ofRows(spark, transform(proto.Relation.newBuilder.setProject(project).build()))
+    assertResult(df.schema)(
+      StructType(Seq(StructField("c", IntegerType), StructField("d", IntegerType))))
+
+    val array = df.collect()
+    assert(array.length == 10)
+    for (i <- 0 until 10) {
+      assert(i == array(i).getInt(0))
+      assert(i + 1 == array(i).getInt(1))
+    }
+  }
+
+  test("transform Project with Alias") {
+    val input = proto.Expression
+      .newBuilder()
+      .setLiteral(
+        proto.Expression.Literal
+          .newBuilder()
+          .setInteger(1)
+          .build())
+
+    val project =
+      proto.Project
+        .newBuilder()
+        .addExpressions(
+          proto.Expression
+            .newBuilder()
+            .setAlias(Alias.newBuilder().setExpr(input).addName("id").build())
+            .build())
+        .build()
+
+    val df =
+      Dataset.ofRows(spark, transform(proto.Relation.newBuilder.setProject(project).build()))
+    assert(df.schema.fields.toSeq.map(_.name) == Seq("id"))
   }
 }

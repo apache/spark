@@ -52,6 +52,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
   val extendedCheckRules: Seq[LogicalPlan => Unit] = Nil
 
   val DATA_TYPE_MISMATCH_ERROR = TreeNodeTag[Boolean]("dataTypeMismatchError")
+  val INVALID_FORMAT_ERROR = TreeNodeTag[Boolean]("invalidFormatError")
 
   /**
    * Fails the analysis at the point where a specific tree node was parsed using a provided
@@ -221,6 +222,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 hof.failAnalysis(
                   errorClass = "_LEGACY_ERROR_TEMP_2314",
                   messageParameters = Map("sqlExpr" -> hof.sql, "msg" -> message))
+              case checkRes: TypeCheckResult.InvalidFormat =>
+                hof.setTagValue(INVALID_FORMAT_ERROR, true)
+                hof.invalidFormat(checkRes)
             }
 
           // If an attribute can't be resolved as a map key of string type, either the key should be
@@ -252,6 +256,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                     "sqlExpr" -> e.sql,
                     "msg" -> message,
                     "hint" -> extraHintForAnsiTypeCoercionExpression(operator)))
+              case checkRes: TypeCheckResult.InvalidFormat =>
+                e.setTagValue(INVALID_FORMAT_ERROR, true)
+                e.invalidFormat(checkRes)
             }
 
           case c: Cast if !c.resolved =>
