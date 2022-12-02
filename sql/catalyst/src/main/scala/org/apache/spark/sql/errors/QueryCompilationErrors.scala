@@ -3404,10 +3404,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     }
   }
 
-  def generatedColumnsOnCreationUnsupportedForDataSource(provider: String): Throwable = {
+  def generatedColumnsUnsupportedForDataSource(provider: String, operation: String): Throwable = {
     new AnalysisException(
-      errorClass = "UNSUPPORTED_FEATURE.GENERATED_COLUMN_ON_TABLE_CREATION",
-      messageParameters = Map("provider" -> provider)
+      errorClass = "UNSUPPORTED_FEATURE.GENERATED_COLUMN_UNSUPPORTED_FOR_PROVIDER",
+      messageParameters = Map("provider" -> provider, "statement" -> operation)
     )
   }
 }

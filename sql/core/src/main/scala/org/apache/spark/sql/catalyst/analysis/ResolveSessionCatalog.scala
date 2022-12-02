@@ -174,7 +174,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
       if (GeneratedColumn.hasGeneratedColumns(c.tableSchema) &&
         !supportsGeneratedColumnsOnCreation(provider)) {
-        throw QueryCompilationErrors.generatedColumnsOnCreationUnsupportedForDataSource(provider)
+        throw QueryCompilationErrors.generatedColumnsUnsupportedForDataSource(
+          provider, "CREATE TABLE")
       }
       if (!isV2Provider(provider)) {
         constructV1TableCmd(None, c.tableSpec, ident, c.tableSchema, c.partitioning,
@@ -211,7 +212,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
       if (GeneratedColumn.hasGeneratedColumns(c.tableSchema) &&
         !supportsGeneratedColumnsOnCreation(provider)) {
-        throw QueryCompilationErrors.generatedColumnsOnCreationUnsupportedForDataSource(provider)
+        throw QueryCompilationErrors.generatedColumnsUnsupportedForDataSource(
+          provider, "REPLACE TABLE")
       }
       if (!isV2Provider(provider)) {
         throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(

@@ -603,10 +603,10 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       classOf[SupportsGeneratedColumnsOnCreationWritableDataSource].getName
     val doesNotSupportGeneratedColumn = classOf[SimpleWritableDataSource].getName
     val tblName = "my_tab"
-    val tableDefinition = s"TABLE $tblName(a INT, b INT GENERATED ALWAYS AS (a+1))"
-    for (statement <- Seq("CREATE", "REPLACE")) {
+    val tableDefinition = s" $tblName(a INT, b INT GENERATED ALWAYS AS (a+1))"
+    for (statement <- Seq("CREATE TABLE", "REPLACE TABLE")) {
       withTable(tblName) {
-        if (statement == "REPLACE") {
+        if (statement == "REPLACE TABLE") {
           spark.sql(s"CREATE TABLE $tblName(a INT) USING $supportsGeneratedColumn")
         }
         spark.sql(s"$statement $tableDefinition USING $supportsGeneratedColumn")
@@ -615,11 +615,11 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         val e = intercept[AnalysisException] {
           spark.sql(s"$statement $tableDefinition USING $doesNotSupportGeneratedColumn")
         }
-        assert(e.getMessage.contains("Target data source with table provider: " +
-          "\"org.apache.spark.sql.connector.SimpleWritableDataSource\" " +
-          "does not support creating generated columns with GENERATED ALWAYS AS expressions in " +
-          "create/replace table statements"))
-        assert(e.getErrorClass == "UNSUPPORTED_FEATURE.GENERATED_COLUMN_ON_TABLE_CREATION")
+        assert(e.getMessage.contains(
+          "Target data source with table provider: " +
+            "\"org.apache.spark.sql.connector.SimpleWritableDataSource\" does not support " +
+            s"creating generated columns with GENERATED ALWAYS AS expressions in $statement"))
+        assert(e.getErrorClass == "UNSUPPORTED_FEATURE.GENERATED_COLUMN_UNSUPPORTED_FOR_PROVIDER")
       }
     }
   }
