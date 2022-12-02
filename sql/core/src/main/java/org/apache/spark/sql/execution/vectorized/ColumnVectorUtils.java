@@ -54,23 +54,23 @@ public class ColumnVectorUtils {
     if (row.isNullAt(fieldIdx)) {
       col.setNull();
     } else {
-      if (pdt instanceof PhysicalBooleanType) {
+      if (pdt == PhysicalDataTypes.BooleanType) {
         col.setBoolean(row.getBoolean(fieldIdx));
-      } else if (pdt instanceof PhysicalBinaryType) {
+      } else if (pdt == PhysicalDataTypes.BinaryType) {
         col.setBinary(row.getBinary(fieldIdx));
-      } else if (pdt instanceof PhysicalByteType) {
+      } else if (pdt == PhysicalDataTypes.ByteType) {
         col.setByte(row.getByte(fieldIdx));
-      } else if (pdt instanceof PhysicalShortType) {
+      } else if (pdt == PhysicalDataTypes.ShortType) {
         col.setShort(row.getShort(fieldIdx));
-      } else if (pdt instanceof PhysicalIntegerType) {
+      } else if (pdt == PhysicalDataTypes.IntegerType) {
         col.setInt(row.getInt(fieldIdx));
-      } else if (pdt instanceof PhysicalLongType) {
+      } else if (pdt == PhysicalDataTypes.LongType) {
         col.setLong(row.getLong(fieldIdx));
-      } else if (pdt instanceof PhysicalFloatType) {
+      } else if (pdt == PhysicalDataTypes.FloatType) {
         col.setFloat(row.getFloat(fieldIdx));
-      } else if (pdt instanceof PhysicalDoubleType) {
+      } else if (pdt == PhysicalDataTypes.DoubleType) {
         col.setDouble(row.getDouble(fieldIdx));
-      } else if (pdt instanceof PhysicalStringType) {
+      } else if (pdt == PhysicalDataTypes.StringType) {
         UTF8String v = row.getUTF8String(fieldIdx);
         col.setUtf8String(v);
       } else if (pdt instanceof PhysicalDecimalType) {
@@ -130,25 +130,25 @@ public class ColumnVectorUtils {
         dst.appendNull();
       }
     } else {
-      if (pdt instanceof PhysicalBooleanType) {
+      if (pdt == PhysicalDataTypes.BooleanType) {
         dst.appendBoolean((Boolean) o);
-      } else if (pdt instanceof PhysicalByteType) {
+      } else if (pdt == PhysicalDataTypes.ByteType) {
         dst.appendByte((Byte) o);
-      } else if (pdt instanceof PhysicalShortType) {
+      } else if (pdt == PhysicalDataTypes.ShortType) {
         dst.appendShort((Short) o);
-      } else if (pdt instanceof PhysicalIntegerType) {
+      } else if (pdt == PhysicalDataTypes.IntegerType) {
         if (o instanceof Date) {
           dst.appendInt(DateTimeUtils.fromJavaDate((Date) o));
         } else {
           dst.appendInt((Integer) o);
         }
-      } else if (pdt instanceof PhysicalLongType) {
+      } else if (pdt == PhysicalDataTypes.LongType) {
         dst.appendLong((Long) o);
-      } else if (pdt instanceof PhysicalFloatType) {
+      } else if (pdt == PhysicalDataTypes.FloatType) {
         dst.appendFloat((Float) o);
-      } else if (pdt instanceof PhysicalDoubleType) {
+      } else if (pdt == PhysicalDataTypes.DoubleType) {
         dst.appendDouble((Double) o);
-      } else if (pdt instanceof PhysicalStringType) {
+      } else if (pdt == PhysicalDataTypes.StringType) {
         byte[] b =((String)o).getBytes(StandardCharsets.UTF_8);
         dst.appendByteArray(b, 0, b.length);
       } else if (pdt instanceof PhysicalDecimalType) {
