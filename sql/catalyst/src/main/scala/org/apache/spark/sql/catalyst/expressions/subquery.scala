@@ -158,8 +158,8 @@ object SubExprUtils extends PredicateHelper {
   /**
    * Wrap attributes in the expression with [[OuterReference]]s.
    */
-  def wrapOuterReference[E <: Expression](e: E): E = {
-    e.transform { case a: Attribute => OuterReference(a) }.asInstanceOf[E]
+  def wrapOuterReference[E <: Expression](e: E, nameParts: Option[Seq[String]] = None): E = {
+    e.transform { case a: Attribute => OuterReference(a).setNameParts(nameParts) }.asInstanceOf[E]
   }
 
   /**

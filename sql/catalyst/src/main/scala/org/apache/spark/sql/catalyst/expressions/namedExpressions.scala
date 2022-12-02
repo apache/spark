@@ -424,8 +424,18 @@ case class OuterReference(e: NamedExpression)
   override def qualifier: Seq[String] = e.qualifier
   override def exprId: ExprId = e.exprId
   override def toAttribute: Attribute = e.toAttribute
-  override def newInstance(): NamedExpression = OuterReference(e.newInstance())
+  override def newInstance(): NamedExpression =
+    OuterReference(e.newInstance()).setNameParts(nameParts)
   final override val nodePatterns: Seq[TreePattern] = Seq(OUTER_REFERENCE)
+
+  // optional field of the original name parts of UnresolvedAttribute before it is resolved to
+  // OuterReference. Used in rule ResolveLateralColumnAlias to restore OuterReference back to
+  // UnresolvedAttribute.
+  var nameParts: Option[Seq[String]] = None
+  def setNameParts(newNameParts: Option[Seq[String]]): OuterReference = {
+    nameParts = newNameParts
+    this
+  }
 }
 
 object VirtualColumn {

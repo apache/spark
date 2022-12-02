@@ -1844,7 +1844,7 @@ class Analyzer(override val catalogManager: CatalogManager)
               // Only Project and Aggregate can host star expressions.
               case u @ (_: Project | _: Aggregate) =>
                 Try(s.expand(u.children.head, resolver)) match {
-                  case Success(expanded) => expanded.map(wrapOuterReference)
+                  case Success(expanded) => expanded.map(wrapOuterReference(_))
                   case Failure(_) => throw e
                 }
               // Do not use the outer plan to resolve the star expression
@@ -2165,7 +2165,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       case u @ UnresolvedAttribute(nameParts) => withPosition(u) {
         try {
           AnalysisContext.get.outerPlan.get.resolveChildren(nameParts, resolver) match {
-            case Some(resolved) => wrapOuterReference(resolved)
+            case Some(resolved) => wrapOuterReference(resolved, Some(nameParts))
             case None => u
           }
         } catch {
