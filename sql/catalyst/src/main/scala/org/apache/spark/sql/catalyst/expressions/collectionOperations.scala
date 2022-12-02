@@ -4610,7 +4610,6 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
   """,
   group = "array_funcs",
   since = "3.4.0")
-// Note: check is it required to inherit ArraySetLike
 case class ArrayCompact(child: Expression)
   extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
@@ -4637,15 +4636,7 @@ case class ArrayCompact(child: Expression)
     new GenericArrayData(newArray.slice(0, pos))
   }
   override def prettyName: String = "array_compact"
-  /**
-   * Returns Java source code that can be compiled to evaluate this expression.
-   * The default behavior is to call the eval method of the expression. Concrete expression
-   * implementations should override this to do actual code generation.
-   *
-   * @param ctx a [[CodegenContext]]
-   * @param ev  an [[ExprCode]] with unique terms.
-   * @return an [[ExprCode]] containing the Java source code to generate the given expression
-   */
+
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
 
     nullSafeCodeGen(ctx, ev, (array) => {

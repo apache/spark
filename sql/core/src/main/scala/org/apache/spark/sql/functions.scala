@@ -4031,6 +4031,7 @@ object functions {
   def array_compact(column: Column): Column = withExpr {
     ArrayCompact(column.expr)
   }
+
   /**
    * Removes duplicate values from the array.
    * @group collection_funcs
