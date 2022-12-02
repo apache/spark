@@ -74,18 +74,18 @@ public class ColumnVectorUtils {
         UTF8String v = row.getUTF8String(fieldIdx);
         col.setUtf8String(v);
       } else if (pdt instanceof PhysicalDecimalType) {
-        PhysicalDecimalType pd = (PhysicalDecimalType) pdt;
-        Decimal d = row.getDecimal(fieldIdx, pd.precision(), pd.scale());
-        if (pd.precision() <= Decimal.MAX_INT_DIGITS()) {
+        PhysicalDecimalType dt = (PhysicalDecimalType) pdt;
+        Decimal d = row.getDecimal(fieldIdx, dt.precision(), dt.scale());
+        if (dt.precision() <= Decimal.MAX_INT_DIGITS()) {
           col.setInt((int)d.toUnscaledLong());
-        } else if (pd.precision() <= Decimal.MAX_LONG_DIGITS()) {
+        } else if (dt.precision() <= Decimal.MAX_LONG_DIGITS()) {
           col.setLong(d.toUnscaledLong());
         } else {
           final BigInteger integer = d.toJavaBigDecimal().unscaledValue();
           byte[] bytes = integer.toByteArray();
           col.setBinary(bytes);
         }
-      } else if (pdt == DataTypes.CalendarIntervalType.physicalDataType()) {
+      } else if (pdt instanceof PhysicalCalendarIntervalType) {
         // The value of `numRows` is irrelevant.
         col.setCalendarInterval((CalendarInterval) row.get(fieldIdx, t));
       } else {
