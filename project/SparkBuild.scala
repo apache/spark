@@ -52,6 +52,7 @@ object BuildCommons {
   val streamingProjects@Seq(streaming, streamingKafka010) =
     Seq("streaming", "streaming-kafka-0-10").map(ProjectRef(buildLocation, _))
 
+  val connectCommon = ProjectRef(buildLocation, "connect-common")
   val connect = ProjectRef(buildLocation, "connect")
 
   val allProjects@Seq(
@@ -59,7 +60,7 @@ object BuildCommons {
   ) = Seq(
     "core", "graphx", "mllib", "mllib-local", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
     "tags", "sketch", "kvstore"
-  ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ Seq(connect)
+  ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ Seq(connectCommon, connect)
 
   val optionallyEnabledProjects@Seq(kubernetes, mesos, yarn,
     sparkGangliaLgpl, streamingKinesisAsl,
@@ -402,7 +403,7 @@ object SparkBuild extends PomBuild {
   val mimaProjects = allProjects.filterNot { x =>
     Seq(
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
-      unsafe, tags, tokenProviderKafka010, sqlKafka010, connect, protobuf
+      unsafe, tags, tokenProviderKafka010, sqlKafka010, connectCommon, connect, protobuf
     ).contains(x)
   }
 
@@ -443,6 +444,7 @@ object SparkBuild extends PomBuild {
   /* Hive console settings */
   enable(Hive.settings)(hive)
 
+  enable(SparkConnect.settings)(connectCommon)
   enable(SparkConnect.settings)(connect)
 
   /* Protobuf settings */
@@ -1241,10 +1243,10 @@ object Unidoc {
 
     (ScalaUnidoc / unidoc / unidocProjectFilter) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
-        yarn, tags, streamingKafka010, sqlKafka010, connect, protobuf),
+        yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, protobuf),
     (JavaUnidoc / unidoc / unidocProjectFilter) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
-        yarn, tags, streamingKafka010, sqlKafka010, connect, protobuf),
+        yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, protobuf),
 
     (ScalaUnidoc / unidoc / unidocAllClasspaths) := {
       ignoreClasspaths((ScalaUnidoc / unidoc / unidocAllClasspaths).value)
