@@ -20,9 +20,6 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.sql.Date;
-import java.sql.Timestamp;
-import java.time.Instant;
-import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -125,45 +122,32 @@ public class ColumnVectorUtils {
   }
 
   private static void appendValue(WritableColumnVector dst, DataType t, Object o) {
-    PhysicalDataType pdt = t.physicalDataType();
     if (o == null) {
-      if (pdt instanceof PhysicalCalendarIntervalType) {
+      if (t instanceof CalendarIntervalType) {
         dst.appendStruct(true);
       } else {
         dst.appendNull();
       }
     } else {
-      if (pdt instanceof PhysicalBooleanType) {
+      if (t == DataTypes.BooleanType) {
         dst.appendBoolean((Boolean) o);
-      } else if (pdt instanceof PhysicalByteType) {
+      } else if (t == DataTypes.ByteType) {
         dst.appendByte((Byte) o);
-      } else if (pdt instanceof PhysicalShortType) {
+      } else if (t == DataTypes.ShortType) {
         dst.appendShort((Short) o);
-      } else if (pdt instanceof PhysicalIntegerType) {
-        if (o instanceof Date) {
-          dst.appendInt(DateTimeUtils.fromJavaDate((Date) o));
-        } else if (o instanceof LocalDate) {
-          dst.appendInt(DateTimeUtils.localDateToDays((LocalDate) o));
-        } else {
-          dst.appendInt((Integer) o);
-        }
-      } else if (pdt instanceof PhysicalLongType) {
-        if (o instanceof Timestamp) {
-          dst.appendLong(DateTimeUtils.fromJavaTimestamp((Timestamp) o));
-        } else if (o instanceof Instant) {
-          dst.appendLong(DateTimeUtils.instantToMicros((Instant) o));
-        }else {
-          dst.appendLong((Long) o);
-        }
-      } else if (pdt instanceof PhysicalFloatType) {
+      } else if (t == DataTypes.IntegerType) {
+        dst.appendInt((Integer) o);
+      } else if (t == DataTypes.LongType) {
+        dst.appendLong((Long) o);
+      } else if (t == DataTypes.FloatType) {
         dst.appendFloat((Float) o);
-      } else if (pdt instanceof PhysicalDoubleType) {
+      } else if (t == DataTypes.DoubleType) {
         dst.appendDouble((Double) o);
-      } else if (pdt instanceof PhysicalStringType) {
+      } else if (t == DataTypes.StringType) {
         byte[] b =((String)o).getBytes(StandardCharsets.UTF_8);
         dst.appendByteArray(b, 0, b.length);
-      } else if (pdt instanceof PhysicalDecimalType) {
-        PhysicalDecimalType dt = (PhysicalDecimalType) pdt;
+      } else if (t instanceof DecimalType) {
+        DecimalType dt = (DecimalType) t;
         Decimal d = Decimal.apply((BigDecimal) o, dt.precision(), dt.scale());
         if (dt.precision() <= Decimal.MAX_INT_DIGITS()) {
           dst.appendInt((int) d.toUnscaledLong());
@@ -174,12 +158,14 @@ public class ColumnVectorUtils {
           byte[] bytes = integer.toByteArray();
           dst.appendByteArray(bytes, 0, bytes.length);
         }
-      } else if (pdt instanceof PhysicalCalendarIntervalType) {
+      } else if (t instanceof CalendarIntervalType) {
         CalendarInterval c = (CalendarInterval)o;
         dst.appendStruct(false);
         dst.getChild(0).appendInt(c.months);
         dst.getChild(1).appendInt(c.days);
         dst.getChild(2).appendLong(c.microseconds);
+      } else if (t instanceof DateType) {
+        dst.appendInt(DateTimeUtils.fromJavaDate((Date)o));
       } else {
         throw new UnsupportedOperationException("Type " + t);
       }
@@ -187,9 +173,8 @@ public class ColumnVectorUtils {
   }
 
   private static void appendValue(WritableColumnVector dst, DataType t, Row src, int fieldIdx) {
-    PhysicalDataType pdt = t.physicalDataType();
-    if (pdt instanceof PhysicalArrayType) {
-      PhysicalArrayType at = (PhysicalArrayType) pdt;
+    if (t instanceof ArrayType) {
+      ArrayType at = (ArrayType)t;
       if (src.isNullAt(fieldIdx)) {
         dst.appendNull();
       } else {
@@ -199,8 +184,8 @@ public class ColumnVectorUtils {
           appendValue(dst.arrayData(), at.elementType(), o);
         }
       }
-    } else if (pdt instanceof PhysicalStructType) {
-      PhysicalStructType st = (PhysicalStructType) pdt;
+    } else if (t instanceof StructType) {
+      StructType st = (StructType)t;
       if (src.isNullAt(fieldIdx)) {
         dst.appendStruct(true);
       } else {
