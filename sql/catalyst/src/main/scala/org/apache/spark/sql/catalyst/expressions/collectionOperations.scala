@@ -4616,13 +4616,6 @@ case class ArrayCompact(child: Expression)
   override def dataType: DataType = child.dataType
 
   @transient private lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
-  override def checkInputDataTypes(): TypeCheckResult = {
-    super.checkInputDataTypes() match {
-      case f if f.isFailure => f
-      case TypeCheckResult.TypeCheckSuccess =>
-        TypeUtils.checkForOrderingExpr(elementType, prettyName)
-    }
-  }
 
   override def nullSafeEval(array: Any): Any = {
     val newArray = new Array[Any](array.asInstanceOf[ArrayData].numElements())

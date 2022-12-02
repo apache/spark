@@ -2621,8 +2621,8 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       ArrayType(BinaryType))
     checkEvaluation(ArrayCompact(binary_arr), Seq[Array[Byte]](Array[Byte](1, 2)))
 
-    val int_arr = Literal.create(Seq[Seq[Int]](null, Seq[Int](2, 1)),
-      ArrayType(ArrayType(IntegerType)))
-    checkEvaluation(ArrayCompact(int_arr), Seq[Seq[Int]]( Seq[Int](2, 1)))
+    val int_arr = Literal.create(Seq[Array[Integer]](Array(1, null, 3), null, Array(null, 2, 3)))
+    checkEvaluation(ArrayCompact(int_arr),
+      Seq[Array[Integer]](Array(1, null, 3), Array(null, 2, 3)))
   }
 }
