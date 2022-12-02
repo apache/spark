@@ -32,6 +32,7 @@ import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.types.PhysicalDataType;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
@@ -40,7 +41,7 @@ import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
-import static org.apache.spark.sql.types.DataTypes.*;
+import static org.apache.spark.sql.types.PhysicalDataTypes.*;
 import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
 
 /**
@@ -73,7 +74,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   /**
    * Field types that can be updated in place in UnsafeRows (e.g. we support set() for these types)
    */
-  public static final Set<DataType> mutableFieldTypes;
+  public static final Set<PhysicalDataType> mutableFieldTypes;
 
   // DecimalType, DayTimeIntervalType and YearMonthIntervalType are also mutable
   static {
@@ -87,10 +88,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
           IntegerType,
           LongType,
           FloatType,
-          DoubleType,
-          DateType,
-          TimestampType,
-          TimestampNTZType
+          DoubleType
         )));
   }
 
@@ -102,8 +100,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     if (dt instanceof DecimalType) {
       return ((DecimalType) dt).precision() <= Decimal.MAX_LONG_DIGITS();
     } else {
-      return dt instanceof DayTimeIntervalType || dt instanceof YearMonthIntervalType ||
-        mutableFieldTypes.contains(dt);
+      return mutableFieldTypes.contains(dt.physicalDataType());
     }
   }
 
@@ -112,9 +109,8 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
       return isMutable(((UserDefinedType) dt).sqlType());
     }
 
-    return mutableFieldTypes.contains(dt) || dt instanceof DecimalType ||
-      dt instanceof CalendarIntervalType || dt instanceof DayTimeIntervalType ||
-      dt instanceof YearMonthIntervalType;
+    return mutableFieldTypes.contains(dt.physicalDataType()) || dt instanceof DecimalType ||
+      dt instanceof CalendarIntervalType;
   }
 
   //////////////////////////////////////////////////////////////////////////////
