@@ -142,6 +142,10 @@ class SparkConnectFunctionTests(SparkConnectSQLTestCase):
             sdf.select(SF.isnull(sdf.a), SF.isnull("b")).toPandas(),
         )
         self.assert_eq(
+            cdf.select(CF.input_file_name()).toPandas(),
+            sdf.select(SF.input_file_name()).toPandas(),
+        )
+        self.assert_eq(
             cdf.select(CF.least(cdf.a, "b", cdf.c)).toPandas(),
             sdf.select(SF.least(sdf.a, "b", sdf.c)).toPandas(),
         )
