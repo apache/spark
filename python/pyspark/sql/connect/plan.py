@@ -16,6 +16,7 @@
 #
 
 from typing import Any, List, Optional, Sequence, Union, cast, TYPE_CHECKING, Mapping, Dict
+import functools
 import pandas
 import pyarrow as pa
 import pyspark.sql.connect.proto as proto
@@ -725,12 +726,7 @@ class Join(LogicalPlan):
                 if isinstance(self.on[0], str):
                     rel.join.using_columns.extend(cast(str, self.on))
                 else:
-                    merge_column = None
-                    for c in self.on:
-                        if merge_column is not None:
-                            merge_column = merge_column & c
-                        else:
-                            merge_column = c
+                    merge_column = functools.reduce(lambda c1, c2: c1 & c2, self.on)
                     rel.join.join_condition.CopyFrom(cast(Column, merge_column).to_plan(session))
         rel.join.join_type = self.how
         return rel
