@@ -59,6 +59,15 @@ SELECT SUM(t.v) FROM (
   SELECT v + v AS v FROM t3
 ) t;
 
+-- SPARK-41361: Invalid call toAttribute on unresolved object exception caused by WidenSetOperationTypes
+SELECT
+TRANSFORM(*) USING 'cat' AS (a)
+FROM
+(
+SELECT c2 AS c from t2
+UNION
+SELECT c2 AS c from t1);
+
 -- Clean-up
 DROP VIEW IF EXISTS t1;
 DROP VIEW IF EXISTS t2;

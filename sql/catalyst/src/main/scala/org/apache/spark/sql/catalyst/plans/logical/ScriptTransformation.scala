@@ -32,7 +32,13 @@ case class ScriptTransformation(
     child: LogicalPlan,
     ioschema: ScriptInputOutputSchema) extends UnaryNode {
   @transient
-  override lazy val references: AttributeSet = AttributeSet(child.output)
+  override lazy val references: AttributeSet = {
+    if (child.resolved) {
+      AttributeSet(child.output)
+    } else {
+      AttributeSet.empty
+    }
+  }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): ScriptTransformation =
     copy(child = newChild)
