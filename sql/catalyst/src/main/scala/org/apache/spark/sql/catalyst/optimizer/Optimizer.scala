@@ -242,8 +242,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RemoveNoopOperators) :+
     // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
     Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers) :+
-    Batch("ReplaceUpdateFieldsExpression", Once, ReplaceUpdateFieldsExpression)
-
+    Batch("ReplaceUpdateFieldsExpression", Once, ReplaceUpdateFieldsExpression) :+
+    Batch("MergeConditionWithValue", FixedPoint(1), MergeConditionWithValue)
     // remove any batches with no rules. this may happen when subclasses do not add optional rules.
     batches.filter(_.rules.nonEmpty)
   }
@@ -636,6 +636,29 @@ object RemoveNoopOperators extends Rule[LogicalPlan] {
 
     // Eliminate no-op Window
     case w: Window if w.windowExpressions.isEmpty => w.child
+  }
+}
+
+/**
+ * Merge case condition expression with same value.
+ */
+object MergeConditionWithValue extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
+    _.containsPattern(CASE_WHEN)) {
+    case Project(projectList, child) =>
+      Project(projectList.map(_.mapChildren({
+          case CaseWhen(branches, elseValue) =>
+            val caseMap = mutable.HashMap.empty[Expression, Expression]
+            branches.foreach {
+              case (condition, value) =>
+                if (caseMap.contains(value)) {
+                  caseMap.put(value, Or(caseMap.get(value).get, condition))
+                } else {
+                  caseMap.put(value, condition)
+                }
+            }
+            CaseWhen(caseMap.toSeq.map(_.swap), elseValue)
+      })).asInstanceOf[Seq[NamedExpression]], child)
   }
 }
 
