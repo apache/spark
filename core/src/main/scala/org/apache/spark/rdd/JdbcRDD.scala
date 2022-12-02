@@ -32,7 +32,6 @@ private[spark] class JdbcPartition(idx: Int, val lower: Long, val upper: Long) e
   override def index: Int = idx
 }
 
-// TODO: Expose a jdbcRDD function in SparkContext and mark this as semi-private
 /**
  * An RDD that executes a SQL query on a JDBC connection and reads results.
  * For usage example, see test case JdbcRDDSuite.

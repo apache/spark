@@ -23,8 +23,9 @@ import com.google.common.primitives.{Doubles, Ints, Longs}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile.PercentileDigest
 import org.apache.spark.sql.catalyst.trees.TernaryLike
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
@@ -118,17 +119,46 @@ case class ApproximatePercentile(
     val defaultCheck = super.checkInputDataTypes()
     if (defaultCheck.isFailure) {
       defaultCheck
-    } else if (!percentageExpression.foldable || !accuracyExpression.foldable) {
-      TypeCheckFailure(s"The accuracy or percentage provided must be a constant literal")
+    } else if (!percentageExpression.foldable) {
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> "percentage",
+          "inputType" -> toSQLType(percentageExpression.dataType),
+          "inputExpr" -> toSQLExpr(percentageExpression)
+        )
+      )
+    } else if (!accuracyExpression.foldable) {
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> "accuracy",
+          "inputType" -> toSQLType(accuracyExpression.dataType),
+          "inputExpr" -> toSQLExpr(accuracyExpression)
+        )
+      )
     } else if (accuracy <= 0 || accuracy > Int.MaxValue) {
-      TypeCheckFailure(s"The accuracy provided must be a literal between (0, ${Int.MaxValue}]" +
-        s" (current value = $accuracy)")
+      DataTypeMismatch(
+        errorSubClass = "VALUE_OUT_OF_RANGE",
+        messageParameters = Map(
+          "exprName" -> "accuracy",
+          "valueRange" -> s"(0, ${Int.MaxValue}]",
+          "currentValue" -> toSQLValue(accuracy, LongType)
+        )
+      )
     } else if (percentages == null) {
-      TypeCheckFailure("Percentage value must not be null")
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_NULL",
+        messageParameters = Map("exprName" -> "percentage"))
     } else if (percentages.exists(percentage => percentage < 0.0D || percentage > 1.0D)) {
-      TypeCheckFailure(
-        s"All percentage values must be between 0.0 and 1.0 " +
-          s"(current = ${percentages.mkString(", ")})")
+      DataTypeMismatch(
+        errorSubClass = "VALUE_OUT_OF_RANGE",
+        messageParameters = Map(
+          "exprName" -> "percentage",
+          "valueRange" -> "[0.0, 1.0]",
+          "currentValue" -> percentages.map(toSQLValue(_, DoubleType)).mkString(",")
+        )
+      )
     } else {
       TypeCheckSuccess
     }

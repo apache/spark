@@ -70,7 +70,7 @@ class SeriesPlotMatplotlibTest(PandasOnSparkTestCase, TestUtils):
 
     @property
     def pdf2(self):
-        return self.psdf2.to_pandas()
+        return self.psdf2._to_pandas()
 
     @staticmethod
     def plot_to_base64(ax):

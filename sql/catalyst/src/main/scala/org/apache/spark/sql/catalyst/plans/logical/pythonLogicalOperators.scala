@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, PythonUDF}
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
+import org.apache.spark.sql.types.StructType
 
 /**
  * FlatMap groups using a udf: pandas.Dataframe -> pandas.DataFrame.
@@ -96,6 +98,38 @@ case class FlatMapCoGroupsInPandas(
   override protected def withNewChildrenInternal(
       newLeft: LogicalPlan, newRight: LogicalPlan): FlatMapCoGroupsInPandas =
     copy(left = newLeft, right = newRight)
+}
+
+/**
+ * Similar with [[FlatMapGroupsWithState]]. Applies func to each unique group
+ * in `child`, based on the evaluation of `groupingAttributes`,
+ * while using state data.
+ * `functionExpr` is invoked with an pandas DataFrame representation and the
+ * grouping key (tuple).
+ *
+ * @param functionExpr function called on each group
+ * @param groupingAttributes used to group the data
+ * @param outputAttrs used to define the output rows
+ * @param stateType used to serialize/deserialize state before calling `functionExpr`
+ * @param outputMode the output mode of `func`
+ * @param timeout used to timeout groups that have not received data in a while
+ * @param child logical plan of the underlying data
+ */
+case class FlatMapGroupsInPandasWithState(
+    functionExpr: Expression,
+    groupingAttributes: Seq[Attribute],
+    outputAttrs: Seq[Attribute],
+    stateType: StructType,
+    outputMode: OutputMode,
+    timeout: GroupStateTimeout,
+    child: LogicalPlan) extends UnaryNode {
+
+  override def output: Seq[Attribute] = outputAttrs
+
+  override def producedAttributes: AttributeSet = AttributeSet(outputAttrs)
+
+  override protected def withNewChildInternal(
+    newChild: LogicalPlan): FlatMapGroupsInPandasWithState = copy(child = newChild)
 }
 
 trait BaseEvalPython extends UnaryNode {

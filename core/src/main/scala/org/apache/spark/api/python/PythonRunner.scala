@@ -53,6 +53,7 @@ private[spark] object PythonEvalType {
   val SQL_MAP_PANDAS_ITER_UDF = 205
   val SQL_COGROUPED_MAP_PANDAS_UDF = 206
   val SQL_MAP_ARROW_ITER_UDF = 207
+  val SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE = 208
 
   def toString(pythonEvalType: Int): String = pythonEvalType match {
     case NON_UDF => "NON_UDF"
@@ -65,6 +66,7 @@ private[spark] object PythonEvalType {
     case SQL_MAP_PANDAS_ITER_UDF => "SQL_MAP_PANDAS_ITER_UDF"
     case SQL_COGROUPED_MAP_PANDAS_UDF => "SQL_COGROUPED_MAP_PANDAS_UDF"
     case SQL_MAP_ARROW_ITER_UDF => "SQL_MAP_ARROW_ITER_UDF"
+    case SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE => "SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE"
   }
 }
 
@@ -133,13 +135,6 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     val execCoresProp = Option(context.getLocalProperty(EXECUTOR_CORES_LOCAL_PROPERTY))
     val memoryMb = Option(context.getLocalProperty(PYSPARK_MEMORY_LOCAL_PROPERTY)).map(_.toLong)
     val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")
-    // if OMP_NUM_THREADS is not explicitly set, override it with the number of cores
-    if (conf.getOption("spark.executorEnv.OMP_NUM_THREADS").isEmpty) {
-      // SPARK-28843: limit the OpenMP thread pool to the number of cores assigned to this executor
-      // this avoids high memory consumption with pandas/numpy because of a large OpenMP thread pool
-      // see https://github.com/numpy/numpy/issues/10455
-      execCoresProp.foreach(envVars.put("OMP_NUM_THREADS", _))
-    }
     envVars.put("SPARK_LOCAL_DIRS", localdir) // it's also used in monitor thread
     if (reuseWorker) {
       envVars.put("SPARK_REUSE_WORKER", "1")
@@ -401,6 +396,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
           // the decrypted data to python
           val idsAndFiles = broadcastVars.flatMap { broadcast =>
             if (!oldBids.contains(broadcast.id)) {
+              oldBids.add(broadcast.id)
               Some((broadcast.id, broadcast.value.path))
             } else {
               None
@@ -414,7 +410,6 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
           idsAndFiles.foreach { case (id, _) =>
             // send new broadcast
             dataOut.writeLong(id)
-            oldBids.add(id)
           }
           dataOut.flush()
           logTrace("waiting for python to read decrypted broadcast data from server")

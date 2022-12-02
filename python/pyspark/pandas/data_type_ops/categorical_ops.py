@@ -25,7 +25,6 @@ from pandas.api.types import is_list_like, CategoricalDtype  # type: ignore[attr
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.base import column_op, IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import _sanitize_list_like, DataTypeOps
-from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef import pandas_on_spark_type
 from pyspark.sql import functions as F
 from pyspark.sql.column import Column
@@ -134,9 +133,9 @@ def _compare(
 def _to_cat(index_ops: IndexOpsLike) -> IndexOpsLike:
     categories = cast(CategoricalDtype, index_ops.dtype).categories
     if len(categories) == 0:
-        scol = SF.lit(None)
+        scol = F.lit(None)
     else:
-        kvs = chain(*[(SF.lit(code), SF.lit(category)) for code, category in enumerate(categories)])
+        kvs = chain(*[(F.lit(code), F.lit(category)) for code, category in enumerate(categories)])
         map_scol = F.create_map(*kvs)
         scol = map_scol[index_ops.spark.column]
     return index_ops._with_new_scol(scol)

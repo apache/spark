@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-
 
 class StringFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -575,10 +575,21 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       Row(null, Seq(Seq("10")), Seq(Seq("3.14"))))
 
     // Argument number exception
-    val m = intercept[AnalysisException] {
-      df.selectExpr("sentences()")
-    }.getMessage
-    assert(m.contains("Invalid number of arguments for function sentences"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("sentences()")
+      },
+      errorClass = "WRONG_NUM_ARGS",
+      parameters = Map(
+        "functionName" -> toSQLId("sentences"),
+        "expectedNum" -> "[1, 2, 3]",
+        "actualNum" -> "0"
+      ),
+      context = ExpectedContext(
+        fragment = "sentences()",
+        start = 0,
+        stop = 10)
+    )
   }
 
   test("str_to_map function") {
@@ -635,9 +646,21 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-36148: check input data types of regexp_replace") {
-    val m = intercept[AnalysisException] {
-      sql("select regexp_replace(collect_list(1), '1', '2')")
-    }.getMessage
-    assert(m.contains("data type mismatch: argument 1 requires string type"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("select regexp_replace(collect_list(1), '1', '2')")
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      sqlState = None,
+      parameters = Map(
+        "sqlExpr" -> "\"regexp_replace(collect_list(1), 1, 2, 1)\"",
+        "paramIndex" -> "1",
+        "inputSql" -> "\"collect_list(1)\"",
+        "inputType" -> "\"ARRAY<INT>\"",
+        "requiredType" -> "\"STRING\""),
+      context = ExpectedContext(
+        fragment = "regexp_replace(collect_list(1), '1', '2')",
+        start = 7,
+        stop = 47))
   }
 }

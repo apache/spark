@@ -49,9 +49,9 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "message" : "integer overflow",
     "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
-    "config" : "spark.sql.ansi.enabled"
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "message" : "integer overflow"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -73,9 +73,9 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "message" : "long overflow",
     "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
-    "config" : "spark.sql.ansi.enabled"
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "message" : "long overflow"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -211,7 +211,23 @@ SELECT try_add(interval 2 year, interval 2 second)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'INTERVAL '2' YEAR + INTERVAL '02' SECOND' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'INTERVAL '2' YEAR' is of interval year type.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"INTERVAL '2' YEAR\"",
+    "inputType" : "\"INTERVAL YEAR\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"INTERVAL '2' YEAR + INTERVAL '02' SECOND\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 50,
+    "fragment" : "try_add(interval 2 year, interval 2 second)"
+  } ]
+}
 
 
 -- !query
@@ -264,9 +280,9 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "message" : "integer overflow",
     "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
-    "config" : "spark.sql.ansi.enabled"
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "message" : "integer overflow"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -288,9 +304,9 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "message" : "long overflow",
     "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
-    "config" : "spark.sql.ansi.enabled"
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "message" : "long overflow"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -422,9 +438,9 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "message" : "integer overflow",
     "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
-    "config" : "spark.sql.ansi.enabled"
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "message" : "integer overflow"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -446,9 +462,9 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "message" : "long overflow",
     "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
-    "config" : "spark.sql.ansi.enabled"
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "message" : "long overflow"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -564,9 +580,9 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "message" : "integer overflow",
     "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
-    "config" : "spark.sql.ansi.enabled"
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "message" : "integer overflow"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -588,9 +604,9 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "message" : "long overflow",
     "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
-    "config" : "spark.sql.ansi.enabled"
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "message" : "long overflow"
   },
   "queryContext" : [ {
     "objectType" : "",

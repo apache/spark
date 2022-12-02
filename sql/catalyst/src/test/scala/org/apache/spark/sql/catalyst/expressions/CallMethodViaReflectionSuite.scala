@@ -20,9 +20,10 @@ package org.apache.spark.sql.catalyst.expressions
 import java.sql.Timestamp
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.Cast.toSQLType
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
-import org.apache.spark.sql.types.{IntegerType, StringType}
+import org.apache.spark.sql.types._
 
 /** A static class for testing purpose. */
 object ReflectStaticClass {
@@ -60,39 +61,89 @@ class CallMethodViaReflectionSuite extends SparkFunSuite with ExpressionEvalHelp
   }
 
   test("class not found") {
-    val ret = createExpr("some-random-class", "method").checkInputDataTypes()
+    val wrongClassName = "some-random-class"
+    val ret = createExpr(wrongClassName, "method").checkInputDataTypes()
     assert(ret.isFailure)
-    val errorMsg = ret.asInstanceOf[TypeCheckFailure].message
-    assert(errorMsg.contains("not found") && errorMsg.contains("class"))
+    assert(ret ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_CLASS_TYPE",
+        messageParameters = Map("className" -> wrongClassName)
+      )
+    )
   }
 
   test("method not found because name does not match") {
-    val ret = createExpr(staticClassName, "notfoundmethod").checkInputDataTypes()
+    val wrongMethodName = "notfoundmethod"
+    val ret = createExpr(staticClassName, wrongMethodName).checkInputDataTypes()
     assert(ret.isFailure)
-    val errorMsg = ret.asInstanceOf[TypeCheckFailure].message
-    assert(errorMsg.contains("cannot find a static method"))
+    assert(ret ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_STATIC_METHOD",
+        messageParameters = Map("methodName" -> wrongMethodName, "className" -> staticClassName)
+      )
+    )
   }
 
   test("method not found because there is no static method") {
-    val ret = createExpr(dynamicClassName, "method1").checkInputDataTypes()
+    val wrongMethodName = "method1"
+    val ret = createExpr(dynamicClassName, wrongMethodName).checkInputDataTypes()
     assert(ret.isFailure)
-    val errorMsg = ret.asInstanceOf[TypeCheckFailure].message
-    assert(errorMsg.contains("cannot find a static method"))
+    assert(ret ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_STATIC_METHOD",
+        messageParameters = Map("methodName" -> wrongMethodName, "className" -> dynamicClassName)
+      )
+    )
   }
 
   test("input type checking") {
-    assert(CallMethodViaReflection(Seq.empty).checkInputDataTypes().isFailure)
-    assert(CallMethodViaReflection(Seq(Literal(staticClassName))).checkInputDataTypes().isFailure)
+    assert(CallMethodViaReflection(Seq.empty).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "WRONG_NUM_ARGS",
+        messageParameters = Map(
+          "functionName" -> "`reflect`",
+          "expectedNum" -> "> 1",
+          "actualNum" -> "0")
+      )
+    )
+    assert(CallMethodViaReflection(Seq(Literal(staticClassName))).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "WRONG_NUM_ARGS",
+        messageParameters = Map(
+          "functionName" -> "`reflect`",
+          "expectedNum" -> "> 1",
+          "actualNum" -> "1")
+      )
+    )
     assert(CallMethodViaReflection(
-      Seq(Literal(staticClassName), Literal(1))).checkInputDataTypes().isFailure)
+      Seq(Literal(staticClassName), Literal(1))).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> "method",
+          "inputType" -> "\"STRING\"",
+          "inputExpr" -> "\"1\"")
+      )
+    )
     assert(createExpr(staticClassName, "method1").checkInputDataTypes().isSuccess)
   }
 
   test("unsupported type checking") {
     val ret = createExpr(staticClassName, "method1", new Timestamp(1)).checkInputDataTypes()
     assert(ret.isFailure)
-    val errorMsg = ret.asInstanceOf[TypeCheckFailure].message
-    assert(errorMsg.contains("arguments from the third require boolean, byte, short"))
+    assert(ret ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "3",
+          "requiredType" -> toSQLType(
+            TypeCollection(BooleanType, ByteType, ShortType,
+              IntegerType, LongType, FloatType, DoubleType, StringType)),
+          "inputSql" -> "\"TIMESTAMP '1969-12-31 16:00:00.001'\"",
+          "inputType" -> "\"TIMESTAMP\""
+        )
+      )
+    )
   }
 
   test("invoking methods using acceptable types") {

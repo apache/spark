@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
-import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, FileScan}
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.functions.broadcast
 import org.apache.spark.sql.internal.SQLConf
@@ -140,6 +140,24 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with Shared
     }
   }
 
+  test("SPARK-40565: don't push down non-deterministic filters for V2 file sources") {
+    // Force datasource v2 for parquet
+    withSQLConf((SQLConf.USE_V1_SOURCE_LIST.key, "")) {
+      withTempPath { dir =>
+        spark.range(10).coalesce(1).selectExpr("id", "id % 3 as p")
+          .write.partitionBy("p").parquet(dir.getCanonicalPath)
+        withTempView("tmp") {
+          spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tmp")
+          assertPrunedPartitions("SELECT * FROM tmp WHERE rand() > 0.5", 3, "")
+          assertPrunedPartitions("SELECT * FROM tmp WHERE p > rand()", 3, "")
+          assertPrunedPartitions("SELECT * FROM tmp WHERE p = 0 AND rand() > 0.5",
+            1,
+            "(tmp.p = 0)")
+        }
+      }
+    }
+  }
+
   protected def collectPartitionFiltersFn(): PartialFunction[SparkPlan, Seq[Expression]] = {
     case scan: FileSourceScanExec => scan.partitionFilters
   }
@@ -147,7 +165,8 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with Shared
   override def getScanExecPartitionSize(plan: SparkPlan): Long = {
     plan.collectFirst {
       case p: FileSourceScanExec => p.selectedPartitions.length
-      case b: BatchScanExec => b.partitions.size
+      case BatchScanExec(_, scan: FileScan, _, _, _, _) =>
+        scan.fileIndex.listFiles(scan.partitionFilters, scan.dataFilters).length
     }.get
   }
 }

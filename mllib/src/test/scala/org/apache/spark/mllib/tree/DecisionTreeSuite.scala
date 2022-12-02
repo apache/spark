@@ -629,14 +629,14 @@ object DecisionTreeSuite extends SparkFunSuite {
       case (Some(aNode), Some(bNode)) => checkEqual(aNode, bNode)
       case (None, None) =>
       case _ =>
-        fail("Only one instance has leftNode defined. (a.leftNode: ${a.leftNode}," +
-          " b.leftNode: ${b.leftNode})")
+        fail(s"Only one instance has leftNode defined. (a.leftNode: ${a.leftNode}," +
+          s" b.leftNode: ${b.leftNode})")
     }
     (a.rightNode, b.rightNode) match {
       case (Some(aNode: Node), Some(bNode: Node)) => checkEqual(aNode, bNode)
       case (None, None) =>
-      case _ => fail("Only one instance has rightNode defined. (a.rightNode: ${a.rightNode}, " +
-        "b.rightNode: ${b.rightNode})")
+      case _ => fail(s"Only one instance has rightNode defined. (a.rightNode: ${a.rightNode}, " +
+        s"b.rightNode: ${b.rightNode})")
     }
   }
 }

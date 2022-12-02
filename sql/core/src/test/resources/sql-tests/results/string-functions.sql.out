@@ -5,7 +5,22 @@ select concat_ws()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-requirement failed: concat_ws requires at least one argument.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+  "messageParameters" : {
+    "actualNum" : "0",
+    "expectedNum" : "> 0",
+    "functionName" : "`concat_ws`",
+    "sqlExpr" : "\"concat_ws()\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 18,
+    "fragment" : "concat_ws()"
+  } ]
+}
 
 
 -- !query
@@ -14,7 +29,22 @@ select format_string()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-requirement failed: format_string() should take at least 1 argument; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+  "messageParameters" : {
+    "actualNum" : "0",
+    "expectedNum" : "> 0",
+    "functionName" : "`format_string`",
+    "sqlExpr" : "\"format_string()\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 22,
+    "fragment" : "format_string()"
+  } ]
+}
 
 
 -- !query
@@ -485,6 +515,22 @@ AABB
 
 
 -- !query
+SELECT hex(lpad(unhex('123'), 2))
+-- !query schema
+struct<hex(lpad(unhex(123), 2, X'00')):string>
+-- !query output
+0123
+
+
+-- !query
+SELECT hex(lpad(unhex('12345'), 2))
+-- !query schema
+struct<hex(lpad(unhex(12345), 2, X'00')):string>
+-- !query output
+0123
+
+
+-- !query
 SELECT hex(lpad(unhex(''), 5, unhex('1f')))
 -- !query schema
 struct<hex(lpad(unhex(), 5, unhex(1f))):string>
@@ -578,6 +624,22 @@ SELECT hex(rpad(unhex('aabbcc'), 2))
 struct<hex(rpad(unhex(aabbcc), 2, X'00')):string>
 -- !query output
 AABB
+
+
+-- !query
+SELECT hex(rpad(unhex('123'), 2))
+-- !query schema
+struct<hex(rpad(unhex(123), 2, X'00')):string>
+-- !query output
+0123
+
+
+-- !query
+SELECT hex(rpad(unhex('12345'), 2))
+-- !query schema
+struct<hex(rpad(unhex(12345), 2, X'00')):string>
+-- !query output
+0123
 
 
 -- !query
@@ -690,7 +752,21 @@ select decode()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid number of arguments for function decode. Expected: 2; Found: 0; line 1 pos 7
+{
+  "errorClass" : "WRONG_NUM_ARGS",
+  "messageParameters" : {
+    "actualNum" : "0",
+    "expectedNum" : "2",
+    "functionName" : "`decode`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 15,
+    "fragment" : "decode()"
+  } ]
+}
 
 
 -- !query
@@ -699,7 +775,21 @@ select decode(encode('abc', 'utf-8'))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid number of arguments for function decode. Expected: 2; Found: 1; line 1 pos 7
+{
+  "errorClass" : "WRONG_NUM_ARGS",
+  "messageParameters" : {
+    "actualNum" : "1",
+    "expectedNum" : "2",
+    "functionName" : "`decode`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 37,
+    "fragment" : "decode(encode('abc', 'utf-8'))"
+  } ]
+}
 
 
 -- !query
@@ -1119,10 +1209,10 @@ org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
   "messageParameters" : {
-    "str" : "' ab cdef= = '",
     "fmt" : "'BASE64'",
-    "targetType" : "\"BINARY\"",
-    "suggestion" : "`try_to_binary`"
+    "str" : "' ab cdef= = '",
+    "suggestion" : "`try_to_binary`",
+    "targetType" : "\"BINARY\""
   }
 }
 
@@ -1146,10 +1236,10 @@ org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
   "messageParameters" : {
-    "str" : "'a'",
     "fmt" : "'BASE64'",
-    "targetType" : "\"BINARY\"",
-    "suggestion" : "`try_to_binary`"
+    "str" : "'a'",
+    "suggestion" : "`try_to_binary`",
+    "targetType" : "\"BINARY\""
   }
 }
 
@@ -1163,10 +1253,10 @@ org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
   "messageParameters" : {
-    "str" : "'a?'",
     "fmt" : "'BASE64'",
-    "targetType" : "\"BINARY\"",
-    "suggestion" : "`try_to_binary`"
+    "str" : "'a?'",
+    "suggestion" : "`try_to_binary`",
+    "targetType" : "\"BINARY\""
   }
 }
 
@@ -1180,10 +1270,10 @@ org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
   "messageParameters" : {
-    "str" : "'abcde'",
     "fmt" : "'BASE64'",
-    "targetType" : "\"BINARY\"",
-    "suggestion" : "`try_to_binary`"
+    "str" : "'abcde'",
+    "suggestion" : "`try_to_binary`",
+    "targetType" : "\"BINARY\""
   }
 }
 
@@ -1197,10 +1287,10 @@ org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
   "messageParameters" : {
-    "str" : "'abcd='",
     "fmt" : "'BASE64'",
-    "targetType" : "\"BINARY\"",
-    "suggestion" : "`try_to_binary`"
+    "str" : "'abcd='",
+    "suggestion" : "`try_to_binary`",
+    "targetType" : "\"BINARY\""
   }
 }
 
@@ -1214,10 +1304,10 @@ org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
   "messageParameters" : {
-    "str" : "'a==='",
     "fmt" : "'BASE64'",
-    "targetType" : "\"BINARY\"",
-    "suggestion" : "`try_to_binary`"
+    "str" : "'a==='",
+    "suggestion" : "`try_to_binary`",
+    "targetType" : "\"BINARY\""
   }
 }
 
@@ -1231,10 +1321,10 @@ org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
   "messageParameters" : {
-    "str" : "'ab==f'",
     "fmt" : "'BASE64'",
-    "targetType" : "\"BINARY\"",
-    "suggestion" : "`try_to_binary`"
+    "str" : "'ab==f'",
+    "suggestion" : "`try_to_binary`",
+    "targetType" : "\"BINARY\""
   }
 }
 
@@ -1313,6 +1403,22 @@ struct<to_binary(FF):binary>
 
 
 -- !query
+select to_binary('123', 'hex')
+-- !query schema
+struct<to_binary(123, hex):binary>
+-- !query output
+#
+
+
+-- !query
+select to_binary('12345', 'hex')
+-- !query schema
+struct<to_binary(12345, hex):binary>
+-- !query output
+#E
+
+
+-- !query
 select to_binary('GG')
 -- !query schema
 struct<>
@@ -1321,10 +1427,10 @@ org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
   "messageParameters" : {
-    "str" : "'GG'",
     "fmt" : "'HEX'",
-    "targetType" : "\"BINARY\"",
-    "suggestion" : "`try_to_binary`"
+    "str" : "'GG'",
+    "suggestion" : "`try_to_binary`",
+    "targetType" : "\"BINARY\""
   }
 }
 
@@ -1338,10 +1444,10 @@ org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
   "messageParameters" : {
-    "str" : "'01 AF'",
     "fmt" : "'HEX'",
-    "targetType" : "\"BINARY\"",
-    "suggestion" : "`try_to_binary`"
+    "str" : "'01 AF'",
+    "suggestion" : "`try_to_binary`",
+    "targetType" : "\"BINARY\""
   }
 }
 
@@ -1363,10 +1469,10 @@ org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
   "messageParameters" : {
-    "str" : "' ab cdef= = '",
     "fmt" : "'BASE64'",
-    "targetType" : "\"BINARY\"",
-    "suggestion" : "`try_to_binary`"
+    "str" : "' ab cdef= = '",
+    "suggestion" : "`try_to_binary`",
+    "targetType" : "\"BINARY\""
   }
 }
 
@@ -1380,10 +1486,10 @@ org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
   "messageParameters" : {
-    "str" : "' ab cdef= = '",
     "fmt" : "'HEX'",
-    "targetType" : "\"BINARY\"",
-    "suggestion" : "`try_to_binary`"
+    "str" : "' ab cdef= = '",
+    "suggestion" : "`try_to_binary`",
+    "targetType" : "\"BINARY\""
   }
 }
 
@@ -1393,7 +1499,8 @@ select to_binary('abc', 'Hex')
 -- !query schema
 struct<to_binary(abc, Hex):binary>
 -- !query output
-� 
+
+�
 
 
 -- !query
@@ -1434,7 +1541,23 @@ select to_binary('abc', 1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The 'format' parameter of function 'to_binary' needs to be a string literal.; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_ARG_VALUE",
+  "messageParameters" : {
+    "inputName" : "fmt",
+    "inputValue" : "'1'",
+    "requireType" : "case-insensitive \"STRING\"",
+    "sqlExpr" : "\"to_binary(abc, 1)\"",
+    "validValues" : "'hex', 'utf-8', 'utf8', or 'base64'"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 26,
+    "fragment" : "to_binary('abc', 1)"
+  } ]
+}
 
 
 -- !query
@@ -1443,4 +1566,60 @@ select to_binary('abc', 'invalidFormat')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid value for the 'format' parameter of function 'to_binary': invalidformat. The value has to be a case-insensitive string literal of 'hex', 'utf-8', 'utf8', or 'base64'.
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_ARG_VALUE",
+  "messageParameters" : {
+    "inputName" : "fmt",
+    "inputValue" : "'invalidformat'",
+    "requireType" : "case-insensitive \"STRING\"",
+    "sqlExpr" : "\"to_binary(abc, invalidFormat)\"",
+    "validValues" : "'hex', 'utf-8', 'utf8', or 'base64'"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 40,
+    "fragment" : "to_binary('abc', 'invalidFormat')"
+  } ]
+}
+
+
+-- !query
+CREATE TEMPORARY VIEW fmtTable(fmtField) AS SELECT * FROM VALUES ('invalidFormat')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT to_binary('abc', fmtField) FROM fmtTable
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "messageParameters" : {
+    "inputExpr" : "\"fmtField\"",
+    "inputName" : "fmt",
+    "inputType" : "\"STRING\"",
+    "sqlExpr" : "\"to_binary(abc, fmtField)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 33,
+    "fragment" : "to_binary('abc', fmtField)"
+  } ]
+}
+
+
+-- !query
+DROP VIEW IF EXISTS fmtTable
+-- !query schema
+struct<>
+-- !query output
+

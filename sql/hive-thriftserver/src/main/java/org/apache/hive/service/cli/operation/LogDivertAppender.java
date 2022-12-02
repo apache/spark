@@ -17,6 +17,7 @@
 
 package org.apache.hive.service.cli.operation;
 import java.io.CharArrayWriter;
+import java.io.Serializable;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -48,7 +49,6 @@ public class LogDivertAppender extends AbstractWriterAppender<WriterManager> {
   private static final Logger LOG = LogManager.getLogger(LogDivertAppender.class.getName());
   private final OperationManager operationManager;
   private boolean isVerbose;
-  private Layout verboseLayout;
 
   /**
    * A log filter that filters messages coming from the logger with the given names.
@@ -266,7 +266,7 @@ public class LogDivertAppender extends AbstractWriterAppender<WriterManager> {
     Map<String, Appender> appenders = root.getAppenders();
     for (Appender ap : appenders.values()) {
       if (ap.getClass().equals(ConsoleAppender.class)) {
-        Layout l = ap.getLayout();
+        Layout<? extends Serializable> l = ap.getLayout();
         if (l instanceof StringLayout) {
           layout = (StringLayout) l;
           break;
@@ -284,7 +284,6 @@ public class LogDivertAppender extends AbstractWriterAppender<WriterManager> {
 
     this.isVerbose = (loggingMode == OperationLog.LoggingLevel.VERBOSE);
     this.operationManager = operationManager;
-    this.verboseLayout = isVerbose ? getLayout() : CLIServiceUtils.verboseLayout;
     addFilter(new NameFilter(loggingMode, operationManager));
   }
 
@@ -300,7 +299,6 @@ public class LogDivertAppender extends AbstractWriterAppender<WriterManager> {
       // the last subAppend call, change the layout to preserve consistency.
       if (isCurrModeVerbose != isVerbose) {
         isVerbose = isCurrModeVerbose;
-        // setLayout(isVerbose, verboseLayout);
       }
     }
 

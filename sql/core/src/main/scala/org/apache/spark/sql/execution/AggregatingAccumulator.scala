@@ -199,11 +199,13 @@ class AggregatingAccumulator private(
 
   override def withBufferSerialized(): AggregatingAccumulator = {
     assert(!isAtDriverSide)
-    var i = 0
-    // AggregatingAccumulator runs on executor, we should serialize all TypedImperativeAggregate.
-    while (i < typedImperatives.length) {
-      typedImperatives(i).serializeAggregateBufferInPlace(buffer)
-      i += 1
+    if (buffer != null) {
+      var i = 0
+      // AggregatingAccumulator runs on executor, we should serialize all TypedImperativeAggregate.
+      while (i < typedImperatives.length) {
+        typedImperatives(i).serializeAggregateBufferInPlace(buffer)
+        i += 1
+      }
     }
     this
   }

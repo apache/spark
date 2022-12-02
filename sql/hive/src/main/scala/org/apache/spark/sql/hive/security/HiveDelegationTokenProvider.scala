@@ -54,7 +54,7 @@ private[spark] class HiveDelegationTokenProvider
         logWarning("Fail to create Hive Configuration", e)
         hadoopConf
       case e: NoClassDefFoundError =>
-        logWarning(classNotFoundErrorStr)
+        logWarning(classNotFoundErrorStr, e)
         hadoopConf
     }
   }

@@ -360,7 +360,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
                |'content': '<div class="task-assignment-timeline-content"
                  |data-toggle="tooltip" data-placement="top"
                  |data-html="true" data-container="body"
-                 |data-title="${s"Task " + index + " (attempt " + attempt + ")"}<br>
+                 |data-title="${"Task " + index + " (attempt " + attempt + ")"}<br>
                  |Status: ${taskInfo.status}<br>
                  |Launch Time: ${UIUtils.formatDate(new Date(launchTime))}
                  |${
@@ -416,7 +416,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
           <span>Enable zooming</span>
         </div>
         <div>
-          <form id={s"form-event-timeline-page"}
+          <form id={"form-event-timeline-page"}
                 method="get"
                 action=""
                 class="form-inline float-right justify-content-end"
@@ -426,13 +426,13 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
             <input type="hidden" name="attempt" value={stageAttemptId.toString} />
             <input type="text"
                    name="task.eventTimelinePageNumber"
-                   id={s"form-event-timeline-page-no"}
+                   id={"form-event-timeline-page-no"}
                    value={page.toString}
                    class="col-1 form-control" />
 
             <label>. Show </label>
             <input type="text"
-                   id={s"form-event-timeline-page-size"}
+                   id={"form-event-timeline-page-size"}
                    name="task.eventTimelinePageSize"
                    value={pageSize.toString}
                    class="col-1 form-control" />
@@ -445,7 +445,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
       {TIMELINE_LEGEND}
     </div> ++
     <script type="text/javascript">
-      {Unparsed(s"drawTaskAssignmentTimeline(" +
+      {Unparsed("drawTaskAssignmentTimeline(" +
       s"$groupArrayStr, $executorsArrayStr, $minLaunchTime, $maxFinishTime, " +
         s"${UIUtils.getTimeZoneOffset()})")}
     </script>

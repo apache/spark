@@ -32,5 +32,6 @@ This page gives an overview of all public pandas API on Spark.
    indexing
    window
    groupby
+   resampling
    ml
    extensions

@@ -56,7 +56,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       case Some(table) =>
         table
       case _ =>
-        throw new NoSuchTableException(ident)
+        throw new NoSuchTableException(ident.asMultipartIdentifier)
     }
   }
 
@@ -66,7 +66,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       case Some(table) =>
         table
       case _ =>
-        throw new NoSuchTableException(ident)
+        throw new NoSuchTableException(ident.asMultipartIdentifier)
     }
   }
 
@@ -76,7 +76,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       case Some(table) =>
         table
       case _ =>
-        throw new NoSuchTableException(ident)
+        throw new NoSuchTableException(ident.asMultipartIdentifier)
     }
   }
 
@@ -103,7 +103,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       requiredNumPartitions: Option[Int],
       distributionStrictlyRequired: Boolean = true): Table = {
     if (tables.containsKey(ident)) {
-      throw new TableAlreadyExistsException(ident)
+      throw new TableAlreadyExistsException(ident.asMultipartIdentifier)
     }
 
     InMemoryTableCatalog.maybeSimulateFailedTableCreation(properties)
@@ -138,14 +138,14 @@ class BasicInMemoryTableCatalog extends TableCatalog {
 
   override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit = {
     if (tables.containsKey(newIdent)) {
-      throw new TableAlreadyExistsException(newIdent)
+      throw new TableAlreadyExistsException(newIdent.asMultipartIdentifier)
     }
 
     Option(tables.remove(oldIdent)) match {
       case Some(table) =>
         tables.put(newIdent, table)
       case _ =>
-        throw new NoSuchTableException(oldIdent)
+        throw new NoSuchTableException(oldIdent.asMultipartIdentifier)
     }
   }
 

@@ -25,7 +25,6 @@ from pandas.api.types import (  # type: ignore[attr-defined]
 )
 
 from pyspark.pandas.internal import InternalField
-from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.data_type_ops.categorical_ops import _to_cat
 from pyspark.sql import functions as F
 from pyspark.sql.types import StructField
@@ -879,7 +878,7 @@ class CategoricalAccessor:
 
         if rename:
             new_scol = (
-                F.when(scol >= len(new_categories), SF.lit(-1).cast(self._data.spark.data_type))
+                F.when(scol >= len(new_categories), F.lit(-1).cast(self._data.spark.data_type))
                 .otherwise(scol)
                 .alias(self._data._internal.data_spark_column_names[0])
             )

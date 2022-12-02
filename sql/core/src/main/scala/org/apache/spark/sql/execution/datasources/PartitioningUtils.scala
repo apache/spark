@@ -558,8 +558,7 @@ object PartitioningUtils extends SQLConfHelper {
       partitionColumns: Seq[String],
       caseSensitive: Boolean): Unit = {
 
-    SchemaUtils.checkColumnNameDuplication(
-      partitionColumns, partitionColumns.mkString(", "), caseSensitive)
+    SchemaUtils.checkColumnNameDuplication(partitionColumns, caseSensitive)
 
     partitionColumnsSchema(schema, partitionColumns).foreach {
       field => field.dataType match {

@@ -59,6 +59,13 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
     ExprUtils.getDecimalParser(options.locale)
   }
 
+  // Date formats that could be parsed in DefaultTimestampFormatter
+  // Reference: DateTimeUtils.parseTimestampString
+  // Used to determine inferring a column with mixture of dates and timestamps as TimestampType or
+  // StringType when no timestamp format is specified (the lenient timestamp formatter will be used)
+  private val LENIENT_TS_FORMATTER_SUPPORTED_DATE_FORMATS = Set(
+    "yyyy-MM-dd", "yyyy-M-d", "yyyy-M-dd", "yyyy-MM-d", "yyyy-MM", "yyyy-M", "yyyy")
+
   /**
    * Similar to the JSON schema inference
    *     1. Infer type of each row
@@ -123,10 +130,8 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
         case LongType => tryParseLong(field)
         case _: DecimalType => tryParseDecimal(field)
         case DoubleType => tryParseDouble(field)
-        case DateType => tryParseDateTime(field)
-        case TimestampNTZType if options.prefersDate => tryParseDateTime(field)
+        case DateType => tryParseDate(field)
         case TimestampNTZType => tryParseTimestampNTZ(field)
-        case TimestampType if options.prefersDate => tryParseDateTime(field)
         case TimestampType => tryParseTimestamp(field)
         case BooleanType => tryParseBoolean(field)
         case StringType => StringType
@@ -179,13 +184,13 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
     if ((allCatch opt field.toDouble).isDefined || isInfOrNan(field)) {
       DoubleType
     } else if (options.prefersDate) {
-      tryParseDateTime(field)
+      tryParseDate(field)
     } else {
       tryParseTimestampNTZ(field)
     }
   }
 
-  private def tryParseDateTime(field: String): DataType = {
+  private def tryParseDate(field: String): DataType = {
     if ((allCatch opt dateFormatter.parse(field)).isDefined) {
       DateType
     } else {
@@ -233,7 +238,40 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
    * is compatible with both input data types.
    */
   private def compatibleType(t1: DataType, t2: DataType): Option[DataType] = {
-    TypeCoercion.findTightestCommonType(t1, t2).orElse(findCompatibleTypeForCSV(t1, t2))
+    (t1, t2) match {
+      case (DateType, TimestampType) | (DateType, TimestampNTZType) |
+           (TimestampNTZType, DateType) | (TimestampType, DateType) =>
+        // For a column containing a mixture of dates and timestamps, infer it as timestamp type
+        // if its dates can be inferred as timestamp type, otherwise infer it as StringType.
+        // This only happens when the timestamp pattern is not specified, as the default timestamp
+        // parser is very lenient and can parse date string as well.
+        val dateFormat = options.dateFormatInRead.getOrElse(DateFormatter.defaultPattern)
+        t1 match {
+          case DateType if canParseDateAsTimestamp(dateFormat, t2) =>
+            Some(t2)
+          case TimestampType | TimestampNTZType if canParseDateAsTimestamp(dateFormat, t1) =>
+            Some(t1)
+          case _ => Some(StringType)
+        }
+      case _ => TypeCoercion.findTightestCommonType(t1, t2).orElse(findCompatibleTypeForCSV(t1, t2))
+    }
+  }
+
+  /**
+   * Return true if strings of given date format can be parsed as timestamps
+   *  1. If user provides timestamp format, we will parse strings as timestamps using
+   *  Iso8601TimestampFormatter (with strict timestamp parsing). Any date string can not be parsed
+   *  as timestamp type in this case
+   *  2. Otherwise, we will use DefaultTimestampFormatter to parse strings as timestamps, which
+   *  is more lenient and can parse strings of some date formats as timestamps.
+   */
+  private def canParseDateAsTimestamp(dateFormat: String, tsType: DataType): Boolean = {
+    if ((tsType.isInstanceOf[TimestampType] && options.timestampFormatInRead.isEmpty) ||
+      (tsType.isInstanceOf[TimestampNTZType] && options.timestampNTZFormatInRead.isEmpty)) {
+      LENIENT_TS_FORMATTER_SUPPORTED_DATE_FORMATS.contains(dateFormat)
+    } else {
+      false
+    }
   }
 
   /**

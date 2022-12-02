@@ -268,13 +268,17 @@ object RebaseDateTime {
     micros + rebaseInfo.diffs(i)
   }
 
+  private lazy val mapper = {
+    val mapper = new ObjectMapper() with ClassTagExtensions
+    mapper.registerModule(DefaultScalaModule)
+    mapper
+  }
+
   // Loads rebasing info from an JSON file. JSON records in the files should conform to
   // `JsonRebaseRecord`. AnyRefMap is used here instead of Scala's immutable map because
   // it is 2 times faster in DateTimeRebaseBenchmark.
   private[sql] def loadRebaseRecords(fileName: String): AnyRefMap[String, RebaseInfo] = {
     val file = Utils.getSparkClassLoader.getResource(fileName)
-    val mapper = new ObjectMapper() with ClassTagExtensions
-    mapper.registerModule(DefaultScalaModule)
     val jsonRebaseRecords = mapper.readValue[Seq[JsonRebaseRecord]](file)
     val anyRefMap = new AnyRefMap[String, RebaseInfo]((3 * jsonRebaseRecords.size) / 2)
     jsonRebaseRecords.foreach { jsonRecord =>

@@ -162,6 +162,9 @@ case class BroadcastHashJoinExec(
               // Anti Join: Drop the row on the streamed side if it is a match on the build
               hashed.get(lookupKey) == null
             }
+          }).map(row => {
+            numOutputRows += 1
+            row
           })
         }
       }
@@ -237,7 +240,7 @@ case class BroadcastHashJoinExec(
            |${consume(ctx, input)}
          """.stripMargin
       } else if (broadcastRelation.value == HashedRelationWithAllNullKeys) {
-        s"""
+        """
            |// If the right side contains any all-null key, NAAJ simply returns Nothing.
          """.stripMargin
       } else {

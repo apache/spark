@@ -65,6 +65,7 @@ import org.apache.spark.sql.types._
  *   1. Support UDF testing.
  *   2. Support DESC command.
  *   3. Support SHOW command.
+ *   4. Support UDAF testing.
  */
 // scalastyle:on line.size.limit
 class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServer {
@@ -246,6 +247,8 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
       val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
 
       if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}udf")) {
+        Seq.empty
+      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}udaf")) {
         Seq.empty
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}postgreSQL")) {
         PgSQLTestCase(testCaseName, absPath, resultFile) :: Nil

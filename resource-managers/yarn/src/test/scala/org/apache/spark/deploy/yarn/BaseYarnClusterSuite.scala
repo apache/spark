@@ -85,7 +85,7 @@ abstract class BaseYarnClusterSuite extends SparkFunSuite with Matchers {
     logConfDir = new File(tempDir, "log4j")
     logConfDir.mkdir()
 
-    val logConfFile = new File(logConfDir, "log4j.properties")
+    val logConfFile = new File(logConfDir, "log4j2.properties")
     Files.write(LOG4J_CONF, logConfFile, StandardCharsets.UTF_8)
 
     // Disable the disk utilization check to avoid the test hanging when people's disks are

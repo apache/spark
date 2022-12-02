@@ -58,7 +58,22 @@ ROWS BETWEEN CURRENT ROW AND 2147483648 FOLLOWING) FROM testData ORDER BY udf(ca
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'ROWS BETWEEN CURRENT ROW AND 2147483648L FOLLOWING' due to data type mismatch: The data type of the upper bound 'bigint' does not match the expected data type 'int'.; line 1 pos 46
+{
+  "errorClass" : "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
+  "messageParameters" : {
+    "expectedType" : "\"INT\"",
+    "exprType" : "\"BIGINT\"",
+    "location" : "upper",
+    "sqlExpr" : "\"ROWS BETWEEN CURRENT ROW AND 2147483648 FOLLOWING\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 47,
+    "stopIndex" : 138,
+    "fragment" : "(PARTITION BY cate ORDER BY udf(val_long)\nROWS BETWEEN CURRENT ROW AND 2147483648 FOLLOWING)"
+  } ]
+}
 
 
 -- !query
@@ -188,7 +203,21 @@ ROWS BETWEEN UNBOUNDED FOLLOWING AND 1 FOLLOWING) FROM testData ORDER BY cate, u
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'ROWS BETWEEN UNBOUNDED FOLLOWING AND 1 FOLLOWING' due to data type mismatch: Window frame upper bound '1' does not follow the lower bound 'unboundedfollowing$()'.; line 1 pos 38
+{
+  "errorClass" : "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_INVALID_BOUND",
+  "messageParameters" : {
+    "lower" : "\"UNBOUNDED FOLLOWING\"",
+    "sqlExpr" : "\"ROWS BETWEEN UNBOUNDED FOLLOWING AND 1 FOLLOWING\"",
+    "upper" : "\"1\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 39,
+    "stopIndex" : 111,
+    "fragment" : "(PARTITION BY udf(cate)\nROWS BETWEEN UNBOUNDED FOLLOWING AND 1 FOLLOWING)"
+  } ]
+}
 
 
 -- !query
@@ -198,7 +227,19 @@ RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM testData ORDER BY cate, udf(val)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(PARTITION BY CAST(udf(cast(cate as string)) AS STRING) RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)' due to data type mismatch: A range window frame cannot be used in an unordered window specification.; line 1 pos 38
+{
+  "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_WITHOUT_ORDER",
+  "messageParameters" : {
+    "sqlExpr" : "\"(PARTITION BY udf(cate) RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 39,
+    "stopIndex" : 104,
+    "fragment" : "(PARTITION BY udf(cate)\nRANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)"
+  } ]
+}
 
 
 -- !query
@@ -208,7 +249,20 @@ RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM testData ORDER BY cate, udf(val)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(PARTITION BY CAST(udf(cast(cate as string)) AS STRING) ORDER BY CAST(udf(cast(val as string)) AS INT) ASC NULLS FIRST, testdata.cate ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)' due to data type mismatch: A range window frame with value boundaries cannot be used in a window specification with multiple order by expressions: cast(udf(cast(val#x as string)) as int) ASC NULLS FIRST,cate#x ASC NULLS FIRST; line 1 pos 38
+{
+  "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_MULTI_ORDER",
+  "messageParameters" : {
+    "orderSpec" : "cast(udf(cast(val#x as string)) as int) ASC NULLS FIRST,cate#x ASC NULLS FIRST",
+    "sqlExpr" : "\"(PARTITION BY udf(cate) ORDER BY udf(val) ASC NULLS FIRST, cate ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 39,
+    "stopIndex" : 128,
+    "fragment" : "(PARTITION BY udf(cate) ORDER BY udf(val), cate\nRANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)"
+  } ]
+}
 
 
 -- !query
@@ -218,7 +272,21 @@ RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM testData ORDER BY cate, udf(val)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(PARTITION BY CAST(udf(cast(cate as string)) AS STRING) ORDER BY current_timestamp() ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)' due to data type mismatch: The data type 'timestamp' used in the order specification does not match the data type 'int' which is used in the range frame.; line 1 pos 38
+{
+  "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_INVALID_TYPE",
+  "messageParameters" : {
+    "orderSpecType" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(PARTITION BY udf(cate) ORDER BY current_timestamp() ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)\"",
+    "valueBoundaryType" : "\"INT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 39,
+    "stopIndex" : 131,
+    "fragment" : "(PARTITION BY udf(cate) ORDER BY current_timestamp\nRANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)"
+  } ]
+}
 
 
 -- !query
@@ -228,7 +296,20 @@ RANGE BETWEEN 1 FOLLOWING AND 1 PRECEDING) FROM testData ORDER BY udf(cate), val
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'RANGE BETWEEN 1 FOLLOWING AND 1 PRECEDING' due to data type mismatch: The lower bound of a window frame must be less than or equal to the upper bound; line 1 pos 38
+{
+  "errorClass" : "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_WRONG_COMPARISON",
+  "messageParameters" : {
+    "comparison" : "less than or equal",
+    "sqlExpr" : "\"RANGE BETWEEN 1 FOLLOWING AND 1 PRECEDING\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 39,
+    "stopIndex" : 117,
+    "fragment" : "(PARTITION BY udf(cate) ORDER BY val\nRANGE BETWEEN 1 FOLLOWING AND 1 PRECEDING)"
+  } ]
+}
 
 
 -- !query
@@ -238,13 +319,19 @@ RANGE BETWEEN CURRENT ROW AND current_date PRECEDING) FROM testData ORDER BY cat
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Frame bound value must be a literal.(line 2, pos 30)
-
-== SQL ==
-SELECT udf(val), cate, count(val) OVER(PARTITION BY udf(cate) ORDER BY udf(val)
-RANGE BETWEEN CURRENT ROW AND current_date PRECEDING) FROM testData ORDER BY cate, val(val)
-------------------------------^^^
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0064",
+  "messageParameters" : {
+    "msg" : "Frame bound value must be a literal."
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 111,
+    "stopIndex" : 132,
+    "fragment" : "current_date PRECEDING"
+  } ]
+}
 
 
 -- !query
@@ -321,7 +408,12 @@ SELECT udf(val), cate, row_number() OVER(PARTITION BY cate) FROM testData ORDER 
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Window function row_number() requires window to be ordered, please add ORDER BY clause. For example SELECT row_number()(value_expr) OVER (PARTITION BY window_partition ORDER BY window_ordering) from table
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1037",
+  "messageParameters" : {
+    "wf" : "row_number()"
+  }
+}
 
 
 -- !query

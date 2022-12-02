@@ -191,7 +191,7 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
       assert(e3.getMessage ===
         """{
           |  "errorClass" : "DIVIDE_BY_ZERO",
-          |  "message" : "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error.",
+          |  "messageTemplate" : "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error.",
           |  "sqlState" : "22012",
           |  "messageParameters" : {
           |    "config" : "\"spark.sql.ansi.enabled\""

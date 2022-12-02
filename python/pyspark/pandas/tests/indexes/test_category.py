@@ -226,9 +226,18 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
         psidx3 = ps.from_pandas(pidx3)
 
         self.assert_eq(psidx1.append(psidx2), pidx1.append(pidx2))
-        self.assert_eq(
-            psidx1.append(psidx3.astype("category")), pidx1.append(pidx3.astype("category"))
-        )
+        if LooseVersion(pd.__version__) >= LooseVersion("1.5.0"):
+            self.assert_eq(
+                psidx1.append(psidx3.astype("category")), pidx1.append(pidx3.astype("category"))
+            )
+        else:
+            expected_result = ps.CategoricalIndex(
+                ["x", "y", "z", "y", "x", "w", "z"],
+                categories=["z", "y", "x", "w"],
+                ordered=False,
+                dtype="category",
+            )
+            self.assert_eq(psidx1.append(psidx3.astype("category")), expected_result)
 
         # TODO: append non-categorical or categorical with a different category
         self.assertRaises(NotImplementedError, lambda: psidx1.append(psidx3))

@@ -19,12 +19,14 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{IntegerType, StringType}
 
 /**
  * Unit tests for regular expression (regexp) related SQL expressions.
@@ -152,15 +154,18 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on nonascii
 
     // invalid escaping
-    val invalidEscape = intercept[AnalysisException] {
-      evaluateWithoutCodegen("""a""" like """\a""")
-    }
-    assert(invalidEscape.getMessage.contains("pattern"))
-
-    val endEscape = intercept[AnalysisException] {
-      evaluateWithoutCodegen("""a""" like """a\""")
-    }
-    assert(endEscape.getMessage.contains("pattern"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        evaluateWithoutCodegen("""a""" like """\a""")
+      },
+      errorClass = "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
+      parameters = Map("format" -> """'\\a'""", "char" -> "'a'"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        evaluateWithoutCodegen("""a""" like """a\""")
+      },
+      errorClass = "INVALID_FORMAT.ESC_AT_THE_END",
+      parameters = Map("format" -> """'a\\'"""))
 
     // case
     checkLiteralRow("A" like _, "a%", false)
@@ -229,14 +234,12 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       // scalastyle:on nonascii
 
       // invalid escaping
-      val invalidEscape = intercept[AnalysisException] {
-        evaluateWithoutCodegen("""a""" like(s"""${escapeChar}a""", escapeChar))
-      }
-      assert(invalidEscape.getMessage.contains("pattern"))
-      val endEscape = intercept[AnalysisException] {
-        evaluateWithoutCodegen("""a""" like(s"""a$escapeChar""", escapeChar))
-      }
-      assert(endEscape.getMessage.contains("pattern"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          evaluateWithoutCodegen("""a""" like(s"""${escapeChar}a""", escapeChar))
+        },
+        errorClass = "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
+        parameters = Map("format" -> s"'${escapeChar}a'", "char" -> "'a'"))
 
       // case
       checkLiteralRow("A" like(_, escapeChar), "a%", false)
@@ -521,14 +524,33 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkExceptionInExpression[SparkRuntimeException](
       RegExpExtract(s, p, r),
       create_row("1a 2b 14m", "(?l)", 0),
-      s"$prefix `regexp_extract` is invalid: (?l)")
+      s"$prefix `regexp_extract` is invalid: '(?l)'")
     checkExceptionInExpression[SparkRuntimeException](
       RegExpExtractAll(s, p, r),
       create_row("abc", "] [", 0),
-      s"$prefix `regexp_extract_all` is invalid: ] [")
+      s"$prefix `regexp_extract_all` is invalid: '] ['")
     checkExceptionInExpression[SparkRuntimeException](
       RegExpInStr(s, p, r),
       create_row("abc", ", (", 0),
-      s"$prefix `regexp_instr` is invalid: , (")
+      s"$prefix `regexp_instr` is invalid: ', ('")
+  }
+
+  test("RegExpReplace: fails analysis if pos is not a constant") {
+    val s = $"s".string.at(0)
+    val p = $"p".string.at(1)
+    val r = $"r".string.at(2)
+    val posExpr = AttributeReference("b", IntegerType)()
+    val expr = RegExpReplace(s, p, r, posExpr)
+
+    assert(expr.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> "position",
+          "inputType" -> toSQLType(posExpr.dataType),
+          "inputExpr" -> toSQLExpr(posExpr)
+        )
+      )
+    )
   }
 }

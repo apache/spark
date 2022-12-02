@@ -149,7 +149,8 @@ private[spark] class Client(
     var watch: Watch = null
     var createdDriverPod: Pod = null
     try {
-      createdDriverPod = kubernetesClient.pods().create(resolvedDriverPod)
+      createdDriverPod =
+        kubernetesClient.pods().inNamespace(conf.namespace).resource(resolvedDriverPod).create()
     } catch {
       case NonFatal(e) =>
         kubernetesClient.resourceList(preKubernetesResources: _*).delete()
@@ -163,7 +164,7 @@ private[spark] class Client(
       kubernetesClient.resourceList(preKubernetesResources: _*).createOrReplace()
     } catch {
       case NonFatal(e) =>
-        kubernetesClient.pods().delete(createdDriverPod)
+        kubernetesClient.pods().resource(createdDriverPod).delete()
         kubernetesClient.resourceList(preKubernetesResources: _*).delete()
         throw e
     }
@@ -175,7 +176,7 @@ private[spark] class Client(
       kubernetesClient.resourceList(otherKubernetesResources: _*).createOrReplace()
     } catch {
       case NonFatal(e) =>
-        kubernetesClient.pods().delete(createdDriverPod)
+        kubernetesClient.pods().resource(createdDriverPod).delete()
         throw e
     }
 
@@ -185,6 +186,7 @@ private[spark] class Client(
         while (true) {
           val podWithName = kubernetesClient
             .pods()
+            .inNamespace(conf.namespace)
             .withName(driverPodName)
           // Reset resource to old before we start the watch, this is important for race conditions
           watcher.reset()

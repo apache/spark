@@ -1104,4 +1104,11 @@ abstract class SchemaPruningSuite
     checkAnswer(query2.orderBy("id"),
       Row("John", "Y."))
   }
+
+  testSchemaPruning("SPARK-41017: column pruning through 2 filters") {
+    import testImplicits._
+    val query = spark.table("contacts").filter(rand() > 0.5).filter(rand() < 0.8)
+      .select($"id", $"name.first")
+    checkScan(query, "struct<id:int, name:struct<first:string>>")
+  }
 }

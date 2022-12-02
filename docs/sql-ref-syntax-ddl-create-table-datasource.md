@@ -55,6 +55,10 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
 
     Data Source is the input format used to create the table. Data source can be CSV, TXT, ORC, JDBC, PARQUET, etc.
 
+* **OPTIONS**
+
+    Options of data source which will be injected to storage properties.
+
 * **PARTITIONED BY**
 
     Partitions are created on the table, based on the columns specified.
@@ -116,6 +120,15 @@ CREATE TABLE student_copy USING CSV
   
 --Omit the USING clause, which uses the default data source (parquet by default)
 CREATE TABLE student (id INT, name STRING, age INT);
+
+--Use parquet data source with parquet storage options
+--The columns 'id' and 'name' enable the bloom filter during writing parquet file,
+--column 'age' does not enable
+CREATE TABLE student_parquet(id INT, name STRING, age INT) USING PARQUET
+    OPTIONS (
+      'parquet.bloom.filter.enabled'='true',
+      'parquet.bloom.filter.enabled#age'='false'
+    );
 
 --Specify table comment and properties
 CREATE TABLE student (id INT, name STRING, age INT) USING CSV
