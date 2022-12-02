@@ -133,7 +133,8 @@ class RocksDB(
       if (conf.resetStatsOnLoad) {
         nativeStats.reset
       }
-      // reset resources to prevent side-effects from previous loaded version
+      // reset resources to prevent side-effects from previous loaded version if it was not cleaned
+      // up correctly
       closePrefixScanIterators()
       resetWriteBatch()
       logInfo(s"Loaded $version")
@@ -310,6 +311,9 @@ class RocksDB(
         "checkpoint" -> checkpointTimeMs,
         "fileSync" -> fileSyncTimeMs
       )
+      // reset resources as we already pushed the changes and it has been committed
+      closePrefixScanIterators()
+      resetWriteBatch()
       logInfo(s"Committed $newVersion, stats = ${metrics.json}")
       loadedVersion
     } catch {

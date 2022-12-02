@@ -116,7 +116,9 @@ class RocksDBSuite extends SparkFunSuite {
     withDB(remoteDir, conf = conf) { db =>
       // Generate versions without cleaning up
       for (version <- 1 to 50) {
-        db.put(version.toString, version.toString)  // update "1" -> "1", "2" -> "2", ...
+        // we have to overwrite some keys to ensure compaction happens
+        // update "1" -> "1", "2" -> "2", ...
+        (1 to version).foreach { version => db.put(version.toString, version.toString) }
         db.commit()
       }
 
