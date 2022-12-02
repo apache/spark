@@ -870,11 +870,6 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertEqual(4.0, res[0][1])
         self.assertEqual(5.0, res[1][1])
 
-    def test_column_operator(self):
-        # SPARK-41351: Column needs to support !=
-        df = self.connect.range(10)
-        self.assertEqual(9, df.select(df.id != lit(1)).collect())
-
     def test_crossjoin(self):
         # SPARK-41227: Test CrossJoin
         connect_df = self.connect.read.table(self.tbl_name)
