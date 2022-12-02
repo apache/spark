@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from typing import get_args, TYPE_CHECKING, Callable, Any, Union, overload, cast
+from typing import get_args, TYPE_CHECKING, Callable, Any, Union, overload, cast, Sequence
 
 import json
 import decimal
@@ -67,7 +67,7 @@ def _unary_op(name: str, doc: str = "unary function") -> Callable[["Column"], "C
 
 
 def scalar_function(op: str, *args: "Column") -> "Column":
-    return Column(ScalarFunctionExpression(op, *args))
+    return Column(UnresolvedFunction(op, [arg._expr for arg in args]))
 
 
 def sql_expression(expr: str) -> "Column":
@@ -322,24 +322,29 @@ class SortOrder(Expression):
         return cast(proto.Expression, sort)
 
 
-class ScalarFunctionExpression(Expression):
+class UnresolvedFunction(Expression):
     def __init__(
         self,
-        op: str,
-        *args: "Column",
+        name: str,
+        args: Sequence["Expression"],
     ) -> None:
         super().__init__()
+
+        assert isinstance(name, str)
+        self._name = name
+
+        assert isinstance(args, list) and all(isinstance(arg, Expression) for arg in args)
         self._args = args
-        self._op = op
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
         fun = proto.Expression()
-        fun.unresolved_function.function_name = self._op
-        fun.unresolved_function.arguments.extend([x.to_plan(session) for x in self._args])
+        fun.unresolved_function.function_name = self._name
+        if len(self._args) > 0:
+            fun.unresolved_function.arguments.extend([arg.to_plan(session) for arg in self._args])
         return fun
 
     def __repr__(self) -> str:
-        return f"({self._op} ({', '.join([str(x) for x in self._args])}))"
+        return f"({self._name} ({', '.join([str(arg) for arg in self._args])}))"
 
 
 class Column:
