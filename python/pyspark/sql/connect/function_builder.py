@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Optional, Any, Iterable, Union
 
 import pyspark.sql.connect.proto as proto
 import pyspark.sql.types
-from pyspark.sql.connect.column import Expression, ScalarFunctionExpression, Column
+from pyspark.sql.connect.column import Expression, UnresolvedFunction, Column
 from pyspark.sql.connect.functions import col
 
 
@@ -43,10 +43,10 @@ def _build(name: str, *args: "ColumnOrName") -> Column:
 
     Returns
     -------
-    :class:`ScalarFunctionExpression`
+    :class:`UnresolvedFunction`
     """
-    cols = [x if isinstance(x, Column) else col(x) for x in args]
-    return Column(ScalarFunctionExpression(name, *cols))
+    cols = [arg if isinstance(arg, Column) else col(arg) for arg in args]
+    return Column(UnresolvedFunction(name, [col._expr for col in cols]))
 
 
 class FunctionBuilder:
