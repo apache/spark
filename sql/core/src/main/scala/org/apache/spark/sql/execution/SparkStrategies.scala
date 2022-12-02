@@ -686,9 +686,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           minLimit match {
             case Some((limit, rankLikeFunction)) if limit <= conf.windowGroupLimitThreshold =>
               if (limit > 0) {
-                // TODO: [SPARK-41337] Add a physical rule to remove the partialLimitExec node,
-                // if there is no shuffle between the two nodes (partialLimitExec's
-                // outputPartitioning satisfies the finalLimitExec's requiredChildDistribution)
                 val partialLimitExec = execution.window.WindowGroupLimitExec(partitionSpec,
                   orderSpec, rankLikeFunction, limit, execution.window.Partial, planLater(child))
                 val finalLimitExec = execution.window.WindowGroupLimitExec(partitionSpec,
