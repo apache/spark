@@ -23,7 +23,7 @@ import java.time.{Duration, Period}
 
 import org.apache.hadoop.fs.{FileAlreadyExistsException, FSDataOutputStream, Path, RawLocalFileSystem}
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkNumberFormatException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
@@ -2312,6 +2312,34 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
               Row(4, Period.ofYears(5), Duration.ofDays(6)),
               Row(7, Period.ofYears(8), Duration.ofDays(9))))
         }
+      }
+    }
+  }
+
+  test("SPARK-40988: Test case for insert partition should verify value") {
+    val tableName = "partition_table"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (id INT, name STRING) USING PARQUET PARTITIONED BY (age INT)")
+
+      sql(s"INSERT INTO TABLE $tableName PARTITION(age=1) VALUES (1, 'ABC')")
+      checkAnswer(spark.table(s"$tableName"), Row(1, "ABC", 1))
+
+      withSQLConf("spark.sql.hive.convertInsertingPartitionedTable" -> "false") {
+        checkError(
+          exception = intercept[SparkNumberFormatException] {
+            sql(s"INSERT INTO TABLE $tableName PARTITION(age='aaa') VALUES (1, 'ABC')")
+          },
+          errorClass = "CAST_INVALID_INPUT",
+          parameters = Map(
+            "ansiConfig" -> "\"spark.sql.ansi.enabled\"",
+            "expression" -> "'aaa'",
+            "sourceType" -> "\"STRING\"",
+            "targetType" -> "\"INT\""),
+          context = ExpectedContext(
+            fragment = s"INSERT INTO TABLE $tableName PARTITION(age='aaa')",
+            start = 0,
+            stop = 38 + tableName.length)
+        )
       }
     }
   }
