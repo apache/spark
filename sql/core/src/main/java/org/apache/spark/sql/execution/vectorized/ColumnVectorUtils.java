@@ -28,6 +28,7 @@ import java.util.Map;
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.types.*;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.vectorized.ColumnarArray;
@@ -47,53 +48,49 @@ public class ColumnVectorUtils {
    * Populates the value of `row[fieldIdx]` into `ConstantColumnVector`.
    */
   public static void populate(ConstantColumnVector col, InternalRow row, int fieldIdx) {
-    DataType t = col.dataType();
+    DataType dt = col.dataType();
+    PhysicalDataType pdt = dt.physicalDataType();
 
     if (row.isNullAt(fieldIdx)) {
       col.setNull();
     } else {
-      if (t == DataTypes.BooleanType) {
+      if (pdt == DataTypes.BooleanType.physicalDataType()) {
         col.setBoolean(row.getBoolean(fieldIdx));
-      } else if (t == DataTypes.BinaryType) {
+      } else if (pdt == DataTypes.BinaryType.physicalDataType()) {
         col.setBinary(row.getBinary(fieldIdx));
-      } else if (t == DataTypes.ByteType) {
+      } else if (pdt == DataTypes.ByteType.physicalDataType()) {
         col.setByte(row.getByte(fieldIdx));
-      } else if (t == DataTypes.ShortType) {
+      } else if (pdt == DataTypes.ShortType.physicalDataType()) {
         col.setShort(row.getShort(fieldIdx));
-      } else if (t == DataTypes.IntegerType) {
+      } else if (pdt == DataTypes.IntegerType.physicalDataType()) {
         col.setInt(row.getInt(fieldIdx));
-      } else if (t == DataTypes.LongType) {
+      } else if (pdt == DataTypes.LongType.physicalDataType()) {
         col.setLong(row.getLong(fieldIdx));
-      } else if (t == DataTypes.FloatType) {
+      } else if (pdt == DataTypes.FloatType.physicalDataType()) {
         col.setFloat(row.getFloat(fieldIdx));
-      } else if (t == DataTypes.DoubleType) {
+      } else if (pdt == DataTypes.DoubleType.physicalDataType()) {
         col.setDouble(row.getDouble(fieldIdx));
-      } else if (t == DataTypes.StringType) {
+      } else if (pdt == DataTypes.StringType.physicalDataType()) {
         UTF8String v = row.getUTF8String(fieldIdx);
         col.setUtf8String(v);
-      } else if (t instanceof DecimalType) {
-        DecimalType dt = (DecimalType) t;
-        Decimal d = row.getDecimal(fieldIdx, dt.precision(), dt.scale());
-        if (dt.precision() <= Decimal.MAX_INT_DIGITS()) {
+      } else if (pdt instanceof PhysicalDecimalType) {
+        PhysicalDecimalType pd = (PhysicalDecimalType) pdt;
+        Decimal d = row.getDecimal(fieldIdx, pd.precision(), pd.scale());
+        if (pd.precision() <= Decimal.MAX_INT_DIGITS()) {
           col.setInt((int)d.toUnscaledLong());
-        } else if (dt.precision() <= Decimal.MAX_LONG_DIGITS()) {
+        } else if (pd.precision() <= Decimal.MAX_LONG_DIGITS()) {
           col.setLong(d.toUnscaledLong());
         } else {
           final BigInteger integer = d.toJavaBigDecimal().unscaledValue();
           byte[] bytes = integer.toByteArray();
           col.setBinary(bytes);
         }
-      } else if (t instanceof CalendarIntervalType) {
+      } else if (pdt == DataTypes.CalendarIntervalType.physicalDataType()) {
         // The value of `numRows` is irrelevant.
-        col.setCalendarInterval((CalendarInterval) row.get(fieldIdx, t));
-      } else if (t instanceof DateType || t instanceof YearMonthIntervalType) {
-        col.setInt(row.getInt(fieldIdx));
-      } else if (t instanceof TimestampType || t instanceof TimestampNTZType ||
-        t instanceof DayTimeIntervalType) {
-        col.setLong(row.getLong(fieldIdx));
+        col.setCalendarInterval((CalendarInterval) row.get(fieldIdx, dt));
       } else {
         throw new RuntimeException(String.format("DataType %s is not supported" +
-            " in column vectorized reader.", t.sql()));
+            " in column vectorized reader.", dt.sql()));
       }
     }
   }
@@ -125,32 +122,37 @@ public class ColumnVectorUtils {
   }
 
   private static void appendValue(WritableColumnVector dst, DataType t, Object o) {
+    PhysicalDataType pdt = t.physicalDataType();
     if (o == null) {
-      if (t instanceof CalendarIntervalType) {
+      if (pdt instanceof PhysicalCalendarIntervalType) {
         dst.appendStruct(true);
       } else {
         dst.appendNull();
       }
     } else {
-      if (t == DataTypes.BooleanType) {
+      if (pdt == DataTypes.BooleanType.physicalDataType()) {
         dst.appendBoolean((Boolean) o);
-      } else if (t == DataTypes.ByteType) {
+      } else if (pdt == DataTypes.ByteType.physicalDataType()) {
         dst.appendByte((Byte) o);
-      } else if (t == DataTypes.ShortType) {
+      } else if (pdt == DataTypes.ShortType.physicalDataType()) {
         dst.appendShort((Short) o);
-      } else if (t == DataTypes.IntegerType) {
-        dst.appendInt((Integer) o);
-      } else if (t == DataTypes.LongType) {
+      } else if (pdt == DataTypes.IntegerType.physicalDataType()) {
+        if (o instanceof Date) {
+          dst.appendInt(DateTimeUtils.fromJavaDate((Date) o));
+        } else {
+          dst.appendInt((Integer) o);
+        }
+      } else if (pdt == DataTypes.LongType.physicalDataType()) {
         dst.appendLong((Long) o);
-      } else if (t == DataTypes.FloatType) {
+      } else if (pdt == DataTypes.FloatType.physicalDataType()) {
         dst.appendFloat((Float) o);
-      } else if (t == DataTypes.DoubleType) {
+      } else if (pdt == DataTypes.DoubleType.physicalDataType()) {
         dst.appendDouble((Double) o);
-      } else if (t == DataTypes.StringType) {
+      } else if (pdt == DataTypes.StringType.physicalDataType()) {
         byte[] b =((String)o).getBytes(StandardCharsets.UTF_8);
         dst.appendByteArray(b, 0, b.length);
-      } else if (t instanceof DecimalType) {
-        DecimalType dt = (DecimalType) t;
+      } else if (pdt instanceof PhysicalDecimalType) {
+        PhysicalDecimalType dt = (PhysicalDecimalType) pdt;
         Decimal d = Decimal.apply((BigDecimal) o, dt.precision(), dt.scale());
         if (dt.precision() <= Decimal.MAX_INT_DIGITS()) {
           dst.appendInt((int) d.toUnscaledLong());
@@ -161,14 +163,12 @@ public class ColumnVectorUtils {
           byte[] bytes = integer.toByteArray();
           dst.appendByteArray(bytes, 0, bytes.length);
         }
-      } else if (t instanceof CalendarIntervalType) {
+      } else if (pdt instanceof PhysicalCalendarIntervalType) {
         CalendarInterval c = (CalendarInterval)o;
         dst.appendStruct(false);
         dst.getChild(0).appendInt(c.months);
         dst.getChild(1).appendInt(c.days);
         dst.getChild(2).appendLong(c.microseconds);
-      } else if (t instanceof DateType) {
-        dst.appendInt(DateTimeUtils.fromJavaDate((Date)o));
       } else {
         throw new UnsupportedOperationException("Type " + t);
       }
@@ -176,8 +176,9 @@ public class ColumnVectorUtils {
   }
 
   private static void appendValue(WritableColumnVector dst, DataType t, Row src, int fieldIdx) {
-    if (t instanceof ArrayType) {
-      ArrayType at = (ArrayType)t;
+    PhysicalDataType pdt = t.physicalDataType();
+    if (pdt instanceof PhysicalArrayType) {
+      PhysicalArrayType at = (PhysicalArrayType) pdt;
       if (src.isNullAt(fieldIdx)) {
         dst.appendNull();
       } else {
@@ -187,8 +188,8 @@ public class ColumnVectorUtils {
           appendValue(dst.arrayData(), at.elementType(), o);
         }
       }
-    } else if (t instanceof StructType) {
-      StructType st = (StructType)t;
+    } else if (pdt instanceof PhysicalStructType) {
+      PhysicalStructType st = (PhysicalStructType) pdt;
       if (src.isNullAt(fieldIdx)) {
         dst.appendStruct(true);
       } else {
