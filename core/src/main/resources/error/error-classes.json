@@ -852,6 +852,11 @@
       "It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query."
     ]
   },
+  "NON_FOLDABLE_SQL_ARG" : {
+    "message" : [
+      "The argument <name> is not foldable. Consider to replace it by a literal value."
+    ]
+  },
   "NON_LAST_MATCHED_CLAUSE_OMIT_CONDITION" : {
     "message" : [
       "When there are more than one MATCHED clauses in a MERGE statement, only the last MATCHED clause can omit the condition."

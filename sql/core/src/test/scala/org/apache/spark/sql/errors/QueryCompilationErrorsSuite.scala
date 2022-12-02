@@ -680,6 +680,19 @@ class QueryCompilationErrorsSuite
         start = 13,
         stop = 16))
   }
+
+  test("NON_FOLDABLE_SQL_ARG - SPARK-41271: non-foldable argument of `sql()`") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql("SELECT @param1 FROM VALUES (1) AS t(col1)", Map("param1" -> "col1 + 1"))
+      },
+      errorClass = "NON_FOLDABLE_SQL_ARG",
+      parameters = Map("name" -> "param1"),
+      context = ExpectedContext(
+        fragment = "col1 + 1",
+        start = 0,
+        stop = 7))
+  }
 }
 
 class MyCastToString extends SparkUserDefinedFunction(

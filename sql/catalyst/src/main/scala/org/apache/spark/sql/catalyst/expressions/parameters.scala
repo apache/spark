@@ -59,9 +59,7 @@ object Parameter extends QueryErrorsBase {
       args.filter(!_._2.foldable).headOption.foreach { case (name, expr) =>
         expr.failAnalysis(
           errorClass = "NON_FOLDABLE_SQL_ARG",
-          messageParameters = Map(
-            "name" -> name,
-            "expr" -> toSQLExpr(expr)))
+          messageParameters = Map("name" -> name))
       }
       plan.transformAllExpressionsWithPruning(_.containsPattern(PARAMETER)) {
         case param @ Parameter(name) =>
