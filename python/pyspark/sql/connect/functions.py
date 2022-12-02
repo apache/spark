@@ -32,6 +32,7 @@ if TYPE_CHECKING:
 
 
 def _to_col(col: "ColumnOrName") -> Column:
+    assert isinstance(col, (Column, str))
     return col if isinstance(col, Column) else column(col)
 
 
@@ -59,7 +60,7 @@ def _invoke_function(name: str, *args: Union[Column, Expression]) -> Column:
 
 def _invoke_function_over_columns(name: str, *cols: "ColumnOrName") -> Column:
     """
-    Invokes n-ary JVM function identified by name
+    Invokes n-ary function identified by name
     and wraps the result with :class:`~pyspark.sql.Column`.
     """
     _cols = [_to_col(c) for c in cols]
@@ -68,7 +69,7 @@ def _invoke_function_over_columns(name: str, *cols: "ColumnOrName") -> Column:
 
 def _invoke_binary_math_function(name: str, col1: Any, col2: Any) -> Column:
     """
-    Invokes binary JVM math function identified by name
+    Invokes binary math function identified by name
     and wraps the result with :class:`~pyspark.sql.Column`.
     """
 
@@ -1235,7 +1236,7 @@ def round(col: "ColumnOrName", scale: int = 0) -> Column:
     Round the given value to `scale` decimal places using HALF_UP rounding mode if `scale` >= 0
     or at integral part when `scale` < 0.
 
-    .. versionadded:: 1.5.0
+    .. versionadded:: 3.4.0
 
     Parameters
     ----------
