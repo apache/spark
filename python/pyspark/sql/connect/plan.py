@@ -16,6 +16,7 @@
 #
 
 from typing import Any, List, Optional, Sequence, Union, cast, TYPE_CHECKING, Mapping, Dict
+import functools
 import pandas
 import pyarrow as pa
 import pyspark.sql.connect.proto as proto
@@ -675,7 +676,7 @@ class Join(LogicalPlan):
         self,
         left: Optional["LogicalPlan"],
         right: "LogicalPlan",
-        on: Optional[Union[str, List[str], Column]],
+        on: Optional[Union[str, List[str], Column, List[Column]]],
         how: Optional[str],
     ) -> None:
         super().__init__(left)
@@ -721,8 +722,12 @@ class Join(LogicalPlan):
                     rel.join.using_columns.append(self.on)
                 else:
                     rel.join.join_condition.CopyFrom(self.to_attr_or_expression(self.on, session))
-            else:
-                rel.join.using_columns.extend(self.on)
+            elif len(self.on) > 0:
+                if isinstance(self.on[0], str):
+                    rel.join.using_columns.extend(cast(str, self.on))
+                else:
+                    merge_column = functools.reduce(lambda c1, c2: c1 & c2, self.on)
+                    rel.join.join_condition.CopyFrom(cast(Column, merge_column).to_plan(session))
         rel.join.join_type = self.how
         return rel
 

@@ -59,6 +59,11 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
             other=right_input, on=left_input.name == right_input.name
         )._plan.to_proto(self.connect)
         self.assertIsNotNone(plan.root.join.join_condition)
+        plan = left_input.join(
+            other=right_input,
+            on=[left_input.name == right_input.name, left_input.age == right_input.age],
+        )._plan.to_proto(self.connect)
+        self.assertIsNotNone(plan.root.join.join_condition)
 
     def test_crossjoin(self):
         # SPARK-41227: Test CrossJoin
