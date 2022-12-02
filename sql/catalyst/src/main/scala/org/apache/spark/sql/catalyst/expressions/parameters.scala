@@ -38,13 +38,12 @@ case class Parameter(name: String) extends LeafExpression {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(PARAMETER)
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  private def unboundError() =
     throw SparkException.internalError(s"Found the unbound parameter: $name.")
-  }
 
-  def eval(input: InternalRow): Any = {
-    throw SparkException.internalError(s"Found the unbound parameter: $name.")
-  }
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = unboundError()
+
+  def eval(input: InternalRow): Any = unboundError()
 }
 
 
