@@ -164,7 +164,7 @@ class CreateScalarFunction(google.protobuf.message.Message):
     ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
         pyspark.sql.connect.proto.types_pb2.DataType
     ]:
-        """(Optional) A list of argument types. Can be empty when the function does not take a argument."""
+        """(Optional) A list of argument types. Can be empty when the function does not take an argument."""
     @property
     def return_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
         """(Required) the return type of the function."""
