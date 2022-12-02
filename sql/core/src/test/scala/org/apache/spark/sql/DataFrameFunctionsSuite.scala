@@ -5237,6 +5237,30 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       )
     )
   }
+
+  test("SPARK-41235: test array_compact") {
+    val df = Seq(
+      (Array[Integer](null, 1, 2, null, 3, 4),
+        Array("a", null, "b", null, "c", "d"), Array("", "")),
+      (Array.empty[Integer], Array("1.0", "2.2", "3.0"), Array.empty[String]),
+      (Array[Integer](null, null, null), null, null)
+    ).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(array_compact($"a"),
+        array_compact($"b"), array_compact($"c")),
+      Seq(Row(Seq(1, 2, 3, 4), Seq("a", "b", "c", "d"), Seq("", "")),
+        Row(Seq.empty[Integer], Seq("1.0", "2.2", "3.0"), Seq.empty[String]),
+        Row(Seq.empty[Integer], null, null))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_compact(array(1.0D, 2.0D, null))"),
+      Seq(
+        Row(Seq(1.0, 2.0))
+      )
+    )
+  }
 }
 
 object DataFrameFunctionsSuite {

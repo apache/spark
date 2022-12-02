@@ -2596,4 +2596,33 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
           Date.valueOf("2017-02-12")))
     }
   }
+
+  test("SPARK-41235: Array Compact") {
+    val a0 = Literal.create(Seq(1, null, 3, null, 2, 5), ArrayType(IntegerType))
+    val a1 = Literal.create(Seq("a", "b", null, "c", "b"), ArrayType(StringType))
+    val a2 = Literal.create(Seq[String](null, "", null, ""), ArrayType(StringType))
+    val a3 = Literal.create(Seq.empty[Integer], ArrayType(IntegerType))
+    val a4 = Literal.create(null, ArrayType(StringType))
+    val a5 = Literal.create(Seq(1, null, 8, 9, null), ArrayType(IntegerType))
+    val a6 = Literal.create(Seq(true, false, null, true), ArrayType(BooleanType))
+    val a7 = Literal.create(Seq(null, null), ArrayType(IntegerType))
+
+    checkEvaluation(ArrayCompact(a0), Seq(1, 3, 2, 5))
+    checkEvaluation(ArrayCompact(a1), Seq( "a", "b", "c", "b"))
+    checkEvaluation(ArrayCompact(a2), Seq( "", ""))
+    checkEvaluation(ArrayCompact(a3), Seq.empty[Integer])
+    checkEvaluation(ArrayCompact(a4), null)
+    checkEvaluation(ArrayCompact(a5), Seq(1, 8, 9))
+    checkEvaluation(ArrayCompact(a6), Seq(true, false, true))
+    checkEvaluation(ArrayCompact(a7), Seq.empty[Integer])
+
+    // complex data types
+    val binary_arr = Literal.create(Seq[Array[Byte]](null, Array[Byte](1, 2)),
+      ArrayType(BinaryType))
+    checkEvaluation(ArrayCompact(binary_arr), Seq[Array[Byte]](Array[Byte](1, 2)))
+
+    val int_arr = Literal.create(Seq[Seq[Int]](null, Seq[Int](2, 1)),
+      ArrayType(ArrayType(IntegerType)))
+    checkEvaluation(ArrayCompact(int_arr), Seq[Seq[Int]]( Seq[Int](2, 1)))
+  }
 }

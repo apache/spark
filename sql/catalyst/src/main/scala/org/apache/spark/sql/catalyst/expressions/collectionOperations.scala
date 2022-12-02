@@ -4600,3 +4600,60 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): ArrayExcept = copy(left = newLeft, right = newRight)
 }
+
+@ExpressionDescription(
+  usage = "_FUNC_(array) - Removes null values from the array.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 2, 3, null));
+       [1,2,3]
+  """,
+  group = "array_funcs",
+  since = "3.4.0")
+// Note: check is it required to inherit ArraySetLike
+case class ArrayCompact(child: Expression)
+  extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
+  override def dataType: DataType = child.dataType
+
+  @transient private lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
+  override def checkInputDataTypes(): TypeCheckResult = {
+    super.checkInputDataTypes() match {
+      case f if f.isFailure => f
+      case TypeCheckResult.TypeCheckSuccess =>
+        TypeUtils.checkForOrderingExpr(elementType, prettyName)
+    }
+  }
+
+  override def nullSafeEval(array: Any): Any = {
+    val newArray = new Array[Any](array.asInstanceOf[ArrayData].numElements())
+    var pos = 0
+    array.asInstanceOf[ArrayData].foreach (elementType, (i, v) =>
+      if (v != null ) {
+        newArray(pos) = v
+        pos += 1
+      }
+    )
+    new GenericArrayData(newArray.slice(0, pos))
+  }
+  override def prettyName: String = "array_compact"
+  /**
+   * Returns Java source code that can be compiled to evaluate this expression.
+   * The default behavior is to call the eval method of the expression. Concrete expression
+   * implementations should override this to do actual code generation.
+   *
+   * @param ctx a [[CodegenContext]]
+   * @param ev  an [[ExprCode]] with unique terms.
+   * @return an [[ExprCode]] containing the Java source code to generate the given expression
+   */
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+
+    nullSafeCodeGen(ctx, ev, (array) => {
+      val expr = ctx.addReferenceObj("arrayCompactExpr", this)
+      s"${ev.value} = (ArrayData)$expr.nullSafeEval($array);"
+    })
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): ArrayCompact =
+    copy(child = newChild)
+}

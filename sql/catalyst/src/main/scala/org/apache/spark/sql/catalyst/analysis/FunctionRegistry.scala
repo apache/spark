@@ -704,6 +704,7 @@ object FunctionRegistry {
     expression[MapZipWith]("map_zip_with"),
     expression[ZipWith]("zip_with"),
     expression[Get]("get"),
+    expression[ArrayCompact]("array_compact"),
 
     CreateStruct.registryEntry,
 
