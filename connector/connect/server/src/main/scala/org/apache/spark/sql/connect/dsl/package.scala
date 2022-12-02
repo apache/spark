@@ -83,9 +83,19 @@ package object dsl {
           .setUnresolvedFunction(
             Expression.UnresolvedFunction
               .newBuilder()
-              .addParts("<")
+              .setFunctionName("<")
               .addArguments(expr)
               .addArguments(other))
+          .build()
+
+      def cast(dataType: DataType): Expression =
+        Expression
+          .newBuilder()
+          .setCast(
+            Expression.Cast
+              .newBuilder()
+              .setExpr(expr)
+              .setCastToType(dataType))
           .build()
     }
 
@@ -93,14 +103,14 @@ package object dsl {
       Expression
         .newBuilder()
         .setUnresolvedFunction(
-          Expression.UnresolvedFunction.newBuilder().addParts("min").addArguments(e))
+          Expression.UnresolvedFunction.newBuilder().setFunctionName("min").addArguments(e))
         .build()
 
     def proto_explode(e: Expression): Expression =
       Expression
         .newBuilder()
         .setUnresolvedFunction(
-          Expression.UnresolvedFunction.newBuilder().addParts("explode").addArguments(e))
+          Expression.UnresolvedFunction.newBuilder().setFunctionName("explode").addArguments(e))
         .build()
 
     /**
@@ -117,7 +127,8 @@ package object dsl {
         .setUnresolvedFunction(
           Expression.UnresolvedFunction
             .newBuilder()
-            .addAllParts(nameParts.asJava)
+            .setFunctionName(nameParts.mkString("."))
+            .setIsUserDefinedFunction(true)
             .addAllArguments(args.asJava))
         .build()
     }
@@ -136,7 +147,7 @@ package object dsl {
         .setUnresolvedFunction(
           Expression.UnresolvedFunction
             .newBuilder()
-            .addParts(name)
+            .setFunctionName(name)
             .addAllArguments(args.asJava))
         .build()
     }

@@ -21,11 +21,20 @@ import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 
 class UnsafeArrayWriterSuite extends SparkFunSuite {
   test("SPARK-40403: don't print negative number when array is too big") {
+    val numElements = 268271216
+    val elementSize = 8
     val rowWriter = new UnsafeRowWriter(1)
     rowWriter.resetRowWriter()
-    val arrayWriter = new UnsafeArrayWriter(rowWriter, 8)
-    assert(intercept[SparkIllegalArgumentException] {
-      arrayWriter.initialize(268271216)
-    }.getMessage.contains("Cannot initialize array with 268271216 elements of size 8"))
+    val arrayWriter = new UnsafeArrayWriter(rowWriter, elementSize)
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        arrayWriter.initialize(numElements)
+      },
+      errorClass = "TOO_MANY_ARRAY_ELEMENTS",
+      parameters = Map(
+        "numElements" -> numElements.toString,
+        "size" -> elementSize.toString
+      )
+    )
   }
 }

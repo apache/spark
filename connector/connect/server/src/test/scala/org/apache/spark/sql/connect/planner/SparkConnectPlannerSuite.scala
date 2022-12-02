@@ -23,7 +23,7 @@ import com.google.protobuf.ByteString
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.Expression.UnresolvedStar
+import org.apache.spark.connect.proto.Expression.{Alias, ExpressionString, UnresolvedStar}
 import org.apache.spark.sql.{AnalysisException, Dataset}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeProjection}
@@ -235,7 +235,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
     val joinCondition = proto.Expression.newBuilder.setUnresolvedFunction(
       proto.Expression.UnresolvedFunction.newBuilder
-        .addAllParts(Seq("==").asJava)
+        .setFunctionName("==")
         .addArguments(unresolvedAttribute)
         .addArguments(unresolvedAttribute)
         .build())
@@ -296,7 +296,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
         .setUnresolvedFunction(
           proto.Expression.UnresolvedFunction
             .newBuilder()
-            .addParts("sum")
+            .setFunctionName("sum")
             .addArguments(unresolvedAttribute))
         .build()
 
@@ -467,5 +467,108 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
           .build())
     }
     assert(e.getMessage.contains("part1, part2"))
+  }
+
+  test("transform UnresolvedStar and ExpressionString") {
+    val sql =
+      "SELECT * FROM VALUES (1,'spark',1), (2,'hadoop',2), (3,'kafka',3) AS tab(id, name, value)"
+    val input = proto.Relation
+      .newBuilder()
+      .setSql(
+        proto.SQL
+          .newBuilder()
+          .setQuery(sql)
+          .build())
+
+    val project =
+      proto.Project
+        .newBuilder()
+        .setInput(input)
+        .addExpressions(
+          proto.Expression
+            .newBuilder()
+            .setUnresolvedStar(UnresolvedStar.newBuilder().build())
+            .build())
+        .addExpressions(
+          proto.Expression
+            .newBuilder()
+            .setExpressionString(ExpressionString.newBuilder().setExpression("name").build())
+            .build())
+        .build()
+
+    val df =
+      Dataset.ofRows(spark, transform(proto.Relation.newBuilder.setProject(project).build()))
+    val array = df.collect()
+    assert(array.length == 3)
+    assert(array(0).toString == InternalRow(1, "spark", 1, "spark").toString)
+    assert(array(1).toString == InternalRow(2, "hadoop", 2, "hadoop").toString)
+    assert(array(2).toString == InternalRow(3, "kafka", 3, "kafka").toString)
+  }
+
+  test("transform UnresolvedStar with target field") {
+    val rows = (0 until 10).map { i =>
+      InternalRow(InternalRow(InternalRow(i, i + 1)))
+    }
+
+    val schema = StructType(
+      Seq(
+        StructField(
+          "a",
+          StructType(Seq(StructField(
+            "b",
+            StructType(Seq(StructField("c", IntegerType), StructField("d", IntegerType)))))))))
+    val inputRows = rows.map { row =>
+      val proj = UnsafeProjection.create(schema)
+      proj(row).copy()
+    }
+
+    val localRelation = createLocalRelationProto(schema.toAttributes, inputRows)
+
+    val project =
+      proto.Project
+        .newBuilder()
+        .setInput(localRelation)
+        .addExpressions(
+          proto.Expression
+            .newBuilder()
+            .setUnresolvedStar(UnresolvedStar.newBuilder().addTarget("a").addTarget("b").build())
+            .build())
+        .build()
+
+    val df =
+      Dataset.ofRows(spark, transform(proto.Relation.newBuilder.setProject(project).build()))
+    assertResult(df.schema)(
+      StructType(Seq(StructField("c", IntegerType), StructField("d", IntegerType))))
+
+    val array = df.collect()
+    assert(array.length == 10)
+    for (i <- 0 until 10) {
+      assert(i == array(i).getInt(0))
+      assert(i + 1 == array(i).getInt(1))
+    }
+  }
+
+  test("transform Project with Alias") {
+    val input = proto.Expression
+      .newBuilder()
+      .setLiteral(
+        proto.Expression.Literal
+          .newBuilder()
+          .setInteger(1)
+          .build())
+
+    val project =
+      proto.Project
+        .newBuilder()
+        .addExpressions(
+          proto.Expression
+            .newBuilder()
+            .setAlias(Alias.newBuilder().setExpr(input).addName("id").build())
+            .build())
+        .build()
+
+    val df =
+      Dataset.ofRows(spark, transform(proto.Relation.newBuilder.setProject(project).build()))
+    assert(df.schema.fields.toSeq.map(_.name) == Seq("id"))
   }
 }

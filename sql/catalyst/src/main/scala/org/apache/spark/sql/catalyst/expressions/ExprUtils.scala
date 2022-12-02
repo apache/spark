@@ -46,7 +46,7 @@ object ExprUtils extends QueryErrorsBase {
   def evalSchemaExpr(exp: Expression): StructType = {
     val dataType = evalTypeExpr(exp)
     if (!dataType.isInstanceOf[StructType]) {
-      throw QueryCompilationErrors.schemaIsNotStructTypeError(dataType)
+      throw QueryCompilationErrors.schemaIsNotStructTypeError(exp, dataType)
     }
     dataType.asInstanceOf[StructType]
   }

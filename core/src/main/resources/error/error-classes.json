@@ -109,12 +109,6 @@
       "The column <columnName> already exists. Consider to choose another name or rename the existing column."
     ]
   },
-  "COLUMN_NOT_IN_GROUP_BY_CLAUSE" : {
-    "message" : [
-      "The expression <expression> is neither present in the group by, nor is it an aggregate function. Add to group by or wrap in `first()` (or `first_value()`) if you don't care which value you get."
-    ],
-    "sqlState" : "42000"
-  },
   "CONCURRENT_QUERY" : {
     "message" : [
       "Another instance of this query was just started by a concurrent session."
@@ -788,6 +782,11 @@
           "The input expression must be string literal and not null."
         ]
       },
+      "NON_STRUCT_TYPE" : {
+        "message" : [
+          "The input expression should be evaluated to struct type, but got <dataType>."
+        ]
+      },
       "PARSE_ERROR" : {
         "message" : [
           "Cannot parse the schema:",
@@ -829,6 +828,13 @@
     "message" : [
       "Malformed Protobuf messages are detected in message deserialization. Parse Mode: <failFastMode>. To process malformed protobuf message as null result, try setting the option 'mode' as 'PERMISSIVE'."
     ]
+  },
+  "MISSING_AGGREGATION" : {
+    "message" : [
+      "The non-aggregating expression <expression> is based on columns which are not participating in the GROUP BY clause.",
+      "Add the columns or the expression to the GROUP BY, aggregate the expression, or use <expressionAnyValue> if you do not care which of the values within a group is returned."
+    ],
+    "sqlState" : "42000"
   },
   "MISSING_STATIC_PARTITION_COLUMN" : {
     "message" : [
@@ -1643,11 +1649,6 @@
       "Cannot mix year-month and day-time fields: <literal>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0030" : {
-    "message" : [
-      "DataType <dataType> is not supported."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0031" : {
     "message" : [
       "Invalid number of buckets: <describe>."
@@ -2213,11 +2214,6 @@
   "_LEGACY_ERROR_TEMP_1091" : {
     "message" : [
       "Cannot read table property '<key>' as it's corrupted.<details>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1094" : {
-    "message" : [
-      "Schema should be struct type but got <dataType>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1097" : {

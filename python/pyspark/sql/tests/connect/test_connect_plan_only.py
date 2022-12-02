@@ -59,6 +59,19 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
             other=right_input, on=left_input.name == right_input.name
         )._plan.to_proto(self.connect)
         self.assertIsNotNone(plan.root.join.join_condition)
+        plan = left_input.join(
+            other=right_input,
+            on=[left_input.name == right_input.name, left_input.age == right_input.age],
+        )._plan.to_proto(self.connect)
+        self.assertIsNotNone(plan.root.join.join_condition)
+
+    def test_crossjoin(self):
+        # SPARK-41227: Test CrossJoin
+        left_input = self.connect.readTable(table_name=self.tbl_name)
+        right_input = self.connect.readTable(table_name=self.tbl_name)
+        crossJoin_plan = left_input.crossJoin(other=right_input)._plan.to_proto(self.connect)
+        join_plan = left_input.join(other=right_input, how="cross")._plan.to_proto(self.connect)
+        self.assertEqual(crossJoin_plan, join_plan)
 
     def test_filter(self):
         df = self.connect.readTable(table_name=self.tbl_name)
@@ -69,7 +82,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
                 plan.root.filter.condition.unresolved_function, proto.Expression.UnresolvedFunction
             )
         )
-        self.assertEqual(plan.root.filter.condition.unresolved_function.parts, [">"])
+        self.assertEqual(plan.root.filter.condition.unresolved_function.function_name, ">")
         self.assertEqual(len(plan.root.filter.condition.unresolved_function.arguments), 2)
 
     def test_filter_with_string_expr(self):
