@@ -1137,7 +1137,7 @@
   },
   "UNBOUND_PARAMETER" : {
     "message" : [
-      "Found the unbound parameter: <name>. Use `bind()` to substitute the parameter by a literal."
+      "Found the unbound parameter: <name>. Please, fix `args` and provide a mapping of the parameter to a literal value."
     ]
   },
   "UNCLOSED_BRACKETED_COMMENT" : {
