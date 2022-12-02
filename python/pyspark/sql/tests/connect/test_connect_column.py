@@ -20,9 +20,6 @@ from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
 from pyspark.testing.sqlutils import have_pandas
 
 if have_pandas:
-    pass
-
-if have_pandas:
     from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
     from pyspark.sql.connect.client import ChannelBuilder
     from pyspark.sql.connect.function_builder import udf
