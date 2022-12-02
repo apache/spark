@@ -7155,7 +7155,7 @@ def array_compact(col: "ColumnOrName") -> Column:
     --------
     >>> df = spark.createDataFrame([([1, None, 2, 3],), ([4, 5, None, 4],)], ['data'])
     >>> df.select(array_compact(df.data)).collect()
-    [Row(array_compact(data)=[1, 2, 3]), Row(array_distinct(data)=[4, 5, 4])]
+    [Row(array_compact(data)=[1, 2, 3]), Row(array_compact(data)=[4, 5, 4])]
     """
     return _invoke_function_over_columns("array_compact", col)
 
