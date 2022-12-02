@@ -4613,6 +4613,17 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
     new GenericArrayData(newArray.slice(0, pos.asInstanceOf[Int]))
   }
 
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, (arr, pos, item) => {
+      val i = ctx.freshName("i")
+      s"""
+         |for (int $i = 0; $i < $arr.numElements(); $i ++) {
+         |  assert true;
+         |}
+       """.stripMargin
+    })
+  }
+
   override def dataType: DataType = srcArrayExpr.dataType
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, IntegerType, IntegerType)
   override def first: Expression = srcArrayExpr
