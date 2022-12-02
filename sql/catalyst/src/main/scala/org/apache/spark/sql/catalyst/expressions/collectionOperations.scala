@@ -4605,27 +4605,56 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
 case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: Expression)
   extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
-  @transient protected lazy val elementType: DataType =
-    inputTypes.head.asInstanceOf[ArrayType].elementType
+  @transient private lazy val elementType: DataType = srcArrayExpr.dataType.asInstanceOf[ArrayType].elementType
+
+  override def dataType: DataType = srcArrayExpr.dataType
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, IntegerType, StringType)
 
   override def nullSafeEval(arr: Any, pos: Any, item: Any): Any = {
-    val newArray = new Array[Any](arr.asInstanceOf[ArrayData].numElements())
-    new GenericArrayData(newArray.slice(0, pos.asInstanceOf[Int]))
+    val arrCon = arr.asInstanceOf[ArrayData]
+    val data = arrCon.toSeq[AnyRef](elementType)
+    new GenericArrayData(data)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (arr, pos, item) => {
-      val i = ctx.freshName("i")
+      val posIdx = ctx.freshName("startIdx")
+      val resLength = ctx.freshName("resLength")
+      val defaultIntValue = CodeGenerator.defaultValue(CodeGenerator.JAVA_INT, false)
       s"""
-         |for (int $i = 0; $i < $arr.numElements(); $i ++) {
-         |  assert true;
-         |}
+         |${CodeGenerator.JAVA_INT} $posIdx = $defaultIntValue;
+         |${CodeGenerator.JAVA_INT} $resLength = $defaultIntValue;
+         |$resLength = $pos + 1;
+         |$posIdx = $pos;
+         |${genCodeForResult(ctx, ev, arr, posIdx, resLength)}
        """.stripMargin
     })
   }
 
-  override def dataType: DataType = srcArrayExpr.dataType
-  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, IntegerType, IntegerType)
+  def genCodeForResult(
+      ctx: CodegenContext,
+      ev: ExprCode,
+      inputArray: String,
+      startIdx: String,
+      resLength: String): String = {
+    val values = ctx.freshName("values")
+    val i = ctx.freshName("i")
+    val genericArrayData = classOf[GenericArrayData].getName
+
+    val allocation = CodeGenerator.createArrayData(
+      values, elementType, resLength, s" $prettyName failed.")
+    val assignment = CodeGenerator.createArrayAssignment(values, elementType, inputArray,
+      i, s"$i + $startIdx", false)
+
+    s"""
+       |$allocation
+       |for (int $i = 0; $i < $resLength; $i ++) {
+       |  $assignment
+       |}
+       |${ev.value} = $values;
+     """.stripMargin
+  }
+
   override def first: Expression = srcArrayExpr
   override def second: Expression = posExpr
   override def third: Expression = itemExpr
