@@ -887,6 +887,22 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             set(spark_df.select("id").crossJoin(other=spark_df.select("name")).toPandas()),
         )
 
+    def test_parameter_types_for_df_operations(self):
+        # SPARK-41362: Test correct type checks for parameters.
+        df = self.connect.read.table(self.tbl_name)
+
+        with self.assertRaises(TypeError) as ex:
+            df.select(lambda x: x)._plan.to_proto(self.spark)
+        self.assertIn("Argument type expected to be", str(ex.exception))
+
+        with self.assertRaises(TypeError) as ex:
+            df.withColumns({"abc": lambda x: x})._plan.to_proto(self.spark)
+        self.assertIn("Argument type expected to be", str(ex.exception))
+
+        with self.assertRaises(TypeError) as ex:
+            df.sort(lambda x: x)._plan.to_proto(self.spark)
+        self.assertIn("Argument type expected to be", str(ex.exception))
+
 
 class ChannelBuilderTests(ReusedPySparkTestCase):
     def test_invalid_connection_strings(self):

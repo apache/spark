@@ -15,16 +15,47 @@
 # limitations under the License.
 #
 
-from typing import Any, List, Optional, Sequence, Union, cast, TYPE_CHECKING, Mapping, Dict
+from typing import (
+    Any,
+    List,
+    Optional,
+    Sequence,
+    Union,
+    cast,
+    TYPE_CHECKING,
+    Mapping,
+    Dict,
+    get_args,
+)
 import pandas
 import pyarrow as pa
 import pyspark.sql.connect.proto as proto
 from pyspark.sql.connect.column import Column, SortOrder, ColumnReference
 
+from pyspark.sql.connect._typing import ColumnOrName
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import ColumnOrName
     from pyspark.sql.connect.client import SparkConnectClient
+
+
+def _extract_all_types(type: Any):
+    res = []
+    for x in get_args(type):
+        res.append(x)
+        res.extend(_extract_all_types(x))
+    return res
+
+
+def _all_of(args: List[Any], type: Any):
+    """Helper method that checks a list of input values for their type."""
+    arg_types = _extract_all_types(type)
+    if len(arg_types) > 0:
+        actual_types = arg_types
+    else:
+        actual_types = [type]
+    for a in args:
+        if not isinstance(a, (*actual_types,)):
+            raise TypeError(f"Argument type expected to be in {type}, got {a}")
 
 
 class InputValidationError(Exception):
@@ -248,6 +279,7 @@ class Project(LogicalPlan):
     def __init__(self, child: Optional["LogicalPlan"], *columns: "ColumnOrName") -> None:
         super().__init__(child)
         self._raw_columns = list(columns)
+        _all_of(self._raw_columns, ColumnOrName)
         self.alias: Optional[str] = None
         self._verify_expressions()
 
@@ -305,6 +337,7 @@ class WithColumns(LogicalPlan):
         plan = proto.Relation()
         plan.with_columns.input.CopyFrom(self._child.plan(session))
         for k, v in self._cols_map.items():
+            _all_of((v,), Column)
             name_expr = proto.Expression.Alias()
             name_expr.name.append(k)
             name_expr.expr.CopyFrom(v.to_plan(session))
@@ -488,6 +521,7 @@ class Sort(LogicalPlan):
     ) -> None:
         super().__init__(child)
         self.columns = columns
+        _all_of(self.columns, ColumnOrName)
         self.is_global = is_global
 
     def col_to_sort_field(
@@ -1350,4 +1384,3 @@ class WriteOperation(LogicalPlan):
             f"options: '{self.options}'<br />"
             f"</li></ul>"
         )
-        pass

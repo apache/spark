@@ -251,8 +251,10 @@ class ColumnReference(Expression):
         super().__init__()
         if isinstance(name, str):
             self._unparsed_identifier = name
-        else:
+        elif isinstance(name, Column):
             self._unparsed_identifier = name.name()
+        else:
+            raise TypeError(f"Unsupported argument type when constructing ColumnReference: {name}")
 
     def name(self) -> str:
         """Returns the qualified name of the column reference."""
