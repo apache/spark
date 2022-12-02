@@ -14,16 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
 
 from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
 from pyspark.testing.sqlutils import have_pandas
 
 if have_pandas:
-    from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
-    from pyspark.sql.connect.client import ChannelBuilder
-    from pyspark.sql.connect.function_builder import udf
-    from pyspark.sql.connect.functions import lit, col
+    from pyspark.sql.connect.functions import lit
 
 
 class SparkConnectTests(SparkConnectSQLTestCase):
