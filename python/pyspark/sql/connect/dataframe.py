@@ -40,7 +40,6 @@ from pyspark.sql.connect.column import (
     Column,
     scalar_function,
     sql_expression,
-    ScalarFunctionExpression,
 )
 from pyspark.sql.connect.functions import col, lit
 from pyspark.sql.types import (
@@ -157,7 +156,7 @@ class GroupedData(object):
             from pyspark.sql.connect.function_builder import functions as FB
 
             # Convert the dict into key value pairs
-            measures = [Column(ScalarFunctionExpression(exprs[0][k], col(k))) for k in exprs[0]]
+            measures = [scalar_function(exprs[0][k], col(k)) for k in exprs[0]]
         else:
             # Columns
             assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
