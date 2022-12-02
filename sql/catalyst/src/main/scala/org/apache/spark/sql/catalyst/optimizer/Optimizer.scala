@@ -133,7 +133,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
         SimplifyExtractValueOps,
         OptimizeCsvJsonExprs,
         CombineConcats,
-        PushdownPredicatesAndPruneColumnsForCTEDef) ++
+        PushdownPredicatesAndPruneColumnsForCTEDef,
+        ReorderWindowPartitionExpressions) ++
         extendedOperatorOptimizationRules
 
     val operatorOptimizationBatch: Seq[Batch] = {
@@ -2432,5 +2433,41 @@ object RemoveRepetitionFromGroupExpressions extends Rule[LogicalPlan] {
       } else {
         a.copy(groupingExpressions = newGrouping)
       }
+  }
+}
+
+/**
+ * Reorder window partition expressions by the distinct values stats.
+ * Sorting with high cardinality will be faster.
+ */
+object ReorderWindowPartitionExpressions extends Rule[LogicalPlan] {
+
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    if (!SQLConf.get.reorderWindowPartitionExpressions) {
+      plan
+    } else {
+      plan.transformDownWithPruning(_.containsPattern(WINDOW)) {
+        case w @ Window(windowExpressions, partitionSpec, _, child)
+          if partitionSpec.forall(_.isInstanceOf[NamedExpression]) =>
+          val colStats = child.stats.attributeStats
+          val partitionColStats =
+            partitionSpec.map(p => colStats.get(p.asInstanceOf[NamedExpression].toAttribute))
+          if (partitionColStats.forall(s => s.isDefined && s.get.distinctCount.isDefined)) {
+            val newPartitionSpec =
+              partitionSpec.zip(partitionColStats.map(_.get.distinctCount.get))
+                .sortBy(-_._2).map(_._1)
+            val newWindowExpressions =
+              windowExpressions.map {
+                _.transform {
+                  case spec: WindowSpecDefinition =>
+                    spec.copy(partitionSpec = newPartitionSpec)
+                }.asInstanceOf[NamedExpression]
+              }
+            w.copy(windowExpressions = newWindowExpressions, partitionSpec = newPartitionSpec)
+          } else {
+            w
+          }
+      }
+    }
   }
 }

@@ -4027,6 +4027,13 @@ object SQLConf {
     .checkValues(ErrorMessageFormat.values.map(_.toString))
     .createWithDefault(ErrorMessageFormat.PRETTY.toString)
 
+  val REORDER_WINDOW_PARTITION_EXPRESSIONS =
+    buildConf("spark.sql.reorderWindowPartitionExpressions")
+    .doc("Reorder the window partition expressions by expression stats")
+    .version("3.4.0")
+    .booleanConf
+    .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -4837,6 +4844,9 @@ class SQLConf extends Serializable with Logging {
 
   def allowsTempViewCreationWithMultipleNameparts: Boolean =
     getConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_MULTIPLE_NAME_PARTS)
+
+  def reorderWindowPartitionExpressions: Boolean =
+    getConf(SQLConf.REORDER_WINDOW_PARTITION_EXPRESSIONS)
 
   /** ********************** SQLConf functionality methods ************ */
 
