@@ -5266,7 +5266,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       OneRowRelation().
         selectExpr("array_compact(array(array(1, null,3), null, array(null, 2, 3)))"),
       Seq(
-        Row(Seq(Seq(1,null, 3), Seq(null, 2, 3))))
+        Row(Seq(Seq(1, null, 3), Seq(null, 2, 3))))
     )
 
     // unsupported data type
