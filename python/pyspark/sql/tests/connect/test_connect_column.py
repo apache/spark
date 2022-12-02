@@ -14,8 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-import grpc  # type: ignore
+import unittest
 
 from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
 from pyspark.testing.sqlutils import have_pandas
