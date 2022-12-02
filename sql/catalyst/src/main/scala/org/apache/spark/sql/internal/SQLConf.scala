@@ -3046,16 +3046,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val ENABLE_GENERATED_COLUMNS =
-    buildConf("spark.sql.generatedColumn.enabled")
-      .internal()
-      .doc("When true, allow CREATE TABLE and REPLACE TABLE statements to define generated " +
-        "columns by specifying a generation expression for specific columns with " +
-        "`GENERATED ALWAYS AS expr`")
-      .version("3.4.0")
-      .booleanConf
-      .createWithDefault(true)
-
   val SKIP_TYPE_VALIDATION_ON_ALTER_PARTITION =
     buildConf("spark.sql.legacy.skipTypeValidationOnAlterPartition")
       .internal()

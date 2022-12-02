@@ -1336,11 +1336,6 @@
           "Repeated PIVOT operation."
         ]
       },
-      "SET_COLUMN_GENERATION_EXPRESSION" : {
-        "message" : [
-          "Specifying a generation expression for a column with GENERATED ALWAYS AS expr is disabled by configuration spark.sql.generatedColumn.enabled=false"
-        ]
-      },
       "SET_NAMESPACE_PROPERTY" : {
         "message" : [
           "<property> is a reserved namespace property, <msg>."

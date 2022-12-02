@@ -3031,11 +3031,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     // Add the 'GENERATED ALWAYS AS expression' clause in the column definition, if any, to the
     // column metadata.
     generationExpression.map(visitGenerationExpression).foreach { field =>
-      if (conf.getConf(SQLConf.ENABLE_GENERATED_COLUMNS)) {
-        builder.putString(GeneratedColumn.GENERATION_EXPRESSION_METADATA_KEY, field)
-      } else {
-        throw QueryParsingErrors.generatedColumnNotEnabledError(ctx)
-      }
+      builder.putString(GeneratedColumn.GENERATION_EXPRESSION_METADATA_KEY, field)
     }
 
     val name: String = colName.getText

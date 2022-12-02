@@ -650,8 +650,4 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
         "optionName" -> optionName),
       ctx)
   }
-
-  def generatedColumnNotEnabledError(ctx: ParserRuleContext): Throwable = {
-    new ParseException(errorClass = "UNSUPPORTED_FEATURE.SET_COLUMN_GENERATION_EXPRESSION", ctx)
-  }
 }
