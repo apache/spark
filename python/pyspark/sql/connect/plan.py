@@ -39,7 +39,7 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.client import SparkConnectClient
 
 
-def _extract_all_types(type: Any):
+def _extract_all_types(type: Any) -> Sequence[Any]:
     res = []
     for x in get_args(type):
         res.append(x)
@@ -47,7 +47,7 @@ def _extract_all_types(type: Any):
     return res
 
 
-def _all_of(args: List[Any], type: Any):
+def _all_of(args: Sequence[Any], type: Any) -> None:
     """Helper method that checks a list of input values for their type."""
     arg_types = _extract_all_types(type)
     if len(arg_types) > 0:
