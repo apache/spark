@@ -25,58 +25,58 @@ import org.apache.spark.sql.catalyst.types.*;
  * @since 3.4.0
  */
 public class PhysicalDataTypes {
-    /**
-     * Gets the PhysicalStringType object.
-     */
-    public static final PhysicalDataType StringType = PhysicalStringType$.MODULE$;
+  /**
+   * Gets the PhysicalStringType object.
+   */
+  public static final PhysicalDataType StringType = PhysicalStringType$.MODULE$;
 
-    /**
-     * Gets the PhysicalBinaryType object.
-     */
-    public static final PhysicalDataType BinaryType = PhysicalBinaryType$.MODULE$;
+  /**
+   * Gets the PhysicalBinaryType object.
+   */
+  public static final PhysicalDataType BinaryType = PhysicalBinaryType$.MODULE$;
 
-    /**
-     * Gets the PhysicalBooleanType object.
-     */
-    public static final PhysicalDataType BooleanType = PhysicalBooleanType$.MODULE$;
+  /**
+   * Gets the PhysicalBooleanType object.
+   */
+  public static final PhysicalDataType BooleanType = PhysicalBooleanType$.MODULE$;
 
-    /**
-     * Gets the PhysicalCalendarIntervalType object.
-     */
-    public static final PhysicalDataType CalendarIntervalType = PhysicalCalendarIntervalType$.MODULE$;
+  /**
+   * Gets the PhysicalCalendarIntervalType object.
+   */
+  public static final PhysicalDataType CalendarIntervalType = PhysicalCalendarIntervalType$.MODULE$;
 
-    /**
-     * Gets the PhysicalDoubleType object.
-     */
-    public static final PhysicalDataType DoubleType = PhysicalDoubleType$.MODULE$;
+  /**
+   * Gets the PhysicalDoubleType object.
+   */
+  public static final PhysicalDataType DoubleType = PhysicalDoubleType$.MODULE$;
 
-    /**
-     * Gets the PhysicalFloatType object.
-     */
-    public static final PhysicalDataType FloatType = PhysicalFloatType$.MODULE$;
+  /**
+   * Gets the PhysicalFloatType object.
+   */
+  public static final PhysicalDataType FloatType = PhysicalFloatType$.MODULE$;
 
-    /**
-     * Gets the PhysicalByteType object.
-     */
-    public static final PhysicalDataType ByteType = PhysicalByteType$.MODULE$;
+  /**
+   * Gets the PhysicalByteType object.
+   */
+  public static final PhysicalDataType ByteType = PhysicalByteType$.MODULE$;
 
-    /**
-     * Gets the PhysicalIntegerType object.
-     */
-    public static final PhysicalDataType IntegerType = PhysicalIntegerType$.MODULE$;
+  /**
+   * Gets the PhysicalIntegerType object.
+   */
+  public static final PhysicalDataType IntegerType = PhysicalIntegerType$.MODULE$;
 
-    /**
-     * Gets the PhysicalLongType object.
-     */
-    public static final PhysicalDataType LongType = PhysicalLongType$.MODULE$;
+  /**
+   * Gets the PhysicalLongType object.
+   */
+  public static final PhysicalDataType LongType = PhysicalLongType$.MODULE$;
 
-    /**
-     * Gets the PhysicalShortType object.
-     */
-    public static final PhysicalDataType ShortType = PhysicalShortType$.MODULE$;
+  /**
+   * Gets the PhysicalShortType object.
+   */
+  public static final PhysicalDataType ShortType = PhysicalShortType$.MODULE$;
 
-    /**
-     * Gets the PhysicalNullType object.
-     */
-    public static final PhysicalDataType NullType = PhysicalNullType$.MODULE$;
+  /**
+   * Gets the PhysicalNullType object.
+   */
+  public static final PhysicalDataType NullType = PhysicalNullType$.MODULE$;
 }
