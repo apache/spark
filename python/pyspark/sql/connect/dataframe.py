@@ -161,7 +161,7 @@ class GroupedData(object):
         else:
             # Columns
             assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
-            measures = cast(Sequence[Column], list(exprs))
+            measures = cast(List[Column], list(exprs))
 
         res = DataFrame.withPlan(
             plan.Aggregate(
