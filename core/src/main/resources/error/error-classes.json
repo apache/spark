@@ -1251,6 +1251,12 @@
     },
     "sqlState" : "42000"
   },
+  "UNRESOLVED_ROUTINE" : {
+    "message" : [
+      "Cannot resolve function <routineName> on search path <searchPath>."
+    ],
+    "sqlState" : "42000"
+  },
   "UNSUPPORTED_DATATYPE" : {
     "message" : [
       "Unsupported data type <typeName>"
@@ -2033,11 +2039,6 @@
   "_LEGACY_ERROR_TEMP_1040" : {
     "message" : [
       "Gap duration expression used in session window must be CalendarIntervalType, but got <dt>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1041" : {
-    "message" : [
-      "Undefined function <name>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1045" : {

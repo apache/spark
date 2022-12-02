@@ -48,7 +48,7 @@ import org.apache.spark.sql.types._
  * As commands are executed eagerly, this also includes errors thrown during the execution of
  * commands, which users can see immediately.
  */
-private[sql] object QueryCompilationErrors extends QueryErrorsBase {
+private[sql] object QueryCompilationErrors extends QueryErrorsBase with LookupCatalog {
 
   def groupingIDMismatchError(groupingID: GroupingID, groupByExprs: Seq[Expression]): Throwable = {
     new AnalysisException(
@@ -633,8 +633,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def functionUndefinedError(name: FunctionIdentifier): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1041",
-      messageParameters = Map("name" -> name.toString))
+      errorClass = "UNRESOLVED_ROUTINE",
+      messageParameters = Map("routineName" -> toSQLId(name.funcName),
+        "searchPath" -> getFormattedSQLSearchPath))
   }
 
   def invalidFunctionArgumentsError(
@@ -2358,20 +2359,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       rawName: Seq[String],
       t: TreeNode[_],
       fullName: Option[Seq[String]] = None): Throwable = {
-    if (rawName.length == 1 && fullName.isDefined) {
       new AnalysisException(
-        errorClass = "_LEGACY_ERROR_TEMP_1242",
+        errorClass = "UNRESOLVED_ROUTINE",
         messageParameters = Map(
-          "rawName" -> rawName.head,
-          "fullName" -> fullName.get.quoted
+          "routineName" -> toSQLId(rawName),
+          "searchPath" -> getFormattedSQLSearchPath
         ),
         origin = t.origin)
-    } else {
-      new AnalysisException(
-        errorClass = "_LEGACY_ERROR_TEMP_1243",
-        messageParameters = Map("rawName" -> rawName.quoted),
-        origin = t.origin)
-    }
   }
 
   def unsetNonExistentPropertyError(property: String, table: TableIdentifier): Throwable = {
