@@ -20,6 +20,9 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.sql.Date;
+import java.sql.Timestamp;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -139,11 +142,19 @@ public class ColumnVectorUtils {
       } else if (pdt instanceof PhysicalIntegerType) {
         if (o instanceof Date) {
           dst.appendInt(DateTimeUtils.fromJavaDate((Date) o));
+        } else if (o instanceof LocalDate) {
+          dst.appendInt(DateTimeUtils.localDateToDays((LocalDate) o));
         } else {
           dst.appendInt((Integer) o);
         }
       } else if (pdt instanceof PhysicalLongType) {
-        dst.appendLong((Long) o);
+        if (o instanceof Timestamp) {
+          dst.appendLong(DateTimeUtils.fromJavaTimestamp((Timestamp) o));
+        } else if (o instanceof Instant) {
+          dst.appendLong(DateTimeUtils.instantToMicros((Instant) o));
+        }else {
+          dst.appendLong((Long) o);
+        }
       } else if (pdt instanceof PhysicalFloatType) {
         dst.appendFloat((Float) o);
       } else if (pdt instanceof PhysicalDoubleType) {
