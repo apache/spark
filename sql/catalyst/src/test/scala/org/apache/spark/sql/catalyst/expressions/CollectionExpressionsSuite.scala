@@ -2597,7 +2597,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     }
   }
 
-  test("SPARK-41235: Array Compact") {
+  test("Array Compact") {
     val a0 = Literal.create(Seq(1, null, 3, null, 2, 5), ArrayType(IntegerType))
     val a1 = Literal.create(Seq("a", "b", null, "c", "b"), ArrayType(StringType))
     val a2 = Literal.create(Seq[String](null, "", null, ""), ArrayType(StringType))

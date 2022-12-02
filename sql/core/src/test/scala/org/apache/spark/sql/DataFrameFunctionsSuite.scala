@@ -5238,7 +5238,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("SPARK-41235: test array_compact") {
+  test("test array_compact") {
     val df = Seq(
       (Array[Integer](null, 1, 2, null, 3, 4),
         Array("a", null, "b", null, "c", "d"), Array("", "")),
