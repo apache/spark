@@ -361,6 +361,44 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     master.removeShuffle(0, true)
   }
 
+  test("SPARK-41360: Avoid block manager re-registration if the executor has been lost") {
+    // Set up a DriverEndpoint which always returns isExecutorAlive=false
+    rpcEnv.setupEndpoint(CoarseGrainedSchedulerBackend.ENDPOINT_NAME,
+      new RpcEndpoint {
+        override val rpcEnv: RpcEnv = BlockManagerSuite.this.rpcEnv
+
+        override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+          case CoarseGrainedClusterMessages.RegisterExecutor(executorId, _, _, _, _, _, _, _) =>
+            context.reply(true)
+          case CoarseGrainedClusterMessages.IsExecutorAlive(executorId) =>
+            // always return false
+            context.reply(false)
+        }
+      }
+    )
+
+    // Set up a block manager endpoint and endpoint reference
+    val bmRef = rpcEnv.setupEndpoint(s"bm-0", new RpcEndpoint {
+      override val rpcEnv: RpcEnv = BlockManagerSuite.this.rpcEnv
+
+      private def reply[T](context: RpcCallContext, response: T): Unit = {
+        context.reply(response)
+      }
+
+      override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+        case RemoveRdd(_) => reply(context, 1)
+        case RemoveBroadcast(_, _) => reply(context, 1)
+        case RemoveShuffle(_) => reply(context, true)
+      }
+    })
+    val bmId = BlockManagerId(s"exec-0", "localhost", 1234, None)
+    // Register the block manager with isReRegister = true
+    val updatedId = master.registerBlockManager(
+      bmId, Array.empty, 2000, 0, bmRef, isReRegister = true)
+    // The re-registration should fail since the executor is considered as dead by DriverEndpoint
+    assert(updatedId.executorId === BlockManagerId.INVALID_EXECUTOR_ID)
+  }
+
   test("StorageLevel object caching") {
     val level1 = StorageLevel(false, false, false, 3)
     // this should return the same object as level1
