@@ -48,8 +48,8 @@ public class ColumnVectorUtils {
    * Populates the value of `row[fieldIdx]` into `ConstantColumnVector`.
    */
   public static void populate(ConstantColumnVector col, InternalRow row, int fieldIdx) {
-    DataType dt = col.dataType();
-    PhysicalDataType pdt = dt.physicalDataType();
+    DataType t = col.dataType();
+    PhysicalDataType pdt = t.physicalDataType();
 
     if (row.isNullAt(fieldIdx)) {
       col.setNull();
@@ -87,10 +87,10 @@ public class ColumnVectorUtils {
         }
       } else if (pdt == DataTypes.CalendarIntervalType.physicalDataType()) {
         // The value of `numRows` is irrelevant.
-        col.setCalendarInterval((CalendarInterval) row.get(fieldIdx, dt));
+        col.setCalendarInterval((CalendarInterval) row.get(fieldIdx, t));
       } else {
         throw new RuntimeException(String.format("DataType %s is not supported" +
-            " in column vectorized reader.", dt.sql()));
+            " in column vectorized reader.", t.sql()));
       }
     }
   }
