@@ -614,7 +614,7 @@ class SparkSession private(
    * This API eagerly runs DDL/DML commands, but not for SELECT queries.
    *
    * @param sqlText A SQL statement with named parameters to execute.
-   * @param args A map of parameter names to typed literals.
+   * @param args A map of parameter names to literal values.
    *
    * @since 3.4.0
    */

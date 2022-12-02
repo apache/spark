@@ -28,8 +28,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, NullType}
 
 /**
- * The expression represents a named parameter that should be bound later
- * to a literal with concrete value and type.
+ * The expression represents a named parameter that should be replaces by a foldable expression.
  *
  * @param name The identifier of the parameter without the marker.
  */
@@ -50,8 +49,8 @@ case class Parameter(name: String) extends LeafExpression {
 
 
 /**
- * Finds all named parameters in the given plan and substitutes them by literal values
- * evaluated from `args` values.
+ * Finds all named parameters in the given plan and substitutes them by
+ * foldable expressions of `args` values.
  */
 object Parameter extends QueryErrorsBase {
   def bind(plan: LogicalPlan, args: Map[String, Expression]): LogicalPlan = {

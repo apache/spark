@@ -4028,8 +4028,8 @@ object SQLConf {
     .createWithDefault(ErrorMessageFormat.PRETTY.toString)
 
   val PARAMETERS_ENABLED = buildConf("spark.sql.parameters.enabled")
-    .doc("When set to true, queries can have named parameters that should be substituted " +
-      "by literal values later using `bind()`. If set to false, Spark handles constants " +
+    .doc("When set to true, `spark.sql()` executes input SQL queries by substituting named " +
+      "parameters by given literal values. If set to false, Spark handles constants " +
       "with the `@` prefix as regular identifiers and does not consider them as parameters.")
     .version("3.4.0")
     .booleanConf
