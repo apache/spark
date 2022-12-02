@@ -134,7 +134,11 @@ private[sql] object DataSourceV2Utils extends Logging {
           None
         }
         val timeTravel = TimeTravelSpec.create(timeTravelTimestamp, timeTravelVersion, conf)
-        (CatalogV2Util.loadTable(catalog, ident, timeTravel).get, Some(catalog), Some(ident))
+        val tbl = CatalogV2Util.loadTable(catalog, ident, timeTravel)
+        if (tbl.isEmpty) {
+          throw new IllegalArgumentException(s"Could not find $ident in $source.")
+        }
+        (tbl.get, Some(catalog), Some(ident))
       case _ =>
         // TODO: Non-catalog paths for DSV2 are currently not well defined.
         val tbl = DataSourceV2Utils.getTableFromProvider(provider, dsOptions, userSpecifiedSchema)

@@ -214,6 +214,13 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
     checkV2Identifiers(df.logicalPlan)
   }
 
+  test("DataFrameReader read non-existent table") {
+    val e = intercept[IllegalArgumentException] {
+      spark.read.format(format).option("name", "non_existent_table").load()
+    }
+    assert(e.getMessage.contains(s"Could not find default.non_existent_table in $format."))
+  }
+
   test("DataFrameWriter creates v2Relation with identifiers") {
     sql(s"create table $catalogName.t1 (id bigint) using $format")
 
