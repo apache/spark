@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{Decimal, DecimalType}
 
 
 /**
@@ -72,16 +73,28 @@ class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mutable
 
   private[this] val fieldWriters: Array[Any => Unit] = validExprs.map { case (e, i) =>
     val writer = InternalRow.getWriter(i, e.dataType)
+    val nullSafeWriter: (InternalRow, Any) => Unit = e.dataType match {
+      case DecimalType.Fixed(precision, _) if precision > Decimal.MAX_LONG_DIGITS =>
+        (row, v: Any) => {
+          if (v == null && !row.isInstanceOf[UnsafeRow]) {
+            row.setNullAt(i)
+          } else {
+            writer(row, v)
+          }
+        }
+      case _ =>
+        (row, v: Any) => {
+          if (v == null) {
+            row.setNullAt(i)
+          } else {
+            writer(row, v)
+          }
+        }
+    }
     if (!e.nullable) {
       (v: Any) => writer(mutableRow, v)
     } else {
-      (v: Any) => {
-        if (v == null) {
-          mutableRow.setNullAt(i)
-        } else {
-          writer(mutableRow, v)
-        }
-      }
+      (v: Any) => nullSafeWriter(mutableRow, v)
     }
   }.toArray
 

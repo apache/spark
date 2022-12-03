@@ -65,6 +65,28 @@ class MutableProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(SafeProjection.create(fixedLengthTypes)(projUnsafeRow) === inputRow)
   }
 
+  testBothCodegenAndInterpreted("unsafe buffer with null decimal") {
+    val bufferSchema = StructType(Array(
+      StructField("dec1", DecimalType(27, 2), nullable = true),
+      StructField("dec2", DecimalType(27, 2), nullable = true)))
+    val bufferTypes = Array[DataType](DecimalType(27, 2), DecimalType(27, 2))
+    val proj = createMutableProjection(bufferTypes)
+    val unsafeBuffer = UnsafeProjection.create(bufferSchema)
+      .apply(new GenericInternalRow(bufferSchema.length))
+
+    val scalaRows = Seq(
+      Seq(BigDecimal(5), null),
+      Seq(BigDecimal(10), BigDecimal(11)))
+
+    scalaRows.foreach { scalaRow =>
+      val inputRow = InternalRow.fromSeq(scalaRow.zip(bufferTypes).map {
+        case (v, dataType) => CatalystTypeConverters.createToCatalystConverter(dataType)(v)
+      })
+      val projRow = proj.target(unsafeBuffer)(inputRow)
+      assert(SafeProjection.create(bufferTypes)(projRow) === inputRow)
+    }
+  }
+
   testBothCodegenAndInterpreted("variable-length types") {
     val proj = createMutableProjection(variableLengthTypes)
     val scalaValues = Seq("abc", BigDecimal(10),
