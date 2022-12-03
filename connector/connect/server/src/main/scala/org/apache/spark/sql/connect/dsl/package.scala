@@ -26,6 +26,7 @@ import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.connect.proto.SetOperation.SetOpType
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.connect.planner.DataTypeProtoConverter
+import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.toConnectProtoValue
 
 /**
  * A collection of implicit conversions that create a DSL for constructing connect protos.
@@ -241,16 +242,6 @@ package object dsl {
 
     implicit class DslNAFunctions(val logicalPlan: Relation) {
 
-      private def convertValue(value: Any) = {
-        value match {
-          case b: Boolean => Expression.Literal.newBuilder().setBoolean(b).build()
-          case l: Long => Expression.Literal.newBuilder().setLong(l).build()
-          case d: Double => Expression.Literal.newBuilder().setDouble(d).build()
-          case s: String => Expression.Literal.newBuilder().setString(s).build()
-          case o => throw new Exception(s"Unsupported value type: $o")
-        }
-      }
-
       def fillValue(value: Any): Relation = {
         Relation
           .newBuilder()
@@ -258,7 +249,7 @@ package object dsl {
             proto.NAFill
               .newBuilder()
               .setInput(logicalPlan)
-              .addAllValues(Seq(convertValue(value)).asJava)
+              .addAllValues(Seq(toConnectProtoValue(value)).asJava)
               .build())
           .build()
       }
@@ -271,13 +262,13 @@ package object dsl {
               .newBuilder()
               .setInput(logicalPlan)
               .addAllCols(cols.toSeq.asJava)
-              .addAllValues(Seq(convertValue(value)).asJava)
+              .addAllValues(Seq(toConnectProtoValue(value)).asJava)
               .build())
           .build()
       }
 
       def fillValueMap(valueMap: Map[String, Any]): Relation = {
-        val (cols, values) = valueMap.mapValues(convertValue).toSeq.unzip
+        val (cols, values) = valueMap.mapValues(toConnectProtoValue).toSeq.unzip
         Relation
           .newBuilder()
           .setFillNa(
@@ -338,8 +329,8 @@ package object dsl {
           replace.addReplacements(
             proto.NAReplace.Replacement
               .newBuilder()
-              .setOldValue(convertValue(oldValue))
-              .setNewValue(convertValue(newValue)))
+              .setOldValue(toConnectProtoValue(oldValue))
+              .setNewValue(toConnectProtoValue(newValue)))
         }
 
         Relation
@@ -691,6 +682,18 @@ package object dsl {
               .addAllNameExprList(colsMap.map { case (k, v) =>
                 Expression.Alias.newBuilder().addName(k).setExpr(v).build()
               }.asJava))
+          .build()
+      }
+
+      def hint(name: String, parameters: Any*): Relation = {
+        Relation
+          .newBuilder()
+          .setHint(
+            Hint
+              .newBuilder()
+              .setInput(logicalPlan)
+              .setName(name)
+              .addAllParameters(parameters.map(toConnectProtoValue).asJava))
           .build()
       }
 
