@@ -47,7 +47,7 @@ public class DelegateSymlinkTextInputFormat extends SymlinkTextInputFormat {
 
     // Used for deserialisation.
     public DelegateSymlinkTextInputSplit() {
-      super((Path) null, 0, 0, (String[]) null);
+      super(null, 0, 0, (String[]) null);
       targetPath = null;
     }
 
@@ -97,7 +97,7 @@ public class DelegateSymlinkTextInputFormat extends SymlinkTextInputFormat {
   public RecordReader<LongWritable, Text> getRecordReader(
       InputSplit split, JobConf job, Reporter reporter) throws IOException {
     DelegateSymlinkTextInputSplit delegateSplit = (DelegateSymlinkTextInputSplit) split;
-    InputSplit targetSplit = ((SymlinkTextInputSplit) delegateSplit.getSplit()).getTargetSplit();
+    InputSplit targetSplit = delegateSplit.getSplit().getTargetSplit();
 
     // SPARK-40815: the code is derived from
     // https://github.com/apache/hive/blob/master/ql/src/java/org/apache/hadoop/hive/ql/io/SymlinkTextInputFormat.java
