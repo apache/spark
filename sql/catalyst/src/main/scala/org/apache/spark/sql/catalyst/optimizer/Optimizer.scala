@@ -643,22 +643,19 @@ object RemoveNoopOperators extends Rule[LogicalPlan] {
  * Merge case condition expression with same value.
  */
 object MergeConditionWithValue extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformExpressionsWithPruning(
     _.containsPattern(CASE_WHEN)) {
-    case Project(projectList, child) =>
-      Project(projectList.map(_.mapChildren({
-          case CaseWhen(branches, elseValue) =>
-            val caseMap = mutable.HashMap.empty[Expression, Expression]
-            branches.foreach {
-              case (condition, value) =>
-                if (caseMap.contains(value)) {
-                  caseMap.put(value, Or(caseMap.get(value).get, condition))
-                } else {
-                  caseMap.put(value, condition)
-                }
-            }
-            CaseWhen(caseMap.toSeq.map(_.swap), elseValue)
-      })).asInstanceOf[Seq[NamedExpression]], child)
+    case CaseWhen(branches, elseValue) =>
+      val caseMap = mutable.HashMap.empty[Expression, Expression]
+      branches.foreach {
+        case (condition, value) =>
+          if (caseMap.contains(value)) {
+            caseMap.put(value, Or(caseMap.get(value).get, condition))
+          } else {
+            caseMap.put(value, condition)
+          }
+      }
+      CaseWhen(caseMap.toSeq.map(_.swap), elseValue)
   }
 }
 
