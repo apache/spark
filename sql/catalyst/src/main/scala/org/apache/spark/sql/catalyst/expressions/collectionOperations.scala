@@ -4628,6 +4628,16 @@ case class ArrayAppend(left: Expression, right: Expression)
     Seq.empty
   }
 
+  override def eval(input: InternalRow): Any = {
+    val value1 = left.eval(input)
+    val value2 = right.eval(input)
+    if (value1 == null) {
+      null
+    } else {
+      nullSafeEval(value1, value2)
+    }
+  }
+
   override def checkInputDataTypes(): TypeCheckResult = {
     (left.dataType, right.dataType) match {
       case (ArrayType(e1, _), (e2)) if e1.sameType(e2) =>
@@ -4661,14 +4671,40 @@ case class ArrayAppend(left: Expression, right: Expression)
     new GenericArrayData(finalData)
   }
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(
-      ctx,
-      ev,
-      (left, right) => {
-        val expr = ctx.addReferenceObj("arraysAppendExpr", this)
-        s"${ev.value} = (ArrayData)$expr.nullSafeEval($left, $right);"
-      })
-  }
+
+    val f = (left: String, right:String) => {
+      val expr = ctx.addReferenceObj("arraysAppendExpr", this)
+      s"${ev.value} = (ArrayData)$expr.nullSafeEval($left, $right);"
+    }
+
+    val leftGen = left.genCode(ctx)
+    val rightGen = right.genCode(ctx)
+    val resultCode = f(leftGen.value, rightGen.value)
+
+    if (nullable) {
+      val nullSafeEval =
+        leftGen.code + ctx.nullSafeExec(left.nullable, leftGen.isNull) {
+          s"""
+            ${ev.isNull} = false; // resultCode could change nullability.
+            $resultCode
+          """
+        }
+      ev.copy(code =
+        code"""
+        boolean ${ev.isNull} = true;
+        ${rightGen.code}
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $nullSafeEval
+      """)
+    } else {
+      ev.copy(code =
+        code"""
+        ${leftGen.code}
+        ${rightGen.code}
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $resultCode""", isNull = FalseLiteral)
+    }
+ }
 
   /**
    * Returns the [[DataType]] of the result of evaluating this expression. It is invalid to query

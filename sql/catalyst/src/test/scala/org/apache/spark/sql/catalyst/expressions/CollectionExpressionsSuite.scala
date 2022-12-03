@@ -2600,6 +2600,24 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
   test("SPARK-41232 ArrayAppend Expression Test") {
     checkEvaluation(
       ArrayAppend(
+        Literal.create(null, ArrayType(StringType)),
+        Literal.create("c", StringType)),
+      null)
+
+    checkEvaluation(
+      ArrayAppend(
+        Literal.create(null, ArrayType(StringType)),
+        Literal.create(null, StringType)),
+      null)
+
+    checkEvaluation(
+      ArrayAppend(
+        Literal.create(Seq(""), ArrayType(StringType)),
+        Literal.create(null, StringType)),
+      Seq("", null))
+
+    checkEvaluation(
+      ArrayAppend(
         Literal.create(Seq(Double.NaN, 1d, 2d), ArrayType(DoubleType)),
         Literal.create(3d, DoubleType)),
       Seq(Double.NaN, 1d, 2d, 3d))
@@ -2654,7 +2672,6 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
             "leftType" -> "\"ARRAY<DATE>\"",
             "rightType" -> "\"TIMESTAMP\""))
     )
-
 
   }
 }

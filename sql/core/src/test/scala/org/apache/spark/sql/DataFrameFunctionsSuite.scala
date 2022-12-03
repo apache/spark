@@ -5279,6 +5279,16 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         stop = 17
       )
     )
+    // Adding null check Unit Tests
+    val df4 = Seq((Array[String]("a", "b", "c"), "d"),
+      (null, "d"),
+      (Array[String]("x", "y", "z"), null),
+      (null, null)
+    ).toDF("a", "b")
+    checkAnswer(df4.selectExpr("array_append(a, b)"),
+      Seq(Row(Seq("a", "b", "c", "d")), Row(null), Row(Seq("x", "y", "z", null)), Row(null)))
+
+
   }
 }
 
