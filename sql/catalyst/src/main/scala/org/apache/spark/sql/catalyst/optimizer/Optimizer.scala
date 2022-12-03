@@ -243,7 +243,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
     Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers) :+
     Batch("ReplaceUpdateFieldsExpression", Once, ReplaceUpdateFieldsExpression) :+
-    Batch("MergeConditionWithValue", FixedPoint(1), MergeConditionWithValue)
+    Batch("MergeConditionWithValue", Once, MergeConditionWithValue)
     // remove any batches with no rules. this may happen when subclasses do not add optional rules.
     batches.filter(_.rules.nonEmpty)
   }
@@ -646,7 +646,7 @@ object MergeConditionWithValue extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transformExpressionsWithPruning(
     _.containsPattern(CASE_WHEN)) {
     case CaseWhen(branches, elseValue) =>
-      val caseMap = mutable.HashMap.empty[Expression, Expression]
+      val caseMap = mutable.LinkedHashMap.empty[Expression, Expression]
       branches.foreach {
         case (condition, value) =>
           if (caseMap.contains(value)) {
