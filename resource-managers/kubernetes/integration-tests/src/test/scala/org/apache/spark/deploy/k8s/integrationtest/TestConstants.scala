@@ -37,5 +37,5 @@ object TestConstants {
   val CONFIG_DRIVER_REQUEST_CORES = "spark.kubernetes.test.driverRequestCores"
   val CONFIG_EXECUTOR_REQUEST_CORES = "spark.kubernetes.test.executorRequestCores"
 
-  val CONFIG_KEY_VOLCANO_MAX_JOB_NUM = "spark.kubernetes.test.volcano.maxConcurrencyJobNum"
+  val CONFIG_KEY_VOLCANO_MAX_JOB_NUM = "spark.kubernetes.test.volcanoMaxConcurrencyJobNum"
 }
