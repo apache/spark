@@ -28,6 +28,7 @@ import org.apache.commons.lang3.StringUtils
 import org.json4s.JsonAST.{JArray, JString}
 import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.SparkException.checkInternalError
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
@@ -797,8 +798,9 @@ case class UnresolvedCatalogRelation(
 case class TemporaryViewRelation(
     tableMeta: CatalogTable,
     plan: Option[LogicalPlan] = None) extends LeafNode {
-  require(plan.isEmpty ||
-    (plan.get.resolved && tableMeta.properties.contains(VIEW_STORING_ANALYZED_PLAN)))
+  checkInternalError(plan.isEmpty ||
+    (plan.get.resolved && tableMeta.properties.contains(VIEW_STORING_ANALYZED_PLAN)),
+    s"Not found the table property: $VIEW_STORING_ANALYZED_PLAN")
 
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = Nil

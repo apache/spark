@@ -19,12 +19,14 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.annotation.tailrec
 
+import org.apache.spark.SparkException.checkInternalError
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{INVOKE, JSON_TO_STRUCT, LIKE_FAMLIY, PYTHON_UDF, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, SCALA_UDF}
+import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -33,7 +35,11 @@ import org.apache.spark.sql.types._
  * The filter could be an IN subquery (converted to a semi join), a bloom filter, or something
  * else in the future.
  */
-object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with JoinSelectionHelper {
+object InjectRuntimeFilter
+  extends Rule[LogicalPlan]
+  with PredicateHelper
+  with JoinSelectionHelper
+  with QueryErrorsBase {
 
   // Wraps `expr` with a hash function if its byte size is larger than an integer.
   private def mayWrapWithHash(expr: Expression): Expression = {
@@ -49,7 +55,6 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       filterApplicationSidePlan: LogicalPlan,
       filterCreationSideExp: Expression,
       filterCreationSidePlan: LogicalPlan): LogicalPlan = {
-    require(conf.runtimeFilterBloomFilterEnabled || conf.runtimeFilterSemiJoinReductionEnabled)
     if (conf.runtimeFilterBloomFilterEnabled) {
       injectBloomFilter(
         filterApplicationSideExp,
@@ -58,6 +63,9 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
         filterCreationSidePlan
       )
     } else {
+      checkInternalError(
+        conf.runtimeFilterSemiJoinReductionEnabled,
+        "Disabled the config: " + toSQLConf(SQLConf.RUNTIME_FILTER_SEMI_JOIN_REDUCTION_ENABLED.key))
       injectInSubqueryFilter(
         filterApplicationSideExp,
         filterApplicationSidePlan,
@@ -98,7 +106,10 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       filterApplicationSidePlan: LogicalPlan,
       filterCreationSideExp: Expression,
       filterCreationSidePlan: LogicalPlan): LogicalPlan = {
-    require(filterApplicationSideExp.dataType == filterCreationSideExp.dataType)
+    checkInternalError(
+      filterApplicationSideExp.dataType == filterCreationSideExp.dataType,
+      s"Invalid type of the creation side ${toSQLType(filterCreationSideExp.dataType)}, " +
+      s"expected ${toSQLType(filterApplicationSideExp.dataType)}.")
     val actualFilterKeyExpr = mayWrapWithHash(filterCreationSideExp)
     val alias = Alias(actualFilterKeyExpr, actualFilterKeyExpr.toString)()
     val aggregate = ColumnPruning(Aggregate(Seq(alias), Seq(alias), filterCreationSidePlan))

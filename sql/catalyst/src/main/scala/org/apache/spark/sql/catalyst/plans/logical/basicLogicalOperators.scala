@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.SparkException.checkInternalError
 import org.apache.spark.sql.catalyst.{AliasIdentifier, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
@@ -318,7 +319,10 @@ abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends Binar
   protected def leftConstraints: ExpressionSet = left.constraints
 
   protected def rightConstraints: ExpressionSet = {
-    require(left.output.size == right.output.size)
+    checkInternalError(
+      left.output.size == right.output.size,
+      s"The number of left outputs (${left.output.size}) of $nodeName must be equal to " +
+      s"the number of right outputs (${right.output.size}).")
     val attributeRewrites = AttributeMap(right.output.zip(left.output))
     right.constraints.map(_ transform {
       case a: Attribute => attributeRewrites(a)

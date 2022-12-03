@@ -20,12 +20,13 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 
+import org.apache.spark.SparkException.checkInternalError
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLId, toSQLType, toSQLValue}
 import org.apache.spark.sql.catalyst.trees.TernaryLike
+import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{RUNTIME_BLOOM_FILTER_MAX_NUM_BITS, RUNTIME_BLOOM_FILTER_MAX_NUM_ITEMS}
 import org.apache.spark.sql.types._
@@ -44,7 +45,7 @@ case class BloomFilterAggregate(
     numBitsExpression: Expression,
     override val mutableAggBufferOffset: Int,
     override val inputAggBufferOffset: Int)
-  extends TypedImperativeAggregate[BloomFilter] with TernaryLike[Expression] {
+  extends TypedImperativeAggregate[BloomFilter] with TernaryLike[Expression] with QueryErrorsBase {
 
   def this(child: Expression, estimatedNumItemsExpression: Expression,
       numBitsExpression: Expression) = {
@@ -116,9 +117,14 @@ case class BloomFilterAggregate(
             )
           )
         } else {
-          require(estimatedNumItems <=
-            SQLConf.get.getConf(RUNTIME_BLOOM_FILTER_MAX_NUM_ITEMS))
-          require(numBits <= SQLConf.get.getConf(RUNTIME_BLOOM_FILTER_MAX_NUM_BITS))
+          checkInternalError(
+            estimatedNumItems <= SQLConf.get.getConf(RUNTIME_BLOOM_FILTER_MAX_NUM_ITEMS),
+            "The estimated number of items for the runtime bloom filter must be <= " +
+            toSQLConf(RUNTIME_BLOOM_FILTER_MAX_NUM_ITEMS.key))
+          checkInternalError(
+            numBits <= SQLConf.get.getConf(RUNTIME_BLOOM_FILTER_MAX_NUM_BITS),
+            "The number of bits to use for the runtime bloom filter must be <= " +
+            toSQLConf(RUNTIME_BLOOM_FILTER_MAX_NUM_BITS.key))
           TypeCheckSuccess
         }
       case _ =>

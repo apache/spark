@@ -224,7 +224,6 @@ case class DecimalAddNoOverflowCheck(
     left: Expression,
     right: Expression,
     override val dataType: DataType) extends BinaryOperator {
-  require(dataType.isInstanceOf[DecimalType])
 
   override def inputType: AbstractDataType = DecimalType
   override def symbol: String = "+"

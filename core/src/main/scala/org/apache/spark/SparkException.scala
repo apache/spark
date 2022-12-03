@@ -87,6 +87,16 @@ object SparkException {
       messageParameters = Map("message" -> msg),
       cause = cause)
   }
+
+  /**
+   * Tests an condition, throwing an `SparkException` with
+   * the error class `INTERNAL_ERROR` if false.
+   */
+  def checkInternalError(condition: Boolean, msg: String): Unit = {
+    if (!condition) {
+      throw internalError(msg)
+    }
+  }
 }
 
 /**

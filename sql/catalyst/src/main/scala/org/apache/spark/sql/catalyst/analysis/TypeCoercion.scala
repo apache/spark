@@ -22,6 +22,7 @@ import javax.annotation.Nullable
 import scala.annotation.tailrec
 import scala.collection.mutable
 
+import org.apache.spark.SparkException.checkInternalError
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -293,7 +294,9 @@ abstract class TypeCoercionBase {
 
     /** Build new children with the widest types for each attribute among all the children */
     private def buildNewChildrenWithWiderTypes(children: Seq[LogicalPlan]): Seq[LogicalPlan] = {
-      require(children.forall(_.output.length == children.head.output.length))
+      children.foreach(child => checkInternalError(
+        child.output.length == children.head.output.length,
+        "All children must have the same number of outputs."))
 
       // Get a sequence of data types, each of which is the widest type of this specific attribute
       // in all the children
