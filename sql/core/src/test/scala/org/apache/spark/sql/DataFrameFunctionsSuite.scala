@@ -5248,11 +5248,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df3.select(array_append(col("a"), col("b")))
       },
-      errorClass = "DATATYPE_MISMATCH.ARRAY_ELEMENT_DIFF_TYPES",
+      errorClass = "DATATYPE_MISMATCH.ARRAY_FUNCTION_DIFF_TYPES",
       parameters = Map(
-        "functionName" -> "array_append",
-        "arrayType" -> ArrayType(StringType).sql,
-        "elementType" -> IntegerType.sql,
+        "functionName" -> "`array_append`",
+        "dataType" -> "\"ARRAY\"",
+        "leftType" -> "\"ARRAY<STRING>\"",
+        "rightType" -> "\"INT\"",
         "sqlExpr" -> "\"array_append(a, b)\"")
     )
 
@@ -5264,12 +5265,14 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df3.selectExpr("array_append(a, b)")
       },
-      errorClass = "DATATYPE_MISMATCH.ARRAY_ELEMENT_DIFF_TYPES",
+      errorClass = "DATATYPE_MISMATCH.ARRAY_FUNCTION_DIFF_TYPES",
       parameters = Map(
-        "functionName" -> "array_append",
-        "arrayType" -> ArrayType(StringType).sql,
-        "elementType" -> IntegerType.sql,
-        "sqlExpr" -> "\"array_append(a, b)\""),
+        "functionName" -> "`array_append`",
+        "leftType" -> "\"ARRAY<STRING>\"",
+        "rightType" -> "\"INT\"",
+        "sqlExpr" -> "\"array_append(a, b)\"",
+        "dataType" -> "\"ARRAY\""
+      ),
       context = ExpectedContext(
         fragment = "array_append(a, b)",
         start = 0,

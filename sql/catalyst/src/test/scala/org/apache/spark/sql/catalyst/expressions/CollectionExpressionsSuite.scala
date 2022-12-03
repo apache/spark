@@ -2626,17 +2626,35 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
         Literal.create("c", StringType)),
       Seq("a", "b", "c", "c"))
 
-    // Mixed type check
     assert(
       ArrayAppend(
         Literal.create(Seq(null, 1d, 2d), ArrayType(DoubleType)),
         Literal.create(3, IntegerType))
         .checkInputDataTypes() ==
         DataTypeMismatch(
-          errorSubClass = "ARRAY_ELEMENT_DIFF_TYPES",
+          errorSubClass = "ARRAY_FUNCTION_DIFF_TYPES",
           messageParameters = Map(
-            "functionName" -> "array_append",
-            "arrayType" -> ArrayType(DoubleType).sql,
-            "elementType" -> IntegerType.sql)))
+            "functionName" -> "`array_append`",
+            "dataType" -> "\"ARRAY\"",
+            "leftType" -> "\"ARRAY<DOUBLE>\"",
+            "rightType" -> "\"INT\""))
+    )
+
+    assert(
+      ArrayAppend(
+        Literal.create(
+          Seq(Date.valueOf("2017-04-06"), Date.valueOf("2017-03-23"), Date.valueOf("2017-03-10")),
+          ArrayType(DateType)),
+        Literal.create(Timestamp.valueOf("2017-03-10 00:00:00"), TimestampType))
+        .checkInputDataTypes() == DataTypeMismatch(
+          errorSubClass = "ARRAY_FUNCTION_DIFF_TYPES",
+          messageParameters = Map(
+            "functionName" -> "`array_append`",
+            "dataType" -> "\"ARRAY\"",
+            "leftType" -> "\"ARRAY<DATE>\"",
+            "rightType" -> "\"TIMESTAMP\""))
+    )
+
+
   }
 }

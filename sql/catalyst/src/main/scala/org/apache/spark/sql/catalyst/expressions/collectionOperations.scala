@@ -4605,19 +4605,28 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
  * Given an array, and another element append the element at the end of the array.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr, expr) - Prepend the element",
+  usage = "_FUNC_(array, element) - Append the element",
   examples = """
     Examples:
-      > SELECT _FUNC_(array('b', 'd', 'c', 'a'), array(1, 2, 3, 4));
+      > SELECT _FUNC_(array('b', 'd', 'c', 'a'), 'd');
 
   """,
   since = "3.4.0",
-  group = "collection_funcs")
+  group = "array_funcs")
 case class ArrayAppend(left: Expression, right: Expression)
     extends BinaryExpression
-    with ImplicitCastInputTypes {
+      with ImplicitCastInputTypes with QueryErrorsBase {
   override def prettyName: String = "array_append"
-  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, AnyDataType)
+  override def inputTypes: Seq[AbstractDataType] = {
+    (left.dataType, right.dataType) match {
+      case (ArrayType(e1, hasNull), e2) =>
+        TypeCoercion.findTightestCommonType(e1, e2) match {
+          case Some(dt) => Seq(ArrayType(dt, hasNull), dt)
+          case _ => Seq.empty
+        }
+    }
+    Seq.empty
+  }
 
   override def checkInputDataTypes(): TypeCheckResult = {
     (left.dataType, right.dataType) match {
@@ -4625,28 +4634,29 @@ case class ArrayAppend(left: Expression, right: Expression)
         TypeCheckResult.TypeCheckSuccess
       case _ =>
         DataTypeMismatch(
-          errorSubClass = "ARRAY_ELEMENT_DIFF_TYPES",
+          errorSubClass = "ARRAY_FUNCTION_DIFF_TYPES",
           messageParameters = Map(
-            "functionName" -> prettyName,
-            "arrayType" -> left.dataType.sql,
-            "elementType" -> right.dataType.sql))
+            "functionName" -> toSQLId(prettyName),
+            "leftType" -> toSQLType(left.dataType),
+            "rightType" -> toSQLType(right.dataType),
+            "dataType" -> toSQLType(ArrayType)
+          ))
     }
   }
-  protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
+
+  protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): ArrayAppend =
     copy(left = newLeft, right = newRight)
 
   override protected def nullSafeEval(input1: Any, input2: Any): Any = {
     val arrayData = input1.asInstanceOf[ArrayData]
-    val arrayElementType = left.dataType.asInstanceOf[ArrayType].elementType
-    val elementData = input2.asInstanceOf[AnyRef]
-    val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
+    val arrayElementType = dataType.asInstanceOf[ArrayType].elementType
+    val elementData = input2
     val numberOfElements = arrayData.numElements() + 1
     if (numberOfElements > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
       throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(numberOfElements)
     }
-    val finalData = new Array[AnyRef](numberOfElements.toInt)
-    val arr = arrayData.toObjectArray(arrayElementType)
-    Array.copy(arr, 0, finalData, 0, arr.length)
+    val finalData = new Array[Any](numberOfElements)
+    arrayData.foreach(arrayElementType, finalData.update)
     finalData.update(numberOfElements - 1, elementData)
     new GenericArrayData(finalData)
   }
