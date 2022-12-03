@@ -4606,7 +4606,8 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
  */
 @ExpressionDescription(
   usage = "_FUNC_(array, element) - Append the element",
-  examples = """
+  examples =
+    """
     Examples:
       > SELECT _FUNC_(array('b', 'd', 'c', 'a'), 'd');
 
@@ -4614,9 +4615,10 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
   since = "3.4.0",
   group = "array_funcs")
 case class ArrayAppend(left: Expression, right: Expression)
-    extends BinaryExpression
-      with ImplicitCastInputTypes with QueryErrorsBase {
+  extends BinaryExpression
+    with ImplicitCastInputTypes with QueryErrorsBase {
   override def prettyName: String = "array_append"
+
   override def inputTypes: Seq[AbstractDataType] = {
     (left.dataType, right.dataType) match {
       case (ArrayType(e1, hasNull), e2) =>
@@ -4670,9 +4672,10 @@ case class ArrayAppend(left: Expression, right: Expression)
     finalData.update(numberOfElements - 1, elementData)
     new GenericArrayData(finalData)
   }
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
 
-    val f = (left: String, right:String) => {
+    val f = (left: String, right: String) => {
       val expr = ctx.addReferenceObj("arraysAppendExpr", this)
       s"${ev.value} = (ArrayData)$expr.nullSafeEval($left, $right);"
     }
@@ -4704,7 +4707,7 @@ case class ArrayAppend(left: Expression, right: Expression)
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         $resultCode""", isNull = FalseLiteral)
     }
- }
+  }
 
   /**
    * Returns the [[DataType]] of the result of evaluating this expression. It is invalid to query
