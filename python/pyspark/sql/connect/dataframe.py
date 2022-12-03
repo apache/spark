@@ -1562,12 +1562,16 @@ class DataFrame(object):
         throws :class:`TempTableAlreadyExistsException`, if the view name already exists in the
         catalog.
 
-        .. versionadded:: 2.0.0
+        .. versionadded:: 3.4.0
 
         Parameters
         ----------
         name : str
             Name of the view.
+
+        Returns
+        -------
+        None
         """
         command = plan.CreateView(
             child=self._plan, name=name, is_global=False, replace=False
