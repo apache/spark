@@ -18,11 +18,6 @@
 syntax = "proto3";
 package org.apache.spark.status.protobuf;
 
-message JavaDate {
-  // The number of milliseconds since January 1, 1970, 00:00:00 GMT
-  optional int64 date = 1;
-}
-
 enum JobExecutionStatus {
   UNSPECIFIED = 0;
   RUNNING = 1;
@@ -35,8 +30,8 @@ message JobData {
   int32 job_id = 1;
   string name = 2;
   optional string description = 3;
-  optional JavaDate submission_time = 4;
-  optional JavaDate completion_time = 5;
+  optional int64 submission_time = 4;
+  optional int64 completion_time = 5;
   repeated int32 stage_ids = 6;
   optional string job_group = 7;
   JobExecutionStatus status = 8;

@@ -69,10 +69,10 @@ object JobDataWrapperSerializer {
 
     jobData.description.foreach(jobDataBuilder.setDescription)
     jobData.submissionTime.foreach { d =>
-      jobDataBuilder.setSubmissionTime(serializeDate(d))
+      jobDataBuilder.setSubmissionTime(d.getTime)
     }
     jobData.completionTime.foreach { d =>
-      jobDataBuilder.setCompletionTime(serializeDate(d))
+      jobDataBuilder.setCompletionTime(d.getTime)
     }
     jobData.stageIds.foreach(jobDataBuilder.addStageIds)
     jobData.jobGroup.foreach(jobDataBuilder.setJobGroup)
@@ -85,9 +85,8 @@ object JobDataWrapperSerializer {
   private def deserializeJobData(info: StoreTypes.JobData): JobData = {
     val description = getOptional(info.hasDescription, info.getDescription)
     val submissionTime =
-      getOptional(info.hasSubmissionTime, () => new Date(info.getSubmissionTime.getDate))
-    val completionTime = getOptional(info.hasCompletionTime,
-      () => new Date(info.getCompletionTime.getDate))
+      getOptional(info.hasSubmissionTime, () => new Date(info.getSubmissionTime))
+    val completionTime = getOptional(info.hasCompletionTime, () => new Date(info.getCompletionTime))
     val jobGroup = getOptional(info.hasJobGroup, info.getJobGroup)
     val status = JobExecutionStatus.valueOf(info.getStatus.toString)
 
@@ -112,10 +111,6 @@ object JobDataWrapperSerializer {
       numSkippedStages = info.getNumSkippedStages,
       numFailedStages = info.getNumFailedStages,
       killedTasksSummary = info.getKillTasksSummaryMap.asScala.mapValues(_.toInt).toMap)
-  }
-
-  private def serializeDate(d: Date): StoreTypes.JavaDate = {
-    StoreTypes.JavaDate.newBuilder().setDate(d.getTime).build()
   }
 
   private def serializeJobExecutionStatus(j: JobExecutionStatus): StoreTypes.JobExecutionStatus = {
