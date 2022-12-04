@@ -4603,56 +4603,74 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
 
 
 case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends TernaryExpression with ImplicitCastInputTypes {
 
   @transient private lazy val elementType: DataType = srcArrayExpr.dataType.asInstanceOf[ArrayType].elementType
 
   override def dataType: DataType = srcArrayExpr.dataType
-  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, IntegerType, StringType)
+  override def inputTypes: Seq[AbstractDataType] = {
+    (srcArrayExpr.dataType, posExpr.dataType, itemExpr.dataType) match {
+      case (ArrayType(e1, hasNull), e2, e3) =>
+        TypeCoercion.findTightestCommonType(e1, e3) match {
+          case Some(dt) => Seq(ArrayType(dt, hasNull), LongType, dt)
+          case _ => Seq.empty
+        }
+    }
+    Seq.empty
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val arr = first.eval(input)
+    val pos = second.eval(input)
+    val item = third.eval(input)
+
+    if (arr == null || pos == null) {
+      null
+    } else {
+      nullSafeEval(arr, pos, item)
+    }
+  }
 
   override def nullSafeEval(arr: Any, pos: Any, item: Any): Any = {
-    val arrCon = arr.asInstanceOf[ArrayData]
-    val data = arrCon.toSeq[AnyRef](elementType)
-    new GenericArrayData(data)
+    val currArr = arr.asInstanceOf[ArrayData].toSeq[AnyRef](elementType)
+    val posInt = pos.asInstanceOf[Int]
+    new GenericArrayData(currArr.patch(posInt, Seq(item), 0))
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (arr, pos, item) => {
-      val posIdx = ctx.freshName("startIdx")
-      val resLength = ctx.freshName("resLength")
-      val defaultIntValue = CodeGenerator.defaultValue(CodeGenerator.JAVA_INT, false)
-      s"""
-         |${CodeGenerator.JAVA_INT} $posIdx = $defaultIntValue;
-         |${CodeGenerator.JAVA_INT} $resLength = $defaultIntValue;
-         |$resLength = $pos + 1;
-         |$posIdx = $pos;
-         |${genCodeForResult(ctx, ev, arr, posIdx, resLength)}
-       """.stripMargin
-    })
-  }
+    val f = (arr: String, pos: String, item: String) => {
+      val expr = ctx.addReferenceObj("arrayInsertExpr", this)
+      s"${ev.value} = (ArrayData)$expr.nullSafeEval($arr, $pos, $item);"
+    }
 
-  def genCodeForResult(
-      ctx: CodegenContext,
-      ev: ExprCode,
-      inputArray: String,
-      startIdx: String,
-      resLength: String): String = {
-    val values = ctx.freshName("values")
-    val i = ctx.freshName("i")
-    val genericArrayData = classOf[GenericArrayData].getName
+    val leftGen = first.genCode(ctx)
+    val midGen = second.genCode(ctx)
+    val rightGen = third.genCode(ctx)
+    val resultCode = f(leftGen.value, midGen.value, rightGen.value)
 
-    val allocation = CodeGenerator.createArrayData(
-      values, elementType, resLength, s" $prettyName failed.")
-    val assignment = CodeGenerator.createArrayAssignment(values, elementType, inputArray,
-      i, s"$i + $startIdx", false)
+    if (nullable) {
+      val nullSafeEval =
+        leftGen.code + ctx.nullSafeExec(first.nullable, leftGen.isNull) {
+          midGen.code + ctx.nullSafeExec(second.nullable, midGen.isNull) {
+            s"""
+              ${ev.isNull} = false;
+              $resultCode
+            """
+          }
+        }
 
-    s"""
-       |$allocation
-       |for (int $i = 0; $i < $resLength; $i ++) {
-       |  $assignment
-       |}
-       |${ev.value} = $values;
-     """.stripMargin
+      ev.copy(code = code"""
+        boolean ${ev.isNull} = true;
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $nullSafeEval""")
+    } else {
+      ev.copy(code = code"""
+        ${leftGen.code}
+        ${midGen.code}
+        ${rightGen.code}
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $resultCode""", isNull = FalseLiteral)
+    }
   }
 
   override def first: Expression = srcArrayExpr
