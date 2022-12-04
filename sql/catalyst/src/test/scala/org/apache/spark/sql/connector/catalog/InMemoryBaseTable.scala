@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.connector.catalog
 
+import java.math.BigInteger
 import java.time.{Instant, ZoneId}
 import java.time.temporal.ChronoUnit
 import java.util
-import java.util.OptionalLong
+import java.util.{HashMap, Optional, OptionalLong}
 
 import scala.collection.mutable
 
@@ -34,6 +35,7 @@ import org.apache.spark.sql.connector.expressions._
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning, UnknownPartitioning}
+import org.apache.spark.sql.connector.read.stats.{ColumnStatistics, Histogram, HistogramBin, Statistics}
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
@@ -273,7 +275,23 @@ abstract class InMemoryBaseTable(
     }
   }
 
-  case class InMemoryStats(sizeInBytes: OptionalLong, numRows: OptionalLong) extends Statistics
+  case class InMemoryStats(
+      sizeInBytes: OptionalLong,
+      numRows: OptionalLong,
+      override val columnStats: Optional[HashMap[NamedReference, ColumnStatistics]])
+    extends Statistics
+  case class InMemoryColumnStats (
+      override val distinctCount: Optional[BigInteger],
+      override val min: Optional[AnyRef],
+      override val max: Optional[AnyRef],
+      override val nullCount: Optional[BigInteger],
+      override val avgLen: OptionalLong,
+      override val maxLen: OptionalLong,
+      override val histogram: Optional[Histogram]) extends ColumnStatistics
+
+  case class InMemoryHistogramBin(lo: Double, hi: Double, ndv: Long) extends HistogramBin
+
+  case class InMemoryHistogram(height: Double, bins: Array[HistogramBin]) extends Histogram
 
   abstract class BatchScanBaseClass(
       var data: Seq[InputPartition],
@@ -285,7 +303,7 @@ abstract class InMemoryBaseTable(
 
     override def estimateStatistics(): Statistics = {
       if (data.isEmpty) {
-        return InMemoryStats(OptionalLong.of(0L), OptionalLong.of(0L))
+        return InMemoryStats(OptionalLong.of(0L), OptionalLong.of(0L), Optional.empty())
       }
 
       val inputPartitions = data.map(_.asInstanceOf[BufferedRows])
@@ -294,7 +312,30 @@ abstract class InMemoryBaseTable(
       val objectHeaderSizeInBytes = 12L
       val rowSizeInBytes = objectHeaderSizeInBytes + schema.defaultSize
       val sizeInBytes = numRows * rowSizeInBytes
-      InMemoryStats(OptionalLong.of(sizeInBytes), OptionalLong.of(numRows))
+
+      val map = new util.HashMap[NamedReference, ColumnStatistics]()
+      val colNames = readSchema.fields.map(_.name)
+      for (col <- colNames) {
+        val fieldReference = FieldReference(col)
+        // put some fake data for testing only
+        val bin1 = InMemoryHistogramBin(1, 2, 5L)
+        val bin2 = InMemoryHistogramBin(3, 4, 5L)
+        val bin3 = InMemoryHistogramBin(5, 6, 5L)
+        val bin4 = InMemoryHistogramBin(7, 8, 5L)
+        val bin5 = InMemoryHistogramBin(9, 10, 5L)
+        val colStats = InMemoryColumnStats(
+          Optional.of[BigInteger](BigInteger.valueOf(5)),
+          Optional.of[AnyRef](Integer.valueOf(0)),
+          Optional.of[AnyRef](Integer.valueOf(5)),
+          Optional.of[BigInteger](BigInteger.valueOf(0)),
+          OptionalLong.of(111L),
+          OptionalLong.of(1111L),
+          Optional.of[Histogram](InMemoryHistogram(5, Array(bin1, bin2, bin3, bin4, bin5)))
+        )
+        map.put(fieldReference, colStats)
+      }
+
+      InMemoryStats(OptionalLong.of(sizeInBytes), OptionalLong.of(numRows), Optional.of(map))
     }
 
     override def outputPartitioning(): Partitioning = {

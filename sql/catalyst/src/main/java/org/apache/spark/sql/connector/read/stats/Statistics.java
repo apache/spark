@@ -15,26 +15,27 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.read;
+package org.apache.spark.sql.connector.read.stats;
+
+import java.util.HashMap;
+import java.util.Optional;
+import java.util.OptionalLong;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.read.stats.Statistics;
+import org.apache.spark.sql.connector.expressions.NamedReference;
+import org.apache.spark.sql.connector.read.SupportsReportStatistics;
 
 /**
- * A mix in interface for {@link Scan}. Data sources can implement this interface to
- * report statistics to Spark.
- * <p>
- * As of Spark 3.0, statistics are reported to the optimizer after operators are pushed to the
- * data source. Implementations may return more accurate statistics based on pushed operators
- * which may improve query performance by providing better information to the optimizer.
+ * An interface to represent statistics for a data source, which is returned by
+ * {@link SupportsReportStatistics#estimateStatistics()}.
  *
  * @since 3.0.0
  */
 @Evolving
-public interface SupportsReportStatistics extends Scan {
-
-  /**
-   * Returns the estimated statistics of this data source scan.
-   */
-  Statistics estimateStatistics();
+public interface Statistics {
+  OptionalLong sizeInBytes();
+  OptionalLong numRows();
+  default Optional<HashMap<NamedReference, ColumnStatistics>> columnStats() {
+    return Optional.empty();
+  }
 }
