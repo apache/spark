@@ -24,10 +24,11 @@ message JavaDate {
 }
 
 enum JobExecutionStatus {
-  RUNNING = 0;
-  SUCCEEDED = 1;
-  FAILED = 2;
-  UNKNOWN = 3;
+  UNSPECIFIED = 0;
+  RUNNING = 1;
+  SUCCEEDED = 2;
+  FAILED = 3;
+  UNKNOWN = 4;
 }
 
 message JobData {
