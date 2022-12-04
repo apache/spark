@@ -52,7 +52,7 @@ object JobDataWrapperSerializer {
 
   private def serializeJobData(jobData: JobData): StoreTypes.JobData = {
     val jobDataBuilder = StoreTypes.JobData.newBuilder()
-    jobDataBuilder.setJobId(jobData.jobId)
+    jobDataBuilder.setJobId(jobData.jobId.toLong)
       .setName(jobData.name)
       .setStatus(serializeJobExecutionStatus(jobData.status))
       .setNumTasks(jobData.numTasks)
@@ -74,7 +74,7 @@ object JobDataWrapperSerializer {
     jobData.completionTime.foreach { d =>
       jobDataBuilder.setCompletionTime(d.getTime)
     }
-    jobData.stageIds.foreach(jobDataBuilder.addStageIds)
+    jobData.stageIds.foreach(id => jobDataBuilder.addStageIds(id.toLong))
     jobData.jobGroup.foreach(jobDataBuilder.setJobGroup)
     jobData.killedTasksSummary.foreach { entry =>
       jobDataBuilder.putKillTasksSummary(entry._1, entry._2)
@@ -91,7 +91,7 @@ object JobDataWrapperSerializer {
     val status = JobExecutionStatus.valueOf(info.getStatus.toString)
 
     new JobData(
-      jobId = info.getJobId,
+      jobId = info.getJobId.toInt,
       name = info.getName,
       description = description,
       submissionTime = submissionTime,

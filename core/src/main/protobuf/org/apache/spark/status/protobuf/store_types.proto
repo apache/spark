@@ -27,12 +27,13 @@ enum JobExecutionStatus {
 }
 
 message JobData {
-  int32 job_id = 1;
+  // All IDs are int64 for extendability, even when they are currently int32 in Spark.
+  int64 job_id = 1;
   string name = 2;
   optional string description = 3;
   optional int64 submission_time = 4;
   optional int64 completion_time = 5;
-  repeated int32 stage_ids = 6;
+  repeated int64 stage_ids = 6;
   optional string job_group = 7;
   JobExecutionStatus status = 8;
   int32 num_tasks = 9;
