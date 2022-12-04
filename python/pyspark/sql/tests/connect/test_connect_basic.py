@@ -832,6 +832,13 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             .toPandas(),
         )
 
+    def test_hint(self):
+        # SPARK-41349: Test hint
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name).hint("COALESCE", 3000).toPandas(),
+            self.spark.read.table(self.tbl_name).hint("COALESCE", 3000).toPandas(),
+        )
+
     def test_empty_dataset(self):
         # SPARK-41005: Test arrow based collection with empty dataset.
         self.assertTrue(

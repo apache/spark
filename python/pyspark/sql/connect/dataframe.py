@@ -891,6 +891,30 @@ class DataFrame(object):
 
     melt = unpivot
 
+    def hint(self, name: str, *params: Any) -> "DataFrame":
+        """
+        Specifies some hint on the current DataFrame. As an example, the following code specifies
+        that one of the plan can be broadcasted: `df1.join(df2.hint("broadcast"))`
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        name: str
+            the name of the hint, for example, "broadcast", "SHUFFLE_MERGE" and "shuffle_hash".
+        params: tuple
+            the parameters of the hint
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with the hint
+        """
+        return DataFrame.withPlan(
+            plan.Hint(self._plan, name, list(params)),
+            session=self._session,
+        )
+
     def show(self, n: int = 20, truncate: Union[bool, int] = True, vertical: bool = False) -> None:
         """
         Prints the first ``n`` rows to the console.
