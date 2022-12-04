@@ -64,7 +64,7 @@ functions = FunctionBuilder()
 
 
 class UserDefinedFunction(Expression):
-    """A user defied function is an expresison that has a reference to the actual
+    """A user defied function is an expression that has a reference to the actual
     Python callable attached. During plan generation, the client sends a command to
     the server to register the UDF before execution. The expression object can be
     reused and is not attached to a specific execution. If the internal name of

@@ -4289,7 +4289,7 @@ class RDD(Generic[T_co]):
         Returns
         -------
         :class:`RDD`
-            a :class:`RDD` containing the keys and cogouped values
+            a :class:`RDD` containing the keys and cogrouped values
 
         See Also
         --------
@@ -4330,7 +4330,7 @@ class RDD(Generic[T_co]):
         Returns
         -------
         :class:`RDD`
-            a :class:`RDD` containing the keys and cogouped values
+            a :class:`RDD` containing the keys and cogrouped values
 
         See Also
         --------
