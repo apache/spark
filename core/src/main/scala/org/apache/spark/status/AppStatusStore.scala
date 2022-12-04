@@ -772,7 +772,7 @@ private[spark] object AppStatusStore {
       conf: SparkConf,
       appStatusSource: Option[AppStatusSource] = None): AppStatusStore = {
     val storePath = conf.get(LIVE_UI_LOCAL_STORE_DIR).map(new File(_))
-    val kvStore = KVUtils.createKVStore(storePath, isLive = true, conf)
+    val kvStore = KVUtils.createKVStore(storePath, live = true, conf)
     val store = new ElementTrackingStore(kvStore, conf)
     val listener = new AppStatusListener(store, conf, true, appStatusSource)
     new AppStatusStore(store, listener = Some(listener))

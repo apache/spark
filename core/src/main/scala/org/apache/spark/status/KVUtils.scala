@@ -94,10 +94,10 @@ private[spark] object KVUtils extends Logging {
 
   def createKVStore(
       storePath: Option[File],
-      isLive: Boolean,
+      live: Boolean,
       conf: SparkConf): KVStore = {
     storePath.map { path =>
-      val diskBackend = if (isLive) {
+      val diskBackend = if (live) {
         // For the disk-based KV store of live UI, let's simply make it ROCKSDB only for now,
         // instead of supporting both LevelDB and RocksDB. RocksDB is built based on LevelDB with
         // improvements on writes and reads.
@@ -106,7 +106,7 @@ private[spark] object KVUtils extends Logging {
         HybridStoreDiskBackend.withName(conf.get(History.HYBRID_STORE_DISK_BACKEND))
       }
 
-      val serializer = if (isLive) {
+      val serializer = if (live) {
         // For the disk-based KV store of live UI, let's simply use protobuf serializer only.
         // The default serializer is slow since it is using JSON+GZip encoding.
         Some(new KVStoreProtobufSerializer())
