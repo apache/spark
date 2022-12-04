@@ -29,6 +29,7 @@ import scala.util.control.NonFatal
 import io.fabric8.kubernetes.api.model.Pod
 
 import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.k8s.Config.KUBERNETES_EXECUTOR_SNAPSHOTS_SUBSCRIBERS_GRACE_PERIOD
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Clock
@@ -98,7 +99,16 @@ private[spark] class ExecutorPodsSnapshotsStoreImpl(
 
   override def stop(): Unit = {
     pollingTasks.asScala.foreach(_.cancel(false))
-    val awaitSeconds = conf.get(KUBERNETES_EXECUTOR_SNAPSHOTS_SUBSCRIBERS_GRACE_PERIOD)
+    var awaitSeconds = conf.get(KUBERNETES_EXECUTOR_SNAPSHOTS_SUBSCRIBERS_GRACE_PERIOD)
+    val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
+    if (hadoopConf.get("hadoop.service.shutdown.timeout") != null) {
+        val hadoopTimeout = hadoopConf.get("hadoop.service.shutdown.timeout").toLong
+        // We leave GRACE_PERIOD_FOR_HADOOP seconds for the hadoop timeout
+        val GRACE_PERIOD_FOR_HADOOP = 8
+        if (hadoopTimeout-GRACE_PERIOD_FOR_HADOOP <= awaitSeconds) {
+            awaitSeconds = hadoopTimeout-GRACE_PERIOD_FOR_HADOOP
+        }
+    }
     ThreadUtils.shutdown(subscribersExecutor, FiniteDuration(awaitSeconds, TimeUnit.SECONDS))
   }
 
