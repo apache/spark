@@ -382,7 +382,7 @@ class DataFrame(Frame, Generic[T]):
     .. versionchanged:: 3.4.0
         Since 3.4.0, it deals with `data` and `index` in this approach:
         1, when `data` is a distributed dataset (Internal DataFrame/Spark DataFrame/
-        pandas-on-Spark DataFrame/pandas-on-Spark Series), it will first parallize
+        pandas-on-Spark DataFrame/pandas-on-Spark Series), it will first parallelize
         the `index` if necessary, and then try to combine the `data` and `index`;
         Note that if `data` and `index` doesn't have the same anchor, then
         `compute.ops_on_diff_frames` should be turned on;
