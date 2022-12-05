@@ -20,8 +20,7 @@ import tempfile
 
 from pyspark.testing.sqlutils import have_pandas, SQLTestUtils
 
-from pyspark.sql import SparkSession, Row
-from pyspark.sql.types import StructType, StructField, StringType
+from pyspark.sql import SparkSession
 
 if have_pandas:
     from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
@@ -32,7 +31,7 @@ from pyspark.testing.utils import ReusedPySparkTestCase
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
-class SparkConnectSQLTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLTestUtils):
+class SparkConnectFuncTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLTestUtils):
     """Parent test fixture class for all Spark Connect related
     test cases."""
 
@@ -50,52 +49,100 @@ class SparkConnectSQLTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLT
         cls.hive_available = True
         # Create the new Spark Session
         cls.spark = SparkSession(cls.sc)
-        cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
-        cls.testDataStr = [Row(key=str(i)) for i in range(100)]
-        cls.df = cls.sc.parallelize(cls.testData).toDF()
-        cls.df_text = cls.sc.parallelize(cls.testDataStr).toDF()
-
-        cls.tbl_name = "test_connect_basic_table_1"
-        cls.tbl_name_empty = "test_connect_basic_table_empty"
-
-        # Cleanup test data
-        cls.spark_connect_clean_up_test_data()
-        # Load test data
-        cls.spark_connect_load_test_data()
+        # Setup Remote Spark Session
+        cls.connect = RemoteSparkSession.builder.remote().getOrCreate()
 
     @classmethod
     def tearDownClass(cls: Any) -> None:
-        cls.spark_connect_clean_up_test_data()
         ReusedPySparkTestCase.tearDownClass()
 
-    @classmethod
-    def spark_connect_load_test_data(cls: Any):
-        # Setup Remote Spark Session
-        cls.connect = RemoteSparkSession.builder.remote().getOrCreate()
-        df = cls.spark.createDataFrame([(x, f"{x}") for x in range(100)], ["id", "name"])
-        # Since we might create multiple Spark sessions, we need to create global temporary view
-        # that is specifically maintained in the "global_temp" schema.
-        df.write.saveAsTable(cls.tbl_name)
-        empty_table_schema = StructType(
-            [
-                StructField("firstname", StringType(), True),
-                StructField("middlename", StringType(), True),
-                StructField("lastname", StringType(), True),
-            ]
-        )
-        emptyRDD = cls.spark.sparkContext.emptyRDD()
-        empty_df = cls.spark.createDataFrame(emptyRDD, empty_table_schema)
-        empty_df.write.saveAsTable(cls.tbl_name_empty)
 
-    @classmethod
-    def spark_connect_clean_up_test_data(cls: Any) -> None:
-        cls.spark.sql("DROP TABLE IF EXISTS {}".format(cls.tbl_name))
-        cls.spark.sql("DROP TABLE IF EXISTS {}".format(cls.tbl_name_empty))
-
-
-class SparkConnectFunctionTests(SparkConnectSQLTestCase):
+class SparkConnectFunctionTests(SparkConnectFuncTestCase):
     """These test cases exercise the interface to the proto plan
     generation but do not call Spark."""
+
+    def test_normal_functions(self):
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        query = """
+            SELECT * FROM VALUES
+            (0, float("NAN"), NULL), (1, NULL, 2.0), (2, 2.1, 3.5)
+            AS tab(a, b, c)
+            """
+        # +---+----+----+
+        # |  a|   b|   c|
+        # +---+----+----+
+        # |  0| NaN|null|
+        # |  1|null| 2.0|
+        # |  2| 2.1| 3.5|
+        # +---+----+----+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        self.assert_eq(
+            cdf.select(CF.bitwise_not(cdf.a)).toPandas(),
+            sdf.select(SF.bitwise_not(sdf.a)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.coalesce(cdf.a, "b", cdf.c)).toPandas(),
+            sdf.select(SF.coalesce(sdf.a, "b", sdf.c)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.expr("a + b - c")).toPandas(),
+            sdf.select(SF.expr("a + b - c")).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.greatest(cdf.a, "b", cdf.c)).toPandas(),
+            sdf.select(SF.greatest(sdf.a, "b", sdf.c)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.isnan(cdf.a), CF.isnan("b")).toPandas(),
+            sdf.select(SF.isnan(sdf.a), SF.isnan("b")).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.isnull(cdf.a), CF.isnull("b")).toPandas(),
+            sdf.select(SF.isnull(sdf.a), SF.isnull("b")).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.input_file_name()).toPandas(),
+            sdf.select(SF.input_file_name()).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.least(cdf.a, "b", cdf.c)).toPandas(),
+            sdf.select(SF.least(sdf.a, "b", sdf.c)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.monotonically_increasing_id()).toPandas(),
+            sdf.select(SF.monotonically_increasing_id()).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.nanvl("b", cdf.c)).toPandas(),
+            sdf.select(SF.nanvl("b", sdf.c)).toPandas(),
+        )
+        # Can not compare the values due to the random seed
+        self.assertEqual(
+            cdf.select(CF.rand()).count(),
+            sdf.select(SF.rand()).count(),
+        )
+        self.assert_eq(
+            cdf.select(CF.rand(100)).toPandas(),
+            sdf.select(SF.rand(100)).toPandas(),
+        )
+        # Can not compare the values due to the random seed
+        self.assertEqual(
+            cdf.select(CF.randn()).count(),
+            sdf.select(SF.randn()).count(),
+        )
+        self.assert_eq(
+            cdf.select(CF.randn(100)).toPandas(),
+            sdf.select(SF.randn(100)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.spark_partition_id()).toPandas(),
+            sdf.select(SF.spark_partition_id()).toPandas(),
+        )
 
     def test_sorting_functions_with_column(self):
         from pyspark.sql.connect import functions as CF
@@ -271,6 +318,96 @@ class SparkConnectFunctionTests(SparkConnectSQLTestCase):
         self.assert_eq(
             cdf.select(CF.shiftrightunsigned("b", 1)).toPandas(),
             sdf.select(SF.shiftrightunsigned("b", 1)).toPandas(),
+        )
+
+    def test_aggregation_functions(self):
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        query = """
+            SELECT * FROM VALUES
+            (0, float("NAN"), NULL), (1, NULL, 2.0), (1, 2.1, 3.5), (0, 0.5, 1.0)
+            AS tab(a, b, c)
+            """
+        # +---+----+----+
+        # |  a|   b|   c|
+        # +---+----+----+
+        # |  0| NaN|null|
+        # |  1|null| 2.0|
+        # |  1| 2.1| 3.5|
+        # |  0| 0.5| 1.0|
+        # +---+----+----+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        # TODO(SPARK-41383): add tests for grouping, grouping_id after DataFrame.cube is supported.
+        for cfunc, sfunc in [
+            (CF.approx_count_distinct, SF.approx_count_distinct),
+            (CF.avg, SF.avg),
+            (CF.collect_list, SF.collect_list),
+            (CF.collect_set, SF.collect_set),
+            (CF.count, SF.count),
+            # (CF.count_distinct, SF.count_distinct),
+            (CF.first, SF.first),
+            (CF.kurtosis, SF.kurtosis),
+            (CF.last, SF.last),
+            (CF.max, SF.max),
+            (CF.mean, SF.mean),
+            (CF.median, SF.median),
+            (CF.min, SF.min),
+            (CF.mode, SF.mode),
+            (CF.skewness, SF.skewness),
+            (CF.stddev, SF.stddev),
+            (CF.stddev_pop, SF.stddev_pop),
+            (CF.stddev_samp, SF.stddev_samp),
+            (CF.sum, SF.sum),
+            # (CF.sum_distinct, SF.sum_distinct),
+            (CF.var_pop, SF.var_pop),
+            (CF.var_samp, SF.var_samp),
+            (CF.variance, SF.variance),
+        ]:
+            self.assert_eq(
+                cdf.select(cfunc("b"), cfunc(cdf.c)).toPandas(),
+                sdf.select(sfunc("b"), sfunc(sdf.c)).toPandas(),
+            )
+            self.assert_eq(
+                cdf.groupBy("a").agg([cfunc("b"), cfunc(cdf.c)]).toPandas(),
+                sdf.groupBy("a").agg(sfunc("b"), sfunc(sdf.c)).toPandas(),
+            )
+
+        for cfunc, sfunc in [
+            (CF.corr, SF.corr),
+            (CF.covar_pop, SF.covar_pop),
+            (CF.covar_samp, SF.covar_samp),
+            (CF.max_by, SF.max_by),
+            (CF.min_by, SF.min_by),
+        ]:
+            self.assert_eq(
+                cdf.select(cfunc(cdf.b, "c")).toPandas(),
+                sdf.select(sfunc(sdf.b, "c")).toPandas(),
+            )
+            self.assert_eq(
+                cdf.groupBy("a").agg([cfunc(cdf.b, "c")]).toPandas(),
+                sdf.groupBy("a").agg(sfunc(sdf.b, "c")).toPandas(),
+            )
+
+        # test percentile_approx
+        self.assert_eq(
+            cdf.select(CF.percentile_approx(cdf.b, 0.5, 1000)).toPandas(),
+            sdf.select(SF.percentile_approx(sdf.b, 0.5, 1000)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.percentile_approx(cdf.b, [0.1, 0.9])).toPandas(),
+            sdf.select(SF.percentile_approx(sdf.b, [0.1, 0.9])).toPandas(),
+        )
+        self.assert_eq(
+            cdf.groupBy("a").agg([CF.percentile_approx("b", 0.5)]).toPandas(),
+            sdf.groupBy("a").agg(SF.percentile_approx("b", 0.5)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.groupBy("a").agg([CF.percentile_approx(cdf.b, [0.1, 0.9])]).toPandas(),
+            sdf.groupBy("a").agg(SF.percentile_approx(sdf.b, [0.1, 0.9])).toPandas(),
         )
 
 
