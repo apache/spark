@@ -20,8 +20,7 @@ import tempfile
 
 from pyspark.testing.sqlutils import have_pandas, SQLTestUtils
 
-from pyspark.sql import SparkSession, Row
-from pyspark.sql.types import StructType, StructField, StringType
+from pyspark.sql import SparkSession
 
 if have_pandas:
     from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
@@ -32,7 +31,7 @@ from pyspark.testing.utils import ReusedPySparkTestCase
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
-class SparkConnectSQLTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLTestUtils):
+class SparkConnectFuncTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLTestUtils):
     """Parent test fixture class for all Spark Connect related
     test cases."""
 
@@ -50,50 +49,15 @@ class SparkConnectSQLTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLT
         cls.hive_available = True
         # Create the new Spark Session
         cls.spark = SparkSession(cls.sc)
-        cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
-        cls.testDataStr = [Row(key=str(i)) for i in range(100)]
-        cls.df = cls.sc.parallelize(cls.testData).toDF()
-        cls.df_text = cls.sc.parallelize(cls.testDataStr).toDF()
-
-        cls.tbl_name = "test_connect_basic_table_1"
-        cls.tbl_name_empty = "test_connect_basic_table_empty"
-
-        # Cleanup test data
-        cls.spark_connect_clean_up_test_data()
-        # Load test data
-        cls.spark_connect_load_test_data()
+        # Setup Remote Spark Session
+        cls.connect = RemoteSparkSession.builder.remote().getOrCreate()
 
     @classmethod
     def tearDownClass(cls: Any) -> None:
-        cls.spark_connect_clean_up_test_data()
         ReusedPySparkTestCase.tearDownClass()
 
-    @classmethod
-    def spark_connect_load_test_data(cls: Any):
-        # Setup Remote Spark Session
-        cls.connect = RemoteSparkSession.builder.remote().getOrCreate()
-        df = cls.spark.createDataFrame([(x, f"{x}") for x in range(100)], ["id", "name"])
-        # Since we might create multiple Spark sessions, we need to create global temporary view
-        # that is specifically maintained in the "global_temp" schema.
-        df.write.saveAsTable(cls.tbl_name)
-        empty_table_schema = StructType(
-            [
-                StructField("firstname", StringType(), True),
-                StructField("middlename", StringType(), True),
-                StructField("lastname", StringType(), True),
-            ]
-        )
-        emptyRDD = cls.spark.sparkContext.emptyRDD()
-        empty_df = cls.spark.createDataFrame(emptyRDD, empty_table_schema)
-        empty_df.write.saveAsTable(cls.tbl_name_empty)
 
-    @classmethod
-    def spark_connect_clean_up_test_data(cls: Any) -> None:
-        cls.spark.sql("DROP TABLE IF EXISTS {}".format(cls.tbl_name))
-        cls.spark.sql("DROP TABLE IF EXISTS {}".format(cls.tbl_name_empty))
-
-
-class SparkConnectFunctionTests(SparkConnectSQLTestCase):
+class SparkConnectFunctionTests(SparkConnectFuncTestCase):
     """These test cases exercise the interface to the proto plan
     generation but do not call Spark."""
 
