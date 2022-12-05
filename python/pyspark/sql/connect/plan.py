@@ -246,7 +246,7 @@ class Project(LogicalPlan):
 
     """
 
-    def __init__(self, child: Optional["LogicalPlan"], *columns: "ColumnOrName") -> None:
+    def __init__(self, child: Optional["LogicalPlan"], *columns: "Column") -> None:
         super().__init__(child)
         self._raw_columns = list(columns)
         self.alias: Optional[str] = None
@@ -255,23 +255,14 @@ class Project(LogicalPlan):
     def _verify_expressions(self) -> None:
         """Ensures that all input arguments are instances of Expression or String."""
         for c in self._raw_columns:
-            if not isinstance(c, (Column, str)):
-                raise InputValidationError(
-                    f"Only Column or String can be used for projections: '{c}'."
-                )
+            if not isinstance(c, Column):
+                raise InputValidationError(f"Only Column can be used for projections: '{c}'.")
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
         proj_exprs = []
         for c in self._raw_columns:
-            if isinstance(c, Column):
-                proj_exprs.append(c.to_plan(session))
-            elif c == "*":
-                exp = proto.Expression()
-                exp.unresolved_star.SetInParent()
-                proj_exprs.append(exp)
-            else:
-                proj_exprs.append(self.unresolved_attr(c))
+            proj_exprs.append(c.to_plan(session))
 
         plan = proto.Relation()
         plan.project.input.CopyFrom(self._child.plan(session))

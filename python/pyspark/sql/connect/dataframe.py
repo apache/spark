@@ -137,7 +137,13 @@ class DataFrame(object):
         return len(self.take(1)) == 0
 
     def select(self, *cols: "ColumnOrName") -> "DataFrame":
-        return DataFrame.withPlan(plan.Project(self._plan, *cols), session=self._session)
+        sql_expr = []
+        for element in cols:
+            if isinstance(element, str):
+                sql_expr.append(sql_expression(element))
+            else:
+                sql_expr.append(element)
+        return DataFrame.withPlan(plan.Project(self._plan, *sql_expr), session=self._session)
 
     def selectExpr(self, *expr: Union[str, List[str]]) -> "DataFrame":
         """Projects a set of SQL expressions and returns a new :class:`DataFrame`.
