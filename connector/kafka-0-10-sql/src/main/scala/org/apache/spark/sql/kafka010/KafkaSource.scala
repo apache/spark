@@ -293,6 +293,11 @@ private[kafka010] class KafkaSource(
 
     logInfo(s"GetBatch called with start = $start, end = $end")
     val untilPartitionOffsets = KafkaSourceOffset.getPartitionOffsets(end)
+
+    if (allDataForTriggerAvailableNow != null) {
+      assertEndOffsetForTriggerAvailableNow(untilPartitionOffsets)
+    }
+
     // On recovery, getBatch will get called before getOffset
     if (currentPartitionOffsets.isEmpty) {
       currentPartitionOffsets = Some(untilPartitionOffsets)
@@ -347,6 +352,26 @@ private[kafka010] class KafkaSource(
     } else {
       logWarning(message + s". $INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE")
     }
+  }
+
+  private def assertEndOffsetForTriggerAvailableNow(
+      endPartitionOffsets: Map[TopicPartition, Long]): Unit = {
+    val tpsForPrefetched = allDataForTriggerAvailableNow.keySet
+    val tpsForEndOffset = endPartitionOffsets.keySet
+    assert(tpsForPrefetched == tpsForEndOffset,
+      "Kafka data source in Trigger.AvailableNow should provide the same topic partitions in " +
+        "pre-fetched offset to end offset for each microbatch. " +
+        s"topic-partitions for pre-fetched offset: $tpsForPrefetched, " +
+        s"topic-partitions for end offset: $tpsForEndOffset.")
+
+    assert(allDataForTriggerAvailableNow.keySet.forall { tp =>
+      val offsetFromPrefetched = allDataForTriggerAvailableNow(tp)
+      val offsetFromEndOffset = endPartitionOffsets(tp)
+      offsetFromEndOffset <= offsetFromPrefetched
+    }, "For Kafka data source with Trigger.AvailableNow, end offset should have lower or " +
+      "equal offset per each topic partition than pre-fetched offset." +
+      s"topic-partitions for pre-fetched offset: $tpsForPrefetched, " +
+      s"topic-partitions for end offset: $tpsForEndOffset.")
   }
 
   override def prepareForTriggerAvailableNow(): Unit = {
