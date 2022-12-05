@@ -20,7 +20,7 @@ import tempfile
 
 from pyspark.testing.sqlutils import have_pandas, SQLTestUtils
 
-from pyspark.sql import SparkSession, Row
+from pyspark.sql import SparkSession
 
 if have_pandas:
     from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
