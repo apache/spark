@@ -1379,6 +1379,9 @@ class ColumnarBatchSuite extends SparkFunSuite {
             "Seed = " + seed)
           case DoubleType => assert(doubleEquals(r1.getDouble(ordinal), r2.getDouble(ordinal)),
             "Seed = " + seed)
+          case DateType =>
+            assert(r1.getInt(ordinal) == DateTimeUtils.fromJavaDate(r2.getDate(ordinal)),
+              "Seed = " + seed)
           case t: DecimalType =>
             val d1 = r1.getDecimal(ordinal, t.precision, t.scale).toBigDecimal
             val d2 = r2.getDecimal(ordinal)
@@ -1404,6 +1407,17 @@ class ColumnarBatchSuite extends SparkFunSuite {
                 while (i < a1.length) {
                   assert(doubleEquals(a1(i).asInstanceOf[Float], a2(i).asInstanceOf[Float]),
                     "Seed = " + seed)
+                  i += 1
+                }
+              case DateType =>
+                var i = 0
+                while (i < a1.length) {
+                  assert((a1(i) == null) == (a2(i) == null), "Seed = " + seed)
+                  if (a1(i) != null) {
+                    val i1 = a1(i).asInstanceOf[Int]
+                    val i2 = DateTimeUtils.fromJavaDate(a2(i).asInstanceOf[java.sql.Date])
+                    assert(i1 === i2, "Seed = " + seed)
+                  }
                   i += 1
                 }
               case t: DecimalType =>
@@ -1462,7 +1476,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
       BooleanType, ByteType, FloatType, DoubleType, IntegerType, LongType, ShortType,
       DecimalType.ShortDecimal, DecimalType.IntDecimal, DecimalType.ByteDecimal,
       DecimalType.FloatDecimal, DecimalType.LongDecimal, new DecimalType(5, 2),
-      new DecimalType(12, 2), new DecimalType(30, 10), CalendarIntervalType)
+      new DecimalType(12, 2), new DecimalType(30, 10), CalendarIntervalType,
+      DateType)
     val seed = System.nanoTime()
     val NUM_ROWS = 200
     val NUM_ITERS = 1000
