@@ -117,28 +117,4 @@ object ExprUtils extends QueryErrorsBase {
       TypeCheckSuccess
     }
   }
-
-  /**
-   * Combine a number of boolean expressions into a balanced expression tree. These expressions are
-   * either combined by a logical [[And]] or a logical [[Or]].
-   *
-   * A balanced binary tree is created because regular left recursive trees cause considerable
-   * performance degradations and can cause stack overflows.
-   */
-  def reduceToExpressionTree(
-       expressions: Seq[Expression],
-       expressionCombiner: (Expression, Expression) => Expression): Expression = {
-    def combineRangeExpressions(low: Int, high: Int): Expression = high - low match {
-      case 0 =>
-        expressions(low)
-      case 1 =>
-        expressionCombiner(expressions(low), expressions(high))
-      case x =>
-        val mid = low + x / 2
-        expressionCombiner(
-          combineRangeExpressions(low, mid),
-          combineRangeExpressions(mid + 1, high))
-    }
-    combineRangeExpressions(0, expressions.size - 1)
-  }
 }
