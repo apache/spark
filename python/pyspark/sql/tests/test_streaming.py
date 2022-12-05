@@ -573,6 +573,27 @@ class StreamingTests(ReusedSQLTestCase):
             if q:
                 q.stop()
 
+    def test_streaming_foreachBatch_tempview(self):
+        q = None
+        collected = dict()
+
+        def collectBatch(batch_df, batch_id):
+            batch_df.createOrReplaceTempView("updates")
+            # it should use the spark session within given DataFrame, as microbatch execution will
+            # clone the session which is no longer same with the session used to start the
+            # streaming query
+            collected[batch_id] = batch_df.sparkSession.sql("SELECT * FROM updates").collect()
+
+        try:
+            df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
+            q = df.writeStream.foreachBatch(collectBatch).start()
+            q.processAllAvailable()
+            self.assertTrue(0 in collected)
+            self.assertTrue(len(collected[0]), 2)
+        finally:
+            if q:
+                q.stop()
+
     def test_streaming_foreachBatch_propagates_python_errors(self):
         from pyspark.sql.utils import StreamingQueryException
 
