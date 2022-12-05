@@ -97,6 +97,89 @@ class SparkConnectFunctionTests(SparkConnectSQLTestCase):
     """These test cases exercise the interface to the proto plan
     generation but do not call Spark."""
 
+    def test_normal_functions(self):
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        query = """
+            SELECT * FROM VALUES
+            (0, float("NAN"), NULL), (1, NULL, 2.0), (2, 2.1, 3.5)
+            AS tab(a, b, c)
+            """
+        # +---+----+----+
+        # |  a|   b|   c|
+        # +---+----+----+
+        # |  0| NaN|null|
+        # |  1|null| 2.0|
+        # |  2| 2.1| 3.5|
+        # +---+----+----+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        self.assert_eq(
+            cdf.select(CF.bitwise_not(cdf.a)).toPandas(),
+            sdf.select(SF.bitwise_not(sdf.a)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.coalesce(cdf.a, "b", cdf.c)).toPandas(),
+            sdf.select(SF.coalesce(sdf.a, "b", sdf.c)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.expr("a + b - c")).toPandas(),
+            sdf.select(SF.expr("a + b - c")).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.greatest(cdf.a, "b", cdf.c)).toPandas(),
+            sdf.select(SF.greatest(sdf.a, "b", sdf.c)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.isnan(cdf.a), CF.isnan("b")).toPandas(),
+            sdf.select(SF.isnan(sdf.a), SF.isnan("b")).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.isnull(cdf.a), CF.isnull("b")).toPandas(),
+            sdf.select(SF.isnull(sdf.a), SF.isnull("b")).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.input_file_name()).toPandas(),
+            sdf.select(SF.input_file_name()).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.least(cdf.a, "b", cdf.c)).toPandas(),
+            sdf.select(SF.least(sdf.a, "b", sdf.c)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.monotonically_increasing_id()).toPandas(),
+            sdf.select(SF.monotonically_increasing_id()).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.nanvl("b", cdf.c)).toPandas(),
+            sdf.select(SF.nanvl("b", sdf.c)).toPandas(),
+        )
+        # Can not compare the values due to the random seed
+        self.assertEqual(
+            cdf.select(CF.rand()).count(),
+            sdf.select(SF.rand()).count(),
+        )
+        self.assert_eq(
+            cdf.select(CF.rand(100)).toPandas(),
+            sdf.select(SF.rand(100)).toPandas(),
+        )
+        # Can not compare the values due to the random seed
+        self.assertEqual(
+            cdf.select(CF.randn()).count(),
+            sdf.select(SF.randn()).count(),
+        )
+        self.assert_eq(
+            cdf.select(CF.randn(100)).toPandas(),
+            sdf.select(SF.randn(100)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.spark_partition_id()).toPandas(),
+            sdf.select(SF.spark_partition_id()).toPandas(),
+        )
+
     def test_sorting_functions_with_column(self):
         from pyspark.sql.connect import functions as CF
         from pyspark.sql.connect.column import Column
