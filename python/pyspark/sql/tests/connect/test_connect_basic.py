@@ -914,8 +914,11 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         )
 
         # Dict agg
-        measures = {"id": "sum", "id": "min"}
-        self.assertEqual(set(df_a.agg(measures).collect()), set(df_b.agg(measures).collect()))
+        measures = {"id": "sum"}
+        self.assertEqual(
+            set(df_a.agg(measures).select("sum(id)").collect()),
+            set(df_b.agg(measures).select("sum(id)").collect()),
+        )
 
     def test_column_cannot_be_constructed_from_string(self):
         with self.assertRaises(TypeError):
