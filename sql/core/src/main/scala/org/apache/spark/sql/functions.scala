@@ -4041,14 +4041,13 @@ object functions {
   }
 
   /**
-   * Returns an array of the elements in the intersection of the given two arrays,
-   * without duplicates.
+   * Adds an item into a given array at a specified position
    *
    * @group collection_funcs
-   * @since 2.4.0
+   * @since 3.4.0
    */
-  def array_insert(col1: Column, col2: Column, col3: Column): Column = withExpr {
-    ArrayInsert(col1.expr, col2.expr, col3.expr)
+  def array_insert(arr: Column, pos: Column, value: Column): Column = withExpr {
+    ArrayInsert(arr.expr, pos.expr, value.expr)
   }
 
   /**

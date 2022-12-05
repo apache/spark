@@ -6839,34 +6839,33 @@ def array_distinct(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("array_distinct", col)
 
 
-def array_insert(col1: "ColumnOrName", col2: "ColumnOrName", col3: "ColumnOrName") -> Column:
+def array_insert(arr: "ColumnOrName", pos: "ColumnOrName", value: "ColumnOrName") -> Column:
     """
-    Collection function: returns an array of the elements in the intersection of col1 and col2,
-    without duplicates.
+    Collection function: adds an item into a given array at a specified position
 
-    .. versionadded:: 2.4.0
+    .. versionadded:: 3.4.0
 
     Parameters
     ----------
-    col1 : :class:`~pyspark.sql.Column` or str
-        name of column containing array
-    col2 : :class:`~pyspark.sql.Column` or str
-        name of column containing array
-    col2 : :class:`~pyspark.sql.Column` or str
-        name of column containing array
+    arr : :class:`~pyspark.sql.Column` or str
+        name of column containing an array
+    pos : :class:`~pyspark.sql.Column` or str
+        name of Numeric type column indicating position of insertion (starting index 1)
+    value : :class:`~pyspark.sql.Column` or str
+        name of column containing values for insertion into array
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        an array of values in the intersection of two arrays.
+        an array of values, including the new specified value
 
     Examples
     --------
-    >>> df = spark.createDataFrame([([1, 2, 3, 2],), ([4, 5, 5, 4],)], ['data'])
-    >>> df.select(array_distinct(df.data)).collect()
-    [Row(array_distinct(data)=[1, 2, 3]), Row(array_distinct(data)=[4, 5])]
+    >>> df = spark.createDataFrame([([1, 2, 4], 3, 3), ([3, 2, 1], 4, 0)], ['data', 'pos', 'value'])
+    >>> df.select(array_insert(df.data, df.pos, df.val)).collect()
+    [Row(array_distinct(data)=[1, 2, 3, 4]), Row(array_distinct(data)=[3, 2, 1, 0])]
     """
-    return _invoke_function_over_columns("array_insert", col1, col2, col3)
+    return _invoke_function_over_columns("array_insert", arr, pos, value)
 
 
 def array_intersect(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:

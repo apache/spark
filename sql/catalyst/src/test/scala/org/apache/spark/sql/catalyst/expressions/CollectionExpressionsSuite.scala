@@ -2257,6 +2257,79 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
   }
 
   test("Array Intersect") {
+//    val a1 = Literal.create(Seq(1, 2, 4), ArrayType(IntegerType, false))
+//    val a2 = Literal.create(Seq(1, 2, null, 4, 5, null), ArrayType(IntegerType, true))
+//    val a3 = Literal.create(Seq[Boolean](true, false, true), ArrayType(BooleanType, false))
+//    val a4 = Literal.create(Seq[Boolean](true, false, null), ArrayType(BooleanType, true))
+//    val a5 = Literal.create(Seq[Byte](1, 2, 3, 2), ArrayType(ByteType, containsNull = false))
+//    val a6 = Literal.create(Seq[Byte](4, 2, null), ArrayType(ByteType, containsNull = true))
+//    val a7 = Literal.create(Seq[Short](1, 2, 3, 2), ArrayType(ShortType, containsNull = false))
+//    val a8 = Literal.create(Seq[Short](4, 2, null), ArrayType(ShortType, containsNull = true))
+//    val a9 = Literal.create(Seq[Float](1.1F, 2.2F, 3.3F, 2.2F), ArrayType(FloatType, false))
+//    val a10 = Literal.create(Seq[Float](4.4F, 2.2F, null, 4.4F), ArrayType(FloatType, true))
+//    val a11 = Literal.create(Seq[Double](1.1, 2.2, 3.3, 2.2), ArrayType(DoubleType, false))
+//    val a12 = Literal.create(Seq[Double](4.4, null, 2.2, 4.4), ArrayType(DoubleType, true))
+//    val a13 = Literal.create(Seq(1L, 2L, 4L), ArrayType(LongType, false))
+//    val a14 = Literal.create(Seq(-5L, 4L, null, 2L, -1L, null), ArrayType(LongType, true))
+//    val a15 = Literal.create(Seq("b", "a", "c"), ArrayType(StringType, false))
+//    val a16 = Literal.create(Seq("b", null, "a", "g", null), ArrayType(StringType, true))
+//
+//    val a17 = Literal.create(Seq(null, null), ArrayType(IntegerType))
+//    val a18 = Literal.create(null, ArrayType(StringType))
+//    val a19 = Literal.create(Seq.empty[Int], ArrayType(IntegerType, false))
+//    val a20 = Literal.create(Seq.empty[Long], ArrayType(LongType, false))
+//    val a21 = Literal.create(Seq.empty[String], ArrayType(StringType, false))
+//
+//    val litThreeInt = Literal.create(3, IntegerType)
+//    val litZeroInt = Literal.create(0, IntegerType)
+//    val litNullInt = Literal.create(null, IntegerType)
+//    val litMinusTwoInt = Literal.create(-2, IntegerType)
+//    val litFourLong = Literal.create(4, IntegerType)
+//    val litBoolTrue = Literal.create(true, BooleanType)
+//    val litThreeByte = Literal.create(3, ByteType)
+//    val litThreeShort = Literal.create(3, ShortType)
+//
+//    checkEvaluation(ArrayInsert(a1, litThreeInt, litThreeInt), Seq(1, 2, 3, 4))
+//    checkEvaluation(ArrayInsert(a1, litThreeInt, litNullInt), Seq(1, 2, null, 4))
+//    checkEvaluation(ArrayInsert(a1, litMinusTwoInt, litNullInt), Seq(1, 3, 2, 4))
+
+//    checkEvaluation(ArrayInsert(a2, litFourLong, litThreeInt), Seq(1, 2, null, 3, 4, 5, null))
+//    checkEvaluation(
+//      ArrayInsert(a3, litThreeInt, litBoolTrue),
+//      Seq[Boolean](true, false, true, true)
+//    )
+//    checkEvaluation(
+//      ArrayInsert(a4, litThreeInt, litBoolTrue),
+//      Seq[Boolean](true, true, false, null)
+//    )
+//    checkEvaluation(ArrayInsert(a5, litThreeInt, litThreeByte), Seq(1, 2, 3, 3, 2))
+//    checkEvaluation(ArrayInsert(a6, litThreeInt, litThreeByte), Seq(4, 2, 3, null))
+//    checkEvaluation(ArrayInsert(a7, litThreeInt, litThreeShort), Seq(1, 2, 3, 3, 2))
+//    checkEvaluation(ArrayInsert(a8, litThreeInt, litThreeShort), Seq(4, 2, 3, null))
+
+//    checkEvaluation(ArrayInsert(a10, a11), Seq(2L, 4L))
+//    checkEvaluation(ArrayIntersect(a11, a10), Seq(4L, 2L))
+//    checkEvaluation(ArrayIntersect(a12, a13), Seq(2L, 4L))
+//    checkEvaluation(ArrayIntersect(a13, a12), Seq(4L, 2L))
+//    checkEvaluation(ArrayIntersect(a14, a15), Seq(2L, null, 4L))
+//    checkEvaluation(ArrayIntersect(a12, a16), Seq.empty)
+//    checkEvaluation(ArrayIntersect(a16, a14), Seq.empty)
+
+//    checkEvaluation(ArrayIntersect(a20, a21), Seq("a", "c"))
+//    checkEvaluation(ArrayIntersect(a21, a20), Seq("c", "a"))
+//    checkEvaluation(ArrayIntersect(a22, a21), Seq("a", "c"))
+//    checkEvaluation(ArrayIntersect(a21, a22), Seq("c", "a"))
+//    checkEvaluation(ArrayIntersect(a23, a24), Seq("a", null))
+//    checkEvaluation(ArrayIntersect(a24, a23), Seq(null, "a"))
+//    checkEvaluation(ArrayIntersect(a24, a25), Seq.empty)
+//    checkEvaluation(ArrayIntersect(a25, a24), Seq.empty)
+//
+//    checkEvaluation(ArrayIntersect(a30, a30), Seq(null))
+//    checkEvaluation(ArrayIntersect(a20, a31), null)
+//    checkEvaluation(ArrayIntersect(a31, a20), null)
+  }
+
+  test("Array Insert") {
     val a00 = Literal.create(Seq(1, 2, 4), ArrayType(IntegerType, false))
     val a01 = Literal.create(Seq(4, 2), ArrayType(IntegerType, false))
     val a02 = Literal.create(Seq(1, 2, 1, 4), ArrayType(IntegerType, false))

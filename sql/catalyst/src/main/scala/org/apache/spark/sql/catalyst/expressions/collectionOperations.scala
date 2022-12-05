@@ -4601,18 +4601,29 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
     newLeft: Expression, newRight: Expression): ArrayExcept = copy(left = newLeft, right = newRight)
 }
 
-
+@ExpressionDescription(
+  usage = "_FUNC_(x, pos, val) - Places val into index pos of array x (array indices start at 1)",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 2, 3, 4), 5, 5);
+       [1,2,3,4,5]
+      > SELECT _FUNC_(array(5, 3, 2, 1), 2, 4);
+       [5,4,3,2,1]
+  """,
+  group = "array_funcs",
+  since = "3.4.0")
 case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes {
+  extends TernaryExpression with ImplicitCastInputTypes with SupportQueryContext {
 
-  @transient private lazy val elementType: DataType = srcArrayExpr.dataType.asInstanceOf[ArrayType].elementType
+  @transient private lazy val elementType: DataType =
+    srcArrayExpr.dataType.asInstanceOf[ArrayType].elementType
 
   override def dataType: DataType = srcArrayExpr.dataType
   override def inputTypes: Seq[AbstractDataType] = {
     (srcArrayExpr.dataType, posExpr.dataType, itemExpr.dataType) match {
       case (ArrayType(e1, hasNull), e2, e3) =>
         TypeCoercion.findTightestCommonType(e1, e3) match {
-          case Some(dt) => Seq(ArrayType(dt, hasNull), LongType, dt)
+          case Some(dt) => Seq(ArrayType(dt, hasNull), IntegralType, dt)
           case _ => Seq.empty
         }
     }
@@ -4632,9 +4643,32 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
   }
 
   override def nullSafeEval(arr: Any, pos: Any, item: Any): Any = {
-    val currArr = arr.asInstanceOf[ArrayData].toSeq[AnyRef](elementType)
-    val posInt = pos.asInstanceOf[Int]
-    new GenericArrayData(currArr.patch(posInt, Seq(item), 0))
+    throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(pos.asInstanceOf[Int])
+//    val baseArr = arr.asInstanceOf[ArrayData].toSeq[AnyRef](elementType)
+//    val posInt = pos.asInstanceOf[Int]
+//
+//    if (baseArr.length + 1  > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+//      throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(baseArr.length + 1)
+//    }
+//    val validatedPosInt = this.getValidPosIndexOrThrow(posInt, baseArr.length)
+//
+//    if (validatedPosInt < 0 || validatedPosInt > baseArr.length) {
+//      null
+//    } else {
+//      new GenericArrayData(baseArr.patch(posInt, Seq(item), 0))
+//    }
+  }
+
+  private def getValidPosIndexOrThrow(pos: Int, numArrayElements: Int): Int = {
+    val validIdx = if (pos == 0) {
+      throw QueryExecutionErrors.elementAtByIndexZeroError(getContextOrNull())
+    } else if (pos > 0) {
+      pos - 1
+    } else {
+      pos + numArrayElements
+    }
+
+    validIdx
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -4670,6 +4704,14 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
         ${rightGen.code}
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         $resultCode""", isNull = FalseLiteral)
+    }
+  }
+
+  override def initQueryContext(): Option[SQLQueryContext] = {
+    if (first.resolved) {
+      Some(origin.context)
+    } else {
+      None
     }
   }
 
