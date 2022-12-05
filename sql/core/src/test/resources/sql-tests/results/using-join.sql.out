@@ -72,6 +72,17 @@ two	two
 
 
 -- !query
+SELECT k FROM (SELECT nt2.k FROM nt1 left outer join nt2 using (k))
+-- !query schema
+struct<k:string>
+-- !query output
+NULL
+one
+one
+two
+
+
+-- !query
 SELECT nt1.k, nt2.k FROM nt1 left outer join nt2 using (k) ORDER BY nt2.k
 -- !query schema
 struct<k:string,k:string>
@@ -194,6 +205,17 @@ two	two
 
 
 -- !query
+SELECT k FROM (SELECT nt1.k FROM nt1 right outer join nt2 using (k))
+-- !query schema
+struct<k:string>
+-- !query output
+NULL
+one
+one
+two
+
+
+-- !query
 SELECT k, nt1.k FROM nt1 right outer join nt2 using (k)
 -- !query schema
 struct<k:string,k:string>
@@ -264,6 +286,18 @@ two	two
 
 
 -- !query
+SELECT k FROM (SELECT nt2.k FROM nt1 full outer join nt2 using (k))
+-- !query schema
+struct<k:string>
+-- !query output
+NULL
+four
+one
+one
+two
+
+
+-- !query
 SELECT k, nt1.k FROM nt1 full outer join nt2 using (k)
 -- !query schema
 struct<k:string,k:string>
@@ -327,6 +361,16 @@ struct<k:string,k:string>
 one	one
 one	one
 two	two
+
+
+-- !query
+SELECT k FROM (SELECT nt2.k FROM nt1 inner join nt2 using (k))
+-- !query schema
+struct<k:string>
+-- !query output
+one
+one
+two
 
 
 -- !query
