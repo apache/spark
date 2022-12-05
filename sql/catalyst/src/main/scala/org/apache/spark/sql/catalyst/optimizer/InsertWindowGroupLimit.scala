@@ -75,22 +75,23 @@ object InsertWindowGroupLimit extends Rule[LogicalPlan] with PredicateHelper {
 
         // multiple different rank-like functions unsupported.
         if (limits.isEmpty || limits.groupBy(_.get._2).size > 1) {
-          return filter
-        }
-        val minLimit = limits.minBy(_.get._1)
-        minLimit match {
-          case Some((limit, rankLikeFunction)) if limit <= conf.windowGroupLimitThreshold =>
-            if (limit > 0) {
-              val windowGroupLimit =
-                WindowGroupLimit(partitionSpec, orderSpec, rankLikeFunction, limit, child)
-              val newWindow = window.withNewChildren(Seq(windowGroupLimit))
-              val newFilter = filter.withNewChildren(Seq(newWindow))
-              newFilter
-            } else {
-              LocalRelation(filter.output, data = Seq.empty, isStreaming = filter.isStreaming)
-            }
-          case _ =>
-            filter
+          filter
+        } else {
+          val minLimit = limits.minBy(_.get._1)
+          minLimit match {
+            case Some((limit, rankLikeFunction)) if limit <= conf.windowGroupLimitThreshold =>
+              if (limit > 0) {
+                val windowGroupLimit =
+                  WindowGroupLimit(partitionSpec, orderSpec, rankLikeFunction, limit, child)
+                val newWindow = window.withNewChildren(Seq(windowGroupLimit))
+                val newFilter = filter.withNewChildren(Seq(newWindow))
+                newFilter
+              } else {
+                LocalRelation(filter.output, data = Seq.empty, isStreaming = filter.isStreaming)
+              }
+            case _ =>
+              filter
+          }
         }
     }
   }
