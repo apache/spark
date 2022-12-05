@@ -334,7 +334,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
               // and we don't know if that's the case or just one container.
               removeExecutor(id, ExecutorDecommission(None))
             case _ =>
-              // Don't do anything besides disabling the executor - allow the Kubernetes API events to
+              // Don't do anything besides disabling the executor - allow the K8s API events to
               // drive the rest of the lifecycle decisions.
               // If it's disconnected due to network issues eventually heartbeat will clear it up.
               disableExecutor(id)
