@@ -61,6 +61,7 @@ class MemoryProfilerTests(PySparkTestCase):
 
     def test_profile_pandas_udf(self):
         import pandas as pd
+
         udfs = [self.exec_pandas_udf_ser_to_ser, self.exec_pandas_udf_ser_to_scalar]
         udf_names = ["ser_to_ser", "ser_to_scalar"]
         for f, f_name in zip(udfs, udf_names):
@@ -105,6 +106,7 @@ class MemoryProfilerTests(PySparkTestCase):
 
     def exec_pandas_udf_ser_to_ser(self):
         import pandas as pd
+
         @pandas_udf("int")
         def ser_to_ser(ser: pd.Series) -> pd.Series:
             return ser + 1
@@ -113,6 +115,7 @@ class MemoryProfilerTests(PySparkTestCase):
 
     def exec_pandas_udf_ser_to_scalar(self):
         import pandas as pd
+
         @pandas_udf("int")
         def ser_to_scalar(ser: pd.Series) -> float:
             return ser.median()
@@ -122,6 +125,7 @@ class MemoryProfilerTests(PySparkTestCase):
     # Unsupported
     def exec_pandas_udf_iter_to_iter(self):
         import pandas as pd
+
         @pandas_udf("int")
         def iter_to_iter(batch_ser: Iterator[pd.Series]) -> Iterator[pd.Series]:
             for ser in batch_ser:
@@ -131,6 +135,7 @@ class MemoryProfilerTests(PySparkTestCase):
 
     def exec_grouped_map(self):
         import pandas as pd
+
         def grouped_map(pdf: pd.DataFrame) -> pd.DataFrame:
             return pdf.assign(v=pdf.v - pdf.v.mean())
 
@@ -140,6 +145,7 @@ class MemoryProfilerTests(PySparkTestCase):
     # Unsupported
     def exec_map(self):
         import pandas as pd
+
         def map(pdfs: Iterator[pd.DataFrame]) -> Iterator[pd.DataFrame]:
             for pdf in pdfs:
                 yield pdf[pdf.id == 1]
