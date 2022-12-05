@@ -545,7 +545,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   protected def checkInvalidCastFromNumericType(to: DataType): Unit = {
     cast(1.toByte, to).checkInputDataTypes() ==
       DataTypeMismatch(
-        errorSubClass = "CAST_WITH_FUN_SUGGESTION",
+        errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
         messageParameters = Map(
           "srcType" -> toSQLType(Literal(1.toByte).dataType),
           "targetType" -> toSQLType(to),
@@ -554,7 +554,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       )
     cast(1.toShort, to).checkInputDataTypes() ==
       DataTypeMismatch(
-        errorSubClass = "CAST_WITH_FUN_SUGGESTION",
+        errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
         messageParameters = Map(
           "srcType" -> toSQLType(Literal(1.toShort).dataType),
           "targetType" -> toSQLType(to),
@@ -563,7 +563,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       )
     cast(1, to).checkInputDataTypes() ==
       DataTypeMismatch(
-        errorSubClass = "CAST_WITH_FUN_SUGGESTION",
+        errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
         messageParameters = Map(
           "srcType" -> toSQLType(Literal(1).dataType),
           "targetType" -> toSQLType(to),
@@ -572,7 +572,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       )
     cast(1L, to).checkInputDataTypes() ==
       DataTypeMismatch(
-        errorSubClass = "CAST_WITH_FUN_SUGGESTION",
+        errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
         messageParameters = Map(
           "srcType" -> toSQLType(Literal(1L).dataType),
           "targetType" -> toSQLType(to),
@@ -581,7 +581,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       )
     cast(1.0.toFloat, to).checkInputDataTypes() ==
       DataTypeMismatch(
-        errorSubClass = "CAST_WITH_FUN_SUGGESTION",
+        errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
         messageParameters = Map(
           "srcType" -> toSQLType(Literal(1.0.toFloat).dataType),
           "targetType" -> toSQLType(to),
@@ -590,7 +590,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       )
     cast(1.0, to).checkInputDataTypes() ==
       DataTypeMismatch(
-        errorSubClass = "CAST_WITH_FUN_SUGGESTION",
+        errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
         messageParameters = Map(
           "srcType" -> toSQLType(Literal(1.0).dataType),
           "targetType" -> toSQLType(to),

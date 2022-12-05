@@ -510,6 +510,8 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_connect_plan_only",
         "pyspark.sql.tests.connect.test_connect_select_ops",
         "pyspark.sql.tests.connect.test_connect_basic",
+        "pyspark.sql.tests.connect.test_connect_function",
+        "pyspark.sql.tests.connect.test_connect_column",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and

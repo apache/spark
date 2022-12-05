@@ -43,11 +43,19 @@ message Command {
 // TODO(SPARK-40532) It is required to add the interpreter / language version to the command
 //   parameters.
 message CreateScalarFunction {
-  // Fully qualified name of the function including the catalog / schema names.
+  // (Required) Fully qualified name of the function including the catalog / schema names.
   repeated string parts = 1;
+
+  // (Required) the function language.
   FunctionLanguage language = 2;
+
+  // (Required) if this is a temporary function.
   bool temporary = 3;
+
+  // (Optional) A list of argument types. Can be empty when the function does not take an argument.
   repeated DataType argument_types = 4;
+
+  // (Required) the return type of the function.
   DataType return_type = 5;
 
   // How the function body is defined:
@@ -68,16 +76,16 @@ message CreateScalarFunction {
 
 // A command that can create DataFrame global temp view or local temp view.
 message CreateDataFrameViewCommand {
-  // Required. The relation that this view will be built on.
+  // (Required) The relation that this view will be built on.
   Relation input = 1;
 
-  // Required. View name.
+  // (Required) View name.
   string name = 2;
 
-  // Required. Whether this is global temp view or local temp view.
+  // (Required) Whether this is global temp view or local temp view.
   bool is_global = 3;
 
-  // Required.
+  // (Required)
   //
   // If true, and if the view already exists, updates it; if false, and if the view
   // already exists, throws exception.
@@ -86,24 +94,32 @@ message CreateDataFrameViewCommand {
 
 // As writes are not directly handled during analysis and planning, they are modeled as commands.
 message WriteOperation {
-  // The output of the `input` relation will be persisted according to the options.
+  // (Required) The output of the `input` relation will be persisted according to the options.
   Relation input = 1;
-  // Format value according to the Spark documentation. Examples are: text, parquet, delta.
+
+  // (Required) Format value according to the Spark documentation. Examples are: text, parquet, delta.
   string source = 2;
+
   // The destination of the write operation must be either a path or a table.
   oneof save_type {
     string path = 3;
     string table_name = 4;
   }
+
+  // (Required) the save mode.
   SaveMode mode = 5;
-  // List of columns to sort the output by.
+
+  // (Optional) List of columns to sort the output by.
   repeated string sort_column_names = 6;
-  // List of columns for partitioning.
+
+  // (Optional) List of columns for partitioning.
   repeated string partitioning_columns = 7;
-  // Optional bucketing specification. Bucketing must set the number of buckets and the columns
+
+  // (Optional) Bucketing specification. Bucketing must set the number of buckets and the columns
   // to bucket by.
   BucketBy bucket_by = 8;
-  // Optional list of configuration options.
+
+  // (Optional) A list of configuration options.
   map<string, string> options = 9;
 
   message BucketBy {

@@ -154,7 +154,7 @@ test_that("structType and structField", {
   expect_is(testSchema$fields()[[2]], "structField")
   expect_equal(testSchema$fields()[[1]]$dataType.toString(), "StringType")
 
-  expect_error(structType("A stri"), "DataType stri is not supported.")
+  expect_error(structType("A stri"), ".*Unsupported data type \"STRI\".*")
 })
 
 test_that("structField type strings", {
@@ -4044,14 +4044,14 @@ test_that("Specify a schema by using a DDL-formatted string when reading", {
   expect_is(df1, "SparkDataFrame")
   expect_equal(dtypes(df1), list(c("name", "string"), c("age", "double")))
 
-  expect_error(read.df(jsonPath, "json", "name stri"), "DataType stri is not supported.")
+  expect_error(read.df(jsonPath, "json", "name stri"), ".*Unsupported data type \"STRI\".*")
 
   # Test loadDF with a user defined schema in a DDL-formatted string.
   df2 <- loadDF(jsonPath, "json", "name STRING, age DOUBLE")
   expect_is(df2, "SparkDataFrame")
   expect_equal(dtypes(df2), list(c("name", "string"), c("age", "double")))
 
-  expect_error(loadDF(jsonPath, "json", "name stri"), "DataType stri is not supported.")
+  expect_error(loadDF(jsonPath, "json", "name stri"), ".*Unsupported data type \"STRI\".*")
 })
 
 test_that("Collect on DataFrame when NAs exists at the top of a timestamp column", {

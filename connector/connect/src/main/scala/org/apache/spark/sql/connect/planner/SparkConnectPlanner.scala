@@ -27,13 +27,12 @@ import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.WriteOperation
 import org.apache.spark.sql.{Column, Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.AliasIdentifier
+import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedStar}
-import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.catalyst.plans.{logical, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
+import org.apache.spark.sql.catalyst.plans.{logical, Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, SubqueryAlias, Union}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -413,6 +412,7 @@ class SparkConnectPlanner(session: SparkSession) {
         transformExpressionString(exp.getExpressionString)
       case proto.Expression.ExprTypeCase.UNRESOLVED_STAR =>
         transformUnresolvedStar(exp.getUnresolvedStar)
+      case proto.Expression.ExprTypeCase.CAST => transformCast(exp.getCast)
       case _ =>
         throw InvalidPlanInput(
           s"Expression with ID: ${exp.getExprTypeCase.getNumber} is not supported")
@@ -539,14 +539,17 @@ class SparkConnectPlanner(session: SparkSession) {
    * @return
    */
   private def transformScalarFunction(fun: proto.Expression.UnresolvedFunction): Expression = {
-    if (fun.getPartsCount == 1 && fun.getParts(0).contains(".")) {
-      throw new IllegalArgumentException(
-        "Function identifier must be passed as sequence of name parts.")
+    if (fun.getIsUserDefinedFunction) {
+      UnresolvedFunction(
+        session.sessionState.sqlParser.parseFunctionIdentifier(fun.getFunctionName),
+        fun.getArgumentsList.asScala.map(transformExpression).toSeq,
+        isDistinct = false)
+    } else {
+      UnresolvedFunction(
+        FunctionIdentifier(fun.getFunctionName),
+        fun.getArgumentsList.asScala.map(transformExpression).toSeq,
+        isDistinct = false)
     }
-    UnresolvedFunction(
-      fun.getPartsList.asScala.toSeq,
-      fun.getArgumentsList.asScala.map(transformExpression).toSeq,
-      isDistinct = false)
   }
 
   private def transformAlias(alias: proto.Expression.Alias): NamedExpression = {
@@ -576,6 +579,12 @@ class SparkConnectPlanner(session: SparkSession) {
     } else {
       UnresolvedStar(Some(regex.getTargetList.asScala.toSeq))
     }
+  }
+
+  private def transformCast(cast: proto.Expression.Cast): Expression = {
+    Cast(
+      transformExpression(cast.getExpr),
+      DataTypeProtoConverter.toCatalystType(cast.getCastToType))
   }
 
   private def transformSetOperation(u: proto.SetOperation): LogicalPlan = {
@@ -641,6 +650,7 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Join.JoinType.JOIN_TYPE_LEFT_OUTER => LeftOuter
       case proto.Join.JoinType.JOIN_TYPE_RIGHT_OUTER => RightOuter
       case proto.Join.JoinType.JOIN_TYPE_LEFT_SEMI => LeftSemi
+      case proto.Join.JoinType.JOIN_TYPE_CROSS => Cross
       case _ => throw InvalidPlanInput(s"Join type ${t} is not supported")
     }
   }

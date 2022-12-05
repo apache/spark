@@ -235,7 +235,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
     val joinCondition = proto.Expression.newBuilder.setUnresolvedFunction(
       proto.Expression.UnresolvedFunction.newBuilder
-        .addAllParts(Seq("==").asJava)
+        .setFunctionName("==")
         .addArguments(unresolvedAttribute)
         .addArguments(unresolvedAttribute)
         .build())
@@ -296,7 +296,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
         .setUnresolvedFunction(
           proto.Expression.UnresolvedFunction
             .newBuilder()
-            .addParts("sum")
+            .setFunctionName("sum")
             .addArguments(unresolvedAttribute))
         .build()
 

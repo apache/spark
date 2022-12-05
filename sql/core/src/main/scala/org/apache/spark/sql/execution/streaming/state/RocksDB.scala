@@ -63,7 +63,7 @@ class RocksDB(
   private val readOptions = new ReadOptions()  // used for gets
   private val writeOptions = new WriteOptions().setSync(true)  // wait for batched write to complete
   private val flushOptions = new FlushOptions().setWaitForFlush(true)  // wait for flush to complete
-  private val writeBatch = new WriteBatchWithIndex(true)  // overwrite multiple updates to a key
+  private var writeBatch = new WriteBatchWithIndex(true)  // overwrite multiple updates to a key
 
   private val bloomFilter = new BloomFilter()
   private val tableFormatConfig = new BlockBasedTableConfig()
@@ -135,7 +135,7 @@ class RocksDB(
       }
       // reset resources to prevent side-effects from previous loaded version
       closePrefixScanIterators()
-      writeBatch.clear()
+      resetWriteBatch()
       logInfo(s"Loaded $version")
     } catch {
       case t: Throwable =>
@@ -328,7 +328,7 @@ class RocksDB(
    */
   def rollback(): Unit = {
     closePrefixScanIterators()
-    writeBatch.clear()
+    resetWriteBatch()
     numKeysOnWritingVersion = numKeysOnLoadedVersion
     release()
     logInfo(s"Rolled back to $loadedVersion")
@@ -453,6 +453,13 @@ class RocksDB(
   private def closePrefixScanIterators(): Unit = {
     prefixScanReuseIter.values().asScala.foreach(_.close())
     prefixScanReuseIter.clear()
+  }
+
+  /** Create a new WriteBatch, clear doesn't deallocate the native memory */
+  private def resetWriteBatch(): Unit = {
+    writeBatch.clear()
+    writeBatch.close()
+    writeBatch = new WriteBatchWithIndex(true)
   }
 
   private def getDBProperty(property: String): Long = {
