@@ -119,3 +119,21 @@ select get(array(1, 2, 3), 0);
 select get(array(1, 2, 3), 3);
 select get(array(1, 2, 3), null);
 select get(array(1, 2, 3), -1);
+
+-- function array_compact
+select
+  array_compact(boolean_array),
+  array_compact(tinyint_array),
+  array_compact(smallint_array),
+  array_compact(int_array),
+  array_compact(bigint_array),
+  array_compact(decimal_array),
+  array_compact(double_array),
+  array_compact(float_array),
+  array_compact(date_array),
+  array_compact(timestamp_array)
+from primitive_arrays;
+select array_compact(array("1", null, "2", null));
+select array_compact(array(1D, null, 2D, null));
+select array_compact(array(array(1, 2, 3, null), null, array(4, null, 6)));
+select array_compact(array(null));

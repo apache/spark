@@ -5270,10 +5270,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     )
 
     // unsupported data type
-    val invalid_datatype_df = Seq(1, 2, 3).toDF("a")
+    val invalid_Datatype_df = Seq(1, 2, 3).toDF("a")
     checkError(
       exception = intercept[AnalysisException] {
-        invalid_datatype_df.select(array_compact($"a"))
+        invalid_Datatype_df.select(array_compact($"a"))
       },
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(

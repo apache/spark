@@ -2617,12 +2617,12 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayCompact(a7), Seq.empty[Integer])
 
     // complex data types
-    val binary_arr = Literal.create(Seq[Array[Byte]](null, Array[Byte](1, 2)),
+    val binary_Arr = Literal.create(Seq[Array[Byte]](null, Array[Byte](1, 2)),
       ArrayType(BinaryType))
-    checkEvaluation(ArrayCompact(binary_arr), Seq[Array[Byte]](Array[Byte](1, 2)))
+    checkEvaluation(ArrayCompact(binary_Arr), Seq[Array[Byte]](Array[Byte](1, 2)))
 
-    val int_arr = Literal.create(Seq[Array[Integer]](Array(1, null, 3), null, Array(null, 2, 3)))
-    checkEvaluation(ArrayCompact(int_arr),
+    val int_Arr = Literal.create(Seq[Array[Integer]](Array(1, null, 3), null, Array(null, 2, 3)))
+    checkEvaluation(ArrayCompact(int_Arr),
       Seq[Array[Integer]](Array(1, null, 3), Array(null, 2, 3)))
   }
 }

@@ -489,3 +489,54 @@ select get(array(1, 2, 3), -1)
 struct<get(array(1, 2, 3), -1):int>
 -- !query output
 NULL
+
+
+-- !query
+select
+  array_compact(boolean_array),
+  array_compact(tinyint_array),
+  array_compact(smallint_array),
+  array_compact(int_array),
+  array_compact(bigint_array),
+  array_compact(decimal_array),
+  array_compact(double_array),
+  array_compact(float_array),
+  array_compact(date_array),
+  array_compact(timestamp_array)
+from primitive_arrays
+-- !query schema
+struct<array_compact(boolean_array):array<boolean>,array_compact(tinyint_array):array<tinyint>,array_compact(smallint_array):array<smallint>,array_compact(int_array):array<int>,array_compact(bigint_array):array<bigint>,array_compact(decimal_array):array<decimal(19,0)>,array_compact(double_array):array<double>,array_compact(float_array):array<float>,array_compact(date_array):array<date>,array_compact(timestamp_array):array<timestamp>>
+-- !query output
+[true]	[2,1]	[2,1]	[2,1]	[2,1]	[9223372036854775809,9223372036854775808]	[2.0,1.0]	[2.0,1.0]	[2016-03-14,2016-03-13]	[2016-11-15 20:54:00,2016-11-12 20:54:00]
+
+
+-- !query
+select array_compact(array("1", null, "2", null))
+-- !query schema
+struct<array_compact(array(1, NULL, 2, NULL)):array<string>>
+-- !query output
+["1","2"]
+
+
+-- !query
+select array_compact(array(1D, null, 2D, null))
+-- !query schema
+struct<array_compact(array(1.0, NULL, 2.0, NULL)):array<double>>
+-- !query output
+[1.0,2.0]
+
+
+-- !query
+select array_compact(array(array(1, 2, 3, null), null, array(4, null, 6)))
+-- !query schema
+struct<array_compact(array(array(1, 2, 3, NULL), NULL, array(4, NULL, 6))):array<array<int>>>
+-- !query output
+[[1,2,3,null],[4,null,6]]
+
+
+-- !query
+select array_compact(array(null))
+-- !query schema
+struct<array_compact(array(NULL)):array<void>>
+-- !query output
+[]
