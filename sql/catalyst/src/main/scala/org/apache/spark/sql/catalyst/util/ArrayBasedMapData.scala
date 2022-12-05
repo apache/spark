@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.util
 
 import java.util.{Map => JavaMap}
 
-import org.apache.spark.SparkException.checkInternalError
 import org.apache.spark.util.collection.Utils
 
 /**
@@ -27,12 +26,12 @@ import org.apache.spark.util.collection.Utils
  *
  * Note that, user is responsible to guarantee that the key array does not have duplicated
  * elements, otherwise the behavior is undefined.
+ *
+ * @throws IllegalArgumentException If the number of elements in `keyArray` and `valueArray`
+ *                                  are different.
  */
 class ArrayBasedMapData(val keyArray: ArrayData, val valueArray: ArrayData) extends MapData {
-  checkInternalError(
-    keyArray.numElements() == valueArray.numElements(),
-    s"The number of key elements ${keyArray.numElements()} and value elements " +
-    s"${valueArray.numElements()} must be the same.")
+  require(keyArray.numElements() == valueArray.numElements())
 
   override def numElements(): Int = keyArray.numElements()
 
