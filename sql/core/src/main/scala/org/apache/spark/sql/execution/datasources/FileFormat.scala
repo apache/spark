@@ -197,40 +197,19 @@ object FileFormat {
    */
   val OPTION_RETURNING_BATCH = "returning_batch"
 
-<<<<<<< HEAD
-  // supported metadata struct fields for hadoop fs relation
-  val METADATA_STRUCT: StructType = new StructType()
-    .add(StructField(FILE_PATH, StringType))
-    .add(StructField(FILE_NAME, StringType))
-    .add(StructField(FILE_SIZE, LongType))
-    .add(StructField(FILE_MODIFICATION_TIME, TimestampType))
-
-  // create a file metadata struct col
-  def createFileMetadataCol: AttributeReference =
-    FileSourceMetadataAttribute(METADATA_NAME, METADATA_STRUCT)
-=======
   /**
    * Schema of metadata struct that can be produced by every file format,
    * metadata fields for every file format must be *not* nullable.
    * */
-  val BASE_METADATA_STRUCT: StructType = new StructType()
-    .add(StructField(FileFormat.FILE_PATH, StringType, nullable = false))
-    .add(StructField(FileFormat.FILE_NAME, StringType, nullable = false))
-    .add(StructField(FileFormat.FILE_SIZE, LongType, nullable = false))
-    .add(StructField(FileFormat.FILE_MODIFICATION_TIME, TimestampType, nullable = false))
+  val METADATA_STRUCT: StructType = new StructType()
+    .add(StructField(FILE_PATH, StringType, nullable = false))
+    .add(StructField(FILE_NAME, StringType, nullable = false))
+    .add(StructField(FILE_SIZE, LongType, nullable = false))
+    .add(StructField(FILE_MODIFICATION_TIME, TimestampType, nullable = false))
 
-  /**
-   * Create a file metadata struct column containing fields supported by the given file format.
-   */
-  def createFileMetadataCol(fileFormat: FileFormat): AttributeReference = {
-    val struct = if (fileFormat.isInstanceOf[ParquetFileFormat]) {
-      BASE_METADATA_STRUCT.add(StructField(FileFormat.ROW_INDEX, LongType, nullable = false))
-    } else {
-      BASE_METADATA_STRUCT
-    }
-    FileSourceMetadataAttribute(FileFormat.METADATA_NAME, struct)
-  }
->>>>>>> d8a600e621 ([SPARK-41151][FOLLOW-UP][SQL] Keep built-in file _metadata fields nullable value consistent)
+  // create a file metadata struct col
+  def createFileMetadataCol: AttributeReference =
+    FileSourceMetadataAttribute(METADATA_NAME, METADATA_STRUCT)
 
   // create an internal row given required metadata fields and file information
   def createMetadataInternalRow(
