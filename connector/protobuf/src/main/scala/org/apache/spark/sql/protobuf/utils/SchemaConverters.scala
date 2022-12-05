@@ -92,9 +92,13 @@ object SchemaConverters {
             MapType(keyType, valueType, valueContainsNull = false).defaultConcreteType,
             nullable = false))
       case MESSAGE =>
+        // Stop recursion at the first level when a recursive field is encountered.
+        // TODO: The user should be given the option to set the recursion level to 1, 2, or 3
+        //  using the `spark.protobuf.recursion.level` configuration parameter.
         if (existingRecordNames.contains(fd.getFullName)) {
-          throw QueryCompilationErrors.foundRecursionInProtobufSchema(fd.toString())
+          return Some(StructField(fd.getName, NullType, nullable = false))
         }
+
         val newRecordNames = existingRecordNames + fd.getFullName
 
         Option(

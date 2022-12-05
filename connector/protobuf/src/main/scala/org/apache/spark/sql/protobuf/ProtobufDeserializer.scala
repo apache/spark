@@ -157,6 +157,8 @@ private[sql] class ProtobufDeserializer(
 
       case (null, NullType) => (updater, ordinal, _) => updater.setNullAt(ordinal)
 
+      case (MESSAGE, NullType) => (updater, ordinal, _) => updater.setNullAt(ordinal)
+
       // TODO: we can avoid boxing if future version of Protobuf provide primitive accessors.
       case (BOOLEAN, BooleanType) =>
         (updater, ordinal, value) => updater.setBoolean(ordinal, value.asInstanceOf[Boolean])
@@ -235,7 +237,7 @@ private[sql] class ProtobufDeserializer(
           writeRecord(new RowUpdater(row), value.asInstanceOf[DynamicMessage])
           updater.set(ordinal, row)
 
-      case (MESSAGE, ArrayType(st: StructType, containsNull)) =>
+      case (MESSAGE, ArrayType(st: DataType, containsNull)) =>
         newArrayWriter(protoType, protoPath, catalystPath, st, containsNull)
 
       case (ENUM, StringType) =>
