@@ -3489,7 +3489,7 @@ def concat_ws(sep: str, *cols: "ColumnOrName") -> Column:
     >>> df.select(concat_ws('-', df.s, df.d).alias('s')).collect()
     [Row(s='abcd-123')]
     """
-    return _invoke_function("concat_ws", sep, *[_to_col(c) for c in cols])
+    return _invoke_function("concat_ws", lit(sep), *[_to_col(c) for c in cols])
 
 
 def decode(col: "ColumnOrName", charset: str) -> Column:
@@ -3521,7 +3521,7 @@ def decode(col: "ColumnOrName", charset: str) -> Column:
     |                  abcd|
     +----------------------+
     """
-    return _invoke_function("decode", _to_col(col), charset)
+    return _invoke_function("decode", _to_col(col), lit(charset))
 
 
 def encode(col: "ColumnOrName", charset: str) -> Column:
@@ -3553,4 +3553,4 @@ def encode(col: "ColumnOrName", charset: str) -> Column:
     |   [61 62 63 64]|
     +----------------+
     """
-    return _invoke_function("encode", _to_col(col), charset)
+    return _invoke_function("encode", _to_col(col), lit(charset))
