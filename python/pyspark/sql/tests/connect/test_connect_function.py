@@ -171,6 +171,108 @@ class SparkConnectFunctionTests(SparkConnectSQLTestCase):
                 sdf.orderBy(SF.desc_nulls_last(c)).toPandas(),
             )
 
+    def test_math_functions(self):
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        query = """
+            SELECT * FROM VALUES
+            (false, 1, NULL), (true, NULL, 2.0), (NULL, 3, 3.5)
+            AS tab(a, b, c)
+            """
+        # +-----+----+----+
+        # |    a|   b|   c|
+        # +-----+----+----+
+        # |false|   1|null|
+        # | true|null| 2.0|
+        # | null|   3| 3.5|
+        # +-----+----+----+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        for cfunc, sfunc in [
+            (CF.abs, SF.abs),
+            (CF.acos, SF.acos),
+            (CF.acosh, SF.acosh),
+            (CF.asin, SF.asin),
+            (CF.asinh, SF.asinh),
+            (CF.atan, SF.atan),
+            (CF.atanh, SF.atanh),
+            (CF.bin, SF.bin),
+            (CF.cbrt, SF.cbrt),
+            (CF.ceil, SF.ceil),
+            (CF.cos, SF.cos),
+            (CF.cosh, SF.cosh),
+            (CF.cot, SF.cot),
+            (CF.csc, SF.csc),
+            (CF.degrees, SF.degrees),
+            (CF.exp, SF.exp),
+            (CF.expm1, SF.expm1),
+            (CF.factorial, SF.factorial),
+            (CF.floor, SF.floor),
+            (CF.hex, SF.hex),
+            (CF.log, SF.log),
+            (CF.log10, SF.log10),
+            (CF.log1p, SF.log1p),
+            (CF.log2, SF.log2),
+            (CF.radians, SF.radians),
+            (CF.rint, SF.rint),
+            (CF.sec, SF.sec),
+            (CF.signum, SF.signum),
+            (CF.sin, SF.sin),
+            (CF.sinh, SF.sinh),
+            (CF.sqrt, SF.sqrt),
+            (CF.tan, SF.tan),
+            (CF.tanh, SF.tanh),
+            (CF.unhex, SF.unhex),
+        ]:
+            self.assert_eq(
+                cdf.select(cfunc("b"), cfunc(cdf.c)).toPandas(),
+                sdf.select(sfunc("b"), sfunc(sdf.c)).toPandas(),
+            )
+
+        self.assert_eq(
+            cdf.select(CF.atan2("b", cdf.c)).toPandas(),
+            sdf.select(SF.atan2("b", sdf.c)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.bround("b", 1)).toPandas(),
+            sdf.select(SF.bround("b", 1)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.conv("b", 2, 16)).toPandas(),
+            sdf.select(SF.conv("b", 2, 16)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.hypot("b", cdf.c)).toPandas(),
+            sdf.select(SF.hypot("b", sdf.c)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.pmod("b", cdf.c)).toPandas(),
+            sdf.select(SF.pmod("b", sdf.c)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.pow("b", cdf.c)).toPandas(),
+            sdf.select(SF.pow("b", sdf.c)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.round("b", 1)).toPandas(),
+            sdf.select(SF.round("b", 1)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.shiftleft("b", 1)).toPandas(),
+            sdf.select(SF.shiftleft("b", 1)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.shiftright("b", 1)).toPandas(),
+            sdf.select(SF.shiftright("b", 1)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.shiftrightunsigned("b", 1)).toPandas(),
+            sdf.select(SF.shiftrightunsigned("b", 1)).toPandas(),
+        )
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.test_connect_function import *  # noqa: F401

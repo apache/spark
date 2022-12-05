@@ -5517,7 +5517,7 @@ def concat_ws(sep: str, *cols: "ColumnOrName") -> Column:
     Parameters
     ----------
     sep : str
-        words seperator.
+        words separator.
     cols : :class:`~pyspark.sql.Column` or str
         list of columns to work on.
 
@@ -7916,7 +7916,7 @@ def arrays_zip(*cols: "ColumnOrName") -> Column:
     """
     Collection function: Returns a merged array of structs in which the N-th struct contains all
     N-th values of input arrays. If one of the arrays is shorter than others then
-    resulting struct type value will be a `null` for missing elemets.
+    resulting struct type value will be a `null` for missing elements.
 
     .. versionadded:: 2.4.0
 

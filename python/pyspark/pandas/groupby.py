@@ -1989,7 +1989,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         if should_infer_schema:
             # Here we execute with the first 1000 to get the return type.
             log_advice(
-                "If the type hints is not specified for `grouby.apply`, "
+                "If the type hints is not specified for `groupby.apply`, "
                 "it is expensive to infer the data type internally."
             )
             limit = get_option("compute.shortcut_limit")
@@ -3107,7 +3107,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             # Here we execute with the first 1000 to get the return type.
             # If the records were less than 1000, it uses pandas API directly for a shortcut.
             log_advice(
-                "If the type hints is not specified for `grouby.transform`, "
+                "If the type hints is not specified for `groupby.transform`, "
                 "it is expensive to infer the data type internally."
             )
             limit = get_option("compute.shortcut_limit")
