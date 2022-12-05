@@ -75,8 +75,8 @@ class MutableProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
       .apply(new GenericInternalRow(bufferSchema.length))
 
     val scalaRows = Seq(
-      Seq(BigDecimal(5), null),
-      Seq(BigDecimal(10), BigDecimal(11)))
+      Seq(null, null),
+      Seq(BigDecimal(77.77), BigDecimal(245.00)))
 
     scalaRows.foreach { scalaRow =>
       val inputRow = InternalRow.fromSeq(scalaRow.zip(bufferTypes).map {
