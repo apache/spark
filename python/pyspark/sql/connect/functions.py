@@ -2322,50 +2322,48 @@ def count(col: "ColumnOrName") -> Column:
 #     return count_distinct(col, *cols)
 
 
-# TODO(SPARK-41381): add isDistinct in UnresolvedFunction
-# def count_distinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
-#     """Returns a new :class:`Column` for distinct count of ``col`` or ``cols``.
-#
-#     .. versionadded:: 3.4.0
-#
-#     Parameters
-#     ----------
-#     col : :class:`~pyspark.sql.Column` or str
-#         first column to compute on.
-#     cols : :class:`~pyspark.sql.Column` or str
-#         other columns to compute on.
-#
-#     Returns
-#     -------
-#     :class:`~pyspark.sql.Column`
-#         distinct values of these two column values.
-#
-#     Examples
-#     --------
-#     >>> from pyspark.sql import types
-#     >>> df1 = spark.createDataFrame([1, 1, 3], types.IntegerType())
-#     >>> df2 = spark.createDataFrame([1, 2], types.IntegerType())
-#     >>> df1.join(df2).show()
-#     +-----+-----+
-#     |value|value|
-#     +-----+-----+
-#     |    1|    1|
-#     |    1|    2|
-#     |    1|    1|
-#     |    1|    2|
-#     |    3|    1|
-#     |    3|    2|
-#     +-----+-----+
-#     >>> df1.join(df2).select(count_distinct(df1.value, df2.value)).show()
-#     +----------------------------+
-#     |count(DISTINCT value, value)|
-#     +----------------------------+
-#     |                           4|
-#     +----------------------------+
-#     """
-#     return _invoke_function(
-#         "count_distinct", _to_java_column(col), _to_seq(sc, cols, _to_java_column)
-#     )
+def count_distinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
+    """Returns a new :class:`Column` for distinct count of ``col`` or ``cols``.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        first column to compute on.
+    cols : :class:`~pyspark.sql.Column` or str
+        other columns to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        distinct values of these two column values.
+
+    Examples
+    --------
+    >>> from pyspark.sql import types
+    >>> df1 = spark.createDataFrame([1, 1, 3], types.IntegerType())
+    >>> df2 = spark.createDataFrame([1, 2], types.IntegerType())
+    >>> df1.join(df2).show()
+    +-----+-----+
+    |value|value|
+    +-----+-----+
+    |    1|    1|
+    |    1|    2|
+    |    1|    1|
+    |    1|    2|
+    |    3|    1|
+    |    3|    2|
+    +-----+-----+
+    >>> df1.join(df2).select(count_distinct(df1.value, df2.value)).show()
+    +----------------------------+
+    |count(DISTINCT value, value)|
+    +----------------------------+
+    |                           4|
+    +----------------------------+
+    """
+    _exprs = [_to_col(c)._expr for c in [col] + list(cols)]
+    return Column(UnresolvedFunction("count", _exprs, is_distinct=True))
 
 
 def covar_pop(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
@@ -3097,33 +3095,33 @@ def sum(col: "ColumnOrName") -> Column:
 
 
 # TODO(SPARK-41381): add isDistinct in UnresolvedFunction
-# def sum_distinct(col: "ColumnOrName") -> Column:
-#     """
-#     Aggregate function: returns the sum of distinct values in the expression.
-#
-#     .. versionadded:: 3.4.0
-#
-#     Parameters
-#     ----------
-#     col : :class:`~pyspark.sql.Column` or str
-#         target column to compute on.
-#
-#     Returns
-#     -------
-#     :class:`~pyspark.sql.Column`
-#         the column for computed results.
-#
-#     Examples
-#     --------
-#     >>> df = spark.createDataFrame([(None,), (1,), (1,), (2,)], schema=["numbers"])
-#     >>> df.select(sum_distinct(col("numbers"))).show()
-#     +---------------------+
-#     |sum(DISTINCT numbers)|
-#     +---------------------+
-#     |                    3|
-#     +---------------------+
-#     """
-#     return _invoke_function_over_columns("sum_distinct", col)
+def sum_distinct(col: "ColumnOrName") -> Column:
+    """
+    Aggregate function: returns the sum of distinct values in the expression.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for computed results.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(None,), (1,), (1,), (2,)], schema=["numbers"])
+    >>> df.select(sum_distinct(col("numbers"))).show()
+    +---------------------+
+    |sum(DISTINCT numbers)|
+    +---------------------+
+    |                    3|
+    +---------------------+
+    """
+    return Column(UnresolvedFunction("sum", [_to_col(col)._expr], is_distinct=True))
 
 
 def var_pop(col: "ColumnOrName") -> Column:
