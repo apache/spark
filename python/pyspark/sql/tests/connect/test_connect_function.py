@@ -320,6 +320,96 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             sdf.select(SF.shiftrightunsigned("b", 1)).toPandas(),
         )
 
+    def test_aggregation_functions(self):
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        query = """
+            SELECT * FROM VALUES
+            (0, float("NAN"), NULL), (1, NULL, 2.0), (1, 2.1, 3.5), (0, 0.5, 1.0)
+            AS tab(a, b, c)
+            """
+        # +---+----+----+
+        # |  a|   b|   c|
+        # +---+----+----+
+        # |  0| NaN|null|
+        # |  1|null| 2.0|
+        # |  1| 2.1| 3.5|
+        # |  0| 0.5| 1.0|
+        # +---+----+----+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        # TODO(SPARK-41383): add tests for grouping, grouping_id after DataFrame.cube is supported.
+        for cfunc, sfunc in [
+            (CF.approx_count_distinct, SF.approx_count_distinct),
+            (CF.avg, SF.avg),
+            (CF.collect_list, SF.collect_list),
+            (CF.collect_set, SF.collect_set),
+            (CF.count, SF.count),
+            # (CF.count_distinct, SF.count_distinct),
+            (CF.first, SF.first),
+            (CF.kurtosis, SF.kurtosis),
+            (CF.last, SF.last),
+            (CF.max, SF.max),
+            (CF.mean, SF.mean),
+            (CF.median, SF.median),
+            (CF.min, SF.min),
+            (CF.mode, SF.mode),
+            (CF.skewness, SF.skewness),
+            (CF.stddev, SF.stddev),
+            (CF.stddev_pop, SF.stddev_pop),
+            (CF.stddev_samp, SF.stddev_samp),
+            (CF.sum, SF.sum),
+            # (CF.sum_distinct, SF.sum_distinct),
+            (CF.var_pop, SF.var_pop),
+            (CF.var_samp, SF.var_samp),
+            (CF.variance, SF.variance),
+        ]:
+            self.assert_eq(
+                cdf.select(cfunc("b"), cfunc(cdf.c)).toPandas(),
+                sdf.select(sfunc("b"), sfunc(sdf.c)).toPandas(),
+            )
+            self.assert_eq(
+                cdf.groupBy("a").agg([cfunc("b"), cfunc(cdf.c)]).toPandas(),
+                sdf.groupBy("a").agg(sfunc("b"), sfunc(sdf.c)).toPandas(),
+            )
+
+        for cfunc, sfunc in [
+            (CF.corr, SF.corr),
+            (CF.covar_pop, SF.covar_pop),
+            (CF.covar_samp, SF.covar_samp),
+            (CF.max_by, SF.max_by),
+            (CF.min_by, SF.min_by),
+        ]:
+            self.assert_eq(
+                cdf.select(cfunc(cdf.b, "c")).toPandas(),
+                sdf.select(sfunc(sdf.b, "c")).toPandas(),
+            )
+            self.assert_eq(
+                cdf.groupBy("a").agg([cfunc(cdf.b, "c")]).toPandas(),
+                sdf.groupBy("a").agg(sfunc(sdf.b, "c")).toPandas(),
+            )
+
+        # test percentile_approx
+        self.assert_eq(
+            cdf.select(CF.percentile_approx(cdf.b, 0.5, 1000)).toPandas(),
+            sdf.select(SF.percentile_approx(sdf.b, 0.5, 1000)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.percentile_approx(cdf.b, [0.1, 0.9])).toPandas(),
+            sdf.select(SF.percentile_approx(sdf.b, [0.1, 0.9])).toPandas(),
+        )
+        self.assert_eq(
+            cdf.groupBy("a").agg([CF.percentile_approx("b", 0.5)]).toPandas(),
+            sdf.groupBy("a").agg(SF.percentile_approx("b", 0.5)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.groupBy("a").agg([CF.percentile_approx(cdf.b, [0.1, 0.9])]).toPandas(),
+            sdf.groupBy("a").agg(SF.percentile_approx(sdf.b, [0.1, 0.9])).toPandas(),
+        )
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.test_connect_function import *  # noqa: F401
