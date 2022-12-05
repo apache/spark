@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import java.util.{Map => JavaMap}
 
+import org.apache.spark.SparkException.checkInternalError
 import org.apache.spark.util.collection.Utils
 
 /**
@@ -28,7 +29,10 @@ import org.apache.spark.util.collection.Utils
  * elements, otherwise the behavior is undefined.
  */
 class ArrayBasedMapData(val keyArray: ArrayData, val valueArray: ArrayData) extends MapData {
-  require(keyArray.numElements() == valueArray.numElements())
+  checkInternalError(
+    keyArray.numElements() == valueArray.numElements(),
+    s"The number of key elements ${keyArray.numElements()} and value elements " +
+    s"${valueArray.numElements()} must be the same.")
 
   override def numElements(): Int = keyArray.numElements()
 

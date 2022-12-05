@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.SparkException.checkInternalError
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis
@@ -82,7 +83,7 @@ case class LocalRelation(
     Statistics(sizeInBytes = EstimationUtils.getSizePerRow(output) * data.length)
 
   def toSQL(inlineTableName: String): String = {
-    require(data.nonEmpty)
+    checkInternalError(data.nonEmpty, "The local relation must hold at least one row.")
     val types = output.map(_.dataType)
     val rows = data.map { row =>
       val cells = row.toSeq(types).zip(types).map { case (v, tpe) => Literal(v, tpe).sql }

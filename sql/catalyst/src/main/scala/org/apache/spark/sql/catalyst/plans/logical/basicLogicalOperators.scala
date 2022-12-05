@@ -492,7 +492,10 @@ case class Union(
       reference: Seq[Attribute],
       original: Seq[Attribute],
       constraints: ExpressionSet): ExpressionSet = {
-    require(reference.size == original.size)
+    checkInternalError(
+      reference.size == original.size,
+      s"The number of reference attributes (${reference.size}) and original attributes " +
+      s"(${original.size}) expected to be the same.")
     val attributeRewrites = AttributeMap(original.zip(reference))
     constraints.map(_ transform {
       case a: Attribute => attributeRewrites(a)
@@ -703,7 +706,9 @@ case class View(
     desc: CatalogTable,
     isTempView: Boolean,
     child: LogicalPlan) extends UnaryNode {
-  require(!isTempViewStoringAnalyzedPlan || child.resolved)
+  checkInternalError(
+    !isTempViewStoringAnalyzedPlan || child.resolved,
+    "The logical plan og the view expected to be either a storing plan or resolved.")
 
   override def output: Seq[Attribute] = child.output
 

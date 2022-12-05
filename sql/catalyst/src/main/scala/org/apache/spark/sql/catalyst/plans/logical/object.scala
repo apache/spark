@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.SparkException.checkInternalError
 import org.apache.spark.api.java.function.FilterFunction
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.{Encoder, Row}
@@ -651,7 +652,9 @@ object CoGroup {
       rightAttr: Seq[Attribute],
       left: LogicalPlan,
       right: LogicalPlan): LogicalPlan = {
-    require(StructType.fromAttributes(leftGroup) == StructType.fromAttributes(rightGroup))
+    checkInternalError(
+      StructType.fromAttributes(leftGroup) == StructType.fromAttributes(rightGroup),
+      "The left and right attributes must be the same.")
 
     val cogrouped = CoGroup(
       func.asInstanceOf[(Any, Iterator[Any], Iterator[Any]) => TraversableOnce[Any]],

@@ -65,7 +65,8 @@ object InjectRuntimeFilter
     } else {
       checkInternalError(
         conf.runtimeFilterSemiJoinReductionEnabled,
-        "Disabled the config: " + toSQLConf(SQLConf.RUNTIME_FILTER_SEMI_JOIN_REDUCTION_ENABLED.key))
+        "The SQL config is expected to be enabled: " +
+        toSQLConf(SQLConf.RUNTIME_FILTER_SEMI_JOIN_REDUCTION_ENABLED.key))
       injectInSubqueryFilter(
         filterApplicationSideExp,
         filterApplicationSidePlan,

@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.rules
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkException.checkInternalError
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.util.Utils
 
@@ -27,7 +28,7 @@ case class RuleId(id: Int) {
   // Currently, there are more than 128 but less than 192 rules needing an id. However, the
   // requirement can be relaxed when we have more such rules. Note that increasing the max id can
   // result in increased memory consumption from every TreeNode.
-  require(id >= -1 && id < 192)
+  checkInternalError(id >= -1 && id < 192, s"The rule id ($id) must be in the range [-1, 192).")
 }
 
 // Unknown rule id which does not prune tree traversals. It is used as the default rule id for

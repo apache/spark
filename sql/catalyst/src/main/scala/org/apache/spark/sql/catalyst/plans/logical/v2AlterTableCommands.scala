@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.SparkException.checkInternalError
 import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.util.TypeUtils
@@ -142,7 +143,7 @@ case class ReplaceColumns(
 
   override def changes: Seq[TableChange] = {
     // REPLACE COLUMNS deletes all the existing columns and adds new columns specified.
-    require(table.resolved)
+    checkInternalError(table.resolved, "The table must be resolved.")
     val deleteChanges = table.schema.fieldNames.map { name =>
       // REPLACE COLUMN should require column to exist
       TableChange.deleteColumn(Array(name), false /* ifExists */)
