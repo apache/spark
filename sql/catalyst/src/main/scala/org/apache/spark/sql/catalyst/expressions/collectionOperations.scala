@@ -4678,7 +4678,9 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
           newArray(i) = v
         }
       )
-      if (item != null) newArray(validatedPosInt) = item
+      if (item != null) {
+        newArray(validatedPosInt) = item
+      }
       new GenericArrayData(newArray)
     }
   }
