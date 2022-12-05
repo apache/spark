@@ -530,10 +530,22 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             self.connect.sql("SELECT 2 AS X LIMIT 1").createOrReplaceGlobalTempView("view_1")
             self.assertTrue(self.spark.catalog.tableExists("global_temp.view_1"))
 
-            # Test when creating a view which is alreayd exists but
+            # Test when creating a view which is already exists but
             self.assertTrue(self.spark.catalog.tableExists("global_temp.view_1"))
             with self.assertRaises(grpc.RpcError):
                 self.connect.sql("SELECT 1 AS X LIMIT 0").createGlobalTempView("view_1")
+
+    def test_create_session_local_temp_view(self):
+        # SPARK-41372: test session local temp view creation.
+        with self.tempView("view_local_temp"):
+            self.connect.sql("SELECT 1 AS X").createTempView("view_local_temp")
+            self.assertEqual(self.connect.sql("SELECT * FROM view_local_temp").count(), 1)
+            self.connect.sql("SELECT 1 AS X LIMIT 0").createOrReplaceTempView("view_local_temp")
+            self.assertEqual(self.connect.sql("SELECT * FROM view_local_temp").count(), 0)
+
+            # Test when creating a view which is already exists but
+            with self.assertRaises(grpc.RpcError):
+                self.connect.sql("SELECT 1 AS X LIMIT 0").createTempView("view_local_temp")
 
     def test_to_pandas(self):
         # SPARK-41005: Test to pandas

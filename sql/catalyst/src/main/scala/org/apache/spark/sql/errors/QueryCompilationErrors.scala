@@ -663,12 +663,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     }
   }
 
-  def functionAcceptsOnlyOneArgumentError(name: String): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1044",
-      messageParameters = Map("name" -> name))
-  }
-
   def alterV2TableSetLocationWithPartitionNotSupportedError(): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1045",

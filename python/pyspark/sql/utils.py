@@ -273,9 +273,13 @@ class ForeachBatchFunction:
 
     def call(self, jdf: JavaObject, batch_id: int) -> None:
         from pyspark.sql.dataframe import DataFrame
+        from pyspark.sql.session import SparkSession
 
         try:
-            self.func(DataFrame(jdf, self.session), batch_id)
+            session_jdf = jdf.sparkSession()
+            # assuming that spark context is still the same between JVM and PySpark
+            wrapped_session_jdf = SparkSession(self.session.sparkContext, session_jdf)
+            self.func(DataFrame(jdf, wrapped_session_jdf), batch_id)
         except Exception as e:
             self.error = e
             raise e

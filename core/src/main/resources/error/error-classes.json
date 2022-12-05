@@ -197,7 +197,7 @@
           "If you have to cast <srcType> to <targetType>, you can set <config> as <configVal>."
         ]
       },
-      "CAST_WITH_FUN_SUGGESTION" : {
+      "CAST_WITH_FUNC_SUGGESTION" : {
         "message" : [
           "cannot cast <srcType> to <targetType>.",
           "To convert values from <srcType> to <targetType>, you can use the functions <functionNames> instead."
@@ -2009,11 +2009,6 @@
   "_LEGACY_ERROR_TEMP_1043" : {
     "message" : [
       "Invalid arguments for function <name>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1044" : {
-    "message" : [
-      "Function <name> accepts only one argument."
     ]
   },
   "_LEGACY_ERROR_TEMP_1045" : {
