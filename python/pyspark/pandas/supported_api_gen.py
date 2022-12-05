@@ -171,8 +171,8 @@ def _organize_by_implementation_status(
     """
     Check the implementation status and parameters of both modules.
 
-    Parmeters
-    ---------
+    Parameters
+    ----------
     module_name : str
         Class name that exists in the path of the module.
     pd_funcs: Dict[str, Callable]
@@ -284,11 +284,11 @@ def _update_all_supported_status(
     """
     Updates supported status across multiple module paths.
 
-    Parmeters
-    ---------
+    Parameters
+    ----------
     all_supported_status: Dict[Tuple[str, str], Dict[str, SupportedStatus]]
         Data that stores the supported status across multiple module paths.
-    pd_modles: List[str]
+    pd_modules: List[str]
         Name list of pandas modules.
     pd_module_group : Any
         Specific path of importable pandas module.

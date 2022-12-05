@@ -144,7 +144,7 @@ class SparkSeriesMethods(SparkIndexOpsMethods["ps.Series"]):
 
         .. note:: It forces to lose the index and end up with using default index. It is
             preferred to use :meth:`Series.spark.transform` or `:meth:`DataFrame.spark.apply`
-            with specifying the `inedx_col`.
+            with specifying the `index_col`.
 
         .. note:: It does not require to have the same length of the input and output.
             However, it requires to create a new DataFrame internally which will require

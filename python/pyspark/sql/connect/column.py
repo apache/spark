@@ -510,6 +510,13 @@ class Column:
     isNull = _unary_op("isNull", _isNull_doc)
     isNotNull = _unary_op("isNotNull", _isNotNull_doc)
 
+    def __ne__(  # type: ignore[override]
+        self,
+        other: Any,
+    ) -> "Column":
+        """binary function"""
+        return _func_op("not")(_bin_op("==")(self, other))
+
     # string methods
     def contains(self, other: Union[PrimitiveType, "Column"]) -> "Column":
         """

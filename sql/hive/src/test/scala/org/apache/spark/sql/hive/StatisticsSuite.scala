@@ -537,7 +537,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         }.getMessage
         assert(message.contains(
           "DS is not a valid partition column in table " +
-            s"`$SESSION_CATALOG_NAME`.`default`.`${tableName.toLowerCase(Locale.ROOT)}`"))
+            s"`$SESSION_CATALOG_NAME`.`default`.`$tableName`"))
       }
     }
   }
