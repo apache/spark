@@ -2256,9 +2256,9 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       Seq(2d))
   }
 
-  test("Array Intersect") {
-//    val a1 = Literal.create(Seq(1, 2, 4), ArrayType(IntegerType, false))
-//    val a2 = Literal.create(Seq(1, 2, null, 4, 5, null), ArrayType(IntegerType, true))
+  test("Array Insert") {
+    val a1 = Literal.create(Seq(1, 2, 4), ArrayType(IntegerType, false))
+    val a2 = Literal.create(Seq(1, 2, null, 4, 5, null), ArrayType(IntegerType, true))
 //    val a3 = Literal.create(Seq[Boolean](true, false, true), ArrayType(BooleanType, false))
 //    val a4 = Literal.create(Seq[Boolean](true, false, null), ArrayType(BooleanType, true))
 //    val a5 = Literal.create(Seq[Byte](1, 2, 3, 2), ArrayType(ByteType, containsNull = false))
@@ -2280,7 +2280,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 //    val a20 = Literal.create(Seq.empty[Long], ArrayType(LongType, false))
 //    val a21 = Literal.create(Seq.empty[String], ArrayType(StringType, false))
 //
-//    val litThreeInt = Literal.create(3, IntegerType)
+    val litThreeInt = Literal.create(3, IntegerType)
 //    val litZeroInt = Literal.create(0, IntegerType)
 //    val litNullInt = Literal.create(null, IntegerType)
 //    val litMinusTwoInt = Literal.create(-2, IntegerType)

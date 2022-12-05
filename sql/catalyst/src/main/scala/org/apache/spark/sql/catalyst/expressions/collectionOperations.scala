@@ -4619,16 +4619,7 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
     srcArrayExpr.dataType.asInstanceOf[ArrayType].elementType
 
   override def dataType: DataType = srcArrayExpr.dataType
-  override def inputTypes: Seq[AbstractDataType] = {
-    (srcArrayExpr.dataType, posExpr.dataType, itemExpr.dataType) match {
-      case (ArrayType(e1, hasNull), e2, e3) =>
-        TypeCoercion.findTightestCommonType(e1, e3) match {
-          case Some(dt) => Seq(ArrayType(dt, hasNull), IntegralType, dt)
-          case _ => Seq.empty
-        }
-    }
-    Seq.empty
-  }
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, IntegerType, elementType)
 
   override def eval(input: InternalRow): Any = {
     val arr = first.eval(input)
@@ -4643,20 +4634,19 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
   }
 
   override def nullSafeEval(arr: Any, pos: Any, item: Any): Any = {
-    throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(pos.asInstanceOf[Int])
-//    val baseArr = arr.asInstanceOf[ArrayData].toSeq[AnyRef](elementType)
-//    val posInt = pos.asInstanceOf[Int]
-//
-//    if (baseArr.length + 1  > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-//      throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(baseArr.length + 1)
-//    }
-//    val validatedPosInt = this.getValidPosIndexOrThrow(posInt, baseArr.length)
-//
-//    if (validatedPosInt < 0 || validatedPosInt > baseArr.length) {
-//      null
-//    } else {
-//      new GenericArrayData(baseArr.patch(posInt, Seq(item), 0))
-//    }
+    val baseArr = arr.asInstanceOf[ArrayData].toSeq[AnyRef](elementType)
+    val posInt = pos.asInstanceOf[Int]
+
+    if (baseArr.length + 1  > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+      throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(baseArr.length + 1)
+    }
+    val validatedPosInt = this.getValidPosIndexOrThrow(posInt, baseArr.length)
+
+    if (validatedPosInt < 0 || validatedPosInt > baseArr.length) {
+      null
+    } else {
+      new GenericArrayData(baseArr.patch(posInt, Seq(item), 0))
+    }
   }
 
   private def getValidPosIndexOrThrow(pos: Int, numArrayElements: Int): Int = {
