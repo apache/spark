@@ -373,7 +373,11 @@ class ExecutorPodsAllocator(
           .getItems
           .asScala
 
-        val reusablePVCs = createdPVCs.filterNot(pvc => pvcsInUse.contains(pvc.getMetadata.getName))
+        val now = Instant.now().toEpochMilli
+        val reusablePVCs = createdPVCs
+          .filterNot(pvc => pvcsInUse.contains(pvc.getMetadata.getName))
+          .filter(pvc => now - Instant.parse(pvc.getMetadata.getCreationTimestamp).toEpochMilli
+            > podAllocationDelay)
         logInfo(s"Found ${reusablePVCs.size} reusable PVCs from ${createdPVCs.size} PVCs")
         reusablePVCs
       } catch {
