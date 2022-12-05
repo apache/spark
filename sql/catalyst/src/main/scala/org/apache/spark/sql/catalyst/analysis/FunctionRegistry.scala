@@ -897,7 +897,7 @@ object FunctionRegistry {
       dataType: DataType): (String, (ExpressionInfo, FunctionBuilder)) = {
     val builder = (args: Seq[Expression]) => {
       if (args.size != 1) {
-        throw QueryCompilationErrors.functionAcceptsOnlyOneArgumentError(name)
+        throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "1", args.size)
       }
       Cast(args.head, dataType)
     }
