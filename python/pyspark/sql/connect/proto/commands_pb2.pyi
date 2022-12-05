@@ -153,17 +153,21 @@ class CreateScalarFunction(google.protobuf.message.Message):
     def parts(
         self,
     ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
-        """Fully qualified name of the function including the catalog / schema names."""
+        """(Required) Fully qualified name of the function including the catalog / schema names."""
     language: global___CreateScalarFunction.FunctionLanguage.ValueType
+    """(Required) the function language."""
     temporary: builtins.bool
+    """(Required) if this is a temporary function."""
     @property
     def argument_types(
         self,
     ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
         pyspark.sql.connect.proto.types_pb2.DataType
-    ]: ...
+    ]:
+        """(Optional) A list of argument types. Can be empty when the function does not take an argument."""
     @property
-    def return_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
+    def return_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+        """(Required) the return type of the function."""
     serialized_function: builtins.bytes
     """As a raw string serialized:"""
     literal_string: builtins.str
@@ -231,13 +235,13 @@ class CreateDataFrameViewCommand(google.protobuf.message.Message):
     REPLACE_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
-        """Required. The relation that this view will be built on."""
+        """(Required) The relation that this view will be built on."""
     name: builtins.str
-    """Required. View name."""
+    """(Required) View name."""
     is_global: builtins.bool
-    """Required. Whether this is global temp view or local temp view."""
+    """(Required) Whether this is global temp view or local temp view."""
     replace: builtins.bool
-    """Required.
+    """(Required)
 
     If true, and if the view already exists, updates it; if false, and if the view
     already exists, throws exception.
@@ -342,30 +346,31 @@ class WriteOperation(google.protobuf.message.Message):
     OPTIONS_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
-        """The output of the `input` relation will be persisted according to the options."""
+        """(Required) The output of the `input` relation will be persisted according to the options."""
     source: builtins.str
-    """Format value according to the Spark documentation. Examples are: text, parquet, delta."""
+    """(Required) Format value according to the Spark documentation. Examples are: text, parquet, delta."""
     path: builtins.str
     table_name: builtins.str
     mode: global___WriteOperation.SaveMode.ValueType
+    """(Required) the save mode."""
     @property
     def sort_column_names(
         self,
     ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
-        """List of columns to sort the output by."""
+        """(Optional) List of columns to sort the output by."""
     @property
     def partitioning_columns(
         self,
     ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
-        """List of columns for partitioning."""
+        """(Optional) List of columns for partitioning."""
     @property
     def bucket_by(self) -> global___WriteOperation.BucketBy:
-        """Optional bucketing specification. Bucketing must set the number of buckets and the columns
+        """(Optional) Bucketing specification. Bucketing must set the number of buckets and the columns
         to bucket by.
         """
     @property
     def options(self) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
-        """Optional list of configuration options."""
+        """(Optional) A list of configuration options."""
     def __init__(
         self,
         *,
