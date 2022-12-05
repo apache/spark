@@ -439,29 +439,29 @@ case class OuterReference(e: NamedExpression)
 }
 
 /**
- * A placeholder used to hold a referenced that has been temporarily resolved as the reference
+ * A placeholder used to hold a attribute that has been temporarily resolved as the reference
  * to a lateral column alias. This is created and removed by rule [[ResolveLateralColumnAlias]].
  *
  * There should be no [[LateralColumnAliasReference]] beyond analyzer: if the plan passes all
  * analysis check, then all [[LateralColumnAliasReference]] should already be removed.
  *
- * @param a A resolved [[Alias]] that is a lateral column alias referenced by the current attribute
- * @param nameParts The named parts of the original [[UnresolvedAttribute]]. Used to resolve
- *                  the attribute, or restore back.
+ * @param ne the current attribute is resolved to by lateral column alias
+ * @param nameParts The named parts of the original [[UnresolvedAttribute]]. Used to later resolve
+ *                  the attribute or restore back.
  */
-case class LateralColumnAliasReference(a: Alias, nameParts: Seq[String])
+case class LateralColumnAliasReference(ne: NamedExpression, nameParts: Seq[String])
   extends LeafExpression with NamedExpression with Unevaluable {
-  assert(a.resolved)
+  assert(ne.resolved)
   override def name: String =
     nameParts.map(n => if (n.contains(".")) s"`$n`" else n).mkString(".")
-  override def exprId: ExprId = a.exprId
-  override def qualifier: Seq[String] = a.qualifier
-  override def toAttribute: Attribute = a.toAttribute
+  override def exprId: ExprId = ne.exprId
+  override def qualifier: Seq[String] = ne.qualifier
+  override def toAttribute: Attribute = ne.toAttribute
   override def newInstance(): NamedExpression =
-    LateralColumnAliasReference(a.newInstance().asInstanceOf[Alias], nameParts)
+    LateralColumnAliasReference(ne.newInstance(), nameParts)
 
-  override def nullable: Boolean = a.nullable
-  override def dataType: DataType = a.dataType
+  override def nullable: Boolean = ne.nullable
+  override def dataType: DataType = ne.dataType
   override def prettyName: String = "lateralAliasReference"
   override def sql: String = s"$prettyName($name)"
 

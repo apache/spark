@@ -239,10 +239,10 @@ class LateralColumnAliasSuite extends QueryTest with SharedSparkSession {
   // TODO: more tests on LCA in subquery
 
   test("Lateral alias of a struct - Project") {
-    // This test fails now
-//    checkAnswer(
-//      sql("SELECT named_struct('a', 1) AS foo, foo.a + 1 AS bar"),
-//      Row(Row(1), 2))
+    checkAnswer(
+      sql("SELECT named_struct('a', 1) AS foo, foo.a + 1 AS bar"),
+      Row(Row(1), 2))
+    // TODO: more tests
   }
 
   test("Lateral alias chaining - Project") {

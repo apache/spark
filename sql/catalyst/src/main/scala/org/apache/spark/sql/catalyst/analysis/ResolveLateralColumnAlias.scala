@@ -33,7 +33,7 @@ import org.apache.spark.sql.internal.SQLConf
  * - in Aggregate TODO.
  *
  * The whole process is generally divided into two phases:
- * 1) recognize lateral alias, wrap the attributes referencing them with
+ * 1) recognize resolved lateral alias, wrap the attributes referencing them with
  *    [[LateralColumnAliasReference]]
  * 2) when the whole operator is resolved, unwrap [[LateralColumnAliasReference]].
  *    For Project, it further resolves the attributes and push down the referenced lateral aliases.
@@ -64,7 +64,10 @@ import org.apache.spark.sql.internal.SQLConf
  * [[UnresolvedAttribute]]. If success, it strips [[OuterReference]] and also wraps it with
  * [[LateralColumnAliasReference]].
  */
+// TODO revisit resolving order: top down, or bottom up
 object ResolveLateralColumnAlias extends Rule[LogicalPlan] {
+  def resolver: Resolver = conf.resolver
+
   private case class AliasEntry(alias: Alias, index: Int)
   private def insertIntoAliasMap(
       a: Alias,
@@ -74,7 +77,20 @@ object ResolveLateralColumnAlias extends Rule[LogicalPlan] {
     aliasMap + (a.name -> (prevAliases :+ AliasEntry(a, idx)))
   }
 
-  def resolver: Resolver = conf.resolver
+  /**
+   * Use the given the lateral alias candidate to resolve the name parts.
+   * @return The resolved attribute if succeeds. None if fails to resolve.
+   */
+  private def resolveByLateralAlias(
+      nameParts: Seq[String], lateralAlias: Alias): Option[NamedExpression] = {
+    val resolvedAttr = Analyzer.resolveExpressionByPlanOutput(
+      expr = UnresolvedAttribute(nameParts),
+      plan = Project(Seq(lateralAlias), OneRowRelation()),
+      resolver = resolver,
+      throws = false
+    ).asInstanceOf[NamedExpression]
+    if (resolvedAttr.resolved) Some(resolvedAttr) else None
+  }
 
   private def rewriteLateralColumnAlias(plan: LogicalPlan): LogicalPlan = {
     // phase 1: wrap
@@ -96,10 +112,9 @@ object ResolveLateralColumnAlias extends Rule[LogicalPlan] {
                   throw QueryCompilationErrors.ambiguousLateralColumnAlias(nameParts, n)
                 case n if n == 1 && aliases.head.alias.resolved =>
                   // Only resolved alias can be the lateral column alias
-                  // TODO We need to resolve to the nested field type, e.g. for query
-                  //  SELECT named_struct() AS foo, foo.a, we can't say this foo.a is the
-                  //  LateralColumnAliasReference(foo, foo.a). Otherwise, the type can be mismatched
-                  LateralColumnAliasReference(aliases.head.alias, nameParts)
+                  resolveByLateralAlias(nameParts, aliases.head.alias)
+                    .map(LateralColumnAliasReference(_, nameParts))
+                    .getOrElse(o)
                 case _ => o
               }
             case u: UnresolvedAttribute if aliasMap.contains(u.nameParts.head) &&
@@ -111,8 +126,9 @@ object ResolveLateralColumnAlias extends Rule[LogicalPlan] {
                   throw QueryCompilationErrors.ambiguousLateralColumnAlias(u.name, n)
                 case n if n == 1 && aliases.head.alias.resolved =>
                   // Only resolved alias can be the lateral column alias
-                  // TODO similar problem
-                  LateralColumnAliasReference(aliases.head.alias, u.nameParts)
+                  resolveByLateralAlias(u.nameParts, aliases.head.alias)
+                    .map(LateralColumnAliasReference(_, u.nameParts))
+                    .getOrElse(u)
                 case _ => u
               }
           }.asInstanceOf[NamedExpression]
@@ -138,9 +154,13 @@ object ResolveLateralColumnAlias extends Rule[LogicalPlan] {
       case p @ Project(projectList, child) if p.resolved
         && projectList.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
         // build the map again in case the project list changes and index goes off
-        // TODO one risk: is there any rule that strips off the Alias? that the LCA is resolved
+        // TODO one risk: is there any rule that strips off /add the Alias? that the LCA is resolved
         //  in the beginning, but when it comes to push down, it really can't find the matching one?
-        //  Restore back to UnresolvedAttribute
+        //  Restore back to UnresolvedAttribute.
+        //  Also, when resolving from bottom up should I worry about cases like:
+        //  Project [b AS c, c + 1 AS d]
+        //  +- Project [1 AS a, a AS b]
+        //  b AS c is resolved, even b refers to an alias contains the lateral alias?
         var aliasMap = CaseInsensitiveMap(Map[String, Seq[AliasEntry]]())
         val referencedAliases = collection.mutable.Set.empty[AliasEntry]
         def unwrapLCAReference(e: NamedExpression): NamedExpression = {
@@ -154,12 +174,7 @@ object ResolveLateralColumnAlias extends Rule[LogicalPlan] {
                 // Implementation notes (to-delete):
                 // this is a design decision whether to restore the UnresolvedAttribute, or
                 // directly resolve by constructing a plan and using resolveExpressionByPlanChildren
-                Analyzer.resolveExpressionByPlanOutput(
-                  expr = UnresolvedAttribute(lcaRef.nameParts),
-                  plan = Project(Seq(aliasEntry.alias), OneRowRelation()),
-                  resolver = resolver,
-                  throws = false
-                )
+                resolveByLateralAlias(lcaRef.nameParts, aliasEntry.alias).getOrElse(lcaRef)
               } else {
                 // If there is chaining, don't resolve and save to future rounds
                 lcaRef
