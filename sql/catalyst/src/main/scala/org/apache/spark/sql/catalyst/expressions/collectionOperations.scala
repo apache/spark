@@ -2265,7 +2265,6 @@ case class ElementAt(
           case _ => Seq.empty
         }
       case (l, r) => Seq.empty
-
     }
   }
 
@@ -4613,13 +4612,39 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
   group = "array_funcs",
   since = "3.4.0")
 case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes with SupportQueryContext {
+  extends TernaryExpression with ImplicitCastInputTypes with SupportQueryContext
+    with QueryErrorsBase {
 
   @transient private lazy val elementType: DataType =
     srcArrayExpr.dataType.asInstanceOf[ArrayType].elementType
 
   override def dataType: DataType = srcArrayExpr.dataType
-  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, IntegerType, elementType)
+  override def inputTypes: Seq[AbstractDataType] = {
+    (srcArrayExpr.dataType, posExpr.dataType, itemExpr.dataType) match {
+      case (ArrayType(e1, hasNull), e2: IntegralType, e3) if (e2 != LongType) =>
+        TypeCoercion.findTightestCommonType(e1, e3) match {
+          case Some(dt) => Seq(ArrayType(dt, hasNull), IntegerType, dt)
+          case _ => Seq.empty
+        }
+      case (e1, e2, e3) => Seq.empty
+    }
+    Seq.empty
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    (first.dataType, second.dataType, third.dataType) match {
+      case (_: ArrayType, e2, e3) if e2 != IntegerType =>
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> "2",
+            "requiredType" -> toSQLType(IntegerType),
+            "inputSql" -> toSQLExpr(second),
+            "inputType" -> toSQLType(second.dataType))
+        )
+      case _ => TypeCheckResult.TypeCheckSuccess
+    }
+  }
 
   override def eval(input: InternalRow): Any = {
     val arr = first.eval(input)
@@ -4634,18 +4659,26 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
   }
 
   override def nullSafeEval(arr: Any, pos: Any, item: Any): Any = {
-    val baseArr = arr.asInstanceOf[ArrayData].toSeq[AnyRef](elementType)
+    val baseArr = arr.asInstanceOf[ArrayData]
     val posInt = pos.asInstanceOf[Int]
 
-    if (baseArr.length + 1  > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-      throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(baseArr.length + 1)
+    if (baseArr.numElements() + 1  > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+      throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(baseArr.numElements() + 1)
     }
-    val validatedPosInt = this.getValidPosIndexOrThrow(posInt, baseArr.length)
+    val validatedPosInt = this.getValidPosIndexOrThrow(posInt, baseArr.numElements())
 
-    if (validatedPosInt < 0 || validatedPosInt > baseArr.length) {
+    if (validatedPosInt < 0 || validatedPosInt > baseArr.numElements()) {
       null
     } else {
-      new GenericArrayData(baseArr.patch(posInt, Seq(item), 0))
+      val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
+      baseArr.foreach(baseArr.asInstanceOf[ArrayType].elementType, (i, v) => {
+        if (i == validatedPosInt) {
+          arrayBuffer += item
+        } else {
+          arrayBuffer += v
+        }
+      })
+      new GenericArrayData(arrayBuffer)
     }
   }
 
