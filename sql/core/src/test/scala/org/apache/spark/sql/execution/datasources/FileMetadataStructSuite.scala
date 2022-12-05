@@ -277,8 +277,8 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
     val expectedSchema = new StructType()
       .add(StructField("myName", StringType))
       .add(StructField("myAge", IntegerType))
-      .add(StructField("myFileName", StringType))
-      .add(StructField("myFileSize", LongType))
+      .add(StructField("myFileName", StringType, nullable = false))
+      .add(StructField("myFileSize", LongType, nullable = false))
 
     assert(aliasDF.schema.fields.toSet == expectedSchema.fields.toSet)
 
@@ -660,13 +660,21 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
     val queryExecution = df.select("_metadata").queryExecution
     val analyzedSchema = queryExecution.analyzed.schema
     val executedSchema = queryExecution.executedPlan.schema
-    assert(analyzedSchema.fields.head.name == "_metadata")
-    assert(executedSchema.fields.head.name == "_metadata")
     // For stateful streaming, we store the schema in the state store
     // and check consistency across batches.
     // To avoid state schema compatibility mismatched,
     // we should keep nullability consistent for _metadata struct
+    assert(analyzedSchema.fields.head.name == "_metadata")
+    assert(executedSchema.fields.head.name == "_metadata")
+
+    // Metadata struct is not nullable
     assert(!analyzedSchema.fields.head.nullable)
     assert(analyzedSchema.fields.head.nullable == executedSchema.fields.head.nullable)
+
+    // All sub-fields all not nullable
+    val analyzedStruct = analyzedSchema.fields.head.dataType.asInstanceOf[StructType]
+    val executedStruct = executedSchema.fields.head.dataType.asInstanceOf[StructType]
+    assert(analyzedStruct.fields.forall(!_.nullable))
+    assert(executedStruct.fields.forall(!_.nullable))
   }
 }
