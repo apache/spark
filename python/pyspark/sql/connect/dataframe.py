@@ -1554,6 +1554,44 @@ class DataFrame(object):
         """
         print(self._explain_string(extended=extended, mode=mode))
 
+    def createTempView(self, name: str) -> None:
+        """Creates a local temporary view with this :class:`DataFrame`.
+
+        The lifetime of this temporary table is tied to the :class:`SparkSession`
+        that was used to create this :class:`DataFrame`.
+        throws :class:`TempTableAlreadyExistsException`, if the view name already exists in the
+        catalog.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        name : str
+            Name of the view.
+        """
+        command = plan.CreateView(
+            child=self._plan, name=name, is_global=False, replace=False
+        ).command(session=self._session.client)
+        self._session.client.execute_command(command)
+
+    def createOrReplaceTempView(self, name: str) -> None:
+        """Creates or replaces a local temporary view with this :class:`DataFrame`.
+
+        The lifetime of this temporary table is tied to the :class:`SparkSession`
+        that was used to create this :class:`DataFrame`.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        name : str
+            Name of the view.
+        """
+        command = plan.CreateView(
+            child=self._plan, name=name, is_global=False, replace=True
+        ).command(session=self._session.client)
+        self._session.client.execute_command(command)
+
     def createGlobalTempView(self, name: str) -> None:
         """Creates a global temporary view with this :class:`DataFrame`.
 
