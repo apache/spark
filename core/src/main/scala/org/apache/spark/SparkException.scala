@@ -92,7 +92,7 @@ object SparkException {
    * Tests an condition, throwing an `SparkException` with
    * the error class `INTERNAL_ERROR` if false.
    */
-  def checkInternalError(condition: Boolean, msg: => String): Unit = {
+  @inline final def checkInternalError(condition: Boolean, msg: => String): Unit = {
     if (!condition) {
       throw internalError(msg)
     }
