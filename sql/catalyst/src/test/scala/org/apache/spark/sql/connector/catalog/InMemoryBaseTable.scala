@@ -280,6 +280,7 @@ abstract class InMemoryBaseTable(
       numRows: OptionalLong,
       override val columnStats: Optional[HashMap[NamedReference, ColumnStatistics]])
     extends Statistics
+
   case class InMemoryColumnStats (
       override val distinctCount: Optional[BigInteger],
       override val min: Optional[AnyRef],
