@@ -71,7 +71,7 @@ class LateralColumnAliasSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("Lateral alias in project") {
+  test("Lateral alias basics - Project") {
     checkAnswer(sql(s"select dept as d, d + 1 as e from $testTable where name = 'amy'"),
       Row(1, 2))
 
@@ -91,28 +91,7 @@ class LateralColumnAliasSuite extends QueryTest with SharedSparkSession {
           s"new_income from $testTable where name = 'amy'"),
       Row(20000, 23000))
 
-    // When the lateral alias conflicts with the table column, it should resolved as the table
-    // column
-    checkAnswer(
-      sql(
-        "select salary * 2 as salary, salary * 2 + bonus as " +
-          s"new_income from $testTable where name = 'amy'"),
-      Row(20000, 21000))
-
-    checkAnswer(
-      sql(
-        "select salary * 2 as salary, (salary + bonus) * 3 - (salary + bonus) as " +
-          s"new_income from $testTable where name = 'amy'"),
-      Row(20000, 22000))
-
-    checkAnswer(
-      sql(
-        "select salary * 2 as salary, (salary + bonus) * 2 as bonus, " +
-          s"salary + bonus as prev_income, prev_income + bonus + salary from $testTable" +
-          " where name = 'amy'"),
-      Row(20000, 22000, 11000, 22000))
-
-    // Corner cases for resolution order
+    // should referring to the previously defined LCA
     checkAnswer(
       sql(s"SELECT salary * 1.5 AS d, d, 10000 AS d FROM $testTable WHERE name = 'jen'"),
       Row(18000, 18000, 10000)
@@ -176,6 +155,27 @@ class LateralColumnAliasSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("Lateral alias conflicts with table column - Project") {
+    checkAnswer(
+      sql(
+        "select salary * 2 as salary, salary * 2 + bonus as " +
+          s"new_income from $testTable where name = 'amy'"),
+      Row(20000, 21000))
+
+    checkAnswer(
+      sql(
+        "select salary * 2 as salary, (salary + bonus) * 3 - (salary + bonus) as " +
+          s"new_income from $testTable where name = 'amy'"),
+      Row(20000, 22000))
+
+    checkAnswer(
+      sql(
+        "select salary * 2 as salary, (salary + bonus) * 2 as bonus, " +
+          s"salary + bonus as prev_income, prev_income + bonus + salary from $testTable" +
+          " where name = 'amy'"),
+      Row(20000, 22000, 11000, 22000))
+  }
+
   test("Lateral alias conflicts with OuterReference - Project") {
     // an attribute can both be resolved as LCA and OuterReference
     val query1 =
@@ -220,14 +220,14 @@ class LateralColumnAliasSuite extends QueryTest with SharedSparkSession {
     // a bit complex subquery that the id + 1 is first wrapped with OuterReference
     // test if lca rule strips the OuterReference and resolves to lateral alias
     val query4 =
-      s"""
-         |SELECT *
-         |FROM range(1, 7)
-         |WHERE (
-         |  SELECT id2
-         |  FROM (SELECT dept * 2.0 AS id, id + 1 AS id2 FROM $testTable)) > 5
-         |ORDER BY id
-         |""".stripMargin
+    s"""
+       |SELECT *
+       |FROM range(1, 7)
+       |WHERE (
+       |  SELECT id2
+       |  FROM (SELECT dept * 2.0 AS id, id + 1 AS id2 FROM $testTable)) > 5
+       |ORDER BY id
+       |""".stripMargin
     withLCAOff { intercept[AnalysisException] { sql(query4) } } // surprisingly can't run ..
     withLCAOn {
       val analyzedPlan = sql(query4).queryExecution.analyzed
@@ -236,5 +236,30 @@ class LateralColumnAliasSuite extends QueryTest with SharedSparkSession {
       // checkAnswer(sql(query4), Range(1, 7).map(Row(_)))
     }
   }
-  // TODO: LCA in subquery
+  // TODO: more tests on LCA in subquery
+
+  test("Lateral alias of a struct - Project") {
+    // This test fails now
+//    checkAnswer(
+//      sql("SELECT named_struct('a', 1) AS foo, foo.a + 1 AS bar"),
+//      Row(Row(1), 2))
+  }
+
+  test("Lateral alias chaining - Project") {
+    checkAnswer(
+      sql(
+        s"""
+           |SELECT bonus * 1.1 AS new_bonus, salary + new_bonus AS new_base,
+           |       new_base * 1.1 AS new_total, new_total - new_base AS r,
+           |       new_total - r
+           |FROM $testTable WHERE name = 'cathy'
+           |""".stripMargin),
+      Row(1320, 10320, 11352, 1032, 10320)
+    )
+
+    checkAnswer(
+      sql("SELECT 1 AS a, a + 1 AS b, b - 1, b + 1 AS c, c + 1 AS d, d - a AS e, e + 1"),
+      Row(1, 2, 1, 3, 4, 3, 4)
+    )
+  }
 }
