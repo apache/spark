@@ -4670,15 +4670,16 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
     if (validatedPosInt < 0 || validatedPosInt > baseArr.numElements()) {
       null
     } else {
-      val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
-      baseArr.foreach(baseArr.asInstanceOf[ArrayType].elementType, (i, v) => {
-        if (i == validatedPosInt) {
-          arrayBuffer += item
+      val newArray = new Array[Any](arr.asInstanceOf[ArrayData].numElements() + 1)
+      arr.asInstanceOf[ArrayData].foreach(elementType, (i, v) =>
+        if (i >= validatedPosInt) {
+          newArray(i+1) = v
         } else {
-          arrayBuffer += v
+          newArray(i) = v
         }
-      })
-      new GenericArrayData(arrayBuffer)
+      )
+      if (item != null) newArray(validatedPosInt) = item
+      new GenericArrayData(newArray)
     }
   }
 
