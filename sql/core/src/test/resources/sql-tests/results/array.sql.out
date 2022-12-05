@@ -380,22 +380,46 @@ NULL
 
 
 -- !query
-select
-  array_compact(boolean_array),
-  array_compact(tinyint_array),
-  array_compact(smallint_array),
-  array_compact(int_array),
-  array_compact(bigint_array),
-  array_compact(decimal_array),
-  array_compact(double_array),
-  array_compact(float_array),
-  array_compact(date_array),
-  array_compact(timestamp_array)
-from primitive_arrays
+create temporary view invalid_datatype as select * from values
+(1), (2), (3)
+as invalid_datatype(id)
 -- !query schema
-struct<array_compact(boolean_array):array<boolean>,array_compact(tinyint_array):array<tinyint>,array_compact(smallint_array):array<smallint>,array_compact(int_array):array<int>,array_compact(bigint_array):array<bigint>,array_compact(decimal_array):array<decimal(19,0)>,array_compact(double_array):array<double>,array_compact(float_array):array<float>,array_compact(date_array):array<date>,array_compact(timestamp_array):array<timestamp>>
+struct<>
 -- !query output
-[true]	[2,1]	[2,1]	[2,1]	[2,1]	[9223372036854775809,9223372036854775808]	[2.0,1.0]	[2.0,1.0]	[2016-03-14,2016-03-13]	[2016-11-15 20:54:00,2016-11-12 20:54:00]
+
+
+
+-- !query
+select array_compact(id) from invalid_datatype
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"id\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"ARRAY\"",
+    "sqlExpr" : "\"array_compact(id)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "array_compact(id)"
+  } ]
+}
+
+
+-- !query
+select array_compact(array("1", null, "2", null))
+-- !query schema
+struct<array_compact(array(1, NULL, 2, NULL)):array<string>>
+-- !query output
+["1","2"]
 
 
 -- !query
