@@ -36,11 +36,6 @@ object MimaExcludes {
 
   // Exclude rules for 3.4.x from 3.3.0
   lazy val v34excludes = defaultExcludes ++ Seq(
-    // [SPARK-41378] Support Column Stats in DS v2
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.connector.read.Statistics"),
-    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.connector.read.SupportsReportStatistics.estimateStatistics"),
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.connector.read.SupportsReportStatistics.estimateStatistics"),
-
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.recommendation.ALS.checkedCast"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.recommendation.ALSModel.checkedCast"),
 

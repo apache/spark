@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.read.stats;
+package org.apache.spark.sql.connector.read;
 
 import java.util.HashMap;
 import java.util.Optional;
@@ -23,7 +23,7 @@ import java.util.OptionalLong;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.NamedReference;
-import org.apache.spark.sql.connector.read.SupportsReportStatistics;
+import org.apache.spark.sql.connector.read.colstats.ColumnStatistics;
 
 /**
  * An interface to represent statistics for a data source, which is returned by

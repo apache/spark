@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeSet, Expression, Expr
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.connector.read.{Batch, InputPartition, Scan, SupportsReportStatistics}
-import org.apache.spark.sql.connector.read.stats.Statistics
+import org.apache.spark.sql.connector.read.Statistics
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.PartitionedFileUtil
 import org.apache.spark.sql.execution.datasources._

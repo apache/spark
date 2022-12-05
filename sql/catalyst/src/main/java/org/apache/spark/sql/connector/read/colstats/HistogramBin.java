@@ -15,46 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.read.stats;
+package org.apache.spark.sql.connector.read.colstats;
 
 import org.apache.spark.annotation.Evolving;
-import java.math.BigInteger;
-import java.util.Optional;
-import java.util.OptionalLong;
 
 /**
- * An interface to represent column statistics, which is part of
- * {@link Statistics}.
+ * An interface to represent a bin in an equi-height histogram.
  *
  * @since 3.4.0
  */
 @Evolving
-public interface ColumnStatistics {
-  default Optional<BigInteger> distinctCount() {
-    return Optional.empty();
-  }
-
-  default Optional<Object> min() {
-    return Optional.empty();
-  }
-
-  default Optional<Object> max() {
-    return Optional.empty();
-  }
-
-  default Optional<BigInteger> nullCount() {
-    return Optional.empty();
-  }
-
-  default OptionalLong avgLen() {
-    return OptionalLong.empty();
-  }
-
-  default OptionalLong maxLen() {
-    return OptionalLong.empty();
-  }
-
-  default Optional<Histogram> histogram() {
-    return Optional.empty();
-  }
+public interface HistogramBin {
+  double lo();
+  double hi();
+  long ndv();
 }

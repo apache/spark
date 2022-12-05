@@ -2773,7 +2773,7 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  test("SPARK-XXXXX: test column stats") {
+  test("SPARK-41378: test column stats") {
     spark.sql("CREATE TABLE testcat.test (id bigint NOT NULL, data string)")
     spark.sql("INSERT INTO testcat.test values (1, 'test1'), (2, 'test2'), (3, 'test3')," +
       " (4, 'test4'), (5, 'test5')")

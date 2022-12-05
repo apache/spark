@@ -15,18 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.read.stats;
+package org.apache.spark.sql.connector.read.colstats;
 
 import org.apache.spark.annotation.Evolving;
 
 /**
- * An interface to represent a bin in an equi-height histogram.
+ * An interface to represent an equi-height histogram, which is a part of
+ * {@link ColumnStatistics}. Equi-height histogram represents the distribution of
+ * a column's values by a sequence of bins.
  *
  * @since 3.4.0
  */
 @Evolving
-public interface HistogramBin {
-  double lo();
-  double hi();
-  long ndv();
+public interface Histogram {
+  double height();
+  HistogramBin[] bins();
 }

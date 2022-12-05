@@ -15,19 +15,46 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.read.stats;
+package org.apache.spark.sql.connector.read.colstats;
 
 import org.apache.spark.annotation.Evolving;
+import java.math.BigInteger;
+import java.util.Optional;
+import java.util.OptionalLong;
 
 /**
- * An interface to represent an equi-height histogram, which is a part of
- * {@link ColumnStatistics}. Equi-height histogram represents the distribution of
- * a column's values by a sequence of bins.
+ * An interface to represent column statistics, which is part of
+ * {@link Statistics}.
  *
  * @since 3.4.0
  */
 @Evolving
-public interface Histogram {
-  double height();
-  HistogramBin[] bins();
+public interface ColumnStatistics {
+  default Optional<BigInteger> distinctCount() {
+    return Optional.empty();
+  }
+
+  default Optional<Object> min() {
+    return Optional.empty();
+  }
+
+  default Optional<Object> max() {
+    return Optional.empty();
+  }
+
+  default Optional<BigInteger> nullCount() {
+    return Optional.empty();
+  }
+
+  default OptionalLong avgLen() {
+    return OptionalLong.empty();
+  }
+
+  default OptionalLong maxLen() {
+    return OptionalLong.empty();
+  }
+
+  default Optional<Histogram> histogram() {
+    return Optional.empty();
+  }
 }
