@@ -60,8 +60,6 @@ class MemoryProfilerTests(PySparkTestCase):
         self.assertTrue("udf_%d_memory.txt" % id in os.listdir(d))
 
     def test_profile_pandas_udf(self):
-        import pandas as pd
-
         udfs = [self.exec_pandas_udf_ser_to_ser, self.exec_pandas_udf_ser_to_scalar]
         udf_names = ["ser_to_ser", "ser_to_scalar"]
         for f, f_name in zip(udfs, udf_names):
