@@ -539,6 +539,15 @@ class SparkConnectPlanner(session: SparkSession) {
    * @return
    */
   private def transformScalarFunction(fun: proto.Expression.UnresolvedFunction): Expression = {
+    if (fun.getFunctionName == "product") {
+      if (fun.getArgumentsCount != 1) {
+        throw InvalidPlanInput("Product requires single child expression")
+      }
+      return aggregate
+        .Product(transformExpression(fun.getArgumentsList.asScala.head))
+        .toAggregateExpression()
+    }
+
     if (fun.getIsUserDefinedFunction) {
       UnresolvedFunction(
         session.sessionState.sqlParser.parseFunctionIdentifier(fun.getFunctionName),
