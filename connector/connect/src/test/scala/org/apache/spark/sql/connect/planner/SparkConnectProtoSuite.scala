@@ -91,10 +91,6 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   }
 
   test("UnresolvedFunction resolution.") {
-    assertThrows[IllegalArgumentException] {
-      transform(connectTestRelation.select(callFunction("default.hex", Seq("id".protoAttr))))
-    }
-
     val connectPlan =
       connectTestRelation.select(callFunction(Seq("default", "hex"), Seq("id".protoAttr)))
 
@@ -233,7 +229,8 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   }
 
   test("Test StructType in LocalRelation") {
-    val connectPlan = createLocalRelationProtoByQualifiedAttributes(Seq("a".struct("id".int)))
+    val connectPlan = createLocalRelationProtoByAttributeReferences(
+      Seq(AttributeReference("a", StructType(Seq(StructField("id", IntegerType))))()))
     val sparkPlan =
       LocalRelation(AttributeReference("a", StructType(Seq(StructField("id", IntegerType))))())
     comparePlans(connectPlan, sparkPlan)
@@ -339,6 +336,37 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(
       connectTestRelation.na.fillValueMap(Map("id" -> 1L, "name" -> "xyz")),
       sparkTestRelation.na.fill(Map("id" -> 1L, "name" -> "xyz")))
+  }
+
+  test("SPARK-41148: Test drop na") {
+    comparePlans(connectTestRelation.na.drop(), sparkTestRelation.na.drop())
+    comparePlans(
+      connectTestRelation.na.drop(cols = Seq("id")),
+      sparkTestRelation.na.drop(cols = Seq("id")))
+    comparePlans(
+      connectTestRelation.na.drop(how = Some("all")),
+      sparkTestRelation.na.drop(how = "all"))
+    comparePlans(
+      connectTestRelation.na.drop(how = Some("all"), cols = Seq("id", "name")),
+      sparkTestRelation.na.drop(how = "all", cols = Seq("id", "name")))
+    comparePlans(
+      connectTestRelation.na.drop(minNonNulls = Some(1)),
+      sparkTestRelation.na.drop(minNonNulls = 1))
+    comparePlans(
+      connectTestRelation.na.drop(minNonNulls = Some(1), cols = Seq("id", "name")),
+      sparkTestRelation.na.drop(minNonNulls = 1, cols = Seq("id", "name")))
+  }
+
+  test("SPARK-41315: Test replace") {
+    comparePlans(
+      connectTestRelation.na.replace(cols = Seq("id"), replacement = Map(1.0 -> 2.0)),
+      sparkTestRelation.na.replace(cols = Seq("id"), replacement = Map(1.0 -> 2.0)))
+    comparePlans(
+      connectTestRelation.na.replace(cols = Seq("name"), replacement = Map("a" -> "b")),
+      sparkTestRelation.na.replace(cols = Seq("name"), replacement = Map("a" -> "b")))
+    comparePlans(
+      connectTestRelation.na.replace(cols = Seq("*"), replacement = Map("a" -> "b")),
+      sparkTestRelation.na.replace(col = "*", replacement = Map("a" -> "b")))
   }
 
   test("Test summary") {
@@ -505,12 +533,24 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(select(1), spark.sql("SELECT 1"))
   }
 
-  private def createLocalRelationProtoByQualifiedAttributes(
-      attrs: Seq[proto.Expression.QualifiedAttribute]): proto.Relation = {
+  test("Test withColumns") {
+    comparePlans(
+      connectTestRelation.withColumns(Map("id" -> 1024, "col_not_exist" -> 2048)),
+      sparkTestRelation.withColumns(Map("id" -> lit(1024), "col_not_exist" -> lit(2048))))
+  }
+
+  test("Test cast") {
+    comparePlans(
+      connectTestRelation.select("id".protoAttr.cast(
+        proto.DataType.newBuilder().setString(proto.DataType.String.getDefaultInstance).build())),
+      sparkTestRelation.select(col("id").cast(StringType)))
+  }
+
+  private def createLocalRelationProtoByAttributeReferences(
+      attrs: Seq[AttributeReference]): proto.Relation = {
     val localRelationBuilder = proto.LocalRelation.newBuilder()
 
-    val attributes = attrs.map(exp =>
-      AttributeReference(exp.getName, DataTypeProtoConverter.toCatalystType(exp.getType))())
+    val attributes = attrs.map(exp => AttributeReference(exp.name, exp.dataType)())
     val buffer = ArrowConverters
       .toBatchWithSchemaIterator(
         Iterator.empty,

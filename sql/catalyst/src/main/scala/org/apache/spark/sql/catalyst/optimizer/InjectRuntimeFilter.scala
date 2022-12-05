@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import scala.annotation.tailrec
+
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
@@ -116,6 +118,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
    * do not add a subquery that might have an expensive computation
    */
   private def isSelectiveFilterOverScan(plan: LogicalPlan): Boolean = {
+    @tailrec
     def isSelective(
         p: LogicalPlan,
         predicateReference: AttributeSet,
@@ -225,6 +228,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   }
 
   // This checks if there is already a DPP filter, as this rule is called just after DPP.
+  @tailrec
   def hasDynamicPruningSubquery(
       left: LogicalPlan,
       right: LogicalPlan,
