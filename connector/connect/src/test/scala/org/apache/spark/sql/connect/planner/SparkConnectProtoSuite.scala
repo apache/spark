@@ -530,11 +530,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   }
 
   test("Project does not require an input") {
-    val a = spark.sessionState.sqlParser.parseExpression("*")
-    val b = spark.sessionState.sqlParser.parseExpression("test")
-    val c = spark.sessionState.sqlParser.parseExpression("*")
-
-    //    comparePlans(select(1), spark.sql("SELECT 1"))
+    comparePlans(select(1), spark.sql("SELECT 1"))
   }
 
   test("Test withColumns") {
