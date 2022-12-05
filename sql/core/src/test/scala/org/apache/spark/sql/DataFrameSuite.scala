@@ -1134,6 +1134,11 @@ class DataFrameSuite extends QueryTest
     checkAnswer(approxSummaryDF, approxSummaryResult)
   }
 
+  test("SPARK-41391: Correct the output column name of groupBy.agg(count_distinct)") {
+    val df = person.groupBy("id").agg(count_distinct(col("name")))
+    assert(df.columns === Array("id", "count(DISTINCT name)"))
+  }
+
   test("summary advanced") {
     val stats = Array("count", "50.01%", "max", "mean", "min", "25%")
     val orderMatters = person2.summary(stats: _*)

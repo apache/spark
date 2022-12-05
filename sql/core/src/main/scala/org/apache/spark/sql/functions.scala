@@ -443,10 +443,11 @@ object functions {
    * @since 3.2.0
    */
   @scala.annotation.varargs
-  def count_distinct(expr: Column, exprs: Column*): Column =
+  def count_distinct(expr: Column, exprs: Column*): Column = {
     // For usage like countDistinct("*"), we should let analyzer expand star and
     // resolve function.
-    Column(UnresolvedFunction("count", (expr +: exprs).map(_.expr), isDistinct = true))
+    withAggregateFunction(Count((expr +: exprs).map(_.expr)), isDistinct = true)
+  }
 
   /**
    * Aggregate function: returns the population covariance for two columns.
