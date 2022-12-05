@@ -449,7 +449,9 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             sdf.select(SF.concat_ws("-", sdf.a, "c")).toPandas(),
         )
 
-        # Disable the test case below because of:
+        # Disable the test for "decode" because of inconsistent column names,
+        # as shown below
+        #
         # >>> sdf.select(SF.decode("c", "UTF-8")).toPandas()
         # stringdecode(c, UTF-8)
         # 0                   None
@@ -458,6 +460,7 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
         # decode(c, UTF-8)
         # 0             None
         # 1               ab
+        #
         # self.assert_eq(
         #     cdf.select(CF.decode("c", "UTF-8")).toPandas(),
         #     sdf.select(SF.decode("c", "UTF-8")).toPandas(),
