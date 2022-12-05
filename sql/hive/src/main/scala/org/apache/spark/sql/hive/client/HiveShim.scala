@@ -754,7 +754,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     val addPartitionDesc = new AddPartitionDesc(db, table, ignoreIfExists)
     parts.zipWithIndex.foreach { case (s, i) =>
       addPartitionDesc.addPartition(
-        s.spec.asJava, s.storage.locationUri.map(CatalogUtils.URIToString(_)).orNull)
+        s.spec.asJava, s.storage.locationUri.map(CatalogUtils.URIToString).orNull)
       if (s.parameters.nonEmpty) {
         addPartitionDesc.getPartition(i).setPartParams(s.parameters.asJava)
       }
@@ -1199,13 +1199,11 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
   override def getDriverResults(driver: Driver): Seq[String] = {
     val res = new JArrayList[Object]()
     getDriverResultsMethod.invoke(driver, res)
-    res.asScala.map { r =>
-      r match {
-        case s: String => s
-        case a: Array[Object] => a(0).asInstanceOf[String]
-      }
-    }.toSeq
-  }
+    res.asScala.map {
+      case s: String => s
+      case a: Array[Object] => a(0).asInstanceOf[String]
+    }
+  }.toSeq
 
   override def getDatabaseOwnerName(db: Database): String = {
     Option(getDatabaseOwnerNameMethod.invoke(db)).map(_.asInstanceOf[String]).getOrElse("")

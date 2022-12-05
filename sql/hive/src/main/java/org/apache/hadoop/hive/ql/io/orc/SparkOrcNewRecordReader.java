@@ -37,7 +37,7 @@ public class SparkOrcNewRecordReader extends
   private final int numColumns;
   OrcStruct value;
   private float progress = 0.0f;
-  private ObjectInspector objectInspector;
+  private final ObjectInspector objectInspector;
 
   public SparkOrcNewRecordReader(Reader file, Configuration conf,
       long offset, long length) throws IOException {
@@ -56,19 +56,17 @@ public class SparkOrcNewRecordReader extends
   }
 
   @Override
-  public NullWritable getCurrentKey() throws IOException,
-      InterruptedException {
+  public NullWritable getCurrentKey() {
     return NullWritable.get();
   }
 
   @Override
-  public OrcStruct getCurrentValue() throws IOException,
-      InterruptedException {
+  public OrcStruct getCurrentValue() {
     return value;
   }
 
   @Override
-  public float getProgress() throws IOException, InterruptedException {
+  public float getProgress() {
     return progress;
   }
 
@@ -78,7 +76,7 @@ public class SparkOrcNewRecordReader extends
   }
 
   @Override
-  public boolean nextKeyValue() throws IOException, InterruptedException {
+  public boolean nextKeyValue() throws IOException {
     if (reader.hasNext()) {
       reader.next(value);
       progress = reader.getProgress();

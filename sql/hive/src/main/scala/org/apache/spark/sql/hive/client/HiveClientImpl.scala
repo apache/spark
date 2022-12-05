@@ -330,7 +330,7 @@ private[hive] class HiveClientImpl(
       if (databaseExists(db)) {
         state.setCurrentDatabase(db)
       } else {
-        throw new NoSuchDatabaseException(db)
+        throw NoSuchDatabaseException(db)
       }
     }
   }
@@ -356,7 +356,11 @@ private[hive] class HiveClientImpl(
       ignoreIfNotExists: Boolean,
       cascade: Boolean): Unit = withHiveState {
     try {
-      shim.dropDatabase(client, name, true, ignoreIfNotExists, cascade)
+      shim.dropDatabase(client,
+        name,
+        deleteData = true,
+        ignoreUnknownDb = ignoreIfNotExists,
+        cascade = cascade)
     } catch {
       case e: HiveException if e.getMessage.contains(s"Database $name is not empty") =>
         throw QueryCompilationErrors.cannotDropNonemptyDatabaseError(name)
@@ -401,7 +405,7 @@ private[hive] class HiveClientImpl(
         description = Option(d.getDescription).getOrElse(""),
         locationUri = CatalogUtils.stringToURI(d.getLocationUri),
         properties = params)
-    }.getOrElse(throw new NoSuchDatabaseException(dbName))
+    }.getOrElse(throw NoSuchDatabaseException(dbName))
   }
 
   override def databaseExists(dbName: String): Boolean = withHiveState {
@@ -413,7 +417,7 @@ private[hive] class HiveClientImpl(
   }
 
   private def getRawTableOption(dbName: String, tableName: String): Option[HiveTable] = {
-    Option(shim.getTable(client, dbName, tableName, false /* do not throw exception */))
+    Option(shim.getTable(client, dbName, tableName, throwException = false))
   }
 
   private def getRawTablesByName(dbName: String, tableNames: Seq[String]): Seq[HiveTable] = {
@@ -594,7 +598,8 @@ private[hive] class HiveClientImpl(
       tableName: String,
       ignoreIfNotExists: Boolean,
       purge: Boolean): Unit = withHiveState {
-    shim.dropTable(client, dbName, tableName, true, ignoreIfNotExists, purge)
+    shim.dropTable(client, dbName, tableName, deleteData = true,
+      ignoreIfNotExists = ignoreIfNotExists, purge = purge)
   }
 
   override def alterTable(
@@ -679,7 +684,7 @@ private[hive] class HiveClientImpl(
       purge: Boolean,
       retainData: Boolean): Unit = withHiveState {
     // TODO: figure out how to drop multiple partitions in one call
-    val hiveTable = shim.getTable(client, db, table, true /* throw exception */)
+    val hiveTable = shim.getTable(client, db, table, throwException = true)
     // do the check at first and collect all the matching partitions
     val matchingParts =
       specs.flatMap { s =>
@@ -727,7 +732,7 @@ private[hive] class HiveClientImpl(
     val hiveTable = rawHiveTable.rawTable.asInstanceOf[HiveTable]
     hiveTable.setOwner(userName)
     specs.zip(newSpecs).foreach { case (oldSpec, newSpec) =>
-      if (shim.getPartition(client, hiveTable, newSpec.asJava, false) != null) {
+      if (shim.getPartition(client, hiveTable, newSpec.asJava, forceCreate = false) != null) {
         throw new PartitionsAlreadyExistException(db, table, newSpec)
       }
       val hivePart = getPartitionOption(rawHiveTable, oldSpec)
@@ -783,7 +788,7 @@ private[hive] class HiveClientImpl(
       rawHiveTable: RawHiveTable,
       spec: TablePartitionSpec): Option[CatalogTablePartition] = withHiveState {
     val hiveTable = rawHiveTable.rawTable.asInstanceOf[HiveTable]
-    val hivePartition = shim.getPartition(client, hiveTable, spec.asJava, false)
+    val hivePartition = shim.getPartition(client, hiveTable, spec.asJava, forceCreate = false)
     Option(hivePartition)
       .map(fromHivePartition(_, rawHiveTable.toCatalogTable.storage.locationUri))
   }
@@ -946,7 +951,7 @@ private[hive] class HiveClientImpl(
       replace: Boolean,
       inheritTableSpecs: Boolean,
       isSrcLocal: Boolean): Unit = withHiveState {
-    val hiveTable = shim.getTable(client, dbName, tableName, true /* throw exception */)
+    val hiveTable = shim.getTable(client, dbName, tableName, throwException = true)
     shim.loadPartition(
       client,
       new Path(loadPath), // TODO: Use URI
@@ -978,7 +983,7 @@ private[hive] class HiveClientImpl(
       partSpec: java.util.LinkedHashMap[String, String],
       replace: Boolean,
       numDP: Int): Unit = withHiveState {
-    val hiveTable = shim.getTable(client, dbName, tableName, true /* throw exception */)
+    val hiveTable = shim.getTable(client, dbName, tableName)
     shim.loadDynamicPartitions(
       client,
       new Path(loadPath),
@@ -1053,7 +1058,7 @@ private[hive] class HiveClientImpl(
     }
     shim.getAllDatabases(client).filterNot(_ == "default").foreach { db =>
       logDebug(s"Dropping Database: $db")
-      shim.dropDatabase(client, db, true, false, true)
+      shim.dropDatabase(client, db, deleteData = true, ignoreUnknownDb = false, cascade = true)
     }
   }
 }
@@ -1184,7 +1189,7 @@ private[hive] object HiveClientImpl extends Logging {
     }
     val storageDesc = new StorageDescriptor
     val serdeInfo = new SerDeInfo
-    p.storage.locationUri.map(CatalogUtils.URIToString(_)).foreach(storageDesc.setLocation)
+    p.storage.locationUri.map(CatalogUtils.URIToString).foreach(storageDesc.setLocation)
     p.storage.inputFormat.foreach(storageDesc.setInputFormat)
     p.storage.outputFormat.foreach(storageDesc.setOutputFormat)
     p.storage.serde.foreach(serdeInfo.setSerializationLib)

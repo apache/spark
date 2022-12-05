@@ -190,7 +190,7 @@ case class OptimizedCreateHiveTableAsSelectCommand(
     InsertIntoHadoopFsRelationCommand(
       hadoopRelation.location.rootPaths.head,
       Map.empty, // We don't support to convert partitioned table.
-      false,
+      ifPartitionNotExists = false,
       Seq.empty, // We don't support to convert partitioned table.
       hadoopRelation.bucketSpec,
       hadoopRelation.fileFormat,

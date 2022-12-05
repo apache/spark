@@ -429,7 +429,7 @@ private[hive] case class HiveUDAFFunction(
   override def update(buffer: HiveUDAFBuffer, input: InternalRow): HiveUDAFBuffer = {
     // The input is original data, we create buffer with the partial1 evaluator.
     val nonNullBuffer = if (buffer == null) {
-      HiveUDAFBuffer(partial1HiveEvaluator.evaluator.getNewAggregationBuffer, false)
+      HiveUDAFBuffer(partial1HiveEvaluator.evaluator.getNewAggregationBuffer, canDoMerge = false)
     } else {
       buffer
     }
@@ -444,7 +444,7 @@ private[hive] case class HiveUDAFFunction(
   override def merge(buffer: HiveUDAFBuffer, input: HiveUDAFBuffer): HiveUDAFBuffer = {
     // The input is aggregate buffer, we create buffer with the final evaluator.
     val nonNullBuffer = if (buffer == null) {
-      HiveUDAFBuffer(finalHiveEvaluator.evaluator.getNewAggregationBuffer, true)
+      HiveUDAFBuffer(finalHiveEvaluator.evaluator.getNewAggregationBuffer, canDoMerge = true)
     } else {
       buffer
     }
@@ -457,7 +457,7 @@ private[hive] case class HiveUDAFFunction(
       val newBuf = finalHiveEvaluator.evaluator.getNewAggregationBuffer
       finalHiveEvaluator.evaluator.merge(
         newBuf, partial1HiveEvaluator.evaluator.terminatePartial(nonNullBuffer.buf))
-      HiveUDAFBuffer(newBuf, true)
+      HiveUDAFBuffer(newBuf, canDoMerge = true)
     } else {
       nonNullBuffer
     }
@@ -490,7 +490,7 @@ private[hive] case class HiveUDAFFunction(
   override def deserialize(bytes: Array[Byte]): HiveUDAFBuffer = {
     // Deserializes an `AggregationBuffer` from the shuffled partial aggregation phase to prepare
     // for global aggregation by merging multiple partial aggregation results within a single group.
-    HiveUDAFBuffer(aggBufferSerDe.deserialize(bytes), false)
+    HiveUDAFBuffer(aggBufferSerDe.deserialize(bytes), canDoMerge = false)
   }
 
   // Helper class used to de/serialize Hive UDAF `AggregationBuffer` objects

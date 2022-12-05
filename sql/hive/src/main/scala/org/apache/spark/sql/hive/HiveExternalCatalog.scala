@@ -574,7 +574,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     // We can't use `filterKeys` here, as the map returned by `filterKeys` is not serializable,
     // while `CatalogTable` should be serializable.
     val propsWithoutPath = table.storage.properties.filter {
-      case (k, v) => k.toLowerCase(Locale.ROOT) != "path"
+      case (k, _) => k.toLowerCase(Locale.ROOT) != "path"
     }
     table.storage.copy(properties = propsWithoutPath ++ newPath.map("path" -> _))
   }
@@ -629,7 +629,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         //       want to alter the table location to a file path, we will fail. This should be fixed
         //       in the future.
 
-        val newLocation = tableDefinition.storage.locationUri.map(CatalogUtils.URIToString(_))
+        val newLocation = tableDefinition.storage.locationUri.map(CatalogUtils.URIToString)
         val storageWithPathOption = tableDefinition.storage.copy(
           properties = tableDefinition.storage.properties ++ newLocation.map("path" -> _))
 
@@ -651,7 +651,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       // Add old stats properties to table properties, to retain spark's stats.
       // Set the `schema`, `partitionColumnNames` and `bucketSpec` from the old table definition,
       // to retain the spark specific format if it is.
-      val propsFromOldTable = oldTableDef.properties.filter { case (k, v) =>
+      val propsFromOldTable = oldTableDef.properties.filter { case (k, _) =>
         k.startsWith(DATASOURCE_PREFIX) || k.startsWith(STATISTICS_PREFIX) ||
           k.startsWith(CREATED_SPARK_VERSION)
       }
@@ -875,7 +875,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       schema = reorderedSchema,
       partitionColumnNames = partColumnNames,
       bucketSpec = getBucketSpecFromTableProperties(table),
-      tracksPartitionsInCatalog = partitionProvider == Some(TABLE_PARTITION_PROVIDER_CATALOG),
+      tracksPartitionsInCatalog = partitionProvider.contains(TABLE_PARTITION_PROVIDER_CATALOG),
       properties = table.properties.filterKeys(!HIVE_GENERATED_TABLE_PROPERTIES(_)).toMap)
   }
 
@@ -1433,7 +1433,7 @@ object HiveExternalCatalog {
    */
   private[spark] def isDatasourceTable(table: CatalogTable): Boolean = {
     val provider = table.provider.orElse(table.properties.get(DATASOURCE_PROVIDER))
-    provider.isDefined && provider != Some(DDLUtils.HIVE_PROVIDER)
+    provider.isDefined && !provider.contains(DDLUtils.HIVE_PROVIDER)
   }
 
   private[spark] def isHiveCompatibleDataType(dt: DataType): Boolean = dt match {

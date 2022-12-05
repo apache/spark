@@ -181,7 +181,7 @@ class HadoopTableReader(
             // convert  /demo/data/year/month/day  to  /demo/data/*/*/*/
             def getPathPatternByPath(parNum: Int, tempPath: Path): String = {
               var path = tempPath
-              for (i <- (1 to parNum)) path = path.getParent
+              for (_ <- 1 to parNum) path = path.getParent
               val tails = (1 to parNum).map(_ => "*").mkString("/", "/", "/")
               path.toString + tails
             }
@@ -278,10 +278,10 @@ class HadoopTableReader(
     }.toSeq
 
     // Even if we don't use any partitions, we still need an empty RDD
-    if (hivePartitionRDDs.size == 0) {
+    if (hivePartitionRDDs.isEmpty) {
       new EmptyRDD[InternalRow](sparkSession.sparkContext)
     } else {
-      new UnionRDD(hivePartitionRDDs(0).context, hivePartitionRDDs)
+      new UnionRDD(hivePartitionRDDs.head.context, hivePartitionRDDs)
     }
   }
 
@@ -452,7 +452,7 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
   def initializeLocalJobConfFunc(path: String, tableDesc: TableDesc)(jobConf: JobConf): Unit = {
     FileInputFormat.setInputPaths(jobConf, Seq[Path](new Path(path)): _*)
     if (tableDesc != null) {
-      HiveTableUtil.configureJobPropertiesForStorageHandler(tableDesc, jobConf, true)
+      HiveTableUtil.configureJobPropertiesForStorageHandler(tableDesc, jobConf, input = true)
       Utilities.copyTableJobPropertiesToConf(tableDesc, jobConf)
     }
     val bufferSize = System.getProperty("spark.buffer.size", "65536")
