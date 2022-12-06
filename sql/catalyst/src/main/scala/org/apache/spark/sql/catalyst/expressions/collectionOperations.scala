@@ -2265,6 +2265,7 @@ case class ElementAt(
           case _ => Seq.empty
         }
       case (l, r) => Seq.empty
+
     }
   }
 
@@ -4673,7 +4674,7 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
       val newArray = new Array[Any](arr.asInstanceOf[ArrayData].numElements() + 1)
       arr.asInstanceOf[ArrayData].foreach(elementType, (i, v) =>
         if (i >= validatedPosInt) {
-          newArray(i+1) = v
+          newArray(i + 1) = v
         } else {
           newArray(i) = v
         }
