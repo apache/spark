@@ -136,11 +136,11 @@ true
 
 
 -- !query
-select curdate()
+select curdate() = curdate()
 -- !query schema
-struct<current_date():date>
+struct<(current_date() = current_date()):boolean>
 -- !query output
-2022-12-06
+true
 
 
 -- !query
