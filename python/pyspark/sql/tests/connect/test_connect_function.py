@@ -646,6 +646,126 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
         )
 
 
+    def test_date_ts_functions(self):
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        query = """
+            SELECT * FROM VALUES
+            ('1997-02-28 10:30:00', '2023-03-01 06:00:00', 'JST', 1428476400, 2020, 12, 6),
+            ('2000-01-01 04:30:05', '2020-05-01 12:15:00', 'PST', 1403892395, 2022, 12, 6)
+            AS tab(ts1, ts2, tz, seconds, Y, M, D)
+        """
+        # +-------------------+-------------------+---+----------+----+---+---+
+        # |                ts1|                ts2| tz|   seconds|   Y|  M|  D|
+        # +-------------------+-------------------+---+----------+----+---+---+
+        # |1997-02-28 10:30:00|2023-03-01 06:00:00|JST|1428476400|2020| 12|  6|
+        # |2000-01-01 04:30:05|2020-05-01 12:15:00|PST|1403892395|2022| 12|  6|
+        # +-------------------+-------------------+---+----------+----+---+---+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        # With no parameters
+        for cfunc, sfunc in [
+            (CF.current_date, SF.current_date),
+            (CF.current_timestamp, SF.current_timestamp),
+            (CF.localtimestamp, SF.localtimestamp),
+        ]:
+            self.assert_eq(
+                cdf.select(cfunc()).toPandas(),
+                sdf.select(sfunc()).toPandas(),
+            )
+
+        # With only column parameter
+        for cfunc, sfunc in [
+            (CF.year, SF.year),
+            (CF.quarter, SF.quarter),
+            (CF.month, SF.month),
+            (CF.dayofweek, SF.dayofweek),
+            (CF.dayofmonth, SF.dayofmonth),
+            (CF.dayofyear, SF.dayofyear),
+            (CF.hour, SF.hour),
+            (CF.minute, SF.minute),
+            (CF.second, SF.second),
+            (CF.weekofyear, SF.weekofyear),
+            (CF.last_day, SF.last_day),
+            (CF.unix_timestamp, SF.unix_timestamp),
+            (CF.timestamp_seconds, SF.timestamp_seconds),
+        ]:
+            self.assert_eq(
+                cdf.select(cfunc(cdf.ts1)).toPandas(),
+                sdf.select(sfunc(sdf.ts1)).toPandas(),
+            )
+
+        # With format parameter
+        for cfunc, sfunc in [
+            (CF.date_format, SF.date_format),
+            (CF.to_date, SF.to_date),
+            (CF.to_timestamp, SF.to_timestamp),
+            (CF.trunc, SF.trunc),
+        ]:
+            self.assert_eq(
+                cdf.select(cfunc(cdf.ts1, format="year")).toPandas(),
+                sdf.select(sfunc(sdf.ts1, format="year")).toPandas(),
+            )
+
+        # With tz parameter
+        for cfunc, sfunc in [
+            (CF.from_utc_timestamp, SF.from_utc_timestamp),
+            (CF.to_utc_timestamp, SF.to_utc_timestamp),
+        ]:
+            self.assert_eq(
+                cdf.select(cfunc(cdf.ts1, tz=cdf.tz)).toPandas(),
+                sdf.select(sfunc(sdf.ts1, tz=sdf.tz)).toPandas(),
+            )
+
+        # With numeric parameter
+        for cfunc, sfunc in [
+            (CF.date_add, SF.date_add),
+            (CF.date_sub, SF.date_sub),
+            (CF.add_months, SF.add_months),
+        ]:
+            self.assert_eq(
+                cdf.select(cfunc(cdf.ts1, 2)).toPandas(),
+                sdf.select(sfunc(sdf.ts1, 2)).toPandas(),
+            )
+
+        # With another timestamp as parameter
+        for cfunc, sfunc in [
+            (CF.datediff, SF.datediff),
+            (CF.months_between, SF.months_between),
+        ]:
+            self.assert_eq(
+                cdf.select(cfunc(cdf.ts1, cdf.ts2)).toPandas(),
+                sdf.select(sfunc(sdf.ts1, sdf.ts2)).toPandas(),
+            )
+
+        # from_unixtime
+        self.assert_eq(
+            cdf.select(CF.date_trunc(cdf.seconds)).toPandas(),
+            sdf.select(SF.date_trunc(sdf.seconds)).toPandas(),
+        )
+
+        # make_date
+        self.assert_eq(
+            cdf.select(CF.make_date(cdf.Y, cdf.M, cdf.D)).toPandas(),
+            sdf.select(SF.make_date(sdf.Y, sdf.M, sdf.D)).toPandas(),
+        )
+
+        # date_trunc
+        self.assert_eq(
+            cdf.select(CF.date_trunc("year", cdf.ts1)).toPandas(),
+            sdf.select(SF.date_trunc("year", sdf.ts1)).toPandas(),
+        )
+
+        # next_day
+        self.assert_eq(
+            cdf.select(CF.date_trunc(cdf.ts1, "Mon")).toPandas(),
+            sdf.select(SF.date_trunc(sdf.ts1, "Mon")).toPandas(),
+        )
+
+
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.test_connect_function import *  # noqa: F401
 
