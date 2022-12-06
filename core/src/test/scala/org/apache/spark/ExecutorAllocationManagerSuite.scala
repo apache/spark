@@ -461,6 +461,15 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(numExecutorsTargetForDefaultProfileId(manager) === 10)
   }
 
+  private def speculativeTaskSubmitEventFromTaskIndex(
+    stageId: Int,
+    stageAttemptId: Int = 0,
+    taskIndex: Int): SparkListenerSpeculativeTaskSubmitted = {
+    val event = SparkListenerSpeculativeTaskSubmitted(stageId, stageAttemptId)
+    event.updateTaskIndex(taskIndex)
+    event
+  }
+
   test("add executors when speculative tasks added") {
     val manager = createManager(createConf(0, 10, 0))
 
@@ -469,13 +478,13 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
 
     post(SparkListenerStageSubmitted(createStageInfo(1, 2)))
     // Verify that we're capped at number of tasks including the speculative ones in the stage
-    post(SparkListenerSpeculativeTaskSubmitted(1, taskIndex = 0))
+    post(speculativeTaskSubmitEventFromTaskIndex(1, taskIndex = 0))
     assert(numExecutorsTargetForDefaultProfileId(manager) === 0)
     assert(numExecutorsToAddForDefaultProfile(manager) === 1)
     assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
     doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
-    post(SparkListenerSpeculativeTaskSubmitted(1, taskIndex = 1))
-    post(SparkListenerSpeculativeTaskSubmitted(1, taskIndex = 2))
+    post(speculativeTaskSubmitEventFromTaskIndex(1, taskIndex = 1))
+    post(speculativeTaskSubmitEventFromTaskIndex(1, taskIndex = 2))
     assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
     assert(numExecutorsToAddForDefaultProfile(manager) === 2)
     assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 2)
@@ -700,7 +709,8 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     (0 to 29).map { i => createTaskInfo(i, i, executorId = s"${i / 4}")}.foreach {
       info => post(SparkListenerTaskEnd(0, 0, null, Success, info, new ExecutorMetrics, null)) }
     // 10 speculative tasks (30 - 39) launch for the remaining tasks
-    (30 to 39).foreach { index => post(SparkListenerSpeculativeTaskSubmitted(0, taskIndex = index))}
+    (30 to 39).foreach { index =>
+      post(speculativeTaskSubmitEventFromTaskIndex(0, taskIndex = index))}
     clock.advance(1000)
     manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
     assert(numExecutorsTarget(manager, defaultProfile.id) === 5)
@@ -783,7 +793,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     (0 to 6).foreach { i => onExecutorRemoved(manager, i.toString)}
 
     // 10 speculative tasks (30 - 39) launch for the remaining tasks
-    (30 to 39).foreach { i => post(SparkListenerSpeculativeTaskSubmitted(0, taskIndex = i))}
+    (30 to 39).foreach { i => post(speculativeTaskSubmitEventFromTaskIndex(0, taskIndex = i))}
     assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
     doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
     assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
@@ -861,7 +871,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       createTaskInfo(38, 38, executorId = "9"), new ExecutorMetrics, null))
     post(SparkListenerTaskEnd(0, 0, null, UnknownReason,
       createTaskInfo(49, 39, executorId = "12", speculative = true), new ExecutorMetrics, null))
-    post(SparkListenerSpeculativeTaskSubmitted(0, taskIndex = 39))
+    post(speculativeTaskSubmitEventFromTaskIndex(0, taskIndex = 39))
     clock.advance(1000)
     manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
     // maxNeeded = 1, allocate one more to satisfy speculation locality requirement
