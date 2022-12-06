@@ -560,7 +560,7 @@ class SparkConnectPlanner(session: SparkSession) {
 
   /**
    * For some reason, not all functions are registered in 'FunctionRegistry'. For a unregistered
-   * function, we can still wrap it under the proto 'UnresolvedFunction', and then resolve them in
+   * function, we can still wrap it under the proto 'UnresolvedFunction', and then resolve it in
    * this method.
    */
   private def transformUnregisteredFunction(
