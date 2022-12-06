@@ -7751,8 +7751,8 @@ def array_except(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
 def array_append(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """
-    Collection function: returns an array of the elements in col1 along with the appended element in col2,
-    without duplicates.
+    Collection function: returns an array of the elements in col1 along
+    with the appended element in col2, without duplicates.
 
     .. versionadded:: 3.4.0
 

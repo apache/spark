@@ -123,6 +123,6 @@ select get(array(1, 2, 3), -1);
 -- function array_append
 select array_append(array(1, 2, 3), 4);
 select array_append(array('a', 'b', 'c'), 'd');
-SELECT array_append(array(1, 2, 3), null);
-SELECT array_append(null, 'a');
+select array_append(array(1, 2, 3), null);
+select array_append(null, 'a');
 

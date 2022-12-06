@@ -4610,7 +4610,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
     """
     Examples:
       > SELECT _FUNC_(array('b', 'd', 'c', 'a'), 'd');
-       ['a', 'd', 'c', 'a', 'd']
+       ["b","d","c","a","d"]
 
   """,
   since = "3.4.0",
