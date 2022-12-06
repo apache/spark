@@ -406,7 +406,8 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Expression.ExprTypeCase.UNRESOLVED_ATTRIBUTE =>
         transformUnresolvedExpression(exp)
       case proto.Expression.ExprTypeCase.UNRESOLVED_FUNCTION =>
-        transformUnresolvedFunction(exp.getUnresolvedFunction)
+        transformUnregisteredFunction(exp.getUnresolvedFunction)
+          .getOrElse(transformUnresolvedFunction(exp.getUnresolvedFunction))
       case proto.Expression.ExprTypeCase.ALIAS => transformAlias(exp.getAlias)
       case proto.Expression.ExprTypeCase.EXPRESSION_STRING =>
         transformExpressionString(exp.getExpressionString)
@@ -540,11 +541,6 @@ class SparkConnectPlanner(session: SparkSession) {
    */
   private def transformUnresolvedFunction(
       fun: proto.Expression.UnresolvedFunction): Expression = {
-    val functionOpt = transformUnregisteredFunction(fun)
-    if (functionOpt.nonEmpty) {
-      return functionOpt.get
-    }
-
     if (fun.getIsUserDefinedFunction) {
       UnresolvedFunction(
         session.sessionState.sqlParser.parseFunctionIdentifier(fun.getFunctionName),
