@@ -1179,8 +1179,11 @@ private[spark] class DAGScheduler(
   }
 
   private[scheduler] def handleSpeculativeTaskSubmitted(task: Task[_], taskIndex: Int): Unit = {
-    listenerBus.post(SparkListenerSpeculativeTaskSubmitted(task.stageId,
-      task.stageAttemptId, taskIndex))
+    val speculativeTaskSubmittedEvent =
+      SparkListenerSpeculativeTaskSubmitted(task.stageId, task.stageAttemptId)
+    // add taskIndex field for Executor Dynamic Allocation
+    speculativeTaskSubmittedEvent.updateTaskIndex(taskIndex)
+    listenerBus.post(speculativeTaskSubmittedEvent)
   }
 
   private[scheduler] def handleUnschedulableTaskSetAdded(

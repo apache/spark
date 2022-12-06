@@ -725,8 +725,8 @@ private[spark] class ExecutorAllocationManager(
         // even after another attempt for the stage is submitted.
         stageAttemptToNumTasks -= stageAttempt
         stageAttemptToSpeculativeTaskIndices -= stageAttempt
-        stageAttemptToPendingSpeculativeTasks -= stageAttempt
         stageAttemptToTaskIndices -= stageAttempt
+        stageAttemptToPendingSpeculativeTasks -= stageAttempt
         stageAttemptToExecutorPlacementHints -= stageAttempt
         removeStageFromResourceProfileIfUnused(stageAttempt)
 
@@ -751,8 +751,8 @@ private[spark] class ExecutorAllocationManager(
           stageAttemptToNumRunningTask.getOrElse(stageAttempt, 0) + 1
         // If this is the last pending task, mark the scheduler queue as empty
         if (taskStart.taskInfo.speculative) {
-          stageAttemptToSpeculativeTaskIndices
-            .getOrElseUpdate(stageAttempt, new mutable.HashSet[Int]).add(taskIndex)
+          stageAttemptToSpeculativeTaskIndices.getOrElseUpdate(stageAttempt,
+            new mutable.HashSet[Int]) += taskIndex
           stageAttemptToPendingSpeculativeTasks
             .get(stageAttempt).foreach(_.remove(taskIndex))
         } else {
@@ -779,7 +779,7 @@ private[spark] class ExecutorAllocationManager(
           }
         }
         if (taskEnd.taskInfo.speculative) {
-          stageAttemptToSpeculativeTaskIndices.get(stageAttempt).foreach(_.remove(taskIndex))
+          stageAttemptToSpeculativeTaskIndices.get(stageAttempt).foreach {_.remove{taskIndex}}
         }
 
         taskEnd.reason match {
@@ -847,9 +847,9 @@ private[spark] class ExecutorAllocationManager(
     def removeStageFromResourceProfileIfUnused(stageAttempt: StageAttempt): Unit = {
       if (!stageAttemptToNumRunningTask.contains(stageAttempt) &&
           !stageAttemptToNumTasks.contains(stageAttempt) &&
-          !stageAttemptToSpeculativeTaskIndices.contains(stageAttempt) &&
           !stageAttemptToPendingSpeculativeTasks.contains(stageAttempt) &&
-          !stageAttemptToTaskIndices.contains(stageAttempt)
+          !stageAttemptToTaskIndices.contains(stageAttempt) &&
+          !stageAttemptToSpeculativeTaskIndices.contains(stageAttempt)
       ) {
         val rpForStage = resourceProfileIdToStageAttempt.filter { case (k, v) =>
           v.contains(stageAttempt)
