@@ -19,7 +19,7 @@ select date'2021-4294967297-11';
 select current_date = current_date;
 -- under ANSI mode, `current_date` can't be a function name.
 select current_date() = current_date();
-select curdate();
+select curdate() = curdate();
 select curdate(1);
 
 -- conversions between date and unix_date (number of days from epoch)
