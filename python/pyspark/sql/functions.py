@@ -6861,9 +6861,9 @@ def array_insert(arr: "ColumnOrName", pos: "ColumnOrName", value: "ColumnOrName"
 
     Examples
     --------
-    >>> df = spark.createDataFrame([([1, 2, 4], 3, 3), ([3, 2, 1], 4, 0)], ['data', 'pos', 'val'])
+    >>> df = spark.createDataFrame([(['a', 'b', 'c'], 2, 'd'), (['c', 'b', 'a'], 4, 'd')], ['data', 'pos', 'val'])
     >>> df.select(array_insert(df.data, df.pos, df.val)).collect()
-    [Row(array_distinct(data)=[1, 2, 3, 4]), Row(array_distinct(data)=[3, 2, 1, 0])]
+    [Row(array_distinct(data)=['a', 'd', 'b', 'c']), Row(array_distinct(data)=['c', 'b', 'a', 'd'])]
     """
     return _invoke_function_over_columns("array_insert", arr, pos, value)
 
