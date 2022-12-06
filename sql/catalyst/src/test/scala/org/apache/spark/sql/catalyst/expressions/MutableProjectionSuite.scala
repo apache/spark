@@ -65,48 +65,66 @@ class MutableProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(SafeProjection.create(fixedLengthTypes)(projUnsafeRow) === inputRow)
   }
 
-  testBothCodegenAndInterpreted("SPARK-41395: unsafe buffer with null decimal (high precision)") {
-    val bufferSchema = StructType(Array(
-      StructField("dec1", DecimalType(27, 2), nullable = true),
-      StructField("dec2", DecimalType(27, 2), nullable = true)))
-    val bufferTypes = Array[DataType](DecimalType(27, 2), DecimalType(27, 2))
+  def testRows(
+      bufferSchema: StructType,
+      buffer: InternalRow,
+      scalaRows: Seq[Seq[Any]]): Unit = {
+    val bufferTypes = bufferSchema.map(_.dataType).toArray
     val proj = createMutableProjection(bufferTypes)
-    val unsafeBuffer = UnsafeProjection.create(bufferSchema)
-      .apply(new GenericInternalRow(bufferSchema.length))
-
-    val scalaRows = Seq(
-      Seq(null, null),
-      Seq(BigDecimal(77.77), BigDecimal(245.00)))
 
     scalaRows.foreach { scalaRow =>
       val inputRow = InternalRow.fromSeq(scalaRow.zip(bufferTypes).map {
         case (v, dataType) => CatalystTypeConverters.createToCatalystConverter(dataType)(v)
       })
-      val projRow = proj.target(unsafeBuffer)(inputRow)
+      val projRow = proj.target(buffer)(inputRow)
       assert(SafeProjection.create(bufferTypes)(projRow) === inputRow)
     }
+  }
+
+  testBothCodegenAndInterpreted("SPARK-41395: unsafe buffer with null decimal (high precision)") {
+    val bufferSchema = StructType(Array(
+      StructField("dec1", DecimalType(27, 2), nullable = true),
+      StructField("dec2", DecimalType(27, 2), nullable = true)))
+    val buffer = UnsafeProjection.create(bufferSchema)
+      .apply(new GenericInternalRow(bufferSchema.length))
+    val scalaRows = Seq(
+      Seq(null, null),
+      Seq(BigDecimal(77.77), BigDecimal(245.00)))
+    testRows(bufferSchema, buffer, scalaRows)
   }
 
   testBothCodegenAndInterpreted("SPARK-41395: unsafe buffer with null decimal (low precision)") {
     val bufferSchema = StructType(Array(
       StructField("dec1", DecimalType(10, 2), nullable = true),
       StructField("dec2", DecimalType(10, 2), nullable = true)))
-    val bufferTypes = Array[DataType](DecimalType(10, 2), DecimalType(10, 2))
-    val proj = createMutableProjection(bufferTypes)
-    val unsafeBuffer = UnsafeProjection.create(bufferSchema)
+    val buffer = UnsafeProjection.create(bufferSchema)
       .apply(new GenericInternalRow(bufferSchema.length))
-
     val scalaRows = Seq(
       Seq(null, null),
       Seq(BigDecimal(77.77), BigDecimal(245.00)))
+    testRows(bufferSchema, buffer, scalaRows)
+  }
 
-    scalaRows.foreach { scalaRow =>
-      val inputRow = InternalRow.fromSeq(scalaRow.zip(bufferTypes).map {
-        case (v, dataType) => CatalystTypeConverters.createToCatalystConverter(dataType)(v)
-      })
-      val projRow = proj.target(unsafeBuffer)(inputRow)
-      assert(SafeProjection.create(bufferTypes)(projRow) === inputRow)
-    }
+  testBothCodegenAndInterpreted("SPARK-41395: generic buffer with null decimal (high precision)") {
+    val bufferSchema = StructType(Array(
+      StructField("dec1", DecimalType(27, 2), nullable = true),
+      StructField("dec2", DecimalType(27, 2), nullable = true)))
+    val buffer = new GenericInternalRow(bufferSchema.length)
+    val scalaRows = Seq(
+      Seq(null, null),
+      Seq(BigDecimal(77.77), BigDecimal(245.00)))
+    testRows(bufferSchema, buffer, scalaRows)
+  }
+
+  testBothCodegenAndInterpreted("SPARK-41395: generic buffer with null decimal (low precision)") {
+    val bufferSchema = StructType(Array(
+      StructField("dec1", DecimalType(10, 2), nullable = true),
+      StructField("dec2", DecimalType(10, 2), nullable = true)))
+    val buffer = new GenericInternalRow(bufferSchema.length)
+    val scalaRows = Seq(
+      Seq(null, null),
+      Seq(BigDecimal(77.77), BigDecimal(245.00)))
+    testRows(bufferSchema, buffer, scalaRows)
   }
 
   testBothCodegenAndInterpreted("variable-length types") {

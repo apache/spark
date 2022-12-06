@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{Decimal, DecimalType}
+import org.apache.spark.sql.types.DecimalType
 
 
 /**
@@ -58,7 +58,6 @@ class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mutable
     case _ => true
   }
   private[this] var mutableRow: InternalRow = new GenericInternalRow(expressions.size)
-  private[this] var unsafeMutableRow = false
   def currentValue: InternalRow = mutableRow
 
   override def target(row: InternalRow): MutableProjection = {
@@ -69,37 +68,21 @@ class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mutable
         validExprs.map(_._1.dataType).filterNot(UnsafeRow.isMutable)
           .map(_.catalogString).mkString(", "))
     mutableRow = row
-    unsafeMutableRow = if (mutableRow.isInstanceOf[UnsafeRow]) true else false;
     this
   }
 
   private[this] val fieldWriters: Array[Any => Unit] = validExprs.map { case (e, i) =>
     val writer = InternalRow.getWriter(i, e.dataType)
-    if (!e.nullable) {
+    if (!e.nullable || e.dataType.isInstanceOf[DecimalType]) {
       (v: Any) => writer(mutableRow, v)
     } else {
-      val nullSafeWriter: (InternalRow, Any) => Unit = e.dataType match {
-        case DecimalType.Fixed(precision, _) if precision > Decimal.MAX_LONG_DIGITS =>
-          (row, v: Any) => {
-            // The check of unsafeMutableRow has to happen at run time, rather than at
-            // field writer creation time, because `InterpretedMutableProjection#target`
-            // can be called after the field writers are created.
-            if (v == null && !unsafeMutableRow) {
-              row.setNullAt(i)
-            } else {
-              writer(row, v)
-            }
-          }
-        case _ =>
-          (row, v: Any) => {
-            if (v == null) {
-              row.setNullAt(i)
-            } else {
-              writer(row, v)
-            }
-          }
+      (v: Any) => {
+        if (v == null) {
+          mutableRow.setNullAt(i)
+        } else {
+          writer(mutableRow, v)
+        }
       }
-      (v: Any) => nullSafeWriter(mutableRow, v)
     }
   }.toArray
 
