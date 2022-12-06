@@ -97,6 +97,7 @@ class PlanOnlyTestFixture(unittest.TestCase):
         return DataFrame.withPlan(SQL(query), cls.connect)  # type: ignore
 
     if have_pandas:
+
         @classmethod
         def _with_plan(cls, plan: LogicalPlan) -> "DataFrame":
             return DataFrame.withPlan(plan, cls.connect)  # type: ignore
