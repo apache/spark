@@ -88,7 +88,7 @@ class GroupedData(object):
 
         Alternatively, ``exprs`` can also be a list of aggregate :class:`Column` expressions.
 
-        .. versionadded:: 1.3.0
+        .. versionadded:: 3.4.0
 
         Parameters
         ----------
@@ -136,25 +136,9 @@ class GroupedData(object):
         |Alice|       2|
         |  Bob|       5|
         +-----+--------+
-
-        Same as above but uses pandas UDF.
-
-        >>> @pandas_udf('int', PandasUDFType.GROUPED_AGG)  # doctest: +SKIP
-        ... def min_udf(v):
-        ...     return v.min()
-        ...
-        >>> df.groupBy(df.name).agg(min_udf(df.age)).sort("name").show()  # doctest: +SKIP
-        +-----+------------+
-        | name|min_udf(age)|
-        +-----+------------+
-        |Alice|           2|
-        |  Bob|           5|
-        +-----+------------+
         """
         assert exprs, "exprs should not be empty"
         if len(exprs) == 1 and isinstance(exprs[0], dict):
-            from pyspark.sql.connect.function_builder import functions as FB
-
             # Convert the dict into key value pairs
             measures = [scalar_function(exprs[0][k], col(k)) for k in exprs[0]]
         else:
