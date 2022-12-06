@@ -197,12 +197,15 @@ object FileFormat {
    */
   val OPTION_RETURNING_BATCH = "returning_batch"
 
-  // supported metadata struct fields for hadoop fs relation
+  /**
+   * Schema of metadata struct that can be produced by every file format,
+   * metadata fields for every file format must be *not* nullable.
+   * */
   val METADATA_STRUCT: StructType = new StructType()
-    .add(StructField(FILE_PATH, StringType))
-    .add(StructField(FILE_NAME, StringType))
-    .add(StructField(FILE_SIZE, LongType))
-    .add(StructField(FILE_MODIFICATION_TIME, TimestampType))
+    .add(StructField(FILE_PATH, StringType, nullable = false))
+    .add(StructField(FILE_NAME, StringType, nullable = false))
+    .add(StructField(FILE_SIZE, LongType, nullable = false))
+    .add(StructField(FILE_MODIFICATION_TIME, TimestampType, nullable = false))
 
   // create a file metadata struct col
   def createFileMetadataCol: AttributeReference =
