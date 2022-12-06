@@ -32,13 +32,15 @@ from pyspark.sql.types import StructType, StructField, LongType, StringType
 if have_pandas:
     from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
     from pyspark.sql.connect.client import ChannelBuilder
+    from pyspark.sql.connect.dataframe import DataFrame as CDataFrame
     from pyspark.sql.connect.function_builder import udf
     from pyspark.sql.connect.functions import lit, col
+    from pyspark.testing.pandasutils import PandasOnSparkTestCase
+else:
+    from pyspark.testing.sqlutils import ReusedSQLTestCase as PandasOnSparkTestCase  # type: ignore
 from pyspark.sql.dataframe import DataFrame
 import pyspark.sql.functions
-from pyspark.sql.connect.dataframe import DataFrame as CDataFrame
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.utils import ReusedPySparkTestCase
 
 
@@ -881,6 +883,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         )
 
 
+@unittest.skipIf(not should_test_connect, connect_requirement_message)
 class ChannelBuilderTests(ReusedPySparkTestCase):
     def test_invalid_connection_strings(self):
         invalid = [
