@@ -21,7 +21,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
-import java.time.LocalDateTime
+import java.time.{LocalDate, LocalDateTime, Instant}
 import java.util
 
 import scala.collection.JavaConverters._
@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapBuilder, DateTimeUtils, GenericArrayData, MapData}
 import org.apache.spark.sql.execution.RowToColumnConverter
 import org.apache.spark.sql.execution.datasources.parquet.VectorizedPlainValuesReader
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnarBatchRow, ColumnVector}
@@ -1364,7 +1365,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
   }
 
   private def compareStruct(fields: Seq[StructField], r1: InternalRow, r2: Row,
-      seed: Long): Unit = {
+      seed: Long, java8DTApiEnabled: Boolean): Unit = {
     fields.zipWithIndex.foreach { case (field: StructField, ordinal: Int) =>
       assert(r1.isNullAt(ordinal) == r2.isNullAt(ordinal), "Seed = " + seed)
       if (!r1.isNullAt(ordinal)) {
@@ -1380,11 +1381,23 @@ class ColumnarBatchSuite extends SparkFunSuite {
           case DoubleType => assert(doubleEquals(r1.getDouble(ordinal), r2.getDouble(ordinal)),
             "Seed = " + seed)
           case DateType =>
-            assert(r1.getInt(ordinal) == DateTimeUtils.fromJavaDate(r2.getDate(ordinal)),
-              "Seed = " + seed)
+            if (java8DTApiEnabled) {
+              assert(r1.getInt(ordinal) == DateTimeUtils.localDateToDays(r2.getLocalDate(ordinal)),
+                "Seed = " + seed)
+            } else {
+              assert(r1.getInt(ordinal) == DateTimeUtils.fromJavaDate(r2.getDate(ordinal)),
+                "Seed = " + seed)
+            }
           case TimestampType =>
-            assert(r1.getLong(ordinal) == DateTimeUtils.fromJavaTimestamp(r2.getTimestamp(ordinal)),
-              "Seed = " + seed)
+            if (java8DTApiEnabled) {
+              assert(r1.getLong(ordinal) ==
+                DateTimeUtils.instantToMicros(r2.getInstant(ordinal)),
+                "Seed = " + seed)
+            } else {
+              assert(r1.getLong(ordinal) ==
+                DateTimeUtils.fromJavaTimestamp(r2.getTimestamp(ordinal)),
+                "Seed = " + seed)
+            }
           case t: DecimalType =>
             val d1 = r1.getDecimal(ordinal, t.precision, t.scale).toBigDecimal
             val d2 = r2.getDecimal(ordinal)
@@ -1431,7 +1444,11 @@ class ColumnarBatchSuite extends SparkFunSuite {
                   assert((a1(i) == null) == (a2(i) == null), "Seed = " + seed)
                   if (a1(i) != null) {
                     val i1 = a1(i).asInstanceOf[Int]
-                    val i2 = DateTimeUtils.fromJavaDate(a2(i).asInstanceOf[Date])
+                    val i2 = if (java8DTApiEnabled) {
+                      DateTimeUtils.localDateToDays(a2(i).asInstanceOf[LocalDate])
+                    } else {
+                      DateTimeUtils.fromJavaDate(a2(i).asInstanceOf[Date])
+                    }
                     assert(i1 === i2, "Seed = " + seed)
                   }
                   i += 1
@@ -1442,7 +1459,11 @@ class ColumnarBatchSuite extends SparkFunSuite {
                   assert((a1(i) == null) == (a2(i) == null), "Seed = " + seed)
                   if (a1(i) != null) {
                     val i1 = a1(i).asInstanceOf[Long]
-                    val i2 = DateTimeUtils.fromJavaTimestamp(a2(i).asInstanceOf[Timestamp])
+                    val i2 = if (java8DTApiEnabled) {
+                      DateTimeUtils.instantToMicros(a2(i).asInstanceOf[Instant])
+                    } else {
+                      DateTimeUtils.fromJavaTimestamp(a2(i).asInstanceOf[Timestamp])
+                    }
                     assert(i1 === i2, "Seed = " + seed)
                   }
                   i += 1
@@ -1462,7 +1483,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
             }
           case StructType(childFields) =>
             compareStruct(childFields, r1.getStruct(ordinal, fields.length),
-              r2.getStruct(ordinal), seed)
+              r2.getStruct(ordinal), seed, java8DTApiEnabled)
           case _ =>
             throw new UnsupportedOperationException("Not implemented " + field.dataType)
         }
@@ -1487,7 +1508,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       val it = batch.rowIterator()
       val referenceIt = rows.iterator
       while (it.hasNext) {
-        compareStruct(schema, it.next(), referenceIt.next(), 0)
+        compareStruct(schema, it.next(), referenceIt.next(), 0, false)
       }
       batch.close()
     }
@@ -1497,8 +1518,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
    * This test generates a random schema data, serializes it to column batches and verifies the
    * results.
    */
-  def testRandomRows(flatSchema: Boolean, numFields: Int): Unit = {
-    // TODO: Figure out why StringType doesn't work on jenkins.
+  def testRandomRows(flatSchema: Boolean, numFields: Int,
+      java8DTApiEnabled: Boolean): Unit = {
     val types = Array(
       BooleanType, ByteType, FloatType, DoubleType, IntegerType, LongType, ShortType,
       DecimalType.ShortDecimal, DecimalType.IntDecimal, DecimalType.ByteDecimal,
@@ -1531,7 +1552,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
         val referenceIt = rows.iterator
         var k = 0
         while (it.hasNext) {
-          compareStruct(schema, it.next(), referenceIt.next(), seed)
+          compareStruct(schema, it.next(), referenceIt.next(), seed, java8DTApiEnabled)
           k += 1
         }
         batch.close()
@@ -1540,12 +1561,30 @@ class ColumnarBatchSuite extends SparkFunSuite {
     }
   }
 
-  test("Random flat schema") {
-    testRandomRows(true, 15)
+  Seq(true, false). foreach { java8DTApiEnabled =>
+    test(s"Random flat schema - java8 date time api enabled: $java8DTApiEnabled") {
+      val conf = SQLConf.get
+      val original = conf.getConf(SQLConf.DATETIME_JAVA8API_ENABLED)
+      try {
+        conf.setConf(SQLConf.DATETIME_JAVA8API_ENABLED, java8DTApiEnabled)
+        testRandomRows(true, 15, java8DTApiEnabled)
+      } finally {
+        conf.setConf(SQLConf.DATETIME_JAVA8API_ENABLED, original)
+      }
+    }
   }
 
-  test("Random nested schema") {
-    testRandomRows(false, 30)
+  Seq(true, false).foreach { java8DTApiEnabled =>
+    test(s"Random nested schema - java8 date time api enabled: $java8DTApiEnabled") {
+      val conf = SQLConf.get
+      val original = conf.getConf(SQLConf.DATETIME_JAVA8API_ENABLED)
+      try {
+        conf.setConf(SQLConf.DATETIME_JAVA8API_ENABLED, java8DTApiEnabled)
+        testRandomRows(false, 30, java8DTApiEnabled)
+      } finally {
+        conf.setConf(SQLConf.DATETIME_JAVA8API_ENABLED, original)
+      }
+    }
   }
 
   test("exceeding maximum capacity should throw an error") {
