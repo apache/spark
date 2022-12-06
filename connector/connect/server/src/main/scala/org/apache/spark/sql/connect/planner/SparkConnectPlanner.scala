@@ -410,6 +410,7 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Expression.ExprTypeCase.UNRESOLVED_STAR =>
         transformUnresolvedStar(exp.getUnresolvedStar)
       case proto.Expression.ExprTypeCase.CAST => transformCast(exp.getCast)
+      case proto.Expression.ExprTypeCase.CASE_WHEN => transformCaseWhen(exp.getCaseWhen)
       case _ =>
         throw InvalidPlanInput(
           s"Expression with ID: ${exp.getExprTypeCase.getNumber} is not supported")
@@ -528,6 +529,14 @@ class SparkConnectPlanner(session: SparkSession) {
           transformExpression(cast.getExpr),
           session.sessionState.sqlParser.parseDataType(cast.getTypeStr))
     }
+  }
+
+  private def transformCaseWhen(casewhen: proto.Expression.CaseWhen): Expression = {
+    CaseWhen(
+      branches = casewhen.getBranchesList.asScala
+        .map(b => (transformExpression(b.getCondition), transformExpression(b.getValue))),
+      elseValue =
+        if (casewhen.hasElseValue) Some(transformExpression(casewhen.getElseValue)) else None)
   }
 
   private def transformSetOperation(u: proto.SetOperation): LogicalPlan = {

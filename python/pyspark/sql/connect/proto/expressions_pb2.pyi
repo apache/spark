@@ -633,6 +633,63 @@ class Expression(google.protobuf.message.Message):
             self, oneof_group: typing_extensions.Literal["_metadata", b"_metadata"]
         ) -> typing_extensions.Literal["metadata"] | None: ...
 
+    class CaseWhen(google.protobuf.message.Message):
+        """Case statements of the form "CASE WHEN a THEN b [WHEN c THEN d]* [ELSE e] END"."""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        class Branch(google.protobuf.message.Message):
+            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+            CONDITION_FIELD_NUMBER: builtins.int
+            VALUE_FIELD_NUMBER: builtins.int
+            @property
+            def condition(self) -> global___Expression: ...
+            @property
+            def value(self) -> global___Expression: ...
+            def __init__(
+                self,
+                *,
+                condition: global___Expression | None = ...,
+                value: global___Expression | None = ...,
+            ) -> None: ...
+            def HasField(
+                self,
+                field_name: typing_extensions.Literal["condition", b"condition", "value", b"value"],
+            ) -> builtins.bool: ...
+            def ClearField(
+                self,
+                field_name: typing_extensions.Literal["condition", b"condition", "value", b"value"],
+            ) -> None: ...
+
+        BRANCHES_FIELD_NUMBER: builtins.int
+        ELSE_VALUE_FIELD_NUMBER: builtins.int
+        @property
+        def branches(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            global___Expression.CaseWhen.Branch
+        ]:
+            """(Required) The seq of (branch condition, branch value)"""
+        @property
+        def else_value(self) -> global___Expression:
+            """(Optional) Value for the else branch."""
+        def __init__(
+            self,
+            *,
+            branches: collections.abc.Iterable[global___Expression.CaseWhen.Branch] | None = ...,
+            else_value: global___Expression | None = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["else_value", b"else_value"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "branches", b"branches", "else_value", b"else_value"
+            ],
+        ) -> None: ...
+
     LITERAL_FIELD_NUMBER: builtins.int
     UNRESOLVED_ATTRIBUTE_FIELD_NUMBER: builtins.int
     UNRESOLVED_FUNCTION_FIELD_NUMBER: builtins.int
@@ -640,6 +697,7 @@ class Expression(google.protobuf.message.Message):
     UNRESOLVED_STAR_FIELD_NUMBER: builtins.int
     ALIAS_FIELD_NUMBER: builtins.int
     CAST_FIELD_NUMBER: builtins.int
+    CASE_WHEN_FIELD_NUMBER: builtins.int
     @property
     def literal(self) -> global___Expression.Literal: ...
     @property
@@ -654,6 +712,8 @@ class Expression(google.protobuf.message.Message):
     def alias(self) -> global___Expression.Alias: ...
     @property
     def cast(self) -> global___Expression.Cast: ...
+    @property
+    def case_when(self) -> global___Expression.CaseWhen: ...
     def __init__(
         self,
         *,
@@ -664,12 +724,15 @@ class Expression(google.protobuf.message.Message):
         unresolved_star: global___Expression.UnresolvedStar | None = ...,
         alias: global___Expression.Alias | None = ...,
         cast: global___Expression.Cast | None = ...,
+        case_when: global___Expression.CaseWhen | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
             "alias",
             b"alias",
+            "case_when",
+            b"case_when",
             "cast",
             b"cast",
             "expr_type",
@@ -691,6 +754,8 @@ class Expression(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "alias",
             b"alias",
+            "case_when",
+            b"case_when",
             "cast",
             b"cast",
             "expr_type",
@@ -717,6 +782,7 @@ class Expression(google.protobuf.message.Message):
         "unresolved_star",
         "alias",
         "cast",
+        "case_when",
     ] | None: ...
 
 global___Expression = Expression
