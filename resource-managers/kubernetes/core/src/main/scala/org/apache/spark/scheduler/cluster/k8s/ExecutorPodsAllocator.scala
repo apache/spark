@@ -56,7 +56,7 @@ class ExecutorPodsAllocator(
     conf.getInt(EXECUTOR_INSTANCES.key, DEFAULT_NUMBER_EXECUTORS)
   }
 
-  private val reusePVC = conf.get(KUBERNETES_DRIVER_OWN_PVC) &&
+  private val podAllocOnPVC = conf.get(KUBERNETES_DRIVER_OWN_PVC) &&
     conf.get(KUBERNETES_DRIVER_REUSE_PVC) && conf.get(KUBERNETES_DRIVER_WAIT_TO_REUSE_PVC)
 
   // ResourceProfile id -> total expected executors per profile, currently we don't remove
@@ -410,7 +410,7 @@ class ExecutorPodsAllocator(
     // Check reusable PVCs for this executor allocation batch
     val reusablePVCs = getReusablePVCs(applicationId, pvcsInUse)
     for ( _ <- 0 until numExecutorsToAllocate) {
-      if (reusablePVCs.isEmpty && reusePVC && maxPVCs <= PVC_COUNTER.get()) {
+      if (reusablePVCs.isEmpty && podAllocOnPVC && maxPVCs <= PVC_COUNTER.get()) {
         logInfo(s"Wait to reuse one of the existing ${PVC_COUNTER.get()} PVCs.")
         return
       }
