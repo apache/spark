@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.AnalysisErrorAt
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreePattern.{PARAMETER, TreePattern}
-import org.apache.spark.sql.errors.QueryErrorsBase
+import org.apache.spark.sql.errors.{QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, NullType}
 
@@ -38,12 +37,13 @@ case class Parameter(name: String) extends LeafExpression {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(PARAMETER)
 
-  private def unboundError() =
-    throw SparkException.internalError(s"Found the unbound parameter: $name.")
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    throw QueryExecutionErrors.unboundParameterError(name)
+  }
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = unboundError()
-
-  def eval(input: InternalRow): Any = unboundError()
+  def eval(input: InternalRow): Any = {
+    throw QueryExecutionErrors.unboundParameterError(name)
+  }
 }
 
 
