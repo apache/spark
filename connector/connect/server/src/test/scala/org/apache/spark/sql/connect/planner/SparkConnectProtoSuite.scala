@@ -550,6 +550,10 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       connectTestRelation.select("id".protoAttr.cast(
         proto.DataType.newBuilder().setString(proto.DataType.String.getDefaultInstance).build())),
       sparkTestRelation.select(col("id").cast(StringType)))
+
+    comparePlans(
+      connectTestRelation.select("id".protoAttr.cast("string")),
+      sparkTestRelation.select(col("id").cast("string")))
   }
 
   test("Test Hint") {

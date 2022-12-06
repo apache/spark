@@ -518,9 +518,16 @@ class SparkConnectPlanner(session: SparkSession) {
   }
 
   private def transformCast(cast: proto.Expression.Cast): Expression = {
-    Cast(
-      transformExpression(cast.getExpr),
-      DataTypeProtoConverter.toCatalystType(cast.getCastToType))
+    cast.getCastToTypeCase match {
+      case proto.Expression.Cast.CastToTypeCase.TYPE =>
+        Cast(
+          transformExpression(cast.getExpr),
+          DataTypeProtoConverter.toCatalystType(cast.getType))
+      case _ =>
+        Cast(
+          transformExpression(cast.getExpr),
+          session.sessionState.sqlParser.parseDataType(cast.getTypeStr))
+    }
   }
 
   private def transformSetOperation(u: proto.SetOperation): LogicalPlan = {

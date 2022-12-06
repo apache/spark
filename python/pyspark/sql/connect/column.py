@@ -21,9 +21,10 @@ import json
 import decimal
 import datetime
 
-from pyspark.sql.types import TimestampType, DayTimeIntervalType, DateType
+from pyspark.sql.types import TimestampType, DayTimeIntervalType, DataType, DateType
 
 import pyspark.sql.connect.proto as proto
+from pyspark.sql.connect.types import pyspark_types_to_proto_types
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName
@@ -353,6 +354,29 @@ class UnresolvedFunction(Expression):
             return f"{self._name}(distinct {', '.join([str(arg) for arg in self._args])})"
         else:
             return f"{self._name}({', '.join([str(arg) for arg in self._args])})"
+
+
+class CastExpression(Expression):
+    def __init__(
+        self,
+        col: "Column",
+        data_type: Union[DataType, str],
+    ) -> None:
+        super().__init__()
+        self._col = col
+        self._data_type = data_type
+
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
+        fun = proto.Expression()
+        fun.cast.expr.CopyFrom(self._col.to_plan(session))
+        if isinstance(self._data_type, str):
+            fun.cast.type_str = self._data_type
+        else:
+            fun.cast.type.CopyFrom(pyspark_types_to_proto_types(self._data_type))
+        return fun
+
+    def __repr__(self) -> str:
+        return f"({self._col} ({self._data_type}))"
 
 
 class Column:
@@ -732,6 +756,28 @@ class Column:
 
     def name(self) -> str:
         return self._expr.name()
+
+    def cast(self, dataType: Union[DataType, str]) -> "Column":
+        """
+        Casts the column into type ``dataType``.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        dataType : :class:`DataType` or str
+            a DataType or Python string literal with a DDL-formatted string
+            to use when parsing the column to the same type.
+
+        Returns
+        -------
+        :class:`Column`
+            Column representing whether each element of Column is cast into new type.
+        """
+        if isinstance(dataType, (DataType, str)):
+            return Column(CastExpression(col=self, data_type=dataType))
+        else:
+            raise TypeError("unexpected type: %s" % type(dataType))
 
     # TODO(SPARK-41329): solve the circular import between functions.py and
     # this class if we want to reuse functions.lit

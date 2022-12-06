@@ -43,7 +43,11 @@ message Expression {
     Expression expr = 1;
 
     // (Required) the data type that the expr to be casted to.
-    DataType cast_to_type = 2;
+    oneof cast_to_type {
+      DataType type = 2;
+      // If this is set, Server will use Catalyst parser to parse this string to DataType.
+      string type_str = 3;
+    }
   }
 
   message Literal {

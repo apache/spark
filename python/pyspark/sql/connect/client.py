@@ -26,30 +26,13 @@ import pyarrow as pa
 
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
+import pyspark.sql.connect.types as types
 import pyspark.sql.types
 from pyspark import cloudpickle
 from pyspark.sql.types import (
     DataType,
-    ByteType,
-    ShortType,
-    IntegerType,
-    FloatType,
-    DateType,
-    TimestampType,
-    DayTimeIntervalType,
-    MapType,
-    StringType,
-    CharType,
-    VarcharType,
     StructType,
     StructField,
-    ArrayType,
-    DoubleType,
-    LongType,
-    DecimalType,
-    BinaryType,
-    BooleanType,
-    NullType,
 )
 
 
@@ -350,73 +333,7 @@ class SparkConnectClient(object):
         return self._execute_and_fetch(req)
 
     def _proto_schema_to_pyspark_schema(self, schema: pb2.DataType) -> DataType:
-        if schema.HasField("null"):
-            return NullType()
-        elif schema.HasField("boolean"):
-            return BooleanType()
-        elif schema.HasField("binary"):
-            return BinaryType()
-        elif schema.HasField("byte"):
-            return ByteType()
-        elif schema.HasField("short"):
-            return ShortType()
-        elif schema.HasField("integer"):
-            return IntegerType()
-        elif schema.HasField("long"):
-            return LongType()
-        elif schema.HasField("float"):
-            return FloatType()
-        elif schema.HasField("double"):
-            return DoubleType()
-        elif schema.HasField("decimal"):
-            p = schema.decimal.precision if schema.decimal.HasField("precision") else 10
-            s = schema.decimal.scale if schema.decimal.HasField("scale") else 0
-            return DecimalType(precision=p, scale=s)
-        elif schema.HasField("string"):
-            return StringType()
-        elif schema.HasField("char"):
-            return CharType(schema.char.length)
-        elif schema.HasField("var_char"):
-            return VarcharType(schema.var_char.length)
-        elif schema.HasField("date"):
-            return DateType()
-        elif schema.HasField("timestamp"):
-            return TimestampType()
-        elif schema.HasField("day_time_interval"):
-            start: Optional[int] = (
-                schema.day_time_interval.start_field
-                if schema.day_time_interval.HasField("start_field")
-                else None
-            )
-            end: Optional[int] = (
-                schema.day_time_interval.end_field
-                if schema.day_time_interval.HasField("end_field")
-                else None
-            )
-            return DayTimeIntervalType(startField=start, endField=end)
-        elif schema.HasField("array"):
-            return ArrayType(
-                self._proto_schema_to_pyspark_schema(schema.array.element_type),
-                schema.array.contains_null,
-            )
-        elif schema.HasField("struct"):
-            fields = [
-                StructField(
-                    f.name,
-                    self._proto_schema_to_pyspark_schema(f.data_type),
-                    f.nullable,
-                )
-                for f in schema.struct.fields
-            ]
-            return StructType(fields)
-        elif schema.HasField("map"):
-            return MapType(
-                self._proto_schema_to_pyspark_schema(schema.map.key_type),
-                self._proto_schema_to_pyspark_schema(schema.map.value_type),
-                schema.map.value_contains_null,
-            )
-        else:
-            raise Exception(f"Unsupported data type {schema}")
+        return types.proto_schema_to_pyspark_data_type(schema)
 
     def schema(self, plan: pb2.Plan) -> StructType:
         proto_schema = self._analyze(plan).schema
