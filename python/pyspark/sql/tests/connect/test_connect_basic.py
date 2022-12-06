@@ -41,7 +41,6 @@ else:
 from pyspark.sql.dataframe import DataFrame
 import pyspark.sql.functions
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
-from pyspark.testing.sqlutils import have_pandas, pandas_requirement_message
 from pyspark.testing.utils import ReusedPySparkTestCase
 
 
