@@ -19,10 +19,8 @@ from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
 from pyspark.testing.sqlutils import have_pandas
 
 if have_pandas:
-    import pandas
-
-if have_pandas:
     from pyspark.sql.connect.functions import lit
+    import pandas
 
 
 class SparkConnectTests(SparkConnectSQLTestCase):
