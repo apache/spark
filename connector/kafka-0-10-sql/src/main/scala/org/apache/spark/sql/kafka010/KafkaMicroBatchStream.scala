@@ -327,14 +327,42 @@ private[kafka010] class KafkaMicroBatchStream(
         s"topic-partitions for pre-fetched offset: $tpsForPrefetched, " +
         s"topic-partitions for end offset: $tpsForEndOffset.")
 
-    assert(allDataForTriggerAvailableNow.keySet.forall { tp =>
-      val offsetFromPrefetched = allDataForTriggerAvailableNow(tp)
-      val offsetFromEndOffset = endPartitionOffsets(tp)
-      offsetFromEndOffset <= offsetFromPrefetched
-    }, "For Kafka data source with Trigger.AvailableNow, end offset should have lower or " +
-      "equal offset per each topic partition than pre-fetched offset." +
-      s"topic-partitions for pre-fetched offset: $tpsForPrefetched, " +
-      s"topic-partitions for end offset: $tpsForEndOffset.")
+    val endOffsetHasGreaterOrEqualOffsetComparedToPrefetched = {
+      allDataForTriggerAvailableNow.keySet.forall { tp =>
+        val offsetFromPrefetched = allDataForTriggerAvailableNow(tp)
+        val offsetFromEndOffset = endPartitionOffsets(tp)
+        offsetFromEndOffset <= offsetFromPrefetched
+      }
+    }
+    assert(endOffsetHasGreaterOrEqualOffsetComparedToPrefetched,
+      "For Kafka data source with Trigger.AvailableNow, end offset should have lower or " +
+        "equal offset per each topic partition than pre-fetched offset." +
+        s"topic-partitions for pre-fetched offset: $tpsForPrefetched, " +
+        s"topic-partitions for end offset: $tpsForEndOffset.")
+
+    val latestOffsets = kafkaOffsetReader.fetchLatestOffsets(Some(endPartitionOffsets))
+    val tpsForLatestOffsets = latestOffsets.keySet
+
+    assert(tpsForEndOffset.subsetOf(tpsForLatestOffsets),
+      "Some of partitions in Kafka topic(s) have been lost during running query with " +
+        "Trigger.AvailableNow. We cannot continue since it's not possible to reach an " +
+        "end state. " +
+        s"topic-partitions for latest offset: $tpsForLatestOffsets, " +
+        s"topic-partitions for end offset: $tpsForEndOffset")
+
+    val endOffsetHasGreaterOrEqualOffsetComparedToLatest = {
+      tpsForEndOffset.forall { tp =>
+        val offsetFromLatest = latestOffsets(tp)
+        val offsetFromEndOffset = endPartitionOffsets(tp)
+        offsetFromEndOffset <= offsetFromLatest
+      }
+    }
+
+    assert(endOffsetHasGreaterOrEqualOffsetComparedToLatest,
+      "For Kafka data source with Trigger.AvailableNow, end offset should have lower or " +
+        "equal offset per each topic partition than latest offset." +
+        s"topic-partitions for latest offset: $tpsForLatestOffsets, " +
+        s"topic-partitions for end offset: $tpsForEndOffset")
   }
 
   override def prepareForTriggerAvailableNow(): Unit = {
