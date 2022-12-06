@@ -20,6 +20,7 @@ from pyspark.testing.sqlutils import have_pandas
 
 if have_pandas:
     from pyspark.sql.connect.functions import lit
+    import pandas
 
 
 class SparkConnectTests(SparkConnectSQLTestCase):
@@ -27,6 +28,57 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         # SPARK-41351: Column needs to support !=
         df = self.connect.range(10)
         self.assertEqual(9, len(df.filter(df.id != lit(1)).collect()))
+
+    def test_columns(self):
+        # SPARK-41036: test `columns` API for python client.
+        df = self.connect.read.table(self.tbl_name)
+        df2 = self.spark.read.table(self.tbl_name)
+        self.assertEqual(["id", "name"], df.columns)
+
+        self.assert_eq(
+            df.filter(df.name.rlike("20")).toPandas(), df2.filter(df2.name.rlike("20")).toPandas()
+        )
+        self.assert_eq(
+            df.filter(df.name.like("20")).toPandas(), df2.filter(df2.name.like("20")).toPandas()
+        )
+        self.assert_eq(
+            df.filter(df.name.ilike("20")).toPandas(), df2.filter(df2.name.ilike("20")).toPandas()
+        )
+        self.assert_eq(
+            df.filter(df.name.contains("20")).toPandas(),
+            df2.filter(df2.name.contains("20")).toPandas(),
+        )
+        self.assert_eq(
+            df.filter(df.name.startswith("2")).toPandas(),
+            df2.filter(df2.name.startswith("2")).toPandas(),
+        )
+        self.assert_eq(
+            df.filter(df.name.endswith("0")).toPandas(),
+            df2.filter(df2.name.endswith("0")).toPandas(),
+        )
+        self.assert_eq(
+            df.select(df.name.substr(0, 1).alias("col")).toPandas(),
+            df2.select(df2.name.substr(0, 1).alias("col")).toPandas(),
+        )
+        df3 = self.connect.sql("SELECT cast(null as int) as name")
+        df4 = self.spark.sql("SELECT cast(null as int) as name")
+        self.assert_eq(
+            df3.filter(df3.name.isNull()).toPandas(),
+            df4.filter(df4.name.isNull()).toPandas(),
+        )
+        self.assert_eq(
+            df3.filter(df3.name.isNotNull()).toPandas(),
+            df4.filter(df4.name.isNotNull()).toPandas(),
+        )
+
+    def test_simple_binary_expressions(self):
+        """Test complex expression"""
+        df = self.connect.read.table(self.tbl_name)
+        pd = df.select(df.id).where(df.id % lit(30) == lit(0)).sort(df.id.asc()).toPandas()
+        self.assertEqual(len(pd.index), 4)
+
+        res = pandas.DataFrame(data={"id": [0, 30, 60, 90]})
+        self.assert_(pd.equals(res), f"{pd.to_string()} != {res.to_string()}")
 
 
 if __name__ == "__main__":
