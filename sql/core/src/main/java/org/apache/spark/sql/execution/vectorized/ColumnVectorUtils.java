@@ -20,6 +20,9 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.sql.Date;
+import java.sql.Timestamp;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -146,6 +149,9 @@ public class ColumnVectorUtils {
       } else if (t == DataTypes.StringType) {
         byte[] b =((String)o).getBytes(StandardCharsets.UTF_8);
         dst.appendByteArray(b, 0, b.length);
+      } else if (t == DataTypes.BinaryType) {
+        byte[] b = (byte[]) o;
+        dst.appendByteArray(b, 0, b.length);
       } else if (t instanceof DecimalType) {
         DecimalType dt = (DecimalType) t;
         Decimal d = Decimal.apply((BigDecimal) o, dt.precision(), dt.scale());
@@ -165,7 +171,17 @@ public class ColumnVectorUtils {
         dst.getChild(1).appendInt(c.days);
         dst.getChild(2).appendLong(c.microseconds);
       } else if (t instanceof DateType) {
-        dst.appendInt(DateTimeUtils.fromJavaDate((Date)o));
+        if (o instanceof Date) {
+          dst.appendInt(DateTimeUtils.fromJavaDate((Date)o));
+        } else {
+          dst.appendInt(DateTimeUtils.localDateToDays((LocalDate)o));
+        }
+      } else if (t instanceof TimestampType) {
+        if (o instanceof Timestamp) {
+          dst.appendLong(DateTimeUtils.fromJavaTimestamp((Timestamp) o));
+        } else {
+          dst.appendLong(DateTimeUtils.instantToMicros((Instant) o));
+        }
       } else {
         throw new UnsupportedOperationException("Type " + t);
       }

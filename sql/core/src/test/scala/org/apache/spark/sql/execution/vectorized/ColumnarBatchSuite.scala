@@ -20,9 +20,9 @@ package org.apache.spark.sql.execution.vectorized
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.charset.StandardCharsets
+import java.sql.{Date, Timestamp}
 import java.time.LocalDateTime
 import java.util
-import java.util.NoSuchElementException
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -1382,12 +1382,18 @@ class ColumnarBatchSuite extends SparkFunSuite {
           case DateType =>
             assert(r1.getInt(ordinal) == DateTimeUtils.fromJavaDate(r2.getDate(ordinal)),
               "Seed = " + seed)
+          case TimestampType =>
+            assert(r1.getLong(ordinal) == DateTimeUtils.fromJavaTimestamp(r2.getTimestamp(ordinal)),
+              "Seed = " + seed)
           case t: DecimalType =>
             val d1 = r1.getDecimal(ordinal, t.precision, t.scale).toBigDecimal
             val d2 = r2.getDecimal(ordinal)
             assert(d1.compare(d2) == 0, "Seed = " + seed)
           case StringType =>
             assert(r1.getString(ordinal) == r2.getString(ordinal), "Seed = " + seed)
+          case BinaryType =>
+            assert(r1.getBinary(ordinal) sameElements r2.getAs[Array[Byte]](ordinal),
+              "Seed = " + seed)
           case CalendarIntervalType =>
             assert(r1.getInterval(ordinal) === r2.get(ordinal).asInstanceOf[CalendarInterval])
           case ArrayType(childType, n) =>
@@ -1409,13 +1415,34 @@ class ColumnarBatchSuite extends SparkFunSuite {
                     "Seed = " + seed)
                   i += 1
                 }
+              case StringType =>
+                // Parallel assert to speed up.
+                a1.zipWithIndex.par.foreach {
+                  case (v1, i) =>
+                    assert((v1 == null) == (a2(i) == null), "Seed = " + seed)
+                    if (v1 != null) {
+                      assert(v1.asInstanceOf[UTF8String].toString === a2(i).asInstanceOf[String],
+                        "Seed = " + seed)
+                    }
+                }
               case DateType =>
                 var i = 0
                 while (i < a1.length) {
                   assert((a1(i) == null) == (a2(i) == null), "Seed = " + seed)
                   if (a1(i) != null) {
                     val i1 = a1(i).asInstanceOf[Int]
-                    val i2 = DateTimeUtils.fromJavaDate(a2(i).asInstanceOf[java.sql.Date])
+                    val i2 = DateTimeUtils.fromJavaDate(a2(i).asInstanceOf[Date])
+                    assert(i1 === i2, "Seed = " + seed)
+                  }
+                  i += 1
+                }
+              case TimestampType =>
+                var i = 0
+                while (i < a1.length) {
+                  assert((a1(i) == null) == (a2(i) == null), "Seed = " + seed)
+                  if (a1(i) != null) {
+                    val i1 = a1(i).asInstanceOf[Long]
+                    val i2 = DateTimeUtils.fromJavaTimestamp(a2(i).asInstanceOf[Timestamp])
                     assert(i1 === i2, "Seed = " + seed)
                   }
                   i += 1
@@ -1477,7 +1504,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       DecimalType.ShortDecimal, DecimalType.IntDecimal, DecimalType.ByteDecimal,
       DecimalType.FloatDecimal, DecimalType.LongDecimal, new DecimalType(5, 2),
       new DecimalType(12, 2), new DecimalType(30, 10), CalendarIntervalType,
-      DateType)
+      DateType, StringType, BinaryType, TimestampType)
     val seed = System.nanoTime()
     val NUM_ROWS = 200
     val NUM_ITERS = 1000
