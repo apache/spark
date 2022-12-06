@@ -61,13 +61,13 @@ public class JavaSparkSessionSuite {
     spark = SparkSession.builder().master("local[*]").appName("testing").getOrCreate();
     Map params = new HashMap();
     params.put("_i1", "INTERVAL '1-1' YEAR TO MONTH");
-    params.put("p2", "'abc'");
+    params.put("p2", "'a\"bc'");
     Dataset ds = spark.sql(
       "SELECT @p2, i FROM VALUES (INTERVAL '2-2' YEAR TO MONTH) AS t(i) WHERE i > @_i1",
       params);
     List<Row> rows = ds.collectAsList();
     Assert.assertEquals(1, rows.size());
-    Assert.assertEquals("abc", rows.get(0).getString(0));
+    Assert.assertEquals("a\"bc", rows.get(0).getString(0));
     Assert.assertEquals(java.time.Period.of(2, 2, 0), rows.get(0).get(1));
   }
 }

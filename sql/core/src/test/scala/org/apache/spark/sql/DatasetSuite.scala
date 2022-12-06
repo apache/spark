@@ -2258,6 +2258,10 @@ class DatasetSuite extends QueryTest
       checkAnswer(
         spark.sql(sqlText, args),
         Row(0, 0) :: Row(1, 1) :: Row(2, 2) :: Row(3, 0) :: Nil)
+
+      checkAnswer(
+        spark.sql("""SELECT contains('Spark \'SQL\'', @subStr)""", Map("subStr" -> "'SQL'")),
+        Row(true))
     }
   }
 }
