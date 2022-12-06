@@ -1135,8 +1135,12 @@ class DataFrameSuite extends QueryTest
   }
 
   test("SPARK-41391: Correct the output column name of groupBy.agg(count_distinct)") {
-    val df = person.groupBy("id").agg(count_distinct(col("name")))
-    assert(df.columns === Array("id", "count(DISTINCT name)"))
+    withTempView("person") {
+      person.createOrReplaceTempView("person")
+      val df1 = person.groupBy("id").agg(count_distinct(col("name")))
+      val df2 = spark.sql("SELECT id, COUNT(DISTINCT name) FROM person GROUP BY id")
+      assert(df1.columns === df2.columns)
+    }
   }
 
   test("summary advanced") {
