@@ -1169,6 +1169,34 @@ class StatSummary(LogicalPlan):
         """
 
 
+class StatDescribe(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], cols: List[str]) -> None:
+        super().__init__(child)
+        self.cols = cols
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+        plan = proto.Relation()
+        plan.describe.input.CopyFrom(self._child.plan(session))
+        plan.describe.cols.extend(self.cols)
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return f"""{i}<Describe cols='{self.cols}'>"""
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>Describe</b><br />
+              Cols: {self.cols} <br />
+              {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
 class StatCrosstab(LogicalPlan):
     def __init__(self, child: Optional["LogicalPlan"], col1: str, col2: str) -> None:
         super().__init__(child)

@@ -375,6 +375,12 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       sparkTestRelation.summary("count", "mean", "stddev"))
   }
 
+  test("Test describe") {
+    comparePlans(
+      connectTestRelation.describe("id", "name"),
+      sparkTestRelation.describe("id", "name"))
+  }
+
   test("Test crosstab") {
     comparePlans(
       connectTestRelation.stat.crosstab("id", "name"),

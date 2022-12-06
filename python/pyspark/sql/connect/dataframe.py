@@ -1239,6 +1239,16 @@ class DataFrame(object):
             session=self._session,
         )
 
+    def describe(self, *cols: str) -> "DataFrame":
+        _cols: List[str] = list(cols)
+        for s in _cols:
+            if not isinstance(s, str):
+                raise TypeError(f"'cols' must be list[str], but got {type(s).__name__}")
+        return DataFrame.withPlan(
+            plan.StatDescribe(child=self._plan, cols=_cols),
+            session=self._session,
+        )
+
     def crosstab(self, col1: str, col2: str) -> "DataFrame":
         """
         Computes a pair-wise frequency table of the given columns. Also known as a contingency
