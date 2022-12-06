@@ -85,7 +85,8 @@ object BuildCommons {
   val javaVersion = settingKey[String]("source and target JVM version for javac and scalac")
 
   // Google Protobuf version used for generating the protobuf.
-  val protoVersion = "3.21.1"
+  // SPARK-41247: needs to be consistent with `protobuf.version` in `pom.xml`.
+  val protoVersion = "3.21.9"
   // GRPC version used for Spark Connect.
   val gprcVersion = "1.47.0"
 }
