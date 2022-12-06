@@ -52,6 +52,7 @@ object BuildCommons {
   val streamingProjects@Seq(streaming, streamingKafka010) =
     Seq("streaming", "streaming-kafka-0-10").map(ProjectRef(buildLocation, _))
 
+  val connectCommon = ProjectRef(buildLocation, "connect-common")
   val connect = ProjectRef(buildLocation, "connect")
 
   val allProjects@Seq(
@@ -59,7 +60,7 @@ object BuildCommons {
   ) = Seq(
     "core", "graphx", "mllib", "mllib-local", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
     "tags", "sketch", "kvstore"
-  ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ Seq(connect)
+  ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ Seq(connectCommon, connect)
 
   val optionallyEnabledProjects@Seq(kubernetes, mesos, yarn,
     sparkGangliaLgpl, streamingKinesisAsl,
@@ -402,7 +403,7 @@ object SparkBuild extends PomBuild {
   val mimaProjects = allProjects.filterNot { x =>
     Seq(
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
-      unsafe, tags, tokenProviderKafka010, sqlKafka010, connect, protobuf
+      unsafe, tags, tokenProviderKafka010, sqlKafka010, connectCommon, connect, protobuf
     ).contains(x)
   }
 
@@ -443,6 +444,7 @@ object SparkBuild extends PomBuild {
   /* Hive console settings */
   enable(Hive.settings)(hive)
 
+  enable(SparkConnectCommon.settings)(connectCommon)
   enable(SparkConnect.settings)(connect)
 
   /* Protobuf settings */
@@ -630,8 +632,7 @@ object Core {
   )
 }
 
-
-object SparkConnect {
+object SparkConnectCommon {
   import BuildCommons.protoVersion
 
   lazy val settings = Seq(
@@ -639,6 +640,85 @@ object SparkConnect {
     // even if the project is not using it.
     PB.protocVersion := BuildCommons.protoVersion,
 
+    // For some reason the resolution from the imported Maven build does not work for some
+    // of these dependendencies that we need to shade later on.
+    libraryDependencies ++= {
+      val guavaVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get("guava.version").asInstanceOf[String]
+      val guavaFailureaccessVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "guava.failureaccess.version").asInstanceOf[String]
+      Seq(
+        "io.grpc" % "protoc-gen-grpc-java" % BuildCommons.gprcVersion asProtocPlugin(),
+        "com.google.guava" % "guava" % guavaVersion,
+        "com.google.guava" % "failureaccess" % guavaFailureaccessVersion,
+        "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
+      )
+    },
+
+    dependencyOverrides ++= {
+      val guavaVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get("guava.version").asInstanceOf[String]
+      val guavaFailureaccessVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "guava.failureaccess.version").asInstanceOf[String]
+      Seq(
+        "com.google.guava" % "guava" % guavaVersion,
+        "com.google.guava" % "failureaccess" % guavaFailureaccessVersion,
+        "com.google.protobuf" % "protobuf-java" % protoVersion
+      )
+    },
+
+    (assembly / test) := { },
+
+    (assembly / logLevel) := Level.Info,
+
+    // Exclude `scala-library` from assembly.
+    (assembly / assemblyPackageScala / assembleArtifact) := false,
+
+    // Exclude `pmml-model-*.jar`, `scala-collection-compat_*.jar`,`jsr305-*.jar` and
+    // `netty-*.jar` and `unused-1.0.0.jar` from assembly.
+    (assembly / assemblyExcludedJars) := {
+      val cp = (assembly / fullClasspath).value
+      cp filter { v =>
+        val name = v.data.getName
+        name.startsWith("pmml-model-") || name.startsWith("scala-collection-compat_") ||
+          name.startsWith("jsr305-") || name.startsWith("netty-") || name == "unused-1.0.0.jar"
+      }
+    },
+
+    (assembly / assemblyMergeStrategy) := {
+      case m if m.toLowerCase(Locale.ROOT).endsWith("manifest.mf") => MergeStrategy.discard
+      // Drop all proto files that are not needed as artifacts of the build.
+      case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
+      case _ => MergeStrategy.first
+    }
+  ) ++ {
+    val connectProtocExecPath = sys.props.get("connect.protoc.executable.path")
+    val connectPluginExecPath = sys.props.get("connect.plugin.executable.path")
+    if (connectProtocExecPath.isDefined && connectPluginExecPath.isDefined) {
+      Seq(
+        (Compile / PB.targets) := Seq(
+          PB.gens.java -> (Compile / sourceManaged).value,
+          PB.gens.plugin(name = "grpc-java", path = connectPluginExecPath.get) -> (Compile / sourceManaged).value
+        ),
+        PB.protocExecutable := file(connectProtocExecPath.get)
+      )
+    } else {
+      Seq(
+        (Compile / PB.targets) := Seq(
+          PB.gens.java -> (Compile / sourceManaged).value,
+          PB.gens.plugin("grpc-java") -> (Compile / sourceManaged).value
+        )
+      )
+    }
+  }
+}
+
+object SparkConnect {
+  import BuildCommons.protoVersion
+
+  lazy val settings = Seq(
     // For some reason the resolution from the imported Maven build does not work for some
     // of these dependendencies that we need to shade later on.
     libraryDependencies ++= {
@@ -714,24 +794,12 @@ object SparkConnect {
       case _ => MergeStrategy.first
     }
   ) ++ {
-    val connectProtocExecPath = sys.props.get("connect.protoc.executable.path")
-    val connectPluginExecPath = sys.props.get("connect.plugin.executable.path")
-    if (connectProtocExecPath.isDefined && connectPluginExecPath.isDefined) {
-      Seq(
-        (Compile / PB.targets) := Seq(
-          PB.gens.java -> (Compile / sourceManaged).value,
-          PB.gens.plugin(name = "grpc-java", path = connectPluginExecPath.get) -> (Compile / sourceManaged).value
-        ),
-        PB.protocExecutable := file(connectProtocExecPath.get)
+    Seq(
+      (Compile / PB.targets) := Seq(
+        PB.gens.java -> (Compile / sourceManaged).value,
+        PB.gens.plugin("grpc-java") -> (Compile / sourceManaged).value
       )
-    } else {
-      Seq(
-        (Compile / PB.targets) := Seq(
-          PB.gens.java -> (Compile / sourceManaged).value,
-          PB.gens.plugin("grpc-java") -> (Compile / sourceManaged).value
-        )
-      )
-    }
+    )
   }
 }
 
@@ -1241,10 +1309,10 @@ object Unidoc {
 
     (ScalaUnidoc / unidoc / unidocProjectFilter) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
-        yarn, tags, streamingKafka010, sqlKafka010, connect, protobuf),
+        yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, protobuf),
     (JavaUnidoc / unidoc / unidocProjectFilter) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
-        yarn, tags, streamingKafka010, sqlKafka010, connect, protobuf),
+        yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, protobuf),
 
     (ScalaUnidoc / unidoc / unidocAllClasspaths) := {
       ignoreClasspaths((ScalaUnidoc / unidoc / unidocAllClasspaths).value)
