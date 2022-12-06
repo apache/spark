@@ -28,7 +28,7 @@ if have_pandas:
     from pyspark.sql.connect.plan import LogicalPlan
     from pyspark.sql.connect.session import SparkSession
 
-    connect_jar = search_jar("connector/connect", "spark-connect-assembly-", "spark-connect")
+    connect_jar = search_jar("connector/connect/server", "spark-connect-assembly-", "spark-connect")
 else:
     connect_jar = None
 
