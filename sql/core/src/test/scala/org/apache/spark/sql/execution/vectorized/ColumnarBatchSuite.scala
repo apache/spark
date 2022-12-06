@@ -21,7 +21,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
-import java.time.{LocalDate, LocalDateTime, Instant}
+import java.time.{Instant, LocalDate, LocalDateTime}
 import java.util
 
 import scala.collection.JavaConverters._
