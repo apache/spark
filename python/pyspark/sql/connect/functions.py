@@ -3492,7 +3492,7 @@ def concat_ws(sep: str, *cols: "ColumnOrName") -> Column:
     return _invoke_function("concat_ws", lit(sep), *[_to_col(c) for c in cols])
 
 
-# TODO: follow PySpark function's column name
+# TODO: enable with SPARK-41402
 # def decode(col: "ColumnOrName", charset: str) -> Column:
 #     """
 #     Computes the first argument into a string from a binary using the provided character set
