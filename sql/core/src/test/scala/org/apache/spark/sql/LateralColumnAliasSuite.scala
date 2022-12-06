@@ -29,16 +29,24 @@ class LateralColumnAliasSuite extends QueryTest with SharedSparkSession {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    sql(s"CREATE TABLE $testTable (dept INTEGER, name String, salary INTEGER, bonus INTEGER) " +
-      s"using orc")
+    sql(
+      s"""
+         |CREATE TABLE $testTable (
+         |  dept INTEGER,
+         |  name String,
+         |  salary INTEGER,
+         |  bonus INTEGER,
+         |  properties STRUCT<joinYear INTEGER, mostRecentEmployer STRING>)
+         |USING orc
+         |""".stripMargin)
     sql(
       s"""
          |INSERT INTO $testTable VALUES
-         |  (1, 'amy', 10000, 1000),
-         |  (2, 'alex', 12000, 1200),
-         |  (1, 'cathy', 9000, 1200),
-         |  (2, 'david', 10000, 1300),
-         |  (6, 'jen', 12000, 1200)
+         |  (1, 'amy', 10000, 1000, named_struct('joinYear', 2019, 'mostRecentEmployer', 'A')),
+         |  (2, 'alex', 12000, 1200, named_struct('joinYear', 2017, 'mostRecentEmployer', 'A')),
+         |  (1, 'cathy', 9000, 1200, named_struct('joinYear', 2020, 'mostRecentEmployer', 'B')),
+         |  (2, 'david', 10000, 1300, named_struct('joinYear', 2019, 'mostRecentEmployer', 'C')),
+         |  (6, 'jen', 12000, 1200, named_struct('joinYear', 2018, 'mostRecentEmployer', 'D'))
          |""".stripMargin)
   }
 
@@ -174,6 +182,16 @@ class LateralColumnAliasSuite extends QueryTest with SharedSparkSession {
           s"salary + bonus as prev_income, prev_income + bonus + salary from $testTable" +
           " where name = 'amy'"),
       Row(20000, 22000, 11000, 22000))
+
+    checkAnswer(
+      sql(s"SELECT named_struct('joinYear', 2022) AS properties, properties.joinYear " +
+        s"FROM $testTable WHERE name = 'amy'"),
+      Row(Row(2022), 2019))
+
+    checkAnswer(
+      sql(s"SELECT named_struct('name', 'someone') AS $testTable, $testTable.name " +
+        s"FROM $testTable WHERE name = 'amy'"),
+      Row(Row("someone"), "amy"))
   }
 
   test("Lateral alias conflicts with OuterReference - Project") {
@@ -240,9 +258,13 @@ class LateralColumnAliasSuite extends QueryTest with SharedSparkSession {
 
   test("Lateral alias of a struct - Project") {
     checkAnswer(
-      sql("SELECT named_struct('a', 1) AS foo, foo.a + 1 AS bar"),
-      Row(Row(1), 2))
-    // TODO: more tests
+      sql("SELECT named_struct('a', 1) AS foo, foo.a + 1 AS bar, bar + 1"),
+      Row(Row(1), 2, 3))
+
+    checkAnswer(
+      sql("SELECT named_struct('a', named_struct('b', 1)) AS foo, foo.a.b + 1 AS bar"),
+      Row(Row(Row(1)), 2)
+    )
   }
 
   test("Lateral alias chaining - Project") {
