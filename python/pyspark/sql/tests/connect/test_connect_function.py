@@ -26,7 +26,7 @@ if have_pandas:
     from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
     from pyspark.testing.pandasutils import PandasOnSparkTestCase
 else:
-    from pyspark.testing.sqlutils import ReusedSQLTestCase as PandasOnSparkTestCase
+    from pyspark.testing.sqlutils import ReusedSQLTestCase as PandasOnSparkTestCase  # type: ignore
 from pyspark.sql.dataframe import DataFrame
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.utils import ReusedPySparkTestCase

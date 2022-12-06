@@ -37,7 +37,7 @@ if have_pandas:
     from pyspark.sql.connect.functions import lit, col
     from pyspark.testing.pandasutils import PandasOnSparkTestCase
 else:
-    from pyspark.testing.sqlutils import ReusedSQLTestCase as PandasOnSparkTestCase
+    from pyspark.testing.sqlutils import ReusedSQLTestCase as PandasOnSparkTestCase  # type: ignore
 from pyspark.sql.dataframe import DataFrame
 import pyspark.sql.functions
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
