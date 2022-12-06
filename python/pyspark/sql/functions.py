@@ -7748,6 +7748,7 @@ def array_except(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """
     return _invoke_function_over_columns("array_except", col1, col2)
 
+
 def array_append(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """
     Collection function: returns an array of the elements in col1 along with the appended element in col2,

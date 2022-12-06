@@ -391,7 +391,7 @@ select array_append(array('a', 'b', 'c'), 'd')
 -- !query schema
 struct<array_append(array(a, b, c), d):array<string>>
 -- !query output
-[a,b,c,d]
+["a","b","c","d"]
 
 -- !query
 select array_append(array(1, 2, 3), null)
