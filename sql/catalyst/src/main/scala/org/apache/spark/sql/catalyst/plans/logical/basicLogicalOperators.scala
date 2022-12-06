@@ -906,7 +906,7 @@ object Range {
   }
 
   def getOutputAttrs: Seq[Attribute] = {
-    StructType(StructField("id", LongType, nullable = false) :: Nil).toAttributes
+    StructType(Array(StructField("id", LongType, nullable = false))).toAttributes
   }
 
   private def typeCoercion: TypeCoercionBase = {
@@ -1627,7 +1627,15 @@ case class SubqueryAlias(
 
   override def output: Seq[Attribute] = {
     val qualifierList = identifier.qualifier :+ alias
-    child.output.map(_.withQualifier(qualifierList))
+    child.output.map { attr =>
+      // `SubqueryAlias` sets a new qualifier for its output columns. It doesn't make sense to still
+      // restrict the hidden columns of natural/using join to be accessed by qualified name only.
+      if (attr.qualifiedAccessOnly) {
+        attr.markAsAllowAnyAccess().withQualifier(qualifierList)
+      } else {
+        attr.withQualifier(qualifierList)
+      }
+    }
   }
 
   override def metadataOutput: Seq[Attribute] = {

@@ -419,7 +419,7 @@ object Cast extends QueryErrorsBase {
       fallbackConf: Option[(String, String)]): DataTypeMismatch = {
     def withFunSuggest(names: String*): DataTypeMismatch = {
       DataTypeMismatch(
-        errorSubClass = "CAST_WITH_FUN_SUGGESTION",
+        errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
         messageParameters = Map(
           "srcType" -> toSQLType(from),
           "targetType" -> toSQLType(to),

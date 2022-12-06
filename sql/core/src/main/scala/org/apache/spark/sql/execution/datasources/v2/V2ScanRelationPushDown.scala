@@ -454,6 +454,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     case other => (other, false)
   }
 
+  @scala.annotation.tailrec
   private def pushDownOffset(
       plan: LogicalPlan,
       offset: Int): Boolean = plan match {

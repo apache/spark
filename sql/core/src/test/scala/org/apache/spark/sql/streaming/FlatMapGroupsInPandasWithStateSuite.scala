@@ -886,4 +886,67 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
         total = Seq(1), updated = Seq(1), droppedByWatermark = Seq(0), removed = Some(Seq(1)))
     )
   }
+
+  test("SPARK-41260: applyInPandasWithState - NumPy instances to JVM rows in state") {
+    assume(shouldTestPandasUDFs)
+
+    val pythonScript =
+      """
+        |import pandas as pd
+        |import numpy as np
+        |import datetime
+        |from pyspark.sql.types import StructType, StructField, StringType
+        |
+        |tpe = StructType([StructField("key", StringType())])
+        |
+        |def func(key, pdf_iter, state):
+        |    pdf = pd.DataFrame({
+        |        'int32': [np.int32(1)],
+        |        'int64': [np.int64(1)],
+        |        'float32': [np.float32(1)],
+        |        'float64': [np.float64(1)],
+        |        'bool': [True],
+        |        'datetime': [datetime.datetime(1990, 1, 1, 0, 0, 0)],
+        |        'timedelta': [datetime.timedelta(1)]
+        |    })
+        |
+        |    state.update(tuple(pdf.iloc[0]))
+        |    # Assert on Python primitive type comparison.
+        |    assert state.get == (
+        |        1, 1, 1.0, 1.0, True,
+        |        datetime.datetime(1990, 1, 1, 0, 0, 0), datetime.timedelta(1)
+        |    )
+        |    yield pd.DataFrame({'key': [key[0]]})
+        |""".stripMargin
+    val pythonFunc = TestGroupedMapPandasUDFWithState(
+      name = "pandas_grouped_map_with_state", pythonScript = pythonScript)
+
+    val inputData = MemoryStream[String]
+    val outputStructType = StructType(Seq(StructField("key", StringType)))
+    val stateStructType = StructType(Seq(
+      StructField("int32", IntegerType),
+      StructField("int64", LongType),
+      StructField("float32", FloatType),
+      StructField("float64", DoubleType),
+      StructField("bool", BooleanType),
+      StructField("datetime", DateType),
+      StructField("timedelta", DayTimeIntervalType())
+    ))
+    val inputDataDS = inputData.toDS()
+    val result =
+      inputDataDS
+        .groupBy("value")
+        .applyInPandasWithState(
+          pythonFunc(inputDataDS("value")).expr.asInstanceOf[PythonUDF],
+          outputStructType,
+          stateStructType,
+          "Update",
+          "NoTimeout")
+
+    testStream(result, Update)(
+      AddData(inputData, "a"),
+      CheckNewAnswer("a"),
+      assertNumStateRows(total = 1, updated = 1)
+    )
+  }
 }

@@ -475,7 +475,7 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
         mean_udf = self.pandas_agg_mean_udf
 
         with QuietTest(self.sc):
-            with self.assertRaisesRegex(AnalysisException, "nor.*aggregate function"):
+            with self.assertRaisesRegex(AnalysisException, "[MISSING_AGGREGATION]"):
                 df.groupby(df.id).agg(plus_one(df.v)).collect()
 
         with QuietTest(self.sc):

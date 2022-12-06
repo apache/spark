@@ -21,6 +21,7 @@ import scala.math.Ordering
 import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.annotation.Unstable
+import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalIntegerType}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.YearMonthIntervalType.fieldToString
 
@@ -57,6 +58,8 @@ case class YearMonthIntervalType(startField: Byte, endField: Byte) extends AnsiI
    * The YEAR field is constrained by the upper bound 178956970 to fit to `Int`.
    */
   override def defaultSize: Int = 4
+
+  override def physicalDataType: PhysicalDataType = PhysicalIntegerType
 
   private[spark] override def asNullable: YearMonthIntervalType = this
 

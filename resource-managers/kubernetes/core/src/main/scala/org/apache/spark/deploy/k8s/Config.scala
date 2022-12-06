@@ -723,6 +723,19 @@ private[spark] object Config extends Logging {
       .checkValue(value => value > 0, "Maximum number of pending pods should be a positive integer")
       .createWithDefault(Int.MaxValue)
 
+  val KUBERNETES_EXECUTOR_SNAPSHOTS_SUBSCRIBERS_GRACE_PERIOD =
+    ConfigBuilder("spark.kubernetes.executorSnapshotsSubscribersShutdownGracePeriod")
+      .doc("Time to wait for graceful shutdown kubernetes-executor-snapshots-subscribers " +
+        "thread pool. Since it may be called by ShutdownHookManager, where timeout is " +
+        "controlled by hadoop configuration `hadoop.service.shutdown.timeout` " +
+        "(default is 30s). As the whole Spark shutdown procedure shares the above timeout, " +
+        "this value should be short than that to prevent blocking the following shutdown " +
+        "procedures.")
+      .version("3.4.0")
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(value => value > 0, "Gracefully shutdown period must be a positive time value")
+      .createWithDefaultString("20s")
+
   val KUBERNETES_DRIVER_LABEL_PREFIX = "spark.kubernetes.driver.label."
   val KUBERNETES_DRIVER_ANNOTATION_PREFIX = "spark.kubernetes.driver.annotation."
   val KUBERNETES_DRIVER_SERVICE_LABEL_PREFIX = "spark.kubernetes.driver.service.label."
