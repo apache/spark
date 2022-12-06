@@ -464,7 +464,7 @@ case class Union(
     }
   }
 
-  override def metadataOutput: Seq[Attribute] = Nil
+  override def metadataOutput: Seq[Attribute] = children.take(1).flatMap(_.metadataOutput)
 
   override lazy val resolved: Boolean = {
     // allChildrenCompatible needs to be evaluated after childrenResolved

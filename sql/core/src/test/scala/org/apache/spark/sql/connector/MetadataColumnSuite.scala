@@ -232,4 +232,14 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
       )
     }
   }
+
+  test("Metadata column is propagated through union") {
+    withTable(tbl) {
+      prepareTable()
+      val df = spark.table(tbl)
+      val dfQuery = df.union(df).select("id", "data", "index", "_partition")
+      val expectedAnswer = Seq(Row(1, "a", 0, "3/1"), Row(2, "b", 0, "0/2"), Row(3, "c", 0, "1/3"))
+      checkAnswer(dfQuery, expectedAnswer ++ expectedAnswer)
+    }
+  }
 }
