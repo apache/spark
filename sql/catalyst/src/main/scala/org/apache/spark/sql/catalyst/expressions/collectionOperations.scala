@@ -4610,13 +4610,16 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
     """
     Examples:
       > SELECT _FUNC_(array('b', 'd', 'c', 'a'), 'd');
+       ['a', 'd', 'c', 'a', 'd']
 
   """,
   since = "3.4.0",
   group = "array_funcs")
 case class ArrayAppend(left: Expression, right: Expression)
   extends BinaryExpression
-    with ImplicitCastInputTypes with QueryErrorsBase {
+  with ImplicitCastInputTypes
+  with ComplexTypeMergingExpression
+  with QueryErrorsBase {
   override def prettyName: String = "array_append"
 
   override def inputTypes: Seq[AbstractDataType] = {
@@ -4626,8 +4629,8 @@ case class ArrayAppend(left: Expression, right: Expression)
           case Some(dt) => Seq(ArrayType(dt, hasNull), dt)
           case _ => Seq.empty
         }
+      case _ => Seq.empty
     }
-    Seq.empty
   }
 
   override def eval(input: InternalRow): Any = {
@@ -4642,9 +4645,10 @@ case class ArrayAppend(left: Expression, right: Expression)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     (left.dataType, right.dataType) match {
-      case (ArrayType(e1, _), (e2)) if e1.sameType(e2) =>
+      case (ArrayType(e1, _), e2) => if (e1.sameType(e2)) {
         TypeCheckResult.TypeCheckSuccess
-      case _ =>
+      }
+      else {
         DataTypeMismatch(
           errorSubClass = "ARRAY_FUNCTION_DIFF_TYPES",
           messageParameters = Map(
@@ -4653,6 +4657,17 @@ case class ArrayAppend(left: Expression, right: Expression)
             "rightType" -> toSQLType(right.dataType),
             "dataType" -> toSQLType(ArrayType)
           ))
+      }
+      case _ =>
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> "0",
+            "requiredType" -> toSQLType(ArrayType),
+            "inputSql" -> toSQLExpr(left),
+            "inputType" -> toSQLType(left.dataType)
+          )
+        )
     }
   }
 

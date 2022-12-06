@@ -2597,7 +2597,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     }
   }
 
-  test("SPARK-41232 ArrayAppend Expression Test") {
+  test("ArrayAppend Expression Test") {
     checkEvaluation(
       ArrayAppend(
         Literal.create(null, ArrayType(StringType)),
@@ -2671,6 +2671,37 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
             "dataType" -> "\"ARRAY\"",
             "leftType" -> "\"ARRAY<DATE>\"",
             "rightType" -> "\"TIMESTAMP\""))
+    )
+
+    assert(
+      ArrayAppend(
+        Literal.create(
+          Date.valueOf("2017-04-06"), DateType),
+        Literal.create(Timestamp.valueOf("2017-03-10 00:00:00"), TimestampType))
+        .checkInputDataTypes() == DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "0",
+          "requiredType" -> "\"ARRAY\"",
+          "inputSql" -> "\"DATE '2017-04-06'\"",
+          "inputType" -> "\"DATE\""
+          )
+        )
+    )
+
+    assert(
+      ArrayAppend(
+        Literal.create("Hi", StringType),
+        Literal.create("Spark", StringType))
+        .checkInputDataTypes() == DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "0",
+          "requiredType" -> "\"ARRAY\"",
+          "inputSql" -> "\"Hi\"",
+          "inputType" -> "\"STRING\""
+        )
+      )
     )
 
   }
