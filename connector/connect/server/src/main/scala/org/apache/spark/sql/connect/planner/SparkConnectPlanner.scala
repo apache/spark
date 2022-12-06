@@ -406,7 +406,7 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Expression.ExprTypeCase.UNRESOLVED_ATTRIBUTE =>
         transformUnresolvedExpression(exp)
       case proto.Expression.ExprTypeCase.UNRESOLVED_FUNCTION =>
-        transformScalarFunction(exp.getUnresolvedFunction)
+        transformUnresolvedFunction(exp.getUnresolvedFunction)
       case proto.Expression.ExprTypeCase.ALIAS => transformAlias(exp.getAlias)
       case proto.Expression.ExprTypeCase.EXPRESSION_STRING =>
         transformExpressionString(exp.getExpressionString)
@@ -538,14 +538,11 @@ class SparkConnectPlanner(session: SparkSession) {
    *   Proto representation of the function call.
    * @return
    */
-  private def transformScalarFunction(fun: proto.Expression.UnresolvedFunction): Expression = {
-    if (fun.getFunctionName == "product") {
-      if (fun.getArgumentsCount != 1) {
-        throw InvalidPlanInput("Product requires single child expression")
-      }
-      return aggregate
-        .Product(transformExpression(fun.getArgumentsList.asScala.head))
-        .toAggregateExpression()
+  private def transformUnresolvedFunction(
+      fun: proto.Expression.UnresolvedFunction): Expression = {
+    val functionOpt = transformUnregisteredFunction(fun)
+    if (functionOpt.nonEmpty) {
+      return functionOpt.get
     }
 
     if (fun.getIsUserDefinedFunction) {
@@ -558,6 +555,27 @@ class SparkConnectPlanner(session: SparkSession) {
         FunctionIdentifier(fun.getFunctionName),
         fun.getArgumentsList.asScala.map(transformExpression).toSeq,
         isDistinct = false)
+    }
+  }
+
+  /**
+   * For some reason, not all functions are registered in 'FunctionRegistry'. For a unregistered
+   * function, we can still wrap it under the proto 'UnresolvedFunction', and then resolve them in
+   * this method.
+   */
+  private def transformUnregisteredFunction(
+      fun: proto.Expression.UnresolvedFunction): Option[Expression] = {
+    fun.getFunctionName match {
+      case "product" =>
+        if (fun.getArgumentsCount != 1) {
+          throw InvalidPlanInput("Product requires single child expression")
+        }
+        Some(
+          aggregate
+            .Product(transformExpression(fun.getArgumentsList.asScala.head))
+            .toAggregateExpression())
+
+      case _ => None
     }
   }
 
