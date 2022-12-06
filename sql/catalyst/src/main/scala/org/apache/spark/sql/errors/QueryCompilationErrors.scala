@@ -649,10 +649,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def invalidFunctionArgumentNumberError(
       validParametersCount: Seq[Int], name: String, actualNumber: Int): Throwable = {
-    if (validParametersCount.length == 0) {
-      new AnalysisException(
-        errorClass = "_LEGACY_ERROR_TEMP_1043",
-        messageParameters = Map("name" -> name))
+    if (validParametersCount.isEmpty) {
+      invalidFunctionArgumentsError(name, "0", actualNumber)
     } else {
       val expectedNumberOfParameters = if (validParametersCount.length == 1) {
         validParametersCount.head.toString

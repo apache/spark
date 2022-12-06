@@ -2006,11 +2006,6 @@
       "Undefined function <name>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1043" : {
-    "message" : [
-      "Invalid arguments for function <name>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1045" : {
     "message" : [
       "ALTER TABLE SET LOCATION does not support partition for v2 tables."
