@@ -2011,11 +2011,6 @@
       "Invalid arguments for function <name>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1044" : {
-    "message" : [
-      "Function <name> accepts only one argument."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1045" : {
     "message" : [
       "ALTER TABLE SET LOCATION does not support partition for v2 tables."

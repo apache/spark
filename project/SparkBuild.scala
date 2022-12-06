@@ -86,7 +86,8 @@ object BuildCommons {
   val javaVersion = settingKey[String]("source and target JVM version for javac and scalac")
 
   // Google Protobuf version used for generating the protobuf.
-  val protoVersion = "3.21.1"
+  // SPARK-41247: needs to be consistent with `protobuf.version` in `pom.xml`.
+  val protoVersion = "3.21.9"
   // GRPC version used for Spark Connect.
   val gprcVersion = "1.47.0"
 }
@@ -613,9 +614,23 @@ object SparkParallelTestGrouping {
 
 object Core {
   import scala.sys.process.Process
+  import BuildCommons.protoVersion
   def buildenv = Process(Seq("uname")).!!.trim.replaceFirst("[^A-Za-z0-9].*", "").toLowerCase
   def bashpath = Process(Seq("where", "bash")).!!.split("[\r\n]+").head.replace('\\', '/')
   lazy val settings = Seq(
+    // Setting version for the protobuf compiler. This has to be propagated to every sub-project
+    // even if the project is not using it.
+    PB.protocVersion := BuildCommons.protoVersion,
+    // For some reason the resolution from the imported Maven build does not work for some
+    // of these dependendencies that we need to shade later on.
+    libraryDependencies ++= {
+      Seq(
+        "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
+      )
+    },
+    (Compile / PB.targets) := Seq(
+      PB.gens.java -> (Compile / sourceManaged).value
+    ),
     (Compile / resourceGenerators) += Def.task {
       val buildScript = baseDirectory.value + "/../build/spark-build-info"
       val targetDir = baseDirectory.value + "/target/extra-resources/"

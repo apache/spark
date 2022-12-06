@@ -145,8 +145,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         |  def builder(e: Seq[Expression]) = if (e.length == $x) {
         |    finalUdf.createScalaUDF(e)
         |  } else {
-        |    throw new AnalysisException("Invalid number of arguments for function " + name +
-        |      ". Expected: $x; Found: " + e.length)
+        |    throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "$x", e.length)
         |  }
         |  functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
         |  finalUdf
@@ -171,8 +170,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         |  def builder(e: Seq[Expression]) = if (e.length == $i) {
         |    ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
         |  } else {
-        |    throw new AnalysisException("Invalid number of arguments for function " + name +
-        |      ". Expected: $i; Found: " + e.length)
+        |    throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "$i", e.length)
         |  }
         |  functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
         |}""".stripMargin)

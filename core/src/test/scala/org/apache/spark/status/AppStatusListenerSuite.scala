@@ -20,7 +20,6 @@ package org.apache.spark.status
 import java.io.File
 import java.util.{Date, Properties}
 
-import scala.collection.immutable.Map
 import scala.reflect.{classTag, ClassTag}
 
 import org.scalatest.BeforeAndAfter
@@ -35,6 +34,7 @@ import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster._
 import org.apache.spark.status.ListenerEventsTestHelper._
 import org.apache.spark.status.api.v1
+import org.apache.spark.status.protobuf.KVStoreProtobufSerializer
 import org.apache.spark.storage._
 import org.apache.spark.tags.ExtendedLevelDBTest
 import org.apache.spark.util.Utils
@@ -45,7 +45,7 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
   private val twoReplicaMemAndDiskLevel = StorageLevel(true, true, false, true, 2)
 
   private var time: Long = _
-  private var testDir: File = _
+  protected var testDir: File = _
   private var store: ElementTrackingStore = _
   private var taskIdTracker = -1L
 
@@ -1903,4 +1903,14 @@ class AppStatusListenerWithLevelDBSuite extends AppStatusListenerSuite {
 class AppStatusListenerWithRocksDBSuite extends AppStatusListenerSuite {
   override def conf: SparkConf = super.conf
     .set(HYBRID_STORE_DISK_BACKEND, HybridStoreDiskBackend.ROCKSDB.toString)
+}
+
+class AppStatusListenerWithProtobufSerializerSuite extends AppStatusListenerSuite {
+  override def createKVStore: KVStore =
+    KVUtils.open(
+      testDir,
+      getClass().getName(),
+      conf,
+      Some(HybridStoreDiskBackend.ROCKSDB),
+      Some(new KVStoreProtobufSerializer()))
 }
