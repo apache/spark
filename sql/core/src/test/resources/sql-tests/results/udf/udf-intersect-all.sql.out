@@ -126,10 +126,9 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "NUM_COLUMNS_MISMATCH",
   "messageParameters" : {
-    "invalidNumColumns" : "2",
-    "invalidOrdinalNum" : "second",
+    "leftNumCols" : "1",
     "operator" : "INTERSECTALL",
-    "refNumColumns" : "1"
+    "rightNumCols" : "2"
   },
   "queryContext" : [ {
     "objectType" : "",
