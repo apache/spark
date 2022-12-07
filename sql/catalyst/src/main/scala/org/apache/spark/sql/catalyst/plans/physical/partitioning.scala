@@ -693,14 +693,14 @@ case class KeyGroupedShuffleSpec(
     //    3.3 each pair of partition expressions at the same index must share compatible
     //        transform functions.
     //  4. the partition values, if present on both sides, are following the same order.
-    case otherSpec@KeyGroupedShuffleSpec(otherPartitioning, otherDistribution) =>
+    case otherSpec @ KeyGroupedShuffleSpec(otherPartitioning, otherDistribution) =>
       distribution.clustering.length == otherDistribution.clustering.length &&
         numPartitions == other.numPartitions && isExpressionsCompatible(otherSpec) &&
-        partitioning.partitionValuesOpt.zip(otherPartitioning.partitionValuesOpt).forall {
-          case (left, right) => left.zip(right).forall { case (l, r) =>
-            ordering.compare(l, r) == 0
+          partitioning.partitionValuesOpt.zip(otherPartitioning.partitionValuesOpt).forall {
+            case (left, right) => left.zip(right).forall { case (l, r) =>
+              ordering.compare(l, r) == 0
+            }
           }
-        }
     case ShuffleSpecCollection(specs) =>
       specs.exists(isCompatibleWith)
     case _ => false

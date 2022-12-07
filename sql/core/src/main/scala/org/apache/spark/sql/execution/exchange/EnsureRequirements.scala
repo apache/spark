@@ -247,7 +247,6 @@ case class EnsureRequirements(
     children
   }
 
-
   private def checkKeyGroupedSpec(shuffleSpec: ShuffleSpec): Boolean = {
     def check(spec: KeyGroupedShuffleSpec): Boolean = {
       val attributes = spec.partitioning.expressions.flatMap(_.collectLeaves())
