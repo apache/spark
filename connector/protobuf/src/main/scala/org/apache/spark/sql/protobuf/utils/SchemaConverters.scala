@@ -40,19 +40,25 @@ object SchemaConverters {
    *
    * @since 3.4.0
    */
-  def toSqlType(descriptor: Descriptor): SchemaType = {
-    toSqlTypeHelper(descriptor)
+  def toSqlType(
+      descriptor: Descriptor,
+      protobufOptions: ProtobufOptions = ProtobufOptions(Map.empty)): SchemaType = {
+    toSqlTypeHelper(descriptor, protobufOptions)
   }
 
-  def toSqlTypeHelper(descriptor: Descriptor): SchemaType = ScalaReflectionLock.synchronized {
+  def toSqlTypeHelper(
+      descriptor: Descriptor,
+      protobufOptions: ProtobufOptions): SchemaType = ScalaReflectionLock.synchronized {
     SchemaType(
-      StructType(descriptor.getFields.asScala.flatMap(structFieldFor(_, Set.empty)).toArray),
+      StructType(descriptor.getFields.asScala.flatMap(
+        structFieldFor(_, Map.empty, protobufOptions: ProtobufOptions)).toArray),
       nullable = true)
   }
 
   def structFieldFor(
       fd: FieldDescriptor,
-      existingRecordNames: Set[String]): Option[StructField] = {
+      existingRecordNames: Map[String, Int],
+      protobufOptions: ProtobufOptions): Option[StructField] = {
     import com.google.protobuf.Descriptors.FieldDescriptor.JavaType._
     val dataType = fd.getJavaType match {
       case INT => Some(IntegerType)
@@ -81,9 +87,9 @@ object SchemaConverters {
         fd.getMessageType.getFields.forEach { field =>
           field.getName match {
             case "key" =>
-              keyType = structFieldFor(field, existingRecordNames).get.dataType
+              keyType = structFieldFor(field, existingRecordNames, protobufOptions).get.dataType
             case "value" =>
-              valueType = structFieldFor(field, existingRecordNames).get.dataType
+              valueType = structFieldFor(field, existingRecordNames, protobufOptions).get.dataType
           }
         }
         return Option(
@@ -92,18 +98,22 @@ object SchemaConverters {
             MapType(keyType, valueType, valueContainsNull = false).defaultConcreteType,
             nullable = false))
       case MESSAGE =>
-        // Stop recursion at the first level when a recursive field is encountered.
-        // TODO: The user should be given the option to set the recursion level to 1, 2, or 3
-        //  using the `spark.protobuf.recursion.level` configuration parameter.
-        if (existingRecordNames.contains(fd.getFullName)) {
+        // User can set recursionDepth of 1 or 2 or 3.
+        // Going beyond 3 levels of recursion is not allowed.
+        if (existingRecordNames.contains(fd.getFullName) &&
+          (protobufOptions.recursionDepth <= 0 || protobufOptions.recursionDepth > 3)) {
+          throw QueryCompilationErrors.foundRecursionInProtobufSchema(fd.toString())
+        } else if (existingRecordNames.contains(fd.getFullName) &&
+          existingRecordNames.getOrElse(fd.getFullName, 0) <= protobufOptions.recursionDepth) {
           return Some(StructField(fd.getName, NullType, nullable = false))
         }
 
-        val newRecordNames = existingRecordNames + fd.getFullName
+        val newRecordNames = existingRecordNames +
+          (fd.getFullName -> (existingRecordNames.getOrElse(fd.getFullName, 0) + 1))
 
         Option(
           fd.getMessageType.getFields.asScala
-            .flatMap(structFieldFor(_, newRecordNames))
+            .flatMap(structFieldFor(_, newRecordNames, protobufOptions))
             .toSeq)
           .filter(_.nonEmpty)
           .map(StructType.apply)

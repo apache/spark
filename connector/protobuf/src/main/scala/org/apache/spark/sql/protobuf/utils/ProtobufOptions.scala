@@ -38,6 +38,10 @@ private[sql] class ProtobufOptions(
 
   val parseMode: ParseMode =
     parameters.get("mode").map(ParseMode.fromString).getOrElse(FailFastMode)
+
+  // User can choose a recursion depth of 1, 2, or 3.
+  // Going beyond 3 levels of recursion is not allowed.
+  val recursionDepth: Int = parameters.getOrElse("recursionDepth", "0").toInt
 }
 
 private[sql] object ProtobufOptions {

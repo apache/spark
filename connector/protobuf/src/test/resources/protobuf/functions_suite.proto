@@ -175,32 +175,31 @@ message durationMsg {
 message OneOfEvent {
   string key = 1;
   oneof payload {
+    int32 col_1 = 2;
+    string col_2 = 3;
+    int64 col_3 = 4;
+  }
+  repeated string col_4 = 5;
+}
+
+message OneOfEventWithRecursion {
+  string key = 1;
+  oneof payload {
     EventRecursiveA recursiveA = 3;
-    EventRecursiveB recursiveB = 4;
-    EventRecursiveC recursiveC = 5;
-    EventRecursiveD recursiveD = 6;
+    EventRecursiveB recursiveB = 6;
   }
   string value = 7;
 }
 
 message EventRecursiveA {
-  OneOfEvent recursiveA = 1;
+  OneOfEventWithRecursion recursiveA = 1;
   string key = 2;
 }
 
 message EventRecursiveB {
-  repeated OneOfEvent recursiveB = 1;
-}
-
-message EventRecursiveC {
-  repeated OneOfEvent recursiveA = 1;
-  string key = 2;
-}
-
-message EventRecursiveD {
   string key = 1;
   string value = 2;
-  OneOfEvent recursiveA = 3;
+  OneOfEventWithRecursion recursiveA = 3;
 }
 
 message Status {
