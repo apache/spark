@@ -22,8 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Attri
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, MetadataColumn, SupportsMetadataColumns, Table, TableCapability}
-import org.apache.spark.sql.connector.read.{Scan, SupportsReportStatistics}
-import org.apache.spark.sql.connector.read.{Statistics => V2Statistics}
+import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
@@ -231,11 +230,11 @@ object DataSourceV2Relation {
       keys.forEach(key => {
         val colStat = v2ColumnStat.get(key)
         val distinct: Option[BigInt] =
-          if (colStat.distinctCount().isPresent) Some(colStat.distinctCount().get) else None
+          if (colStat.distinctCount().isPresent) Some(colStat.distinctCount().getAsLong) else None
         val min: Option[Any] = if (colStat.min().isPresent) Some(colStat.min().get) else None
         val max: Option[Any] = if (colStat.max().isPresent) Some(colStat.max().get) else None
         val nullCount: Option[BigInt] =
-          if (colStat.nullCount().isPresent) Some(colStat.nullCount().get()) else None
+          if (colStat.nullCount().isPresent) Some(colStat.nullCount().getAsLong) else None
         val avgLen: Option[Long] =
           if (colStat.avgLen().isPresent) Some(colStat.avgLen().getAsLong) else None
         val maxLen: Option[Long] =

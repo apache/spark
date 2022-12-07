@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.connector.catalog
 
-import java.math.BigInteger
 import java.time.{Instant, ZoneId}
 import java.time.temporal.ChronoUnit
 import java.util
@@ -282,8 +281,8 @@ abstract class InMemoryBaseTable(
     extends Statistics
 
   case class InMemoryColumnStats(
-      override val distinctCount: Optional[BigInteger],
-      override val nullCount: Optional[BigInteger]) extends ColumnStatistics
+      override val distinctCount: OptionalLong,
+      override val nullCount: OptionalLong) extends ColumnStatistics
 
   case class InMemoryHistogramBin(lo: Double, hi: Double, ndv: Long) extends HistogramBin
 
@@ -309,8 +308,8 @@ abstract class InMemoryBaseTable(
       val rowSizeInBytes = objectHeaderSizeInBytes + schema.defaultSize
       val sizeInBytes = numRows * rowSizeInBytes
 
-      val numOfCols = readSchema.fields.length
-      val dataTypes = readSchema.fields.map(_.dataType)
+      val numOfCols = tableSchema.fields.length
+      val dataTypes = tableSchema.fields.map(_.dataType)
       val colValueSets = new Array[util.HashSet[Object]](numOfCols)
       val numOfNulls = new Array[Long](numOfCols)
       for (i <- 0 until numOfCols) {
@@ -329,13 +328,13 @@ abstract class InMemoryBaseTable(
       )
 
       val map = new util.HashMap[NamedReference, ColumnStatistics]()
-      val colNames = readSchema.fields.map(_.name)
+      val colNames = tableSchema.fields.map(_.name)
       var i = 0
       for (col <- colNames) {
         val fieldReference = FieldReference(col)
         val colStats = InMemoryColumnStats(
-          Optional.of[BigInteger](BigInteger.valueOf(colValueSets(i).size())),
-          Optional.of[BigInteger](BigInteger.valueOf(numOfNulls(i))))
+          OptionalLong.of(colValueSets(i).size()),
+          OptionalLong.of(numOfNulls(i)))
         map.put(fieldReference, colStats)
         i = i + 1
       }

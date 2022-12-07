@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.connector.read.colstats;
 
-import java.math.BigInteger;
 import java.util.Optional;
 import java.util.OptionalLong;
 
@@ -36,8 +35,8 @@ public interface ColumnStatistics {
   /**
    * @return number of distinct values in the column
    */
-  default Optional<BigInteger> distinctCount() {
-    return Optional.empty();
+  default OptionalLong distinctCount() {
+    return OptionalLong.empty();
   }
 
   /**
@@ -57,8 +56,8 @@ public interface ColumnStatistics {
   /**
    * @return number of nulls in the column
    */
-  default Optional<BigInteger> nullCount() {
-    return Optional.empty();
+  default OptionalLong nullCount() {
+    return OptionalLong.empty();
   }
 
   /**
