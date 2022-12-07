@@ -392,9 +392,6 @@ class DataFrame(object):
             self._session,
         )
 
-    def describe(self, cols: List[Column]) -> Any:
-        ...
-
     def dropDuplicates(self, subset: Optional[List[str]] = None) -> "DataFrame":
         """Return a new :class:`DataFrame` with duplicate rows removed,
         optionally only deduplicating based on certain columns.
@@ -1325,6 +1322,40 @@ class DataFrame(object):
                 raise TypeError(f"'statistics' must be list[str], but got {type(s).__name__}")
         return DataFrame.withPlan(
             plan.StatSummary(child=self._plan, statistics=_statistics),
+            session=self._session,
+        )
+
+    def describe(self, *cols: str) -> "DataFrame":
+        """Computes basic statistics for numeric and string columns.
+
+        .. versionadded:: 3.4.0
+
+        This include count, mean, stddev, min, and max. If no columns are
+        given, this function computes statistics for all numerical or string columns.
+
+        Notes
+        -----
+        This function is meant for exploratory data analysis, as we make no
+        guarantee about the backward compatibility of the schema of the resulting
+        :class:`DataFrame`.
+        Use summary for expanded statistics and control over which statistics to compute.
+
+        Parameters
+        ----------
+        cols : str, list, optional
+             Column name or list of column names to describe by (default All columns).
+
+        Returns
+        -------
+        :class:`DataFrame`
+            A new DataFrame that describes (provides statistics) given DataFrame.
+        """
+        _cols: List[str] = list(cols)
+        for s in _cols:
+            if not isinstance(s, str):
+                raise TypeError(f"'cols' must be list[str], but got {type(s).__name__}")
+        return DataFrame.withPlan(
+            plan.StatDescribe(child=self._plan, cols=_cols),
             session=self._session,
         )
 

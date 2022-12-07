@@ -88,6 +88,7 @@ class Relation(google.protobuf.message.Message):
     REPLACE_FIELD_NUMBER: builtins.int
     SUMMARY_FIELD_NUMBER: builtins.int
     CROSSTAB_FIELD_NUMBER: builtins.int
+    DESCRIBE_FIELD_NUMBER: builtins.int
     UNKNOWN_FIELD_NUMBER: builtins.int
     @property
     def common(self) -> global___RelationCommon: ...
@@ -150,6 +151,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def crosstab(self) -> global___StatCrosstab: ...
     @property
+    def describe(self) -> global___StatDescribe: ...
+    @property
     def unknown(self) -> global___Unknown: ...
     def __init__(
         self,
@@ -183,6 +186,7 @@ class Relation(google.protobuf.message.Message):
         replace: global___NAReplace | None = ...,
         summary: global___StatSummary | None = ...,
         crosstab: global___StatCrosstab | None = ...,
+        describe: global___StatDescribe | None = ...,
         unknown: global___Unknown | None = ...,
     ) -> None: ...
     def HasField(
@@ -196,6 +200,8 @@ class Relation(google.protobuf.message.Message):
             b"crosstab",
             "deduplicate",
             b"deduplicate",
+            "describe",
+            b"describe",
             "drop",
             b"drop",
             "drop_na",
@@ -263,6 +269,8 @@ class Relation(google.protobuf.message.Message):
             b"crosstab",
             "deduplicate",
             b"deduplicate",
+            "describe",
+            b"describe",
             "drop",
             b"drop",
             "drop_na",
@@ -350,6 +358,7 @@ class Relation(google.protobuf.message.Message):
         "replace",
         "summary",
         "crosstab",
+        "describe",
         "unknown",
     ] | None: ...
 
@@ -1485,6 +1494,39 @@ class StatSummary(google.protobuf.message.Message):
     ) -> None: ...
 
 global___StatSummary = StatSummary
+
+class StatDescribe(google.protobuf.message.Message):
+    """Computes basic statistics for numeric and string columns, including count, mean, stddev, min,
+    and max. If no columns are given, this function computes statistics for all numerical or
+    string columns.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    COLS_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    @property
+    def cols(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """(Optional) Columns to compute statistics on."""
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        cols: collections.abc.Iterable[builtins.str] | None = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["cols", b"cols", "input", b"input"]
+    ) -> None: ...
+
+global___StatDescribe = StatDescribe
 
 class StatCrosstab(google.protobuf.message.Message):
     """Computes a pair-wise frequency table of the given columns. Also known as a contingency table.

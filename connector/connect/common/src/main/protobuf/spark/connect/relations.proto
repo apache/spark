@@ -63,6 +63,7 @@ message Relation {
     // stat functions
     StatSummary summary = 100;
     StatCrosstab crosstab = 101;
+    StatDescribe describe = 102;
 
     Unknown unknown = 999;
   }
@@ -402,6 +403,17 @@ message StatSummary {
   // If no statistics are given, this function computes 'count', 'mean', 'stddev', 'min',
   // 'approximate quartiles' (percentiles at 25%, 50%, and 75%), and 'max'.
   repeated string statistics = 2;
+}
+
+// Computes basic statistics for numeric and string columns, including count, mean, stddev, min,
+// and max. If no columns are given, this function computes statistics for all numerical or
+// string columns.
+message StatDescribe {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Optional) Columns to compute statistics on.
+  repeated string cols = 2;
 }
 
 // Computes a pair-wise frequency table of the given columns. Also known as a contingency table.

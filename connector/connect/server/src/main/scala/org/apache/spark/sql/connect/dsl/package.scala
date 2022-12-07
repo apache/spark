@@ -651,6 +651,18 @@ package object dsl {
           .build()
       }
 
+      def describe(cols: String*): Relation = {
+        Relation
+          .newBuilder()
+          .setDescribe(
+            proto.StatDescribe
+              .newBuilder()
+              .setInput(logicalPlan)
+              .addAllCols(cols.toSeq.asJava)
+              .build())
+          .build()
+      }
+
       def toDF(columnNames: String*): Relation =
         Relation
           .newBuilder()

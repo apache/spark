@@ -86,6 +86,7 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Relation.RelTypeCase.DROP_NA => transformNADrop(rel.getDropNa)
       case proto.Relation.RelTypeCase.REPLACE => transformReplace(rel.getReplace)
       case proto.Relation.RelTypeCase.SUMMARY => transformStatSummary(rel.getSummary)
+      case proto.Relation.RelTypeCase.DESCRIBE => transformStatDescribe(rel.getDescribe)
       case proto.Relation.RelTypeCase.CROSSTAB =>
         transformStatCrosstab(rel.getCrosstab)
       case proto.Relation.RelTypeCase.RENAME_COLUMNS_BY_SAME_LENGTH_NAMES =>
@@ -250,6 +251,13 @@ class SparkConnectPlanner(session: SparkSession) {
     Dataset
       .ofRows(session, transformRelation(rel.getInput))
       .summary(rel.getStatisticsList.asScala.toSeq: _*)
+      .logicalPlan
+  }
+
+  private def transformStatDescribe(rel: proto.StatDescribe): LogicalPlan = {
+    Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .describe(rel.getColsList.asScala.toSeq: _*)
       .logicalPlan
   }
 

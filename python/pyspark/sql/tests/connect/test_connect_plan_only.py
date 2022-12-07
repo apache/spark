@@ -183,6 +183,17 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
             ["count", "mean", "stddev", "min", "25%"],
         )
 
+    def test_describe(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+        plan = df.filter(df.col_name > 3).describe()._plan.to_proto(self.connect)
+        self.assertEqual(plan.root.describe.cols, [])
+
+        plan = df.filter(df.col_name > 3).describe("col_a", "col_b")._plan.to_proto(self.connect)
+        self.assertEqual(
+            plan.root.describe.cols,
+            ["col_a", "col_b"],
+        )
+
     def test_crosstab(self):
         df = self.connect.readTable(table_name=self.tbl_name)
         plan = df.filter(df.col_name > 3).crosstab("col_a", "col_b")._plan.to_proto(self.connect)
