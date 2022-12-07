@@ -331,10 +331,10 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         query.stop()
       }
     }
-    TestUtils.assertExceptionMsg(exc, "end offset should have lower or equal offset " +
-      "per each topic partition than latest offset.")
-    TestUtils.assertExceptionMsg(exc, "topic-partitions for latest offset: ")
-    TestUtils.assertExceptionMsg(exc, "topic-partitions for end offset: ")
+    TestUtils.assertExceptionMsg(exc, "Some of partitions in Kafka topic(s) report available" +
+      " offset which is less than end offset during running query with Trigger.AvailableNow.")
+    TestUtils.assertExceptionMsg(exc, "latest offset: ")
+    TestUtils.assertExceptionMsg(exc, "end offset: ")
   }
 
   test("(de)serialization of initial offsets") {
