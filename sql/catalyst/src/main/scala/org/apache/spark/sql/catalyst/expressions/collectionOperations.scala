@@ -4613,13 +4613,9 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
   group = "array_funcs",
   since = "3.4.0")
 case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes with SupportQueryContext
-    with QueryErrorsBase {
+  extends TernaryExpression with ImplicitCastInputTypes with ComplexTypeMergingExpression
+    with SupportQueryContext with QueryErrorsBase{
 
-  @transient private lazy val elementType: DataType =
-    srcArrayExpr.dataType.asInstanceOf[ArrayType].elementType
-
-  override def dataType: DataType = srcArrayExpr.dataType
   override def inputTypes: Seq[AbstractDataType] = {
     (srcArrayExpr.dataType, posExpr.dataType, itemExpr.dataType) match {
       case (ArrayType(e1, hasNull), e2: IntegralType, e3) if (e2 != LongType) =>
@@ -4662,26 +4658,27 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
   override def nullSafeEval(arr: Any, pos: Any, item: Any): Any = {
     val baseArr = arr.asInstanceOf[ArrayData]
     val posInt = pos.asInstanceOf[Int]
+    val arrayElementType = dataType.asInstanceOf[ArrayType].elementType
+    val newArrayLength = baseArr.numElements() + 1
 
-    if (baseArr.numElements() + 1  > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-      throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(baseArr.numElements() + 1)
+    if (newArrayLength  > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+      throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(newArrayLength)
     }
     val validatedPosInt = this.getValidPosIndexOrThrow(posInt, baseArr.numElements())
 
     if (validatedPosInt < 0 || validatedPosInt > baseArr.numElements()) {
       null
     } else {
-      val newArray = new Array[Any](arr.asInstanceOf[ArrayData].numElements() + 1)
-      arr.asInstanceOf[ArrayData].foreach(elementType, (i, v) =>
+      val newArray = new Array[Any](newArrayLength)
+      baseArr.foreach(arrayElementType, (i, v) =>
         if (i >= validatedPosInt) {
           newArray(i + 1) = v
         } else {
           newArray(i) = v
         }
       )
-      if (item != null) {
-        newArray(validatedPosInt) = item
-      }
+      newArray(validatedPosInt) = item
+
       new GenericArrayData(newArray)
     }
   }
@@ -4747,6 +4744,7 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
   override def third: Expression = itemExpr
 
   override def prettyName: String = "array_insert"
+  override def dataType: DataType = first.dataType
 
   override protected def withNewChildrenInternal(
       newSrcArrayExpr: Expression, newPosExpr: Expression, newItemExpr: Expression): ArrayInsert =
