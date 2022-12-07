@@ -1376,7 +1376,8 @@ class SparkSession(SparkConversionMixin):
         if len(kwargs) > 0:
             sqlQuery = formatter.format(sqlQuery, **kwargs)
         try:
-            return DataFrame(self._jsparkSession.sql(sqlQuery), self)
+            args = formatter.unused_args
+            return DataFrame(self._jsparkSession.sql(sqlQuery, args), self)
         finally:
             if len(kwargs) > 0:
                 formatter.clear()

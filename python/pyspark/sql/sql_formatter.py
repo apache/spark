@@ -37,6 +37,7 @@ class SQLStringFormatter(string.Formatter):
     def __init__(self, session: "SparkSession") -> None:
         self._session: "SparkSession" = session
         self._temp_views: List[Tuple[DataFrame, str]] = []
+        self.unused_args: Mapping[str, str] = {}
 
     def get_field(self, field_name: str, args: Sequence[Any], kwargs: Mapping[str, Any]) -> Any:
         obj, first = super(SQLStringFormatter, self).get_field(field_name, args, kwargs)
@@ -78,7 +79,14 @@ class SQLStringFormatter(string.Formatter):
         else:
             return val
 
+    def check_unused_args(self, used_args: Sequence[Any], args: Sequence[Any], kwargs: Mapping[str, Any]) -> None:
+        for k in kwargs:
+            if isinstance(kwargs[k], str) and not used_args.__contains__(k):
+                self.unused_args[k] = kwargs[k]
+        return super().check_unused_args(used_args, args, kwargs)
+
     def clear(self) -> None:
         for _, n in self._temp_views:
             self._session.catalog.dropTempView(n)
         self._temp_views = []
+        self.unused_args = []
