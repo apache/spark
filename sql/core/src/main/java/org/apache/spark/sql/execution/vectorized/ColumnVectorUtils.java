@@ -21,8 +21,6 @@ import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.sql.Date;
 import java.sql.Timestamp;
-import java.time.Instant;
-import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -171,17 +169,9 @@ public class ColumnVectorUtils {
         dst.getChild(1).appendInt(c.days);
         dst.getChild(2).appendLong(c.microseconds);
       } else if (t instanceof DateType) {
-        if (o instanceof Date) {
-          dst.appendInt(DateTimeUtils.fromJavaDate((Date)o));
-        } else {
-          dst.appendInt(DateTimeUtils.localDateToDays((LocalDate)o));
-        }
+        dst.appendInt(DateTimeUtils.fromJavaDate((Date)o));
       } else if (t instanceof TimestampType) {
-        if (o instanceof Timestamp) {
-          dst.appendLong(DateTimeUtils.fromJavaTimestamp((Timestamp) o));
-        } else {
-          dst.appendLong(DateTimeUtils.instantToMicros((Instant) o));
-        }
+        dst.appendLong(DateTimeUtils.fromJavaTimestamp((Timestamp) o));
       } else {
         throw new UnsupportedOperationException("Type " + t);
       }
