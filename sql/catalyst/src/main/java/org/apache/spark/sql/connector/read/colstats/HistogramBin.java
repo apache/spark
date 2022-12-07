@@ -26,7 +26,18 @@ import org.apache.spark.annotation.Evolving;
  */
 @Evolving
 public interface HistogramBin {
+  /**
+   * @return lower bound of the value range in this bin
+   */
   double lo();
+
+  /**
+   * @return higher bound of the value range in this bin
+   */
   double hi();
+
+  /**
+   * @return approximate number of distinct values in this bin
+   */
   long ndv();
 }

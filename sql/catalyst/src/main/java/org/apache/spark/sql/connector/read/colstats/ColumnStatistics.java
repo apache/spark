@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.connector.read.colstats;
 
-import org.apache.spark.annotation.Evolving;
 import java.math.BigInteger;
 import java.util.Optional;
 import java.util.OptionalLong;
+
+import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.read.Statistics;
 
 /**
  * An interface to represent column statistics, which is part of
@@ -30,30 +32,52 @@ import java.util.OptionalLong;
  */
 @Evolving
 public interface ColumnStatistics {
+
+  /**
+   * @return number of distinct values in the column
+   */
   default Optional<BigInteger> distinctCount() {
     return Optional.empty();
   }
 
+  /**
+   * @return minimum value in the column
+   */
   default Optional<Object> min() {
     return Optional.empty();
   }
 
+  /**
+   * @return maximum value in the column
+   */
   default Optional<Object> max() {
     return Optional.empty();
   }
 
+  /**
+   * @return number of nulls in the column
+   */
   default Optional<BigInteger> nullCount() {
     return Optional.empty();
   }
 
+  /**
+   * @return average length of the values in the column
+   */
   default OptionalLong avgLen() {
     return OptionalLong.empty();
   }
 
+  /**
+   * @return maximum length of the values in the column
+   */
   default OptionalLong maxLen() {
     return OptionalLong.empty();
   }
 
+  /**
+   * @return histogram of the values in the column
+   */
   default Optional<Histogram> histogram() {
     return Optional.empty();
   }

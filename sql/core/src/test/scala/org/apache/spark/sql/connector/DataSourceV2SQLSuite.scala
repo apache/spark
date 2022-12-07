@@ -2775,8 +2775,8 @@ class DataSourceV2SQLSuiteV1Filter
 
   test("SPARK-41378: test column stats") {
     spark.sql("CREATE TABLE testcat.test (id bigint NOT NULL, data string)")
-    spark.sql("INSERT INTO testcat.test values (1, 'test1'), (2, 'test2'), (3, 'test3')," +
-      " (4, 'test4'), (5, 'test5')")
+    spark.sql("INSERT INTO testcat.test values (1, 'test1'), (2, null), (3, null)," +
+      " (4, null), (5, 'test5')")
     val df = spark.sql("select * from testcat.test")
 
     df.queryExecution.optimizedPlan.collect {
@@ -2786,23 +2786,10 @@ class DataSourceV2SQLSuiteV1Filter
         assert(stats.rowCount.get == 5)
         val colStats = stats.attributeStats.values.toArray
         assert(colStats.length == 2)
-        colStats.foreach(stat => {
-          assert(stat.distinctCount.get == 5)
-          assert(stat.min.get == 0)
-          assert(stat.max.get == 5)
-          assert(stat.nullCount.get == 0)
-          assert(stat.avgLen.get == 111L)
-          assert(stat.maxLen.get == 1111L)
-          assert(stat.histogram.get.height == 5)
-          val bins = stat.histogram.get.bins
-          var i = 0
-          bins.foreach(bin => {
-            assert(bin.hi == 2.0 + 2 * i)
-            assert(bin.lo == 1.0 + 2 * i)
-            assert(bin.ndv == 5)
-            i += 1
-          })
-        })
+        assert(colStats(0).distinctCount.get == 3)
+        assert(colStats(0).nullCount.get == 3)
+        assert(colStats(1).distinctCount.get == 5)
+        assert(colStats(1).nullCount.get == 0)
     }
   }
 

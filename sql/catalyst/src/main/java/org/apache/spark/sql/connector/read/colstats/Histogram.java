@@ -28,6 +28,13 @@ import org.apache.spark.annotation.Evolving;
  */
 @Evolving
 public interface Histogram {
+  /**
+   * @return number of rows in each bin
+   */
   double height();
+
+  /**
+   * @return equi-height histogram bins
+   */
   HistogramBin[] bins();
 }

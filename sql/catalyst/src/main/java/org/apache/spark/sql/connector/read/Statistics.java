@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector.read;
 
-import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
 
@@ -35,7 +35,7 @@ import org.apache.spark.sql.connector.read.colstats.ColumnStatistics;
 public interface Statistics {
   OptionalLong sizeInBytes();
   OptionalLong numRows();
-  default Optional<HashMap<NamedReference, ColumnStatistics>> columnStats() {
+  default Optional<Map<NamedReference, ColumnStatistics>> columnStats() {
     return Optional.empty();
   }
 }

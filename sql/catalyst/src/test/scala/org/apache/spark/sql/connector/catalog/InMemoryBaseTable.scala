@@ -21,7 +21,7 @@ import java.math.BigInteger
 import java.time.{Instant, ZoneId}
 import java.time.temporal.ChronoUnit
 import java.util
-import java.util.{HashMap, Optional, OptionalLong}
+import java.util.{Optional, OptionalLong}
 
 import scala.collection.mutable
 
@@ -278,17 +278,12 @@ abstract class InMemoryBaseTable(
   case class InMemoryStats(
       sizeInBytes: OptionalLong,
       numRows: OptionalLong,
-      override val columnStats: Optional[HashMap[NamedReference, ColumnStatistics]])
+      override val columnStats: Optional[util.Map[NamedReference, ColumnStatistics]])
     extends Statistics
 
-  case class InMemoryColumnStats (
+  case class InMemoryColumnStats(
       override val distinctCount: Optional[BigInteger],
-      override val min: Optional[AnyRef],
-      override val max: Optional[AnyRef],
-      override val nullCount: Optional[BigInteger],
-      override val avgLen: OptionalLong,
-      override val maxLen: OptionalLong,
-      override val histogram: Optional[Histogram]) extends ColumnStatistics
+      override val nullCount: Optional[BigInteger]) extends ColumnStatistics
 
   case class InMemoryHistogramBin(lo: Double, hi: Double, ndv: Long) extends HistogramBin
 
@@ -314,26 +309,35 @@ abstract class InMemoryBaseTable(
       val rowSizeInBytes = objectHeaderSizeInBytes + schema.defaultSize
       val sizeInBytes = numRows * rowSizeInBytes
 
+      val numOfCols = readSchema.fields.length
+      val dataTypes = readSchema.fields.map(_.dataType)
+      val colValueSets = new Array[util.HashSet[Object]](numOfCols)
+      val numOfNulls = new Array[Long](numOfCols)
+      for (i <- 0 until numOfCols) {
+        colValueSets(i) = new util.HashSet[Object]
+      }
+
+      inputPartitions.foreach(inputPartition =>
+        inputPartition.rows.foreach(row =>
+          for (i <- 0 until numOfCols) {
+            colValueSets(i).add(row.get(i, dataTypes(i)))
+            if (row.isNullAt(i)) {
+              numOfNulls(i) += 1
+            }
+          }
+        )
+      )
+
       val map = new util.HashMap[NamedReference, ColumnStatistics]()
       val colNames = readSchema.fields.map(_.name)
+      var i = 0
       for (col <- colNames) {
         val fieldReference = FieldReference(col)
-        // put some fake data for testing only
-        val bin1 = InMemoryHistogramBin(1, 2, 5L)
-        val bin2 = InMemoryHistogramBin(3, 4, 5L)
-        val bin3 = InMemoryHistogramBin(5, 6, 5L)
-        val bin4 = InMemoryHistogramBin(7, 8, 5L)
-        val bin5 = InMemoryHistogramBin(9, 10, 5L)
         val colStats = InMemoryColumnStats(
-          Optional.of[BigInteger](BigInteger.valueOf(5)),
-          Optional.of[AnyRef](Integer.valueOf(0)),
-          Optional.of[AnyRef](Integer.valueOf(5)),
-          Optional.of[BigInteger](BigInteger.valueOf(0)),
-          OptionalLong.of(111L),
-          OptionalLong.of(1111L),
-          Optional.of[Histogram](InMemoryHistogram(5, Array(bin1, bin2, bin3, bin4, bin5)))
-        )
+          Optional.of[BigInteger](BigInteger.valueOf(colValueSets(i).size())),
+          Optional.of[BigInteger](BigInteger.valueOf(numOfNulls(i))))
         map.put(fieldReference, colStats)
+        i = i + 1
       }
 
       InMemoryStats(OptionalLong.of(sizeInBytes), OptionalLong.of(numRows), Optional.of(map))
