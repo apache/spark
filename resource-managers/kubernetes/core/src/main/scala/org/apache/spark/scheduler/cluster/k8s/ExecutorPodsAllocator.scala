@@ -455,7 +455,6 @@ class ExecutorPodsAllocator(
             .inNamespace(namespace)
             .resource(createdExecutorPod)
             .delete()
-          PVC_COUNTER.decrementAndGet()
           throw e
       }
     }
