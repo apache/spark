@@ -397,7 +397,7 @@ class SparkConnectPlanner(session: SparkSession) {
   }
 
   private def transformUnresolvedExpression(exp: proto.Expression): UnresolvedAttribute = {
-    UnresolvedAttribute(exp.getUnresolvedAttribute.getUnparsedIdentifier)
+    UnresolvedAttribute.quotedString(exp.getUnresolvedAttribute.getUnparsedIdentifier)
   }
 
   private def transformExpression(exp: proto.Expression): Expression = {

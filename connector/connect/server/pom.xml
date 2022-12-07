@@ -256,6 +256,7 @@
               <include>com.google.j2objc:j2objc-annotations</include>
               <include>org.checkerframework:checker-qual</include>
               <include>com.google.code.gson:gson</include>
+              <include>org.apache.spark:spark-connect-common_${scala.binary.version}</include>
             </includes>
           </artifactSet>
           <relocations>

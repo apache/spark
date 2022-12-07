@@ -357,6 +357,10 @@ class Column:
     """
 
     def __init__(self, expr: Expression) -> None:
+        if not isinstance(expr, Expression):
+            raise TypeError(
+                f"Cannot construct column expected Expression, got {expr} ({type(expr)})"
+            )
         self._expr = expr
 
     __gt__ = _bin_op(">")
