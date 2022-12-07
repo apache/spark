@@ -311,9 +311,6 @@ class RocksDB(
         "checkpoint" -> checkpointTimeMs,
         "fileSync" -> fileSyncTimeMs
       )
-      // reset resources as we already pushed the changes and it has been committed
-      closePrefixScanIterators()
-      resetWriteBatch()
       logInfo(s"Committed $newVersion, stats = ${metrics.json}")
       loadedVersion
     } catch {
@@ -323,6 +320,10 @@ class RocksDB(
     } finally {
       db.continueBackgroundWork()
       silentDeleteRecursively(checkpointDir, s"committing $newVersion")
+      // reset resources as either 1) we already pushed the changes and it has been committed or
+      // 2) commit has failed and the current version is "invalidated".
+      closePrefixScanIterators()
+      resetWriteBatch()
       release()
     }
   }
