@@ -97,6 +97,11 @@ class SparkConnectTests(SparkConnectSQLTestCase):
     def test_cast(self):
         df = self.connect.read.table(self.tbl_name)
         df2 = self.spark.read.table(self.tbl_name)
+
+        self.assert_eq(
+            df.select(df.id.cast("string")).toPandas(), df2.select(df2.id.cast("string")).toPandas()
+        )
+
         for x in [
             StringType(),
             BinaryType(),

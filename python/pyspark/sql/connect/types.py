@@ -65,34 +65,9 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
         ret.double.CopyFrom(pb2.DataType.Double())
     elif isinstance(data_type, DecimalType):
         ret.decimal.CopyFrom(pb2.DataType.Decimal())
-    # elif isinstance(data_type, CharType):
-    #     c = pb2.DataType.Char()
-    #     c.length = data_type.length
-    #     ret.char.CopyFrom(c)
-    # elif isinstance(data_type, VarcharType):
-    #     v = pb2.DataType.VarChar()
-    #     v.length = data_type.length
-    #     ret.var_char.CopyFrom(v)
-    # elif isinstance(data_type, DateType):
-    #     ret.date.CopyFrom(pb2.DataType.Date())
-    # elif isinstance(data_type, TimestampType):
-    #     ret.timestamp.CopyFrom(pb2.DataType.Timestamp())
-    # elif isinstance(data_type, DayTimeIntervalType):
-    #     ret.day_time_interval.start_field = data_type.startField
-    #     ret.day_time_interval.end_field = data_type.endField
-    # elif isinstance(data_type, ArrayType):
-    #     ret.array.element_type.CopyFrom(pyspark_types_to_proto_types(data_type.elementType))
-    #     ret.array.contains_null = data_type.containsNull
-    # elif isinstance(data_type, MapType):
-    #     ret.map.key_type.CopyFrom(data_type.keyType)
-    #     ret.map.key_type.CopyFrom(data_type.valueType)
-    #     ret.map.value_contains_null = data_type.valueContainsNull
-    # elif isinstance(data_type, StructType):
-    #     for f in data_type.fields:
-    #         field = pb2.DataType.StructField()
-    #         field.data_type.CopyFrom(pyspark_types_to_proto_types(f.dataType))
-    #         field.nullable = f.nullable
-    #         data_type.fields.append(field)
+    elif isinstance(data_type, DayTimeIntervalType):
+        ret.day_time_interval.start_field = data_type.startField
+        ret.day_time_interval.end_field = data_type.endField
     else:
         raise Exception(f"Unsupported data type {data_type}")
     return ret
