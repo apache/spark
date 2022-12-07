@@ -28,6 +28,7 @@ import org.apache.spark.sql.{AnalysisException, Dataset}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical
+import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.toConnectProtoValue
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
@@ -570,5 +571,50 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     val df =
       Dataset.ofRows(spark, transform(proto.Relation.newBuilder.setProject(project).build()))
     assert(df.schema.fields.toSeq.map(_.name) == Seq("id"))
+  }
+
+  test("Hint") {
+    val input = proto.Relation
+      .newBuilder()
+      .setSql(
+        proto.SQL
+          .newBuilder()
+          .setQuery("select id from range(10)")
+          .build())
+
+    val logical = transform(
+      proto.Relation
+        .newBuilder()
+        .setHint(
+          proto.Hint
+            .newBuilder()
+            .setInput(input)
+            .setName("REPARTITION")
+            .addParameters(toConnectProtoValue(10000)))
+        .build())
+
+    val df = Dataset.ofRows(spark, logical)
+    assert(df.rdd.partitions.length == 10000)
+  }
+
+  test("Hint with illegal name will be ignored") {
+    val input = proto.Relation
+      .newBuilder()
+      .setSql(
+        proto.SQL
+          .newBuilder()
+          .setQuery("select id from range(10)")
+          .build())
+
+    val logical = transform(
+      proto.Relation
+        .newBuilder()
+        .setHint(
+          proto.Hint
+            .newBuilder()
+            .setInput(input)
+            .setName("illegal"))
+        .build())
+    assert(10 === Dataset.ofRows(spark, logical).count())
   }
 }

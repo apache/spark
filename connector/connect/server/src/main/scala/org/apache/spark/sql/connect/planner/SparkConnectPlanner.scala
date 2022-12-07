@@ -33,15 +33,15 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.{logical, Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
-import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, SubqueryAlias, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, SubqueryAlias, Union, UnresolvedHint}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.{toCatalystExpression, toCatalystValue}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.command.CreateViewCommand
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.Utils
 
 final case class InvalidPlanInput(
@@ -93,6 +93,7 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Relation.RelTypeCase.RENAME_COLUMNS_BY_NAME_TO_NAME_MAP =>
         transformRenameColumnsByNameToNameMap(rel.getRenameColumnsByNameToNameMap)
       case proto.Relation.RelTypeCase.WITH_COLUMNS => transformWithColumns(rel.getWithColumns)
+      case proto.Relation.RelTypeCase.HINT => transformHint(rel.getHint)
       case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
         throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
       case _ => throw InvalidPlanInput(s"${rel.getUnknown} not supported.")
@@ -199,17 +200,7 @@ class SparkConnectPlanner(session: SparkSession) {
     } else {
       val valueMap = mutable.Map.empty[String, Any]
       cols.zip(values).foreach { case (col, value) =>
-        value.getLiteralTypeCase match {
-          case proto.Expression.Literal.LiteralTypeCase.BOOLEAN =>
-            valueMap.update(col, value.getBoolean)
-          case proto.Expression.Literal.LiteralTypeCase.LONG =>
-            valueMap.update(col, value.getLong)
-          case proto.Expression.Literal.LiteralTypeCase.DOUBLE =>
-            valueMap.update(col, value.getDouble)
-          case proto.Expression.Literal.LiteralTypeCase.STRING =>
-            valueMap.update(col, value.getString)
-          case other => throw InvalidPlanInput(s"Unsupported value type: $other")
-        }
+        valueMap.update(col, toCatalystValue(value))
       }
       dataset.na.fill(valueMap = valueMap.toMap).logicalPlan
     }
@@ -233,19 +224,11 @@ class SparkConnectPlanner(session: SparkSession) {
   }
 
   private def transformReplace(rel: proto.NAReplace): LogicalPlan = {
-    def convert(value: proto.Expression.Literal): Any = {
-      value.getLiteralTypeCase match {
-        case proto.Expression.Literal.LiteralTypeCase.NULL => null
-        case proto.Expression.Literal.LiteralTypeCase.BOOLEAN => value.getBoolean
-        case proto.Expression.Literal.LiteralTypeCase.DOUBLE => value.getDouble
-        case proto.Expression.Literal.LiteralTypeCase.STRING => value.getString
-        case other => throw InvalidPlanInput(s"Unsupported value type: $other")
-      }
-    }
-
     val replacement = mutable.Map.empty[Any, Any]
     rel.getReplacementsList.asScala.foreach { replace =>
-      replacement.update(convert(replace.getOldValue), convert(replace.getNewValue))
+      replacement.update(
+        toCatalystValue(replace.getOldValue),
+        toCatalystValue(replace.getNewValue))
     }
 
     if (rel.getColsCount == 0) {
@@ -311,6 +294,11 @@ class SparkConnectPlanner(session: SparkSession) {
       .ofRows(session, transformRelation(rel.getInput))
       .withColumns(names.toSeq, cols.toSeq)
       .logicalPlan
+  }
+
+  private def transformHint(rel: proto.Hint): LogicalPlan = {
+    val params = rel.getParametersList.asScala.map(toCatalystValue).toSeq
+    UnresolvedHint(rel.getName, params, transformRelation(rel.getInput))
   }
 
   private def transformDeduplicate(rel: proto.Deduplicate): LogicalPlan = {
@@ -426,90 +414,7 @@ class SparkConnectPlanner(session: SparkSession) {
    *   Expression
    */
   private def transformLiteral(lit: proto.Expression.Literal): Expression = {
-    lit.getLiteralTypeCase match {
-      case proto.Expression.Literal.LiteralTypeCase.NULL =>
-        expressions.Literal(null, NullType)
-
-      case proto.Expression.Literal.LiteralTypeCase.BINARY =>
-        expressions.Literal(lit.getBinary.toByteArray, BinaryType)
-
-      case proto.Expression.Literal.LiteralTypeCase.BOOLEAN =>
-        expressions.Literal(lit.getBoolean, BooleanType)
-
-      case proto.Expression.Literal.LiteralTypeCase.BYTE =>
-        expressions.Literal(lit.getByte, ByteType)
-
-      case proto.Expression.Literal.LiteralTypeCase.SHORT =>
-        expressions.Literal(lit.getShort, ShortType)
-
-      case proto.Expression.Literal.LiteralTypeCase.INTEGER =>
-        expressions.Literal(lit.getInteger, IntegerType)
-
-      case proto.Expression.Literal.LiteralTypeCase.LONG =>
-        expressions.Literal(lit.getLong, LongType)
-
-      case proto.Expression.Literal.LiteralTypeCase.FLOAT =>
-        expressions.Literal(lit.getFloat, FloatType)
-
-      case proto.Expression.Literal.LiteralTypeCase.DOUBLE =>
-        expressions.Literal(lit.getDouble, DoubleType)
-
-      case proto.Expression.Literal.LiteralTypeCase.DECIMAL =>
-        val decimal = Decimal.apply(lit.getDecimal.getValue)
-        var precision = decimal.precision
-        if (lit.getDecimal.hasPrecision) {
-          precision = math.max(precision, lit.getDecimal.getPrecision)
-        }
-        var scale = decimal.scale
-        if (lit.getDecimal.hasScale) {
-          scale = math.max(scale, lit.getDecimal.getScale)
-        }
-        expressions.Literal(decimal, DecimalType(math.max(precision, scale), scale))
-
-      case proto.Expression.Literal.LiteralTypeCase.STRING =>
-        expressions.Literal(UTF8String.fromString(lit.getString), StringType)
-
-      case proto.Expression.Literal.LiteralTypeCase.DATE =>
-        expressions.Literal(lit.getDate, DateType)
-
-      case proto.Expression.Literal.LiteralTypeCase.TIMESTAMP =>
-        expressions.Literal(lit.getTimestamp, TimestampType)
-
-      case proto.Expression.Literal.LiteralTypeCase.TIMESTAMP_NTZ =>
-        expressions.Literal(lit.getTimestampNtz, TimestampNTZType)
-
-      case proto.Expression.Literal.LiteralTypeCase.CALENDAR_INTERVAL =>
-        val interval = new CalendarInterval(
-          lit.getCalendarInterval.getMonths,
-          lit.getCalendarInterval.getDays,
-          lit.getCalendarInterval.getMicroseconds)
-        expressions.Literal(interval, CalendarIntervalType)
-
-      case proto.Expression.Literal.LiteralTypeCase.YEAR_MONTH_INTERVAL =>
-        expressions.Literal(lit.getYearMonthInterval, YearMonthIntervalType())
-
-      case proto.Expression.Literal.LiteralTypeCase.DAY_TIME_INTERVAL =>
-        expressions.Literal(lit.getDayTimeInterval, DayTimeIntervalType())
-
-      case proto.Expression.Literal.LiteralTypeCase.ARRAY =>
-        val literals = lit.getArray.getValuesList.asScala.toArray.map(transformLiteral)
-        CreateArray(literals)
-
-      case proto.Expression.Literal.LiteralTypeCase.STRUCT =>
-        val literals = lit.getStruct.getFieldsList.asScala.toArray.map(transformLiteral)
-        CreateStruct(literals)
-
-      case proto.Expression.Literal.LiteralTypeCase.MAP =>
-        val literals = lit.getMap.getPairsList.asScala.toArray.flatMap { pair =>
-          transformLiteral(pair.getKey) :: transformLiteral(pair.getValue) :: Nil
-        }
-        CreateMap(literals)
-
-      case _ =>
-        throw InvalidPlanInput(
-          s"Unsupported Literal Type: ${lit.getLiteralTypeCase.getNumber}" +
-            s"(${lit.getLiteralTypeCase.name})")
-    }
+    toCatalystExpression(lit)
   }
 
   private def transformLimit(limit: proto.Limit): LogicalPlan = {
