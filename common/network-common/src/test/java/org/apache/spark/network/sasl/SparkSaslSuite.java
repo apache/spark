@@ -345,6 +345,78 @@ public class SparkSaslSuite {
     }
   }
 
+  @Test
+  public void testSaslWithRetriesEnabled() throws Exception {
+    testSaslResetHandling(1);
+  }
+
+  @Test
+  public void testMultipleSaslRetries() throws Exception {
+    testSaslResetHandling(2);
+  }
+
+  private void testSaslResetHandling(final int maxRetries)  {
+    Map<String, String> testConf = ImmutableMap.of("spark.authenticate.enableSaslEncryption",
+        String.valueOf(false),
+        "spark.shuffle.sasl.enableRetries", String.valueOf(true));
+    TransportConf conf = new TransportConf("shuffle", new MapConfigProvider(testConf));
+
+    SecretKeyHolder keyHolder = mock(SecretKeyHolder.class);
+    when(keyHolder.getSaslUser(anyString())).thenReturn("user");
+    when(keyHolder.getSecretKey(anyString())).thenReturn("secret");
+
+    Channel channel = mock(Channel.class);
+    RpcHandler delegate = mock(RpcHandler.class);
+    doAnswer(invocation -> {
+      ByteBuffer message = (ByteBuffer) invocation.getArguments()[1];
+      RpcResponseCallback cb = (RpcResponseCallback) invocation.getArguments()[2];
+      assertEquals("Ping", JavaUtils.bytesToString(message));
+      cb.onSuccess(JavaUtils.stringToBytes("Pong"));
+      return null;
+    }).when(delegate)
+        .receive(any(TransportClient.class), any(ByteBuffer.class), any(RpcResponseCallback.class));
+
+    RpcHandler saslHandler = new SaslRpcHandler(conf, channel, delegate, keyHolder);
+
+    TransportClient client = mock(TransportClient.class);
+    final ByteBuffer[] handlerResponse = new ByteBuffer[1];
+
+    when(client.sendRpcSync(any(), anyLong())).thenAnswer(invocation -> {
+
+      ByteBuffer msg = (ByteBuffer)(invocation.getArguments()[0]);
+      saslHandler.receive(client, msg, new RpcResponseCallback() {
+        @Override
+        public void onSuccess(ByteBuffer response) {
+          handlerResponse[0] = response;
+        }
+
+        @Override
+        public void onFailure(Throwable e) {
+        }
+      });
+      return handlerResponse[0];
+    });
+
+    SaslClientBootstrap bootstrapClient = new SaslClientBootstrap(conf, "user", keyHolder);
+    for (int i = 0; i < maxRetries; i++) {
+      bootstrapClient.doBootstrap(client, channel);
+    }
+
+    // Subsequent messages to handler should be forwarded to delegate
+    saslHandler.receive(client, JavaUtils.stringToBytes("Ping"), new RpcResponseCallback() {
+      @Override
+      public void onSuccess(ByteBuffer response) {
+        handlerResponse[0] = response;
+      }
+
+      @Override
+      public void onFailure(Throwable e) {
+      }
+    });
+
+    assertEquals("Pong", JavaUtils.bytesToString(handlerResponse[0]));
+  }
+
   private static class SaslTestCtx implements AutoCloseable {
 
     final TransportClient client;

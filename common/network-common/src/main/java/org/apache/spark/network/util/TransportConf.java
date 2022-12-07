@@ -333,6 +333,15 @@ public class TransportConf {
     return conf.getBoolean("spark.shuffle.useOldFetchProtocol", false);
   }
 
+  /** Whether to enable sasl retries. Sasl retries will be enabled, once the shuffle
+   * server is upgraded. The updated SaslHandler can handle older clients that don't
+   * send any SaslInitMessage. However, the older SaslHandler will not be able to handle
+   * SaslInitMessage.
+   */
+  public boolean enableSaslRetries() {
+    return conf.getBoolean("spark.shuffle.sasl.enableRetries", false);
+  }
+
   /**
    * Class name of the implementation of MergedShuffleFileManager that merges the blocks
    * pushed to it when push-based shuffle is enabled. By default, push-based shuffle is disabled at

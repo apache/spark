@@ -74,10 +74,33 @@ public class SaslRpcHandler extends AbstractAuthRpcHandler {
       ByteBuffer message,
       RpcResponseCallback callback) {
     if (saslServer == null || !saslServer.isComplete()) {
+      // save the position and limit, before reading a byte
+      int position = message.position();
+      int limit = message.limit();
+
       ByteBuf nettyBuf = Unpooled.wrappedBuffer(message);
+      byte tagByte = nettyBuf.readByte();
+      if (super.isAuthenticated() && tagByte != SaslMessage.TAG_BYTE
+          && tagByte != SaslInitMessage.TAG_BYTE) {
+        // not a sasl or sasl reset, so sasl completed at client as well.
+        message.position(position);
+        message.limit(limit);
+        return true;
+      }
+      if (tagByte != SaslMessage.TAG_BYTE && tagByte != SaslInitMessage.TAG_BYTE) {
+        throw new IllegalStateException("Expected SaslMessage, received something else"
+            + " (maybe your client does not have SASL enabled?)");
+      }
+      if (tagByte == SaslInitMessage.TAG_BYTE) {
+        logger.debug("Received an init message for channel {}", client);
+        if (saslServer != null) {
+          resetSaslServer(true);
+        }
+        client.unsetClientId();
+      }
       SaslMessage saslMessage;
       try {
-        saslMessage = SaslMessage.decode(nettyBuf);
+        saslMessage = SaslMessage.decodeWithoutTag(nettyBuf);
       } finally {
         nettyBuf.release();
       }
@@ -86,13 +109,13 @@ public class SaslRpcHandler extends AbstractAuthRpcHandler {
         // First message in the handshake, setup the necessary state.
         client.setClientId(saslMessage.appId);
         saslServer = new SparkSaslServer(saslMessage.appId, secretKeyHolder,
-          conf.saslServerAlwaysEncrypt());
+            conf.saslServerAlwaysEncrypt());
       }
 
       byte[] response;
       try {
         response = saslServer.response(JavaUtils.bufferToArray(
-          saslMessage.body().nioByteBuffer()));
+            saslMessage.body().nioByteBuffer()));
       } catch (IOException ioe) {
         throw new RuntimeException(ioe);
       }
@@ -107,13 +130,13 @@ public class SaslRpcHandler extends AbstractAuthRpcHandler {
     if (saslServer.isComplete()) {
       if (!SparkSaslServer.QOP_AUTH_CONF.equals(saslServer.getNegotiatedProperty(Sasl.QOP))) {
         logger.debug("SASL authentication successful for channel {}", client);
-        complete(true);
+        resetSaslServer(true);
         return true;
       }
 
       logger.debug("Enabling encryption for channel {}", client);
       SaslEncryption.addToChannel(channel, saslServer, conf.maxSaslEncryptedBlockSize());
-      complete(false);
+      resetSaslServer(false);
       return true;
     }
     return false;
@@ -130,7 +153,7 @@ public class SaslRpcHandler extends AbstractAuthRpcHandler {
     }
   }
 
-  private void complete(boolean dispose) {
+  private void resetSaslServer(boolean dispose) {
     if (dispose) {
       try {
         saslServer.dispose();

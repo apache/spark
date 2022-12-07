@@ -26,6 +26,7 @@ import java.util.concurrent.TimeUnit;
 
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.Uninterruptibles;
+import org.apache.spark.network.client.TransportClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -99,6 +100,9 @@ public class RetryingBlockTransferor {
    */
   private RetryingBlockTransferListener currentListener;
 
+  /** Whether sasl retries are enabled. */
+  private final boolean enableSaslRetries;
+
   private final ErrorHandler errorHandler;
 
   public RetryingBlockTransferor(
@@ -115,6 +119,7 @@ public class RetryingBlockTransferor {
     Collections.addAll(outstandingBlocksIds, blockIds);
     this.currentListener = new RetryingBlockTransferListener();
     this.errorHandler = errorHandler;
+    this.enableSaslRetries = conf.enableSaslRetries();
   }
 
   public RetryingBlockTransferor(
@@ -192,8 +197,11 @@ public class RetryingBlockTransferor {
   private synchronized boolean shouldRetry(Throwable e) {
     boolean isIOException = e instanceof IOException
       || e.getCause() instanceof IOException;
+    boolean isSaslTimeout = enableSaslRetries &&
+        (e instanceof TransportClient.SaslTimeoutException ||
+            (e.getCause() != null && e.getCause() instanceof TransportClient.SaslTimeoutException));
     boolean hasRemainingRetries = retryCount < maxRetries;
-    return isIOException && hasRemainingRetries && errorHandler.shouldRetryError(e);
+    return (isSaslTimeout || isIOException) && hasRemainingRetries && errorHandler.shouldRetryError(e);
   }
 
   /**

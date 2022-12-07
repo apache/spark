@@ -33,7 +33,7 @@ import org.apache.spark.network.protocol.Message;
 class SaslMessage extends AbstractMessage {
 
   /** Serialization tag used to catch incorrect payloads. */
-  private static final byte TAG_BYTE = (byte) 0xEA;
+  static final byte TAG_BYTE = (byte) 0xEA;
 
   public final String appId;
 
@@ -71,6 +71,13 @@ class SaslMessage extends AbstractMessage {
         + " (maybe your client does not have SASL enabled?)");
     }
 
+    String appId = Encoders.Strings.decode(buf);
+    // See comment in encodedLength().
+    buf.readInt();
+    return new SaslMessage(appId, buf.retain());
+  }
+
+  public static SaslMessage decodeWithoutTag(ByteBuf buf) {
     String appId = Encoders.Strings.decode(buf);
     // See comment in encodedLength().
     buf.readInt();

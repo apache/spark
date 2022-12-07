@@ -24,6 +24,7 @@ import java.nio.ByteBuffer;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import javax.annotation.Nullable;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -113,6 +114,14 @@ public class TransportClient implements Closeable {
   public void setClientId(String id) {
     Preconditions.checkState(clientId == null, "Client ID has already been set.");
     this.clientId = id;
+  }
+
+  /**
+   * This is needed when sasl server is reset. Sasl authentication
+   * will be re-attempted.
+   */
+  public void unsetClientId() {
+    this.clientId = null;
   }
 
   /**
@@ -264,7 +273,7 @@ public class TransportClient implements Closeable {
   public ByteBuffer sendRpcSync(ByteBuffer message, long timeoutMs) {
     final SettableFuture<ByteBuffer> result = SettableFuture.create();
 
-    sendRpc(message, new RpcResponseCallback() {
+    long rpcId = sendRpc(message, new RpcResponseCallback() {
       @Override
       public void onSuccess(ByteBuffer response) {
         try {
@@ -287,6 +296,9 @@ public class TransportClient implements Closeable {
 
     try {
       return result.get(timeoutMs, TimeUnit.MILLISECONDS);
+    } catch (TimeoutException e) {
+      logger.warn("RPC {} timed-out", rpcId);
+      throw Throwables.propagate(new SaslTimeoutException(e));
     } catch (ExecutionException e) {
       throw Throwables.propagate(e.getCause());
     } catch (Exception e) {
@@ -336,6 +348,15 @@ public class TransportClient implements Closeable {
       .append("clientId", clientId)
       .append("isActive", isActive())
       .toString();
+  }
+
+  /**
+   * Exception thrown when sasl request times out.
+   */
+  public static class SaslTimeoutException extends RuntimeException {
+    public SaslTimeoutException(Throwable cause) {
+      super((cause));
+    }
   }
 
   private static long requestId() {
