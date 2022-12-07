@@ -353,12 +353,10 @@ pattern%	no-pattern\%	pattern\%	pattern\\%
 select '\'', '"', '\n', '\r', '\t', 'Z'
 -- !query schema
 struct<':string,":string,
-:string,
-:string,	:string,Z:string>
+:string,:string,	:string,Z:string>
 -- !query output
 '	"	
-	
-			Z
+				Z
 
 
 -- !query
@@ -393,6 +391,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "CANNOT_PARSE_VALUE_TO_DATATYPE",
+  "sqlState" : "42000",
   "messageParameters" : {
     "value" : "mar 11 2016",
     "valueType" : "DATE"
@@ -423,6 +422,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "CANNOT_PARSE_VALUE_TO_DATATYPE",
+  "sqlState" : "42000",
   "messageParameters" : {
     "value" : "2016-33-11 20:54:00.000",
     "valueType" : "TIMESTAMP"
