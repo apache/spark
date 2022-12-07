@@ -56,6 +56,7 @@ class TaskMetrics private[spark] () extends Serializable {
   private val _diskBytesSpilled = new LongAccumulator
   private val _peakExecutionMemory = new LongAccumulator
   private val _updatedBlockStatuses = new CollectionAccumulator[(BlockId, BlockStatus)]
+  private val _saslRequestRetries = new LongAccumulator
 
   /**
    * Time taken on the executor to deserialize this task.
@@ -112,6 +113,11 @@ class TaskMetrics private[spark] () extends Serializable {
   def peakExecutionMemory: Long = _peakExecutionMemory.sum
 
   /**
+   * The number of SASL requests retried by this task.
+   */
+  def saslRequestRetries: Long = _saslRequestRetries.sum
+
+  /**
    * Storage statuses of any blocks that have been updated as a result of this task.
    *
    * Tracking the _updatedBlockStatuses can use a lot of memory.
@@ -125,6 +131,7 @@ class TaskMetrics private[spark] () extends Serializable {
     // `asScala` which accesses the internal values using `java.util.Iterator`.
     _updatedBlockStatuses.value.asScala.toSeq
   }
+
 
   // Setters and increment-ers
   private[spark] def setExecutorDeserializeTime(v: Long): Unit =
@@ -147,6 +154,7 @@ class TaskMetrics private[spark] () extends Serializable {
     _updatedBlockStatuses.setValue(v)
   private[spark] def setUpdatedBlockStatuses(v: Seq[(BlockId, BlockStatus)]): Unit =
     _updatedBlockStatuses.setValue(v.asJava)
+  private[spark] def incSaslRequestRetries(v: Long): Unit = _saslRequestRetries.add(v)
 
   /**
    * Metrics related to reading data from a [[org.apache.spark.rdd.HadoopRDD]] or from persisted
@@ -220,6 +228,7 @@ class TaskMetrics private[spark] () extends Serializable {
     DISK_BYTES_SPILLED -> _diskBytesSpilled,
     PEAK_EXECUTION_MEMORY -> _peakExecutionMemory,
     UPDATED_BLOCK_STATUSES -> _updatedBlockStatuses,
+    SASL_REQUEST_RETRIES -> _saslRequestRetries,
     shuffleRead.REMOTE_BLOCKS_FETCHED -> shuffleReadMetrics._remoteBlocksFetched,
     shuffleRead.LOCAL_BLOCKS_FETCHED -> shuffleReadMetrics._localBlocksFetched,
     shuffleRead.REMOTE_BYTES_READ -> shuffleReadMetrics._remoteBytesRead,

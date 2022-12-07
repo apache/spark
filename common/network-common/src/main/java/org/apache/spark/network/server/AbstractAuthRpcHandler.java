@@ -33,6 +33,7 @@ public abstract class AbstractAuthRpcHandler extends RpcHandler {
   private final RpcHandler delegate;
 
   private boolean isAuthenticated;
+  private boolean isComplete;
 
   protected AbstractAuthRpcHandler(RpcHandler delegate) {
     this.delegate = delegate;
@@ -53,10 +54,14 @@ public abstract class AbstractAuthRpcHandler extends RpcHandler {
       TransportClient client,
       ByteBuffer message,
       RpcResponseCallback callback) {
-    if (isAuthenticated) {
+    if (isAuthenticated && isComplete) {
       delegate.receive(client, message, callback);
     } else {
+      if (isAuthenticated) {
+        isComplete = true;
+      }
       isAuthenticated = doAuthChallenge(client, message, callback);
+
     }
   }
 
