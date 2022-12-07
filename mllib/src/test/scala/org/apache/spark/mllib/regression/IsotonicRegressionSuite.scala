@@ -241,8 +241,8 @@ class IsotonicRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
     assert(model.predict(0.5) === 1.5)
     assert(model.predict(0.75) === 1.75)
     assert(model.predict(1) === 2)
-    assert(model.predict(2) === 10d / 3)
-    assert(model.predict(9) === 10d / 3)
+    assert(model.predict(2) === 10.0 / 3)
+    assert(model.predict(9) === 10.0 / 3)
   }
 
   test("isotonic regression prediction with duplicate features") {

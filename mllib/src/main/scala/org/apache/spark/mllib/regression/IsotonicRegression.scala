@@ -336,47 +336,13 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
       weight > 0
     }
 
-    if (cleanInput.isEmpty) Array.empty
-    else if (cleanInput.length <= 1) cleanInput
-    else {
+    if (cleanInput.length <= 1) {
+      cleanInput
+    } else {
       // whether or not two double features are equal up to a precision
       @inline def areEqual(a: Double, b: Double): Boolean = Precision.equals(a, b)
 
-      // Utility object, holds a buffer of all points with unique features so far, and performs
-      // weighted sum accumulation of points. Hides these details for better readability of the
-      // main algorithm.
-      object PointsAccumulator {
-        private val output = ArrayBuffer[(Double, Double, Double)]()
-        private var (currentLabel: Double, currentFeature: Double, currentWeight: Double) =
-          (0d, 0d, 0d)
-
-        /** Resets the current value of the point accumulator using the provided point. */
-        def :=(point: (Double, Double, Double)): Unit = {
-          val (label, feature, weight) = point
-          currentLabel = label * weight
-          currentFeature = feature * weight
-          currentWeight = weight
-        }
-
-        /** Accumulates the provided point into the current value of the point accumulator. */
-        def +=(point: (Double, Double, Double)): Unit = {
-          val (label, feature, weight) = point
-          currentLabel += label * weight
-          currentFeature += feature * weight
-          currentWeight += weight
-        }
-
-        /** Appends the current value of the point accumulator to the output. */
-        def appendToOutput(): Unit =
-          output += ((
-            currentLabel / currentWeight,
-            currentFeature / currentWeight,
-            currentWeight))
-
-        /** Returns all accumulated points so far. */
-        def getOutput: Array[(Double, Double, Double)] = output.toArray
-      }
-
+      val pointsAccumulator = new IsotonicRegression.PointsAccumulator
       var (_, prevFeature, _) = cleanInput.head
 
       // Go through input points, merging all points with approximately equal feature values into
@@ -387,16 +353,16 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
       // we compute the weighted average of the features.
       cleanInput.foreach { case point @ (_, feature, _) =>
         if (areEqual(feature, prevFeature)) {
-          PointsAccumulator += point
+          pointsAccumulator += point
         } else {
-          PointsAccumulator.appendToOutput()
-          PointsAccumulator := point
+          pointsAccumulator.appendToOutput()
+          pointsAccumulator := point
         }
         prevFeature = feature
       }
       // Append the last accumulated point
-      PointsAccumulator.appendToOutput()
-      PointsAccumulator.getOutput
+      pointsAccumulator.appendToOutput()
+      pointsAccumulator.getOutput
     }
   }
 
@@ -531,5 +497,44 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
       // Sort again because collect() doesn't promise ordering.
       .sortBy(x => (x._2, x._1))
     poolAdjacentViolators(parallelStepResult)
+  }
+}
+
+object IsotonicRegression {
+  /**
+   * Utility class, holds a buffer of all points with unique features so far, and performs
+   * weighted sum accumulation of points. Hides these details for better readability of the
+   * main algorithm.
+   */
+  class PointsAccumulator {
+    private val output = ArrayBuffer[(Double, Double, Double)]()
+    private var (currentLabel: Double, currentFeature: Double, currentWeight: Double) =
+      (0d, 0d, 0d)
+
+    /** Resets the current value of the point accumulator using the provided point. */
+    def :=(point: (Double, Double, Double)): Unit = {
+      val (label, feature, weight) = point
+      currentLabel = label * weight
+      currentFeature = feature * weight
+      currentWeight = weight
+    }
+
+    /** Accumulates the provided point into the current value of the point accumulator. */
+    def +=(point: (Double, Double, Double)): Unit = {
+      val (label, feature, weight) = point
+      currentLabel += label * weight
+      currentFeature += feature * weight
+      currentWeight += weight
+    }
+
+    /** Appends the current value of the point accumulator to the output. */
+    def appendToOutput(): Unit =
+      output += ((
+        currentLabel / currentWeight,
+        currentFeature / currentWeight,
+        currentWeight))
+
+    /** Returns all accumulated points so far. */
+    def getOutput: Array[(Double, Double, Double)] = output.toArray
   }
 }
