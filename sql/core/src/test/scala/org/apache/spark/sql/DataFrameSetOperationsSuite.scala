@@ -1010,7 +1010,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
     val errMsg = intercept[AnalysisException] {
       df1.unionByName(df2)
     }.getMessage
-    assert(errMsg.contains("Union can only be performed on tables with" +
+    assert(errMsg.contains("UNION can only be performed on tables with" +
       " compatible column types." +
       " The third column of the second table is struct<c1:int,c2:int,c3:struct<c3:int,c5:int>>" +
       " type which is not compatible with struct<c1:int,c2:int,c3:struct<c3:int>> at the same" +
@@ -1094,7 +1094,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
 
     val err = intercept[AnalysisException](df7.union(df8).collect())
     assert(err.message
-      .contains("Union can only be performed on tables with compatible column types"))
+      .contains("UNION can only be performed on tables with compatible column types"))
   }
 
   test("SPARK-36546: Add unionByName support to arrays of structs") {

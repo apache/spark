@@ -564,7 +564,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                   e.failAnalysis(
                     errorClass = "_LEGACY_ERROR_TEMP_2430",
                     messageParameters = Map(
-                      "operator" -> operator.nodeName,
+                      "operator" -> toSQLStmt(operator.nodeName),
                       "ci" -> ordinalNumber(ci),
                       "ti" -> ordinalNumber(ti + 1),
                       "dt1" -> dt1.catalogString,
