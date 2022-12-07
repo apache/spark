@@ -63,12 +63,6 @@
       "Could not load Protobuf class with name <protobufClassName>. <explanation>."
     ]
   },
-  "CANNOT_PARSE_VALUE_TO_DATATYPE" : {
-    "message" : [
-      "Cannot parse <value> to <valueType> type."
-    ],
-    "sqlState" : "42000"
-  },
   "CANNOT_PARSE_DECIMAL" : {
     "message" : [
       "Cannot parse decimal"
@@ -83,6 +77,12 @@
   "CANNOT_PARSE_TIMESTAMP" : {
     "message" : [
       "<message>. If necessary set <ansiConfig> to \"false\" to bypass this error."
+    ],
+    "sqlState" : "42000"
+  },
+  "CANNOT_PARSE_VALUE_TO_DATATYPE" : {
+    "message" : [
+      "Cannot parse <value> to <valueType> type."
     ],
     "sqlState" : "42000"
   },
