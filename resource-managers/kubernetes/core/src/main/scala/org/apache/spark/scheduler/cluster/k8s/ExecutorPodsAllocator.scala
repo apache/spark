@@ -433,6 +433,7 @@ class ExecutorPodsAllocator(
         podWithAttachedContainer, resolvedExecutorSpec.executorKubernetesResources, reusablePVCs)
       val createdExecutorPod =
         kubernetesClient.pods().inNamespace(namespace).resource(podWithAttachedContainer).create()
+      var success = 0
       try {
         addOwnerReference(createdExecutorPod, resources)
         resources
@@ -445,6 +446,7 @@ class ExecutorPodsAllocator(
             logInfo(s"Trying to create PersistentVolumeClaim ${pvc.getMetadata.getName} with " +
               s"StorageClass ${pvc.getSpec.getStorageClassName}")
             kubernetesClient.persistentVolumeClaims().inNamespace(namespace).resource(pvc).create()
+            success += 1
             PVC_COUNTER.incrementAndGet()
           }
         newlyCreatedExecutors(newExecutorId) = (resourceProfileId, clock.getTimeMillis())
@@ -455,7 +457,15 @@ class ExecutorPodsAllocator(
             .inNamespace(namespace)
             .resource(createdExecutorPod)
             .delete()
+          if (success == 1) {
+            success += 1
+          }
           throw e
+      } finally {
+          if ((!conf.get(KUBERNETES_DRIVER_OWN_PVC) || !conf.get(KUBERNETES_DRIVER_REUSE_PVC))
+              && success == 2) {
+            PVC_COUNTER.decrementAndGet()
+          }
       }
     }
   }
