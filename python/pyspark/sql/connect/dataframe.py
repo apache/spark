@@ -303,9 +303,6 @@ class DataFrame(object):
             self._session,
         )
 
-    def describe(self, cols: List[Column]) -> Any:
-        ...
-
     def dropDuplicates(self, subset: Optional[List[str]] = None) -> "DataFrame":
         """Return a new :class:`DataFrame` with duplicate rows removed,
         optionally only deduplicating based on certain columns.
