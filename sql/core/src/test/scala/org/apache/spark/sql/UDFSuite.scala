@@ -638,10 +638,16 @@ class UDFSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-28521 error message for CAST(parameter types contains DataType)") {
-    val e = intercept[AnalysisException] {
-      spark.sql("SELECT CAST(1)")
-    }
-    assert(e.getMessage.contains("Invalid arguments for function cast"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT CAST(1)")
+      },
+      errorClass = "INVALID_FUNCTION_ARGS",
+      parameters = Map(
+        "name" -> "`cast`"
+      ),
+      context = ExpectedContext("", "", 7, 13, "CAST(1)")
+    )
   }
 
   test("only one case class parameter") {

@@ -54,11 +54,9 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         sql("SELECT CURDATE(1)")
       },
-      errorClass = "WRONG_NUM_ARGS",
+      errorClass = "INVALID_FUNCTION_ARGS",
       parameters = Map(
-        "functionName" -> "`curdate`",
-        "expectedNum" -> "0",
-        "actualNum" -> "1"
+        "name" -> "`curdate`"
       ),
       context = ExpectedContext("", "", 7, 16, "CURDATE(1)")
     )
