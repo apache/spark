@@ -172,7 +172,7 @@ object CurDateExpressionBuilder extends ExpressionBuilder {
       CurrentDate()
     } else {
       throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
-        Seq.empty, funcName, expressions.length)
+        Seq(0), funcName, expressions.length)
     }
   }
 }
