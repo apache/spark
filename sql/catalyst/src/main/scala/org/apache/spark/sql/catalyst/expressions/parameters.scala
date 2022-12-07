@@ -54,10 +54,10 @@ case class Parameter(name: String) extends LeafExpression {
 object Parameter extends QueryErrorsBase {
   def bind(plan: LogicalPlan, args: Map[String, Expression]): LogicalPlan = {
     if (!args.isEmpty && SQLConf.get.parametersEnabled) {
-      args.filter(!_._2.foldable).headOption.foreach { case (name, expr) =>
+      args.filter(!_._2.isInstanceOf[Literal]).headOption.foreach { case (name, expr) =>
         expr.failAnalysis(
-          errorClass = "NON_FOLDABLE_SQL_ARG",
-          messageParameters = Map("name" -> name))
+          errorClass = "INVALID_SQL_ARG",
+          messageParameters = Map("name" -> toSQLId(name)))
       }
       plan.transformAllExpressionsWithPruning(_.containsPattern(PARAMETER)) {
         case param @ Parameter(name) =>

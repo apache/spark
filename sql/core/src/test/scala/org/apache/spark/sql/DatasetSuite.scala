@@ -2262,11 +2262,6 @@ class DatasetSuite extends QueryTest
       checkAnswer(
         spark.sql("""SELECT contains('Spark \'SQL\'', @subStr)""", Map("subStr" -> "'SQL'")),
         Row(true))
-      checkAnswer(
-        spark.sql(
-          """SELECT 1 + @castInt""",
-          Map("castInt" -> "CAST('100' AS INT)")),
-        Row(101))
     }
   }
 }

@@ -681,17 +681,19 @@ class QueryCompilationErrorsSuite
         stop = 16))
   }
 
-  test("NON_FOLDABLE_SQL_ARG - SPARK-41271: non-foldable argument of `sql()`") {
-    checkError(
-      exception = intercept[AnalysisException] {
-        spark.sql("SELECT @param1 FROM VALUES (1) AS t(col1)", Map("param1" -> "col1 + 1"))
-      },
-      errorClass = "NON_FOLDABLE_SQL_ARG",
-      parameters = Map("name" -> "param1"),
-      context = ExpectedContext(
-        fragment = "col1 + 1",
-        start = 0,
-        stop = 7))
+  test("INVALID_SQL_ARG - SPARK-41271: non-literal argument of `sql()`") {
+    Seq("col1 + 1", "CAST('100' AS INT)", "map('a', 1, 'b', 2)", "array(1)").foreach { arg =>
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.sql("SELECT @param1 FROM VALUES (1) AS t(col1)", Map("param1" -> arg))
+        },
+        errorClass = "INVALID_SQL_ARG",
+        parameters = Map("name" -> "`param1`"),
+        context = ExpectedContext(
+          fragment = arg,
+          start = 0,
+          stop = arg.length - 1))
+    }
   }
 }
 
