@@ -178,7 +178,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         c
       }
 
-    case c @ CreateTableAsSelect(ResolvedV1Identifier(ident), _, _, _, writeOptions, _) =>
+    case c @ CreateTableAsSelect(ResolvedV1Identifier(ident), _, _, _, writeOptions, _, _) =>
       val (storageFormat, provider) = getStorageFormatAndProvider(
         c.tableSpec.provider,
         c.tableSpec.options ++ writeOptions,
@@ -211,7 +211,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         c
       }
 
-    case c @ ReplaceTableAsSelect(ResolvedV1Identifier(ident), _, _, _, _, _) =>
+    case c @ ReplaceTableAsSelect(ResolvedV1Identifier(ident), _, _, _, _, _, _) =>
       val provider = c.tableSpec.provider.getOrElse(conf.defaultDataSourceName)
       if (!isV2Provider(provider)) {
         throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(
