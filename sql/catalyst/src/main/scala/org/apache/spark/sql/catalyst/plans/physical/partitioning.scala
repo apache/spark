@@ -677,7 +677,7 @@ case class KeyGroupedShuffleSpec(
     }
   }
 
-  private lazy val ordering: Ordering[InternalRow] =
+  lazy val ordering: Ordering[InternalRow] =
     RowOrdering.createNaturalAscendingOrdering(partitioning.expressions.map(_.dataType))
 
   override def numPartitions: Int = partitioning.numPartitions
@@ -693,27 +693,31 @@ case class KeyGroupedShuffleSpec(
     //    3.3 each pair of partition expressions at the same index must share compatible
     //        transform functions.
     //  4. the partition values, if present on both sides, are following the same order.
-    case otherSpec @ KeyGroupedShuffleSpec(otherPartitioning, otherDistribution) =>
-      val expressions = partitioning.expressions
-      val otherExpressions = otherPartitioning.expressions
-
+    case otherSpec@KeyGroupedShuffleSpec(otherPartitioning, otherDistribution) =>
       distribution.clustering.length == otherDistribution.clustering.length &&
-        numPartitions == other.numPartitions &&
-          expressions.length == otherExpressions.length && {
-            val otherKeyPositions = otherSpec.keyPositions
-            keyPositions.zip(otherKeyPositions).forall { case (left, right) =>
-              left.intersect(right).nonEmpty
-            }
-          } && expressions.zip(otherExpressions).forall {
-            case (l, r) => isExpressionCompatible(l, r)
-          } && partitioning.partitionValuesOpt.zip(otherPartitioning.partitionValuesOpt).forall {
-            case (left, right) => left.zip(right).forall { case (l, r) =>
-              ordering.compare(l, r) == 0
-            }
-         }
+        numPartitions == other.numPartitions && isExpressionsCompatible(otherSpec) &&
+        partitioning.partitionValuesOpt.zip(otherPartitioning.partitionValuesOpt).forall {
+          case (left, right) => left.zip(right).forall { case (l, r) =>
+            ordering.compare(l, r) == 0
+          }
+        }
     case ShuffleSpecCollection(specs) =>
       specs.exists(isCompatibleWith)
     case _ => false
+  }
+
+  def isExpressionsCompatible(other: KeyGroupedShuffleSpec): Boolean = {
+    val expressions = partitioning.expressions
+    val otherExpressions = other.partitioning.expressions
+
+    expressions.length == otherExpressions.length && {
+      val otherKeyPositions = other.keyPositions
+      keyPositions.zip(otherKeyPositions).forall { case (left, right) =>
+        left.intersect(right).nonEmpty
+      }
+    } && expressions.zip(otherExpressions).forall {
+      case (l, r) => isExpressionCompatible(l, r)
+    }
   }
 
   private def isExpressionCompatible(left: Expression, right: Expression): Boolean =

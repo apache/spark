@@ -46,6 +46,8 @@ trait ShuffledJoin extends JoinCodegenSupport {
 
   override def outputPartitioning: Partitioning = joinType match {
     case _: InnerLike =>
+      val leftP = left.outputPartitioning
+      val rightP = right.outputPartitioning
       PartitioningCollection(Seq(left.outputPartitioning, right.outputPartitioning))
     case LeftOuter => left.outputPartitioning
     case RightOuter => right.outputPartitioning

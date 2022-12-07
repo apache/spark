@@ -28,6 +28,7 @@ import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.connector.distributions.Distributions
 import org.apache.spark.sql.connector.expressions._
 import org.apache.spark.sql.connector.expressions.Expressions._
+import org.apache.spark.sql.connector.read.partitioning.KeyGroupedPartitioning
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
@@ -45,12 +46,15 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     UnboundTruncateFunction)
 
   private var originalV2BucketingEnabled: Boolean = false
+  private var originalV2BucketingPushPartKeysEnabled: Boolean = false
   private var originalAutoBroadcastJoinThreshold: Long = -1
 
   override def beforeAll(): Unit = {
     super.beforeAll()
     originalV2BucketingEnabled = conf.getConf(V2_BUCKETING_ENABLED)
+    originalV2BucketingPushPartKeysEnabled = conf.getConf(V2_BUCKETING_PUSH_PART_KEYS_ENABLED)
     conf.setConf(V2_BUCKETING_ENABLED, true)
+    conf.setConf(V2_BUCKETING_PUSH_PART_KEYS_ENABLED, true)
     originalAutoBroadcastJoinThreshold = conf.getConf(AUTO_BROADCASTJOIN_THRESHOLD)
     conf.setConf(AUTO_BROADCASTJOIN_THRESHOLD, -1L)
   }
@@ -60,6 +64,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       super.afterAll()
     } finally {
       conf.setConf(V2_BUCKETING_ENABLED, originalV2BucketingEnabled)
+      conf.setConf(V2_BUCKETING_PUSH_PART_KEYS_ENABLED, originalV2BucketingPushPartKeysEnabled)
       conf.setConf(AUTO_BROADCASTJOIN_THRESHOLD, originalAutoBroadcastJoinThreshold)
     }
   }
@@ -404,8 +409,103 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
         s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p " +
         "ON i.id = p.item_id AND i.arrive_time = p.time ORDER BY id, purchase_price, sale_price")
 
+    checkAnswer(df,
+      Seq(Row(1, "aa", 40.0, 42.0), Row(2, "bb", 10.0, 11.0)))
+
     val shuffles = collectShuffles(df.queryExecution.executedPlan)
-    assert(shuffles.nonEmpty, "should add shuffle when partition keys mismatch")
+    assert(shuffles.isEmpty, "should not add shuffle when partition keys mismatch")
+  }
+
+  test("partitioned join: partition values from one side are subset of those from the other side") {
+    val items_partitions = Array(bucket(4, "id"))
+    createTable(items, items_schema, items_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        s"(3, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        s"(4, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    val purchases_partitions = Array(bucket(4, "item_id"))
+    createTable(purchases, purchases_schema, purchases_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+        s"(3, 19.5, cast('2020-02-01' as timestamp))")
+
+    val df = sql("SELECT id, name, i.price as purchase_price, p.price as sale_price " +
+        s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p " +
+        "ON i.id = p.item_id ORDER BY id, purchase_price, sale_price")
+
+    val shuffles = collectShuffles(df.queryExecution.executedPlan)
+    shuffles.foreach { s =>
+      assert(s.outputPartitioning.isInstanceOf[KeyGroupedPartitioning],
+        s"expected KeyGroupedPartitioning but found ${s.outputPartitioning.getClass.getName}")
+      assert(s.outputPartitioning.numPartitions == 3,
+        s"expected 3 partitions for $s but found ${s.outputPartitioning.numPartitions}")
+    }
+    assert(shuffles.isEmpty, "should not contain any shuffle")
+    checkAnswer(df, Seq(Row(1, "aa", 40.0, 42.0), Row(3, "bb", 10.0, 19.5)))
+  }
+
+  test("partitioned join: partition values from both sides overlaps") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, items_schema, items_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    val purchases_partitions = Array(identity("item_id"))
+    createTable(purchases, purchases_schema, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+        s"(2, 19.5, cast('2020-02-01' as timestamp)), " +
+        s"(4, 30.0, cast('2020-02-01' as timestamp))")
+
+    val df = sql("SELECT id, name, i.price as purchase_price, p.price as sale_price " +
+        s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p " +
+        "ON i.id = p.item_id ORDER BY id, purchase_price, sale_price")
+
+    val shuffles = collectShuffles(df.queryExecution.executedPlan)
+    shuffles.foreach { s =>
+      assert(s.outputPartitioning.isInstanceOf[KeyGroupedPartitioning],
+        s"expected KeyGroupedPartitioning but found ${s.outputPartitioning.getClass.getName}")
+      assert(s.outputPartitioning.numPartitions == 4,
+        s"expected 4 partitions for $s but found ${s.outputPartitioning.numPartitions}")
+    }
+    assert(shuffles.isEmpty, "should not contain any shuffle")
+    checkAnswer(df, Seq(Row(1, "aa", 40.0, 42.0), Row(2, "bb", 10.0, 19.5)))
+  }
+
+  test("partitioned join: non-overlapping partition values from both sides") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, items_schema, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    val purchases_partitions = Array(identity("item_id"))
+    createTable(purchases, purchases_schema, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        s"(4, 42.0, cast('2020-01-01' as timestamp)), " +
+        s"(5, 19.5, cast('2020-02-01' as timestamp)), " +
+        s"(6, 30.0, cast('2020-02-01' as timestamp))")
+
+    val df = sql("SELECT id, name, i.price as purchase_price, p.price as sale_price " +
+        s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p " +
+        "ON i.id = p.item_id ORDER BY id, purchase_price, sale_price")
+
+    val shuffles = collectShuffles(df.queryExecution.executedPlan)
+    shuffles.foreach { s =>
+      assert(s.outputPartitioning.isInstanceOf[KeyGroupedPartitioning],
+        s"expected KeyGroupedPartitioning but found ${s.outputPartitioning.getClass.getName}")
+      assert(s.outputPartitioning.numPartitions == 6,
+        s"expected 6 partitions for $s but found ${s.outputPartitioning.numPartitions}")
+    }
+    assert(shuffles.isEmpty, "should not contain any shuffle")
+    checkAnswer(df, Seq.empty)
   }
 
   test("data source partitioning + dynamic partition filtering") {

@@ -20,12 +20,15 @@ package org.apache.spark.sql.execution.exchange
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.collection.Utils
 
 /**
  * Ensures that the [[org.apache.spark.sql.catalyst.plans.physical.Partitioning Partitioning]]
@@ -142,12 +145,66 @@ case class EnsureRequirements(
         Some(finalCandidateSpecs.values.maxBy(_.numPartitions))
       }
 
+      def getKeyGroupedSpec(idx: Int): ShuffleSpec = specs(idx) match {
+        case ShuffleSpecCollection(specs) => specs.head
+        case spec => spec
+      }
+
+      def populatePartitionKeys(plan: SparkPlan, keys: Seq[InternalRow]): SparkPlan =
+        plan match {
+          case scan: BatchScanExec =>
+            scan.copy(commonPartitionKeys = Some(keys))
+          case node =>
+            node.mapChildren(child => populatePartitionKeys(child, keys))
+        }
+
       // Check if 1) all children are of `KeyGroupedPartitioning` and 2) they are all compatible
       // with each other. If both are true, skip shuffle.
-      val allCompatible = childrenIndexes.sliding(2).forall {
-        case Seq(a, b) =>
-          checkKeyGroupedSpec(specs(a)) && checkKeyGroupedSpec(specs(b)) &&
-            specs(a).isCompatibleWith(specs(b))
+      val allCompatible = childrenIndexes.length == 2 && {
+        val left = childrenIndexes.head
+        val right = childrenIndexes(1)
+        var isCompatible: Boolean = false
+
+        if (checkKeyGroupedSpec(specs(left)) && checkKeyGroupedSpec(specs(right))) {
+          isCompatible = specs(left).isCompatibleWith(specs(right))
+
+          // If `isCompatible` is false, it could mean:
+          //   1. Partition expressions are not compatible: we have to shuffle in this case.
+          //   2. Partition expressions are compatible, but partition keys are not: in this case we
+          //      can compute a superset of partition keys and push-down to respective
+          //      data sources, which can then adjust their respective output partitioning by
+          //      filling missing partition keys with empty partitions. As result, Spark can still
+          //      avoid shuffle.
+          if (!isCompatible && conf.v2BucketingPushPartKeysEnabled) {
+            (getKeyGroupedSpec(left), getKeyGroupedSpec(right)) match {
+              case (leftSpec: KeyGroupedShuffleSpec, rightSpec: KeyGroupedShuffleSpec) =>
+                // Check if the two children are partition expression compatible. If so, find the
+                // common set of partition keys, and adjust the plan accordingly.
+                if (leftSpec.isExpressionsCompatible(rightSpec)) {
+                  assert(leftSpec.partitioning.partitionValuesOpt.isDefined)
+                  assert(rightSpec.partitioning.partitionValuesOpt.isDefined)
+
+                  val leftPartKeys = leftSpec.partitioning.partitionValuesOpt.get
+                  val rightPartKeys = rightSpec.partitioning.partitionValuesOpt.get
+
+                  val mergedPartKeys = Utils.mergeOrdered(
+                    Seq(leftPartKeys, rightPartKeys))(leftSpec.ordering).toSeq.distinct
+
+                  // Now we need to push-down the common partition key to the scan in each child
+                  children = children.zipWithIndex.map {
+                    case (child, idx) if childrenIndexes.contains(idx) =>
+                      populatePartitionKeys(child, mergedPartKeys)
+                    case (child, _) => child
+                  }
+
+                  isCompatible = true
+                }
+              case _ => // This case shouldn't happen
+            }
+          }
+        }
+
+        isCompatible
       }
 
       children = children.zip(requiredChildDistributions).zipWithIndex.map {
@@ -189,6 +246,7 @@ case class EnsureRequirements(
 
     children
   }
+
 
   private def checkKeyGroupedSpec(shuffleSpec: ShuffleSpec): Boolean = {
     def check(spec: KeyGroupedShuffleSpec): Boolean = {
