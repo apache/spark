@@ -545,12 +545,12 @@ class SparkConnectPlanner(session: SparkSession) {
       UnresolvedFunction(
         session.sessionState.sqlParser.parseFunctionIdentifier(fun.getFunctionName),
         fun.getArgumentsList.asScala.map(transformExpression).toSeq,
-        isDistinct = false)
+        isDistinct = fun.getIsDistinct)
     } else {
       UnresolvedFunction(
         FunctionIdentifier(fun.getFunctionName),
         fun.getArgumentsList.asScala.map(transformExpression).toSeq,
-        isDistinct = false)
+        isDistinct = fun.getIsDistinct)
     }
   }
 

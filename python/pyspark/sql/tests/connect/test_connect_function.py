@@ -350,7 +350,6 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             (CF.collect_list, SF.collect_list),
             (CF.collect_set, SF.collect_set),
             (CF.count, SF.count),
-            # (CF.count_distinct, SF.count_distinct),
             (CF.first, SF.first),
             (CF.kurtosis, SF.kurtosis),
             (CF.last, SF.last),
@@ -365,7 +364,7 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             (CF.stddev_pop, SF.stddev_pop),
             (CF.stddev_samp, SF.stddev_samp),
             (CF.sum, SF.sum),
-            # (CF.sum_distinct, SF.sum_distinct),
+            (CF.sum_distinct, SF.sum_distinct),
             (CF.var_pop, SF.var_pop),
             (CF.var_samp, SF.var_samp),
             (CF.variance, SF.variance),
@@ -411,6 +410,22 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
         self.assert_eq(
             cdf.groupBy("a").agg(CF.percentile_approx(cdf.b, [0.1, 0.9])).toPandas(),
             sdf.groupBy("a").agg(SF.percentile_approx(sdf.b, [0.1, 0.9])).toPandas(),
+        )
+
+        # test count_distinct
+        self.assert_eq(
+            cdf.select(CF.count_distinct("b"), CF.count_distinct(cdf.c)).toPandas(),
+            sdf.select(SF.count_distinct("b"), SF.count_distinct(sdf.c)).toPandas(),
+        )
+        # The output column names of 'groupBy.agg(count_distinct)' in PySpark
+        # are incorrect, see SPARK-41391.
+        self.assert_eq(
+            cdf.groupBy("a")
+            .agg(CF.count_distinct("b").alias("x"), CF.count_distinct(cdf.c).alias("y"))
+            .toPandas(),
+            sdf.groupBy("a")
+            .agg(SF.count_distinct("b").alias("x"), SF.count_distinct(sdf.c).alias("y"))
+            .toPandas(),
         )
 
     def test_string_functions(self):
