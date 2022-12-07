@@ -23,6 +23,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "CANNOT_PARSE_VALUE_TO_DATATYPE",
+  "sqlState" : "42000",
   "messageParameters" : {
     "value" : "2020-01-01中文",
     "valueType" : "DATE"
@@ -83,6 +84,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "CANNOT_PARSE_VALUE_TO_DATATYPE",
+  "sqlState" : "42000",
   "messageParameters" : {
     "value" : "015",
     "valueType" : "DATE"
@@ -105,6 +107,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "CANNOT_PARSE_VALUE_TO_DATATYPE",
+  "sqlState" : "42000",
   "messageParameters" : {
     "value" : "2021-4294967297-11",
     "valueType" : "DATE"
