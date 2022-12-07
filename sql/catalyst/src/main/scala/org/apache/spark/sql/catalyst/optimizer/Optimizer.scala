@@ -233,6 +233,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     Batch("Check Cartesian Products", Once,
       CheckCartesianProducts) :+
     Batch("RewriteSubquery", Once,
+      RewriteSelfJoinInInPredicate,
       RewritePredicateSubquery,
       PushPredicateThroughJoin,
       LimitPushDown,

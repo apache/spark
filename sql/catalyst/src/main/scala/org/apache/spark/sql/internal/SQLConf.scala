@@ -4027,6 +4027,13 @@ object SQLConf {
     .checkValues(ErrorMessageFormat.values.map(_.toString))
     .createWithDefault(ErrorMessageFormat.PRETTY.toString)
 
+  val REWRITE_SELFJOIN_IN_IN_PREDICATE =
+    buildConf("spark.sql.optimizer.RewriteSelfJoinInInPredicate")
+      .doc("Rewrite the SelfJoin resulting in duplicate rows used for IN predicate to aggregation")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
