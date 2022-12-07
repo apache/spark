@@ -21,6 +21,7 @@ import tempfile
 
 import grpc  # type: ignore
 
+from pyspark.sql.connect.column import Column
 from pyspark.testing.sqlutils import have_pandas, SQLTestUtils
 
 if have_pandas:
@@ -864,6 +865,27 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertEqual(2, len(res))
         self.assertEqual(4.0, res[0][1])
         self.assertEqual(5.0, res[1][1])
+
+        # Additional GroupBy tests with 3 rows
+        from pyspark.sql.connect.function_builder import functions as FB
+        import pyspark.sql.functions as PF
+
+        df_a = self.connect.range(10).groupBy((col("id") % lit(3)).alias("moded"))
+        df_b = self.spark.range(10).groupBy((PF.col("id") % PF.lit(3)).alias("moded"))
+        self.assertEqual(
+            set(df_b.agg(PF.sum("id")).collect()), set(df_a.agg(FB.sum("id")).collect())
+        )
+
+        # Dict agg
+        measures = {"id": "sum"}
+        self.assertEqual(
+            set(df_a.agg(measures).select("sum(id)").collect()),
+            set(df_b.agg(measures).select("sum(id)").collect()),
+        )
+
+    def test_column_cannot_be_constructed_from_string(self):
+        with self.assertRaises(TypeError):
+            Column("col")
 
     def test_crossjoin(self):
         # SPARK-41227: Test CrossJoin

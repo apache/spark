@@ -374,7 +374,7 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
                 sdf.select(sfunc("b"), sfunc(sdf.c)).toPandas(),
             )
             self.assert_eq(
-                cdf.groupBy("a").agg([cfunc("b"), cfunc(cdf.c)]).toPandas(),
+                cdf.groupBy("a").agg(cfunc("b"), cfunc(cdf.c)).toPandas(),
                 sdf.groupBy("a").agg(sfunc("b"), sfunc(sdf.c)).toPandas(),
             )
 
@@ -390,7 +390,7 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
                 sdf.select(sfunc(sdf.b, "c")).toPandas(),
             )
             self.assert_eq(
-                cdf.groupBy("a").agg([cfunc(cdf.b, "c")]).toPandas(),
+                cdf.groupBy("a").agg(cfunc(cdf.b, "c")).toPandas(),
                 sdf.groupBy("a").agg(sfunc(sdf.b, "c")).toPandas(),
             )
 
@@ -404,11 +404,11 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             sdf.select(SF.percentile_approx(sdf.b, [0.1, 0.9])).toPandas(),
         )
         self.assert_eq(
-            cdf.groupBy("a").agg([CF.percentile_approx("b", 0.5)]).toPandas(),
+            cdf.groupBy("a").agg(CF.percentile_approx("b", 0.5)).toPandas(),
             sdf.groupBy("a").agg(SF.percentile_approx("b", 0.5)).toPandas(),
         )
         self.assert_eq(
-            cdf.groupBy("a").agg([CF.percentile_approx(cdf.b, [0.1, 0.9])]).toPandas(),
+            cdf.groupBy("a").agg(CF.percentile_approx(cdf.b, [0.1, 0.9])).toPandas(),
             sdf.groupBy("a").agg(SF.percentile_approx(sdf.b, [0.1, 0.9])).toPandas(),
         )
 
