@@ -867,7 +867,7 @@ object RewriteSelfJoinInInPredicate extends Rule[LogicalPlan] with PredicateHelp
                   Project(newProjectList, aggPlan)
                 } else {
                   Project(newProjectList,
-                    Filter(buildBalancedPredicate(nonEqualJoinAttrs.map(
+                    Filter(buildBalancedPredicate(nonEqualJoinAttrs.toSeq.map(
                       expr => GreaterThan(expr.toAttribute, Literal(0L))), And),
                       aggPlan
                     )
