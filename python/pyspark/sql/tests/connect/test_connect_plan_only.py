@@ -188,13 +188,9 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         plan = df.filter(df.col_name > 3).describe()._plan.to_proto(self.connect)
         self.assertEqual(plan.root.describe.cols, [])
 
-        plan = (
-            df.filter(df.col_name > 3)
-            .describe("col_a", "col_b")
-            ._plan.to_proto(self.connect)
-        )
+        plan = df.filter(df.col_name > 3).describe("col_a", "col_b")._plan.to_proto(self.connect)
         self.assertEqual(
-            plan.root.describe.statistics,
+            plan.root.describe.cols,
             ["col_a", "col_b"],
         )
 
