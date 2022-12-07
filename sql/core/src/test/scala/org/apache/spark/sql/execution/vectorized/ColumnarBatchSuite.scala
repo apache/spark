@@ -1419,11 +1419,9 @@ class ColumnarBatchSuite extends SparkFunSuite {
               case StringType =>
                 var i = 0
                 while (i < a1.length) {
-                  val s1 = a1(i)
-                  val s2 = a2(i)
-                  assert((s1 == null) == (s2 == null), "Seed = " + seed)
-                  if (s1 != null) {
-                    assert(s1.asInstanceOf[UTF8String].toString === s2.asInstanceOf[String],
+                  assert((a1(i) == null) == (a2(i) == null), "Seed = " + seed)
+                  if (a1(i) != null) {
+                    assert(a1(i).asInstanceOf[UTF8String].toString === a2(i).asInstanceOf[String],
                       "Seed = " + seed)
                   }
                   i += 1
