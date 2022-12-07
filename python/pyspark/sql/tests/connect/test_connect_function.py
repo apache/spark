@@ -63,6 +63,24 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
     """These test cases exercise the interface to the proto plan
     generation but do not call Spark."""
 
+    def compare_by_show(self, df1: Any, df2: Any):
+        from pyspark.sql.dataframe import DataFrame as SDF
+        from pyspark.sql.connect.dataframe import DataFrame as CDF
+
+        assert isinstance(df1, (SDF, CDF))
+        if isinstance(df1, SDF):
+            str1 = df1._jdf.showString(20, 20, False)
+        else:
+            str1 = df1._show_string(20, 20, False)
+
+        assert isinstance(df2, (SDF, CDF))
+        if isinstance(df2, SDF):
+            str2 = df2._jdf.showString(20, 20, False)
+        else:
+            str2 = df2._show_string(20, 20, False)
+
+        self.assertEqual(str1, str2)
+
     def test_normal_functions(self):
         from pyspark.sql import functions as SF
         from pyspark.sql.connect import functions as CF
@@ -426,6 +444,144 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             sdf.groupBy("a")
             .agg(SF.count_distinct("b").alias("x"), SF.count_distinct(sdf.c).alias("y"))
             .toPandas(),
+        )
+
+    def test_collection_functions(self):
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        query = """
+            SELECT * FROM VALUES
+            (ARRAY('a', 'ab'), ARRAY(1, 2, 3), ARRAY(1, NULL, 3), 1, 2, 'a'),
+            (ARRAY('x', NULL), NULL, ARRAY(1, 3), 3, 4, 'x'),
+            (NULL, ARRAY(-1, -2, -3), Array(), 5, 6, NULL)
+            AS tab(a, b, c, d, e, f)
+            """
+        # +---------+------------+------------+---+---+----+
+        # |        a|           b|           c|  d|  e|   f|
+        # +---------+------------+------------+---+---+----+
+        # |  [a, ab]|   [1, 2, 3]|[1, null, 3]|  1|  2|   a|
+        # |[x, null]|        null|      [1, 3]|  3|  4|   x|
+        # |     null|[-1, -2, -3]|          []|  5|  6|null|
+        # +---------+------------+------------+---+---+----+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        for cfunc, sfunc in [
+            (CF.array_distinct, SF.array_distinct),
+            (CF.array_max, SF.array_max),
+            (CF.array_min, SF.array_min),
+        ]:
+            self.assert_eq(
+                cdf.select(cfunc("a"), cfunc(cdf.b)).toPandas(),
+                sdf.select(sfunc("a"), sfunc(sdf.b)).toPandas(),
+            )
+
+        for cfunc, sfunc in [
+            (CF.array_except, SF.array_except),
+            (CF.array_intersect, SF.array_intersect),
+            (CF.array_union, SF.array_union),
+            (CF.arrays_overlap, SF.arrays_overlap),
+        ]:
+            self.assert_eq(
+                cdf.select(cfunc("b", cdf.c)).toPandas(),
+                sdf.select(sfunc("b", sdf.c)).toPandas(),
+            )
+
+        for cfunc, sfunc in [
+            (CF.array_position, SF.array_position),
+            (CF.array_remove, SF.array_remove),
+        ]:
+            self.assert_eq(
+                cdf.select(cfunc(cdf.a, "ab")).toPandas(),
+                sdf.select(sfunc(sdf.a, "ab")).toPandas(),
+            )
+
+        # test array
+        self.assert_eq(
+            cdf.select(CF.array(cdf.d, "e")).toPandas(),
+            sdf.select(SF.array(sdf.d, "e")).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.array(cdf.d, "e", CF.lit(99))).toPandas(),
+            sdf.select(SF.array(sdf.d, "e", SF.lit(99))).toPandas(),
+        )
+
+        # test array_contains
+        self.assert_eq(
+            cdf.select(CF.array_contains(cdf.a, "ab")).toPandas(),
+            sdf.select(SF.array_contains(sdf.a, "ab")).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.array_contains(cdf.a, cdf.f)).toPandas(),
+            sdf.select(SF.array_contains(sdf.a, sdf.f)).toPandas(),
+        )
+
+        # test array_join
+        self.assert_eq(
+            cdf.select(
+                CF.array_join(cdf.a, ","), CF.array_join("b", ":"), CF.array_join("c", "~")
+            ).toPandas(),
+            sdf.select(
+                SF.array_join(sdf.a, ","), SF.array_join("b", ":"), SF.array_join("c", "~")
+            ).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(
+                CF.array_join(cdf.a, ",", "_null_"),
+                CF.array_join("b", ":", ".null."),
+                CF.array_join("c", "~", "NULL"),
+            ).toPandas(),
+            sdf.select(
+                SF.array_join(sdf.a, ",", "_null_"),
+                SF.array_join("b", ":", ".null."),
+                SF.array_join("c", "~", "NULL"),
+            ).toPandas(),
+        )
+
+        # test array_repeat
+        self.assert_eq(
+            cdf.select(CF.array_repeat(cdf.f, "d")).toPandas(),
+            sdf.select(SF.array_repeat(sdf.f, "d")).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.array_repeat("f", cdf.d)).toPandas(),
+            sdf.select(SF.array_repeat("f", sdf.d)).toPandas(),
+        )
+        # TODO: Make Literal contains DataType
+        #   Cannot resolve "array_repeat(f, 3)" due to data type mismatch:
+        #   Parameter 2 requires the "INT" type, however "3" has the type "BIGINT".
+        # self.assert_eq(
+        #     cdf.select(CF.array_repeat("f", 3)).toPandas(),
+        #     sdf.select(SF.array_repeat("f", 3)).toPandas(),
+        # )
+
+        # test arrays_zip
+        # TODO: Make toPandas support complex nested types like Array<Struct>
+        # DataFrame.iloc[:, 0] (column name="arrays_zip(b, c)") values are different (66.66667 %)
+        # [index]: [0, 1, 2]
+        # [left]:  [[{'b': 1, 'c': 1.0}, {'b': 2, 'c': None}, {'b': 3, 'c': 3.0}], None,
+        #           [{'b': -1, 'c': None}, {'b': -2, 'c': None}, {'b': -3, 'c': None}]]
+        # [right]: [[(1, 1), (2, None), (3, 3)], None, [(-1, None), (-2, None), (-3, None)]]
+        self.compare_by_show(
+            cdf.select(CF.arrays_zip(cdf.b, "c")),
+            sdf.select(SF.arrays_zip(sdf.b, "c")),
+        )
+
+        # test concat
+        self.assert_eq(
+            cdf.select(CF.concat("d", cdf.e, CF.lit(-1))).toPandas(),
+            sdf.select(SF.concat("d", sdf.e, SF.lit(-1))).toPandas(),
+        )
+
+        # test create_map
+        self.compare_by_show(
+            cdf.select(CF.create_map(cdf.d, cdf.e)), sdf.select(SF.create_map(sdf.d, sdf.e))
+        )
+        self.compare_by_show(
+            cdf.select(CF.create_map(cdf.d, "e", "e", CF.lit(1))),
+            sdf.select(SF.create_map(sdf.d, "e", "e", SF.lit(1))),
         )
 
     def test_string_functions(self):
