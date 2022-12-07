@@ -30,7 +30,7 @@ import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos.{EventRecursiveA
 import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos.SimpleMessageRepeated.NestedEnum
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DayTimeIntervalType, IntegerType, StringType, StructField, StructType, TimestampType}
+import org.apache.spark.sql.types.{ArrayType, DayTimeIntervalType, IntegerType, LongType, NullType, StringType, StructField, StructType, TimestampType}
 
 class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with ProtobufTestBase
   with Serializable {
@@ -417,7 +417,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
             .show()
         }
         assert(e.getMessage.contains(
-          "Found recursive reference in Protobuf schema, which can not be processed by Spark:"
+          "Found recursive reference in Protobuf schema, which can not be processed by Spark"
         ))
     }
   }
@@ -453,7 +453,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
             .show()
         }
         assert(e.getMessage.contains(
-          "Found recursive reference in Protobuf schema, which can not be processed by Spark:"
+          "Found recursive reference in Protobuf schema, which can not be processed by Spark"
         ))
     }
   }
@@ -730,6 +730,28 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     eventFromSpark.getDescriptorForType.getFields.asScala.map(f => {
       assert(expectedFields.contains(f.getName))
     })
+
+    val schema = new StructType()
+      .add("sample",
+        new StructType()
+          .add("key", StringType)
+          .add("col_1", IntegerType)
+          .add("col_2", StringType)
+          .add("col_3", LongType)
+          .add("col_4", ArrayType(StringType))
+      )
+
+    val data = Seq(Row(Row("key", 123, "col2value", 109202L, Seq("col4value"))))
+    val dataDf = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+    val dataDfToProto = dataDf.select(
+      functions.to_protobuf($"sample", "OneOfEvent", testFileDesc) as 'toProto)
+    val eventFromSparkSchema = OneOfEvent.parseFrom(
+      dataDfToProto.select("toProto").take(1).toSeq(0).getAs[Array[Byte]](0))
+    assert(eventFromSparkSchema.getCol2.isEmpty)
+    assert(eventFromSparkSchema.getCol3 == 109202L)
+    eventFromSparkSchema.getDescriptorForType.getFields.asScala.map(f => {
+      assert(expectedFields.contains(f.getName))
+    })
   }
 
   test("Unit tests for Protobuf OneOf field with recursionDepth option") {
@@ -787,6 +809,61 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
 
     val expectedFields = descriptor.getFields.asScala.map(f => f.getName)
     eventFromSpark.getDescriptorForType.getFields.asScala.map(f => {
+      assert(expectedFields.contains(f.getName))
+    })
+
+    val schema = StructType(List(StructField("sample",
+        StructType(List(StructField("key", StringType, true),
+          StructField("recursiveA",
+            StructType(List(StructField("recursiveA",
+                StructType(List(StructField("key", StringType, true),
+                  StructField("recursiveA", NullType, true),
+                  StructField("recursiveB", StructType(
+                      List(StructField("key", StringType, true),
+                      StructField("value", StringType, true),
+                      StructField("recursiveA",
+                        StructType(List(StructField("key", StringType, true),
+                          StructField("recursiveA", NullType, true),
+                          StructField("recursiveB", NullType, true),
+                          StructField("value", StringType, true))), true))), true),
+                  StructField("value", StringType, true))), true),
+              StructField("key", StringType, true))), true),
+          StructField("recursiveB",
+            StructType(List(StructField("key", StringType, true),
+              StructField("value", StringType, true),
+              StructField("recursiveA",
+                StructType(List(StructField("key", StringType, true),
+                  StructField("recursiveA",
+                    StructType(List(StructField("recursiveA",
+                        StructType(List(StructField("key", StringType),
+                          StructField("recursiveA", NullType),
+                          StructField("recursiveB", NullType),
+                          StructField("value", StringType))), true),
+                      StructField("key", StringType, true))), true),
+                  StructField("recursiveB", NullType, true),
+                  StructField("value", StringType, true))), true))), true),
+          StructField("value", StringType, true))), true)))
+
+    val data = Seq(
+      Row(
+        Row("key1",
+          Row(
+            Row("keyNested2", null, null, "valueNested2"),
+            "recursiveAKey"),
+          null,
+          "value1")
+      )
+    )
+    val dataDf = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+    val dataDfToProto = dataDf.select(
+      functions.to_protobuf($"sample", "OneOfEventWithRecursion", testFileDesc) as 'toProto)
+    val eventFromSparkSchema = OneOfEventWithRecursion.parseFrom(
+      dataDfToProto.select("toProto").take(1).toSeq(0).getAs[Array[Byte]](0))
+
+    assert(eventFromSpark.getRecursiveA.getRecursiveA.getKey.equals("keyNested2"))
+    assert(eventFromSpark.getRecursiveA.getRecursiveA.getValue.equals("valueNested2"))
+    assert(eventFromSpark.getRecursiveA.getRecursiveA.getRecursiveA.getKey.isEmpty)
+    eventFromSparkSchema.getDescriptorForType.getFields.asScala.map(f => {
       assert(expectedFields.contains(f.getName))
     })
   }
