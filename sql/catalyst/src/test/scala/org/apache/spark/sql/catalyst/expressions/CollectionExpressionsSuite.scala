@@ -2260,7 +2260,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val a1 = Literal.create(Seq(1, 2, 4), ArrayType(IntegerType))
     val a2 = Literal.create(Seq(1, 2, null, 4, 5, null), ArrayType(IntegerType))
     val a3 = Literal.create(Seq[Boolean](true, false, true), ArrayType(BooleanType))
-    val a5 = Literal.create(Seq[Byte](1, 2, 3, 2), ArrayType(ByteType))
+    val a4 = Literal.create(Seq[Byte](1, 2, 3, 2), ArrayType(ByteType))
     val a7 = Literal.create(Seq[Short](1, 2, 3, 2), ArrayType(ShortType))
     val a9 = Literal.create(Seq[Float](1.1F, 2.2F, 3.3F, 2.2F), ArrayType(FloatType))
     val a11 = Literal.create(Seq[Double](1.1, 2.2, 3.3, 2.2), ArrayType(DoubleType))
@@ -2289,7 +2289,8 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       ArrayInsert(a3, litThreeInt, litBoolTrue),
       Seq[Boolean](true, false, true, true)
     )
-    checkEvaluation(ArrayInsert(a5, litThreeInt, litThreeByte), Seq[Byte](1, 2, 5, 3, 2))
+    checkEvaluation(ArrayInsert(a4, litThreeInt, litThreeByte), Seq[Byte](1, 2, 5, 3, 2))
+    checkEvaluation(ArrayInsert(a7, litThreeInt, litThreeShort), Seq[Short](1, 2, 3, 3, 2))
     checkEvaluation(
       ArrayInsert(a11, litFourInt, litFourFourDouble),
       Seq[Double](1.1, 2.2, 3.3, 4.4, 2.2)
