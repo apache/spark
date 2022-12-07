@@ -17,6 +17,7 @@
 package org.apache.spark.sql.connect.config
 
 import org.apache.spark.internal.config.ConfigBuilder
+import org.apache.spark.network.util.ByteUnit
 
 private[spark] object Connect {
 
@@ -34,4 +35,12 @@ private[spark] object Connect {
       .version("3.4.0")
       .stringConf
       .createOptional
+
+  val CONNECT_GRPC_ARROW_MAX_BATCH_SIZE =
+    ConfigBuilder("spark.connect.grpc.arrow.maxBatchSize")
+      .doc("When using Apache Arrow, limit the maximum size of one arrow batch that " +
+        "can be sent from server side to client side.")
+      .version("3.4.0")
+      .bytesConf(ByteUnit.MiB)
+      .createWithDefaultString("4m")
 }
