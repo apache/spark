@@ -47,9 +47,8 @@ object OptimizeSkewInRebalancePartitions extends AQEShuffleReadRule {
   private def optimizeSkewedPartitions(
       shuffleId: Int,
       bytesByPartitionId: Array[Long],
-      targetSize: Long): Seq[ShufflePartitionSpec] = {
-    val smallPartitionFactor =
-      conf.getConf(SQLConf.ADAPTIVE_REBALANCE_PARTITIONS_SMALL_PARTITION_FACTOR)
+      targetSize: Long,
+      smallPartitionFactor: Double): Seq[ShufflePartitionSpec] = {
     bytesByPartitionId.indices.flatMap { reduceIndex =>
       val bytes = bytesByPartitionId(reduceIndex)
       if (bytes > targetSize) {
@@ -62,22 +61,27 @@ object OptimizeSkewInRebalancePartitions extends AQEShuffleReadRule {
             s"split it into ${newPartitionSpec.get.size} parts.")
           newPartitionSpec.get
         }
-      } else {
+      } else if (bytes < targetSize * smallPartitionFactor) {
         CoalescedPartitionSpec(reduceIndex, reduceIndex + 1, bytes) :: Nil
+      } else {
+        CoalescedPartitionSpec(reduceIndex, reduceIndex, bytes) :: Nil
       }
     }
   }
 
   private def tryOptimizeSkewedPartitions(shuffle: ShuffleQueryStageExec): SparkPlan = {
     val advisorySize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
+    val smallPartitionFactor =
+      conf.getConf(SQLConf.ADAPTIVE_REBALANCE_PARTITIONS_SMALL_PARTITION_FACTOR)
     val mapStats = shuffle.mapStats
     if (mapStats.isEmpty ||
-      mapStats.get.bytesByPartitionId.forall(_ <= advisorySize)) {
+      mapStats.get.bytesByPartitionId.forall(
+        r => r <= advisorySize && r >= advisorySize * smallPartitionFactor)) {
       return shuffle
     }
 
     val newPartitionsSpec = optimizeSkewedPartitions(
-      mapStats.get.shuffleId, mapStats.get.bytesByPartitionId, advisorySize)
+      mapStats.get.shuffleId, mapStats.get.bytesByPartitionId, advisorySize, smallPartitionFactor)
     // return origin plan if we can not optimize partitions
     if (newPartitionsSpec.length == mapStats.get.bytesByPartitionId.length) {
       shuffle
