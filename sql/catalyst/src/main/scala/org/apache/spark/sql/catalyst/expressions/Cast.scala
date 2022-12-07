@@ -355,6 +355,34 @@ object Cast extends QueryErrorsBase {
     case _ => false
   }
 
+  // For table insertions, capture the overflow errors and show proper message.
+  // Without this method, the overflow errors of castings will show hints for turning off ANSI SQL
+  // mode, which are not helpful since the behavior is controlled by the store assignment policy.
+  def checkOverflowInTableInsert(cast: Cast, columnName: String): Expression = {
+    if (Cast.canOverflow(cast)) {
+      CheckOverflowInTableInsert(cast, columnName)
+    } else {
+      cast
+    }
+  }
+
+  private def canOverflow(cast: Cast): Boolean = {
+    containsIntegralOrDecimalType(cast.dataType) &&
+      !Cast.canUpCast(cast.child.dataType, cast.dataType)
+  }
+
+  private def containsIntegralOrDecimalType(dt: DataType): Boolean = dt match {
+    case _: IntegralType | _: DecimalType => true
+    case a: ArrayType => containsIntegralOrDecimalType(a.elementType)
+    case m: MapType =>
+      containsIntegralOrDecimalType(m.keyType) || containsIntegralOrDecimalType(m.valueType)
+    case s: StructType =>
+      s.fields.exists(sf => containsIntegralOrDecimalType(sf.dataType))
+    case _ => false
+  }
+
+
+
   private def legalNumericPrecedence(from: DataType, to: DataType): Boolean = {
     val fromPrecedence = TypeCoercion.numericPrecedence.indexOf(from)
     val toPrecedence = TypeCoercion.numericPrecedence.indexOf(to)
