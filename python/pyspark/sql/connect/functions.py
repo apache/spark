@@ -2322,50 +2322,48 @@ def count(col: "ColumnOrName") -> Column:
 #     return count_distinct(col, *cols)
 
 
-# TODO(SPARK-41381): add isDistinct in UnresolvedFunction
-# def count_distinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
-#     """Returns a new :class:`Column` for distinct count of ``col`` or ``cols``.
-#
-#     .. versionadded:: 3.4.0
-#
-#     Parameters
-#     ----------
-#     col : :class:`~pyspark.sql.Column` or str
-#         first column to compute on.
-#     cols : :class:`~pyspark.sql.Column` or str
-#         other columns to compute on.
-#
-#     Returns
-#     -------
-#     :class:`~pyspark.sql.Column`
-#         distinct values of these two column values.
-#
-#     Examples
-#     --------
-#     >>> from pyspark.sql import types
-#     >>> df1 = spark.createDataFrame([1, 1, 3], types.IntegerType())
-#     >>> df2 = spark.createDataFrame([1, 2], types.IntegerType())
-#     >>> df1.join(df2).show()
-#     +-----+-----+
-#     |value|value|
-#     +-----+-----+
-#     |    1|    1|
-#     |    1|    2|
-#     |    1|    1|
-#     |    1|    2|
-#     |    3|    1|
-#     |    3|    2|
-#     +-----+-----+
-#     >>> df1.join(df2).select(count_distinct(df1.value, df2.value)).show()
-#     +----------------------------+
-#     |count(DISTINCT value, value)|
-#     +----------------------------+
-#     |                           4|
-#     +----------------------------+
-#     """
-#     return _invoke_function(
-#         "count_distinct", _to_java_column(col), _to_seq(sc, cols, _to_java_column)
-#     )
+def count_distinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
+    """Returns a new :class:`Column` for distinct count of ``col`` or ``cols``.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        first column to compute on.
+    cols : :class:`~pyspark.sql.Column` or str
+        other columns to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        distinct values of these two column values.
+
+    Examples
+    --------
+    >>> from pyspark.sql import types
+    >>> df1 = spark.createDataFrame([1, 1, 3], types.IntegerType())
+    >>> df2 = spark.createDataFrame([1, 2], types.IntegerType())
+    >>> df1.join(df2).show()
+    +-----+-----+
+    |value|value|
+    +-----+-----+
+    |    1|    1|
+    |    1|    2|
+    |    1|    1|
+    |    1|    2|
+    |    3|    1|
+    |    3|    2|
+    +-----+-----+
+    >>> df1.join(df2).select(count_distinct(df1.value, df2.value)).show()
+    +----------------------------+
+    |count(DISTINCT value, value)|
+    +----------------------------+
+    |                           4|
+    +----------------------------+
+    """
+    _exprs = [_to_col(c)._expr for c in [col] + list(cols)]
+    return Column(UnresolvedFunction("count", _exprs, is_distinct=True))
 
 
 def covar_pop(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
@@ -2920,37 +2918,36 @@ def percentile_approx(
     return _invoke_function("percentile_approx", _to_col(col), percentage_col, lit(accuracy))
 
 
-# TODO(SPARK-41382): add product in FunctionRegistry?
-# def product(col: "ColumnOrName") -> Column:
-#     """
-#     Aggregate function: returns the product of the values in a group.
-#
-#     .. versionadded:: 3.4.0
-#
-#     Parameters
-#     ----------
-#     col : str, :class:`Column`
-#         column containing values to be multiplied together
-#
-#     Returns
-#     -------
-#     :class:`~pyspark.sql.Column`
-#         the column for computed results.
-#
-#     Examples
-#     --------
-#     >>> df = spark.range(1, 10).toDF('x').withColumn('mod3', col('x') % 3)
-#     >>> prods = df.groupBy('mod3').agg(product('x').alias('product'))
-#     >>> prods.orderBy('mod3').show()
-#     +----+-------+
-#     |mod3|product|
-#     +----+-------+
-#     |   0|  162.0|
-#     |   1|   28.0|
-#     |   2|   80.0|
-#     +----+-------+
-#     """
-#     return _invoke_function_over_columns("product", col)
+def product(col: "ColumnOrName") -> Column:
+    """
+    Aggregate function: returns the product of the values in a group.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : str, :class:`Column`
+        column containing values to be multiplied together
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for computed results.
+
+    Examples
+    --------
+    >>> df = spark.range(1, 10).toDF('x').withColumn('mod3', col('x') % 3)
+    >>> prods = df.groupBy('mod3').agg(product('x').alias('product'))
+    >>> prods.orderBy('mod3').show()
+    +----+-------+
+    |mod3|product|
+    +----+-------+
+    |   0|  162.0|
+    |   1|   28.0|
+    |   2|   80.0|
+    +----+-------+
+    """
+    return _invoke_function_over_columns("product", col)
 
 
 def skewness(col: "ColumnOrName") -> Column:
@@ -3098,33 +3095,33 @@ def sum(col: "ColumnOrName") -> Column:
 
 
 # TODO(SPARK-41381): add isDistinct in UnresolvedFunction
-# def sum_distinct(col: "ColumnOrName") -> Column:
-#     """
-#     Aggregate function: returns the sum of distinct values in the expression.
-#
-#     .. versionadded:: 3.4.0
-#
-#     Parameters
-#     ----------
-#     col : :class:`~pyspark.sql.Column` or str
-#         target column to compute on.
-#
-#     Returns
-#     -------
-#     :class:`~pyspark.sql.Column`
-#         the column for computed results.
-#
-#     Examples
-#     --------
-#     >>> df = spark.createDataFrame([(None,), (1,), (1,), (2,)], schema=["numbers"])
-#     >>> df.select(sum_distinct(col("numbers"))).show()
-#     +---------------------+
-#     |sum(DISTINCT numbers)|
-#     +---------------------+
-#     |                    3|
-#     +---------------------+
-#     """
-#     return _invoke_function_over_columns("sum_distinct", col)
+def sum_distinct(col: "ColumnOrName") -> Column:
+    """
+    Aggregate function: returns the sum of distinct values in the expression.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for computed results.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(None,), (1,), (1,), (2,)], schema=["numbers"])
+    >>> df.select(sum_distinct(col("numbers"))).show()
+    +---------------------+
+    |sum(DISTINCT numbers)|
+    +---------------------+
+    |                    3|
+    +---------------------+
+    """
+    return Column(UnresolvedFunction("sum", [_to_col(col)._expr], is_distinct=True))
 
 
 def var_pop(col: "ColumnOrName") -> Column:
@@ -3209,3 +3206,349 @@ def variance(col: "ColumnOrName") -> Column:
     +------------+
     """
     return var_samp(col)
+
+
+# String/Binary functions
+
+
+def upper(col: "ColumnOrName") -> Column:
+    """
+    Converts a string expression to upper case.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        upper case values.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame(["Spark", "PySpark", "Pandas API"], "STRING")
+    >>> df.select(upper("value")).show()
+    +------------+
+    |upper(value)|
+    +------------+
+    |       SPARK|
+    |     PYSPARK|
+    |  PANDAS API|
+    +------------+
+    """
+    return _invoke_function_over_columns("upper", col)
+
+
+def lower(col: "ColumnOrName") -> Column:
+    """
+    Converts a string expression to lower case.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        lower case values.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame(["Spark", "PySpark", "Pandas API"], "STRING")
+    >>> df.select(lower("value")).show()
+    +------------+
+    |lower(value)|
+    +------------+
+    |       spark|
+    |     pyspark|
+    |  pandas api|
+    +------------+
+    """
+    return _invoke_function_over_columns("lower", col)
+
+
+def ascii(col: "ColumnOrName") -> Column:
+    """
+    Computes the numeric value of the first character of the string column.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        numeric value.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame(["Spark", "PySpark", "Pandas API"], "STRING")
+    >>> df.select(ascii("value")).show()
+    +------------+
+    |ascii(value)|
+    +------------+
+    |          83|
+    |          80|
+    |          80|
+    +------------+
+    """
+    return _invoke_function_over_columns("ascii", col)
+
+
+def base64(col: "ColumnOrName") -> Column:
+    """
+    Computes the BASE64 encoding of a binary column and returns it as a string column.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        BASE64 encoding of string value.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame(["Spark", "PySpark", "Pandas API"], "STRING")
+    >>> df.select(base64("value")).show()
+    +----------------+
+    |   base64(value)|
+    +----------------+
+    |        U3Bhcms=|
+    |    UHlTcGFyaw==|
+    |UGFuZGFzIEFQSQ==|
+    +----------------+
+    """
+    return _invoke_function_over_columns("base64", col)
+
+
+def unbase64(col: "ColumnOrName") -> Column:
+    """
+    Decodes a BASE64 encoded string column and returns it as a binary column.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        encoded string value.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame(["U3Bhcms=",
+    ...                             "UHlTcGFyaw==",
+    ...                             "UGFuZGFzIEFQSQ=="], "STRING")
+    >>> df.select(unbase64("value")).show()
+    +--------------------+
+    |     unbase64(value)|
+    +--------------------+
+    |    [53 70 61 72 6B]|
+    |[50 79 53 70 61 7...|
+    |[50 61 6E 64 61 7...|
+    +--------------------+
+    """
+    return _invoke_function_over_columns("unbase64", col)
+
+
+def ltrim(col: "ColumnOrName") -> Column:
+    """
+    Trim the spaces from left end for the specified string value.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        left trimmed values.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame(["   Spark", "Spark  ", " Spark"], "STRING")
+    >>> df.select(ltrim("value").alias("r")).withColumn("length", length("r")).show()
+    +-------+------+
+    |      r|length|
+    +-------+------+
+    |  Spark|     5|
+    |Spark  |     7|
+    |  Spark|     5|
+    +-------+------+
+    """
+    return _invoke_function_over_columns("ltrim", col)
+
+
+def rtrim(col: "ColumnOrName") -> Column:
+    """
+    Trim the spaces from right end for the specified string value.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        right trimmed values.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame(["   Spark", "Spark  ", " Spark"], "STRING")
+    >>> df.select(rtrim("value").alias("r")).withColumn("length", length("r")).show()
+    +--------+------+
+    |       r|length|
+    +--------+------+
+    |   Spark|     8|
+    |   Spark|     5|
+    |   Spark|     6|
+    +--------+------+
+    """
+    return _invoke_function_over_columns("rtrim", col)
+
+
+def trim(col: "ColumnOrName") -> Column:
+    """
+    Trim the spaces from both ends for the specified string column.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        trimmed values from both sides.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame(["   Spark", "Spark  ", " Spark"], "STRING")
+    >>> df.select(trim("value").alias("r")).withColumn("length", length("r")).show()
+    +-----+------+
+    |    r|length|
+    +-----+------+
+    |Spark|     5|
+    |Spark|     5|
+    |Spark|     5|
+    +-----+------+
+    """
+    return _invoke_function_over_columns("trim", col)
+
+
+def concat_ws(sep: str, *cols: "ColumnOrName") -> Column:
+    """
+    Concatenates multiple input string columns together into a single string column,
+    using the given separator.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    sep : str
+        words separator.
+    cols : :class:`~pyspark.sql.Column` or str
+        list of columns to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        string of concatenated words.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('abcd','123')], ['s', 'd'])
+    >>> df.select(concat_ws('-', df.s, df.d).alias('s')).collect()
+    [Row(s='abcd-123')]
+    """
+    return _invoke_function("concat_ws", lit(sep), *[_to_col(c) for c in cols])
+
+
+# TODO: enable with SPARK-41402
+# def decode(col: "ColumnOrName", charset: str) -> Column:
+#     """
+#     Computes the first argument into a string from a binary using the provided character set
+#     (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
+#
+#     .. versionadded:: 3.4.0
+#
+#     Parameters
+#     ----------
+#     col : :class:`~pyspark.sql.Column` or str
+#         target column to work on.
+#     charset : str
+#         charset to use to decode to.
+#
+#     Returns
+#     -------
+#     :class:`~pyspark.sql.Column`
+#         the column for computed results.
+#
+#     Examples
+#     --------
+#     >>> df = spark.createDataFrame([('abcd',)], ['a'])
+#     >>> df.select(decode("a", "UTF-8")).show()
+#     +----------------------+
+#     |stringdecode(a, UTF-8)|
+#     +----------------------+
+#     |                  abcd|
+#     +----------------------+
+#     """
+#     return _invoke_function("decode", _to_col(col), lit(charset))
+
+
+def encode(col: "ColumnOrName", charset: str) -> Column:
+    """
+    Computes the first argument into a binary from a string using the provided character set
+    (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+    charset : str
+        charset to use to encode.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for computed results.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('abcd',)], ['c'])
+    >>> df.select(encode("c", "UTF-8")).show()
+    +----------------+
+    |encode(c, UTF-8)|
+    +----------------+
+    |   [61 62 63 64]|
+    +----------------+
+    """
+    return _invoke_function("encode", _to_col(col), lit(charset))

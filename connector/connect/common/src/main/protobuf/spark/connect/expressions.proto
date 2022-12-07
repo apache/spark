@@ -1,0 +1,179 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = 'proto3';
+
+import "spark/connect/types.proto";
+
+package spark.connect;
+
+option java_multiple_files = true;
+option java_package = "org.apache.spark.connect.proto";
+
+// Expression used to refer to fields, functions and similar. This can be used everywhere
+// expressions in SQL appear.
+message Expression {
+
+  oneof expr_type {
+    Literal literal = 1;
+    UnresolvedAttribute unresolved_attribute = 2;
+    UnresolvedFunction unresolved_function = 3;
+    ExpressionString expression_string = 4;
+    UnresolvedStar unresolved_star = 5;
+    Alias alias = 6;
+    Cast cast = 7;
+  }
+
+  message Cast {
+    // (Required) the expression to be casted.
+    Expression expr = 1;
+
+    // (Required) the data type that the expr to be casted to.
+    DataType cast_to_type = 2;
+  }
+
+  message Literal {
+    oneof literal_type {
+      bool null = 1;
+      bytes binary = 2;
+      bool boolean = 3;
+
+      int32 byte = 4;
+      int32 short = 5;
+      int32 integer = 6;
+      int64 long = 7;
+      float float = 10;
+      double double = 11;
+      Decimal decimal = 12;
+
+      string string = 13;
+
+      // Date in units of days since the UNIX epoch.
+      int32 date = 16;
+      // Timestamp in units of microseconds since the UNIX epoch.
+      int64 timestamp = 17;
+      // Timestamp in units of microseconds since the UNIX epoch (without timezone information).
+      int64 timestamp_ntz = 18;
+
+      CalendarInterval calendar_interval = 19;
+      int32 year_month_interval = 20;
+      int64 day_time_interval = 21;
+
+      Array array = 22;
+      Struct struct = 23;
+      Map map = 24;
+    }
+
+    // whether the literal type should be treated as a nullable type. Applies to
+    // all members of union other than the Typed null (which should directly
+    // declare nullability).
+    bool nullable = 50;
+
+    // optionally points to a type_variation_anchor defined in this plan.
+    // Applies to all members of union other than the Typed null (which should
+    // directly declare the type variation).
+    uint32 type_variation_reference = 51;
+
+    message Decimal {
+      // the string representation.
+      string value = 1;
+      // The maximum number of digits allowed in the value.
+      // the maximum precision is 38.
+      optional int32 precision = 2;
+      // declared scale of decimal literal
+      optional int32 scale = 3;
+    }
+
+    message CalendarInterval {
+      int32 months = 1;
+      int32 days = 2;
+      int64 microseconds = 3;
+    }
+
+    message Struct {
+      // A possibly heterogeneously typed list of literals
+      repeated Literal fields = 1;
+    }
+
+    message Array {
+      // A homogeneously typed list of literals
+      repeated Literal values = 1;
+    }
+
+    message Map {
+      repeated Pair pairs = 1;
+
+      message Pair {
+        Literal key = 1;
+        Literal value = 2;
+      }
+    }
+  }
+
+  // An unresolved attribute that is not explicitly bound to a specific column, but the column
+  // is resolved during analysis by name.
+  message UnresolvedAttribute {
+    // (Required) An identifier that will be parsed by Catalyst parser. This should follow the
+    // Spark SQL identifier syntax.
+    string unparsed_identifier = 1;
+  }
+
+  // An unresolved function is not explicitly bound to one explicit function, but the function
+  // is resolved during analysis following Sparks name resolution rules.
+  message UnresolvedFunction {
+    // (Required) name (or unparsed name for user defined function) for the unresolved function.
+    string function_name = 1;
+
+    // (Optional) Function arguments. Empty arguments are allowed.
+    repeated Expression arguments = 2;
+
+    // (Required) Indicate if this function should be applied on distinct values.
+    bool is_distinct = 3;
+
+    // (Required) Indicate if this is a user defined function.
+    //
+    // When it is not a user defined function, Connect will use the function name directly.
+    // When it is a user defined function, Connect will parse the function name first.
+    bool is_user_defined_function = 4;
+  }
+
+  // Expression as string.
+  message ExpressionString {
+    // (Required) A SQL expression that will be parsed by Catalyst parser.
+    string expression = 1;
+  }
+
+  // UnresolvedStar is used to expand all the fields of a relation or struct.
+  message UnresolvedStar {
+    // (Optional) The target of the expansion, either be a table name or struct name, this
+    // is a list of identifiers that is the path of the expansion.
+    repeated string target = 1;
+  }
+
+  message Alias {
+    // (Required) The expression that alias will be added on.
+    Expression expr = 1;
+
+    // (Required) a list of name parts for the alias.
+    //
+    // Scalar columns only has one name that presents.
+    repeated string name = 2;
+
+    // (Optional) Alias metadata expressed as a JSON map.
+    optional string metadata = 3;
+  }
+}

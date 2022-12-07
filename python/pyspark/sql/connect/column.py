@@ -327,6 +327,7 @@ class UnresolvedFunction(Expression):
         self,
         name: str,
         args: Sequence["Expression"],
+        is_distinct: bool = False,
     ) -> None:
         super().__init__()
 
@@ -336,15 +337,22 @@ class UnresolvedFunction(Expression):
         assert isinstance(args, list) and all(isinstance(arg, Expression) for arg in args)
         self._args = args
 
+        assert isinstance(is_distinct, bool)
+        self._is_distinct = is_distinct
+
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
         fun = proto.Expression()
         fun.unresolved_function.function_name = self._name
         if len(self._args) > 0:
             fun.unresolved_function.arguments.extend([arg.to_plan(session) for arg in self._args])
+        fun.unresolved_function.is_distinct = self._is_distinct
         return fun
 
     def __repr__(self) -> str:
-        return f"({self._name} ({', '.join([str(arg) for arg in self._args])}))"
+        if self._is_distinct:
+            return f"{self._name}(distinct {', '.join([str(arg) for arg in self._args])})"
+        else:
+            return f"{self._name}({', '.join([str(arg) for arg in self._args])})"
 
 
 class Column:
@@ -357,6 +365,10 @@ class Column:
     """
 
     def __init__(self, expr: Expression) -> None:
+        if not isinstance(expr, Expression):
+            raise TypeError(
+                f"Cannot construct column expected Expression, got {expr} ({type(expr)})"
+            )
         self._expr = expr
 
     __gt__ = _bin_op(">")
