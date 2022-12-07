@@ -4639,7 +4639,18 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
             "inputSql" -> toSQLExpr(second),
             "inputType" -> toSQLType(second.dataType))
         )
-      case _ => TypeCheckResult.TypeCheckSuccess
+      case (ArrayType(e1, _), e2, e3) if e1.sameType(e2) =>
+        TypeUtils.checkForOrderingExpr(e2, prettyName)
+      case _ =>
+        DataTypeMismatch(
+          errorSubClass = "ARRAY_FUNCTION_DIFF_TYPES",
+          messageParameters = Map(
+            "functionName" -> toSQLId(prettyName),
+            "dataType" -> toSQLType(ArrayType),
+            "arrayType" -> toSQLType(srcArrayExpr.dataType),
+            "itemType" -> toSQLType(itemExpr.dataType)
+          )
+        )
     }
   }
 
@@ -4664,35 +4675,27 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
     if (newArrayLength  > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
       throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(newArrayLength)
     }
-    val validatedPosInt = this.getValidPosIndexOrThrow(posInt, baseArr.numElements())
+    val insertionIndex = if (posInt > 0) {
+      posInt - 1
+    } else {
+      posInt + baseArr.numElements()
+    }
 
-    if (validatedPosInt < 0 || validatedPosInt > baseArr.numElements()) {
+    if (insertionIndex < 0 || insertionIndex > baseArr.numElements()) {
       null
     } else {
       val newArray = new Array[Any](newArrayLength)
       baseArr.foreach(arrayElementType, (i, v) =>
-        if (i >= validatedPosInt) {
+        if (i >= insertionIndex) {
           newArray(i + 1) = v
         } else {
           newArray(i) = v
         }
       )
-      newArray(validatedPosInt) = item
+      newArray(insertionIndex) = item
 
       new GenericArrayData(newArray)
     }
-  }
-
-  private def getValidPosIndexOrThrow(pos: Int, numArrayElements: Int): Int = {
-    val validIdx = if (pos == 0) {
-      throw QueryExecutionErrors.elementAtByIndexZeroError(getContextOrNull())
-    } else if (pos > 0) {
-      pos - 1
-    } else {
-      pos + numArrayElements
-    }
-
-    validIdx
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {

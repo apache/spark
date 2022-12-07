@@ -6862,9 +6862,9 @@ def array_insert(arr: "ColumnOrName", pos: "ColumnOrName", value: "ColumnOrName"
     Examples
     --------
     >>> df = spark.createDataFrame(
-    >>>     [(['a', 'b', 'c'], 2, 'd'), (['c', 'b', 'a'], 4, 'd')],
-    >>>     ['data', 'pos', 'val']
-    >>> )
+    ...     [(['a', 'b', 'c'], 2, 'd'), (['c', 'b', 'a'], 4, 'd')],
+    ...     ['data', 'pos', 'val']
+    ... )
     >>> df.select(array_insert(df.data, df.pos, df.val)).collect()
     [Row(array_insert(data)=['a', 'd', 'b', 'c']), Row(array_insert(data)=['c', 'b', 'a', 'd'])]
     """
