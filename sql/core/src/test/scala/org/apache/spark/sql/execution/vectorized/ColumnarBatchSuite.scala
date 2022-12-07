@@ -1417,14 +1417,16 @@ class ColumnarBatchSuite extends SparkFunSuite {
                   i += 1
                 }
               case StringType =>
-                // Parallel assert to speed up.
-                a1.zipWithIndex.par.foreach {
-                  case (v1, i) =>
-                    assert((v1 == null) == (a2(i) == null), "Seed = " + seed)
-                    if (v1 != null) {
-                      assert(v1.asInstanceOf[UTF8String].toString === a2(i).asInstanceOf[String],
-                        "Seed = " + seed)
-                    }
+                var i = 0
+                while (i < a1.length) {
+                  val s1 = a1(i)
+                  val s2 = a2(i)
+                  assert((s1 == null) == (s2 == null), "Seed = " + seed)
+                  if (s1 != null) {
+                    assert(s1.asInstanceOf[UTF8String].toString === s2.asInstanceOf[String],
+                      "Seed = " + seed)
+                  }
+                  i += 1
                 }
               case DateType =>
                 var i = 0
