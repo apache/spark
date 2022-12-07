@@ -413,6 +413,67 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             sdf.groupBy("a").agg(SF.percentile_approx(sdf.b, [0.1, 0.9])).toPandas(),
         )
 
+    def test_string_functions(self):
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        query = """
+            SELECT * FROM VALUES
+            ('   ab   ', 'ab   ', NULL), ('   ab', NULL, 'ab')
+            AS tab(a, b, c)
+            """
+        # +--------+-----+----+
+        # |       a|    b|   c|
+        # +--------+-----+----+
+        # |   ab   |ab   |null|
+        # |      ab| null|  ab|
+        # +--------+-----+----+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        for cfunc, sfunc in [
+            (CF.upper, SF.upper),
+            (CF.lower, SF.lower),
+            (CF.ascii, SF.ascii),
+            (CF.base64, SF.base64),
+            (CF.unbase64, SF.unbase64),
+            (CF.ltrim, SF.ltrim),
+            (CF.rtrim, SF.rtrim),
+            (CF.trim, SF.trim),
+        ]:
+            self.assert_eq(
+                cdf.select(cfunc("a"), cfunc(cdf.b)).toPandas(),
+                sdf.select(sfunc("a"), sfunc(sdf.b)).toPandas(),
+            )
+
+        self.assert_eq(
+            cdf.select(CF.concat_ws("-", cdf.a, "c")).toPandas(),
+            sdf.select(SF.concat_ws("-", sdf.a, "c")).toPandas(),
+        )
+
+        # Disable the test for "decode" because of inconsistent column names,
+        # as shown below
+        #
+        # >>> sdf.select(SF.decode("c", "UTF-8")).toPandas()
+        # stringdecode(c, UTF-8)
+        # 0                   None
+        # 1                     ab
+        # >>> cdf.select(CF.decode("c", "UTF-8")).toPandas()
+        # decode(c, UTF-8)
+        # 0             None
+        # 1               ab
+        #
+        # self.assert_eq(
+        #     cdf.select(CF.decode("c", "UTF-8")).toPandas(),
+        #     sdf.select(SF.decode("c", "UTF-8")).toPandas(),
+        # )
+
+        self.assert_eq(
+            cdf.select(CF.encode("c", "UTF-8")).toPandas(),
+            sdf.select(SF.encode("c", "UTF-8")).toPandas(),
+        )
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.test_connect_function import *  # noqa: F401
