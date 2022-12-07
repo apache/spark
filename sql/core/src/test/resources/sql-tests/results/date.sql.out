@@ -22,7 +22,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
+  "errorClass" : "CANNOT_PARSE_VALUE_TO_DATATYPE",
   "messageParameters" : {
     "value" : "2020-01-01中文",
     "valueType" : "DATE"
@@ -68,7 +68,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
+  "errorClass" : "CANNOT_PARSE_VALUE_TO_DATATYPE",
   "messageParameters" : {
     "value" : "015",
     "valueType" : "DATE"
@@ -90,7 +90,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
+  "errorClass" : "CANNOT_PARSE_VALUE_TO_DATATYPE",
   "messageParameters" : {
     "value" : "2021-4294967297-11",
     "valueType" : "DATE"

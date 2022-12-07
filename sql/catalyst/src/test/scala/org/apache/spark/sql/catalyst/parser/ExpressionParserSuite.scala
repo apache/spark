@@ -521,7 +521,7 @@ class ExpressionParserSuite extends AnalysisTest {
         Literal(Timestamp.valueOf("2016-03-11 20:54:00.000")))
       checkError(
         exception = parseException("timestamP_LTZ '2016-33-11 20:54:00.000'"),
-        errorClass = "_LEGACY_ERROR_TEMP_0019",
+        errorClass = "CANNOT_PARSE_VALUE_TO_DATATYPE",
         parameters = Map("valueType" -> "TIMESTAMP_LTZ", "value" -> "2016-33-11 20:54:00.000"),
         context = ExpectedContext(
           fragment = "timestamP_LTZ '2016-33-11 20:54:00.000'",
@@ -533,7 +533,7 @@ class ExpressionParserSuite extends AnalysisTest {
         Literal(LocalDateTime.parse("2016-03-11T20:54:00.000")))
       checkError(
         exception = parseException("tImEstAmp_Ntz '2016-33-11 20:54:00.000'"),
-        errorClass = "_LEGACY_ERROR_TEMP_0019",
+        errorClass = "CANNOT_PARSE_VALUE_TO_DATATYPE",
         parameters = Map("valueType" -> "TIMESTAMP_NTZ", "value" -> "2016-33-11 20:54:00.000"),
         context = ExpectedContext(
           fragment = "tImEstAmp_Ntz '2016-33-11 20:54:00.000'",
@@ -545,7 +545,7 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("dAte '2016-03-11'", Literal(Date.valueOf("2016-03-11")))
     checkError(
       exception = parseException("DAtE 'mar 11 2016'"),
-      errorClass = "_LEGACY_ERROR_TEMP_0019",
+      errorClass = "CANNOT_PARSE_VALUE_TO_DATATYPE",
       parameters = Map("valueType" -> "DATE", "value" -> "mar 11 2016"),
       context = ExpectedContext(
         fragment = "DAtE 'mar 11 2016'",
@@ -557,7 +557,7 @@ class ExpressionParserSuite extends AnalysisTest {
       Literal(Timestamp.valueOf("2016-03-11 20:54:00.000")))
     checkError(
       exception = parseException("timestamP '2016-33-11 20:54:00.000'"),
-      errorClass = "_LEGACY_ERROR_TEMP_0019",
+      errorClass = "CANNOT_PARSE_VALUE_TO_DATATYPE",
       parameters = Map("valueType" -> "TIMESTAMP", "value" -> "2016-33-11 20:54:00.000"),
       context = ExpectedContext(
         fragment = "timestamP '2016-33-11 20:54:00.000'",
@@ -571,7 +571,7 @@ class ExpressionParserSuite extends AnalysisTest {
 
       checkError(
         exception = parseException("timestamP '2016-33-11 20:54:00.000'"),
-        errorClass = "_LEGACY_ERROR_TEMP_0019",
+        errorClass = "CANNOT_PARSE_VALUE_TO_DATATYPE",
         parameters = Map("valueType" -> "TIMESTAMP", "value" -> "2016-33-11 20:54:00.000"),
         context = ExpectedContext(
           fragment = "timestamP '2016-33-11 20:54:00.000'",

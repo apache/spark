@@ -211,7 +211,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   def cannotParseValueTypeError(
       valueType: String, value: String, ctx: TypeConstructorContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0019",
+      errorClass = "CANNOT_PARSE_VALUE_TO_DATATYPE",
       messageParameters = Map("valueType" -> valueType, "value" -> value),
       ctx)
   }
