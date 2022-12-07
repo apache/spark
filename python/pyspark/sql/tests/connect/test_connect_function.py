@@ -359,6 +359,7 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             (CF.median, SF.median),
             (CF.min, SF.min),
             (CF.mode, SF.mode),
+            (CF.product, SF.product),
             (CF.skewness, SF.skewness),
             (CF.stddev, SF.stddev),
             (CF.stddev_pop, SF.stddev_pop),

@@ -406,7 +406,8 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Expression.ExprTypeCase.UNRESOLVED_ATTRIBUTE =>
         transformUnresolvedExpression(exp)
       case proto.Expression.ExprTypeCase.UNRESOLVED_FUNCTION =>
-        transformScalarFunction(exp.getUnresolvedFunction)
+        transformUnregisteredFunction(exp.getUnresolvedFunction)
+          .getOrElse(transformUnresolvedFunction(exp.getUnresolvedFunction))
       case proto.Expression.ExprTypeCase.ALIAS => transformAlias(exp.getAlias)
       case proto.Expression.ExprTypeCase.EXPRESSION_STRING =>
         transformExpressionString(exp.getExpressionString)
@@ -538,7 +539,8 @@ class SparkConnectPlanner(session: SparkSession) {
    *   Proto representation of the function call.
    * @return
    */
-  private def transformScalarFunction(fun: proto.Expression.UnresolvedFunction): Expression = {
+  private def transformUnresolvedFunction(
+      fun: proto.Expression.UnresolvedFunction): Expression = {
     if (fun.getIsUserDefinedFunction) {
       UnresolvedFunction(
         session.sessionState.sqlParser.parseFunctionIdentifier(fun.getFunctionName),
@@ -549,6 +551,27 @@ class SparkConnectPlanner(session: SparkSession) {
         FunctionIdentifier(fun.getFunctionName),
         fun.getArgumentsList.asScala.map(transformExpression).toSeq,
         isDistinct = false)
+    }
+  }
+
+  /**
+   * For some reason, not all functions are registered in 'FunctionRegistry'. For a unregistered
+   * function, we can still wrap it under the proto 'UnresolvedFunction', and then resolve it in
+   * this method.
+   */
+  private def transformUnregisteredFunction(
+      fun: proto.Expression.UnresolvedFunction): Option[Expression] = {
+    fun.getFunctionName match {
+      case "product" =>
+        if (fun.getArgumentsCount != 1) {
+          throw InvalidPlanInput("Product requires single child expression")
+        }
+        Some(
+          aggregate
+            .Product(transformExpression(fun.getArgumentsList.asScala.head))
+            .toAggregateExpression())
+
+      case _ => None
     }
   }
 
