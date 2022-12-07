@@ -1303,6 +1303,12 @@ class AnalysisSuite extends AnalysisTest with Matchers {
           plan = parsePlan("SELECT * FROM a LIMIT @limitA"),
           args = Map("limitA" -> Literal(10))),
         parsePlan("SELECT * FROM a LIMIT 10"))
+      // Ignore unused arguments
+      comparePlans(
+        Parameter.bind(
+          plan = parsePlan("SELECT c FROM a WHERE c < @param2"),
+          args = Map("param1" -> Literal(10), "param2" -> Literal(20))),
+        parsePlan("SELECT c FROM a WHERE c < 20"))
     }
   }
 }
