@@ -132,7 +132,7 @@ class V1WriteFallbackSuite extends QueryTest with SharedSparkSession with Before
     assert(e3.getMessage.contains("schema"))
   }
 
-  test("fallback writes should only analyze/optimize plan once") {
+  test("SPARK-41437: fallback writes should only analyze/optimize plan once") {
     SparkSession.clearActiveSession()
     SparkSession.clearDefaultSession()
     try {
