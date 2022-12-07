@@ -1316,6 +1316,38 @@ class DataFrame(object):
         return DataFrameStatFunctions(self)
 
     def summary(self, *statistics: str) -> "DataFrame":
+        """Computes specified statistics for numeric and string columns.
+
+        .. versionadded:: 3.4.0
+
+        Available statistics are:
+        count
+        mean
+        stddev
+        min
+        max
+        arbitrary approximate percentiles specified as a percentage (e.g. 75%)
+        count_distinct
+        approx_count_distinct
+
+        Notes
+        -----
+        If no statistics are given, this function computes 'count', 'mean', 'stddev', 'min',
+        'approximate quartiles' (percentiles at 25%, 50%, and 75%), and 'max'.
+        This function is meant for exploratory data analysis, as we make no guarantee about the
+        backward compatibility of the schema of the resulting :class:`DataFrame`. If you want to
+        programmatically compute summary statistics, use the `agg` function instead.
+
+        Parameters
+        ----------
+        statistics : str, list, optional
+             Statistics from above list to be computed.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            A new DataFrame that computes specified statistics for given DataFrame.
+        """
         _statistics: List[str] = list(statistics)
         for s in _statistics:
             if not isinstance(s, str):
