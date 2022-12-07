@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.kafka.common.TopicPartition
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Network.NETWORK_TIMEOUT
 import org.apache.spark.sql.SparkSession
@@ -321,11 +321,14 @@ private[kafka010] class KafkaMicroBatchStream(
       endPartitionOffsets: Map[TopicPartition, Long]): Unit = {
     val tpsForPrefetched = allDataForTriggerAvailableNow.keySet
     val tpsForEndOffset = endPartitionOffsets.keySet
-    assert(tpsForPrefetched == tpsForEndOffset,
-      "Kafka data source in Trigger.AvailableNow should provide the same topic partitions in " +
-        "pre-fetched offset to end offset for each microbatch. " +
-        s"topic-partitions for pre-fetched offset: $tpsForPrefetched, " +
-        s"topic-partitions for end offset: $tpsForEndOffset.")
+
+    if (tpsForPrefetched != tpsForEndOffset) {
+      throw SparkException.internalError(
+        "Kafka data source in Trigger.AvailableNow should provide the same topic partitions in " +
+          "pre-fetched offset to end offset for each microbatch. " +
+          s"topic-partitions for pre-fetched offset: $tpsForPrefetched, " +
+          s"topic-partitions for end offset: $tpsForEndOffset.")
+    }
 
     val endOffsetHasGreaterOrEqualOffsetComparedToPrefetched = {
       allDataForTriggerAvailableNow.keySet.forall { tp =>
@@ -334,21 +337,25 @@ private[kafka010] class KafkaMicroBatchStream(
         offsetFromEndOffset <= offsetFromPrefetched
       }
     }
-    assert(endOffsetHasGreaterOrEqualOffsetComparedToPrefetched,
-      "For Kafka data source with Trigger.AvailableNow, end offset should have lower or " +
-        "equal offset per each topic partition than pre-fetched offset." +
-        s"topic-partitions for pre-fetched offset: $tpsForPrefetched, " +
-        s"topic-partitions for end offset: $tpsForEndOffset.")
+    if (!endOffsetHasGreaterOrEqualOffsetComparedToPrefetched) {
+      throw SparkException.internalError(
+        "For Kafka data source with Trigger.AvailableNow, end offset should have lower or " +
+          "equal offset per each topic partition than pre-fetched offset." +
+          s"topic-partitions for pre-fetched offset: $tpsForPrefetched, " +
+          s"topic-partitions for end offset: $tpsForEndOffset.")
+    }
 
     val latestOffsets = kafkaOffsetReader.fetchLatestOffsets(Some(endPartitionOffsets))
     val tpsForLatestOffsets = latestOffsets.keySet
 
-    assert(tpsForEndOffset.subsetOf(tpsForLatestOffsets),
-      "Some of partitions in Kafka topic(s) have been lost during running query with " +
-        "Trigger.AvailableNow. We cannot continue since it's not possible to reach an " +
-        "end state. " +
-        s"topic-partitions for latest offset: $tpsForLatestOffsets, " +
-        s"topic-partitions for end offset: $tpsForEndOffset")
+    if (!tpsForEndOffset.subsetOf(tpsForLatestOffsets)) {
+      throw SparkException.internalError(
+        "Some of partitions in Kafka topic(s) have been lost during running query with " +
+          "Trigger.AvailableNow. We cannot continue since it's not possible to reach an " +
+          "end state. " +
+          s"topic-partitions for latest offset: $tpsForLatestOffsets, " +
+          s"topic-partitions for end offset: $tpsForEndOffset")
+    }
 
     val endOffsetHasGreaterOrEqualOffsetComparedToLatest = {
       tpsForEndOffset.forall { tp =>
@@ -357,12 +364,13 @@ private[kafka010] class KafkaMicroBatchStream(
         offsetFromEndOffset <= offsetFromLatest
       }
     }
-
-    assert(endOffsetHasGreaterOrEqualOffsetComparedToLatest,
-      "For Kafka data source with Trigger.AvailableNow, end offset should have lower or " +
-        "equal offset per each topic partition than latest offset." +
-        s"topic-partitions for latest offset: $tpsForLatestOffsets, " +
-        s"topic-partitions for end offset: $tpsForEndOffset")
+    if (!endOffsetHasGreaterOrEqualOffsetComparedToLatest) {
+      throw SparkException.internalError(
+        "For Kafka data source with Trigger.AvailableNow, end offset should have lower or " +
+          "equal offset per each topic partition than latest offset." +
+          s"topic-partitions for latest offset: $tpsForLatestOffsets, " +
+          s"topic-partitions for end offset: $tpsForEndOffset")
+    }
   }
 
   override def prepareForTriggerAvailableNow(): Unit = {
