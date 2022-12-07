@@ -181,8 +181,8 @@ public class NettyUtils {
   }
 
   /**
-   * ByteBuf allocator prefers to allocate direct ByteBuf iif both Spark configurations allows to
-   * create direct ByteBuf and Netty enables directBufferPreferred.
+   * ByteBuf allocator prefers to allocate direct ByteBuf iif both Spark allows to create direct
+   * ByteBuf and Netty enables directBufferPreferred.
    */
   public static boolean preferDirectBufs(TransportConf conf) {
     boolean allowDirectBufs;
