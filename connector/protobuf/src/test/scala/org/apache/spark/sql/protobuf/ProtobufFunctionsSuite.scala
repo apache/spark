@@ -754,7 +754,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     })
   }
 
-  test("Unit tests for Protobuf OneOf field with recursionDepth option") {
+  test("Unit tests for Protobuf OneOf field with circularReferenceDepth option") {
     val descriptor = ProtobufUtils.buildDescriptor(testFileDesc, "OneOfEventWithRecursion")
 
     val recursiveANested = EventRecursiveA.newBuilder()
@@ -777,7 +777,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     val df = Seq(oneOfEventWithRecursion.toByteArray).toDF("value")
 
     val options = new java.util.HashMap[String, String]()
-    options.put("recursionDepth", "2")
+    options.put("circularReferenceDepth", "1")
 
     val fromProtoDf = df.select(
       functions.from_protobuf($"value",
@@ -802,7 +802,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     val eventFromSpark = OneOfEventWithRecursion.parseFrom(
       toDf.select("toProto").take(1).toSeq(0).getAs[Array[Byte]](0))
 
-    // check recursionDepth=2 value are present, but not recursionDepth=3
+    // check circularReferenceDepth=1 value are present, but not circularReferenceDepth=2
     assert(eventFromSpark.getRecursiveA.getRecursiveA.getKey.equals("keyNested2"))
     assert(eventFromSpark.getRecursiveA.getRecursiveA.getValue.equals("valueNested2"))
     assert(eventFromSpark.getRecursiveA.getRecursiveA.getRecursiveA.getKey.isEmpty)
@@ -812,30 +812,30 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       assert(expectedFields.contains(f.getName))
     })
 
-    val schema = StructType(List(StructField("sample",
-        StructType(List(StructField("key", StringType, true),
+    val schema = StructType(Seq(StructField("sample",
+        StructType(Seq(StructField("key", StringType, true),
           StructField("recursiveA",
-            StructType(List(StructField("recursiveA",
-                StructType(List(StructField("key", StringType, true),
+            StructType(Seq(StructField("recursiveA",
+                StructType(Seq(StructField("key", StringType, true),
                   StructField("recursiveA", NullType, true),
                   StructField("recursiveB", StructType(
-                      List(StructField("key", StringType, true),
+                    Seq(StructField("key", StringType, true),
                       StructField("value", StringType, true),
                       StructField("recursiveA",
-                        StructType(List(StructField("key", StringType, true),
+                        StructType(Seq(StructField("key", StringType, true),
                           StructField("recursiveA", NullType, true),
                           StructField("recursiveB", NullType, true),
                           StructField("value", StringType, true))), true))), true),
                   StructField("value", StringType, true))), true),
               StructField("key", StringType, true))), true),
           StructField("recursiveB",
-            StructType(List(StructField("key", StringType, true),
+            StructType(Seq(StructField("key", StringType, true),
               StructField("value", StringType, true),
               StructField("recursiveA",
-                StructType(List(StructField("key", StringType, true),
+                StructType(Seq(StructField("key", StringType, true),
                   StructField("recursiveA",
-                    StructType(List(StructField("recursiveA",
-                        StructType(List(StructField("key", StringType),
+                    StructType(Seq(StructField("recursiveA",
+                        StructType(Seq(StructField("key", StringType),
                           StructField("recursiveA", NullType),
                           StructField("recursiveB", NullType),
                           StructField("value", StringType))), true),
