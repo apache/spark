@@ -15,27 +15,29 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.read;
-
-import java.util.Map;
-import java.util.Optional;
-import java.util.OptionalLong;
+package org.apache.spark.sql.connector.read.colstats;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.NamedReference;
-import org.apache.spark.sql.connector.read.colstats.ColumnStatistics;
 
 /**
- * An interface to represent statistics for a data source, which is returned by
- * {@link SupportsReportStatistics#estimateStatistics()}.
+ * An interface to represent a bin in an equi-height histogram.
  *
- * @since 3.0.0
+ * @since 3.4.0
  */
 @Evolving
-public interface Statistics {
-  OptionalLong sizeInBytes();
-  OptionalLong numRows();
-  default Optional<Map<NamedReference, ColumnStatistics>> columnStats() {
-    return Optional.empty();
-  }
+public interface HistogramBin {
+  /**
+   * @return lower bound of the value range in this bin
+   */
+  double lo();
+
+  /**
+   * @return higher bound of the value range in this bin
+   */
+  double hi();
+
+  /**
+   * @return approximate number of distinct values in this bin
+   */
+  long ndv();
 }

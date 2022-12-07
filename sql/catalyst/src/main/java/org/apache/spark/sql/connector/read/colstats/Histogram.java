@@ -15,27 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.read;
-
-import java.util.Map;
-import java.util.Optional;
-import java.util.OptionalLong;
+package org.apache.spark.sql.connector.read.colstats;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.NamedReference;
-import org.apache.spark.sql.connector.read.colstats.ColumnStatistics;
 
 /**
- * An interface to represent statistics for a data source, which is returned by
- * {@link SupportsReportStatistics#estimateStatistics()}.
+ * An interface to represent an equi-height histogram, which is a part of
+ * {@link ColumnStatistics}. Equi-height histogram represents the distribution of
+ * a column's values by a sequence of bins.
  *
- * @since 3.0.0
+ * @since 3.4.0
  */
 @Evolving
-public interface Statistics {
-  OptionalLong sizeInBytes();
-  OptionalLong numRows();
-  default Optional<Map<NamedReference, ColumnStatistics>> columnStats() {
-    return Optional.empty();
-  }
+public interface Histogram {
+  /**
+   * @return number of rows in each bin
+   */
+  double height();
+
+  /**
+   * @return equi-height histogram bins
+   */
+  HistogramBin[] bins();
 }
