@@ -1241,19 +1241,24 @@ class DataFrame(object):
 
     def describe(self, *cols: str) -> "DataFrame":
         """Computes basic statistics for numeric and string columns.
+
         .. versionadded:: 3.4.0
+
         This include count, mean, stddev, min, and max. If no columns are
         given, this function computes statistics for all numerical or string columns.
+
         Notes
         -----
         This function is meant for exploratory data analysis, as we make no
         guarantee about the backward compatibility of the schema of the resulting
         :class:`DataFrame`.
         Use summary for expanded statistics and control over which statistics to compute.
+
         Parameters
         ----------
         cols : str, list, optional
              Column name or list of column names to describe by (default All columns).
+
         Returns
         -------
         :class:`DataFrame`
