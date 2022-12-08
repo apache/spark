@@ -796,7 +796,7 @@ object OptimizeOneRowRelationSubquery extends Rule[LogicalPlan] {
       case s @ ScalarSubquery(OneRowSubquery(p @ Project(_, _: OneRowRelation)), _, _, _, _)
           if !hasCorrelatedSubquery(s.plan) && s.joinCond.isEmpty =>
         assert(p.projectList.size == 1)
-        p.projectList.head
+        stripOuterReferences(p.projectList).head
     }
   }
 
