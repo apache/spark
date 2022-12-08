@@ -247,23 +247,6 @@ class InsertWindowGroupLimitSuite extends PlanTest {
     }
   }
 
-  test("Insert window group limit node for top-k computation: different window specification") {
-    rankLikeFunctions.foreach { function =>
-      val originalQuery =
-        testRelation
-          .select(a, b, c,
-            windowExpr(function,
-              windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"),
-            windowExpr(function,
-              windowSpec(a :: Nil, c.asc :: Nil, windowFrame)).as("rn2"))
-          .where('rn < 2 && 'rn2 === 1)
-
-      comparePlans(
-        Optimize.execute(originalQuery.analyze),
-        WithoutOptimize.execute(originalQuery.analyze))
-    }
-  }
-
   test("multiple different rank-like window function and only one used in filter") {
     val originalQuery =
       testRelation
