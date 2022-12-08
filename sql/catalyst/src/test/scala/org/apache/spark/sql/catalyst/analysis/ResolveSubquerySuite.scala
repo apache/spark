@@ -287,34 +287,37 @@ class ResolveSubquerySuite extends AnalysisTest {
       val t2 = LocalRelation(c, d)
       val optimizer = new SimpleTestOptimizer()
 
+      // each tuple contains logical plan to test,
+      // expected number of aggregate functions after analysis,
+      // expected number of leaves in the filter clause
       val plansToTest = Seq(
-        t1.select($"a", $"b").
+        (t1.select($"a", $"b").
           having($"b")(Cos(sum($"a")))(Exists(t2.select($"c").
-            where($"d" === Cos(sum($"a"))))) -> 1,
-        t1.select($"a", $"b").
+            where($"d" === Cos(sum($"a"))))), 1, 2),
+          (t1.select($"a", $"b").
           having($"b")(sum($"a"))(Exists(t2.select($"c").
-            where($"d" === Cos(sum($"a"))))) -> 1,
-        t1.select($"a", $"b").
+            where($"d" === Cos(sum($"a"))))), 1, 2),
+        (t1.select($"a", $"b").
           having($"b")(Cos(sum($"a")))(Exists(t2.select($"c").
-            where($"d" === sum($"a")))) -> 2,
-        t1.select($"a", $"b").
+            where($"d" === sum($"a")))), 2, 2),
+        (t1.select($"a", $"b").
           having($"b")(sum($"a"), Cos(sum($"b")))(Exists(t2.select($"c").
-            where($"d" === Cos(sum($"a")) + sum($"a") + sum($"b") + Cos(sum($"b"))))) -> 3,
-        t1.select($"a", $"b").
+            where($"d" === Cos(sum($"a")) + sum($"a") + sum($"b") + Cos(sum($"b"))))), 3, 5),
+        (t1.select($"a", $"b").
           having($"b")(Literal(1) + sum($"a"), Cos(sum($"b")))(Exists(t2.select($"c").
-            where($"d" === (Literal(1) + sum($"a"))))) -> 2
+            where($"d" === (Literal(1) + sum($"a"))))), 2, 2)
       )
 
       plansToTest.foreach {
-        case (logicalPlan: LogicalPlan, numAggFunctions) =>
-          assertAnalysis(logicalPlan, numAggFunctions)
+        case (logicalPlan: LogicalPlan, numAggFunctions, expectedLeavesInFilter) =>
+          assertAnalysis(logicalPlan, numAggFunctions, expectedLeavesInFilter)
       }
 
-      def assertAnalysis(logicalPlan: LogicalPlan, expectedAggregateFunctions: Int): Unit = {
+      def assertAnalysis(logicalPlan: LogicalPlan, expectedAggregateFunctions: Int,
+                         expectedLeavesInFilter: Int): Unit = {
         val analyzedQuery = logicalPlan.analyze
         assert(analyzedQuery.analyzed)
-        val optimizedQuery = optimizer.execute(analyzedQuery)
-        assert(optimizedQuery.resolved)
+
         // the analyzed query should contain only one aggregate function
         val buff = mutable.ArrayBuffer[AggregateFunction]()
         analyzedQuery.transformAllExpressions {
@@ -335,6 +338,19 @@ class ResolveSubquerySuite extends AnalysisTest {
           }
         }.flatMap(_.map(_.asInstanceOf[SubqueryExpression]))
         assert(allSubqueryExprs.forall(sq => sq.references.subsetOf(aggAttribs)))
+
+        val filterCondn = analyzedQuery.collectFirst {
+          case Filter(condn, _) => condn match {
+            case ex: Exists => ex.plan.collectFirst {
+              case f: Filter => f.condition
+            }.getOrElse(condn)
+            case _ => condn
+          }
+        }
+        val numLeavesInFilterClause = filterCondn.map(_.collectLeaves().length).getOrElse(0)
+        assert(numLeavesInFilterClause == expectedLeavesInFilter)
+        val optimizedQuery = optimizer.execute(analyzedQuery)
+        assert(optimizedQuery.resolved)
       }
     }
   }
