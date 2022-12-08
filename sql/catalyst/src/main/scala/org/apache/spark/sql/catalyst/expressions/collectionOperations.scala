@@ -4605,9 +4605,11 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
  * Given an array, and another element append the element at the end of the array.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(array, element) - Append the element",
-  examples =
-    """
+  usage =
+    """_FUNC_(array, element) - Append the element at the end of the array passed as first argument.
+      | Type of element should be similar to type of the elements of the array.
+      |""".stripMargin,
+  examples = """
     Examples:
       > SELECT _FUNC_(array('b', 'd', 'c', 'a'), 'd');
        ["b","d","c","a","d"]
@@ -4621,6 +4623,9 @@ case class ArrayAppend(left: Expression, right: Expression)
   with ComplexTypeMergingExpression
   with QueryErrorsBase {
   override def prettyName: String = "array_append"
+
+  @transient protected lazy val elementType: DataType =
+    inputTypes.head.asInstanceOf[ArrayType].elementType
 
   override def inputTypes: Seq[AbstractDataType] = {
     (left.dataType, right.dataType) match {
@@ -4662,14 +4667,13 @@ case class ArrayAppend(left: Expression, right: Expression)
 
   override protected def nullSafeEval(input1: Any, input2: Any): Any = {
     val arrayData = input1.asInstanceOf[ArrayData]
-    val arrayElementType = dataType.asInstanceOf[ArrayType].elementType
     val elementData = input2
     val numberOfElements = arrayData.numElements() + 1
     if (numberOfElements > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
       throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(numberOfElements)
     }
     val finalData = new Array[Any](numberOfElements)
-    arrayData.foreach(arrayElementType, finalData.update)
+    arrayData.foreach(elementType, finalData.update)
     finalData.update(numberOfElements - 1, elementData)
     new GenericArrayData(finalData)
   }
