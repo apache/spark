@@ -556,6 +556,20 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(connectTestRelation.hint("COALESCE", 3), sparkTestRelation.hint("COALESCE", 3))
   }
 
+  test("Test Melt") {
+    val connectPlan0 =
+      connectTestRelation.melt(Seq("id".protoAttr), Seq("name".protoAttr), "variable", "value")
+    val sparkPlan0 =
+      sparkTestRelation.melt(Array(Column("id")), Array(Column("name")), "variable", "value")
+    comparePlans(connectPlan0, sparkPlan0)
+
+    val connectPlan1 =
+      connectTestRelation.melt(Seq("id".protoAttr), "variable", "value")
+    val sparkPlan1 =
+      sparkTestRelation.melt(Array(Column("id")), "variable", "value")
+    comparePlans(connectPlan1, sparkPlan1)
+  }
+
   private def createLocalRelationProtoByAttributeReferences(
       attrs: Seq[AttributeReference]): proto.Relation = {
     val localRelationBuilder = proto.LocalRelation.newBuilder()

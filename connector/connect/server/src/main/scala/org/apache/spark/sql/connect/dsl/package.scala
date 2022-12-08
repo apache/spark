@@ -709,6 +709,40 @@ package object dsl {
           .build()
       }
 
+      def melt(
+          ids: Seq[Expression],
+          values: Seq[Expression],
+          variableColumnName: String,
+          valueColumnName: String): Relation = {
+        Relation
+          .newBuilder()
+          .setMelt(
+            Melt
+              .newBuilder()
+              .setInput(logicalPlan)
+              .addAllIds(ids.asJava)
+              .addAllValues(values.asJava)
+              .setVariableColumnName(variableColumnName)
+              .setValueColumnName(valueColumnName))
+          .build()
+      }
+
+      def melt(
+          ids: Seq[Expression],
+          variableColumnName: String,
+          valueColumnName: String): Relation = {
+        Relation
+          .newBuilder()
+          .setMelt(
+            Melt
+              .newBuilder()
+              .setInput(logicalPlan)
+              .addAllIds(ids.asJava)
+              .setVariableColumnName(variableColumnName)
+              .setValueColumnName(valueColumnName))
+          .build()
+      }
+
       private def createSetOperation(
           left: Relation,
           right: Relation,

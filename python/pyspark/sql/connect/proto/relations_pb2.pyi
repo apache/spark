@@ -83,6 +83,7 @@ class Relation(google.protobuf.message.Message):
     TAIL_FIELD_NUMBER: builtins.int
     WITH_COLUMNS_FIELD_NUMBER: builtins.int
     HINT_FIELD_NUMBER: builtins.int
+    MELT_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -139,6 +140,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def hint(self) -> global___Hint: ...
     @property
+    def melt(self) -> global___Melt: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -181,6 +184,7 @@ class Relation(google.protobuf.message.Message):
         tail: global___Tail | None = ...,
         with_columns: global___WithColumns | None = ...,
         hint: global___Hint | None = ...,
+        melt: global___Melt | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -218,6 +222,8 @@ class Relation(google.protobuf.message.Message):
             b"limit",
             "local_relation",
             b"local_relation",
+            "melt",
+            b"melt",
             "offset",
             b"offset",
             "project",
@@ -287,6 +293,8 @@ class Relation(google.protobuf.message.Message):
             b"limit",
             "local_relation",
             b"local_relation",
+            "melt",
+            b"melt",
             "offset",
             b"offset",
             "project",
@@ -353,6 +361,7 @@ class Relation(google.protobuf.message.Message):
         "tail",
         "with_columns",
         "hint",
+        "melt",
         "fill_na",
         "drop_na",
         "replace",
@@ -1963,3 +1972,66 @@ class Hint(google.protobuf.message.Message):
     ) -> None: ...
 
 global___Hint = Hint
+
+class Melt(google.protobuf.message.Message):
+    """Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns set."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    IDS_FIELD_NUMBER: builtins.int
+    VALUES_FIELD_NUMBER: builtins.int
+    VARIABLE_COLUMN_NAME_FIELD_NUMBER: builtins.int
+    VALUE_COLUMN_NAME_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    @property
+    def ids(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.expressions_pb2.Expression
+    ]:
+        """(Required) Id columns."""
+    @property
+    def values(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.expressions_pb2.Expression
+    ]:
+        """(Optional) Value columns to unpivot."""
+    variable_column_name: builtins.str
+    """(Required) Name of the variable column."""
+    value_column_name: builtins.str
+    """(Required) Name of the value column."""
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        ids: collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression]
+        | None = ...,
+        values: collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression]
+        | None = ...,
+        variable_column_name: builtins.str = ...,
+        value_column_name: builtins.str = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "ids",
+            b"ids",
+            "input",
+            b"input",
+            "value_column_name",
+            b"value_column_name",
+            "values",
+            b"values",
+            "variable_column_name",
+            b"variable_column_name",
+        ],
+    ) -> None: ...
+
+global___Melt = Melt
