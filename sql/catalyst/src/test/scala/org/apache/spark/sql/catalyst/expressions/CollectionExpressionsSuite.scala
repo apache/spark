@@ -2614,7 +2614,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       ArrayAppend(
         Literal.create(Seq(""), ArrayType(StringType)),
         Literal.create(null, StringType)),
-      Seq("", null))
+      null)
 
     checkEvaluation(
       ArrayAppend(

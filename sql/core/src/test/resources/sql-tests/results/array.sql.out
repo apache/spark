@@ -386,6 +386,7 @@ struct<array_append(array(1, 2, 3), 4):array<int>>
 -- !query output
 [1,2,3,4]
 
+
 -- !query
 select array_append(array('a', 'b', 'c'), 'd')
 -- !query schema
@@ -393,16 +394,26 @@ struct<array_append(array(a, b, c), d):array<string>>
 -- !query output
 ["a","b","c","d"]
 
+
 -- !query
-select array_append(array(1, 2, 3), null)
+select array_append(array(1, 2, 3), CAST(null AS INT))
 -- !query schema
-struct<array_append(array(1, 2, 3), null):array<int>>
+struct<array_append(array(1, 2, 3), CAST(NULL AS INT)):array<int>>
 -- !query output
 NULL
 
+
 -- !query
-select array_append(null, 'a')
+select array_append(CAST(null AS ARRAY<String>), 'a')
 -- !query schema
-struct<array_append(null, a):array<int>>
+struct<array_append(NULL, a):array<string>>
+-- !query output
+NULL
+
+
+-- !query
+select array_append(CAST(null AS ARRAY<String>), CAST(null as String))
+-- !query schema
+struct<array_append(NULL, CAST(NULL AS STRING)):array<string>>
 -- !query output
 NULL

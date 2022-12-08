@@ -4633,23 +4633,10 @@ case class ArrayAppend(left: Expression, right: Expression)
     }
   }
 
-  override def eval(input: InternalRow): Any = {
-    val value1 = left.eval(input)
-    val value2 = right.eval(input)
-    if (value1 == null) {
-      null
-    } else {
-      nullSafeEval(value1, value2)
-    }
-  }
-
   override def checkInputDataTypes(): TypeCheckResult = {
     (left.dataType, right.dataType) match {
-      case (ArrayType(e1, _), e2) => if (e1.sameType(e2)) {
-        TypeCheckResult.TypeCheckSuccess
-      }
-      else {
-        DataTypeMismatch(
+      case (ArrayType(e1, _), e2) if e1.sameType(e2) => TypeCheckResult.TypeCheckSuccess
+      case (ArrayType(e1, _), e2) => DataTypeMismatch(
           errorSubClass = "ARRAY_FUNCTION_DIFF_TYPES",
           messageParameters = Map(
             "functionName" -> toSQLId(prettyName),
@@ -4657,7 +4644,6 @@ case class ArrayAppend(left: Expression, right: Expression)
             "rightType" -> toSQLType(right.dataType),
             "dataType" -> toSQLType(ArrayType)
           ))
-      }
       case _ =>
         DataTypeMismatch(
           errorSubClass = "UNEXPECTED_INPUT_TYPE",
@@ -4689,39 +4675,12 @@ case class ArrayAppend(left: Expression, right: Expression)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-
-    val f = (left: String, right: String) => {
-      val expr = ctx.addReferenceObj("arraysAppendExpr", this)
-      s"${ev.value} = (ArrayData)$expr.nullSafeEval($left, $right);"
-    }
-
-    val leftGen = left.genCode(ctx)
-    val rightGen = right.genCode(ctx)
-    val resultCode = f(leftGen.value, rightGen.value)
-
-    if (nullable) {
-      val nullSafeEval =
-        leftGen.code + ctx.nullSafeExec(left.nullable, leftGen.isNull) {
-          s"""
-            ${ev.isNull} = false; // resultCode could change nullability.
-            $resultCode
-          """
-        }
-      ev.copy(code =
-        code"""
-        boolean ${ev.isNull} = true;
-        ${rightGen.code}
-        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        $nullSafeEval
-      """)
-    } else {
-      ev.copy(code =
-        code"""
-        ${leftGen.code}
-        ${rightGen.code}
-        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        $resultCode""", isNull = FalseLiteral)
-    }
+    nullSafeCodeGen(
+      ctx, ev, (left: String, right: String) => {
+        val expr = ctx.addReferenceObj("arraysAppendExpr", this)
+        s"${ev.value} = (ArrayData)$expr.nullSafeEval($left, $right);"
+      }
+    )
   }
 
   /**
