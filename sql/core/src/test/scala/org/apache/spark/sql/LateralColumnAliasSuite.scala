@@ -59,6 +59,7 @@ class LateralColumnAliasSuite extends QueryTest with SharedSparkSession {
   }
 
   val lcaEnabled: Boolean = true
+  // by default the tests in this suites run with LCA on
   override protected def test(testName: String, testTags: Tag*)(testFun: => Any)
     (implicit pos: Position): Unit = {
     super.test(testName, testTags: _*) {
@@ -66,6 +67,11 @@ class LateralColumnAliasSuite extends QueryTest with SharedSparkSession {
         testFun
       }
     }
+  }
+  // mark special testcases test both LCA on and off
+  protected def testOnAndOff(testName: String, testTags: Tag*)(testFun: => Any)
+      (implicit pos: Position): Unit = {
+    super.test(testName, testTags: _*)(testFun)
   }
 
   private def withLCAOff(f: => Unit): Unit = {
@@ -79,29 +85,35 @@ class LateralColumnAliasSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("Lateral alias basics - Project") {
-    checkAnswer(sql(s"select dept as d, d + 1 as e from $testTable where name = 'amy'"),
+  testOnAndOff("Lateral alias basics - Project") {
+    def checkAnswerWhenOnAndExceptionWhenOff(query: String, expectedAnswerLCAOn: Row): Unit = {
+      withLCAOn { checkAnswer(sql(query), expectedAnswerLCAOn) }
+      withLCAOff {
+        assert(intercept[AnalysisException]{ sql(query) }
+          .getErrorClass == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+      }
+    }
+
+    checkAnswerWhenOnAndExceptionWhenOff(
+      s"select dept as d, d + 1 as e from $testTable where name = 'amy'",
       Row(1, 2))
 
-    checkAnswer(
-      sql(
-        s"select salary * 2 as new_salary, new_salary + bonus from $testTable where name = 'amy'"),
+    checkAnswerWhenOnAndExceptionWhenOff(
+      s"select salary * 2 as new_salary, new_salary + bonus from $testTable where name = 'amy'",
       Row(20000, 21000))
-    checkAnswer(
-      sql(
-        s"select salary * 2 as new_salary, new_salary + bonus * 2 as new_income from $testTable" +
-          s" where name = 'amy'"),
+    checkAnswerWhenOnAndExceptionWhenOff(
+      s"select salary * 2 as new_salary, new_salary + bonus * 2 as new_income from $testTable" +
+        s" where name = 'amy'",
       Row(20000, 22000))
 
-    checkAnswer(
-      sql(
-        "select salary * 2 as new_salary, (new_salary + bonus) * 3 - new_salary * 2 as " +
-          s"new_income from $testTable where name = 'amy'"),
+    checkAnswerWhenOnAndExceptionWhenOff(
+      "select salary * 2 as new_salary, (new_salary + bonus) * 3 - new_salary * 2 as " +
+        s"new_income from $testTable where name = 'amy'",
       Row(20000, 23000))
 
     // should referring to the previously defined LCA
-    checkAnswer(
-      sql(s"SELECT salary * 1.5 AS d, d, 10000 AS d FROM $testTable WHERE name = 'jen'"),
+    checkAnswerWhenOnAndExceptionWhenOff(
+      s"SELECT salary * 1.5 AS d, d, 10000 AS d FROM $testTable WHERE name = 'jen'",
       Row(18000, 18000, 10000)
     )
   }
@@ -194,7 +206,7 @@ class LateralColumnAliasSuite extends QueryTest with SharedSparkSession {
       Row(Row("someone"), "amy"))
   }
 
-  test("Lateral alias conflicts with OuterReference - Project") {
+  testOnAndOff("Lateral alias conflicts with OuterReference - Project") {
     // an attribute can both be resolved as LCA and OuterReference
     val query1 =
       s"""
