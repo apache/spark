@@ -4605,11 +4605,8 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
  * Given an array, and another element append the element at the end of the array.
  */
 @ExpressionDescription(
-  usage =
-    """_FUNC_(array, element) - Append the element at the end of the array passed as first
-      | argument.
-      | Type of element should be similar to type of the elements of the array.
-      |""".stripMargin,
+  usage = """_FUNC_(array, element) - Append the element at the end of the array passed as first
+      argument. Type of element should be similar to type of the elements of the array.""",
   examples = """
     Examples:
       > SELECT _FUNC_(array('b', 'd', 'c', 'a'), 'd');
