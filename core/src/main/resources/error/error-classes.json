@@ -109,6 +109,11 @@
       "The column <columnName> already exists. Consider to choose another name or rename the existing column."
     ]
   },
+  "COLUMN_NOT_EXISTS" : {
+    "message" : [
+      "The column <columnName> does not exist."
+    ]
+  },
   "CONCURRENT_QUERY" : {
     "message" : [
       "Another instance of this query was just started by a concurrent session."
@@ -2089,11 +2094,6 @@
   "_LEGACY_ERROR_TEMP_1060" : {
     "message" : [
       "<command> does not support nested column: <column>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1061" : {
-    "message" : [
-      "Column <colName> does not exist."
     ]
   },
   "_LEGACY_ERROR_TEMP_1065" : {
