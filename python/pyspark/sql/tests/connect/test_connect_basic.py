@@ -17,6 +17,7 @@
 from typing import Any
 import unittest
 import shutil
+import numpy as np
 import tempfile
 
 import grpc  # type: ignore
@@ -223,6 +224,74 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         pdf = pandas.DataFrame({"a": []})
         with self.assertRaises(ValueError):
             self.connect.createDataFrame(pdf)
+
+    def test_with_local_ndarray(self):
+        """SPARK-41446: Test creating a dataframe using local list"""
+        data = np.array([[1, 2, 3, 4], [5, 6, 7, 8]])
+
+        sdf = self.spark.createDataFrame(data)
+        cdf = self.connect.createDataFrame(data)
+        self.assertEqual(sdf.schema, cdf.schema)
+        self.assert_eq(sdf.toPandas(), cdf.toPandas())
+
+        for schema in [
+            "col1 int, col2 int, col3 int, col4 int",
+            "col1 int, col2 long, col3 string, col4 long",
+            "col1 int, col2 string, col3 short, col4 long",
+            ["a", "b", "c", "d"],
+            ("x1", "x2", "x3", "x4"),
+        ]:
+            sdf = self.spark.createDataFrame(data, schema=schema)
+            cdf = self.connect.createDataFrame(data, schema=schema)
+
+            self.assertEqual(sdf.schema, cdf.schema)
+            self.assert_eq(sdf.toPandas(), cdf.toPandas())
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Length mismatch: Expected axis has 4 elements, new values have 5 elements",
+        ):
+            self.connect.createDataFrame(data, ["a", "b", "c", "d", "e"])
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Length mismatch: Expected axis has 4 elements, new values have 5 elements",
+        ):
+            self.connect.createDataFrame(data, "col1 int, col2 int, col3 int, col4 int, col5 int")
+
+    def test_with_local_list(self):
+        """SPARK-41446: Test creating a dataframe using local list"""
+        data = [[1, 2, 3, 4]]
+
+        sdf = self.spark.createDataFrame(data)
+        cdf = self.connect.createDataFrame(data)
+        self.assertEqual(sdf.schema, cdf.schema)
+        self.assert_eq(sdf.toPandas(), cdf.toPandas())
+
+        for schema in [
+            "col1 int, col2 int, col3 int, col4 int",
+            "col1 int, col2 long, col3 string, col4 long",
+            "col1 int, col2 string, col3 short, col4 long",
+            ["a", "b", "c", "d"],
+            ("x1", "x2", "x3", "x4"),
+        ]:
+            sdf = self.spark.createDataFrame(data, schema=schema)
+            cdf = self.connect.createDataFrame(data, schema=schema)
+
+            self.assertEqual(sdf.schema, cdf.schema)
+            self.assert_eq(sdf.toPandas(), cdf.toPandas())
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Length mismatch: Expected axis has 4 elements, new values have 5 elements",
+        ):
+            self.connect.createDataFrame(data, ["a", "b", "c", "d", "e"])
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Length mismatch: Expected axis has 4 elements, new values have 5 elements",
+        ):
+            self.connect.createDataFrame(data, "col1 int, col2 int, col3 int, col4 int, col5 int")
 
     def test_simple_explain_string(self):
         df = self.connect.read.table(self.tbl_name).limit(10)
