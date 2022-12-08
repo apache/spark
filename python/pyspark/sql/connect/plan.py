@@ -1022,7 +1022,13 @@ class Melt(LogicalPlan):
 
     def print(self, indent: int = 0) -> str:
         c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
-        return f"{' ' * indent}<Melt ids={self.ids}, values={self.values}, variable_column_name={self.variable_column_name}, value_column_name={self.value_column_name}>\n{c_buf}"
+        return (
+            f"{' ' * indent}"
+            f"<Melt ids={self.ids}, values={self.values}, "
+            f"variable_column_name={self.variable_column_name}, "
+            f"value_column_name={self.value_column_name}>"
+            f"\n{c_buf}"
+        )
 
     def _repr_html_(self) -> str:
         return f"""
