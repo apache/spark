@@ -270,5 +270,13 @@ class LikeSimplificationSuite extends PlanTest {
     comparePlans(
       Optimize.execute(testRelation.where($"a" notLikeAny("ab", "cd", "ef")).analyze),
       testRelation.where(Not(InSet($"a", Set("ab", "cd", "ef").map(convertToCatalyst)))).analyze)
+    comparePlans(
+      Optimize.execute(testRelation.where($"a" likeAny("ab", "cd%", "ef", "%gh")).analyze),
+      testRelation.where(InSet($"a", Set("ab", "ef").map(convertToCatalyst)) ||
+        (StartsWith($"a", "cd") || EndsWith($"a", "gh"))).analyze)
+    comparePlans(
+      Optimize.execute(testRelation.where($"a" notLikeAny("ab", "cd%", "ef", "%gh")).analyze),
+      testRelation.where(Not(InSet($"a", Set("ab", "ef").map(convertToCatalyst))) ||
+        (Not(StartsWith($"a", "cd")) || Not(EndsWith($"a", "gh")))).analyze)
   }
 }

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.immutable.HashSet
-import scala.collection.mutable.{ArrayBuffer, Stack}
+import scala.collection.mutable.{ArrayBuffer, HashSet => MutableHashset, Stack}
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.analysis._
@@ -762,10 +762,40 @@ object LikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
           val and = buildBalancedPredicate(replacements.map(Not(_)), And)
           if (remainPatterns.nonEmpty) And(and, l.copy(patterns = remainPatterns)) else and
         case l: LikeAny =>
-          val or = buildBalancedPredicate(replacements, Or)
+          val equalPatterns = MutableHashset[Any]()
+          val nonEqualPatterns = replacements filter {
+            case EqualTo(_, str: Literal) =>
+              equalPatterns += str.eval(EmptyRow)
+              false
+            case _ => true
+          }
+          val or =
+            if (equalPatterns.nonEmpty && nonEqualPatterns.nonEmpty) {
+              Or(InSet(child, equalPatterns.toSet), buildBalancedPredicate(nonEqualPatterns, Or))
+            } else if (equalPatterns.nonEmpty) {
+              InSet(child, equalPatterns.toSet)
+            } else {
+              buildBalancedPredicate(nonEqualPatterns, Or)
+            }
+
           if (remainPatterns.nonEmpty) Or(or, l.copy(patterns = remainPatterns)) else or
         case l: NotLikeAny =>
-          val or = buildBalancedPredicate(replacements.map(Not(_)), Or)
+          val equalPatterns = MutableHashset[Any]()
+          val nonEqualPatterns = replacements filter {
+            case EqualTo(_, str: Literal) =>
+              equalPatterns += str.eval(EmptyRow)
+              false
+            case _ => true
+          }
+          val or =
+            if (equalPatterns.nonEmpty && nonEqualPatterns.nonEmpty) {
+              Or(Not(InSet(child, equalPatterns.toSet)),
+                buildBalancedPredicate(nonEqualPatterns.map(Not(_)), Or))
+            } else if (equalPatterns.nonEmpty) {
+              Not(InSet(child, equalPatterns.toSet))
+            } else {
+              buildBalancedPredicate(nonEqualPatterns.map(Not(_)), Or)
+            }
           if (remainPatterns.nonEmpty) Or(or, l.copy(patterns = remainPatterns)) else or
       }
     }
@@ -780,13 +810,6 @@ object LikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
       } else {
         simplifyLike(input, pattern.toString, escapeChar).getOrElse(l)
       }
-    case LikeAny(child, patterns)
-      if patterns.map(_.toString).forall { case equalTo(_) => true case _ => false } =>
-      InSet(child, patterns.toSet)
-    case NotLikeAny(child, patterns)
-      if patterns.map(_.toString).forall { case equalTo(_) => true case _ => false } =>
-      Not(InSet(child, patterns.toSet))
-
     case l @ LikeAll(child, patterns) if CollapseProject.isCheap(child) =>
       simplifyMultiLike(child, patterns, l)
     case l @ NotLikeAll(child, patterns) if CollapseProject.isCheap(child) =>
