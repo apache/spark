@@ -273,6 +273,63 @@ class DataFrameReader(OptionUtils):
         )
         return self.load(path=path, format="json", schema=schema)
 
+    def parquet(self, path: str, **options: "OptionalPrimitiveType") -> "DataFrame":
+        """
+        Loads Parquet files, returning the result as a :class:`DataFrame`.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        path : str
+
+        Other Parameters
+        ----------------
+        **options
+            For the extra options, refer to
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option>`_
+            for the version you use.
+
+            .. # noqa
+
+        Examples
+        --------
+        Write a DataFrame into a Parquet file and read it back.
+
+        >>> import tempfile
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     # Write a DataFrame into a Parquet file
+        ...     spark.createDataFrame(
+        ...         [{"age": 100, "name": "Hyukjin Kwon"}]
+        ...     ).write.mode("overwrite").format("parquet").save(d)
+        ...
+        ...     # Read the Parquet file as a DataFrame.
+        ...     spark.read.parquet(d).show()
+        +---+------------+
+        |age|        name|
+        +---+------------+
+        |100|Hyukjin Kwon|
+        +---+------------+
+        """
+        mergeSchema = options.get("mergeSchema", None)
+        pathGlobFilter = options.get("pathGlobFilter", None)
+        modifiedBefore = options.get("modifiedBefore", None)
+        modifiedAfter = options.get("modifiedAfter", None)
+        recursiveFileLookup = options.get("recursiveFileLookup", None)
+        datetimeRebaseMode = options.get("datetimeRebaseMode", None)
+        int96RebaseMode = options.get("int96RebaseMode", None)
+        self._set_opts(
+            mergeSchema=mergeSchema,
+            pathGlobFilter=pathGlobFilter,
+            recursiveFileLookup=recursiveFileLookup,
+            modifiedBefore=modifiedBefore,
+            modifiedAfter=modifiedAfter,
+            datetimeRebaseMode=datetimeRebaseMode,
+            int96RebaseMode=int96RebaseMode,
+        )
+
+        return self.load(path=path, format="parquet")
+
 
 class DataFrameWriter(OptionUtils):
     """

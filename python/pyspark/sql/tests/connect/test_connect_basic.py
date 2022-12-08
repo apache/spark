@@ -138,6 +138,18 @@ class SparkConnectTests(SparkConnectSQLTestCase):
                 self.spark.read.json(path=d, primitivesAsString=True).toPandas(),
             )
 
+    def test_paruqet(self):
+        # SPARK-41445: Implement DataFrameReader.paruqet
+        with tempfile.TemporaryDirectory() as d:
+            # Write a DataFrame into a JSON file
+            self.spark.createDataFrame([{"age": 100, "name": "Hyukjin Kwon"}]).write.mode(
+                "overwrite"
+            ).format("parquet").save(d)
+            # Read the Parquet file as a DataFrame.
+            self.assert_eq(
+                self.connect.read.parquet(d).toPandas(), self.spark.read.parquet(d).toPandas()
+            )
+
     def test_join_condition_column_list_columns(self):
         left_connect_df = self.connect.read.table(self.tbl_name)
         right_connect_df = self.connect.read.table(self.tbl_name2)
