@@ -645,8 +645,7 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             sdf.select(SF.encode("c", "UTF-8")).toPandas(),
         )
 
-
-    # TODO: To enable disabled test cases
+    # TODO(SPARK-41283): To compare toPandas for test cases with dtypes marked
     def test_date_ts_functions(self):
         from pyspark.sql import functions as SF
         from pyspark.sql.connect import functions as CF
@@ -656,7 +655,7 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             ('1997/02/28 10:30:00', '2023/03/01 06:00:00', 'JST', 1428476400, 2020, 12, 6),
             ('2000/01/01 04:30:05', '2020/05/01 12:15:00', 'PST', 1403892395, 2022, 12, 6)
             AS tab(ts1, ts2, tz, seconds, Y, M, D)
-        """
+            """
         # +-------------------+-------------------+---+----------+----+---+---+
         # |                ts1|                ts2| tz|   seconds|   Y|  M|  D|
         # +-------------------+-------------------+---+----------+----+---+---+
@@ -670,20 +669,25 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
         # With no parameters
         for cfunc, sfunc in [
             (CF.current_date, SF.current_date),
-            # (CF.current_timestamp, SF.current_timestamp),
-            # >> sdf.select(SF.current_timestamp()).toPandas().dtypes
-            # current_timestamp()    datetime64[ns]
-            # dtype: object
-            # >>> cdf.select(CF.current_timestamp()).toPandas().dtypes
-            # current_timestamp()    datetime64[ns, America/Los_Angeles]
-            # (CF.localtimestamp, SF.localtimestamp),
-            # [left]:  [1670414530606060000, 1670414530606060000]
-            # [right]: [1670414530682717000, 1670414530682717000]
         ]:
             self.assert_eq(
                 cdf.select(cfunc()).toPandas(),
                 sdf.select(sfunc()).toPandas(),
             )
+
+        # current_timestamp
+        # [left]:  datetime64[ns, America/Los_Angeles]
+        # [right]: datetime64[ns]
+        plan = cdf.select(CF.current_timestamp())._plan.to_proto(self.connect)
+        self.assertEqual(
+            plan.root.project.expressions.unresolved_function.function_name, "current_timestamp"
+        )
+
+        # localtimestamp
+        plan = cdf.select(CF.localtimestamp())._plan.to_proto(self.connect)
+        self.assertEqual(
+            plan.root.project.expressions.unresolved_function.function_name, "localtimestamp"
+        )
 
         # With only column parameter
         for cfunc, sfunc in [
@@ -709,25 +713,28 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
         for cfunc, sfunc in [
             (CF.date_format, SF.date_format),
             (CF.to_date, SF.to_date),
-            # (CF.to_timestamp, SF.to_timestamp),
-            # [left]:  datetime64[ns, America/Los_Angeles]
-            # [right]: datetime64[ns]
         ]:
             self.assert_eq(
                 cdf.select(cfunc(cdf.ts1, format="yyyy-MM-dd")).toPandas(),
                 sdf.select(sfunc(sdf.ts1, format="yyyy-MM-dd")).toPandas(),
             )
+        self.compare_by_show(
+            # [left]:  datetime64[ns, America/Los_Angeles]
+            # [right]: datetime64[ns]
+            cdf.select(CF.to_timestamp(cdf.ts1, format="yyyy-MM-dd")),
+            sdf.select(SF.to_timestamp(sdf.ts1, format="yyyy-MM-dd")),
+        )
 
         # With tz parameter
         for cfunc, sfunc in [
-            # (CF.from_utc_timestamp, SF.from_utc_timestamp),
-            # (CF.to_utc_timestamp, SF.to_utc_timestamp),
+            (CF.from_utc_timestamp, SF.from_utc_timestamp),
+            (CF.to_utc_timestamp, SF.to_utc_timestamp),
             # [left]:  datetime64[ns, America/Los_Angeles]
             # [right]: datetime64[ns]
         ]:
-            self.assert_eq(
-                cdf.select(cfunc(cdf.ts1, tz=cdf.tz)).toPandas(),
-                sdf.select(sfunc(sdf.ts1, tz=sdf.tz)).toPandas(),
+            self.compare_by_show(
+                cdf.select(cfunc(cdf.ts1, tz=cdf.tz)),
+                sdf.select(sfunc(sdf.ts1, tz=sdf.tz)),
             )
 
         # With numeric parameter
@@ -752,15 +759,12 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             )
 
         # With seconds parameter
-        for cfunc, sfunc in [
-            # (CF.timestamp_seconds, SF.timestamp_seconds),
+        self.compare_by_show(
             # [left]:  datetime64[ns, America/Los_Angeles]
             # [right]: datetime64[ns]
-        ]:
-            self.assert_eq(
-                cdf.select(cfunc(cdf.seconds)).toPandas(),
-                sdf.select(sfunc(sdf.seconds)).toPandas(),
-            )
+            cdf.select(CF.timestamp_seconds(cdf.seconds)),
+            sdf.select(SF.timestamp_seconds(sdf.seconds)),
+        )
 
         # make_date
         self.assert_eq(
@@ -769,12 +773,12 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
         )
 
         # date_trunc
-        # self.assert_eq(
-        #     cdf.select(CF.date_trunc("day", cdf.ts1)).toPandas(),
-        #     sdf.select(SF.date_trunc("day", sdf.ts1)).toPandas(),
-        # )
-        # [left]:  datetime64[ns, America/Los_Angeles]
-        # [right]: datetime64[ns]
+        self.assert_eq(
+            # [left]:  datetime64[ns, America/Los_Angeles]
+            # [right]: datetime64[ns]
+            cdf.select(CF.date_trunc("day", cdf.ts1)),
+            sdf.select(SF.date_trunc("day", sdf.ts1)),
+        )
 
         # trunc
         self.assert_eq(

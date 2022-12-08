@@ -4161,6 +4161,8 @@ def encode(col: "ColumnOrName", charset: str) -> Column:
 
 
 # Date/Timestamp functions
+# TODO(SPARK-41283): Resolve dtypes inconsistencies for
+# to_timestamp, from_utc_timestamp, to_utc_timestamp, timestamp_seconds, current_timestamp
 
 
 def current_date() -> Column:
@@ -4971,7 +4973,7 @@ def unix_timestamp() -> Column:
 
 
 def unix_timestamp(
-        timestamp: Optional["ColumnOrName"] = None, format: str = "yyyy-MM-dd HH:mm:ss"
+    timestamp: Optional["ColumnOrName"] = None, format: str = "yyyy-MM-dd HH:mm:ss"
 ) -> Column:
     """
     Convert time string with given pattern ('yyyy-MM-dd HH:mm:ss', by default)
