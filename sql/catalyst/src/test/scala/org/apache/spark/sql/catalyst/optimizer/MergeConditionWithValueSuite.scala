@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 class MergeConditionWithValueSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches = Seq(Batch("MergeConditionWithValue", FixedPoint(1), MergeConditionWithValue))
+    val batches = Seq(Batch("MergeConditionWithValue", Once, MergeConditionWithValue))
   }
 
   test("SPARK-40099: Merge adjacent CaseWhen branches if their values are the same") {
