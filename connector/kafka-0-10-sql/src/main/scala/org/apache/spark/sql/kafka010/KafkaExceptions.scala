@@ -26,11 +26,11 @@ object KafkaExceptions {
     new ErrorClassesJsonReader(
       Seq(getClass.getClassLoader.getResource("error/kafka-error-classes.json")))
 
-  def topicPartitionsInEndOffsetAreNotSameWithPrefetched(
+  def mismatchedTopicPartitionsBetweenEndOffsetAndPrefetched(
       tpsForPrefetched: Set[TopicPartition],
       tpsForEndOffset: Set[TopicPartition]): SparkException = {
     val errMsg = errorClassesJsonReader.getErrorMessage(
-      "TOPIC_PARTITIONS_IN_END_OFFSET_ARE_NOT_SAME_WITH_PREFETCHED",
+      "MISMATCHED_TOPIC_PARTITIONS_BETWEEN_END_OFFSET_AND_PREFETCHED",
       Map(
         "tpsForPrefetched" -> tpsForPrefetched.toString(),
         "tpsForEndOffset" -> tpsForEndOffset.toString()

@@ -1,5 +1,5 @@
 {
-  "TOPIC_PARTITIONS_IN_END_OFFSET_ARE_NOT_SAME_WITH_PREFETCHED" : {
+  "MISMATCHED_TOPIC_PARTITIONS_BETWEEN_END_OFFSET_AND_PREFETCHED" : {
     "message" : [
       "Kafka data source in Trigger.AvailableNow should provide the same topic partitions in pre-fetched offset to end offset for each microbatch. The error could be transient - restart your query, and report if you still see the same issue.",
       "topic-partitions for pre-fetched offset: <tpsForPrefetched>, topic-partitions for end offset: <tpsForEndOffset>."

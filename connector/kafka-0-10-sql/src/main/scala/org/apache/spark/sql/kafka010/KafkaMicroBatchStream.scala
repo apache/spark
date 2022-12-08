@@ -323,7 +323,7 @@ private[kafka010] class KafkaMicroBatchStream(
     val tpsForEndOffset = endPartitionOffsets.keySet
 
     if (tpsForPrefetched != tpsForEndOffset) {
-      throw KafkaExceptions.topicPartitionsInEndOffsetAreNotSameWithPrefetched(
+      throw KafkaExceptions.mismatchedTopicPartitionsBetweenEndOffsetAndPrefetched(
         tpsForPrefetched, tpsForEndOffset)
     }
 
