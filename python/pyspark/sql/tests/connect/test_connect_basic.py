@@ -21,7 +21,6 @@ import tempfile
 
 import grpc  # type: ignore
 
-from pyspark.sql.connect.column import Column
 from pyspark.testing.sqlutils import have_pandas, SQLTestUtils
 
 if have_pandas:
@@ -33,6 +32,7 @@ from pyspark.sql.types import StructType, StructField, LongType, StringType
 if have_pandas:
     from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
     from pyspark.sql.connect.client import ChannelBuilder
+    from pyspark.sql.connect.column import Column
     from pyspark.sql.connect.dataframe import DataFrame as CDataFrame
     from pyspark.sql.connect.function_builder import udf
     from pyspark.sql.connect.functions import lit, col
