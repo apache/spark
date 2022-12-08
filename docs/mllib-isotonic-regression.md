@@ -43,7 +43,17 @@ best fitting the original data points.
 which uses an approach to
 [parallelizing isotonic regression](https://doi.org/10.1007/978-3-642-99789-1_10).
 The training input is an RDD of tuples of three double values that represent
-label, feature and weight in this order. Additionally, IsotonicRegression algorithm has one
+label, feature and weight in this order. In case there are multiple tuples with
+the same feature then these tuples are aggregated into a single tuple as follows:
+
+* Aggregated label is the weighted average of all labels.
+* Aggregated feature is the weighted average of all equal features. It is possible
+  that feature values to be equal up to a resolution due to representation errors,
+  hence the weighted average of the features is used. Ideally, all feature values
+  will be equal and the weighted average is just the value at any point.
+* Aggregated weight is the sum of all weights.
+
+Additionally, IsotonicRegression algorithm has one
 optional parameter called $isotonic$ defaulting to true.
 This argument specifies if the isotonic regression is
 isotonic (monotonically increasing) or antitonic (monotonically decreasing).
@@ -53,17 +63,12 @@ labels for both known and unknown features. The result of isotonic regression
 is treated as piecewise linear function. The rules for prediction therefore are:
 
 * If the prediction input exactly matches a training feature
-  then associated prediction is returned. In case there are multiple predictions with the same
-  feature then one of them is returned. Which one is undefined
-  (same as java.util.Arrays.binarySearch).
+  then associated prediction is returned.
 * If the prediction input is lower or higher than all training features
   then prediction with lowest or highest feature is returned respectively.
-  In case there are multiple predictions with the same feature
-  then the lowest or highest is returned respectively.
 * If the prediction input falls between two training features then prediction is treated
   as piecewise linear function and interpolated value is calculated from the
-  predictions of the two closest features. In case there are multiple values
-  with the same feature then the same rules as in previous point are used.
+  predictions of the two closest features.
 
 ### Examples
 

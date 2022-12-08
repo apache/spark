@@ -272,8 +272,8 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
    * @param input RDD of tuples (label, feature, weight) where label is dependent variable
    *              for which we calculate isotonic regression, feature is independent variable
    *              and weight represents number of measures with default 1.
-   *              If multiple labels share the same feature value then they are ordered before
-   *              the algorithm is executed.
+   *              If multiple labels share the same feature value then they are aggregated using
+   *              the weighted average before the algorithm is executed.
    * @return Isotonic regression model.
    */
   @Since("1.3.0")
@@ -298,8 +298,8 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
    * @param input JavaRDD of tuples (label, feature, weight) where label is dependent variable
    *              for which we calculate isotonic regression, feature is independent variable
    *              and weight represents number of measures with default 1.
-   *              If multiple labels share the same feature value then they are ordered before
-   *              the algorithm is executed.
+   *              If multiple labels share the same feature value then they are aggregated using
+   *              the weighted average before the algorithm is executed.
    * @return Isotonic regression model.
    */
   @Since("1.3.0")
@@ -488,14 +488,14 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
       // Points with same or adjacent features must collocate within the same partition.
       .partitionBy(new RangePartitioner(keyedInput.getNumPartitions, keyedInput))
       .values
-      // Lexicographically sort points by features then labels.
-      .mapPartitions(p => Iterator(p.toArray.sortBy(x => (x._2, x._1))))
+      // Lexicographically sort points by features.
+      .mapPartitions(p => Iterator(p.toArray.sortBy(_._2)))
       // Aggregate points with equal features into a single point.
       .map(makeUnique)
       .flatMap(poolAdjacentViolators)
       .collect()
       // Sort again because collect() doesn't promise ordering.
-      .sortBy(x => (x._2, x._1))
+      .sortBy(_._2)
     poolAdjacentViolators(parallelStepResult)
   }
 }
