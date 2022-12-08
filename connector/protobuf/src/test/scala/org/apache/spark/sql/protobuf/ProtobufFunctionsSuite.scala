@@ -30,7 +30,7 @@ import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos.{EventRecursiveA
 import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos.SimpleMessageRepeated.NestedEnum
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ArrayType, DayTimeIntervalType, IntegerType, LongType, NullType, StringType, StructField, StructType, TimestampType}
+import org.apache.spark.sql.types.{DataType, DayTimeIntervalType, IntegerType, StringType, StructField, StructType, TimestampType}
 
 class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with ProtobufTestBase
   with Serializable {
@@ -694,7 +694,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       parameters = Map("descFilePath" -> testFileDescriptor))
   }
 
-  test("Unit test for Protobuf OneOf field") {
+  test("Verify OneOf field between from_protobuf -> to_protobuf and struct -> from_protobuf") {
     val descriptor = ProtobufUtils.buildDescriptor(testFileDesc, "OneOfEvent")
     val oneOfEvent = OneOfEvent.newBuilder()
       .setKey("key")
@@ -705,56 +705,60 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
 
     val df = Seq(oneOfEvent.toByteArray).toDF("value")
 
-    val fromProtoDf = df.select(
-      functions.from_protobuf($"value", "OneOfEvent", testFileDesc) as 'sample)
-    val toDf = fromProtoDf.select(
-      functions.to_protobuf($"sample", "OneOfEvent", testFileDesc) as 'toProto)
-    val toFromDf = toDf.select(
-      functions.from_protobuf($"toProto", "OneOfEvent", testFileDesc) as 'fromToProto)
+    checkWithFileAndClassName("OneOfEvent") {
+      case (name, descFilePathOpt) =>
+        val fromProtoDf = df.select(
+          from_protobuf_wrapper($"value", name, descFilePathOpt) as 'sample)
+        val toDf = fromProtoDf.select(
+          to_protobuf_wrapper($"sample", name, descFilePathOpt) as 'toProto)
+        val toFromDf = toDf.select(
+          from_protobuf_wrapper($"toProto", name, descFilePathOpt) as 'fromToProto)
+        checkAnswer(fromProtoDf, toFromDf)
+        val actualFieldNames = fromProtoDf.select("sample.*").schema.fields.toSeq.map(f => f.name)
+        descriptor.getFields.asScala.map(f => {
+          assert(actualFieldNames.contains(f.getName))
+        })
 
-    checkAnswer(fromProtoDf, toFromDf)
+        val eventFromSpark = OneOfEvent.parseFrom(
+          toDf.select("toProto").take(1).toSeq(0).getAs[Array[Byte]](0))
+        // OneOf field: the last set value(by order) will overwrite all previous ones.
+        assert(eventFromSpark.getCol2.equals("col2value"))
+        assert(eventFromSpark.getCol3 == 0)
+        val expectedFields = descriptor.getFields.asScala.map(f => f.getName)
+        eventFromSpark.getDescriptorForType.getFields.asScala.map(f => {
+          assert(expectedFields.contains(f.getName))
+        })
 
-    val actualFieldNames = fromProtoDf.select("sample.*").schema.fields.toSeq.map(f => f.name)
-    descriptor.getFields.asScala.map(f => {
-      assert(actualFieldNames.contains(f.getName))
-    })
+        val jsonSchema =
+         """{"type":"struct","fields":[{"name":"sample","type":{"type":"struct","fields":
+            |[{"name":"key","type":"string","nullable":true},{"name":"col_1","type":"integer",
+            |"nullable":true},{"name":"col_2","type":"string","nullable":true},{"name":"col_3",
+            |"type":"long","nullable":true},{"name":"col_4","type":{"type":"array",
+            |"elementType":"string","containsNull":false},"nullable":false}]},"nullable":true}]}
+            |{"type":"struct","fields":[{"name":"sample","type":{"type":"struct","fields":
+            |[{"name":"key","type":"string","nullable":true},{"name":"col_1","type":"integer",
+            |"nullable":true},{"name":"col_2","type":"string","nullable":true},{"name":"col_3",
+            |"type":"long","nullable":true},{"name":"col_4","type":{"type":"array",
+            |"elementType":"string","containsNull":false},"nullable":false}]},
+            |"nullable":true}]}""".stripMargin
+        val schema = DataType.fromJson(jsonSchema).asInstanceOf[StructType]
+        val data = Seq(Row(Row("key", 123, "col2value", 109202L, Seq("col4value"))))
+        val dataDf = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+        val dataDfToProto = dataDf.select(
+          to_protobuf_wrapper($"sample", name, descFilePathOpt) as 'toProto)
 
-    val eventFromSpark = OneOfEvent.parseFrom(
-      toDf.select("toProto").take(1).toSeq(0).getAs[Array[Byte]](0))
-
-    // OneOf field: the last set value(by order) will overwrite all previous ones.
-    assert(eventFromSpark.getCol2.equals("col2value"))
-    assert(eventFromSpark.getCol3 == 0)
-
-    val expectedFields = descriptor.getFields.asScala.map(f => f.getName)
-    eventFromSpark.getDescriptorForType.getFields.asScala.map(f => {
-      assert(expectedFields.contains(f.getName))
-    })
-
-    val schema = new StructType()
-      .add("sample",
-        new StructType()
-          .add("key", StringType)
-          .add("col_1", IntegerType)
-          .add("col_2", StringType)
-          .add("col_3", LongType)
-          .add("col_4", ArrayType(StringType))
-      )
-
-    val data = Seq(Row(Row("key", 123, "col2value", 109202L, Seq("col4value"))))
-    val dataDf = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
-    val dataDfToProto = dataDf.select(
-      functions.to_protobuf($"sample", "OneOfEvent", testFileDesc) as 'toProto)
-    val eventFromSparkSchema = OneOfEvent.parseFrom(
-      dataDfToProto.select("toProto").take(1).toSeq(0).getAs[Array[Byte]](0))
-    assert(eventFromSparkSchema.getCol2.isEmpty)
-    assert(eventFromSparkSchema.getCol3 == 109202L)
-    eventFromSparkSchema.getDescriptorForType.getFields.asScala.map(f => {
-      assert(expectedFields.contains(f.getName))
-    })
+        val eventFromSparkSchema = OneOfEvent.parseFrom(
+          dataDfToProto.select("toProto").take(1).toSeq(0).getAs[Array[Byte]](0))
+        assert(eventFromSparkSchema.getCol2.isEmpty)
+        assert(eventFromSparkSchema.getCol3 == 109202L)
+        eventFromSparkSchema.getDescriptorForType.getFields.asScala.map(f => {
+          assert(expectedFields.contains(f.getName))
+        })
+    }
   }
 
-  test("Unit tests for Protobuf OneOf field with circularReferenceDepth option") {
+  test("Verify OneOf field with recursive fields between from_protobuf -> to_protobuf " +
+    "and struct -> from_protobuf") {
     val descriptor = ProtobufUtils.buildDescriptor(testFileDesc, "OneOfEventWithRecursion")
 
     val recursiveANested = EventRecursiveA.newBuilder()
@@ -802,7 +806,6 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     val eventFromSpark = OneOfEventWithRecursion.parseFrom(
       toDf.select("toProto").take(1).toSeq(0).getAs[Array[Byte]](0))
 
-    // check circularReferenceDepth=1 value are present, but not circularReferenceDepth=2
     assert(eventFromSpark.getRecursiveA.getRecursiveA.getKey.equals("keyNested2"))
     assert(eventFromSpark.getRecursiveA.getRecursiveA.getValue.equals("valueNested2"))
     assert(eventFromSpark.getRecursiveA.getRecursiveA.getRecursiveA.getKey.isEmpty)
@@ -812,38 +815,30 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       assert(expectedFields.contains(f.getName))
     })
 
-    val schema = StructType(Seq(StructField("sample",
-        StructType(Seq(StructField("key", StringType, true),
-          StructField("recursiveA",
-            StructType(Seq(StructField("recursiveA",
-                StructType(Seq(StructField("key", StringType, true),
-                  StructField("recursiveA", NullType, true),
-                  StructField("recursiveB", StructType(
-                    Seq(StructField("key", StringType, true),
-                      StructField("value", StringType, true),
-                      StructField("recursiveA",
-                        StructType(Seq(StructField("key", StringType, true),
-                          StructField("recursiveA", NullType, true),
-                          StructField("recursiveB", NullType, true),
-                          StructField("value", StringType, true))), true))), true),
-                  StructField("value", StringType, true))), true),
-              StructField("key", StringType, true))), true),
-          StructField("recursiveB",
-            StructType(Seq(StructField("key", StringType, true),
-              StructField("value", StringType, true),
-              StructField("recursiveA",
-                StructType(Seq(StructField("key", StringType, true),
-                  StructField("recursiveA",
-                    StructType(Seq(StructField("recursiveA",
-                        StructType(Seq(StructField("key", StringType),
-                          StructField("recursiveA", NullType),
-                          StructField("recursiveB", NullType),
-                          StructField("value", StringType))), true),
-                      StructField("key", StringType, true))), true),
-                  StructField("recursiveB", NullType, true),
-                  StructField("value", StringType, true))), true))), true),
-          StructField("value", StringType, true))), true)))
-
+    val jsonSchema =
+      """{"type":"struct","fields":[{"name":"sample","type":{"type":"struct","fields":
+        |[{"name":"key","type":"string","nullable":true},{"name":"recursiveA","type":
+        |{"type":"struct","fields":[{"name":"recursiveA","type":{"type":"struct","fields":
+        |[{"name":"key","type":"string","nullable":true},{"name":"recursiveA","type":"void",
+        |"nullable":true},{"name":"recursiveB","type":{"type":"struct","fields":[{"name":"key",
+        |"type":"string","nullable":true},{"name":"value","type":"string","nullable":true},
+        |{"name":"recursiveA","type":{"type":"struct","fields":[{"name":"key","type":"string",
+        |"nullable":true},{"name":"recursiveA","type":"void","nullable":true},{"name":"recursiveB",
+        |"type":"void","nullable":true},{"name":"value","type":"string","nullable":true}]},
+        |"nullable":true}]},"nullable":true},{"name":"value","type":"string","nullable":true}]},
+        |"nullable":true},{"name":"key","type":"string","nullable":true}]},"nullable":true},
+        |{"name":"recursiveB","type":{"type":"struct","fields":[{"name":"key","type":"string",
+        |"nullable":true},{"name":"value","type":"string","nullable":true},{"name":"recursiveA",
+        |"type":{"type":"struct","fields":[{"name":"key","type":"string","nullable":true},
+        |{"name":"recursiveA","type":{"type":"struct","fields":[{"name":"recursiveA","type":
+        |{"type":"struct","fields":[{"name":"key","type":"string","nullable":true},
+        |{"name":"recursiveA","type":"void","nullable":true},{"name":"recursiveB","type":"void",
+        |"nullable":true},{"name":"value","type":"string","nullable":true}]},"nullable":true},
+        |{"name":"key","type":"string","nullable":true}]},"nullable":true},{"name":"recursiveB",
+        |"type":"void","nullable":true},{"name":"value","type":"string","nullable":true}]},
+        |"nullable":true}]},"nullable":true},{"name":"value","type":"string","nullable":true}]},
+        |"nullable":true}]}""".stripMargin
+    val schema = DataType.fromJson(jsonSchema).asInstanceOf[StructType]
     val data = Seq(
       Row(
         Row("key1",
@@ -857,9 +852,9 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     val dataDf = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
     val dataDfToProto = dataDf.select(
       functions.to_protobuf($"sample", "OneOfEventWithRecursion", testFileDesc) as 'toProto)
+
     val eventFromSparkSchema = OneOfEventWithRecursion.parseFrom(
       dataDfToProto.select("toProto").take(1).toSeq(0).getAs[Array[Byte]](0))
-
     assert(eventFromSpark.getRecursiveA.getRecursiveA.getKey.equals("keyNested2"))
     assert(eventFromSpark.getRecursiveA.getRecursiveA.getValue.equals("valueNested2"))
     assert(eventFromSpark.getRecursiveA.getRecursiveA.getRecursiveA.getKey.isEmpty)

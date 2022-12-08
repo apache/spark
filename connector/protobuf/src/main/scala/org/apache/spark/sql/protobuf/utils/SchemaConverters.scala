@@ -109,8 +109,10 @@ object SchemaConverters {
             MapType(keyType, valueType, valueContainsNull = false).defaultConcreteType,
             nullable = false))
       case MESSAGE =>
-        // User can set circularReferenceDepth of 0 or 1 or 2.
-        // Going beyond 3 levels of recursion is not allowed.
+        // Setting the circularReferenceDepth to 0 allows the field to be recursed once, setting
+        // it to 1 allows it to be recursed twice, and setting it to 2 allows it to be recursed
+        // thrice. circularReferenceDepth value greater than 2 is not allowed. If the not
+        // specified, it will default to -1, which disables recursive fields.
         if (protobufOptions.circularReferenceType.equals("FIELD_TYPE")) {
           if (existingRecordTypes.contains(fd.getType.name()) &&
             (protobufOptions.circularReferenceDepth < 0 ||
