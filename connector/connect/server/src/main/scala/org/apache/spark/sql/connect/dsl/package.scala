@@ -96,7 +96,17 @@ package object dsl {
             Expression.Cast
               .newBuilder()
               .setExpr(expr)
-              .setCastToType(dataType))
+              .setType(dataType))
+          .build()
+
+      def cast(dataType: String): Expression =
+        Expression
+          .newBuilder()
+          .setCast(
+            Expression.Cast
+              .newBuilder()
+              .setExpr(expr)
+              .setTypeStr(dataType))
           .build()
     }
 

@@ -16,7 +16,21 @@
 #
 
 from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
+from pyspark.sql.types import StringType
 from pyspark.testing.sqlutils import have_pandas
+from pyspark.sql.types import (
+    ByteType,
+    ShortType,
+    IntegerType,
+    FloatType,
+    DayTimeIntervalType,
+    StringType,
+    DoubleType,
+    LongType,
+    DecimalType,
+    BinaryType,
+    BooleanType,
+)
 
 if have_pandas:
     from pyspark.sql.connect.functions import lit
@@ -79,6 +93,31 @@ class SparkConnectTests(SparkConnectSQLTestCase):
 
         res = pandas.DataFrame(data={"id": [0, 30, 60, 90]})
         self.assert_(pd.equals(res), f"{pd.to_string()} != {res.to_string()}")
+
+    def test_cast(self):
+        df = self.connect.read.table(self.tbl_name)
+        df2 = self.spark.read.table(self.tbl_name)
+
+        self.assert_eq(
+            df.select(df.id.cast("string")).toPandas(), df2.select(df2.id.cast("string")).toPandas()
+        )
+
+        for x in [
+            StringType(),
+            BinaryType(),
+            ShortType(),
+            IntegerType(),
+            LongType(),
+            FloatType(),
+            DoubleType(),
+            ByteType(),
+            DecimalType(10, 2),
+            BooleanType(),
+            DayTimeIntervalType(),
+        ]:
+            self.assert_eq(
+                df.select(df.id.cast(x)).toPandas(), df2.select(df2.id.cast(x)).toPandas()
+            )
 
 
 if __name__ == "__main__":

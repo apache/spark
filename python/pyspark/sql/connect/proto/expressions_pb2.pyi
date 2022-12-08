@@ -60,27 +60,51 @@ class Expression(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         EXPR_FIELD_NUMBER: builtins.int
-        CAST_TO_TYPE_FIELD_NUMBER: builtins.int
+        TYPE_FIELD_NUMBER: builtins.int
+        TYPE_STR_FIELD_NUMBER: builtins.int
         @property
         def expr(self) -> global___Expression:
             """(Required) the expression to be casted."""
         @property
-        def cast_to_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
-            """(Required) the data type that the expr to be casted to."""
+        def type(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
+        type_str: builtins.str
+        """If this is set, Server will use Catalyst parser to parse this string to DataType."""
         def __init__(
             self,
             *,
             expr: global___Expression | None = ...,
-            cast_to_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+            type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+            type_str: builtins.str = ...,
         ) -> None: ...
         def HasField(
             self,
-            field_name: typing_extensions.Literal["cast_to_type", b"cast_to_type", "expr", b"expr"],
+            field_name: typing_extensions.Literal[
+                "cast_to_type",
+                b"cast_to_type",
+                "expr",
+                b"expr",
+                "type",
+                b"type",
+                "type_str",
+                b"type_str",
+            ],
         ) -> builtins.bool: ...
         def ClearField(
             self,
-            field_name: typing_extensions.Literal["cast_to_type", b"cast_to_type", "expr", b"expr"],
+            field_name: typing_extensions.Literal[
+                "cast_to_type",
+                b"cast_to_type",
+                "expr",
+                b"expr",
+                "type",
+                b"type",
+                "type_str",
+                b"type_str",
+            ],
         ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["cast_to_type", b"cast_to_type"]
+        ) -> typing_extensions.Literal["type", "type_str"] | None: ...
 
     class Literal(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
