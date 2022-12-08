@@ -200,7 +200,7 @@ object DataSourceV2Relation {
     // with "annotated" string type here as the query engine doesn't support char/varchar yet.
     val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(table.schema)
     DataSourceV2Relation(
-      table, schema.toAttributes.map(_.withTrusted(false)), catalog, identifier, options)
+      table, schema.toAttributes.map(_.withTrustNullability(false)), catalog, identifier, options)
   }
 
   def create(

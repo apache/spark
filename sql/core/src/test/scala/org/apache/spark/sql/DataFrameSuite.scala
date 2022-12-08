@@ -24,7 +24,6 @@ import java.sql.{Date, Timestamp}
 import java.util.{Locale, UUID}
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.JavaConverters._
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Random
 

@@ -113,7 +113,7 @@ abstract class Attribute extends LeafExpression with NamedExpression with NullIn
   def withMetadata(newMetadata: Metadata): Attribute
   def withExprId(newExprId: ExprId): Attribute
   def withDataType(newType: DataType): Attribute
-  def withTrusted(newTrusted: Boolean): Attribute = ???
+  def withTrustNullability(newTrusted: Boolean): Attribute
 
   override def toAttribute: Attribute = this
   def newInstance(): Attribute
@@ -318,11 +318,11 @@ case class AttributeReference(
     }
   }
 
-  override def withTrusted(newTrusted: Boolean): AttributeReference = {
-    if (trustNullability == newTrusted) {
+  override def withTrustNullability(newTrustNullability: Boolean): AttributeReference = {
+    if (trustNullability == newTrustNullability) {
       this
     } else {
-      AttributeReference(name, dataType, nullable, metadata)(exprId, qualifier, newTrusted)
+      AttributeReference(name, dataType, nullable, metadata)(exprId, qualifier, newTrustNullability)
     }
   }
 
@@ -418,6 +418,8 @@ case class PrettyAttribute(
   override def withExprId(newExprId: ExprId): Attribute =
     throw new UnsupportedOperationException
   override def withDataType(newType: DataType): Attribute =
+    throw new UnsupportedOperationException
+  override def withTrustNullability(newTrustNullability: Boolean): Attribute =
     throw new UnsupportedOperationException
   override def nullable: Boolean = true
 }

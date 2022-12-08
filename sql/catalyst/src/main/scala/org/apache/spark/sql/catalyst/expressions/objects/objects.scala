@@ -25,6 +25,7 @@ import scala.reflect.ClassTag
 import scala.util.{Properties, Try}
 
 import org.apache.commons.lang3.reflect.MethodUtils
+import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.serializer._
@@ -1866,8 +1867,6 @@ case class GetExternalRowField(
 
   override def dataType: DataType = ObjectType(classOf[Object])
 
-  private val errMsg = QueryExecutionErrors.fieldCannotBeNullMsg(index, fieldName)
-
   override def eval(input: InternalRow): Any = {
     val inputRow = child.eval(input).asInstanceOf[Row]
     if (inputRow == null) {
@@ -1882,7 +1881,6 @@ case class GetExternalRowField(
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Use unnamed reference that doesn't create a local field here to reduce the number of fields
     // because errMsgField is used only when the field is null.
-    val errMsgField = ctx.addReferenceObj("errMsg", errMsg)
     val row = child.genCode(ctx)
     val code = code"""
       ${row.code}
@@ -1892,7 +1890,8 @@ case class GetExternalRowField(
       }
 
       if (${row.value}.isNullAt($index)) {
-        throw new RuntimeException($errMsgField);
+        throw QueryExecutionErrors.fieldCannotBeNullError($index,
+            ${StringEscapeUtils.escapeJava(fieldName)});
       }
 
       final Object ${ev.value} = ${row.value}.get($index);

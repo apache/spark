@@ -525,28 +525,20 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map("plan" -> plan.toString()))
   }
 
-  def inputExternalRowCannotBeNullError(): SparkRuntimeException = {
+  private def unexpectedNullValueError(desc: String): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2031",
-      messageParameters = Map.empty)
+      errorClass = "UNEXPECTED_NULL_VALUE",
+      messageParameters = Map("desc" -> desc))
   }
 
-  def fieldCannotBeNullMsg(index: Int, fieldName: String): String = {
-    s"The ${index}th field '$fieldName' of input row cannot be null."
-  }
+  def inputExternalRowCannotBeNullError(): SparkRuntimeException =
+    unexpectedNullValueError("input external row")
 
-  def fieldCannotBeNullError(index: Int, fieldName: String): SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2032",
-      messageParameters = Map("fieldCannotBeNullMsg" -> fieldCannotBeNullMsg(index, fieldName)))
-  }
+  def fieldCannotBeNullError(index: Int, fieldName: String): SparkRuntimeException =
+    unexpectedNullValueError(s"${index}th field '$fieldName' of input row")
 
-  def valueCannotBeNullError(locationDesc: String): RuntimeException = {
-    new RuntimeException(s"The value at $locationDesc cannot be null, but a NULL was found. " +
-      "This is typically caused by the presence of a NULL value when the schema indicates the " +
-      "value should be non-null. Check that the input data matches the schema and/or that UDFs " +
-      "which can return null have a nullable return schema.")
-  }
+  def valueCannotBeNullError(locationDesc: String): SparkRuntimeException =
+    unexpectedNullValueError(s"value at $locationDesc")
 
   def unableToCreateDatabaseAsFailedToCreateDirectoryError(
       dbDefinition: CatalogDatabase, e: IOException): Throwable = {

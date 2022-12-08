@@ -1529,6 +1529,13 @@
       "The <functionName> requires <expectedNum> parameters but the actual number is <actualNum>."
     ]
   },
+  "UNEXPECTED_NULL_VALUE" : {
+    "message": [
+      "The <desc> cannot be null, but a NULL was found.",
+      "This is typically caused by the presence of a NULL value when the schema indicates the value should be non-null.",
+      "Check that the input data matches the schema and/or that UDFs which can return null have a nullable return schema."
+    ]
+  },
   "_LEGACY_ERROR_TEMP_0001" : {
     "message" : [
       "Invalid InsertIntoContext"
@@ -3555,16 +3562,6 @@
   "_LEGACY_ERROR_TEMP_2030" : {
     "message" : [
       "Can not handle nested schema yet...  plan <plan>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2031" : {
-    "message" : [
-      "The input external row cannot be null."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2032" : {
-    "message" : [
-      "<fieldCannotBeNullMsg>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2033" : {

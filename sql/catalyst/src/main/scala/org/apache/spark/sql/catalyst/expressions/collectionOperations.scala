@@ -16,13 +16,13 @@
  */
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.commons.text.StringEscapeUtils
-
 import java.time.{Duration, Period, ZoneId}
 import java.util.Comparator
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
+
+import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedAttribute, UnresolvedSeed}
