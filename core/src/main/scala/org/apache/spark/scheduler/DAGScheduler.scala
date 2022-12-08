@@ -1183,6 +1183,7 @@ private[spark] class DAGScheduler(
       SparkListenerSpeculativeTaskSubmitted(task.stageId, task.stageAttemptId)
     // add taskIndex field for Executor Dynamic Allocation
     speculativeTaskSubmittedEvent.updateTaskIndex(taskIndex)
+    speculativeTaskSubmittedEvent.updatePartitionId(task.partitionId)
     listenerBus.post(speculativeTaskSubmittedEvent)
   }
 

@@ -643,11 +643,11 @@ private[spark] class ExecutorAllocationManager(
     // Should be 0 when no stages are active.
     private val stageAttemptToNumRunningTask = new mutable.HashMap[StageAttempt, Int]
     private val stageAttemptToTaskIndices = new mutable.HashMap[StageAttempt, mutable.HashSet[Int]]
-    // Number of speculative tasks running in each stageAttempt
+    // Map from each stageAttempt to a set of running speculative task indexes
     // TODO(SPARK-41192): We simply need an Int for this.
     private val stageAttemptToSpeculativeTaskIndices =
       new mutable.HashMap[StageAttempt, mutable.HashSet[Int]]()
-    // Number of speculative tasks pending in each stageAttempt
+    // Map from each stageAttempt to a set of pending speculative task indexes
     private val stageAttemptToPendingSpeculativeTasks =
       new mutable.HashMap[StageAttempt, mutable.HashSet[Int]]
 
@@ -735,7 +735,9 @@ private[spark] class ExecutorAllocationManager(
 
         // If this is the last stage with pending tasks, mark the scheduler queue as empty
         // This is needed in case the stage is aborted for any reason
-        if (stageAttemptToNumTasks.isEmpty && stageAttemptToPendingSpeculativeTasks.isEmpty) {
+        if (stageAttemptToNumTasks.isEmpty
+          && stageAttemptToPendingSpeculativeTasks.isEmpty
+          && stageAttemptToSpeculativeTaskIndices.isEmpty) {
           allocationManager.onSchedulerQueueEmpty()
         }
       }

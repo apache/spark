@@ -60,11 +60,17 @@ case class SparkListenerSpeculativeTaskSubmitted(
   // Note: this is here for backwards-compatibility with older versions of this event which
   // didn't stored taskIndex
   private var _taskIndex: Int = -1
+  private var _partitionId: Int = -1
 
   def taskIndex: Int = _taskIndex
+  def partitionId: Int = _partitionId
 
   def updateTaskIndex(index: Int): Unit = {
     _taskIndex = index
+  }
+
+  def updatePartitionId(partitionId: Int): Unit = {
+    _partitionId = partitionId
   }
 }
 
