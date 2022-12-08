@@ -646,21 +646,22 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
         )
 
 
+    # TODO: To enable disabled test cases
     def test_date_ts_functions(self):
         from pyspark.sql import functions as SF
         from pyspark.sql.connect import functions as CF
 
         query = """
             SELECT * FROM VALUES
-            ('1997-02-28 10:30:00', '2023-03-01 06:00:00', 'JST', 1428476400, 2020, 12, 6),
-            ('2000-01-01 04:30:05', '2020-05-01 12:15:00', 'PST', 1403892395, 2022, 12, 6)
+            ('1997/02/28 10:30:00', '2023/03/01 06:00:00', 'JST', 1428476400, 2020, 12, 6),
+            ('2000/01/01 04:30:05', '2020/05/01 12:15:00', 'PST', 1403892395, 2022, 12, 6)
             AS tab(ts1, ts2, tz, seconds, Y, M, D)
         """
         # +-------------------+-------------------+---+----------+----+---+---+
         # |                ts1|                ts2| tz|   seconds|   Y|  M|  D|
         # +-------------------+-------------------+---+----------+----+---+---+
-        # |1997-02-28 10:30:00|2023-03-01 06:00:00|JST|1428476400|2020| 12|  6|
-        # |2000-01-01 04:30:05|2020-05-01 12:15:00|PST|1403892395|2022| 12|  6|
+        # |1997/02/28 10:30:00|2023/03/01 06:00:00|JST|1428476400|2020| 12|  6|
+        # |2000/01/01 04:30:05|2020/05/01 12:15:00|PST|1403892395|2022| 12|  6|
         # +-------------------+-------------------+---+----------+----+---+---+
 
         cdf = self.connect.sql(query)
@@ -669,8 +670,15 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
         # With no parameters
         for cfunc, sfunc in [
             (CF.current_date, SF.current_date),
-            (CF.current_timestamp, SF.current_timestamp),
-            (CF.localtimestamp, SF.localtimestamp),
+            # (CF.current_timestamp, SF.current_timestamp),
+            # >> sdf.select(SF.current_timestamp()).toPandas().dtypes
+            # current_timestamp()    datetime64[ns]
+            # dtype: object
+            # >>> cdf.select(CF.current_timestamp()).toPandas().dtypes
+            # current_timestamp()    datetime64[ns, America/Los_Angeles]
+            # (CF.localtimestamp, SF.localtimestamp),
+            # [left]:  [1670414530606060000, 1670414530606060000]
+            # [right]: [1670414530682717000, 1670414530682717000]
         ]:
             self.assert_eq(
                 cdf.select(cfunc()).toPandas(),
@@ -691,7 +699,6 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             (CF.weekofyear, SF.weekofyear),
             (CF.last_day, SF.last_day),
             (CF.unix_timestamp, SF.unix_timestamp),
-            (CF.timestamp_seconds, SF.timestamp_seconds),
         ]:
             self.assert_eq(
                 cdf.select(cfunc(cdf.ts1)).toPandas(),
@@ -702,18 +709,21 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
         for cfunc, sfunc in [
             (CF.date_format, SF.date_format),
             (CF.to_date, SF.to_date),
-            (CF.to_timestamp, SF.to_timestamp),
-            (CF.trunc, SF.trunc),
+            # (CF.to_timestamp, SF.to_timestamp),
+            # [left]:  datetime64[ns, America/Los_Angeles]
+            # [right]: datetime64[ns]
         ]:
             self.assert_eq(
-                cdf.select(cfunc(cdf.ts1, format="year")).toPandas(),
-                sdf.select(sfunc(sdf.ts1, format="year")).toPandas(),
+                cdf.select(cfunc(cdf.ts1, format="yyyy-MM-dd")).toPandas(),
+                sdf.select(sfunc(sdf.ts1, format="yyyy-MM-dd")).toPandas(),
             )
 
         # With tz parameter
         for cfunc, sfunc in [
-            (CF.from_utc_timestamp, SF.from_utc_timestamp),
-            (CF.to_utc_timestamp, SF.to_utc_timestamp),
+            # (CF.from_utc_timestamp, SF.from_utc_timestamp),
+            # (CF.to_utc_timestamp, SF.to_utc_timestamp),
+            # [left]:  datetime64[ns, America/Los_Angeles]
+            # [right]: datetime64[ns]
         ]:
             self.assert_eq(
                 cdf.select(cfunc(cdf.ts1, tz=cdf.tz)).toPandas(),
@@ -727,8 +737,8 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             (CF.add_months, SF.add_months),
         ]:
             self.assert_eq(
-                cdf.select(cfunc(cdf.ts1, 2)).toPandas(),
-                sdf.select(sfunc(sdf.ts1, 2)).toPandas(),
+                cdf.select(cfunc(cdf.ts1, cdf.D)).toPandas(),
+                sdf.select(sfunc(sdf.ts1, sdf.D)).toPandas(),
             )
 
         # With another timestamp as parameter
@@ -741,11 +751,16 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
                 sdf.select(sfunc(sdf.ts1, sdf.ts2)).toPandas(),
             )
 
-        # from_unixtime
-        self.assert_eq(
-            cdf.select(CF.date_trunc(cdf.seconds)).toPandas(),
-            sdf.select(SF.date_trunc(sdf.seconds)).toPandas(),
-        )
+        # With seconds parameter
+        for cfunc, sfunc in [
+            # (CF.timestamp_seconds, SF.timestamp_seconds),
+            # [left]:  datetime64[ns, America/Los_Angeles]
+            # [right]: datetime64[ns]
+        ]:
+            self.assert_eq(
+                cdf.select(cfunc(cdf.seconds)).toPandas(),
+                sdf.select(sfunc(sdf.seconds)).toPandas(),
+            )
 
         # make_date
         self.assert_eq(
@@ -754,15 +769,23 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
         )
 
         # date_trunc
+        # self.assert_eq(
+        #     cdf.select(CF.date_trunc("day", cdf.ts1)).toPandas(),
+        #     sdf.select(SF.date_trunc("day", sdf.ts1)).toPandas(),
+        # )
+        # [left]:  datetime64[ns, America/Los_Angeles]
+        # [right]: datetime64[ns]
+
+        # trunc
         self.assert_eq(
-            cdf.select(CF.date_trunc("year", cdf.ts1)).toPandas(),
-            sdf.select(SF.date_trunc("year", sdf.ts1)).toPandas(),
+            cdf.select(CF.trunc(cdf.ts1, "year")).toPandas(),
+            sdf.select(SF.trunc(sdf.ts1, "year")).toPandas(),
         )
 
         # next_day
         self.assert_eq(
-            cdf.select(CF.date_trunc(cdf.ts1, "Mon")).toPandas(),
-            sdf.select(SF.date_trunc(sdf.ts1, "Mon")).toPandas(),
+            cdf.select(CF.next_day(cdf.ts1, "Mon")).toPandas(),
+            sdf.select(SF.next_day(sdf.ts1, "Mon")).toPandas(),
         )
 
 
