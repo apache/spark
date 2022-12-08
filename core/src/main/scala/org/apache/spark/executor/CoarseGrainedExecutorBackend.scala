@@ -35,6 +35,8 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.worker.WorkerWatcher
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.network.netty.SparkTransportConf
+import org.apache.spark.network.util.NettyUtils
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.resource.ResourceProfile._
@@ -85,7 +87,8 @@ private[spark] class CoarseGrainedExecutorBackend(
 
     logInfo("Connecting to driver: " + driverUrl)
     try {
-      if (PlatformDependent.directBufferPreferred() &&
+      val shuffleClientTransportConf = SparkTransportConf.fromSparkConf(env.conf, "shuffle")
+      if (NettyUtils.preferDirectBufs(shuffleClientTransportConf) &&
           PlatformDependent.maxDirectMemory() < env.conf.get(MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM)) {
         throw new SparkException(s"Netty direct memory should at least be bigger than " +
           s"'${MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM.key}', but got " +
