@@ -4332,6 +4332,85 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
+   *  For KYLIN create Logical View, it is similar to `GLOBAL TEMPORARY VIEW`
+   */
+  override def visitCreateLogicalView(
+       ctx: CreateLogicalViewContext): LogicalPlan = withOrigin(ctx) {
+    if (!ctx.identifierList.isEmpty) {
+      operationNotAllowed("CREATE LOGICAL VIEW ... PARTITIONED ON", ctx)
+    }
+    checkDuplicateClauses(ctx.commentSpec(), "COMMENT", ctx)
+    checkDuplicateClauses(ctx.PARTITIONED, "PARTITIONED ON", ctx)
+    checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
+
+    val userSpecifiedColumns = Option(ctx.identifierCommentList).toSeq.flatMap { icl =>
+      icl.identifierComment.asScala.map { ic =>
+        ic.identifier.getText -> Option(ic.commentSpec()).map(visitCommentSpec)
+      }
+    }
+
+    val properties = ctx.tablePropertyList.asScala.headOption.map(visitPropertyKeyValues)
+      .getOrElse(Map.empty)
+
+    CreateViewStatement(
+      visitMultipartIdentifier(ctx.multipartIdentifier),
+      userSpecifiedColumns,
+      visitCommentSpecList(ctx.commentSpec()),
+      properties,
+      Option(source(ctx.query)),
+      plan(ctx.query),
+      false,
+      false,
+      GlobalTempView)
+  }
+
+  /**
+   * For KYLIN replace Logical View, it is similar to `GLOBAL TEMPORARY VIEW`
+   */
+  override def visitReplaceLogicalView(
+      ctx: ReplaceLogicalViewContext): LogicalPlan = withOrigin(ctx) {
+    if (!ctx.identifierList.isEmpty) {
+      operationNotAllowed("REPLACE LOGICAL VIEW ... PARTITIONED ON", ctx)
+    }
+    checkDuplicateClauses(ctx.commentSpec(), "COMMENT", ctx)
+    checkDuplicateClauses(ctx.PARTITIONED, "PARTITIONED ON", ctx)
+    checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
+
+    val userSpecifiedColumns = Option(ctx.identifierCommentList).toSeq.flatMap { icl =>
+      icl.identifierComment.asScala.map { ic =>
+        ic.identifier.getText -> Option(ic.commentSpec()).map(visitCommentSpec)
+      }
+    }
+
+    val properties = ctx.tablePropertyList.asScala.headOption.map(visitPropertyKeyValues)
+      .getOrElse(Map.empty)
+
+    CreateViewStatement(
+      visitMultipartIdentifier(ctx.multipartIdentifier),
+      userSpecifiedColumns,
+      visitCommentSpecList(ctx.commentSpec()),
+      properties,
+      Option(source(ctx.query)),
+      plan(ctx.query),
+      false,
+      true,
+      GlobalTempView)
+  }
+
+  /**
+   * For KYLIN drop Logical View, it is similar to `DROP VIEW`
+   */
+  override def visitDropLogicalView(ctx: DropLogicalViewContext): AnyRef = withOrigin(ctx) {
+    DropView(
+      createUnresolvedView(
+        ctx.multipartIdentifier(),
+        commandName = "DROP VIEW",
+        allowTemp = true,
+        relationTypeMismatchHint = Some("Please use DROP TABLE instead.")),
+      ctx.EXISTS != null)
+  }
+
+  /**
    * Alter the query of a view. This creates a [[AlterViewAs]]
    *
    * For example:
