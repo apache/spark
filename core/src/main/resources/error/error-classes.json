@@ -797,7 +797,7 @@
   },
   "INVALID_SQL_ARG" : {
     "message" : [
-      "The argument <name> of `sql()` is invalid. Consider to replace it by a literal value."
+      "The argument <name> of `sql()` is invalid. Consider to replace it by a SQL literal statement."
     ]
   },
   "INVALID_SQL_SYNTAX" : {
@@ -1137,7 +1137,7 @@
   },
   "UNBOUND_PARAMETER" : {
     "message" : [
-      "Found the unbound parameter: <name>. Please, fix `args` and provide a mapping of the parameter to a literal value."
+      "Found the unbound parameter: <name>. Please, fix `args` and provide a mapping of the parameter to a SQL literal statement."
     ]
   },
   "UNCLOSED_BRACKETED_COMMENT" : {
