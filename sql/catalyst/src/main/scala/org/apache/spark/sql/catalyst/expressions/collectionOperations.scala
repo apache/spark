@@ -4606,7 +4606,8 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
  */
 @ExpressionDescription(
   usage =
-    """_FUNC_(array, element) - Append the element at the end of the array passed as first argument.
+    """_FUNC_(array, element) - Append the element at the end of the array passed as first
+      | argument.
       | Type of element should be similar to type of the elements of the array.
       |""".stripMargin,
   examples = """
