@@ -627,6 +627,45 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     )
   }
 
+  test("SPARK-41375: empty partitions should not record to latest offset") {
+    val topicPrefix = newTopic()
+    val topic = topicPrefix + "-good"
+    testUtils.createTopic(topic, partitions = 5)
+    testUtils.sendMessages(topic, Array("-1"))
+    require(testUtils.getLatestOffsets(Set(topic)).size === 5)
+
+    val reader = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("kafka.request.timeout.ms", "3000")
+      .option("kafka.default.api.timeout.ms", "3000")
+      .option("subscribePattern", s"$topicPrefix-.*")
+      .option("failOnDataLoss", "false")
+
+    val kafka = reader.load()
+      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+      .as[(String, String)]
+    val mapped = kafka.map(kv => kv._2.toInt + 1)
+
+    testStream(mapped)(
+      makeSureGetOffsetCalled,
+      AddKafkaData(Set(topic), 1, 2, 3),
+      CheckAnswer(2, 3, 4),
+      Assert {
+        testUtils.deleteTopic(topic)
+        true
+      },
+      AssertOnQuery { q =>
+        val latestOffset: Option[(Long, OffsetSeq)] = q.offsetLog.getLatest
+        latestOffset.exists { offset =>
+          !offset._2.offsets.exists(_.exists(_.json == "{}"))
+        }
+      }
+    )
+  }
+
   test("subscribe topic by pattern with topic recreation between batches") {
     val topicPrefix = newTopic()
     val topic = topicPrefix + "-good"
