@@ -275,7 +275,7 @@ private[spark] object KubernetesConf {
         .toLowerCase(Locale.ROOT)
         .replaceAll("[^a-z0-9\\-]", "-")
         .replaceAll("-+", "-"),
-      "",
+      "-",
       KUBERNETES_DNS_LABEL_NAME_MAX_LENGTH
     ).stripPrefix("-").stripSuffix("-")
   }
