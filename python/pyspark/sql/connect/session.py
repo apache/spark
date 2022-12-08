@@ -21,24 +21,14 @@ from collections.abc import Sized
 import numpy as np
 import pandas as pd
 
-from pyspark.sql.types import (
-    DataType,
-    ByteType,
-    ShortType,
-    IntegerType,
-    LongType,
-    FloatType,
-    DoubleType,
-    StringType,
-    StructType,
-    _parse_datatype_string,
-)
+from pyspark.sql.types import DataType, StringType, StructType, _parse_datatype_string
 
 from pyspark.sql.connect.client import SparkConnectClient
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.connect.plan import SQL, Range, LocalRelation
 from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.utils import to_str
+from pyspark.sql.pandas.conversion import PandasConversionMixin
 
 from typing import (
     Optional,
@@ -54,7 +44,7 @@ from typing import (
 )
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import OptionalPrimitiveType, ArrayLike
+    from pyspark.sql.connect._typing import OptionalPrimitiveType
 
 
 # TODO(SPARK-38912): This method can be dropped once support for Python 3.8 is dropped
@@ -270,7 +260,7 @@ class SparkSession(object):
 
     def createDataFrame(
         self,
-        data: Union["pd.DataFrame", "ArrayLike", Iterable[Any]],
+        data: Union["pd.DataFrame", "np.ndarray", Iterable[Any]],
         schema: Optional[Union[StructType, str, List[str], Tuple[str, ...]]] = None,
     ) -> "DataFrame":
         """
@@ -357,21 +347,12 @@ class SparkSession(object):
             for field in struct.fields:
                 name = field.name
                 dt = field.dataType
-
-                if isinstance(dt, ByteType):
-                    pdf[name] = pdf[name].astype("int8")
-                elif isinstance(dt, ShortType):
-                    pdf[name] = pdf[name].astype("int16")
-                elif isinstance(dt, IntegerType):
-                    pdf[name] = pdf[name].astype("int32")
-                elif isinstance(dt, LongType):
-                    pdf[name] = pdf[name].astype("int64")
-                elif isinstance(dt, FloatType):
-                    pdf[name] = pdf[name].astype("float32")
-                elif isinstance(dt, DoubleType):
-                    pdf[name] = pdf[name].astype("float64")
-                elif isinstance(dt, StringType):
+                if isinstance(dt, StringType):
                     pdf[name] = pdf[name].apply(str)
+                else:
+                    pt = PandasConversionMixin._to_corrected_pandas_type(dt)
+                    if pt is not None:
+                        pdf[name] = pdf[name].astype(pt)
 
         return DataFrame.withPlan(LocalRelation(pdf), self)
 

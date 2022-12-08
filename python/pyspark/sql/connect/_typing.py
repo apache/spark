@@ -26,11 +26,7 @@ from typing import Union, Optional
 import datetime
 import decimal
 
-from numpy import ndarray as NDArray
-
 from pyspark.sql.connect.column import Column
-
-ArrayLike = NDArray
 
 ColumnOrName = Union[Column, str]
 
