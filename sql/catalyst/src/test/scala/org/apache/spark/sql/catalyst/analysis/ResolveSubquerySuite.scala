@@ -305,6 +305,9 @@ class ResolveSubquerySuite extends AnalysisTest {
             where($"d" === Cos(sum($"a")) + sum($"a") + sum($"b") + Cos(sum($"b"))))), 3, 5),
         (t1.select($"a", $"b").
           having($"b")(Literal(1) + sum($"a"), Cos(sum($"b")))(Exists(t2.select($"c").
+            where($"d" === (Literal(1) + sum($"a"))))), 2, 2),
+        (t1.select($"a", $"b").
+          having($"b")(Literal(1) + sum($"a"), sum($"a"))(Exists(t2.select($"c").
             where($"d" === (Literal(1) + sum($"a"))))), 2, 2)
       )
 
