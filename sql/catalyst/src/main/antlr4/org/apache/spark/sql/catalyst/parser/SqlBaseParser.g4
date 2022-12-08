@@ -935,7 +935,7 @@ primaryExpression
 
 constant
     : NULL                                                                                     #nullLiteral
-    | {parameters_enabled}? PARAMETER                                                          #parameterLiteral
+    | {parameters_enabled}? ':' identifier                                                     #parameterLiteral
     | interval                                                                                 #intervalLiteral
     | identifier stringLit                                                                     #typeConstructor
     | number                                                                                   #numericLiteral

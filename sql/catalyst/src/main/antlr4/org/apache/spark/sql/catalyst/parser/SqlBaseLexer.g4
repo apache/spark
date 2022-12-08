@@ -507,7 +507,3 @@ WS
 UNRECOGNIZED
     : .
     ;
-
-PARAMETER
-    : ':' IDENTIFIER
-    ;
