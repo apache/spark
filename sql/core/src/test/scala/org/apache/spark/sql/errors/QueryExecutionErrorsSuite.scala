@@ -773,7 +773,7 @@ class QueryExecutionErrorsSuite
   test("UNBOUND_PARAMETER - SPARK-41271: non-substituted parameters") {
     checkError(
       exception = intercept[SparkRuntimeException] {
-        sql("select @abc").collect()
+        sql("select :abc").collect()
       },
       errorClass = "UNBOUND_PARAMETER",
       parameters = Map("name" -> "abc"))

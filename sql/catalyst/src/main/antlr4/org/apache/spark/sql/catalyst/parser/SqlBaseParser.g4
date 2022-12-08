@@ -42,7 +42,7 @@ options { tokenVocab = SqlBaseLexer; }
   public boolean double_quoted_identifiers = false;
 
   /**
-   * When true, identifiers that begin from `@` are considered as named parameters.
+   * When true, identifiers that begin from `:` are considered as named parameters.
    */
   public boolean parameters_enabled = false;
 }

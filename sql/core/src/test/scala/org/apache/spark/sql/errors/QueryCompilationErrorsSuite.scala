@@ -671,12 +671,12 @@ class QueryCompilationErrorsSuite
   test("UNBOUND_PARAMETER - SPARK-41271: non-substituted parameters") {
     checkError(
       exception = intercept[AnalysisException] {
-        spark.sql("select @abc, @def", Map("abc" -> "1"))
+        spark.sql("select :abc, :def", Map("abc" -> "1"))
       },
       errorClass = "UNBOUND_PARAMETER",
       parameters = Map("name" -> "def"),
       context = ExpectedContext(
-        fragment = "@def",
+        fragment = ":def",
         start = 13,
         stop = 16))
   }
@@ -685,7 +685,7 @@ class QueryCompilationErrorsSuite
     Seq("col1 + 1", "CAST('100' AS INT)", "map('a', 1, 'b', 2)", "array(1)").foreach { arg =>
       checkError(
         exception = intercept[AnalysisException] {
-          spark.sql("SELECT @param1 FROM VALUES (1) AS t(col1)", Map("param1" -> arg))
+          spark.sql("SELECT :param1 FROM VALUES (1) AS t(col1)", Map("param1" -> arg))
         },
         errorClass = "INVALID_SQL_ARG",
         parameters = Map("name" -> "`param1`"),

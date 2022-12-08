@@ -63,7 +63,7 @@ public class JavaSparkSessionSuite {
     params.put("_i1", "INTERVAL '1-1' YEAR TO MONTH");
     params.put("p2", "'a\"bc'");
     Dataset ds = spark.sql(
-      "SELECT @p2, i FROM VALUES (INTERVAL '2-2' YEAR TO MONTH) AS t(i) WHERE i > @_i1",
+      "SELECT :p2, i FROM VALUES (INTERVAL '2-2' YEAR TO MONTH) AS t(i) WHERE i > :_i1",
       params);
     List<Row> rows = ds.collectAsList();
     Assert.assertEquals(1, rows.size());

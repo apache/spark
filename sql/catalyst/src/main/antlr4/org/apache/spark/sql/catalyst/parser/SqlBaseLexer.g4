@@ -509,5 +509,5 @@ UNRECOGNIZED
     ;
 
 PARAMETER
-    : '@' IDENTIFIER
+    : ':' IDENTIFIER
     ;

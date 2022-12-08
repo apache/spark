@@ -4030,7 +4030,7 @@ object SQLConf {
   val PARAMETERS_ENABLED = buildConf("spark.sql.parameters.enabled")
     .doc("When set to true, `spark.sql()` executes input SQL queries by substituting named " +
       "parameters by given literal values. If set to false, Spark handles constants " +
-      "with the `@` prefix as regular identifiers and does not consider them as parameters.")
+      "with the `:` prefix as regular identifiers and does not consider them as parameters.")
     .version("3.4.0")
     .booleanConf
     .createWithDefault(true)

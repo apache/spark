@@ -2250,9 +2250,9 @@ class DatasetSuite extends QueryTest
     withSQLConf(SQLConf.PARAMETERS_ENABLED.key -> "true") {
       val sqlText =
         """
-          |SELECT id, id % @div as c0
+          |SELECT id, id % :div as c0
           |FROM VALUES (0), (1), (2), (3), (4), (5), (6), (7), (8), (9) AS t(id)
-          |WHERE id < @constA
+          |WHERE id < :constA
           |""".stripMargin
       val args = Map("div" -> "3", "constA" -> "4L")
       checkAnswer(
@@ -2260,7 +2260,7 @@ class DatasetSuite extends QueryTest
         Row(0, 0) :: Row(1, 1) :: Row(2, 2) :: Row(3, 0) :: Nil)
 
       checkAnswer(
-        spark.sql("""SELECT contains('Spark \'SQL\'', @subStr)""", Map("subStr" -> "'SQL'")),
+        spark.sql("""SELECT contains('Spark \'SQL\'', :subStr)""", Map("subStr" -> "'SQL'")),
         Row(true))
     }
   }
