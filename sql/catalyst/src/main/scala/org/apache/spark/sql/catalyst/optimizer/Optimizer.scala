@@ -138,7 +138,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       Batch("Push extra predicate through join", fixedPoint,
         PushExtraPredicateThroughJoin,
         PushDownPredicates) ::
-      Batch("Insert window group limit", fixedPoint,
+      Batch("Insert window group limit", Once,
         InsertWindowGroupLimit) :: Nil
     }
 

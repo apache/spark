@@ -1283,6 +1283,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest
       ("c", 2, nullStr, 5.0)).toDF("key", "value", "order", "value2")
 
     val window = Window.partitionBy($"key").orderBy($"order".asc_nulls_first)
+    val window2 = Window.partitionBy($"key").orderBy($"order".desc_nulls_first)
 
     Seq(-1, 100).foreach { enabled =>
       withSQLConf(SQLConf.WINDOW_GROUP_LIMIT_THRESHOLD.key -> enabled.toString) {
@@ -1411,6 +1412,17 @@ class DataFrameWindowFunctionsSuite extends QueryTest
             Row("a", 4, "", 2.0, 1, 1),
             Row("a", 4, "", 2.0, 1, 1),
             Row("b", 1, "h", Double.NaN, 1, 1),
+            Row("c", 2, null, 5.0, 1, 1)
+          )
+        )
+
+        val multipleWindowsOne = df
+          .withColumn("rn2", row_number().over(window2))
+          .withColumn("rn", row_number().over(window))
+          .where('rn < 2 && 'rn2 < 3)
+        checkAnswer(multipleWindowsOne,
+          Seq(
+            Row("b", 1, "h", Double.NaN, 2, 1),
             Row("c", 2, null, 5.0, 1, 1)
           )
         )
