@@ -533,7 +533,7 @@ class SparkConnectPlanner(session: SparkSession) {
 
   private def transformCaseWhen(casewhen: proto.Expression.CaseWhen): Expression = {
     CaseWhen(
-      branches = casewhen.getBranchesList.asScala
+      branches = casewhen.getBranchesList.asScala.toSeq
         .map(b => (transformExpression(b.getCondition), transformExpression(b.getValue))),
       elseValue =
         if (casewhen.hasElseValue) Some(transformExpression(casewhen.getElseValue)) else None)
