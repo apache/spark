@@ -984,8 +984,8 @@ class RenameColumnsNameByName(LogicalPlan):
         """
 
 
-class Melt(LogicalPlan):
-    """Logical plan object for a melt operation."""
+class Unpivot(LogicalPlan):
+    """Logical plan object for a unpivot operation."""
 
     def __init__(
         self,
@@ -1001,7 +1001,7 @@ class Melt(LogicalPlan):
         self.variable_column_name = variable_column_name
         self.value_column_name = value_column_name
 
-    def col_to_expression(
+    def col_to_expr(
         self, col: "ColumnOrName", session: "SparkConnectClient"
     ) -> proto.Expression:
         if isinstance(col, Column):
@@ -1013,18 +1013,18 @@ class Melt(LogicalPlan):
         assert self._child is not None
 
         plan = proto.Relation()
-        plan.melt.input.CopyFrom(self._child.plan(session))
-        plan.melt.ids.extend([self.col_to_expression(x, session) for x in self.ids])
-        plan.melt.values.extend([self.col_to_expression(x, session) for x in self.values])
-        plan.melt.variable_column_name = self.variable_column_name
-        plan.melt.value_column_name = self.value_column_name
+        plan.unpivot.input.CopyFrom(self._child.plan(session))
+        plan.unpivot.ids.extend([self.col_to_expr(x, session) for x in self.ids])
+        plan.unpivot.values.extend([self.col_to_expr(x, session) for x in self.values])
+        plan.unpivot.variable_column_name = self.variable_column_name
+        plan.unpivot.value_column_name = self.value_column_name
         return plan
 
     def print(self, indent: int = 0) -> str:
         c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
         return (
             f"{' ' * indent}"
-            f"<Melt ids={self.ids}, values={self.values}, "
+            f"<Unpivot ids={self.ids}, values={self.values}, "
             f"variable_column_name={self.variable_column_name}, "
             f"value_column_name={self.value_column_name}>"
             f"\n{c_buf}"
@@ -1034,7 +1034,7 @@ class Melt(LogicalPlan):
         return f"""
         <ul>
             <li>
-                <b>Melt</b><br />
+                <b>Unpivot</b><br />
                 ids: {self.ids}
                 values: {self.values}
                 variable_column_name: {self.variable_column_name}

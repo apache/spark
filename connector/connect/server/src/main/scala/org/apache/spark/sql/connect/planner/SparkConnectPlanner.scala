@@ -95,7 +95,7 @@ class SparkConnectPlanner(session: SparkSession) {
         transformRenameColumnsByNameToNameMap(rel.getRenameColumnsByNameToNameMap)
       case proto.Relation.RelTypeCase.WITH_COLUMNS => transformWithColumns(rel.getWithColumns)
       case proto.Relation.RelTypeCase.HINT => transformHint(rel.getHint)
-      case proto.Relation.RelTypeCase.MELT => transformMelt(rel.getMelt)
+      case proto.Relation.RelTypeCase.UNPIVOT => transformUnpivot(rel.getUnpivot)
       case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
         throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
       case _ => throw InvalidPlanInput(s"${rel.getUnknown} not supported.")
@@ -310,25 +310,21 @@ class SparkConnectPlanner(session: SparkSession) {
     UnresolvedHint(rel.getName, params, transformRelation(rel.getInput))
   }
 
-  private def transformMelt(rel: proto.Melt): LogicalPlan = {
+  private def transformUnpivot(rel: proto.Unpivot): LogicalPlan = {
     val ids = rel.getIdsList.asScala.toArray.map { expr =>
       Column(transformExpression(expr))
     }
 
+    val df = Dataset.ofRows(session, transformRelation(rel.getInput))
+
     if (rel.getValuesList.isEmpty) {
-      Dataset
-        .ofRows(session, transformRelation(rel.getInput))
-        .melt(ids, rel.getVariableColumnName, rel.getValueColumnName)
-        .logicalPlan
+      df.unpivot(ids, rel.getVariableColumnName, rel.getValueColumnName).logicalPlan
     } else {
       val values = rel.getValuesList.asScala.toArray.map { expr =>
         Column(transformExpression(expr))
       }
 
-      Dataset
-        .ofRows(session, transformRelation(rel.getInput))
-        .melt(ids, values, rel.getVariableColumnName, rel.getValueColumnName)
-        .logicalPlan
+      df.unpivot(ids, values, rel.getVariableColumnName, rel.getValueColumnName).logicalPlan
     }
   }
 

@@ -824,7 +824,7 @@ class DataFrame(object):
             session=self._session,
         )
 
-    def melt(
+    def unpivot(
         self,
         ids: List["ColumnOrName"],
         values: List["ColumnOrName"],
@@ -853,9 +853,11 @@ class DataFrame(object):
         :class:`DataFrame`
         """
         return DataFrame.withPlan(
-            plan.Melt(self._plan, ids, values, variableColumnName, valueColumnName),
+            plan.Unpivot(self._plan, ids, values, variableColumnName, valueColumnName),
             self._session,
         )
+
+    melt = unpivot
 
     def show(self, n: int = 20, truncate: Union[bool, int] = True, vertical: bool = False) -> None:
         """

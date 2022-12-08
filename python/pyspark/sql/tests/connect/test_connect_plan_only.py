@@ -168,6 +168,33 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertEqual(plan.root.replace.replacements[1].old_value.string, "Bob")
         self.assertEqual(plan.root.replace.replacements[1].new_value.string, "B")
 
+    def test_unpivot(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+
+        plan = (
+            df.filter(df.col_name > 3)
+            .unpivot(["id"], ["name"], "variable", "value")
+            ._plan.to_proto(self.connect)
+        )
+        self.assertTrue(all(isinstance(c, proto.Expression) for c in plan.root.unpivot.ids))
+        self.assertEqual(plan.root.unpivot.ids[0].unresolved_attribute.unparsed_identifier, "id")
+        self.assertTrue(all(isinstance(c, proto.Expression) for c in plan.root.unpivot.values))
+        self.assertEqual(plan.root.unpivot.values[0].unresolved_attribute.unparsed_identifier, "name")
+        self.assertEqual(plan.root.unpivot.variable_column_name, "variable")
+        self.assertEqual(plan.root.unpivot.value_column_name, "value")
+
+        plan = (
+            df.filter(df.col_name > 3)
+            .unpivot(["id"], [], "variable", "value")
+            ._plan.to_proto(self.connect)
+        )
+        self.assertTrue(len(plan.root.unpivot.ids) == 1)
+        self.assertTrue(all(isinstance(c, proto.Expression) for c in plan.root.unpivot.ids))
+        self.assertEqual(plan.root.unpivot.ids[0].unresolved_attribute.unparsed_identifier, "id")
+        self.assertTrue(len(plan.root.unpivot.values) == 0)
+        self.assertEqual(plan.root.unpivot.variable_column_name, "variable")
+        self.assertEqual(plan.root.unpivot.value_column_name, "value")
+
     def test_melt(self):
         df = self.connect.readTable(table_name=self.tbl_name)
 
@@ -176,24 +203,24 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
             .melt(["id"], ["name"], "variable", "value")
             ._plan.to_proto(self.connect)
         )
-        self.assertTrue(all(isinstance(c, proto.Expression) for c in plan.root.melt.ids))
-        self.assertEqual(plan.root.melt.ids[0].unresolved_attribute.unparsed_identifier, "id")
-        self.assertTrue(all(isinstance(c, proto.Expression) for c in plan.root.melt.values))
-        self.assertEqual(plan.root.melt.values[0].unresolved_attribute.unparsed_identifier, "name")
-        self.assertEqual(plan.root.melt.variable_column_name, "variable")
-        self.assertEqual(plan.root.melt.value_column_name, "value")
+        self.assertTrue(all(isinstance(c, proto.Expression) for c in plan.root.unpivot.ids))
+        self.assertEqual(plan.root.unpivot.ids[0].unresolved_attribute.unparsed_identifier, "id")
+        self.assertTrue(all(isinstance(c, proto.Expression) for c in plan.root.unpivot.values))
+        self.assertEqual(plan.root.unpivot.values[0].unresolved_attribute.unparsed_identifier, "name")
+        self.assertEqual(plan.root.unpivot.variable_column_name, "variable")
+        self.assertEqual(plan.root.unpivot.value_column_name, "value")
 
         plan = (
             df.filter(df.col_name > 3)
             .melt(["id"], [], "variable", "value")
             ._plan.to_proto(self.connect)
         )
-        self.assertTrue(len(plan.root.melt.ids) == 1)
-        self.assertTrue(all(isinstance(c, proto.Expression) for c in plan.root.melt.ids))
-        self.assertEqual(plan.root.melt.ids[0].unresolved_attribute.unparsed_identifier, "id")
-        self.assertTrue(len(plan.root.melt.values) == 0)
-        self.assertEqual(plan.root.melt.variable_column_name, "variable")
-        self.assertEqual(plan.root.melt.value_column_name, "value")
+        self.assertTrue(len(plan.root.unpivot.ids) == 1)
+        self.assertTrue(all(isinstance(c, proto.Expression) for c in plan.root.unpivot.ids))
+        self.assertEqual(plan.root.unpivot.ids[0].unresolved_attribute.unparsed_identifier, "id")
+        self.assertTrue(len(plan.root.unpivot.values) == 0)
+        self.assertEqual(plan.root.unpivot.variable_column_name, "variable")
+        self.assertEqual(plan.root.unpivot.value_column_name, "value")
 
     def test_summary(self):
         df = self.connect.readTable(table_name=self.tbl_name)

@@ -83,7 +83,7 @@ class Relation(google.protobuf.message.Message):
     TAIL_FIELD_NUMBER: builtins.int
     WITH_COLUMNS_FIELD_NUMBER: builtins.int
     HINT_FIELD_NUMBER: builtins.int
-    MELT_FIELD_NUMBER: builtins.int
+    UNPIVOT_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -140,7 +140,7 @@ class Relation(google.protobuf.message.Message):
     @property
     def hint(self) -> global___Hint: ...
     @property
-    def melt(self) -> global___Melt: ...
+    def unpivot(self) -> global___Unpivot: ...
     @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
@@ -184,7 +184,7 @@ class Relation(google.protobuf.message.Message):
         tail: global___Tail | None = ...,
         with_columns: global___WithColumns | None = ...,
         hint: global___Hint | None = ...,
-        melt: global___Melt | None = ...,
+        unpivot: global___Unpivot | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -222,8 +222,6 @@ class Relation(google.protobuf.message.Message):
             b"limit",
             "local_relation",
             b"local_relation",
-            "melt",
-            b"melt",
             "offset",
             b"offset",
             "project",
@@ -260,6 +258,8 @@ class Relation(google.protobuf.message.Message):
             b"tail",
             "unknown",
             b"unknown",
+            "unpivot",
+            b"unpivot",
             "with_columns",
             b"with_columns",
         ],
@@ -293,8 +293,6 @@ class Relation(google.protobuf.message.Message):
             b"limit",
             "local_relation",
             b"local_relation",
-            "melt",
-            b"melt",
             "offset",
             b"offset",
             "project",
@@ -331,6 +329,8 @@ class Relation(google.protobuf.message.Message):
             b"tail",
             "unknown",
             b"unknown",
+            "unpivot",
+            b"unpivot",
             "with_columns",
             b"with_columns",
         ],
@@ -361,7 +361,7 @@ class Relation(google.protobuf.message.Message):
         "tail",
         "with_columns",
         "hint",
-        "melt",
+        "unpivot",
         "fill_na",
         "drop_na",
         "replace",
@@ -1973,7 +1973,7 @@ class Hint(google.protobuf.message.Message):
 
 global___Hint = Hint
 
-class Melt(google.protobuf.message.Message):
+class Unpivot(google.protobuf.message.Message):
     """Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns set."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -2034,4 +2034,4 @@ class Melt(google.protobuf.message.Message):
         ],
     ) -> None: ...
 
-global___Melt = Melt
+global___Unpivot = Unpivot

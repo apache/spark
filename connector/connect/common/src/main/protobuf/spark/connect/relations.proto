@@ -54,7 +54,7 @@ message Relation {
     Tail tail = 22;
     WithColumns with_columns = 23;
     Hint hint = 24;
-    Melt melt = 25;
+    Unpivot unpivot = 25;
 
     // NA functions
     NAFill fill_na = 90;
@@ -573,7 +573,7 @@ message Hint {
 }
 
 // Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns set.
-message Melt {
+message Unpivot {
   // (Required) The input relation.
   Relation input = 1;
 

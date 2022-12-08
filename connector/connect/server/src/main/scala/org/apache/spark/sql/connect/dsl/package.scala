@@ -709,15 +709,15 @@ package object dsl {
           .build()
       }
 
-      def melt(
+      def unpivot(
           ids: Seq[Expression],
           values: Seq[Expression],
           variableColumnName: String,
           valueColumnName: String): Relation = {
         Relation
           .newBuilder()
-          .setMelt(
-            Melt
+          .setUnpivot(
+            Unpivot
               .newBuilder()
               .setInput(logicalPlan)
               .addAllIds(ids.asJava)
@@ -727,14 +727,14 @@ package object dsl {
           .build()
       }
 
-      def melt(
+      def unpivot(
           ids: Seq[Expression],
           variableColumnName: String,
           valueColumnName: String): Relation = {
         Relation
           .newBuilder()
-          .setMelt(
-            Melt
+          .setUnpivot(
+            Unpivot
               .newBuilder()
               .setInput(logicalPlan)
               .addAllIds(ids.asJava)
@@ -742,6 +742,19 @@ package object dsl {
               .setValueColumnName(valueColumnName))
           .build()
       }
+
+      def melt(
+          ids: Seq[Expression],
+          values: Seq[Expression],
+          variableColumnName: String,
+          valueColumnName: String): Relation =
+        unpivot(ids, values, variableColumnName, valueColumnName)
+
+      def melt(
+          ids: Seq[Expression],
+          variableColumnName: String,
+          valueColumnName: String): Relation =
+        unpivot(ids, variableColumnName, valueColumnName)
 
       private def createSetOperation(
           left: Relation,
