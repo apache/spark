@@ -121,6 +121,23 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         # Check that the limit is applied
         self.assertEqual(len(data.index), 10)
 
+    def test_json(self):
+        with tempfile.TemporaryDirectory() as d:
+            # Write a DataFrame into a JSON file
+            self.spark.createDataFrame([{"age": 100, "name": "Hyukjin Kwon"}]).write.mode(
+                "overwrite"
+            ).format("json").save(d)
+            # Read the JSON file as a DataFrame.
+            self.assert_eq(self.connect.read.json(d).toPandas(), self.spark.read.json(d).toPandas())
+            self.assert_eq(
+                self.connect.read.json(path=d, schema="age INT, name STRING").toPandas(),
+                self.spark.read.json(path=d, schema="age INT, name STRING").toPandas(),
+            )
+            self.assert_eq(
+                self.connect.read.json(path=d, primitivesAsString=True).toPandas(),
+                self.spark.read.json(path=d, primitivesAsString=True).toPandas(),
+            )
+
     def test_join_condition_column_list_columns(self):
         left_connect_df = self.connect.read.table(self.tbl_name)
         right_connect_df = self.connect.read.table(self.tbl_name2)
