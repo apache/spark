@@ -256,7 +256,7 @@ class LateralColumnAliasSuite extends QueryTest with SharedSparkSession {
   }
   // TODO: more tests on LCA in subquery
 
-  test("Lateral alias of a struct - Project") {
+  test("Lateral alias of a complex type - Project") {
     checkAnswer(
       sql("SELECT named_struct('a', 1) AS foo, foo.a + 1 AS bar, bar + 1"),
       Row(Row(1), 2, 3))
@@ -264,6 +264,34 @@ class LateralColumnAliasSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       sql("SELECT named_struct('a', named_struct('b', 1)) AS foo, foo.a.b + 1 AS bar"),
       Row(Row(Row(1)), 2)
+    )
+
+    checkAnswer(
+      sql("SELECT array(1, 2, 3) AS foo, foo[1] AS bar, bar + 1"),
+      Row(Seq(1, 2, 3), 2, 3)
+    )
+    checkAnswer(
+      sql("SELECT array(array(1, 2), array(1, 2, 3), array(100)) AS foo, foo[2][0] + 1 AS bar"),
+      Row(Seq(Seq(1, 2), Seq(1, 2, 3), Seq(100)), 101)
+    )
+    checkAnswer(
+      sql("SELECT array(named_struct('a', 1), named_struct('a', 2)) AS foo, foo[0].a + 1 AS bar"),
+      Row(Seq(Row(1), Row(2)), 2)
+    )
+
+    checkAnswer(
+      sql("SELECT map('a', 1, 'b', 2) AS foo, foo['b'] AS bar, bar + 1"),
+      Row(Map("a" -> 1, "b" -> 2), 2, 3)
+    )
+  }
+
+  test("Lateral alias reference attribute further be used by upper plan - Project") {
+    // this is out of the scope of lateral alias project functionality requirements, but naturally
+    // supported by the current design
+    checkAnswer(
+      sql(s"SELECT properties AS new_properties, new_properties.joinYear AS new_join_year " +
+        s"FROM $testTable WHERE dept = 1 ORDER BY new_join_year DESC"),
+      Row(Row(2020, "B"), 2020) :: Row(Row(2019, "A"), 2019) :: Nil
     )
   }
 

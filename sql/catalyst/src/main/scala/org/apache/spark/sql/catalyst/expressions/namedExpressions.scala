@@ -439,17 +439,20 @@ case class OuterReference(e: NamedExpression)
 }
 
 /**
- * A placeholder used to hold a attribute that has been temporarily resolved as the reference
- * to a lateral column alias. This is created and removed by rule [[ResolveLateralColumnAlias]].
+ * A placeholder used to hold a [[NamedExpression]] that has been temporarily resolved as the
+ * reference to a lateral column alias.
  *
+ * This is created and removed by Analyzer rule [[ResolveLateralColumnAlias]].
  * There should be no [[LateralColumnAliasReference]] beyond analyzer: if the plan passes all
  * analysis check, then all [[LateralColumnAliasReference]] should already be removed.
  *
- * @param ne the current attribute is resolved to by lateral column alias
- * @param nameParts The named parts of the original [[UnresolvedAttribute]]. Used to later resolve
- *                  the attribute or restore back.
+ * @param ne the resolved [[NamedExpression]] by lateral column alias
+ * @param nameParts the named parts of the original [[UnresolvedAttribute]]. Used to restore back
+ *                  to [[UnresolvedAttribute]] when needed
+ * @param a the attribute of referenced lateral column alias. Used to match alias when unwrapping
+ *          and resolving LateralColumnAliasReference
  */
-case class LateralColumnAliasReference(ne: NamedExpression, nameParts: Seq[String])
+case class LateralColumnAliasReference(ne: NamedExpression, nameParts: Seq[String], a: Attribute)
   extends LeafExpression with NamedExpression with Unevaluable {
   assert(ne.resolved)
   override def name: String =
@@ -458,7 +461,7 @@ case class LateralColumnAliasReference(ne: NamedExpression, nameParts: Seq[Strin
   override def qualifier: Seq[String] = ne.qualifier
   override def toAttribute: Attribute = ne.toAttribute
   override def newInstance(): NamedExpression =
-    LateralColumnAliasReference(ne.newInstance(), nameParts)
+    LateralColumnAliasReference(ne.newInstance(), nameParts, a)
 
   override def nullable: Boolean = ne.nullable
   override def dataType: DataType = ne.dataType

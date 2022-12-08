@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, LateralColumnAliasReference, NamedExpression, OuterReference}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, LateralColumnAliasReference, NamedExpression, OuterReference}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.rules.{Rule, UnknownRuleId}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, OUTER_REFERENCE, UNRESOLVED_ATTRIBUTE}
@@ -64,7 +64,6 @@ import org.apache.spark.sql.internal.SQLConf
  * [[UnresolvedAttribute]]. If success, it strips [[OuterReference]] and also wraps it with
  * [[LateralColumnAliasReference]].
  */
-// TODO revisit resolving order: top down, or bottom up
 object ResolveLateralColumnAlias extends Rule[LogicalPlan] {
   def resolver: Resolver = conf.resolver
 
@@ -78,18 +77,27 @@ object ResolveLateralColumnAlias extends Rule[LogicalPlan] {
   }
 
   /**
-   * Use the given the lateral alias candidate to resolve the name parts.
-   * @return The resolved attribute if succeeds. None if fails to resolve.
+   * Use the given lateral alias to resolve the unresolved attribute with the name parts.
+   *
+   * Construct a dummy plan with the given lateral alias as project list, use the output of the
+   * plan to resolve.
+   * @return The resolved [[LateralColumnAliasReference]] if succeeds. None if fails to resolve.
    */
   private def resolveByLateralAlias(
-      nameParts: Seq[String], lateralAlias: Alias): Option[NamedExpression] = {
+      nameParts: Seq[String], lateralAlias: Alias): Option[LateralColumnAliasReference] = {
+    // TODO question: everytime it resolves the extract field it generates a new exprId.
+    //  Does it matter?
     val resolvedAttr = Analyzer.resolveExpressionByPlanOutput(
       expr = UnresolvedAttribute(nameParts),
       plan = Project(Seq(lateralAlias), OneRowRelation()),
       resolver = resolver,
       throws = false
     ).asInstanceOf[NamedExpression]
-    if (resolvedAttr.resolved) Some(resolvedAttr) else None
+    if (resolvedAttr.resolved) {
+      Some(LateralColumnAliasReference(resolvedAttr, nameParts, lateralAlias.toAttribute))
+    } else {
+      None
+    }
   }
 
   private def rewriteLateralColumnAlias(plan: LogicalPlan): LogicalPlan = {
@@ -103,20 +111,6 @@ object ResolveLateralColumnAlias extends Rule[LogicalPlan] {
         var aliasMap = CaseInsensitiveMap(Map[String, Seq[AliasEntry]]())
         def wrapLCAReference(e: NamedExpression): NamedExpression = {
           e.transformWithPruning(_.containsAnyPattern(UNRESOLVED_ATTRIBUTE, OUTER_REFERENCE)) {
-            case o: OuterReference
-              if aliasMap.contains(o.nameParts.map(_.head).getOrElse(o.name)) =>
-              val nameParts = o.nameParts.getOrElse(Seq(o.name))
-              val aliases = aliasMap.get(nameParts.head).get
-              aliases.size match {
-                case n if n > 1 =>
-                  throw QueryCompilationErrors.ambiguousLateralColumnAlias(nameParts, n)
-                case n if n == 1 && aliases.head.alias.resolved =>
-                  // Only resolved alias can be the lateral column alias
-                  resolveByLateralAlias(nameParts, aliases.head.alias)
-                    .map(LateralColumnAliasReference(_, nameParts))
-                    .getOrElse(o)
-                case _ => o
-              }
             case u: UnresolvedAttribute if aliasMap.contains(u.nameParts.head) &&
               Analyzer.resolveExpressionByPlanChildren(u, p, resolver)
                 .isInstanceOf[UnresolvedAttribute] =>
@@ -126,10 +120,22 @@ object ResolveLateralColumnAlias extends Rule[LogicalPlan] {
                   throw QueryCompilationErrors.ambiguousLateralColumnAlias(u.name, n)
                 case n if n == 1 && aliases.head.alias.resolved =>
                   // Only resolved alias can be the lateral column alias
-                  resolveByLateralAlias(u.nameParts, aliases.head.alias)
-                    .map(LateralColumnAliasReference(_, u.nameParts))
-                    .getOrElse(u)
+                  // The lateral alias can be a struct and have nested field, need to construct
+                  // a dummy plan to resolve the expression
+                  resolveByLateralAlias(u.nameParts, aliases.head.alias).getOrElse(u)
                 case _ => u
+              }
+            case o: OuterReference
+              if aliasMap.contains(o.nameParts.map(_.head).getOrElse(o.name)) =>
+              // handle OuterReference exactly same as UnresolvedAttribute
+              val nameParts = o.nameParts.getOrElse(Seq(o.name))
+              val aliases = aliasMap.get(nameParts.head).get
+              aliases.size match {
+                case n if n > 1 =>
+                  throw QueryCompilationErrors.ambiguousLateralColumnAlias(nameParts, n)
+                case n if n == 1 && aliases.head.alias.resolved =>
+                  resolveByLateralAlias(nameParts, aliases.head.alias).getOrElse(o)
+                case _ => o
               }
           }.asInstanceOf[NamedExpression]
         }
@@ -139,7 +145,7 @@ object ResolveLateralColumnAlias extends Rule[LogicalPlan] {
             // Insert the LCA-resolved alias instead of the unresolved one into map. If it is
             // resolved, it can be referenced as LCA by later expressions (chaining).
             // Unresolved Alias is also added to the map to perform ambiguous name check, but only
-            // resolved alias can be LCA
+            // resolved alias can be LCA.
             aliasMap = insertIntoAliasMap(lcaWrapped, idx, aliasMap)
             lcaWrapped
           case (e, _) =>
@@ -153,47 +159,36 @@ object ResolveLateralColumnAlias extends Rule[LogicalPlan] {
       _.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE), UnknownRuleId) {
       case p @ Project(projectList, child) if p.resolved
         && projectList.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
-        // build the map again in case the project list changes and index goes off
-        // TODO one risk: is there any rule that strips off /add the Alias? that the LCA is resolved
-        //  in the beginning, but when it comes to push down, it really can't find the matching one?
-        //  Restore back to UnresolvedAttribute.
-        //  Also, when resolving from bottom up should I worry about cases like:
-        //  Project [b AS c, c + 1 AS d]
-        //  +- Project [1 AS a, a AS b]
-        //  b AS c is resolved, even b refers to an alias contains the lateral alias?
-        var aliasMap = CaseInsensitiveMap(Map[String, Seq[AliasEntry]]())
+        var aliasMap = Map[Attribute, AliasEntry]()
         val referencedAliases = collection.mutable.Set.empty[AliasEntry]
         def unwrapLCAReference(e: NamedExpression): NamedExpression = {
-          e.transformWithPruning(_.containsAnyPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
-            case lcaRef: LateralColumnAliasReference if aliasMap.contains(lcaRef.nameParts.head) =>
-              val aliasEntry = aliasMap.get(lcaRef.nameParts.head).get.head
+          e.transformWithPruning(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
+            case lcaRef: LateralColumnAliasReference if aliasMap.contains(lcaRef.a) =>
+              val aliasEntry = aliasMap(lcaRef.a)
+              // If there is no chaining of lateral column alias reference, push down the alias
+              // and unwrap the LateralColumnAliasReference to the NamedExpression inside
+              // If there is chaining, don't resolve and save to future rounds
               if (!aliasEntry.alias.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
-                // If there is no chaining, push down the alias and resolve the attribute by
-                // constructing a dummy plan
                 referencedAliases += aliasEntry
-                // Implementation notes (to-delete):
-                // this is a design decision whether to restore the UnresolvedAttribute, or
-                // directly resolve by constructing a plan and using resolveExpressionByPlanChildren
-                resolveByLateralAlias(lcaRef.nameParts, aliasEntry.alias).getOrElse(lcaRef)
+                lcaRef.ne
               } else {
-                // If there is chaining, don't resolve and save to future rounds
                 lcaRef
               }
-            case lcaRef: LateralColumnAliasReference if !aliasMap.contains(lcaRef.nameParts.head) =>
-              // It shouldn't happen. Restore to unresolved attribute to be safe.
-              UnresolvedAttribute(lcaRef.name)
+            case lcaRef: LateralColumnAliasReference if !aliasMap.contains(lcaRef.a) =>
+              // It shouldn't happen, but restore to unresolved attribute to be safe.
+              UnresolvedAttribute(lcaRef.nameParts)
           }.asInstanceOf[NamedExpression]
         }
-
         val newProjectList = projectList.zipWithIndex.map {
           case (a: Alias, idx) =>
             val lcaResolved = unwrapLCAReference(a)
             // Insert the original alias instead of rewritten one to detect chained LCA
-            aliasMap = insertIntoAliasMap(a, idx, aliasMap)
+            aliasMap += (a.toAttribute -> AliasEntry(a, idx))
             lcaResolved
           case (e, _) =>
             unwrapLCAReference(e)
         }
+
         if (referencedAliases.isEmpty) {
           p
         } else {
