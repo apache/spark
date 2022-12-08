@@ -1001,9 +1001,7 @@ class Unpivot(LogicalPlan):
         self.variable_column_name = variable_column_name
         self.value_column_name = value_column_name
 
-    def col_to_expr(
-        self, col: "ColumnOrName", session: "SparkConnectClient"
-    ) -> proto.Expression:
+    def col_to_expr(self, col: "ColumnOrName", session: "SparkConnectClient") -> proto.Expression:
         if isinstance(col, Column):
             return col.to_plan(session)
         else:

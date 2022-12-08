@@ -179,7 +179,9 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertTrue(all(isinstance(c, proto.Expression) for c in plan.root.unpivot.ids))
         self.assertEqual(plan.root.unpivot.ids[0].unresolved_attribute.unparsed_identifier, "id")
         self.assertTrue(all(isinstance(c, proto.Expression) for c in plan.root.unpivot.values))
-        self.assertEqual(plan.root.unpivot.values[0].unresolved_attribute.unparsed_identifier, "name")
+        self.assertEqual(
+            plan.root.unpivot.values[0].unresolved_attribute.unparsed_identifier, "name"
+        )
         self.assertEqual(plan.root.unpivot.variable_column_name, "variable")
         self.assertEqual(plan.root.unpivot.value_column_name, "value")
 
@@ -206,7 +208,9 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertTrue(all(isinstance(c, proto.Expression) for c in plan.root.unpivot.ids))
         self.assertEqual(plan.root.unpivot.ids[0].unresolved_attribute.unparsed_identifier, "id")
         self.assertTrue(all(isinstance(c, proto.Expression) for c in plan.root.unpivot.values))
-        self.assertEqual(plan.root.unpivot.values[0].unresolved_attribute.unparsed_identifier, "name")
+        self.assertEqual(
+            plan.root.unpivot.values[0].unresolved_attribute.unparsed_identifier, "name"
+        )
         self.assertEqual(plan.root.unpivot.variable_column_name, "variable")
         self.assertEqual(plan.root.unpivot.value_column_name, "value")
 
