@@ -1586,12 +1586,14 @@ class PlanParserSuite extends AnalysisTest {
         parsePlan("SELECT * FROM a LIMIT :limitA"),
         table("a").select(star()).limit(Parameter("limitA")))
       // Invalid empty name and invalid symbol in a name
-      Seq(":", ":-").foreach { name =>
-        checkError(
-          exception = parseException(s"SELECT $name"),
-          errorClass = "PARSE_SYNTAX_ERROR",
-          parameters = Map("error" -> "':'", "hint" -> ""))
-      }
+      checkError(
+        exception = parseException(s"SELECT :-"),
+        errorClass = "PARSE_SYNTAX_ERROR",
+        parameters = Map("error" -> "'-'", "hint" -> ""))
+      checkError(
+        exception = parseException(s"SELECT :"),
+        errorClass = "PARSE_SYNTAX_ERROR",
+        parameters = Map("error" -> "end of input", "hint" -> ""))
     }
     withSQLConf(SQLConf.PARAMETERS_ENABLED.key -> "false") {
       checkError(
@@ -1599,7 +1601,7 @@ class PlanParserSuite extends AnalysisTest {
           parsePlan("SELECT :param_1")
         },
         errorClass = "PARSE_SYNTAX_ERROR",
-        parameters = Map("error" -> "':param_1'", "hint" -> ""))
+        parameters = Map("error" -> "':'", "hint" -> ""))
     }
   }
 }
