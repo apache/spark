@@ -4620,13 +4620,26 @@ case class ArrayCompact(child: Expression)
   override def nullSafeEval(array: Any): Any = {
     val newArray = new Array[Any](array.asInstanceOf[ArrayData].numElements())
     var pos = 0
-    array.asInstanceOf[ArrayData].foreach (elementType, (i, v) =>
-      if (v != null ) {
+    var hasNull = false
+    array.asInstanceOf[ArrayData].foreach(elementType, (index, v) =>
+      // add elements only if the source has null
+      if (v != null && hasNull) {
         newArray(pos) = v
         pos += 1
+      } else if (v == null && !hasNull) {
+        hasNull = true
+        // source has null elements, so copy the elements to newArray
+        for(i <- 0 until index) {
+          newArray(pos) = array.asInstanceOf[ArrayData].get(i, elementType)
+          pos += 1
+        }
       }
     )
-    new GenericArrayData(newArray.slice(0, pos))
+    if (hasNull) {
+      new GenericArrayData(newArray.slice(0, pos))
+    } else {
+      array
+    }
   }
   override def prettyName: String = "array_compact"
 
