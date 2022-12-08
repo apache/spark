@@ -668,12 +668,12 @@ class QueryCompilationErrorsSuite
       parameters = Map("schema" -> "\"INT\"", "sqlExpr" -> "\"from_json(a)\""))
   }
 
-  test("UNBOUND_PARAMETER - SPARK-41271: non-substituted parameters") {
+  test("UNBOUND_SQL_PARAMETER - SPARK-41271: non-substituted parameters") {
     checkError(
       exception = intercept[AnalysisException] {
         spark.sql("select :abc, :def", Map("abc" -> "1"))
       },
-      errorClass = "UNBOUND_PARAMETER",
+      errorClass = "UNBOUND_SQL_PARAMETER",
       parameters = Map("name" -> "def"),
       context = ExpectedContext(
         fragment = ":def",

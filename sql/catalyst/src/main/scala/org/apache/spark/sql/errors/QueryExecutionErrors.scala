@@ -2830,7 +2830,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def unboundParameterError(name: String): Throwable = {
     new SparkRuntimeException(
-      errorClass = "UNBOUND_PARAMETER",
+      errorClass = "UNBOUND_SQL_PARAMETER",
       messageParameters = Map("name" -> name))
   }
 }

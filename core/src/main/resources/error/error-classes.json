@@ -1135,7 +1135,7 @@
       "Unable to convert SQL type <toType> to Protobuf type <protobufType>."
     ]
   },
-  "UNBOUND_PARAMETER" : {
+  "UNBOUND_SQL_PARAMETER" : {
     "message" : [
       "Found the unbound parameter: <name>. Please, fix `args` and provide a mapping of the parameter to a SQL literal statement."
     ]

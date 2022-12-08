@@ -65,7 +65,7 @@ object Parameter extends QueryErrorsBase {
             args(name)
           } else {
             param.failAnalysis(
-              errorClass = "UNBOUND_PARAMETER",
+              errorClass = "UNBOUND_SQL_PARAMETER",
               messageParameters = Map("name" -> name))
           }
       }
