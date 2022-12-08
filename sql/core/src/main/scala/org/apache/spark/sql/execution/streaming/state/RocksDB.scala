@@ -132,7 +132,8 @@ class RocksDB(
       if (conf.resetStatsOnLoad) {
         nativeStats.reset
       }
-      // reset resources to prevent side-effects from previous loaded version
+      // reset resources to prevent side-effects from previous loaded version if it was not cleaned
+      // up correctly
       closePrefixScanIterators()
       resetWriteBatch()
       logInfo(s"Loaded $version")
@@ -318,6 +319,10 @@ class RocksDB(
     } finally {
       db.continueBackgroundWork()
       silentDeleteRecursively(checkpointDir, s"committing $newVersion")
+      // reset resources as either 1) we already pushed the changes and it has been committed or
+      // 2) commit has failed and the current version is "invalidated".
+      closePrefixScanIterators()
+      resetWriteBatch()
       release()
     }
   }
