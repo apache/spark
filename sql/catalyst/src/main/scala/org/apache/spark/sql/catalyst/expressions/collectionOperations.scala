@@ -4645,7 +4645,7 @@ case class ArrayCompact(child: Expression)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
 
-    nullSafeCodeGen(ctx, ev, (array) => {
+    nullSafeCodeGen(ctx, ev, array => {
       val expr = ctx.addReferenceObj("arrayCompactExpr", this)
       s"${ev.value} = (ArrayData)$expr.nullSafeEval($array);"
     })
