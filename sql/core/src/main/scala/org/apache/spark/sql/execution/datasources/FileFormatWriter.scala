@@ -180,7 +180,9 @@ object FileFormatWriter extends Logging {
         rdd,
         (context: TaskContext, iter: Iterator[WriterCommitMessage]) => {
           assert(iter.hasNext)
-          iter.next()
+          val commitMessage = iter.next()
+          assert(!iter.hasNext)
+          commitMessage
         },
         rdd.partitions.indices,
         (index, res: WriterCommitMessage) => {
@@ -202,7 +204,8 @@ object FileFormatWriter extends Logging {
       outputSpec: OutputSpec,
       requiredOrdering: Seq[Expression],
       partitionColumns: Seq[Attribute],
-      sortColumns: Seq[Attribute]): Set[String] = {
+      sortColumns: Seq[Attribute],
+      orderingMatched: Boolean): Set[String] = {
     val hasEmpty2Null = plan.exists(p => V1WritesUtils.hasEmptyToNull(p.expressions))
     val empty2NullPlan = if (hasEmpty2Null) {
       plan
@@ -210,21 +213,6 @@ object FileFormatWriter extends Logging {
       val projectList = V1WritesUtils.convertEmptyToNull(plan.output, partitionColumns)
       if (projectList.nonEmpty) ProjectExec(projectList, plan) else plan
     }
-
-    // the sort order doesn't matter
-    // Use the output ordering from the original plan before adding the empty2null projection.
-    val actualOrdering = plan.outputOrdering.map(_.child)
-    val orderingMatched = V1WritesUtils.isOrderingMatched(requiredOrdering, actualOrdering)
-
-    // When `PLANNED_WRITE_ENABLED` is true, the optimizer rule V1Writes will add logical sort
-    // operator based on the required ordering of the V1 write command. So the output
-    // ordering of the physical plan should always match the required ordering. Here
-    // we set the variable to verify this behavior in tests.
-    // There are two cases where FileFormatWriter still needs to add physical sort:
-    // 1) When the planned write config is disabled.
-    // 2) When the concurrent writers are enabled (in this case the required ordering of a
-    //    V1 write command will be empty).
-    if (Utils.isTesting) outputOrderingMatched = orderingMatched
 
     writeAndCommit(sparkSession, job, description, committer) {
       val (rdd, concurrentOutputWriterSpec) = if (orderingMatched) {
@@ -324,6 +312,22 @@ object FileFormatWriter extends Logging {
       writerBucketSpec.map(_.bucketIdExpression) ++ sortColumns
 
     val writeFilesOpt = V1WritesUtils.getWriteFilesOpt(plan)
+
+    // the sort order doesn't matter
+    // Use the output ordering from the original plan before adding the empty2null projection.
+    val actualOrdering = writeFilesOpt.map(_.child).getOrElse(plan).outputOrdering.map(_.child)
+    val orderingMatched = V1WritesUtils.isOrderingMatched(requiredOrdering, actualOrdering)
+
+    // When `PLANNED_WRITE_ENABLED` is true, the optimizer rule V1Writes will add logical sort
+    // operator based on the required ordering of the V1 write command. So the output
+    // ordering of the physical plan should always match the required ordering. Here
+    // we set the variable to verify this behavior in tests.
+    // There are two cases where FileFormatWriter still needs to add physical sort:
+    // 1) When the planned write config is disabled.
+    // 2) When the concurrent writers are enabled (in this case the required ordering of a
+    //    V1 write command will be empty).
+    if (Utils.isTesting) outputOrderingMatched = orderingMatched
+
     if (writeFilesOpt.isDefined) {
       // build `WriteFilesSpec` for `WriteFiles`
       val concurrentOutputWriterSpecFunc = (plan: SparkPlan) => {
@@ -337,8 +341,8 @@ object FileFormatWriter extends Logging {
       )
       executeWrite(sparkSession, plan, writeSpec, job)
     } else {
-      executeWrite(sparkSession, plan, job, description, committer, outputSpec: OutputSpec,
-        requiredOrdering, partitionColumns, sortColumns)
+      executeWrite(sparkSession, plan, job, description, committer, outputSpec,
+        requiredOrdering, partitionColumns, sortColumns, orderingMatched)
     }
   }
   // scalastyle:on argcount

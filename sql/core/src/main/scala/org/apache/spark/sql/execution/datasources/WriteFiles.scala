@@ -25,9 +25,10 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode}
-import org.apache.spark.sql.connector.write.{WriterCommitMessage, WriteSpec}
+import org.apache.spark.sql.connector.write.WriterCommitMessage
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.datasources.FileFormatWriter.ConcurrentOutputWriterSpec
+import org.apache.spark.sql.internal.WriteSpec
 
 /**
  * The write files spec holds all information of [[V1WriteCommand]] if its provider is

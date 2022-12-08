@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.write;
+package org.apache.spark.sql.internal;
 
 import java.io.Serializable;
 
