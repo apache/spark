@@ -272,16 +272,16 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
     // Disable the background thread during tests.
     if (!conf.contains(IS_TESTING)) {
-      // A task that periodically checks for event log updates on disk.
-      logDebug(s"Scheduling update thread every $UPDATE_INTERVAL_S seconds")
-      pool.scheduleWithFixedDelay(
-        getRunner(() => checkForLogs()), 0, UPDATE_INTERVAL_S, TimeUnit.SECONDS)
-
       if (conf.get(CLEANER_ENABLED)) {
         // A task that periodically cleans event logs on disk.
         pool.scheduleWithFixedDelay(
           getRunner(() => cleanLogs()), 0, CLEAN_INTERVAL_S, TimeUnit.SECONDS)
       }
+
+      // A task that periodically checks for event log updates on disk.
+      logDebug(s"Scheduling update thread every $UPDATE_INTERVAL_S seconds")
+      pool.scheduleWithFixedDelay(
+        getRunner(() => checkForLogs()), 0, UPDATE_INTERVAL_S, TimeUnit.SECONDS)
 
       if (conf.contains(DRIVER_LOG_DFS_DIR) && conf.get(DRIVER_LOG_CLEANER_ENABLED)) {
         pool.scheduleWithFixedDelay(getRunner(() => cleanDriverLogs()),
@@ -995,6 +995,21 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         logWarning(s"Fail to clean up according to MAX_LOG_NUM policy ($maxNum).")
       }
     }
+
+    // Delete log files that don't exist in listing database and exceed the configured max age.
+    Option(fs.listStatus(new Path(logDir))).map(_.toSeq).getOrElse(Nil)
+      .flatMap { entry => EventLogFileReader(fs, entry) }
+      .foreach { reader =>
+        try {
+          listing.read(classOf[LogInfo], reader.rootPath.toString)
+        } catch {
+          case _: NoSuchElementException =>
+            if (reader.modificationTime < maxTime) {
+              logInfo(s"Deleting expired log file for ${reader.rootPath.toString}")
+              deleteLog(fs, reader.rootPath)
+            }
+        }
+      }
 
     // Clean the inaccessibleList from the expired entries.
     clearInaccessibleList(CLEAN_INTERVAL_S)
