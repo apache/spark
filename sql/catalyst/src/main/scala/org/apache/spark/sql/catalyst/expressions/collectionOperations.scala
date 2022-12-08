@@ -4619,6 +4619,7 @@ case class ArrayAppend(left: Expression, right: Expression)
   extends BinaryExpression
   with ImplicitCastInputTypes
   with ComplexTypeMergingExpression
+  with NullIntolerant
   with QueryErrorsBase {
   override def prettyName: String = "array_append"
 
