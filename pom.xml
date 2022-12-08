@@ -2042,6 +2042,10 @@
             <groupId>${hive.group}</groupId>
             <artifactId>hive-ant</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>${hive.group}</groupId>
+            <artifactId>hive-vector-code-gen</artifactId>
+          </exclusion>
           <!-- break the loop -->
           <exclusion>
             <groupId>${hive.group}</groupId>
