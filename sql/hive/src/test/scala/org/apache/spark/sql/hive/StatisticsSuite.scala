@@ -591,7 +591,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
           sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS fakeColumn")
         },
         errorClass = "COLUMN_NOT_EXISTS",
-        parameters =Map("columnName" -> "`fakeColumn`")
+        parameters = Map("columnName" -> "`fakeColumn`")
       )
     }
   }
