@@ -984,6 +984,65 @@ class RenameColumnsNameByName(LogicalPlan):
         """
 
 
+class Unpivot(LogicalPlan):
+    """Logical plan object for a unpivot operation."""
+
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        ids: List["ColumnOrName"],
+        values: List["ColumnOrName"],
+        variable_column_name: str,
+        value_column_name: str,
+    ) -> None:
+        super().__init__(child)
+        self.ids = ids
+        self.values = values
+        self.variable_column_name = variable_column_name
+        self.value_column_name = value_column_name
+
+    def col_to_expr(self, col: "ColumnOrName", session: "SparkConnectClient") -> proto.Expression:
+        if isinstance(col, Column):
+            return col.to_plan(session)
+        else:
+            return self.unresolved_attr(col)
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+
+        plan = proto.Relation()
+        plan.unpivot.input.CopyFrom(self._child.plan(session))
+        plan.unpivot.ids.extend([self.col_to_expr(x, session) for x in self.ids])
+        plan.unpivot.values.extend([self.col_to_expr(x, session) for x in self.values])
+        plan.unpivot.variable_column_name = self.variable_column_name
+        plan.unpivot.value_column_name = self.value_column_name
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
+        return (
+            f"{' ' * indent}"
+            f"<Unpivot ids={self.ids}, values={self.values}, "
+            f"variable_column_name={self.variable_column_name}, "
+            f"value_column_name={self.value_column_name}>"
+            f"\n{c_buf}"
+        )
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+            <li>
+                <b>Unpivot</b><br />
+                ids: {self.ids}
+                values: {self.values}
+                variable_column_name: {self.variable_column_name}
+                value_column_name: {self.value_column_name}
+                {self._child._repr_html_() if self._child is not None else ""}
+            </li>
+        </uL>
+        """
+
+
 class NAFill(LogicalPlan):
     def __init__(
         self, child: Optional["LogicalPlan"], cols: Optional[List[str]], values: List[Any]

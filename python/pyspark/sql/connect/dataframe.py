@@ -824,6 +824,41 @@ class DataFrame(object):
             session=self._session,
         )
 
+    def unpivot(
+        self,
+        ids: List["ColumnOrName"],
+        values: List["ColumnOrName"],
+        variableColumnName: str,
+        valueColumnName: str,
+    ) -> "DataFrame":
+        """
+        Returns a new :class:`DataFrame` by unpivot a DataFrame from wide format to long format,
+        optionally leaving identifier columns set.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        ids : list
+            Id columns.
+        values : list, optional
+            Value columns to unpivot.
+        variableColumnName : str
+            Name of the variable column.
+        valueColumnName : str
+            Name of the value column.
+
+        Returns
+        -------
+        :class:`DataFrame`
+        """
+        return DataFrame.withPlan(
+            plan.Unpivot(self._plan, ids, values, variableColumnName, valueColumnName),
+            self._session,
+        )
+
+    melt = unpivot
+
     def show(self, n: int = 20, truncate: Union[bool, int] = True, vertical: bool = False) -> None:
         """
         Prints the first ``n`` rows to the console.

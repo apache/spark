@@ -54,6 +54,7 @@ message Relation {
     Tail tail = 22;
     WithColumns with_columns = 23;
     Hint hint = 24;
+    Unpivot unpivot = 25;
 
     // NA functions
     NAFill fill_na = 90;
@@ -569,4 +570,22 @@ message Hint {
 
   // (Optional) Hint parameters.
   repeated Expression.Literal parameters = 3;
+}
+
+// Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns set.
+message Unpivot {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) Id columns.
+  repeated Expression ids = 2;
+
+  // (Optional) Value columns to unpivot.
+  repeated Expression values = 3;
+
+  // (Required) Name of the variable column.
+  string variable_column_name = 4;
+
+  // (Required) Name of the value column.
+  string value_column_name = 5;
 }
