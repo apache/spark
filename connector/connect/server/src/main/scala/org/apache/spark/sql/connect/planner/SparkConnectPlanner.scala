@@ -322,8 +322,7 @@ class SparkConnectPlanner(session: SparkSession) {
         None,
         rel.getVariableColumnName,
         Seq(rel.getValueColumnName),
-        transformRelation(rel.getInput)
-      )
+        transformRelation(rel.getInput))
     } else {
       val values = rel.getValuesList.asScala.toArray.map { expr =>
         Column(transformExpression(expr))
@@ -335,8 +334,7 @@ class SparkConnectPlanner(session: SparkSession) {
         None,
         rel.getVariableColumnName,
         Seq(rel.getValueColumnName),
-        transformRelation(rel.getInput)
-      )
+        transformRelation(rel.getInput))
     }
   }
 
