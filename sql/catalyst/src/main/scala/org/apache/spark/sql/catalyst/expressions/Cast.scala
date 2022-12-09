@@ -294,6 +294,9 @@ object Cast extends QueryErrorsBase {
     case (from: DecimalType, to: NumericType) if from.isTighterThan(to) => true
     case (f, t) if legalNumericPrecedence(f, t) => true
     case (DateType, TimestampType) => true
+    case (DateType, TimestampNTZType) => true
+    case (TimestampNTZType, TimestampType) => true
+    case (TimestampType, TimestampNTZType) => true
     case (_: AtomicType, StringType) => true
     case (_: CalendarIntervalType, StringType) => true
     case (NullType, _) => true
