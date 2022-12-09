@@ -7804,7 +7804,7 @@ def array_prepend(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     >>> df.select(array_prepend(df.c1, df.c2)).collect()
     [Row(array_prepend(c1, c2)=['c', 'b', 'a', 'c'])]
     """
-    return _invoke_function_over_columns("array_append", col1, col2)
+    return _invoke_function_over_columns("array_prepend", col1, col2)
 
 
 @try_remote_functions
