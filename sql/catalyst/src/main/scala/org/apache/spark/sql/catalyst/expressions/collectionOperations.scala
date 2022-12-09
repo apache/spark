@@ -4605,7 +4605,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
  * Given an array, and another element append the element at the end of the array.
  */
 @ExpressionDescription(
-  usage = """_FUNC_(array, element) - Append the element at the end of the array passed as first
+  usage = """_FUNC_(array, element) - Add the element at the end of the array passed as first
       argument. Type of element should be similar to type of the elements of the array.""",
   examples = """
     Examples:
@@ -4616,12 +4616,48 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
   since = "3.4.0",
   group = "array_funcs")
 case class ArrayAppend(left: Expression, right: Expression)
-  extends BinaryExpression
-  with ImplicitCastInputTypes
-  with ComplexTypeMergingExpression
-  with NullIntolerant
-  with QueryErrorsBase {
+  extends ArrayAddElement {
   override def prettyName: String = "array_append"
+  override val prependFlag: Boolean = false
+
+  protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): ArrayAppend =
+    copy(left = newLeft, right = newRight)
+
+}
+
+/**
+ * Given an array, and another element prepend the element at the start of the array.
+ */
+@ExpressionDescription(
+  usage = """_FUNC_(array, element) - Add the element at the start of the array passed as first
+      argument. Type of element should be similar to type of the elements of the array.""",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array('b', 'd', 'c', 'a'), 'd');
+       ["d","b","d","c","a"]
+
+  """,
+  since = "3.4.0",
+  group = "array_funcs")
+case class ArrayPrepend(left: Expression, right: Expression)
+  extends ArrayAddElement {
+  override def prettyName: String = "array_prepend"
+
+  override val prependFlag: Boolean = true
+
+  protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): ArrayPrepend =
+    copy(left = newLeft, right = newRight)
+
+}
+
+trait ArrayAddElement
+  extends BinaryExpression
+    with ImplicitCastInputTypes
+    with ComplexTypeMergingExpression
+    with NullIntolerant
+    with QueryErrorsBase{
+
+  val prependFlag: Boolean = false
 
   @transient protected lazy val elementType: DataType =
     inputTypes.head.asInstanceOf[ArrayType].elementType
@@ -4641,13 +4677,13 @@ case class ArrayAppend(left: Expression, right: Expression)
     (left.dataType, right.dataType) match {
       case (ArrayType(e1, _), e2) if e1.sameType(e2) => TypeCheckResult.TypeCheckSuccess
       case (ArrayType(e1, _), e2) => DataTypeMismatch(
-          errorSubClass = "ARRAY_FUNCTION_DIFF_TYPES",
-          messageParameters = Map(
-            "functionName" -> toSQLId(prettyName),
-            "leftType" -> toSQLType(left.dataType),
-            "rightType" -> toSQLType(right.dataType),
-            "dataType" -> toSQLType(ArrayType)
-          ))
+        errorSubClass = "ARRAY_FUNCTION_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName),
+          "leftType" -> toSQLType(left.dataType),
+          "rightType" -> toSQLType(right.dataType),
+          "dataType" -> toSQLType(ArrayType)
+        ))
       case _ =>
         DataTypeMismatch(
           errorSubClass = "UNEXPECTED_INPUT_TYPE",
@@ -4661,8 +4697,6 @@ case class ArrayAppend(left: Expression, right: Expression)
     }
   }
 
-  protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): ArrayAppend =
-    copy(left = newLeft, right = newRight)
 
   override protected def nullSafeEval(input1: Any, input2: Any): Any = {
     val arrayData = input1.asInstanceOf[ArrayData]
@@ -4672,8 +4706,14 @@ case class ArrayAppend(left: Expression, right: Expression)
       throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(numberOfElements)
     }
     val finalData = new Array[Any](numberOfElements)
-    arrayData.foreach(elementType, finalData.update)
-    finalData.update(numberOfElements - 1, elementData)
+    if (prependFlag) {
+      finalData.update(0, elementData)
+      arrayData.foreach(elementType, (i, elem) => finalData.update(i + 1, elem))
+    } else {
+      arrayData.foreach(elementType, finalData.update)
+      finalData.update(numberOfElements - 1, elementData)
+    }
+
     new GenericArrayData(finalData)
   }
 
@@ -4683,6 +4723,7 @@ case class ArrayAppend(left: Expression, right: Expression)
         val expr = ctx.addReferenceObj("arraysAppendExpr", this)
         val newArraySize = ctx.freshName("newArraySize")
         val i = ctx.freshName("i")
+        val prependFlagCode = ctx.freshName("prependFlagCode")
         val pos = ctx.freshName("pos")
         val values = ctx.freshName("values")
         val allocation = CodeGenerator.createArrayData(
@@ -4690,12 +4731,19 @@ case class ArrayAppend(left: Expression, right: Expression)
         val assignment = CodeGenerator.createArrayAssignment(
           values, elementType, left, pos, i, true)
         s"""int $newArraySize = $left.numElements() + 1;
+           |boolean $prependFlagCode = ${prependFlag.toString};
            |$allocation
            |int $pos = 0;
-           |for (int $i=0;$i<$left.numElements(); $i ++, $pos ++){
+           |if ($prependFlagCode) {
+           |  ${CodeGenerator.setArrayElement(values, elementType, pos, right)}
+           |  $pos ++;
+           |}
+           |for (int $i=0;$i<$left.numElements(); $i ++, $pos ++) {
            |  $assignment
            |}
-           |${CodeGenerator.setArrayElement(values, elementType, pos, right)}
+           |if (!$prependFlagCode) {
+           |  ${CodeGenerator.setArrayElement(values, elementType, pos, right)}
+           |}
            |${ev.value} = $values;
            |""".stripMargin
       }
@@ -4707,4 +4755,15 @@ case class ArrayAppend(left: Expression, right: Expression)
    * the dataType of an unresolved expression (i.e., when `resolved` == false).
    */
   override def dataType: DataType = left.dataType
+
+}
+object ArrayAddElement
+{
+  def apply(left: Expression, right: Expression, prepend: Boolean): ArrayAddElement = {
+    if (prepend) {
+      ArrayPrepend(left, right)
+    } else {
+      ArrayAppend(left, right)
+    }
+  }
 }

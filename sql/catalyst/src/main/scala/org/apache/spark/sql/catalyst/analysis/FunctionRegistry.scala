@@ -687,6 +687,7 @@ object FunctionRegistry {
     expression[ArrayMin]("array_min"),
     expression[ArrayMax]("array_max"),
     expression[ArrayAppend]("array_append"),
+    expression[ArrayPrepend]("array_prepend"),
     expression[Reverse]("reverse"),
     expression[Concat]("concat"),
     expression[Flatten]("flatten"),

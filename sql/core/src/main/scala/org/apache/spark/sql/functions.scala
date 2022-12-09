@@ -3892,7 +3892,18 @@ object functions {
    * @since 3.4.0
    */
   def array_append(column: Column, element: Any): Column = withExpr {
-    ArrayAppend(column.expr, lit(element).expr)
+    ArrayAddElement.apply(column.expr, lit(element).expr, false)
+  }
+
+  /**
+   * Returns an ARRAY containing all elements from the source ARRAY as well as the new element.
+   * The new element/column is located at end of the ARRAY.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def array_prepend(column: Column, element: Any): Column = withExpr {
+    ArrayAddElement.apply(column.expr, lit(element).expr, true)
   }
 
   /**
