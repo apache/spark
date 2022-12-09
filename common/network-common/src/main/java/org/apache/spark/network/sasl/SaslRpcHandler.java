@@ -83,7 +83,7 @@ public class SaslRpcHandler extends AbstractAuthRpcHandler {
       if (tagByte == SaslInitMessage.TAG_BYTE) {
         logger.debug("Received an init message for channel {}", client);
         if (saslServer != null) {
-          resetSaslServer(true);
+          complete(true);
         }
         client.unsetClientId();
       }
@@ -119,13 +119,13 @@ public class SaslRpcHandler extends AbstractAuthRpcHandler {
     if (saslServer.isComplete()) {
       if (!SparkSaslServer.QOP_AUTH_CONF.equals(saslServer.getNegotiatedProperty(Sasl.QOP))) {
         logger.debug("SASL authentication successful for channel {}", client);
-        resetSaslServer(true);
+        complete(true);
         return true;
       }
 
       logger.debug("Enabling encryption for channel {}", client);
       SaslEncryption.addToChannel(channel, saslServer, conf.maxSaslEncryptedBlockSize());
-      resetSaslServer(false);
+      complete(false);
       return true;
     }
     return false;
@@ -142,7 +142,7 @@ public class SaslRpcHandler extends AbstractAuthRpcHandler {
     }
   }
 
-  private void resetSaslServer(boolean dispose) {
+  private void complete(boolean dispose) {
     if (dispose) {
       try {
         saslServer.dispose();

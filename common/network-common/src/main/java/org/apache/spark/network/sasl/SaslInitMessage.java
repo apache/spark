@@ -29,7 +29,7 @@ import org.apache.spark.network.protocol.Encoders;
 public final class SaslInitMessage extends SaslMessage {
 
   /** Serialization tag used to catch incorrect payloads. */
-  static final byte TAG_BYTE = (byte) 0xEB;
+  public static final byte TAG_BYTE = (byte) 0xEB;
 
   SaslInitMessage(String appId, byte[] message) {
     super(appId, message);

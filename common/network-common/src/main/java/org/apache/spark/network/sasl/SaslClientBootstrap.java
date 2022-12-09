@@ -75,7 +75,6 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
         buf.writeBytes(msg.body().nioByteBuffer());
 
         ByteBuffer response = client.sendRpcSync(buf.nioBuffer(), conf.authRTTimeoutMs());
-        System.out.println("response: " + Arrays.toString(JavaUtils.bufferToArray(response)));
         payload = saslClient.response(JavaUtils.bufferToArray(response));
       }
 
