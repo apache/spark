@@ -324,7 +324,7 @@ When the user cannot use the official `protoc` binary files to build the `core` 
 
 ```bash
 export CORE_PROTOC_EXEC_PATH=/path-to-protoc-exe
-./build/mvn -Puser-defined-protoc clean package
+./build/mvn -Puser-defined-protoc -DskipDefaultProtoc clean package
 ```
 
 or

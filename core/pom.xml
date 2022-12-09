@@ -696,7 +696,9 @@
     <profile>
       <id>default-protoc</id>
       <activation>
-        <activeByDefault>true</activeByDefault>
+        <property>
+          <name>!skipDefaultProtoc</name>
+        </property>
       </activation>
       <build>
         <plugins>
@@ -755,5 +757,7 @@
       </build>
     </profile>
   </profiles>
+
+
 
 </project>
