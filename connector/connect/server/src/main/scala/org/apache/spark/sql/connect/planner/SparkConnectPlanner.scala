@@ -380,7 +380,33 @@ class SparkConnectPlanner(session: SparkSession) {
     }
     val attributes = structType.toAttributes
     val proj = UnsafeProjection.create(attributes, attributes)
-    new logical.LocalRelation(attributes, rows.map(r => proj(r).copy()).toSeq)
+    val relation = logical.LocalRelation(attributes, rows.map(r => proj(r).copy()).toSeq)
+
+    if (rel.hasDatatype || rel.hasDatatypeStr) {
+      // rename columns and update datatypes
+      val schema = if (rel.hasDatatype) {
+        DataTypeProtoConverter
+          .toCatalystType(rel.getDatatype)
+          .asInstanceOf[StructType]
+      } else {
+        session.sessionState.sqlParser
+          .parseTableSchema(rel.getDatatypeStr)
+      }
+      Dataset
+        .ofRows(session, logicalPlan = relation)
+        .toDF(schema.names: _*)
+        .to(schema)
+        .logicalPlan
+    } else if (rel.hasCols) {
+      // rename columns
+      val colNames = rel.getCols.getStringsList.asScala.toArray
+      Dataset
+        .ofRows(session, logicalPlan = relation)
+        .toDF(colNames: _*)
+        .logicalPlan
+    } else {
+      relation
+    }
   }
 
   private def transformReadRel(rel: proto.Read): LogicalPlan = {

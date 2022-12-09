@@ -46,9 +46,6 @@ from pyspark.testing.connectutils import should_test_connect, connect_requiremen
 from pyspark.testing.utils import ReusedPySparkTestCase
 
 
-import tempfile
-
-
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
 class SparkConnectSQLTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLTestUtils):
     """Parent test fixture class for all Spark Connect related
@@ -234,6 +231,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertEqual(sdf.schema, cdf.schema)
         self.assert_eq(sdf.toPandas(), cdf.toPandas())
 
+        # TODO: add cases for StructType after 'pyspark_types_to_proto_types' support StructType
         for schema in [
             "col1 int, col2 int, col3 int, col4 int",
             "col1 int, col2 long, col3 string, col4 long",
@@ -253,11 +251,13 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         ):
             self.connect.createDataFrame(data, ["a", "b", "c", "d", "e"])
 
-        with self.assertRaisesRegex(
-            ValueError,
-            "Length mismatch: Expected axis has 4 elements, new values have 5 elements",
-        ):
-            self.connect.createDataFrame(data, "col1 int, col2 int, col3 int, col4 int, col5 int")
+        with self.assertRaises(grpc.RpcError):
+            self.connect.createDataFrame(
+                data, "col1 magic_type, col2 int, col3 int, col4 int"
+            ).show()
+
+        with self.assertRaises(grpc.RpcError):
+            self.connect.createDataFrame(data, "col1 int, col2 int, col3 int").show()
 
     def test_with_local_list(self):
         """SPARK-41446: Test creating a dataframe using local list"""
@@ -287,11 +287,13 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         ):
             self.connect.createDataFrame(data, ["a", "b", "c", "d", "e"])
 
-        with self.assertRaisesRegex(
-            ValueError,
-            "Length mismatch: Expected axis has 4 elements, new values have 5 elements",
-        ):
-            self.connect.createDataFrame(data, "col1 int, col2 int, col3 int, col4 int, col5 int")
+        with self.assertRaises(grpc.RpcError):
+            self.connect.createDataFrame(
+                data, "col1 magic_type, col2 int, col3 int, col4 int"
+            ).show()
+
+        with self.assertRaises(grpc.RpcError):
+            self.connect.createDataFrame(data, "col1 int, col2 int, col3 int").show()
 
     def test_simple_explain_string(self):
         df = self.connect.read.table(self.tbl_name).limit(10)

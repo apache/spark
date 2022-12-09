@@ -20,15 +20,15 @@ from collections.abc import Sized
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 
-from pyspark.sql.types import DataType, StringType, StructType, _parse_datatype_string
+from pyspark.sql.types import DataType, StructType
 
 from pyspark.sql.connect.client import SparkConnectClient
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.connect.plan import SQL, Range, LocalRelation
 from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.utils import to_str
-from pyspark.sql.pandas.conversion import PandasConversionMixin
 
 from typing import (
     Optional,
@@ -299,21 +299,19 @@ class SparkSession(object):
         if isinstance(data, Sized) and len(data) == 0:
             raise ValueError("Input data cannot be empty")
 
-        struct: Optional[StructType] = None
-        column_names: List[str] = []
+        _schema: Optional[StructType] = None
+        _schema_str: Optional[str] = None
+        _cols: Optional[List[str]] = None
 
         if isinstance(schema, StructType):
-            struct = schema
-            column_names = struct.names
+            _schema = schema
 
         elif isinstance(schema, str):
-            struct = _parse_datatype_string(schema)  # type: ignore[assignment]
-            assert isinstance(struct, StructType)
-            column_names = struct.names
+            _schema_str = schema
 
         elif isinstance(schema, (list, tuple)):
             # Must re-encode any unicode strings to be consistent with StructField names
-            column_names = [x.encode("utf-8") if not isinstance(x, str) else x for x in schema]
+            _cols = [x.encode("utf-8") if not isinstance(x, str) else x for x in schema]
 
         # Create the Pandas DataFrame
         if isinstance(data, pd.DataFrame):
@@ -326,35 +324,41 @@ class SparkSession(object):
 
             pdf = pd.DataFrame(data)
 
-            if len(column_names) == 0:
+            if _cols is None:
                 if data.ndim == 1 or data.shape[1] == 1:
-                    column_names = ["value"]
+                    _cols = ["value"]
                 else:
-                    column_names = ["_%s" % i for i in range(1, data.shape[1] + 1)]
+                    _cols = ["_%s" % i for i in range(1, data.shape[1] + 1)]
 
         else:
             pdf = pd.DataFrame(list(data))
 
-            if len(column_names) == 0:
-                column_names = ["_%s" % i for i in range(1, pdf.shape[1] + 1)]
+            if _cols is None:
+                _cols = ["_%s" % i for i in range(1, pdf.shape[1] + 1)]
 
-        # Adjust the column names
-        if len(column_names) > 0:
-            pdf.columns = column_names
+        # Validate number of columns
+        num_cols = pdf.shape[1]
+        if _schema is not None and len(_schema.fields) != num_cols:
+            raise ValueError(
+                f"Length mismatch: Expected axis has {num_cols} elements, "
+                f"new values have {len(_schema.fields)} elements"
+            )
+        elif _cols is not None and len(_cols) != num_cols:
+            raise ValueError(
+                f"Length mismatch: Expected axis has {num_cols} elements, "
+                f"new values have {len(_cols)} elements"
+            )
 
-        # Casting according to the input schema
-        if struct is not None:
-            for field in struct.fields:
-                name = field.name
-                dt = field.dataType
-                if isinstance(dt, StringType):
-                    pdf[name] = pdf[name].apply(str)
-                else:
-                    pt = PandasConversionMixin._to_corrected_pandas_type(dt)
-                    if pt is not None:
-                        pdf[name] = pdf[name].astype(pt)
+        table = pa.Table.from_pandas(pdf)
 
-        return DataFrame.withPlan(LocalRelation(pdf), self)
+        if _schema is not None:
+            return DataFrame.withPlan(LocalRelation(table, schema=_schema), self)
+        elif _schema_str is not None:
+            return DataFrame.withPlan(LocalRelation(table, schema=_schema_str), self)
+        elif _cols is not None and len(_cols) > 0:
+            return DataFrame.withPlan(LocalRelation(table, schema=_cols), self)
+        else:
+            return DataFrame.withPlan(LocalRelation(table), self)
 
     @property
     def client(self) -> "SparkConnectClient":
