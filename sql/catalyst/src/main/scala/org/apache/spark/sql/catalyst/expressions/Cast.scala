@@ -1283,10 +1283,14 @@ case class Cast(
   // Whether Spark SQL can evaluation the try_cast as the legacy cast, so that no `try...catch`
   // is needed and the performance can be faster.
   private lazy val canUseLegacyCastForTryCast: Boolean = {
-    (child.dataType, dataType) match {
-      case (StringType, _: FractionalType) => true
-      case (StringType, _: DatetimeType) => true
-      case _ => false
+    if (!child.resolved) {
+      false
+    } else {
+      (child.dataType, dataType) match {
+        case (StringType, _: FractionalType) => true
+        case (StringType, _: DatetimeType) => true
+        case _ => false
+      }
     }
   }
 
