@@ -233,6 +233,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
 
         # TODO: add cases for StructType after 'pyspark_types_to_proto_types' support StructType
         for schema in [
+            "struct<col1 int, col2 int, col3 int, col4 int>",
             "col1 int, col2 int, col3 int, col4 int",
             "col1 int, col2 long, col3 string, col4 long",
             "col1 int, col2 string, col3 short, col4 long",
@@ -269,6 +270,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assert_eq(sdf.toPandas(), cdf.toPandas())
 
         for schema in [
+            "struct<col1 int, col2 int, col3 int, col4 int>",
             "col1 int, col2 int, col3 int, col4 int",
             "col1 int, col2 long, col3 string, col4 long",
             "col1 int, col2 string, col3 short, col4 long",

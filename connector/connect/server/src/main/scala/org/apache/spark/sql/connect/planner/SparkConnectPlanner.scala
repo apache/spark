@@ -371,6 +371,22 @@ class SparkConnectPlanner(session: SparkSession) {
     }
   }
 
+  private def parseDatatypeString(sqlText: String): DataType = {
+    var dataType: DataType = null
+    try {
+      dataType = session.sessionState.sqlParser.parseTableSchema(sqlText)
+    } catch {
+      case e1: ParseException =>
+        try {
+          dataType = session.sessionState.sqlParser.parseDataType(sqlText)
+        } catch {
+          case e2: ParseException =>
+            dataType = session.sessionState.sqlParser.parseDataType(s"struct<${sqlText.strip}>")
+        }
+    }
+    dataType
+  }
+
   private def transformLocalRelation(rel: proto.LocalRelation): LogicalPlan = {
     val (rows, structType) = ArrowConverters.fromBatchWithSchemaIterator(
       Iterator(rel.getData.toByteArray),
@@ -389,8 +405,8 @@ class SparkConnectPlanner(session: SparkSession) {
           .toCatalystType(rel.getDatatype)
           .asInstanceOf[StructType]
       } else {
-        session.sessionState.sqlParser
-          .parseTableSchema(rel.getDatatypeStr)
+        parseDatatypeString(rel.getDatatypeStr)
+          .asInstanceOf[StructType]
       }
       Dataset
         .ofRows(session, logicalPlan = relation)
