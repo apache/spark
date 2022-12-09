@@ -1005,6 +1005,8 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
         cdf = self.connect.sql(query)
         sdf = self.spark.sql(query)
 
+        # TODO(SPARK-41473): Resolve the data type mismatch issue and enable the
+        # Disable the test because:
         # Cannot resolve "format_number(a, 2)" due to data type mismatch:
         # Parameter 2 requires the ("INT" or "STRING") type, however "2" has the type "BIGINT"
         # self.assert_eq(
