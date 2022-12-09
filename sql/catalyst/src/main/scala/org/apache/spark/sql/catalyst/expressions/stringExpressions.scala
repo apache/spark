@@ -2552,6 +2552,8 @@ case class StringDecode(bin: Expression, charset: Expression)
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): StringDecode =
     copy(bin = newLeft, charset = newRight)
+
+  override def prettyName: String = "decode"
 }
 
 /**
