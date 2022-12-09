@@ -119,6 +119,31 @@ class SparkConnectTests(SparkConnectSQLTestCase):
                 df.select(df.id.cast(x)).toPandas(), df2.select(df2.id.cast(x)).toPandas()
             )
 
+    def test_unsupported_functions(self):
+        # SPARK-41225: Disable unsupported functions.
+        c = self.connect.range(1).id
+        for f in (
+            "otherwise",
+            "over",
+            "isin",
+            "when",
+            "getItem",
+            "astype",
+            "between",
+            "getField",
+            "withField",
+            "dropFields",
+        ):
+            with self.assertRaises(NotImplementedError):
+                getattr(c, f)()
+
+        with self.assertRaises(NotImplementedError):
+            c["a"]
+
+        with self.assertRaises(TypeError):
+            for x in c:
+                pass
+
 
 if __name__ == "__main__":
     import unittest
