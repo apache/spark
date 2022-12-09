@@ -4161,8 +4161,9 @@ def encode(col: "ColumnOrName", charset: str) -> Column:
 
 
 # Date/Timestamp functions
-# TODO(SPARK-41283): Resolve dtypes inconsistencies for
-# to_timestamp, from_utc_timestamp, to_utc_timestamp, timestamp_seconds, current_timestamp
+# TODO(SPARK-41283): Resolve dtypes inconsistencies for:
+#     to_timestamp, from_utc_timestamp, to_utc_timestamp,
+#     timestamp_seconds, current_timestamp, date_trunc
 
 
 def current_date() -> Column:

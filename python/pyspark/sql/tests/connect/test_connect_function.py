@@ -773,7 +773,7 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
         )
 
         # date_trunc
-        self.assert_eq(
+        self.compare_by_show(
             # [left]:  datetime64[ns, America/Los_Angeles]
             # [right]: datetime64[ns]
             cdf.select(CF.date_trunc("day", cdf.ts1)),
