@@ -80,12 +80,6 @@
     ],
     "sqlState" : "42000"
   },
-  "CANNOT_PARSE_VALUE_TO_DATATYPE" : {
-    "message" : [
-      "Cannot parse <value> to <valueType> type."
-    ],
-    "sqlState" : "42000"
-  },
   "CANNOT_UP_CAST_DATATYPE" : {
     "message" : [
       "Cannot up cast <expression> from <sourceType> to <targetType>.",
@@ -818,6 +812,12 @@
         ]
       }
     }
+  },
+  "INVALID_TYPED_LITERAL" : {
+    "message" : [
+      "Cannot parse <value> to <valueType> type."
+    ],
+    "sqlState" : "42000"
   },
   "INVALID_WHERE_CONDITION" : {
     "message" : [

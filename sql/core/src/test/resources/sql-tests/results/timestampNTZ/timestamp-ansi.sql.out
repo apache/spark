@@ -14,7 +14,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "CANNOT_PARSE_VALUE_TO_DATATYPE",
+  "errorClass" : "INVALID_TYPED_LITERAL",
   "sqlState" : "42000",
   "messageParameters" : {
     "value" : "2019-01-01中文",
@@ -37,7 +37,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "CANNOT_PARSE_VALUE_TO_DATATYPE",
+  "errorClass" : "INVALID_TYPED_LITERAL",
   "sqlState" : "42000",
   "messageParameters" : {
     "value" : "4294967297",
@@ -60,7 +60,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "CANNOT_PARSE_VALUE_TO_DATATYPE",
+  "errorClass" : "INVALID_TYPED_LITERAL",
   "sqlState" : "42000",
   "messageParameters" : {
     "value" : "2021-01-01T12:30:4294967297.123456",
