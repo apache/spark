@@ -121,10 +121,11 @@ select get(array(1, 2, 3), null);
 select get(array(1, 2, 3), -1);
 
 -- function array_insert()
-select get(array_insert((1, 2, 3), 4, 4);
-select get(array_insert((2, 3, 4), 0, 1);
-select get(array_insert((2, 3, 4), 1, 1);
-select get(array_insert((1, 3, 4), -2, 2);
-select get(array_insert(null, 1, 1);
-select get(array_insert((1, 2, 3), null, 4);
-select get(array_insert((1, 2, 3), 4, null);
+select array_insert(array(1, 2, 3), 4, 4);
+select array_insert(array(2, 3, 4), 0, 1);
+select array_insert(array(2, 3, 4), 1, 1);
+select array_insert(array(1, 3, 4), -2, 2);
+select array_insert(array(1, 2, 3), 4, "4");
+select array_insert(cast(NULL as ARRAY<INT>), 1, 1);
+select array_insert(array(1, 2, 3), cast(NULL as INT), 4);
+select array_insert(array(1, 2, 3), 4, cast(NULL as INT));

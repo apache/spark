@@ -6865,8 +6865,8 @@ def array_insert(arr: "ColumnOrName", pos: "ColumnOrName", value: "ColumnOrName"
     ...     [(['a', 'b', 'c'], 2, 'd'), (['c', 'b', 'a'], 4, 'd')],
     ...     ['data', 'pos', 'val']
     ... )
-    >>> df.select(array_insert(df.data, df.pos.cast('integer'), df.val)).collect()
-    [Row(array_insert(data)=['a', 'd', 'b', 'c']), Row(array_insert(data)=['c', 'b', 'a', 'd'])]
+    >>> df.select(array_insert(df.data, df.pos.cast('integer'), df.val).alias('data')).collect()
+    [Row(data=['a', 'd', 'b', 'c']), Row(data=['c', 'b', 'a', 'd'])]
     """
     return _invoke_function_over_columns("array_insert", arr, pos, value)
 
