@@ -678,16 +678,17 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
         # current_timestamp
         # [left]:  datetime64[ns, America/Los_Angeles]
         # [right]: datetime64[ns]
-        plan = cdf.select(CF.current_timestamp())._plan.to_proto(self.connect)
+        # TODO: compare the return values after resolving dtypes difference
         self.assertEqual(
-            plan.root.project.expressions.unresolved_function.function_name, "current_timestamp"
+            cdf.select(CF.current_timestamp()).count(),
+            sdf.select(SF.current_timestamp()).count(),
         )
 
         # localtimestamp
-        plan = cdf.select(CF.localtimestamp())._plan.to_proto(self.connect)
-        self.assertEqual(
-            plan.root.project.expressions.unresolved_function.function_name, "localtimestamp"
-        )
+        s_pdf0 = sdf.select(SF.localtimestamp()).toPandas()
+        c_pdf = cdf.select(CF.localtimestamp()).toPandas()
+        s_pdf1 = sdf.select(SF.localtimestamp()).toPandas()
+        self.assert_eq(s_pdf0 < c_pdf, c_pdf < s_pdf1)
 
         # With only column parameter
         for cfunc, sfunc in [
