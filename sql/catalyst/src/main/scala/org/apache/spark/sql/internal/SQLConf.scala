@@ -435,6 +435,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val OPTIMIZE_SAMPLE_FOR_RANGE_PARTITION_ENABLED =
+    buildConf("spark.sql.optimizer.optimizeSampleForRangePartition.enabled")
+      .doc("When set to true, Spark would try to optimize sample plan for range partitioning.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val COMPRESS_CACHED = buildConf("spark.sql.inMemoryColumnarStorage.compressed")
     .doc("When set to true Spark SQL will automatically select a compression codec for each " +
       "column based on statistics of the data.")

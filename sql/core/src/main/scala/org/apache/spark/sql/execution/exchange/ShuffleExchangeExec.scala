@@ -27,6 +27,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleWriteMetricsReporter, ShuffleWriteProcessor}
 import org.apache.spark.shuffle.sort.SortShuffleManager
+import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
@@ -271,16 +272,31 @@ object ShuffleExchangeExec {
         // For HashPartitioning, the partitioning key is already a valid partition ID, as we use
         // `HashPartitioning.partitionIdExpression` to produce partitioning key.
         new PartitionIdPassthrough(n)
-      case RangePartitioning(sortingExpressions, numPartitions) =>
+      case RangePartitioning(sortingExpressions, numPartitions, planForSample) =>
         // Extract only fields used for sorting to avoid collecting large fields that does not
         // affect sorting result when deciding partition bounds in RangePartitioner
-        val rddForSampling = rdd.mapPartitionsInternal { iter =>
-          val projection =
-            UnsafeProjection.create(sortingExpressions.map(_.child), outputAttributes)
-          val mutablePair = new MutablePair[InternalRow, Null]()
-          // Internally, RangePartitioner runs a job on the RDD that samples keys to compute
-          // partition bounds. To get accurate samples, we need to copy the mutable keys.
-          iter.map(row => mutablePair.update(projection(row).copy(), null))
+        val rddForSampling = if (planForSample.isEmpty) {
+          rdd.mapPartitionsInternal { iter =>
+            val projection =
+              UnsafeProjection.create(sortingExpressions.map(_.child), outputAttributes)
+            val mutablePair = new MutablePair[InternalRow, Null]()
+            // Internally, RangePartitioner runs a job on the RDD that samples keys to compute
+            // partition bounds. To get accurate samples, we need to copy the mutable keys.
+            iter.map(row => mutablePair.update(projection(row).copy(), null))
+          }
+        } else {
+          val sample = planForSample.get
+          assert(sample.output.size == sortingExpressions.size)
+          // re-optimize sample plan
+          // this new query execution for sample is still a part of the original plan
+          // so we do not need to assign a new execution id.
+          Dataset.ofRows(SparkSession.getActiveSession.orNull, sample)
+            .queryExecution.executedPlan.execute().mapPartitionsInternal { iter =>
+            val mutablePair = new MutablePair[InternalRow, Null]()
+            // Internally, RangePartitioner runs a job on the RDD that samples keys to compute
+            // partition bounds. To get accurate samples, we need to copy the mutable keys.
+            iter.map(row => mutablePair.update(row.copy(), null))
+          }
         }
         // Construct ordering on extracted sort key.
         val orderingAttributes = sortingExpressions.zipWithIndex.map { case (ord, i) =>
@@ -315,7 +331,7 @@ object ShuffleExchangeExec {
       case h: HashPartitioning =>
         val projection = UnsafeProjection.create(h.partitionIdExpression :: Nil, outputAttributes)
         row => projection(row).getInt(0)
-      case RangePartitioning(sortingExpressions, _) =>
+      case RangePartitioning(sortingExpressions, _, _) =>
         val projection = UnsafeProjection.create(sortingExpressions.map(_.child), outputAttributes)
         row => projection(row)
       case SinglePartition => identity

@@ -22,6 +22,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
@@ -394,8 +395,14 @@ object KeyGroupedPartitioning {
  *
  * This class extends expression primarily so that transformations over expression will descend
  * into its child.
+ *
+ * If the `planForSample` is present, the shuffle exchange will use the given plan to do sample
+ * for ranger partitioner.
  */
-case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
+case class RangePartitioning(
+    ordering: Seq[SortOrder],
+    numPartitions: Int,
+    @transient planForSample: Option[LogicalPlan] = None)
   extends Expression with Partitioning with Unevaluable {
 
   override def children: Seq[SortOrder] = ordering
@@ -440,6 +447,8 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
 
   override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec =
     RangeShuffleSpec(this.numPartitions, distribution)
+
+  override protected def stringArgs: Iterator[Any] = Iterator(ordering, numPartitions)
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): RangePartitioning =

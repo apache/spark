@@ -56,7 +56,7 @@ abstract class DistributionAndOrderingSuiteBase
         partitionValues)
     case PartitioningCollection(partitionings) =>
       PartitioningCollection(partitionings.map(resolvePartitioning(_, plan)))
-    case RangePartitioning(ordering, numPartitions) =>
+    case RangePartitioning(ordering, numPartitions, _) =>
       RangePartitioning(ordering.map(resolveAttrs(_, plan).asInstanceOf[SortOrder]), numPartitions)
     case p @ SinglePartition =>
       p
