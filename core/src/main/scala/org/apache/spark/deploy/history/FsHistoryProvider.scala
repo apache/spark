@@ -977,6 +977,20 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         listing.delete(classOf[LogInfo], log.logPath)
       }
     }
+    // Delete log files that don't exist in listing database and exceed the configured max age.
+    Option(fs.listStatus(new Path(logDir))).map(_.toSeq).getOrElse(Nil)
+      .flatMap { entry => EventLogFileReader(fs, entry) }
+      .foreach { reader =>
+        try {
+          listing.read(classOf[LogInfo], reader.rootPath.toString)
+        } catch {
+          case _: NoSuchElementException =>
+            if (reader.modificationTime < maxTime) {
+              logInfo(s"Deleting unlisted expired event log ${reader.rootPath.toString}")
+              deleteLog(fs, reader.rootPath)
+            }
+        }
+      }
 
     // If the number of files is bigger than MAX_LOG_NUM,
     // clean up all completed attempts per application one by one.
@@ -995,21 +1009,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         logWarning(s"Fail to clean up according to MAX_LOG_NUM policy ($maxNum).")
       }
     }
-
-    // Delete log files that don't exist in listing database and exceed the configured max age.
-    Option(fs.listStatus(new Path(logDir))).map(_.toSeq).getOrElse(Nil)
-      .flatMap { entry => EventLogFileReader(fs, entry) }
-      .foreach { reader =>
-        try {
-          listing.read(classOf[LogInfo], reader.rootPath.toString)
-        } catch {
-          case _: NoSuchElementException =>
-            if (reader.modificationTime < maxTime) {
-              logInfo(s"Deleting expired log file for ${reader.rootPath.toString}")
-              deleteLog(fs, reader.rootPath)
-            }
-        }
-      }
 
     // Clean the inaccessibleList from the expired entries.
     clearInaccessibleList(CLEAN_INTERVAL_S)
