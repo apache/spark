@@ -590,8 +590,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         exception = intercept[AnalysisException] {
           sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS fakeColumn")
         },
-        errorClass = "COLUMN_NOT_EXISTS",
-        parameters = Map("columnName" -> "`fakeColumn`")
+        errorClass = "COLUMN_NOT_FOUND",
+        parameters = Map("colName" -> "`fakeColumn`")
       )
     }
   }

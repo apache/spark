@@ -2277,8 +2277,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def columnNotExistError(colName: String): Throwable = {
     new AnalysisException(
-      errorClass = "COLUMN_NOT_EXISTS",
-      messageParameters = Map("columnName" -> toSQLId(colName)))
+      errorClass = "COLUMN_NOT_FOUND",
+      messageParameters = Map("colName" -> toSQLId(colName)))
   }
 
   def noSuchTableError(db: String, table: String): Throwable = {

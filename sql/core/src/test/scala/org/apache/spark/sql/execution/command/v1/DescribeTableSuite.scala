@@ -63,8 +63,8 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         exception = intercept[AnalysisException] {
           sql(s"DESC $tbl key1").collect()
         },
-        errorClass = "COLUMN_NOT_EXISTS",
-        parameters = Map("columnName" -> "`key1`")
+        errorClass = "COLUMN_NOT_FOUND",
+        parameters = Map("colName" -> "`key1`")
       )
     }
   }
@@ -86,8 +86,8 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
           exception = intercept[AnalysisException] {
             sql(s"DESC $tbl KEY").collect()
           },
-          errorClass = "COLUMN_NOT_EXISTS",
-          parameters = Map("columnName" -> "`KEY`")
+          errorClass = "COLUMN_NOT_FOUND",
+          parameters = Map("colName" -> "`KEY`")
         )
       }
     }

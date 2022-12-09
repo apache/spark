@@ -109,9 +109,9 @@
       "The column <columnName> already exists. Consider to choose another name or rename the existing column."
     ]
   },
-  "COLUMN_NOT_EXISTS" : {
+  "COLUMN_NOT_FOUND" : {
     "message" : [
-      "The column <columnName> does not exist."
+      "The column <colName> does not exist."
     ]
   },
   "CONCURRENT_QUERY" : {
