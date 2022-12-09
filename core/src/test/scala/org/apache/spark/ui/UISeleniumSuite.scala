@@ -26,6 +26,7 @@ import scala.xml.Node
 
 import com.gargoylesoftware.css.parser.CSSParseException
 import com.gargoylesoftware.htmlunit.DefaultCssErrorHandler
+import org.glassfish.jersey.internal.util.collection.MultivaluedStringMap
 import org.json4s._
 import org.json4s.jackson.JsonMethods
 import org.openqa.selenium.{By, WebDriver}
@@ -35,9 +36,8 @@ import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 import org.scalatest.time.SpanSugar._
 import org.scalatestplus.selenium.WebBrowser
-import org.apache.spark._
-import org.glassfish.jersey.internal.util.collection.MultivaluedStringMap
 
+import org.apache.spark._
 import org.apache.spark.LocalSparkContext._
 import org.apache.spark.api.java.StorageLevels
 import org.apache.spark.deploy.history.HistoryServerSuite
@@ -845,9 +845,9 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
           "&search%255Bvalue%255D=&search%255Bregex%255D=false&numTasks=10&columnIndexToSort=4" +
           "&columnNameToSort=Locality%2520Level"
         val encodeOnceRes = Utils.tryWithResource(Source.fromURL(
-          apiUrl(sc.ui.get, "stages/0/0/taskTable?"+ encodeOnceQuery)))(_.mkString)
+          apiUrl(sc.ui.get, "stages/0/0/taskTable?" + encodeOnceQuery)))(_.mkString)
         val encodeTwiceRes = Utils.tryWithResource(Source.fromURL(
-          apiUrl(sc.ui.get, "stages/0/0/taskTable?"+ encodeTwiceQuery)))(_.mkString)
+          apiUrl(sc.ui.get, "stages/0/0/taskTable?" + encodeTwiceQuery)))(_.mkString)
         assert(encodeOnceRes.equals(encodeTwiceRes))
       }
     }
