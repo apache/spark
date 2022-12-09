@@ -769,15 +769,6 @@ class QueryExecutionErrorsSuite
     assert(e.getErrorClass === "STREAM_FAILED")
     assert(e.getCause.isInstanceOf[NullPointerException])
   }
-
-  test("UNBOUND_SQL_PARAMETER - SPARK-41271: non-substituted parameters") {
-    checkError(
-      exception = intercept[SparkRuntimeException] {
-        sql("select :abc").collect()
-      },
-      errorClass = "UNBOUND_SQL_PARAMETER",
-      parameters = Map("name" -> "abc"))
-  }
 }
 
 class FakeFileSystemSetPermission extends LocalFileSystem {

@@ -667,34 +667,6 @@ class QueryCompilationErrorsSuite
       errorClass = "DATATYPE_MISMATCH.INVALID_JSON_SCHEMA",
       parameters = Map("schema" -> "\"INT\"", "sqlExpr" -> "\"from_json(a)\""))
   }
-
-  test("UNBOUND_SQL_PARAMETER - SPARK-41271: non-substituted parameters") {
-    checkError(
-      exception = intercept[AnalysisException] {
-        spark.sql("select :abc, :def", Map("abc" -> "1"))
-      },
-      errorClass = "UNBOUND_SQL_PARAMETER",
-      parameters = Map("name" -> "def"),
-      context = ExpectedContext(
-        fragment = ":def",
-        start = 13,
-        stop = 16))
-  }
-
-  test("INVALID_SQL_ARG - SPARK-41271: non-literal argument of `sql()`") {
-    Seq("col1 + 1", "CAST('100' AS INT)", "map('a', 1, 'b', 2)", "array(1)").foreach { arg =>
-      checkError(
-        exception = intercept[AnalysisException] {
-          spark.sql("SELECT :param1 FROM VALUES (1) AS t(col1)", Map("param1" -> arg))
-        },
-        errorClass = "INVALID_SQL_ARG",
-        parameters = Map("name" -> "`param1`"),
-        context = ExpectedContext(
-          fragment = arg,
-          start = 0,
-          stop = arg.length - 1))
-    }
-  }
 }
 
 class MyCastToString extends SparkUserDefinedFunction(

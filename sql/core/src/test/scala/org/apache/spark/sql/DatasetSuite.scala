@@ -2245,25 +2245,6 @@ class DatasetSuite extends QueryTest
       assert(parquetFiles.size === 10)
     }
   }
-
-  test("SPARK-41271: bind parameters") {
-    withSQLConf(SQLConf.PARAMETERS_ENABLED.key -> "true") {
-      val sqlText =
-        """
-          |SELECT id, id % :div as c0
-          |FROM VALUES (0), (1), (2), (3), (4), (5), (6), (7), (8), (9) AS t(id)
-          |WHERE id < :constA
-          |""".stripMargin
-      val args = Map("div" -> "3", "constA" -> "4L")
-      checkAnswer(
-        spark.sql(sqlText, args),
-        Row(0, 0) :: Row(1, 1) :: Row(2, 2) :: Row(3, 0) :: Nil)
-
-      checkAnswer(
-        spark.sql("""SELECT contains('Spark \'SQL\'', :subStr)""", Map("subStr" -> "'SQL'")),
-        Row(true))
-    }
-  }
 }
 
 class DatasetLargeResultCollectingSuite extends QueryTest
