@@ -1386,6 +1386,10 @@ class ColumnarBatchSuite extends SparkFunSuite {
             assert(r1.getLong(ordinal) ==
               DateTimeUtils.fromJavaTimestamp(r2.getTimestamp(ordinal)),
               "Seed = " + seed)
+          case TimestampNTZType =>
+            assert(r1.getLong(ordinal) ==
+              DateTimeUtils.localDateTimeToMicros(r2.getAs[LocalDateTime](ordinal)),
+              "Seed = " + seed)
           case t: DecimalType =>
             val d1 = r1.getDecimal(ordinal, t.precision, t.scale).toBigDecimal
             val d2 = r2.getDecimal(ordinal)
@@ -1449,6 +1453,17 @@ class ColumnarBatchSuite extends SparkFunSuite {
                   }
                   i += 1
                 }
+              case TimestampNTZType =>
+                var i = 0
+                while (i < a1.length) {
+                  assert((a1(i) == null) == (a2(i) == null), "Seed = " + seed)
+                  if (a1(i) != null) {
+                    val i1 = a1(i).asInstanceOf[Long]
+                    val i2 = DateTimeUtils.localDateTimeToMicros(a2(i).asInstanceOf[LocalDateTime])
+                    assert(i1 === i2, "Seed = " + seed)
+                  }
+                  i += 1
+                }
               case t: DecimalType =>
                 var i = 0
                 while (i < a1.length) {
@@ -1505,7 +1520,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       DecimalType.ShortDecimal, DecimalType.IntDecimal, DecimalType.ByteDecimal,
       DecimalType.FloatDecimal, DecimalType.LongDecimal, new DecimalType(5, 2),
       new DecimalType(12, 2), new DecimalType(30, 10), CalendarIntervalType,
-      DateType, StringType, BinaryType, TimestampType)
+      DateType, StringType, BinaryType, TimestampType, TimestampNTZType)
     val seed = System.nanoTime()
     val NUM_ROWS = 200
     val NUM_ITERS = 1000
