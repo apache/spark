@@ -815,7 +815,7 @@
   },
   "INVALID_TYPED_LITERAL" : {
     "message" : [
-      "Cannot parse <value> to <valueType> type."
+      "The value of the typed literal <valueType> is invalid: <value>."
     ],
     "sqlState" : "42000"
   },
