@@ -7777,6 +7777,7 @@ def array_append(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """
     return _invoke_function_over_columns("array_append", col1, col2)
 
+
 def array_prepend(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """
     Collection function: returns an array of the elements in col1 along
@@ -7801,7 +7802,7 @@ def array_prepend(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     >>> from pyspark.sql import Row
     >>> df = spark.createDataFrame([Row(c1=["b", "a", "c"], c2="c")])
     >>> df.select(array_prepend(df.c1, df.c2)).collect()
-    [Row(array_append(c1, c2)=['c', 'b', 'a', 'c'])]
+    [Row(array_prepend(c1, c2)=['c', 'b', 'a', 'c'])]
     """
     return _invoke_function_over_columns("array_append", col1, col2)
 
