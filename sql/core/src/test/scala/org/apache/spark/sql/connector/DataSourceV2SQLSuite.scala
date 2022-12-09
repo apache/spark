@@ -35,6 +35,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAM
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
@@ -2769,6 +2770,26 @@ class DataSourceV2SQLSuiteV1Filter
               |SELECT * FROM t VERSION AS OF '2'
               |""".stripMargin
         ).collect() === Array(Row(1), Row(2)))
+    }
+  }
+
+  test("SPARK-41378: test column stats") {
+    spark.sql("CREATE TABLE testcat.test (id bigint NOT NULL, data string)")
+    spark.sql("INSERT INTO testcat.test values (1, 'test1'), (2, null), (3, null)," +
+      " (4, null), (5, 'test5')")
+    val df = spark.sql("select * from testcat.test")
+
+    df.queryExecution.optimizedPlan.collect {
+      case scan: DataSourceV2ScanRelation =>
+        val stats = scan.stats
+        assert(stats.sizeInBytes == 200)
+        assert(stats.rowCount.get == 5)
+        val colStats = stats.attributeStats.values.toArray
+        assert(colStats.length == 2)
+        assert(colStats(0).distinctCount.get == 3)
+        assert(colStats(0).nullCount.get == 3)
+        assert(colStats(1).distinctCount.get == 5)
+        assert(colStats(1).nullCount.get == 0)
     }
   }
 

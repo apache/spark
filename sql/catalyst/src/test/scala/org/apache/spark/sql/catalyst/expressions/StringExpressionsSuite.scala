@@ -1256,6 +1256,13 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     )
   }
 
+  test("SPARK-41452: ToCharacter: null format string") {
+    // if null format, to_number should return null
+    val toCharacterExpr = ToCharacter(Literal(Decimal(454)), Literal(null, StringType))
+    assert(toCharacterExpr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+    checkEvaluation(toCharacterExpr, null)
+  }
+
   test("ToBinary: fails analysis if fmt is not foldable") {
     val wrongFmt = AttributeReference("invalidFormat", StringType)()
     val toBinaryExpr = ToBinary(Literal("abc"), Some(wrongFmt))
