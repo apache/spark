@@ -471,35 +471,6 @@ case class LateralColumnAliasReference(ne: NamedExpression, nameParts: Seq[Strin
   final override val nodePatterns: Seq[TreePattern] = Seq(LATERAL_COLUMN_ALIAS_REFERENCE)
 }
 
-/**
- * A placeholder used to hold a referenced that has been temporarily resolved as the reference
- * to a lateral column alias. This is created and removed by rule [[ResolveLateralColumnAlias]].
- *
- * There should be no [[LateralColumnAliasReference]] beyond analyzer: if the plan passes all
- * analysis check, then all [[LateralColumnAliasReference]] should already be removed.
- *
- * @param a A resolved [[Alias]] that is a lateral column alias referenced by the current attribute
- * @param nameParts The named parts of the original [[UnresolvedAttribute]]. Used to restore back
- */
-case class LateralColumnAliasReference(a: Alias, nameParts: Seq[String])
-  extends LeafExpression with NamedExpression with Unevaluable {
-  assert(a.resolved)
-  override def name: String =
-    nameParts.map(n => if (n.contains(".")) s"`$n`" else n).mkString(".")
-  override def exprId: ExprId = a.exprId
-  override def qualifier: Seq[String] = a.qualifier
-  override def toAttribute: Attribute = a.toAttribute
-  override def newInstance(): NamedExpression =
-    LateralColumnAliasReference(a.newInstance().asInstanceOf[Alias], nameParts)
-
-  override def nullable: Boolean = a.nullable
-  override def dataType: DataType = a.dataType
-  override def prettyName: String = "lateralAliasReference"
-  override def sql: String = s"$prettyName($name)"
-
-  final override val nodePatterns: Seq[TreePattern] = Seq(LATERAL_COLUMN_ALIAS_REFERENCE)
-}
-
 object VirtualColumn {
   // The attribute name used by Hive, which has different result than Spark, deprecated.
   val hiveGroupingIdName: String = "grouping__id"

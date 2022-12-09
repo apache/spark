@@ -531,50 +531,6 @@ class LateralColumnAliasSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("Duplicated lateral alias names - Project") {
-    // Has duplicated names but not referenced is fine
-    checkAnswer(
-      sql(s"SELECT salary AS d, bonus AS d FROM $testTable WHERE name = 'jen'"),
-      Row(12000, 1200)
-    )
-    checkAnswer(
-      sql(s"SELECT salary AS d, d, 10000 AS d FROM $testTable WHERE name = 'jen'"),
-      Row(12000, 12000, 10000)
-    )
-    checkAnswer(
-      sql(s"SELECT salary * 1.5 AS d, d, 10000 AS d FROM $testTable WHERE name = 'jen'"),
-      Row(18000, 18000, 10000)
-    )
-
-    // Referencing duplicated names raises error
-    checkDuplicatedAliasErrorHelper(
-      s"SELECT salary * 1.5 AS d, d, 10000 AS d, d + 1 FROM $testTable",
-      parameters = Map("name" -> "`d`", "n" -> "2")
-    )
-    checkDuplicatedAliasErrorHelper(
-      s"SELECT 10000 AS d, d * 1.0, salary * 1.5 AS d, d FROM $testTable",
-      parameters = Map("name" -> "`d`", "n" -> "2")
-    )
-    checkDuplicatedAliasErrorHelper(
-      s"SELECT salary AS d, d + 1 AS d, d + 1 AS d FROM $testTable",
-      parameters = Map("name" -> "`d`", "n" -> "2")
-    )
-    checkDuplicatedAliasErrorHelper(
-      s"SELECT salary * 1.5 AS d, d, bonus * 1.5 AS d, d + d FROM $testTable",
-      parameters = Map("name" -> "`d`", "n" -> "2")
-    )
-
-    checkAnswer(
-      sql(
-        s"""
-           |SELECT salary * 1.5 AS salary, salary, 10000 AS salary, salary
-           |FROM $testTable
-           |WHERE name = 'jen'
-           |""".stripMargin),
-      Row(18000, 12000, 10000, 12000)
-    )
-  }
-
   test("Duplicated lateral alias names - Aggregate") {
     // Has duplicated names but not referenced is fine
     checkAnswer(

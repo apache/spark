@@ -32,7 +32,7 @@ import org.apache.spark.sql.internal.SQLConf
  * Plan-wise, it handles two types of operators: Project and Aggregate.
  * - in Project, pushing down the referenced lateral alias into a newly created Project, resolve
  *   the attributes referencing these aliases
- * - in Aggregate TODO.
+ * - in Aggregate TODO inserting the Project node above and fall back to the resolution of Project.
  *
  * The whole process is generally divided into two phases:
  * 1) recognize resolved lateral alias, wrap the attributes referencing them with
@@ -57,35 +57,6 @@ import org.apache.spark.sql.internal.SQLConf
  *
  * Example for Aggregate TODO
  *
- *
- * The name resolution priority:
- * local table column > local lateral column alias > outer reference
- *
- * Because lateral column alias has higher resolution priority than outer reference, it will try
- * to resolve an [[OuterReference]] using lateral column alias in phase 1, similar as an
- * [[UnresolvedAttribute]]. If success, it strips [[OuterReference]] and also wraps it with
- * [[LateralColumnAliasReference]].
- */
-
-/**
- * Resolve lateral column alias, which references the alias defined previously in the SELECT list.
- * - in Project, inserting a new Project node below with the referenced alias so that it can be
- *   resolved by other rules
- * - in Aggregate, inserting the Project node above and fall back to the resolution of Project
- *
- * For Project, it rewrites by inserting a newly created Project plan between the original Project
- * and its child, pushing the referenced lateral column aliases to this new Project, and updating
- * the project list of the original Project.
- *
- * Before rewrite:
- * Project [age AS a, 'a + 1]
- * +- Child
- *
- * After rewrite:
- * Project [a, 'a + 1]
- * +- Project [child output, age AS a]
- *    +- Child
- *
  * For Aggregate, it first wraps the attribute resolved by lateral alias with
  * [[LateralColumnAliasReference]].
  * Before wrap (omit some cast or alias):
@@ -105,18 +76,20 @@ import org.apache.spark.sql.internal.SQLConf
  * Project [dept#14 AS a#12, 'a + 1, avg(salary)#26 AS b#13, 'b + avg(bonus)#27]
  * +- Aggregate [dept#14] [avg(salary#16) AS avg(salary)#26, avg(bonus#17) AS avg(bonus)#27,dept#14]
  *    +- Child [dept#14,name#15,salary#16,bonus#17]
+ *
+ *
+ * The name resolution priority:
+ * local table column > local lateral column alias > outer reference
+ *
+ * Because lateral column alias has higher resolution priority than outer reference, it will try
+ * to resolve an [[OuterReference]] using lateral column alias in phase 1, similar as an
+ * [[UnresolvedAttribute]]. If success, it strips [[OuterReference]] and also wraps it with
+ * [[LateralColumnAliasReference]].
  */
 object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
   case class AliasEntry(alias: Alias, index: Int)
 
-  def unwrapLCAReference(exprs: Seq[NamedExpression]): Seq[NamedExpression] = {
-    exprs.map { expr =>
-      expr.transformWithPruning(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
-        case l: LateralColumnAliasReference =>
-          UnresolvedAttribute(l.nameParts)
-      }.asInstanceOf[NamedExpression]
-    }
-  }
+
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (!conf.getConf(SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED)) {
@@ -172,8 +145,8 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
               child = Project(innerProjectList.toSeq, child)
             )
           }
-        case agg @ Aggregate(groupingExpressions, aggregateExpressions, _)
-          if agg.resolved
+
+        case agg @ Aggregate(groupingExpressions, aggregateExpressions, _) if agg.resolved
             && aggregateExpressions.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
 
           val newAggExprs = collection.mutable.Set.empty[NamedExpression]
@@ -194,16 +167,18 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
                 ne.toAttribute
               case e if groupingExpressions.exists(_.semanticEquals(e)) =>
                 // TODO (improvement) dedup
+                // TODO one concern here, is condition here be able to match all grouping
+                //  expressions? For example, Agg [age + 10] [a + age + 10], when transforming down,
+                //  is it possible that (a + age) + 10, so that it won't be able to match (age + 10)
+                //  add a test.
                 val alias = ResolveAliases.assignAliases(Seq(UnresolvedAlias(e))).head
                 newAggExprs += alias
                 alias.toAttribute
             }.asInstanceOf[NamedExpression]
           }
-          val unwrappedAggExprs = unwrapLCAReference(newAggExprs.toSeq)
-          val unwrappedProjectExprs = unwrapLCAReference(projectExprs)
           Project(
-            projectList = unwrappedProjectExprs,
-            child = agg.copy(aggregateExpressions = unwrappedAggExprs)
+            projectList = projectExprs,
+            child = agg.copy(aggregateExpressions = newAggExprs.toSeq)
           )
         // TODO: think about a corner case, when the Alias passed to LateralColumnAliasReference
         //  contains a LateralColumnAliasReference. Is it safe to do a.toAttribute when resolving
