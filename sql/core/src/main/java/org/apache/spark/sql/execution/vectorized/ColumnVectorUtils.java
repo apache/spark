@@ -170,7 +170,7 @@ public class ColumnVectorUtils {
         dst.getChild(1).appendInt(c.days);
         dst.getChild(2).appendLong(c.microseconds);
       } else if (t instanceof DateType) {
-        dst.appendInt(DateTimeUtils.fromJavaDate((Date)o));
+        dst.appendInt(DateTimeUtils.fromJavaDate((Date) o));
       } else if (t instanceof TimestampType) {
         dst.appendLong(DateTimeUtils.fromJavaTimestamp((Timestamp) o));
       } else if (t instanceof TimestampNTZType) {
