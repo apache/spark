@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, LateralColumnAliasReference, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeMap, LateralColumnAliasReference, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE}
+import org.apache.spark.sql.catalyst.trees.TreePattern.LATERAL_COLUMN_ALIAS_REFERENCE
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -76,12 +76,12 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
         _.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE), ruleId) {
         case p @ Project(projectList, child) if p.resolved
           && projectList.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
-          var aliasMap = Map[Attribute, AliasEntry]()
+          var aliasMap = AttributeMap.empty[AliasEntry]
           val referencedAliases = collection.mutable.Set.empty[AliasEntry]
           def unwrapLCAReference(e: NamedExpression): NamedExpression = {
             e.transformWithPruning(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
               case lcaRef: LateralColumnAliasReference if aliasMap.contains(lcaRef.a) =>
-                val aliasEntry = aliasMap(lcaRef.a)
+                val aliasEntry = aliasMap.get(lcaRef.a).get
                 // If there is no chaining of lateral column alias reference, push down the alias
                 // and unwrap the LateralColumnAliasReference to the NamedExpression inside
                 // If there is chaining, don't resolve and save to future rounds

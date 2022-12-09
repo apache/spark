@@ -1787,11 +1787,9 @@ class Analyzer(override val catalogManager: CatalogManager)
      */
     private def resolveByLateralAlias(
         nameParts: Seq[String], lateralAlias: Alias): Option[LateralColumnAliasReference] = {
-      // TODO question: everytime it resolves the extract field it generates a new exprId.
-      //  Does it matter?
       val resolvedAttr = resolveExpressionByPlanOutput(
         expr = UnresolvedAttribute(nameParts),
-        plan = Project(Seq(lateralAlias), OneRowRelation()),
+        plan = LocalRelation(Seq(lateralAlias.toAttribute)),
         throws = false
       ).asInstanceOf[NamedExpression]
       if (resolvedAttr.resolved) {
