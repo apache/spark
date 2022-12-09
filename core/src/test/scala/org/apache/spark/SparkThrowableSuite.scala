@@ -147,6 +147,18 @@ class SparkThrowableSuite extends SparkFunSuite {
     assert(rereadErrorClassToInfoMap == errorReader.errorInfoMap)
   }
 
+  test("Error class names should contain only capital letters, numbers and underscores") {
+    val allowedChars = "[A-Z0-9_]*"
+    errorReader.errorInfoMap.foreach { e =>
+      assert(e._1.matches(allowedChars))
+      e._2.subClass.map { s =>
+        s.keys.foreach { k =>
+          assert(k.matches(allowedChars))
+        }
+      }
+    }
+  }
+
   test("Check if error class is missing") {
     val ex1 = intercept[SparkException] {
       getMessage("", Map.empty[String, String])
