@@ -266,16 +266,16 @@ private[spark] object KubernetesConf {
 
   def getAppNameLabel(appName: String): String = {
     // According to https://kubernetes.io/docs/concepts/overview/working-with-objects/labels,
-    // must be 63 characters or less to follow the DNS label standard, so take the 63 characters
-    // of the appName name as the label. In addition, label value must start and end with
-    // an alphanumeric character.
+    // must be 63 characters or less to follow the DNS label standard, for appName longer than
+    // 63 characters, replace the tail w/ "-abbr" as the label. In addition, label value must
+    // start and end with an alphanumeric character.
     StringUtils.abbreviate(
       s"$appName"
         .trim
         .toLowerCase(Locale.ROOT)
         .replaceAll("[^a-z0-9\\-]", "-")
         .replaceAll("-+", "-"),
-      "-",
+      "-abbr",
       KUBERNETES_DNS_LABEL_NAME_MAX_LENGTH
     ).stripPrefix("-").stripSuffix("-")
   }
