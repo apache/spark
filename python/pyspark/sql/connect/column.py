@@ -786,3 +786,39 @@ class Column:
 
     def __repr__(self) -> str:
         return "Column<'%s'>" % self._expr.__repr__()
+
+    def otherwise(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("otherwise() is not yet implemented.")
+
+    def over(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("over() is not yet implemented.")
+
+    def isin(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("isin() is not yet implemented.")
+
+    def when(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("when() is not yet implemented.")
+
+    def getItem(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("getItem() is not yet implemented.")
+
+    def astype(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("astype() is not yet implemented.")
+
+    def between(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("between() is not yet implemented.")
+
+    def getField(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("getField() is not yet implemented.")
+
+    def withField(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("withField() is not yet implemented.")
+
+    def dropFields(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("dropFields() is not yet implemented.")
+
+    def __getitem__(self, k: Any) -> None:
+        raise NotImplementedError("apply() - __getitem__ is not yet implemented.")
+
+    def __iter__(self) -> None:
+        raise TypeError("Column is not iterable")
