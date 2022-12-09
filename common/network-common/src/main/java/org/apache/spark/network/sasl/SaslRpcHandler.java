@@ -74,7 +74,6 @@ public class SaslRpcHandler extends AbstractAuthRpcHandler {
       ByteBuffer message,
       RpcResponseCallback callback) {
     if (saslServer == null || !saslServer.isComplete()) {
-
       ByteBuf nettyBuf = Unpooled.wrappedBuffer(message);
       byte tagByte = nettyBuf.readByte();
       if (tagByte != SaslMessage.TAG_BYTE && tagByte != SaslInitMessage.TAG_BYTE) {

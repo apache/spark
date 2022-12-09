@@ -57,8 +57,6 @@ public abstract class AbstractAuthRpcHandler extends RpcHandler {
       TransportClient client,
       ByteBuffer message,
       RpcResponseCallback callback) {
-    System.out.println(JavaUtils.bytesToString(message));
-
     int position = message.position();
     int limit = message.limit();
 
