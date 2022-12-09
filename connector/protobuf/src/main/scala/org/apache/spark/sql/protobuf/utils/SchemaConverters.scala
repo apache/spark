@@ -110,7 +110,7 @@ object SchemaConverters {
         // it to 1 allows it to be recursed twice, and setting it to 2 allows it to be recursed
         // thrice. circularReferenceDepth value greater than 2 is not allowed. If the not
         // specified, it will default to -1, which disables recursive fields.
-        val recordName = fd.getFullName.substring(0, fd.getFullName().lastIndexOf("."))
+        val recordName = fd.getMessageType.getFullName
         if (existingRecordNames.contains(recordName) &&
           protobufOptions.circularReferenceDepth < 0 ) {
           throw QueryCompilationErrors.foundRecursionInProtobufSchema(fd.toString())
