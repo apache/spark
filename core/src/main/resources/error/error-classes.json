@@ -1257,6 +1257,11 @@
           "AES-<mode> with the padding <padding> by the <functionName> function."
         ]
       },
+      "ANALYZE_TABLE_COLUMN_TYPE" : {
+        "message" : [
+          "ANALYZE TABLE ... FOR ... COLUMNS ... does not support on <colName> (data type: <dataType>) in table <tableName>."
+        ]
+      },
       "CATALOG_OPERATION" : {
         "message" : [
           "Catalog <catalogName> does not support <operation>."
@@ -2871,11 +2876,6 @@
   "_LEGACY_ERROR_TEMP_1234" : {
     "message" : [
       "Temporary view <tableIdent> is not cached for analyzing columns."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1235" : {
-    "message" : [
-      "Column <name> in table <tableIdent> is of type <dataType>, and Spark does not support statistics collection on this column type."
     ]
   },
   "_LEGACY_ERROR_TEMP_1236" : {
