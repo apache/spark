@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
-
 
 class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -278,9 +277,9 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
       create_map(intSeq, strWithNull.map(_.value)))
 
     // Map key can't be null
-    checkExceptionInExpression[RuntimeException](
+    checkErrorInExpression[SparkRuntimeException](
       CreateMap(interlace(strWithNull, intSeq.map(Literal(_)))),
-      "Cannot use null as map key")
+      "NULL_MAP_KEY")
 
     checkExceptionInExpression[RuntimeException](
       CreateMap(Seq(Literal(1), Literal(2), Literal(1), Literal(3))), "Duplicate map key")
@@ -382,9 +381,9 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(MapFromArrays(nullArray, nullArray), null)
 
     // Map key can't be null
-    checkExceptionInExpression[RuntimeException](
+    checkErrorInExpression[SparkRuntimeException](
       MapFromArrays(intWithNullArray, strArray),
-      "Cannot use null as map key")
+      "NULL_MAP_KEY")
 
     checkExceptionInExpression[RuntimeException](
       MapFromArrays(

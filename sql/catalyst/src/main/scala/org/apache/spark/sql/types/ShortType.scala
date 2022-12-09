@@ -21,6 +21,7 @@ import scala.math.{Integral, Numeric, Ordering}
 import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.annotation.Stable
+import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalShortType}
 
 /**
  * The data type representing `Short` values. Please use the singleton `DataTypes.ShortType`.
@@ -43,6 +44,8 @@ class ShortType private() extends IntegralType {
    * The default size of a value of the ShortType is 2 bytes.
    */
   override def defaultSize: Int = 2
+
+  override def physicalDataType: PhysicalDataType = PhysicalShortType
 
   override def simpleString: String = "smallint"
 

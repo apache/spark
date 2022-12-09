@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
 import org.apache.spark.sql.catalyst.trees.Origin
+import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalStructType}
 import org.apache.spark.sql.catalyst.util.{truncatedString, StringUtils}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
@@ -431,6 +432,8 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    */
   override def defaultSize: Int = fields.map(_.dataType.defaultSize).sum
 
+  override def physicalDataType: PhysicalDataType = PhysicalStructType(fields)
+
   override def simpleString: String = {
     val fieldTypes = fields.view.map(field => s"${field.name}:${field.dataType.simpleString}").toSeq
     truncatedString(
@@ -555,7 +558,7 @@ object StructType extends AbstractDataType {
 
   def apply(fields: java.util.List[StructField]): StructType = {
     import scala.collection.JavaConverters._
-    StructType(fields.asScala.toSeq)
+    StructType(fields.asScala.toArray)
   }
 
   private[sql] def fromAttributes(attributes: Seq[Attribute]): StructType =
@@ -589,7 +592,7 @@ object StructType extends AbstractDataType {
           leftField.copy(
             dataType = unionLikeMerge(leftField.dataType, rightField.dataType),
             nullable = leftField.nullable || rightField.nullable)
-      }.toSeq
+      }
       StructType(newFields)
     })
 
@@ -626,7 +629,7 @@ object StructType extends AbstractDataType {
           newFields += f
         }
 
-      StructType(newFields.toSeq)
+      StructType(newFields.toArray)
     })
 
   private def mergeInternal(
@@ -713,7 +716,7 @@ object StructType extends AbstractDataType {
     if (newFields.isEmpty) {
       None
     } else {
-      Some(StructType(newFields.toSeq))
+      Some(StructType(newFields.toArray))
     }
   }
 }

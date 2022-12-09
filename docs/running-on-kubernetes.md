@@ -1887,10 +1887,6 @@ Submit Spark jobs with the following extra options:
 Note that `{{APP_ID}}` is the built-in variable that will be substituted with Spark job ID automatically.
 With the above configuration, the job will be scheduled by YuniKorn scheduler instead of the default Kubernetes scheduler.
 
-##### Limitations
-
-- Apache YuniKorn currently only supports x86 Linux, running Spark on ARM64 (or other platform) with Apache YuniKorn is not supported at present.
-
 ### Stage Level Scheduling Overview
 
 Stage level scheduling is supported on Kubernetes when dynamic allocation is enabled. This also requires <code>spark.dynamicAllocation.shuffleTracking.enabled</code> to be enabled since Kubernetes doesn't support an external shuffle service at this time. The order in which containers for different profiles is requested from Kubernetes is not guaranteed. Note that since dynamic allocation on Kubernetes requires the shuffle tracking feature, this means that executors from previous stages that used a different ResourceProfile may not idle timeout due to having shuffle data on them. This could result in using more cluster resources and in the worst case if there are no remaining resources on the Kubernetes cluster then Spark could potentially hang. You may consider looking at config <code>spark.dynamicAllocation.shuffleTracking.timeout</code> to set a timeout, but that could result in data having to be recomputed if the shuffle data is really needed.

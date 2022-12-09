@@ -461,7 +461,7 @@ private[hive] class HiveClientImpl(
         throw QueryExecutionErrors.convertHiveTableToCatalogTableError(
           ex, h.getDbName, h.getTableName)
     }
-    val schema = StructType((cols ++ partCols).toSeq)
+    val schema = StructType((cols ++ partCols).toArray)
 
     val bucketSpec = if (h.getNumBuckets > 0) {
       val sortColumnOrders = h.getSortCols.asScala
@@ -776,7 +776,7 @@ private[hive] class HiveClientImpl(
           assert(s.values.forall(_.nonEmpty), s"partition spec '$s' is invalid")
           shim.getPartitionNames(client, table.database, table.identifier.table, s.asJava, -1)
       }
-    hivePartitionNames.sorted.toSeq
+    hivePartitionNames.sorted
   }
 
   override def getPartitionOption(
@@ -812,7 +812,7 @@ private[hive] class HiveClientImpl(
     val parts = shim.getPartitions(client, hiveTable, partSpec.asJava)
       .map(fromHivePartition(_, absoluteUri))
     HiveCatalogMetrics.incrementFetchedPartitions(parts.length)
-    parts.toSeq
+    parts
   }
 
   override def getPartitionsByFilter(

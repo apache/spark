@@ -24,10 +24,11 @@ import java.sql.{Date, Timestamp}
 
 import scala.util.Random
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions.{Alias, ArraysZip, AttributeReference, Expression, NamedExpression, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, UTC}
@@ -178,10 +179,15 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     )
 
     val df5 = Seq((Seq("a", null), Seq(1, 2))).toDF("k", "v")
-    val msg1 = intercept[Exception] {
+    val e1 = intercept[SparkException] {
       df5.select(map_from_arrays($"k", $"v")).collect
-    }.getMessage
-    assert(msg1.contains("Cannot use null as map key"))
+    }
+    assert(e1.getCause.isInstanceOf[SparkRuntimeException])
+    checkError(
+      exception = e1.getCause.asInstanceOf[SparkRuntimeException],
+      errorClass = "NULL_MAP_KEY",
+      parameters = Map.empty
+    )
 
     val df6 = Seq((Seq(1, 2), Seq("a"))).toDF("k", "v")
     val msg2 = intercept[Exception] {
@@ -4495,15 +4501,25 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     assert(ex2.getMessage.contains(
       "The number of lambda function arguments '3' does not match"))
 
-    val ex3 = intercept[Exception] {
+    val ex3 = intercept[SparkException] {
       dfExample1.selectExpr("transform_keys(i, (k, v) -> v)").show()
     }
-    assert(ex3.getMessage.contains("Cannot use null as map key"))
+    assert(ex3.getCause.isInstanceOf[SparkRuntimeException])
+    checkError(
+      exception = ex3.getCause.asInstanceOf[SparkRuntimeException],
+      errorClass = "NULL_MAP_KEY",
+      parameters = Map.empty
+    )
 
     val ex3a = intercept[Exception] {
       dfExample1.select(transform_keys(col("i"), (k, v) => v)).show()
     }
-    assert(ex3a.getMessage.contains("Cannot use null as map key"))
+    assert(ex3a.getCause.isInstanceOf[SparkRuntimeException])
+    checkError(
+      exception = ex3a.getCause.asInstanceOf[SparkRuntimeException],
+      errorClass = "NULL_MAP_KEY",
+      parameters = Map.empty
+    )
 
     checkError(
       exception = intercept[AnalysisException] {
@@ -4847,14 +4863,34 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       (Seq.empty, Seq("x", "z"), 3),
       (null, Seq("x", "z"), 4)
     ).toDF("a1", "a2", "i")
-    val ex1 = intercept[AnalysisException] {
-      df.selectExpr("zip_with(a1, a2, x -> x)")
-    }
-    assert(ex1.getMessage.contains("The number of lambda function arguments '1' does not match"))
-    val ex2 = intercept[AnalysisException] {
-      df.selectExpr("zip_with(a1, a2, (acc, x) -> x, (acc, x) -> x)")
-    }
-    assert(ex2.getMessage.contains("Invalid number of arguments for function zip_with"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("zip_with(a1, a2, x -> x)")
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2300",
+      parameters = Map(
+        "namesSize" -> "1",
+        "argInfoSize" -> "2"),
+      context = ExpectedContext(
+        fragment = "x -> x",
+        start = 17,
+        stop = 22)
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("zip_with(a1, a2, (acc, x) -> x, (acc, x) -> x)")
+      },
+      errorClass = "WRONG_NUM_ARGS",
+      parameters = Map(
+        "functionName" -> toSQLId("zip_with"),
+        "expectedNum" -> "3",
+        "actualNum" -> "4"),
+      context = ExpectedContext(
+        fragment = "zip_with(a1, a2, (acc, x) -> x, (acc, x) -> x)",
+        start = 0,
+        stop = 45)
+    )
 
     checkError(
       exception = intercept[AnalysisException] {
@@ -5086,10 +5122,15 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-24734: Fix containsNull of Concat for array type") {
     val df = Seq((Seq(1), Seq[Integer](null), Seq("a", "b"))).toDF("k1", "k2", "v")
-    val ex = intercept[Exception] {
+    val e1 = intercept[SparkException] {
       df.select(map_from_arrays(concat($"k1", $"k2"), $"v")).show()
     }
-    assert(ex.getMessage.contains("Cannot use null as map key"))
+    assert(e1.getCause.isInstanceOf[SparkRuntimeException])
+    checkError(
+      exception = e1.getCause.asInstanceOf[SparkRuntimeException],
+      errorClass = "NULL_MAP_KEY",
+      parameters = Map.empty
+    )
   }
 
   test("SPARK-26370: Fix resolution of higher-order function for the same identifier") {
@@ -5177,6 +5218,23 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       map_zip_with($"m1", $"m2", (k2: Column, iv1: Column, iv2: Column) =>
         ov1 + iv1 + ov2 + iv2))),
       Seq(Row(Map("a" -> Map("a" -> 6, "b" -> 8), "b" -> Map("a" -> 8, "b" -> 10))))
+    )
+  }
+
+  test("from_json - invalid schema string") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("select from_json('{\"a\":1}', 1)")
+      },
+      errorClass = "INVALID_SCHEMA.NON_STRING_LITERAL",
+      parameters = Map(
+        "inputSchema" -> "\"1\""
+      ),
+      context = ExpectedContext(
+        fragment = "from_json('{\"a\":1}', 1)",
+        start = 7,
+        stop = 29
+      )
     )
   }
 }

@@ -444,7 +444,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def nullAsMapKeyNotAllowedError(): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2019",
+      errorClass = "NULL_MAP_KEY",
       messageParameters = Map.empty)
   }
 

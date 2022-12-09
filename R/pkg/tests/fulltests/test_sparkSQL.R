@@ -154,7 +154,7 @@ test_that("structType and structField", {
   expect_is(testSchema$fields()[[2]], "structField")
   expect_equal(testSchema$fields()[[1]]$dataType.toString(), "StringType")
 
-  expect_error(structType("A stri"), "DataType stri is not supported.")
+  expect_error(structType("A stri"), ".*Unsupported data type \"STRI\".*")
 })
 
 test_that("structField type strings", {
@@ -3013,6 +3013,32 @@ test_that("mutate(), transform(), rename() and names()", {
   expect_match(tail(columns(newDF), 1L), "234567890", fixed = TRUE)
 })
 
+test_that("unpivot / melt", {
+  df <- createDataFrame(data.frame(
+    id = 1:3, x = c(1, 3, 5), y = c(2, 4, 6), z = c(-1, 0, 1)
+  ))
+
+  result <- unpivot(df, "id", c("x", "y"), "var", "val")
+  expect_s4_class(result, "SparkDataFrame")
+  expect_equal(columns(result), c("id", "var", "val"))
+  expect_equal(count(distinct(select(result, "var"))), 2)
+
+  result <- unpivot(df, "id", NULL, "variable", "value")
+  expect_s4_class(result, "SparkDataFrame")
+  expect_equal(columns(result), c("id", "variable", "value"))
+  expect_equal(count(distinct(select(result, "variable"))), 3)
+
+  result <- melt(df, "id", c("x", "y"), "key", "value")
+  expect_s4_class(result, "SparkDataFrame")
+  expect_equal(columns(result), c("id", "key", "value"))
+  expect_equal(count(distinct(select(result, "key"))), 2)
+
+  result <- melt(df, "id", NULL, "key", "val")
+  expect_s4_class(result, "SparkDataFrame")
+  expect_equal(columns(result), c("id", "key", "val"))
+  expect_equal(count(distinct(select(result, "key"))), 3)
+})
+
 test_that("read/write ORC files", {
   setHiveContext(sc)
   df <- read.df(jsonPath, "json")
@@ -3990,12 +4016,16 @@ test_that("Call DataFrameWriter.load() API in Java without path and check argume
   expect_error(read.df(source = "json"),
                paste("Error in load : analysis error - Unable to infer schema for JSON.",
                      "It must be specified manually"))
-  expect_error(read.df("arbitrary_path"), "Error in load : analysis error - Path does not exist")
-  expect_error(read.json("arbitrary_path"), "Error in json : analysis error - Path does not exist")
-  expect_error(read.text("arbitrary_path"), "Error in text : analysis error - Path does not exist")
-  expect_error(read.orc("arbitrary_path"), "Error in orc : analysis error - Path does not exist")
+  expect_error(read.df("arbitrary_path"),
+               "Error in load : analysis error - \\[PATH_NOT_FOUND\\].*")
+  expect_error(read.json("arbitrary_path"),
+               "Error in json : analysis error - \\[PATH_NOT_FOUND\\].*")
+  expect_error(read.text("arbitrary_path"),
+               "Error in text : analysis error - \\[PATH_NOT_FOUND\\].*")
+  expect_error(read.orc("arbitrary_path"),
+               "Error in orc : analysis error - \\[PATH_NOT_FOUND\\].*")
   expect_error(read.parquet("arbitrary_path"),
-              "Error in parquet : analysis error - Path does not exist")
+               "Error in parquet : analysis error - \\[PATH_NOT_FOUND\\].*")
 
   # Arguments checking in R side.
   expect_error(read.df(path = c(3)),
@@ -4014,14 +4044,14 @@ test_that("Specify a schema by using a DDL-formatted string when reading", {
   expect_is(df1, "SparkDataFrame")
   expect_equal(dtypes(df1), list(c("name", "string"), c("age", "double")))
 
-  expect_error(read.df(jsonPath, "json", "name stri"), "DataType stri is not supported.")
+  expect_error(read.df(jsonPath, "json", "name stri"), ".*Unsupported data type \"STRI\".*")
 
   # Test loadDF with a user defined schema in a DDL-formatted string.
   df2 <- loadDF(jsonPath, "json", "name STRING, age DOUBLE")
   expect_is(df2, "SparkDataFrame")
   expect_equal(dtypes(df2), list(c("name", "string"), c("age", "double")))
 
-  expect_error(loadDF(jsonPath, "json", "name stri"), "DataType stri is not supported.")
+  expect_error(loadDF(jsonPath, "json", "name stri"), ".*Unsupported data type \"STRI\".*")
 })
 
 test_that("Collect on DataFrame when NAs exists at the top of a timestamp column", {
