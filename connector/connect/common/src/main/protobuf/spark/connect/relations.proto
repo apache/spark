@@ -20,6 +20,7 @@ syntax = 'proto3';
 package spark.connect;
 
 import "spark/connect/expressions.proto";
+import "spark/connect/types.proto";
 
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
@@ -305,6 +306,17 @@ message LocalRelation {
   // Local collection data serialized into Arrow IPC streaming format which contains
   // the schema of the data.
   bytes data = 1;
+
+  // (Optional) The user provided schema.
+  //
+  // The Sever side will update the column names and data types according to this schema.
+  oneof schema {
+
+    DataType datatype = 2;
+
+    // Server will use Catalyst parser to parse this string to DataType.
+    string datatype_str = 3;
+  }
 }
 
 // Relation of type [[Sample]] that samples a fraction of the dataset.

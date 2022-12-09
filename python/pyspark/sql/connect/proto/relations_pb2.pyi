@@ -40,6 +40,7 @@ import google.protobuf.internal.containers
 import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
 import pyspark.sql.connect.proto.expressions_pb2
+import pyspark.sql.connect.proto.types_pb2
 import sys
 import typing
 
@@ -1168,16 +1169,45 @@ class LocalRelation(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     DATA_FIELD_NUMBER: builtins.int
+    DATATYPE_FIELD_NUMBER: builtins.int
+    DATATYPE_STR_FIELD_NUMBER: builtins.int
     data: builtins.bytes
     """Local collection data serialized into Arrow IPC streaming format which contains
     the schema of the data.
     """
+    @property
+    def datatype(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
+    datatype_str: builtins.str
+    """Server will use Catalyst parser to parse this string to DataType."""
     def __init__(
         self,
         *,
         data: builtins.bytes = ...,
+        datatype: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+        datatype_str: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["data", b"data"]) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "datatype", b"datatype", "datatype_str", b"datatype_str", "schema", b"schema"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "data",
+            b"data",
+            "datatype",
+            b"datatype",
+            "datatype_str",
+            b"datatype_str",
+            "schema",
+            b"schema",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["schema", b"schema"]
+    ) -> typing_extensions.Literal["datatype", "datatype_str"] | None: ...
 
 global___LocalRelation = LocalRelation
 
