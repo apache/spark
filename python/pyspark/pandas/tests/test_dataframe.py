@@ -7076,7 +7076,7 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
 
     @unittest.skipIf(
         LooseVersion(pd.__version__) < LooseVersion("1.3.0"),
-        "pandas support `Styler.to_latex` since 1.3.0"
+        "pandas support `Styler.to_latex` since 1.3.0",
     )
     def test_style(self):
         # Currently, the `style` function returns a pandas object `Styler` as it is,
