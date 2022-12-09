@@ -122,6 +122,29 @@ true
 
 
 -- !query
+select curdate(1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS",
+  "messageParameters" : {
+    "actualNum" : "1",
+    "expectedNum" : "0",
+    "functionName" : "`curdate`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 17,
+    "fragment" : "curdate(1)"
+  } ]
+}
+
+
+-- !query
 select DATE_FROM_UNIX_DATE(0), DATE_FROM_UNIX_DATE(1000), DATE_FROM_UNIX_DATE(null)
 -- !query schema
 struct<date_from_unix_date(0):date,date_from_unix_date(1000):date,date_from_unix_date(NULL):date>

@@ -50,7 +50,7 @@ class OptionUtils:
                 self.option(k, v)  # type: ignore[attr-defined]
 
 
-class DataFrameReader:
+class DataFrameReader(OptionUtils):
     """
     TODO(SPARK-40539) Achieve parity with PySpark.
     """
@@ -171,6 +171,164 @@ class DataFrameReader:
 
     def table(self, tableName: str) -> "DataFrame":
         return self._df(Read(tableName))
+
+    def json(
+        self,
+        path: str,
+        schema: Optional[str] = None,
+        primitivesAsString: Optional[Union[bool, str]] = None,
+        prefersDecimal: Optional[Union[bool, str]] = None,
+        allowComments: Optional[Union[bool, str]] = None,
+        allowUnquotedFieldNames: Optional[Union[bool, str]] = None,
+        allowSingleQuotes: Optional[Union[bool, str]] = None,
+        allowNumericLeadingZero: Optional[Union[bool, str]] = None,
+        allowBackslashEscapingAnyCharacter: Optional[Union[bool, str]] = None,
+        mode: Optional[str] = None,
+        columnNameOfCorruptRecord: Optional[str] = None,
+        dateFormat: Optional[str] = None,
+        timestampFormat: Optional[str] = None,
+        multiLine: Optional[Union[bool, str]] = None,
+        allowUnquotedControlChars: Optional[Union[bool, str]] = None,
+        lineSep: Optional[str] = None,
+        samplingRatio: Optional[Union[float, str]] = None,
+        dropFieldIfAllNull: Optional[Union[bool, str]] = None,
+        encoding: Optional[str] = None,
+        locale: Optional[str] = None,
+        pathGlobFilter: Optional[Union[bool, str]] = None,
+        recursiveFileLookup: Optional[Union[bool, str]] = None,
+        modifiedBefore: Optional[Union[bool, str]] = None,
+        modifiedAfter: Optional[Union[bool, str]] = None,
+        allowNonNumericNumbers: Optional[Union[bool, str]] = None,
+    ) -> "DataFrame":
+        """
+        Loads JSON files and returns the results as a :class:`DataFrame`.
+
+        `JSON Lines <http://jsonlines.org/>`_ (newline-delimited JSON) is supported by default.
+        For JSON (one record per file), set the ``multiLine`` parameter to ``true``.
+
+        If the ``schema`` parameter is not specified, this function goes
+        through the input once to determine the input schema.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        path : str
+            string represents path to the JSON dataset
+        schema : str, optional
+            a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
+
+        Other Parameters
+        ----------------
+        Extra options
+            For the extra options, refer to
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option>`_
+            for the version you use.
+
+            .. # noqa
+
+        Examples
+        --------
+        Write a DataFrame into a JSON file and read it back.
+
+        >>> import tempfile
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     # Write a DataFrame into a JSON file
+        ...     spark.createDataFrame(
+        ...         [{"age": 100, "name": "Hyukjin Kwon"}]
+        ...     ).write.mode("overwrite").format("json").save(d)
+        ...
+        ...     # Read the JSON file as a DataFrame.
+        ...     spark.read.json(d).show()
+        +---+------------+
+        |age|        name|
+        +---+------------+
+        |100|Hyukjin Kwon|
+        +---+------------+
+        """
+        self._set_opts(
+            primitivesAsString=primitivesAsString,
+            prefersDecimal=prefersDecimal,
+            allowComments=allowComments,
+            allowUnquotedFieldNames=allowUnquotedFieldNames,
+            allowSingleQuotes=allowSingleQuotes,
+            allowNumericLeadingZero=allowNumericLeadingZero,
+            allowBackslashEscapingAnyCharacter=allowBackslashEscapingAnyCharacter,
+            mode=mode,
+            columnNameOfCorruptRecord=columnNameOfCorruptRecord,
+            dateFormat=dateFormat,
+            timestampFormat=timestampFormat,
+            multiLine=multiLine,
+            allowUnquotedControlChars=allowUnquotedControlChars,
+            lineSep=lineSep,
+            samplingRatio=samplingRatio,
+            dropFieldIfAllNull=dropFieldIfAllNull,
+            encoding=encoding,
+            locale=locale,
+            pathGlobFilter=pathGlobFilter,
+            recursiveFileLookup=recursiveFileLookup,
+            modifiedBefore=modifiedBefore,
+            modifiedAfter=modifiedAfter,
+            allowNonNumericNumbers=allowNonNumericNumbers,
+        )
+        return self.load(path=path, format="json", schema=schema)
+
+    def parquet(self, path: str, **options: "OptionalPrimitiveType") -> "DataFrame":
+        """
+        Loads Parquet files, returning the result as a :class:`DataFrame`.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        path : str
+
+        Other Parameters
+        ----------------
+        **options
+            For the extra options, refer to
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option>`_
+            for the version you use.
+
+            .. # noqa
+
+        Examples
+        --------
+        Write a DataFrame into a Parquet file and read it back.
+
+        >>> import tempfile
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     # Write a DataFrame into a Parquet file
+        ...     spark.createDataFrame(
+        ...         [{"age": 100, "name": "Hyukjin Kwon"}]
+        ...     ).write.mode("overwrite").format("parquet").save(d)
+        ...
+        ...     # Read the Parquet file as a DataFrame.
+        ...     spark.read.parquet(d).show()
+        +---+------------+
+        |age|        name|
+        +---+------------+
+        |100|Hyukjin Kwon|
+        +---+------------+
+        """
+        mergeSchema = options.get("mergeSchema", None)
+        pathGlobFilter = options.get("pathGlobFilter", None)
+        modifiedBefore = options.get("modifiedBefore", None)
+        modifiedAfter = options.get("modifiedAfter", None)
+        recursiveFileLookup = options.get("recursiveFileLookup", None)
+        datetimeRebaseMode = options.get("datetimeRebaseMode", None)
+        int96RebaseMode = options.get("int96RebaseMode", None)
+        self._set_opts(
+            mergeSchema=mergeSchema,
+            pathGlobFilter=pathGlobFilter,
+            recursiveFileLookup=recursiveFileLookup,
+            modifiedBefore=modifiedBefore,
+            modifiedAfter=modifiedAfter,
+            datetimeRebaseMode=datetimeRebaseMode,
+            int96RebaseMode=int96RebaseMode,
+        )
+
+        return self.load(path=path, format="parquet")
 
 
 class DataFrameWriter(OptionUtils):

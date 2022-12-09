@@ -28,7 +28,7 @@ if have_pandas:
     from pyspark.sql.connect.plan import LogicalPlan
     from pyspark.sql.connect.session import SparkSession
 
-    connect_jar = search_jar("connector/connect", "spark-connect-assembly-", "spark-connect")
+    connect_jar = search_jar("connector/connect/server", "spark-connect-assembly-", "spark-connect")
 else:
     connect_jar = None
 
@@ -69,7 +69,8 @@ class MockRemoteSession:
 class PlanOnlyTestFixture(unittest.TestCase):
 
     connect: "MockRemoteSession"
-    session: SparkSession
+    if have_pandas:
+        session: SparkSession
 
     @classmethod
     def _read_table(cls, table_name: str) -> "DataFrame":
@@ -95,9 +96,11 @@ class PlanOnlyTestFixture(unittest.TestCase):
     def _session_sql(cls, query: str) -> "DataFrame":
         return DataFrame.withPlan(SQL(query), cls.connect)  # type: ignore
 
-    @classmethod
-    def _with_plan(cls, plan: LogicalPlan) -> "DataFrame":
-        return DataFrame.withPlan(plan, cls.connect)  # type: ignore
+    if have_pandas:
+
+        @classmethod
+        def _with_plan(cls, plan: LogicalPlan) -> "DataFrame":
+            return DataFrame.withPlan(plan, cls.connect)  # type: ignore
 
     @classmethod
     def setUpClass(cls: Any) -> None:

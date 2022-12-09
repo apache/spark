@@ -40,13 +40,14 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
   import DataSourceV2Implicits._
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
-    case a @ AppendData(r: DataSourceV2Relation, query, options, _, None) =>
+    case a @ AppendData(r: DataSourceV2Relation, query, options, _, None, _) =>
       val writeBuilder = newWriteBuilder(r.table, options, query.schema)
       val write = writeBuilder.build()
       val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, r.funCatalog)
       a.copy(write = Some(write), query = newQuery)
 
-    case o @ OverwriteByExpression(r: DataSourceV2Relation, deleteExpr, query, options, _, None) =>
+    case o @ OverwriteByExpression(
+        r: DataSourceV2Relation, deleteExpr, query, options, _, None, _) =>
       // fail if any filter cannot be converted. correctness depends on removing all matching data.
       val predicates = splitConjunctivePredicates(deleteExpr).flatMap { pred =>
         val predicate = DataSourceV2Strategy.translateFilterV2(pred)

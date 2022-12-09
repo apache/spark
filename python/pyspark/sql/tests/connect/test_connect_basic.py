@@ -32,13 +32,16 @@ from pyspark.sql.types import StructType, StructField, LongType, StringType
 if have_pandas:
     from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
     from pyspark.sql.connect.client import ChannelBuilder
+    from pyspark.sql.connect.column import Column
+    from pyspark.sql.connect.dataframe import DataFrame as CDataFrame
     from pyspark.sql.connect.function_builder import udf
     from pyspark.sql.connect.functions import lit, col
+    from pyspark.testing.pandasutils import PandasOnSparkTestCase
+else:
+    from pyspark.testing.sqlutils import ReusedSQLTestCase as PandasOnSparkTestCase  # type: ignore
 from pyspark.sql.dataframe import DataFrame
 import pyspark.sql.functions
-from pyspark.sql.connect.dataframe import DataFrame as CDataFrame
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.utils import ReusedPySparkTestCase
 
 
@@ -118,6 +121,35 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         # Check that the limit is applied
         self.assertEqual(len(data.index), 10)
 
+    def test_json(self):
+        with tempfile.TemporaryDirectory() as d:
+            # Write a DataFrame into a JSON file
+            self.spark.createDataFrame([{"age": 100, "name": "Hyukjin Kwon"}]).write.mode(
+                "overwrite"
+            ).format("json").save(d)
+            # Read the JSON file as a DataFrame.
+            self.assert_eq(self.connect.read.json(d).toPandas(), self.spark.read.json(d).toPandas())
+            self.assert_eq(
+                self.connect.read.json(path=d, schema="age INT, name STRING").toPandas(),
+                self.spark.read.json(path=d, schema="age INT, name STRING").toPandas(),
+            )
+            self.assert_eq(
+                self.connect.read.json(path=d, primitivesAsString=True).toPandas(),
+                self.spark.read.json(path=d, primitivesAsString=True).toPandas(),
+            )
+
+    def test_paruqet(self):
+        # SPARK-41445: Implement DataFrameReader.paruqet
+        with tempfile.TemporaryDirectory() as d:
+            # Write a DataFrame into a JSON file
+            self.spark.createDataFrame([{"age": 100, "name": "Hyukjin Kwon"}]).write.mode(
+                "overwrite"
+            ).format("parquet").save(d)
+            # Read the Parquet file as a DataFrame.
+            self.assert_eq(
+                self.connect.read.parquet(d).toPandas(), self.spark.read.parquet(d).toPandas()
+            )
+
     def test_join_condition_column_list_columns(self):
         left_connect_df = self.connect.read.table(self.tbl_name)
         right_connect_df = self.connect.read.table(self.tbl_name2)
@@ -145,48 +177,6 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             how="inner",
         )
         self.assert_eq(joined_plan3.toPandas(), joined_plan4.toPandas())
-
-    def test_columns(self):
-        # SPARK-41036: test `columns` API for python client.
-        df = self.connect.read.table(self.tbl_name)
-        df2 = self.spark.read.table(self.tbl_name)
-        self.assertEqual(["id", "name"], df.columns)
-
-        self.assert_eq(
-            df.filter(df.name.rlike("20")).toPandas(), df2.filter(df2.name.rlike("20")).toPandas()
-        )
-        self.assert_eq(
-            df.filter(df.name.like("20")).toPandas(), df2.filter(df2.name.like("20")).toPandas()
-        )
-        self.assert_eq(
-            df.filter(df.name.ilike("20")).toPandas(), df2.filter(df2.name.ilike("20")).toPandas()
-        )
-        self.assert_eq(
-            df.filter(df.name.contains("20")).toPandas(),
-            df2.filter(df2.name.contains("20")).toPandas(),
-        )
-        self.assert_eq(
-            df.filter(df.name.startswith("2")).toPandas(),
-            df2.filter(df2.name.startswith("2")).toPandas(),
-        )
-        self.assert_eq(
-            df.filter(df.name.endswith("0")).toPandas(),
-            df2.filter(df2.name.endswith("0")).toPandas(),
-        )
-        self.assert_eq(
-            df.select(df.name.substr(0, 1).alias("col")).toPandas(),
-            df2.select(df2.name.substr(0, 1).alias("col")).toPandas(),
-        )
-        df3 = self.connect.sql("SELECT cast(null as int) as name")
-        df4 = self.spark.sql("SELECT cast(null as int) as name")
-        self.assert_eq(
-            df3.filter(df3.name.isNull()).toPandas(),
-            df4.filter(df4.name.isNull()).toPandas(),
-        )
-        self.assert_eq(
-            df3.filter(df3.name.isNotNull()).toPandas(),
-            df4.filter(df4.name.isNotNull()).toPandas(),
-        )
 
     def test_collect(self):
         df = self.connect.read.table(self.tbl_name)
@@ -369,15 +359,6 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         finally:
             shutil.rmtree(tmpPath)
 
-    def test_simple_binary_expressions(self):
-        """Test complex expression"""
-        df = self.connect.read.table(self.tbl_name)
-        pd = df.select(df.id).where(df.id % lit(30) == lit(0)).sort(df.id.asc()).toPandas()
-        self.assertEqual(len(pd.index), 4)
-
-        res = pandas.DataFrame(data={"id": [0, 30, 60, 90]})
-        self.assert_(pd.equals(res), f"{pd.to_string()} != {res.to_string()}")
-
     def test_limit_offset(self):
         df = self.connect.read.table(self.tbl_name)
         pd = df.limit(10).offset(1).toPandas()
@@ -530,10 +511,22 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             self.connect.sql("SELECT 2 AS X LIMIT 1").createOrReplaceGlobalTempView("view_1")
             self.assertTrue(self.spark.catalog.tableExists("global_temp.view_1"))
 
-            # Test when creating a view which is alreayd exists but
+            # Test when creating a view which is already exists but
             self.assertTrue(self.spark.catalog.tableExists("global_temp.view_1"))
             with self.assertRaises(grpc.RpcError):
                 self.connect.sql("SELECT 1 AS X LIMIT 0").createGlobalTempView("view_1")
+
+    def test_create_session_local_temp_view(self):
+        # SPARK-41372: test session local temp view creation.
+        with self.tempView("view_local_temp"):
+            self.connect.sql("SELECT 1 AS X").createTempView("view_local_temp")
+            self.assertEqual(self.connect.sql("SELECT * FROM view_local_temp").count(), 1)
+            self.connect.sql("SELECT 1 AS X LIMIT 0").createOrReplaceTempView("view_local_temp")
+            self.assertEqual(self.connect.sql("SELECT * FROM view_local_temp").count(), 0)
+
+            # Test when creating a view which is already exists but
+            with self.assertRaises(grpc.RpcError):
+                self.connect.sql("SELECT 1 AS X LIMIT 0").createTempView("view_local_temp")
 
     def test_to_pandas(self):
         # SPARK-41005: Test to pandas
@@ -902,6 +895,27 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertEqual(4.0, res[0][1])
         self.assertEqual(5.0, res[1][1])
 
+        # Additional GroupBy tests with 3 rows
+        from pyspark.sql.connect.function_builder import functions as FB
+        import pyspark.sql.functions as PF
+
+        df_a = self.connect.range(10).groupBy((col("id") % lit(3)).alias("moded"))
+        df_b = self.spark.range(10).groupBy((PF.col("id") % PF.lit(3)).alias("moded"))
+        self.assertEqual(
+            set(df_b.agg(PF.sum("id")).collect()), set(df_a.agg(FB.sum("id")).collect())
+        )
+
+        # Dict agg
+        measures = {"id": "sum"}
+        self.assertEqual(
+            set(df_a.agg(measures).select("sum(id)").collect()),
+            set(df_b.agg(measures).select("sum(id)").collect()),
+        )
+
+    def test_column_cannot_be_constructed_from_string(self):
+        with self.assertRaises(TypeError):
+            Column("col")
+
     def test_crossjoin(self):
         # SPARK-41227: Test CrossJoin
         connect_df = self.connect.read.table(self.tbl_name)
@@ -920,6 +934,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         )
 
 
+@unittest.skipIf(not should_test_connect, connect_requirement_message)
 class ChannelBuilderTests(ReusedPySparkTestCase):
     def test_invalid_connection_strings(self):
         invalid = [

@@ -90,7 +90,10 @@ column = col
 
 
 def lit(col: Any) -> Column:
-    return Column(LiteralExpression(col))
+    if isinstance(col, Column):
+        return col
+    else:
+        return Column(LiteralExpression(col))
 
 
 # def bitwiseNOT(col: "ColumnOrName") -> Column:
@@ -2322,50 +2325,48 @@ def count(col: "ColumnOrName") -> Column:
 #     return count_distinct(col, *cols)
 
 
-# TODO(SPARK-41381): add isDistinct in UnresolvedFunction
-# def count_distinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
-#     """Returns a new :class:`Column` for distinct count of ``col`` or ``cols``.
-#
-#     .. versionadded:: 3.4.0
-#
-#     Parameters
-#     ----------
-#     col : :class:`~pyspark.sql.Column` or str
-#         first column to compute on.
-#     cols : :class:`~pyspark.sql.Column` or str
-#         other columns to compute on.
-#
-#     Returns
-#     -------
-#     :class:`~pyspark.sql.Column`
-#         distinct values of these two column values.
-#
-#     Examples
-#     --------
-#     >>> from pyspark.sql import types
-#     >>> df1 = spark.createDataFrame([1, 1, 3], types.IntegerType())
-#     >>> df2 = spark.createDataFrame([1, 2], types.IntegerType())
-#     >>> df1.join(df2).show()
-#     +-----+-----+
-#     |value|value|
-#     +-----+-----+
-#     |    1|    1|
-#     |    1|    2|
-#     |    1|    1|
-#     |    1|    2|
-#     |    3|    1|
-#     |    3|    2|
-#     +-----+-----+
-#     >>> df1.join(df2).select(count_distinct(df1.value, df2.value)).show()
-#     +----------------------------+
-#     |count(DISTINCT value, value)|
-#     +----------------------------+
-#     |                           4|
-#     +----------------------------+
-#     """
-#     return _invoke_function(
-#         "count_distinct", _to_java_column(col), _to_seq(sc, cols, _to_java_column)
-#     )
+def count_distinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
+    """Returns a new :class:`Column` for distinct count of ``col`` or ``cols``.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        first column to compute on.
+    cols : :class:`~pyspark.sql.Column` or str
+        other columns to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        distinct values of these two column values.
+
+    Examples
+    --------
+    >>> from pyspark.sql import types
+    >>> df1 = spark.createDataFrame([1, 1, 3], types.IntegerType())
+    >>> df2 = spark.createDataFrame([1, 2], types.IntegerType())
+    >>> df1.join(df2).show()
+    +-----+-----+
+    |value|value|
+    +-----+-----+
+    |    1|    1|
+    |    1|    2|
+    |    1|    1|
+    |    1|    2|
+    |    3|    1|
+    |    3|    2|
+    +-----+-----+
+    >>> df1.join(df2).select(count_distinct(df1.value, df2.value)).show()
+    +----------------------------+
+    |count(DISTINCT value, value)|
+    +----------------------------+
+    |                           4|
+    +----------------------------+
+    """
+    _exprs = [_to_col(c)._expr for c in [col] + list(cols)]
+    return Column(UnresolvedFunction("count", _exprs, is_distinct=True))
 
 
 def covar_pop(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
@@ -2920,37 +2921,36 @@ def percentile_approx(
     return _invoke_function("percentile_approx", _to_col(col), percentage_col, lit(accuracy))
 
 
-# TODO(SPARK-41382): add product in FunctionRegistry?
-# def product(col: "ColumnOrName") -> Column:
-#     """
-#     Aggregate function: returns the product of the values in a group.
-#
-#     .. versionadded:: 3.4.0
-#
-#     Parameters
-#     ----------
-#     col : str, :class:`Column`
-#         column containing values to be multiplied together
-#
-#     Returns
-#     -------
-#     :class:`~pyspark.sql.Column`
-#         the column for computed results.
-#
-#     Examples
-#     --------
-#     >>> df = spark.range(1, 10).toDF('x').withColumn('mod3', col('x') % 3)
-#     >>> prods = df.groupBy('mod3').agg(product('x').alias('product'))
-#     >>> prods.orderBy('mod3').show()
-#     +----+-------+
-#     |mod3|product|
-#     +----+-------+
-#     |   0|  162.0|
-#     |   1|   28.0|
-#     |   2|   80.0|
-#     +----+-------+
-#     """
-#     return _invoke_function_over_columns("product", col)
+def product(col: "ColumnOrName") -> Column:
+    """
+    Aggregate function: returns the product of the values in a group.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : str, :class:`Column`
+        column containing values to be multiplied together
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for computed results.
+
+    Examples
+    --------
+    >>> df = spark.range(1, 10).toDF('x').withColumn('mod3', col('x') % 3)
+    >>> prods = df.groupBy('mod3').agg(product('x').alias('product'))
+    >>> prods.orderBy('mod3').show()
+    +----+-------+
+    |mod3|product|
+    +----+-------+
+    |   0|  162.0|
+    |   1|   28.0|
+    |   2|   80.0|
+    +----+-------+
+    """
+    return _invoke_function_over_columns("product", col)
 
 
 def skewness(col: "ColumnOrName") -> Column:
@@ -3098,33 +3098,33 @@ def sum(col: "ColumnOrName") -> Column:
 
 
 # TODO(SPARK-41381): add isDistinct in UnresolvedFunction
-# def sum_distinct(col: "ColumnOrName") -> Column:
-#     """
-#     Aggregate function: returns the sum of distinct values in the expression.
-#
-#     .. versionadded:: 3.4.0
-#
-#     Parameters
-#     ----------
-#     col : :class:`~pyspark.sql.Column` or str
-#         target column to compute on.
-#
-#     Returns
-#     -------
-#     :class:`~pyspark.sql.Column`
-#         the column for computed results.
-#
-#     Examples
-#     --------
-#     >>> df = spark.createDataFrame([(None,), (1,), (1,), (2,)], schema=["numbers"])
-#     >>> df.select(sum_distinct(col("numbers"))).show()
-#     +---------------------+
-#     |sum(DISTINCT numbers)|
-#     +---------------------+
-#     |                    3|
-#     +---------------------+
-#     """
-#     return _invoke_function_over_columns("sum_distinct", col)
+def sum_distinct(col: "ColumnOrName") -> Column:
+    """
+    Aggregate function: returns the sum of distinct values in the expression.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for computed results.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(None,), (1,), (1,), (2,)], schema=["numbers"])
+    >>> df.select(sum_distinct(col("numbers"))).show()
+    +---------------------+
+    |sum(DISTINCT numbers)|
+    +---------------------+
+    |                    3|
+    +---------------------+
+    """
+    return Column(UnresolvedFunction("sum", [_to_col(col)._expr], is_distinct=True))
 
 
 def var_pop(col: "ColumnOrName") -> Column:
@@ -3209,3 +3209,952 @@ def variance(col: "ColumnOrName") -> Column:
     +------------+
     """
     return var_samp(col)
+
+
+# Collection Functions
+
+
+# TODO(SPARK-41434): need to support LambdaFunction Expression first
+# def aggregate(
+#         col: "ColumnOrName",
+#         initialValue: "ColumnOrName",
+#         merge: Callable[[Column, Column], Column],
+#         finish: Optional[Callable[[Column], Column]] = None,
+# ) -> Column:
+#     """
+#     Applies a binary operator to an initial state and all elements in the array,
+#     and reduces this to a single state. The final state is converted into the final result
+#     by applying a finish function.
+#
+#     Both functions can use methods of :class:`~pyspark.sql.Column`, functions defined in
+#     :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
+#     Python ``UserDefinedFunctions`` are not supported
+#     (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
+#
+#     .. versionadded:: 3.1.0
+#
+#     Parameters
+#     ----------
+#     col : :class:`~pyspark.sql.Column` or str
+#         name of column or expression
+#     initialValue : :class:`~pyspark.sql.Column` or str
+#         initial value. Name of column or expression
+#     merge : function
+#         a binary function ``(acc: Column, x: Column) -> Column...`` returning expression
+#         of the same type as ``zero``
+#     finish : function
+#         an optional unary function ``(x: Column) -> Column: ...``
+#         used to convert accumulated value.
+#
+#     Returns
+#     -------
+#     :class:`~pyspark.sql.Column`
+#         final value after aggregate function is applied.
+#
+#     Examples
+#     --------
+#     >>> df = spark.createDataFrame([(1, [20.0, 4.0, 2.0, 6.0, 10.0])], ("id", "values"))
+#     >>> df.select(aggregate("values", lit(0.0), lambda acc, x: acc + x).alias("sum")).show()
+#     +----+
+#     | sum|
+#     +----+
+#     |42.0|
+#     +----+
+#
+#     >>> def merge(acc, x):
+#     ...     count = acc.count + 1
+#     ...     sum = acc.sum + x
+#     ...     return struct(count.alias("count"), sum.alias("sum"))
+#     >>> df.select(
+#     ...     aggregate(
+#     ...         "values",
+#     ...         struct(lit(0).alias("count"), lit(0.0).alias("sum")),
+#     ...         merge,
+#     ...         lambda acc: acc.sum / acc.count,
+#     ...     ).alias("mean")
+#     ... ).show()
+#     +----+
+#     |mean|
+#     +----+
+#     | 8.4|
+#     +----+
+#     """
+#     if finish is not None:
+#         return _invoke_higher_order_function("ArrayAggregate", [col, initialValue],
+#           [merge, finish])
+#
+#     else:
+#         return _invoke_higher_order_function("ArrayAggregate", [col, initialValue],
+#           [merge])
+
+
+def array(*cols: Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]) -> Column:
+    """Creates a new array column.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    cols : :class:`~pyspark.sql.Column` or str
+        column names or :class:`~pyspark.sql.Column`\\s that have
+        the same data type.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a column of array type.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5)], ("name", "age"))
+    >>> df.select(array('age', 'age').alias("arr")).collect()
+    [Row(arr=[2, 2]), Row(arr=[5, 5])]
+    >>> df.select(array([df.age, df.age]).alias("arr")).collect()
+    [Row(arr=[2, 2]), Row(arr=[5, 5])]
+    >>> df.select(array('age', 'age').alias("col")).printSchema()
+    root
+     |-- col: array (nullable = false)
+     |    |-- element: long (containsNull = true)
+    """
+    if len(cols) == 1 and isinstance(cols[0], (list, set, tuple)):
+        cols = cols[0]  # type: ignore[assignment]
+    return _invoke_function_over_columns("array", *cols)  # type: ignore[arg-type]
+
+
+def array_contains(col: "ColumnOrName", value: Any) -> Column:
+    """
+    Collection function: returns null if the array is null, true if the array contains the
+    given value, and false otherwise.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        name of column containing array
+    value :
+        value or column to check for in array
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a column of Boolean type.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(["a", "b", "c"],), ([],)], ['data'])
+    >>> df.select(array_contains(df.data, "a")).collect()
+    [Row(array_contains(data, a)=True), Row(array_contains(data, a)=False)]
+    >>> df.select(array_contains(df.data, lit("a"))).collect()
+    [Row(array_contains(data, a)=True), Row(array_contains(data, a)=False)]
+    """
+    return _invoke_function("array_contains", _to_col(col), lit(value))
+
+
+def array_distinct(col: "ColumnOrName") -> Column:
+    """
+    Collection function: removes duplicate values from the array.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        name of column or expression
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        an array of unique values.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([([1, 2, 3, 2],), ([4, 5, 5, 4],)], ['data'])
+    >>> df.select(array_distinct(df.data)).collect()
+    [Row(array_distinct(data)=[1, 2, 3]), Row(array_distinct(data)=[4, 5])]
+    """
+    return _invoke_function_over_columns("array_distinct", col)
+
+
+def array_except(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    """
+    Collection function: returns an array of the elements in col1 but not in col2,
+    without duplicates.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or str
+        name of column containing array
+    col2 : :class:`~pyspark.sql.Column` or str
+        name of column containing array
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        an array of values from first array that are not in the second.
+
+    Examples
+    --------
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(c1=["b", "a", "c"], c2=["c", "d", "a", "f"])])
+    >>> df.select(array_except(df.c1, df.c2)).collect()
+    [Row(array_except(c1, c2)=['b'])]
+    """
+    return _invoke_function_over_columns("array_except", col1, col2)
+
+
+def array_intersect(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    """
+    Collection function: returns an array of the elements in the intersection of col1 and col2,
+    without duplicates.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or str
+        name of column containing array
+    col2 : :class:`~pyspark.sql.Column` or str
+        name of column containing array
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        an array of values in the intersection of two arrays.
+
+    Examples
+    --------
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(c1=["b", "a", "c"], c2=["c", "d", "a", "f"])])
+    >>> df.select(array_intersect(df.c1, df.c2)).collect()
+    [Row(array_intersect(c1, c2)=['a', 'c'])]
+    """
+    return _invoke_function_over_columns("array_intersect", col1, col2)
+
+
+def array_join(
+    col: "ColumnOrName", delimiter: str, null_replacement: Optional[str] = None
+) -> Column:
+    """
+    Concatenates the elements of `column` using the `delimiter`. Null values are replaced with
+    `null_replacement` if set, otherwise they are ignored.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+    delimiter : str
+        delimiter used to concatenate elements
+    null_replacement : str, optional
+        if set then null values will be replaced by this value
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a column of string type. Concatenated values.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(["a", "b", "c"],), (["a", None],)], ['data'])
+    >>> df.select(array_join(df.data, ",").alias("joined")).collect()
+    [Row(joined='a,b,c'), Row(joined='a')]
+    >>> df.select(array_join(df.data, ",", "NULL").alias("joined")).collect()
+    [Row(joined='a,b,c'), Row(joined='a,NULL')]
+    """
+    if null_replacement is None:
+        return _invoke_function("array_join", _to_col(col), lit(delimiter))
+    else:
+        return _invoke_function("array_join", _to_col(col), lit(delimiter), lit(null_replacement))
+
+
+def array_max(col: "ColumnOrName") -> Column:
+    """
+    Collection function: returns the maximum value of the array.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        name of column or expression
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        maximum value of an array.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([([2, 1, 3],), ([None, 10, -1],)], ['data'])
+    >>> df.select(array_max(df.data).alias('max')).collect()
+    [Row(max=3), Row(max=10)]
+    """
+    return _invoke_function_over_columns("array_max", col)
+
+
+def array_min(col: "ColumnOrName") -> Column:
+    """
+    Collection function: returns the minimum value of the array.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        name of column or expression
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        minimum value of array.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([([2, 1, 3],), ([None, 10, -1],)], ['data'])
+    >>> df.select(array_min(df.data).alias('min')).collect()
+    [Row(min=1), Row(min=-1)]
+    """
+    return _invoke_function_over_columns("array_min", col)
+
+
+def array_position(col: "ColumnOrName", value: Any) -> Column:
+    """
+    Collection function: Locates the position of the first occurrence of the given value
+    in the given array. Returns null if either of the arguments are null.
+
+    .. versionadded:: 3.4.0
+
+    Notes
+    -----
+    The position is not zero based, but 1 based index. Returns 0 if the given
+    value could not be found in the array.
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+    value : Any
+        value to look for.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        position of the value in the given array if found and 0 otherwise.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(["c", "b", "a"],), ([],)], ['data'])
+    >>> df.select(array_position(df.data, "a")).collect()
+    [Row(array_position(data, a)=3), Row(array_position(data, a)=0)]
+    """
+    return _invoke_function("array_position", _to_col(col), lit(value))
+
+
+def array_remove(col: "ColumnOrName", element: Any) -> Column:
+    """
+    Collection function: Remove all elements that equal to element from the given array.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        name of column containing array
+    element :
+        element to be removed from the array
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        an array excluding given value.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([([1, 2, 3, 1, 1],), ([],)], ['data'])
+    >>> df.select(array_remove(df.data, 1)).collect()
+    [Row(array_remove(data, 1)=[2, 3]), Row(array_remove(data, 1)=[])]
+    """
+    return _invoke_function("array_remove", _to_col(col), lit(element))
+
+
+def array_repeat(col: "ColumnOrName", count: Union["ColumnOrName", int]) -> Column:
+    """
+    Collection function: creates an array containing a column repeated count times.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        column name or column that contains the element to be repeated
+    count : :class:`~pyspark.sql.Column` or str or int
+        column name, column, or int containing the number of times to repeat the first argument
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        an array of repeated elements.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('ab',)], ['data'])
+    >>> df.select(array_repeat(df.data, 3).alias('r')).collect()
+    [Row(r=['ab', 'ab', 'ab'])]
+    """
+    _count = lit(count) if isinstance(count, int) else _to_col(count)
+
+    return _invoke_function("array_repeat", _to_col(col), _count)
+
+
+# TODO(SPARK-41434): need to support LambdaFunction Expression first
+# def array_sort(
+#         col: "ColumnOrName", comparator: Optional[Callable[[Column, Column], Column]] = None
+# ) -> Column:
+#     """
+#     Collection function: sorts the input array in ascending order. The elements of the input array
+#     must be orderable. Null elements will be placed at the end of the returned array.
+#
+#     .. versionadded:: 2.4.0
+#     .. versionchanged:: 3.4.0
+#         Can take a `comparator` function.
+#
+#     Parameters
+#     ----------
+#     col : :class:`~pyspark.sql.Column` or str
+#         name of column or expression
+#     comparator : callable, optional
+#         A binary ``(Column, Column) -> Column: ...``.
+#         The comparator will take two
+#         arguments representing two elements of the array. It returns a negative integer, 0, or a
+#         positive integer as the first element is less than, equal to, or greater than the second
+#         element. If the comparator function returns null, the function will fail and raise an
+#         error.
+#
+#     Returns
+#     -------
+#     :class:`~pyspark.sql.Column`
+#         sorted array.
+#
+#     Examples
+#     --------
+#     >>> df = spark.createDataFrame([([2, 1, None, 3],),([1],),([],)], ['data'])
+#     >>> df.select(array_sort(df.data).alias('r')).collect()
+#     [Row(r=[1, 2, 3, None]), Row(r=[1]), Row(r=[])]
+#     >>> df = spark.createDataFrame([(["foo", "foobar", None, "bar"],),(["foo"],),([],)], ['data'])
+#     >>> df.select(array_sort(
+#     ...     "data",
+#     ...     lambda x, y: when(x.isNull() | y.isNull(), lit(0)).otherwise(length(y) - length(x))
+#     ... ).alias("r")).collect()
+#     [Row(r=['foobar', 'foo', None, 'bar']), Row(r=['foo']), Row(r=[])]
+#     """
+#     if comparator is None:
+#         return _invoke_function_over_columns("array_sort", col)
+#     else:
+#         return _invoke_higher_order_function("ArraySort", [col], [comparator])
+
+
+def array_union(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    """
+    Collection function: returns an array of the elements in the union of col1 and col2,
+    without duplicates.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or str
+        name of column containing array
+    col2 : :class:`~pyspark.sql.Column` or str
+        name of column containing array
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        an array of values in union of two arrays.
+
+    Examples
+    --------
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(c1=["b", "a", "c"], c2=["c", "d", "a", "f"])])
+    >>> df.select(array_union(df.c1, df.c2)).collect()
+    [Row(array_union(c1, c2)=['b', 'a', 'c', 'd', 'f'])]
+    """
+    return _invoke_function_over_columns("array_union", col1, col2)
+
+
+def arrays_overlap(a1: "ColumnOrName", a2: "ColumnOrName") -> Column:
+    """
+    Collection function: returns true if the arrays contain any common non-null element; if not,
+    returns null if both the arrays are non-empty and any of them contains a null element; returns
+    false otherwise.
+
+    .. versionadded:: 3.4.0
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a column of Boolean type.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(["a", "b"], ["b", "c"]), (["a"], ["b", "c"])], ['x', 'y'])
+    >>> df.select(arrays_overlap(df.x, df.y).alias("overlap")).collect()
+    [Row(overlap=True), Row(overlap=False)]
+    """
+    return _invoke_function_over_columns("arrays_overlap", a1, a2)
+
+
+def arrays_zip(*cols: "ColumnOrName") -> Column:
+    """
+    Collection function: Returns a merged array of structs in which the N-th struct contains all
+    N-th values of input arrays. If one of the arrays is shorter than others then
+    resulting struct type value will be a `null` for missing elements.
+
+    .. versionadded:: 2.4.0
+
+    Parameters
+    ----------
+    cols : :class:`~pyspark.sql.Column` or str
+        columns of arrays to be merged.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        merged array of entries.
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import arrays_zip
+    >>> df = spark.createDataFrame([(([1, 2, 3], [2, 4, 6], [3, 6]))], ['vals1', 'vals2', 'vals3'])
+    >>> df = df.select(arrays_zip(df.vals1, df.vals2, df.vals3).alias('zipped'))
+    >>> df.show(truncate=False)
+    +------------------------------------+
+    |zipped                              |
+    +------------------------------------+
+    |[{1, 2, 3}, {2, 4, 6}, {3, 6, null}]|
+    +------------------------------------+
+    >>> df.printSchema()
+    root
+     |-- zipped: array (nullable = true)
+     |    |-- element: struct (containsNull = false)
+     |    |    |-- vals1: long (nullable = true)
+     |    |    |-- vals2: long (nullable = true)
+     |    |    |-- vals3: long (nullable = true)
+    """
+    return _invoke_function_over_columns("arrays_zip", *cols)
+
+
+def concat(*cols: "ColumnOrName") -> Column:
+    """
+    Concatenates multiple input columns together into a single column.
+    The function works with strings, numeric, binary and compatible array columns.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    cols : :class:`~pyspark.sql.Column` or str
+        target column or columns to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        concatenated values. Type of the `Column` depends on input columns' type.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.array_join` : to concatenate string columns with delimiter
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('abcd','123')], ['s', 'd'])
+    >>> df = df.select(concat(df.s, df.d).alias('s'))
+    >>> df.collect()
+    [Row(s='abcd123')]
+    >>> df
+    DataFrame[s: string]
+
+    >>> df = spark.createDataFrame([([1, 2], [3, 4], [5]), ([1, 2], None, [3])], ['a', 'b', 'c'])
+    >>> df = df.select(concat(df.a, df.b, df.c).alias("arr"))
+    >>> df.collect()
+    [Row(arr=[1, 2, 3, 4, 5]), Row(arr=None)]
+    >>> df
+    DataFrame[arr: array<bigint>]
+    """
+    return _invoke_function_over_columns("concat", *cols)
+
+
+def create_map(
+    *cols: Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]
+) -> Column:
+    """Creates a new map column.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    cols : :class:`~pyspark.sql.Column` or str
+        column names or :class:`~pyspark.sql.Column`\\s that are
+        grouped as key-value pairs, e.g. (key1, value1, key2, value2, ...).
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5)], ("name", "age"))
+    >>> df.select(create_map('name', 'age').alias("map")).collect()
+    [Row(map={'Alice': 2}), Row(map={'Bob': 5})]
+    >>> df.select(create_map([df.name, df.age]).alias("map")).collect()
+    [Row(map={'Alice': 2}), Row(map={'Bob': 5})]
+    """
+    if len(cols) == 1 and isinstance(cols[0], (list, set, tuple)):
+        cols = cols[0]  # type: ignore[assignment]
+    return _invoke_function_over_columns("map", *cols)  # type: ignore[arg-type]
+
+
+# String/Binary functions
+
+
+def upper(col: "ColumnOrName") -> Column:
+    """
+    Converts a string expression to upper case.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        upper case values.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame(["Spark", "PySpark", "Pandas API"], "STRING")
+    >>> df.select(upper("value")).show()
+    +------------+
+    |upper(value)|
+    +------------+
+    |       SPARK|
+    |     PYSPARK|
+    |  PANDAS API|
+    +------------+
+    """
+    return _invoke_function_over_columns("upper", col)
+
+
+def lower(col: "ColumnOrName") -> Column:
+    """
+    Converts a string expression to lower case.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        lower case values.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame(["Spark", "PySpark", "Pandas API"], "STRING")
+    >>> df.select(lower("value")).show()
+    +------------+
+    |lower(value)|
+    +------------+
+    |       spark|
+    |     pyspark|
+    |  pandas api|
+    +------------+
+    """
+    return _invoke_function_over_columns("lower", col)
+
+
+def ascii(col: "ColumnOrName") -> Column:
+    """
+    Computes the numeric value of the first character of the string column.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        numeric value.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame(["Spark", "PySpark", "Pandas API"], "STRING")
+    >>> df.select(ascii("value")).show()
+    +------------+
+    |ascii(value)|
+    +------------+
+    |          83|
+    |          80|
+    |          80|
+    +------------+
+    """
+    return _invoke_function_over_columns("ascii", col)
+
+
+def base64(col: "ColumnOrName") -> Column:
+    """
+    Computes the BASE64 encoding of a binary column and returns it as a string column.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        BASE64 encoding of string value.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame(["Spark", "PySpark", "Pandas API"], "STRING")
+    >>> df.select(base64("value")).show()
+    +----------------+
+    |   base64(value)|
+    +----------------+
+    |        U3Bhcms=|
+    |    UHlTcGFyaw==|
+    |UGFuZGFzIEFQSQ==|
+    +----------------+
+    """
+    return _invoke_function_over_columns("base64", col)
+
+
+def unbase64(col: "ColumnOrName") -> Column:
+    """
+    Decodes a BASE64 encoded string column and returns it as a binary column.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        encoded string value.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame(["U3Bhcms=",
+    ...                             "UHlTcGFyaw==",
+    ...                             "UGFuZGFzIEFQSQ=="], "STRING")
+    >>> df.select(unbase64("value")).show()
+    +--------------------+
+    |     unbase64(value)|
+    +--------------------+
+    |    [53 70 61 72 6B]|
+    |[50 79 53 70 61 7...|
+    |[50 61 6E 64 61 7...|
+    +--------------------+
+    """
+    return _invoke_function_over_columns("unbase64", col)
+
+
+def ltrim(col: "ColumnOrName") -> Column:
+    """
+    Trim the spaces from left end for the specified string value.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        left trimmed values.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame(["   Spark", "Spark  ", " Spark"], "STRING")
+    >>> df.select(ltrim("value").alias("r")).withColumn("length", length("r")).show()
+    +-------+------+
+    |      r|length|
+    +-------+------+
+    |  Spark|     5|
+    |Spark  |     7|
+    |  Spark|     5|
+    +-------+------+
+    """
+    return _invoke_function_over_columns("ltrim", col)
+
+
+def rtrim(col: "ColumnOrName") -> Column:
+    """
+    Trim the spaces from right end for the specified string value.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        right trimmed values.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame(["   Spark", "Spark  ", " Spark"], "STRING")
+    >>> df.select(rtrim("value").alias("r")).withColumn("length", length("r")).show()
+    +--------+------+
+    |       r|length|
+    +--------+------+
+    |   Spark|     8|
+    |   Spark|     5|
+    |   Spark|     6|
+    +--------+------+
+    """
+    return _invoke_function_over_columns("rtrim", col)
+
+
+def trim(col: "ColumnOrName") -> Column:
+    """
+    Trim the spaces from both ends for the specified string column.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        trimmed values from both sides.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame(["   Spark", "Spark  ", " Spark"], "STRING")
+    >>> df.select(trim("value").alias("r")).withColumn("length", length("r")).show()
+    +-----+------+
+    |    r|length|
+    +-----+------+
+    |Spark|     5|
+    |Spark|     5|
+    |Spark|     5|
+    +-----+------+
+    """
+    return _invoke_function_over_columns("trim", col)
+
+
+def concat_ws(sep: str, *cols: "ColumnOrName") -> Column:
+    """
+    Concatenates multiple input string columns together into a single string column,
+    using the given separator.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    sep : str
+        words separator.
+    cols : :class:`~pyspark.sql.Column` or str
+        list of columns to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        string of concatenated words.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('abcd','123')], ['s', 'd'])
+    >>> df.select(concat_ws('-', df.s, df.d).alias('s')).collect()
+    [Row(s='abcd-123')]
+    """
+    return _invoke_function("concat_ws", lit(sep), *[_to_col(c) for c in cols])
+
+
+# TODO: enable with SPARK-41402
+# def decode(col: "ColumnOrName", charset: str) -> Column:
+#     """
+#     Computes the first argument into a string from a binary using the provided character set
+#     (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
+#
+#     .. versionadded:: 3.4.0
+#
+#     Parameters
+#     ----------
+#     col : :class:`~pyspark.sql.Column` or str
+#         target column to work on.
+#     charset : str
+#         charset to use to decode to.
+#
+#     Returns
+#     -------
+#     :class:`~pyspark.sql.Column`
+#         the column for computed results.
+#
+#     Examples
+#     --------
+#     >>> df = spark.createDataFrame([('abcd',)], ['a'])
+#     >>> df.select(decode("a", "UTF-8")).show()
+#     +----------------------+
+#     |stringdecode(a, UTF-8)|
+#     +----------------------+
+#     |                  abcd|
+#     +----------------------+
+#     """
+#     return _invoke_function("decode", _to_col(col), lit(charset))
+
+
+def encode(col: "ColumnOrName", charset: str) -> Column:
+    """
+    Computes the first argument into a binary from a string using the provided character set
+    (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+    charset : str
+        charset to use to encode.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for computed results.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('abcd',)], ['c'])
+    >>> df.select(encode("c", "UTF-8")).show()
+    +----------------+
+    |encode(c, UTF-8)|
+    +----------------+
+    |   [61 62 63 64]|
+    +----------------+
+    """
+    return _invoke_function("encode", _to_col(col), lit(charset))

@@ -433,11 +433,11 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
           s"(2, 11.0, cast('2020-01-01' as timestamp)), " +
           s"(3, 19.5, cast('2020-02-01' as timestamp))")
 
-      // number of unique partitions changed after dynamic filtering - should throw exception
+      // number of unique partitions changed after dynamic filtering - the gap should be filled
+      // with empty partitions and the job should still succeed
       var df = sql(s"SELECT sum(p.price) from testcat.ns.$items i, testcat.ns.$purchases p WHERE " +
           s"i.id = p.item_id AND i.price > 40.0")
-      val e = intercept[Exception](df.collect())
-      assert(e.getMessage.contains("number of unique partition values"))
+      checkAnswer(df, Seq(Row(131)))
 
       // dynamic filtering doesn't change partitioning so storage-partitioned join should kick in
       df = sql(s"SELECT sum(p.price) from testcat.ns.$items i, testcat.ns.$purchases p WHERE " +
