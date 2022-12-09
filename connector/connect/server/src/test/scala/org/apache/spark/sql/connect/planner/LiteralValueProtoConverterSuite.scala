@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.connect.planner
 
-import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.{toCatalystValue, toConnectProtoValue}
 
-class LiteralValueProtoConverterSuite extends AnyFunSuite {
+class LiteralValueProtoConverterSuite extends AnyFunSuite { // scalastyle:ignore funsuite
 
   test("basic proto value and catalyst value conversion") {
     val values = Array(null, true, 1.toByte, 1.toShort, 1, 1L, 1.1d, 1.1f, "spark")
