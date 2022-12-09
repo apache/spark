@@ -56,7 +56,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     env: SparkEnv,
     resourcesFileOpt: Option[String],
     resourceProfile: ResourceProfile)
-  extends IsolatedRpcEndpoint with ExecutorBackend with Logging {
+  extends IsolatedThreadSafeRpcEndpoint with ExecutorBackend with Logging {
 
   import CoarseGrainedExecutorBackend._
 
