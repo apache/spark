@@ -1168,27 +1168,9 @@ class LocalRelation(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    class StringList(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        STRINGS_FIELD_NUMBER: builtins.int
-        @property
-        def strings(
-            self,
-        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
-        def __init__(
-            self,
-            *,
-            strings: collections.abc.Iterable[builtins.str] | None = ...,
-        ) -> None: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["strings", b"strings"]
-        ) -> None: ...
-
     DATA_FIELD_NUMBER: builtins.int
     DATATYPE_FIELD_NUMBER: builtins.int
     DATATYPE_STR_FIELD_NUMBER: builtins.int
-    COLS_FIELD_NUMBER: builtins.int
     data: builtins.bytes
     """Local collection data serialized into Arrow IPC streaming format which contains
     the schema of the data.
@@ -1197,35 +1179,22 @@ class LocalRelation(google.protobuf.message.Message):
     def datatype(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
     datatype_str: builtins.str
     """Server will use Catalyst parser to parse this string to DataType."""
-    @property
-    def cols(self) -> global___LocalRelation.StringList:
-        """Column names"""
     def __init__(
         self,
         *,
         data: builtins.bytes = ...,
         datatype: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
         datatype_str: builtins.str = ...,
-        cols: global___LocalRelation.StringList | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "cols",
-            b"cols",
-            "datatype",
-            b"datatype",
-            "datatype_str",
-            b"datatype_str",
-            "schema",
-            b"schema",
+            "datatype", b"datatype", "datatype_str", b"datatype_str", "schema", b"schema"
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "cols",
-            b"cols",
             "data",
             b"data",
             "datatype",
@@ -1238,7 +1207,7 @@ class LocalRelation(google.protobuf.message.Message):
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["schema", b"schema"]
-    ) -> typing_extensions.Literal["datatype", "datatype_str", "cols"] | None: ...
+    ) -> typing_extensions.Literal["datatype", "datatype_str"] | None: ...
 
 global___LocalRelation = LocalRelation
 

@@ -297,6 +297,15 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         with self.assertRaises(grpc.RpcError):
             self.connect.createDataFrame(data, "col1 int, col2 int, col3 int").show()
 
+    def test_with_atom_type(self):
+        for data in [[(1), (2), (3)], [1, 2, 3]]:
+            for schema in ["long", "int", "short"]:
+                sdf = self.spark.createDataFrame(data, schema=schema)
+                cdf = self.connect.createDataFrame(data, schema=schema)
+
+                self.assertEqual(sdf.schema, cdf.schema)
+                self.assert_eq(sdf.toPandas(), cdf.toPandas())
+
     def test_simple_explain_string(self):
         df = self.connect.read.table(self.tbl_name).limit(10)
         result = df._explain_string()

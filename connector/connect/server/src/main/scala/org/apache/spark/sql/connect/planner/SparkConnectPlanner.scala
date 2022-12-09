@@ -322,7 +322,8 @@ class SparkConnectPlanner(session: SparkSession) {
         None,
         rel.getVariableColumnName,
         Seq(rel.getValueColumnName),
-        transformRelation(rel.getInput))
+        transformRelation(rel.getInput)
+      )
     } else {
       val values = rel.getValuesList.asScala.toArray.map { expr =>
         Column(transformExpression(expr))
@@ -334,7 +335,8 @@ class SparkConnectPlanner(session: SparkSession) {
         None,
         rel.getVariableColumnName,
         Seq(rel.getValueColumnName),
-        transformRelation(rel.getInput))
+        transformRelation(rel.getInput)
+      )
     }
   }
 
@@ -371,19 +373,17 @@ class SparkConnectPlanner(session: SparkSession) {
 
   private def parseDatatypeString(sqlText: String): DataType = {
     val parser = session.sessionState.sqlParser
-    var dataType: DataType = null
     try {
-      dataType = parser.parseTableSchema(sqlText)
+      parser.parseTableSchema(sqlText)
     } catch {
-      case e1: ParseException =>
+      case _: ParseException =>
         try {
-          dataType = parser.parseDataType(sqlText)
+          parser.parseDataType(sqlText)
         } catch {
-          case e2: ParseException =>
-            dataType = parser.parseDataType(s"struct<${sqlText.strip}>")
+          case _: ParseException =>
+            parser.parseDataType(s"struct<${sqlText.strip()}>")
         }
     }
-    dataType
   }
 
   private def transformLocalRelation(rel: proto.LocalRelation): LogicalPlan = {
@@ -397,24 +397,26 @@ class SparkConnectPlanner(session: SparkSession) {
     val proj = UnsafeProjection.create(attributes, attributes)
     val relation = logical.LocalRelation(attributes, rows.map(r => proj(r).copy()).toSeq)
 
-    if (rel.hasDatatype || rel.hasDatatypeStr) {
-      // rename columns and update datatypes
-      val schema = if (rel.hasDatatype) {
-        DataTypeProtoConverter
-          .toCatalystType(rel.getDatatype)
-          .asInstanceOf[StructType]
-      } else {
-        parseDatatypeString(rel.getDatatypeStr)
-          .asInstanceOf[StructType]
-      }
-      Dataset
-        .ofRows(session, logicalPlan = relation)
-        .toDF(schema.names: _*)
-        .to(schema)
-        .logicalPlan
-    } else {
-      relation
+    if (!rel.hasDatatype && !rel.hasDatatypeStr) {
+      return relation
     }
+
+    val schemaType = if (rel.hasDatatype) {
+      DataTypeProtoConverter.toCatalystType(rel.getDatatype)
+    } else {
+      parseDatatypeString(rel.getDatatypeStr)
+    }
+
+    val schemaStruct = schemaType match {
+      case s: StructType => s
+      case d => StructType(Seq(StructField("value", d)))
+    }
+
+    Dataset
+      .ofRows(session, logicalPlan = relation)
+      .toDF(schemaStruct.names: _*)
+      .to(schemaStruct)
+      .logicalPlan
   }
 
   private def transformReadRel(rel: proto.Read): LogicalPlan = {
