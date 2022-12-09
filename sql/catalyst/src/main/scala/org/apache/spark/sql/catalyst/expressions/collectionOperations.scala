@@ -4614,7 +4614,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
   since = "3.4.0")
 case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: Expression)
   extends TernaryExpression with ImplicitCastInputTypes with ComplexTypeMergingExpression
-    with SupportQueryContext with QueryErrorsBase{
+    with QueryErrorsBase{
 
   override def inputTypes: Seq[AbstractDataType] = {
     (srcArrayExpr.dataType, posExpr.dataType, itemExpr.dataType) match {
@@ -4639,7 +4639,7 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
             "inputSql" -> toSQLExpr(second),
             "inputType" -> toSQLType(second.dataType))
         )
-      case (ArrayType(e1, _), e2, e3) if e1.sameType(e2) =>
+      case (ArrayType(e1, _), e2, e3) if e1.sameType(e3) =>
         TypeUtils.checkForOrderingExpr(e2, prettyName)
       case _ =>
         DataTypeMismatch(
@@ -4647,22 +4647,10 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
           messageParameters = Map(
             "functionName" -> toSQLId(prettyName),
             "dataType" -> toSQLType(ArrayType),
-            "arrayType" -> toSQLType(srcArrayExpr.dataType),
-            "itemType" -> toSQLType(itemExpr.dataType)
+            "left" -> toSQLType(srcArrayExpr.dataType),
+            "right" -> toSQLType(itemExpr.dataType)
           )
         )
-    }
-  }
-
-  override def eval(input: InternalRow): Any = {
-    val arr = first.eval(input)
-    val pos = second.eval(input)
-    val item = third.eval(input)
-
-    if (arr == null || pos == null) {
-      null
-    } else {
-      nullSafeEval(arr, pos, item)
     }
   }
 
@@ -4677,8 +4665,10 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
     }
     val insertionIndex = if (posInt > 0) {
       posInt - 1
-    } else {
+    } else if (posInt < 0) {
       posInt + baseArr.numElements()
+    } else {
+      posInt
     }
 
     if (insertionIndex < 0 || insertionIndex > baseArr.numElements()) {
@@ -4699,47 +4689,12 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val f = (arr: String, pos: String, item: String) => {
-      val expr = ctx.addReferenceObj("arrayInsertExpr", this)
-      s"${ev.value} = (ArrayData)$expr.nullSafeEval($arr, $pos, $item);"
-    }
-
-    val leftGen = first.genCode(ctx)
-    val midGen = second.genCode(ctx)
-    val rightGen = third.genCode(ctx)
-    val resultCode = f(leftGen.value, midGen.value, rightGen.value)
-
-    if (nullable) {
-      val nullSafeEval =
-        leftGen.code + ctx.nullSafeExec(first.nullable, leftGen.isNull) {
-          midGen.code + ctx.nullSafeExec(second.nullable, midGen.isNull) {
-            s"""
-              ${ev.isNull} = false;
-              $resultCode
-            """
-          }
-        }
-
-      ev.copy(code = code"""
-        boolean ${ev.isNull} = true;
-        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        $nullSafeEval""")
-    } else {
-      ev.copy(code = code"""
-        ${leftGen.code}
-        ${midGen.code}
-        ${rightGen.code}
-        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        $resultCode""", isNull = FalseLiteral)
-    }
-  }
-
-  override def initQueryContext(): Option[SQLQueryContext] = {
-    if (first.resolved) {
-      Some(origin.context)
-    } else {
-      None
-    }
+    nullSafeCodeGen(
+      ctx, ev, (first: String, second: String, third: String) => {
+        val expr = ctx.addReferenceObj("arrayInsertExpr", this)
+        s"${ev.value} = (ArrayData)$expr.nullSafeEval($first, $second, $third);"
+      }
+    )
   }
 
   override def first: Expression = srcArrayExpr

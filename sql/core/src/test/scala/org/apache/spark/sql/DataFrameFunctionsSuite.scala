@@ -3106,6 +3106,11 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("array_insert functions") {
+    val df1 = Seq((Array[Int](3, 2, 5, 1, 2), 3, 6)).toDF("a", "b", "c")
+    checkAnswer(df1.selectExpr("array_insert(a, b, c)"), Seq(Row(Seq(3, 2, 5, 1, 2, 3))))
+  }
+
   test("transform function - array for primitive type not containing null") {
     val df = Seq(
       Seq(1, 9, 8, 7),

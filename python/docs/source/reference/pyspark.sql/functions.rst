@@ -158,6 +158,7 @@ Collection Functions
     array_position
     element_at
     array_sort
+    array_insert
     array_remove
     array_distinct
     array_intersect
