@@ -51,14 +51,13 @@ object SchemaConverters {
       protobufOptions: ProtobufOptions): SchemaType = ScalaReflectionLock.synchronized {
     SchemaType(
       StructType(descriptor.getFields.asScala.flatMap(
-        structFieldFor(_, Map.empty, Map.empty, protobufOptions: ProtobufOptions)).toArray),
+        structFieldFor(_, Map.empty, protobufOptions: ProtobufOptions)).toArray),
       nullable = true)
   }
 
   def structFieldFor(
       fd: FieldDescriptor,
       existingRecordNames: Map[String, Int],
-      existingRecordTypes: Map[String, Int],
       protobufOptions: ProtobufOptions): Option[StructField] = {
     import com.google.protobuf.Descriptors.FieldDescriptor.JavaType._
     val dataType = fd.getJavaType match {
@@ -92,14 +91,12 @@ object SchemaConverters {
                 structFieldFor(
                   field,
                   existingRecordNames,
-                  existingRecordTypes,
                   protobufOptions).get.dataType
             case "value" =>
               valueType =
                 structFieldFor(
                   field,
                   existingRecordNames,
-                  existingRecordTypes,
                   protobufOptions).get.dataType
           }
         }
@@ -113,36 +110,22 @@ object SchemaConverters {
         // it to 1 allows it to be recursed twice, and setting it to 2 allows it to be recursed
         // thrice. circularReferenceDepth value greater than 2 is not allowed. If the not
         // specified, it will default to -1, which disables recursive fields.
-        if (protobufOptions.circularReferenceType.equals("FIELD_TYPE")) {
-          if (existingRecordTypes.contains(fd.getType.name()) &&
-            (protobufOptions.circularReferenceDepth < 0 ||
-              protobufOptions.circularReferenceDepth >= 3)) {
-            throw QueryCompilationErrors.foundRecursionInProtobufSchema(fd.toString())
-          } else if (existingRecordTypes.contains(fd.getType.name()) &&
-            (existingRecordTypes.getOrElse(fd.getType.name(), 0)
-              <= protobufOptions.circularReferenceDepth)) {
-            return Some(StructField(fd.getName, NullType, nullable = false))
-          }
-        } else {
-          if (existingRecordNames.contains(fd.getFullName) &&
-            (protobufOptions.circularReferenceDepth < 0 ||
-              protobufOptions.circularReferenceDepth >= 3)) {
-            throw QueryCompilationErrors.foundRecursionInProtobufSchema(fd.toString())
-          } else if (existingRecordNames.contains(fd.getFullName) &&
-            existingRecordNames.getOrElse(fd.getFullName, 0)
-              <= protobufOptions.circularReferenceDepth) {
-            return Some(StructField(fd.getName, NullType, nullable = false))
-          }
+        if (existingRecordNames.contains(fd.getFullName) &&
+          (protobufOptions.circularReferenceDepth < 0 ||
+            protobufOptions.circularReferenceDepth >= 3)) {
+          throw QueryCompilationErrors.foundRecursionInProtobufSchema(fd.toString())
+        } else if (existingRecordNames.contains(fd.getFullName) &&
+          existingRecordNames.getOrElse(fd.getFullName, 0)
+            <= protobufOptions.circularReferenceDepth) {
+          return Some(StructField(fd.getName, NullType, nullable = false))
         }
 
         val newRecordNames = existingRecordNames +
           (fd.getFullName -> (existingRecordNames.getOrElse(fd.getFullName, 0) + 1))
-        val newRecordTypes = existingRecordTypes +
-          (fd.getType.name() -> (existingRecordTypes.getOrElse(fd.getType.name(), 0) + 1))
 
         Option(
           fd.getMessageType.getFields.asScala
-            .flatMap(structFieldFor(_, newRecordNames, newRecordTypes, protobufOptions))
+            .flatMap(structFieldFor(_, newRecordNames, protobufOptions))
             .toSeq)
           .filter(_.nonEmpty)
           .map(StructType.apply)

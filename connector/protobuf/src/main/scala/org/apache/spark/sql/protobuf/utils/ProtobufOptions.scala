@@ -39,10 +39,10 @@ private[sql] class ProtobufOptions(
   val parseMode: ParseMode =
     parameters.get("mode").map(ParseMode.fromString).getOrElse(FailFastMode)
 
-  val circularReferenceType: String = parameters.getOrElse("circularReferenceType", "FIELD_NAME")
-
-  // User can choose a circularReferenceDepth of 0, 1, or 1.
-  // Going beyond 3 levels of recursion is not allowed.
+  // Setting the circularReferenceDepth to 0 allows the field to be recursed once, setting
+  // it to 1 allows it to be recursed twice, and setting it to 2 allows it to be recursed
+  // thrice. circularReferenceDepth value greater than 2 is not allowed. If the not
+  // specified, it will default to -1, which disables recursive fields.
   val circularReferenceDepth: Int = parameters.getOrElse("circularReferenceDepth", "-1").toInt
 }
 

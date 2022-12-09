@@ -730,17 +730,78 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
         })
 
         val jsonSchema =
-         """{"type":"struct","fields":[{"name":"sample","type":{"type":"struct","fields":
-            |[{"name":"key","type":"string","nullable":true},{"name":"col_1","type":"integer",
-            |"nullable":true},{"name":"col_2","type":"string","nullable":true},{"name":"col_3",
-            |"type":"long","nullable":true},{"name":"col_4","type":{"type":"array",
-            |"elementType":"string","containsNull":false},"nullable":false}]},"nullable":true}]}
-            |{"type":"struct","fields":[{"name":"sample","type":{"type":"struct","fields":
-            |[{"name":"key","type":"string","nullable":true},{"name":"col_1","type":"integer",
-            |"nullable":true},{"name":"col_2","type":"string","nullable":true},{"name":"col_3",
-            |"type":"long","nullable":true},{"name":"col_4","type":{"type":"array",
-            |"elementType":"string","containsNull":false},"nullable":false}]},
-            |"nullable":true}]}""".stripMargin
+          s"""
+             |{
+             |  "type" : "struct",
+             |  "fields" : [ {
+             |    "name" : "sample",
+             |    "type" : {
+             |      "type" : "struct",
+             |      "fields" : [ {
+             |        "name" : "key",
+             |        "type" : "string",
+             |        "nullable" : true
+             |      }, {
+             |        "name" : "col_1",
+             |        "type" : "integer",
+             |        "nullable" : true
+             |      }, {
+             |        "name" : "col_2",
+             |        "type" : "string",
+             |        "nullable" : true
+             |      }, {
+             |        "name" : "col_3",
+             |        "type" : "long",
+             |        "nullable" : true
+             |      }, {
+             |        "name" : "col_4",
+             |        "type" : {
+             |          "type" : "array",
+             |          "elementType" : "string",
+             |          "containsNull" : false
+             |        },
+             |        "nullable" : false
+             |      } ]
+             |    },
+             |    "nullable" : true
+             |  } ]
+             |}
+             |{
+             |  "type" : "struct",
+             |  "fields" : [ {
+             |    "name" : "sample",
+             |    "type" : {
+             |      "type" : "struct",
+             |      "fields" : [ {
+             |        "name" : "key",
+             |        "type" : "string",
+             |        "nullable" : true
+             |      }, {
+             |        "name" : "col_1",
+             |        "type" : "integer",
+             |        "nullable" : true
+             |      }, {
+             |        "name" : "col_2",
+             |        "type" : "string",
+             |        "nullable" : true
+             |      }, {
+             |        "name" : "col_3",
+             |        "type" : "long",
+             |        "nullable" : true
+             |      }, {
+             |        "name" : "col_4",
+             |        "type" : {
+             |          "type" : "array",
+             |          "elementType" : "string",
+             |          "containsNull" : false
+             |        },
+             |        "nullable" : false
+             |      } ]
+             |    },
+             |    "nullable" : true
+             |  } ]
+             |}
+             |""".stripMargin
         val schema = DataType.fromJson(jsonSchema).asInstanceOf[StructType]
         val data = Seq(Row(Row("key", 123, "col2value", 109202L, Seq("col4value"))))
         val dataDf = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
@@ -816,28 +877,164 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     })
 
     val jsonSchema =
-      """{"type":"struct","fields":[{"name":"sample","type":{"type":"struct","fields":
-        |[{"name":"key","type":"string","nullable":true},{"name":"recursiveA","type":
-        |{"type":"struct","fields":[{"name":"recursiveA","type":{"type":"struct","fields":
-        |[{"name":"key","type":"string","nullable":true},{"name":"recursiveA","type":"void",
-        |"nullable":true},{"name":"recursiveB","type":{"type":"struct","fields":[{"name":"key",
-        |"type":"string","nullable":true},{"name":"value","type":"string","nullable":true},
-        |{"name":"recursiveA","type":{"type":"struct","fields":[{"name":"key","type":"string",
-        |"nullable":true},{"name":"recursiveA","type":"void","nullable":true},{"name":"recursiveB",
-        |"type":"void","nullable":true},{"name":"value","type":"string","nullable":true}]},
-        |"nullable":true}]},"nullable":true},{"name":"value","type":"string","nullable":true}]},
-        |"nullable":true},{"name":"key","type":"string","nullable":true}]},"nullable":true},
-        |{"name":"recursiveB","type":{"type":"struct","fields":[{"name":"key","type":"string",
-        |"nullable":true},{"name":"value","type":"string","nullable":true},{"name":"recursiveA",
-        |"type":{"type":"struct","fields":[{"name":"key","type":"string","nullable":true},
-        |{"name":"recursiveA","type":{"type":"struct","fields":[{"name":"recursiveA","type":
-        |{"type":"struct","fields":[{"name":"key","type":"string","nullable":true},
-        |{"name":"recursiveA","type":"void","nullable":true},{"name":"recursiveB","type":"void",
-        |"nullable":true},{"name":"value","type":"string","nullable":true}]},"nullable":true},
-        |{"name":"key","type":"string","nullable":true}]},"nullable":true},{"name":"recursiveB",
-        |"type":"void","nullable":true},{"name":"value","type":"string","nullable":true}]},
-        |"nullable":true}]},"nullable":true},{"name":"value","type":"string","nullable":true}]},
-        |"nullable":true}]}""".stripMargin
+      s"""
+         |{
+         |  "type" : "struct",
+         |  "fields" : [ {
+         |    "name" : "sample",
+         |    "type" : {
+         |      "type" : "struct",
+         |      "fields" : [ {
+         |        "name" : "key",
+         |        "type" : "string",
+         |        "nullable" : true
+         |      }, {
+         |        "name" : "recursiveA",
+         |        "type" : {
+         |          "type" : "struct",
+         |          "fields" : [ {
+         |            "name" : "recursiveA",
+         |            "type" : {
+         |              "type" : "struct",
+         |              "fields" : [ {
+         |                "name" : "key",
+         |                "type" : "string",
+         |                "nullable" : true
+         |              }, {
+         |                "name" : "recursiveA",
+         |                "type" : "void",
+         |                "nullable" : true
+         |              }, {
+         |                "name" : "recursiveB",
+         |                "type" : {
+         |                  "type" : "struct",
+         |                  "fields" : [ {
+         |                    "name" : "key",
+         |                    "type" : "string",
+         |                    "nullable" : true
+         |                  }, {
+         |                    "name" : "value",
+         |                    "type" : "string",
+         |                    "nullable" : true
+         |                  }, {
+         |                    "name" : "recursiveA",
+         |                    "type" : {
+         |                      "type" : "struct",
+         |                      "fields" : [ {
+         |                        "name" : "key",
+         |                        "type" : "string",
+         |                        "nullable" : true
+         |                      }, {
+         |                        "name" : "recursiveA",
+         |                        "type" : "void",
+         |                        "nullable" : true
+         |                      }, {
+         |                        "name" : "recursiveB",
+         |                        "type" : "void",
+         |                        "nullable" : true
+         |                      }, {
+         |                        "name" : "value",
+         |                        "type" : "string",
+         |                        "nullable" : true
+         |                      } ]
+         |                    },
+         |                    "nullable" : true
+         |                  } ]
+         |                },
+         |                "nullable" : true
+         |              }, {
+         |                "name" : "value",
+         |                "type" : "string",
+         |                "nullable" : true
+         |              } ]
+         |            },
+         |            "nullable" : true
+         |          }, {
+         |            "name" : "key",
+         |            "type" : "string",
+         |            "nullable" : true
+         |          } ]
+         |        },
+         |        "nullable" : true
+         |      }, {
+         |        "name" : "recursiveB",
+         |        "type" : {
+         |          "type" : "struct",
+         |          "fields" : [ {
+         |            "name" : "key",
+         |            "type" : "string",
+         |            "nullable" : true
+         |          }, {
+         |            "name" : "value",
+         |            "type" : "string",
+         |            "nullable" : true
+         |          }, {
+         |            "name" : "recursiveA",
+         |            "type" : {
+         |              "type" : "struct",
+         |              "fields" : [ {
+         |                "name" : "key",
+         |                "type" : "string",
+         |                "nullable" : true
+         |              }, {
+         |                "name" : "recursiveA",
+         |                "type" : {
+         |                  "type" : "struct",
+         |                  "fields" : [ {
+         |                    "name" : "recursiveA",
+         |                    "type" : {
+         |                      "type" : "struct",
+         |                      "fields" : [ {
+         |                        "name" : "key",
+         |                        "type" : "string",
+         |                        "nullable" : true
+         |                      }, {
+         |                        "name" : "recursiveA",
+         |                        "type" : "void",
+         |                        "nullable" : true
+         |                      }, {
+         |                        "name" : "recursiveB",
+         |                        "type" : "void",
+         |                        "nullable" : true
+         |                      }, {
+         |                        "name" : "value",
+         |                        "type" : "string",
+         |                        "nullable" : true
+         |                      } ]
+         |                    },
+         |                    "nullable" : true
+         |                  }, {
+         |                    "name" : "key",
+         |                    "type" : "string",
+         |                    "nullable" : true
+         |                  } ]
+         |                },
+         |                "nullable" : true
+         |              }, {
+         |                "name" : "recursiveB",
+         |                "type" : "void",
+         |                "nullable" : true
+         |              }, {
+         |                "name" : "value",
+         |                "type" : "string",
+         |                "nullable" : true
+         |              } ]
+         |            },
+         |            "nullable" : true
+         |          } ]
+         |        },
+         |        "nullable" : true
+         |      }, {
+         |        "name" : "value",
+         |        "type" : "string",
+         |        "nullable" : true
+         |      } ]
+         |    },
+         |    "nullable" : true
+         |  } ]
+         |}
+         |""".stripMargin
+
     val schema = DataType.fromJson(jsonSchema).asInstanceOf[StructType]
     val data = Seq(
       Row(
