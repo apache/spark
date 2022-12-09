@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.{logical, Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
-import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, SubqueryAlias, Union, UnresolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, SubqueryAlias, Union, Unpivot, UnresolvedHint}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.{toCatalystExpression, toCatalystValue}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -315,16 +315,28 @@ class SparkConnectPlanner(session: SparkSession) {
       Column(transformExpression(expr))
     }
 
-    val df = Dataset.ofRows(session, transformRelation(rel.getInput))
-
     if (rel.getValuesList.isEmpty) {
-      df.unpivot(ids, rel.getVariableColumnName, rel.getValueColumnName).logicalPlan
+      Unpivot(
+        Some(ids.map(_.named)),
+        None,
+        None,
+        rel.getVariableColumnName,
+        Seq(rel.getValueColumnName),
+        transformRelation(rel.getInput)
+      )
     } else {
       val values = rel.getValuesList.asScala.toArray.map { expr =>
         Column(transformExpression(expr))
       }
 
-      df.unpivot(ids, values, rel.getVariableColumnName, rel.getValueColumnName).logicalPlan
+      Unpivot(
+        Some(ids.map(_.named)),
+        Some(values.map(v => Seq(v.named))),
+        None,
+        rel.getVariableColumnName,
+        Seq(rel.getValueColumnName),
+        transformRelation(rel.getInput)
+      )
     }
   }
 
