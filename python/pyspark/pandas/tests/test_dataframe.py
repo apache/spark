@@ -5774,6 +5774,10 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         for value_psdf, value_pdf in zip(psdf, pdf):
             self.assert_eq(value_psdf, value_pdf)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) < LooseVersion("1.3.0"),
+        "pandas support `Styler.to_latex` since 1.3.0",
+    )
     def test_style(self):
         # Currently, the `style` function returns a pandas object `Styler` as it is,
         # processing only the number of rows declared in `compute.max_rows`.
