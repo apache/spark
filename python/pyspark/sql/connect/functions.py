@@ -4159,6 +4159,7 @@ def encode(col: "ColumnOrName", charset: str) -> Column:
     return _invoke_function("encode", _to_col(col), lit(charset))
 
 
+# TODO(SPARK-41473): Resolve the data type mismatch issue and enable the function
 # def format_number(col: "ColumnOrName", d: int) -> Column:
 #     """
 #     Formats the number X to a format like '#,--#,--#.--', rounded to d decimal places
