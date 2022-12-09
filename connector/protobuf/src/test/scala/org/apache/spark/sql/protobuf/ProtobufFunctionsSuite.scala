@@ -26,7 +26,7 @@ import com.google.protobuf.{ByteString, DynamicMessage}
 import org.apache.spark.sql.{Column, QueryTest, Row}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.functions.{lit, struct}
-import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos.{EventRecursiveA, EventRecursiveB, OneOfEvent, OneOfEventWithRecursion, SimpleMessageRepeated}
+import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos.{messageA, messageB, messageC, EventRecursiveA, EventRecursiveB, EventWithRecursion, OneOfEvent, OneOfEventWithRecursion, SimpleMessageRepeated}
 import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos.SimpleMessageRepeated.NestedEnum
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 import org.apache.spark.sql.test.SharedSparkSession
@@ -818,6 +818,30 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     }
   }
 
+  test("Fail for recursion field with different field names") {
+    val aEventWithRecursion = EventWithRecursion.newBuilder().setKey(2).build()
+    val aaEventWithRecursion = EventWithRecursion.newBuilder().setKey(3).build()
+    val aaaEventWithRecursion = EventWithRecursion.newBuilder().setKey(4).build()
+    val c = messageC.newBuilder().setAaa(aaaEventWithRecursion).setKey(12092)
+    val b = messageB.newBuilder().setAa(aaEventWithRecursion).setC(c)
+    val a = messageA.newBuilder().setA(aEventWithRecursion).setB(b).build()
+    val eventWithRecursion = EventWithRecursion.newBuilder().setKey(1).setA(a).build()
+
+      val df = Seq(eventWithRecursion.toByteArray).toDF("protoEvent")
+
+      checkWithFileAndClassName("EventWithRecursion") {
+        case (name, descFilePathOpt) =>
+          val e = intercept[AnalysisException] {
+            df.select(
+              from_protobuf_wrapper($"protoEvent", name, descFilePathOpt).as("messageFromProto"))
+              .show()
+          }
+          assert(e.getMessage.contains(
+            "Found recursive reference in Protobuf schema, which can not be processed by Spark"
+          ))
+      }
+  }
+
   test("Verify OneOf field with recursive fields between from_protobuf -> to_protobuf " +
     "and struct -> from_protobuf") {
     val descriptor = ProtobufUtils.buildDescriptor(testFileDesc, "OneOfEventWithRecursion")
@@ -1059,4 +1083,6 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       assert(expectedFields.contains(f.getName))
     })
   }
+
+
 }

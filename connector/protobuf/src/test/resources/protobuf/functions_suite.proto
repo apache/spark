@@ -182,6 +182,23 @@ message OneOfEvent {
   repeated string col_4 = 5;
 }
 
+message EventWithRecursion {
+  int32 key = 1;
+  messageA a = 2;
+}
+message messageA {
+  EventWithRecursion a = 1;
+  messageB b = 2;
+}
+message messageB {
+  EventWithRecursion aa = 1;
+  messageC c = 2;
+}
+message messageC {
+  EventWithRecursion aaa = 1;
+  int32 key= 2;
+}
+
 message OneOfEventWithRecursion {
   string key = 1;
   oneof payload {
