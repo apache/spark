@@ -17,11 +17,13 @@
 
 from typing import Any, List, Optional, Sequence, Union, cast, TYPE_CHECKING, Mapping, Dict
 import functools
-import pandas
 import pyarrow as pa
+
+from pyspark.sql.types import DataType
+
 import pyspark.sql.connect.proto as proto
 from pyspark.sql.connect.column import Column, SortOrder, ColumnReference
-
+from pyspark.sql.connect.types import pyspark_types_to_proto_types
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName
@@ -167,21 +169,34 @@ class Read(LogicalPlan):
 
 
 class LocalRelation(LogicalPlan):
-    """Creates a LocalRelation plan object based on a Pandas DataFrame."""
+    """Creates a LocalRelation plan object based on a PyArrow Table."""
 
-    def __init__(self, pdf: "pandas.DataFrame") -> None:
+    def __init__(
+        self,
+        table: "pa.Table",
+        schema: Optional[Union[DataType, str]] = None,
+    ) -> None:
         super().__init__(None)
-        self._pdf = pdf
+        assert table is not None and isinstance(table, pa.Table)
+        self._table = table
+
+        if schema is not None:
+            assert isinstance(schema, (DataType, str))
+        self._schema = schema
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         sink = pa.BufferOutputStream()
-        table = pa.Table.from_pandas(self._pdf)
-        with pa.ipc.new_stream(sink, table.schema) as writer:
-            for b in table.to_batches():
+        with pa.ipc.new_stream(sink, self._table.schema) as writer:
+            for b in self._table.to_batches():
                 writer.write_batch(b)
 
         plan = proto.Relation()
         plan.local_relation.data = sink.getvalue().to_pybytes()
+        if self._schema is not None:
+            if isinstance(self._schema, DataType):
+                plan.local_relation.datatype.CopyFrom(pyspark_types_to_proto_types(self._schema))
+            elif isinstance(self._schema, str):
+                plan.local_relation.datatype_str = self._schema
         return plan
 
     def print(self, indent: int = 0) -> str:

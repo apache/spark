@@ -371,6 +371,21 @@ class SparkConnectPlanner(session: SparkSession) {
     }
   }
 
+  private def parseDatatypeString(sqlText: String): DataType = {
+    val parser = session.sessionState.sqlParser
+    try {
+      parser.parseTableSchema(sqlText)
+    } catch {
+      case _: ParseException =>
+        try {
+          parser.parseDataType(sqlText)
+        } catch {
+          case _: ParseException =>
+            parser.parseDataType(s"struct<${sqlText.trim}>")
+        }
+    }
+  }
+
   private def transformLocalRelation(rel: proto.LocalRelation): LogicalPlan = {
     val (rows, structType) = ArrowConverters.fromBatchWithSchemaIterator(
       Iterator(rel.getData.toByteArray),
@@ -380,7 +395,28 @@ class SparkConnectPlanner(session: SparkSession) {
     }
     val attributes = structType.toAttributes
     val proj = UnsafeProjection.create(attributes, attributes)
-    new logical.LocalRelation(attributes, rows.map(r => proj(r).copy()).toSeq)
+    val relation = logical.LocalRelation(attributes, rows.map(r => proj(r).copy()).toSeq)
+
+    if (!rel.hasDatatype && !rel.hasDatatypeStr) {
+      return relation
+    }
+
+    val schemaType = if (rel.hasDatatype) {
+      DataTypeProtoConverter.toCatalystType(rel.getDatatype)
+    } else {
+      parseDatatypeString(rel.getDatatypeStr)
+    }
+
+    val schemaStruct = schemaType match {
+      case s: StructType => s
+      case d => StructType(Seq(StructField("value", d)))
+    }
+
+    Dataset
+      .ofRows(session, logicalPlan = relation)
+      .toDF(schemaStruct.names: _*)
+      .to(schemaStruct)
+      .logicalPlan
   }
 
   private def transformReadRel(rel: proto.Read): LogicalPlan = {
