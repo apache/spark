@@ -19,6 +19,7 @@ package org.apache.spark.network.sasl;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import javax.security.sasl.Sasl;
 import javax.security.sasl.SaslException;
 
@@ -74,6 +75,7 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
         buf.writeBytes(msg.body().nioByteBuffer());
 
         ByteBuffer response = client.sendRpcSync(buf.nioBuffer(), conf.authRTTimeoutMs());
+        System.out.println("response: " + Arrays.toString(JavaUtils.bufferToArray(response)));
         payload = saslClient.response(JavaUtils.bufferToArray(response));
       }
 

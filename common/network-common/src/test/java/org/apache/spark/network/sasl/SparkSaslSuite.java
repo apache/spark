@@ -352,7 +352,7 @@ public class SparkSaslSuite {
 
   @Test
   public void testMultipleSaslRetries() throws Exception {
-    testSaslResetHandling(2);
+    testSaslResetHandling(5);
   }
 
   private void testSaslResetHandling(final int maxRetries)  {

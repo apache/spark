@@ -74,19 +74,9 @@ public class SaslRpcHandler extends AbstractAuthRpcHandler {
       ByteBuffer message,
       RpcResponseCallback callback) {
     if (saslServer == null || !saslServer.isComplete()) {
-      // save the position and limit, before reading a byte
-      int position = message.position();
-      int limit = message.limit();
 
       ByteBuf nettyBuf = Unpooled.wrappedBuffer(message);
       byte tagByte = nettyBuf.readByte();
-      if (super.isAuthenticated() && tagByte != SaslMessage.TAG_BYTE
-          && tagByte != SaslInitMessage.TAG_BYTE) {
-        // not a sasl or sasl reset, so sasl completed at client as well.
-        message.position(position);
-        message.limit(limit);
-        return true;
-      }
       if (tagByte != SaslMessage.TAG_BYTE && tagByte != SaslInitMessage.TAG_BYTE) {
         throw new IllegalStateException("Expected SaslMessage, received something else"
             + " (maybe your client does not have SASL enabled?)");

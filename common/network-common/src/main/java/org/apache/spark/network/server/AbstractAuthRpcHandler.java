@@ -17,11 +17,15 @@
 
 package org.apache.spark.network.server;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import java.nio.ByteBuffer;
 
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.StreamCallbackWithID;
 import org.apache.spark.network.client.TransportClient;
+import org.apache.spark.network.util.JavaUtils;
+
 
 /**
  * RPC Handler which performs authentication, and when it's successful, delegates further
@@ -33,7 +37,6 @@ public abstract class AbstractAuthRpcHandler extends RpcHandler {
   private final RpcHandler delegate;
 
   private boolean isAuthenticated;
-  private boolean isComplete;
 
   protected AbstractAuthRpcHandler(RpcHandler delegate) {
     this.delegate = delegate;
@@ -54,14 +57,23 @@ public abstract class AbstractAuthRpcHandler extends RpcHandler {
       TransportClient client,
       ByteBuffer message,
       RpcResponseCallback callback) {
-    if (isAuthenticated && isComplete) {
-      delegate.receive(client, message, callback);
-    } else {
-      if (isAuthenticated) {
-        isComplete = true;
-      }
-      isAuthenticated = doAuthChallenge(client, message, callback);
+    System.out.println(JavaUtils.bytesToString(message));
 
+    int position = message.position();
+    int limit = message.limit();
+
+    ByteBuf nettyBuf = Unpooled.wrappedBuffer(message);
+    byte tagByte = nettyBuf.readByte();
+    if (isAuthenticated) {
+      if (tagByte != (byte) 0xEA && tagByte != (byte) 0xEB) {
+        message.position(position);
+        message.limit(limit);
+        delegate.receive(client, message, callback);
+      } else {
+        isAuthenticated = doAuthChallenge(client, message, callback);
+      }
+    } else {
+      isAuthenticated = doAuthChallenge(client, message, callback);
     }
   }
 
