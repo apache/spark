@@ -712,8 +712,6 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
       rdd.count()
 
       eventually(timeout(5.seconds), interval(100.milliseconds)) {
-        val str: String = Utils.tryWithResource(Source.fromURL(
-          apiUrl(sc.ui.get, "/stages/stage/0/0/taskTable?draw=1")))(_.mkString)
         val stage0 = Utils.tryWithResource(Source.fromURL(sc.ui.get.webUrl +
           "/stages/stage/?id=0&attempt=0&expandDagViz=true"))(_.mkString)
         assert(stage0.contains("digraph G {\n  subgraph clusterstage_0 {\n    " +
