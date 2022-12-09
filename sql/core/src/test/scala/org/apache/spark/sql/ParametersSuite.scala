@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -48,17 +47,21 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
         spark.sql("select :abc, :def", Map("abc" -> "1"))
       },
       errorClass = "UNBOUND_SQL_PARAMETER",
-      parameters = Map("name" -> "def"),
+      parameters = Map("name" -> "`def`"),
       context = ExpectedContext(
         fragment = ":def",
         start = 13,
         stop = 16))
     checkError(
-      exception = intercept[SparkRuntimeException] {
+      exception = intercept[AnalysisException] {
         sql("select :abc").collect()
       },
       errorClass = "UNBOUND_SQL_PARAMETER",
-      parameters = Map("name" -> "abc"))
+      parameters = Map("name" -> "`abc`"),
+      context = ExpectedContext(
+        fragment = ":abc",
+        start = 7,
+        stop = 10))
   }
 
   test("non-literal argument of `sql()`") {

@@ -2827,10 +2827,4 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "location" -> toSQLValue(location.toString, StringType),
         "identifier" -> toSQLId(tableId.nameParts)))
   }
-
-  def unboundParameterError(name: String): Throwable = {
-    new SparkRuntimeException(
-      errorClass = "UNBOUND_SQL_PARAMETER",
-      messageParameters = Map("name" -> name))
-  }
 }

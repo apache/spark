@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.AnalysisErrorAt
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreePattern.{PARAMETER, TreePattern}
-import org.apache.spark.sql.errors.{QueryErrorsBase, QueryExecutionErrors}
+import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, NullType}
 
@@ -32,18 +33,21 @@ import org.apache.spark.sql.types.{DataType, NullType}
  * @param name The identifier of the parameter without the marker.
  */
 case class Parameter(name: String) extends LeafExpression {
+
+  override lazy val resolved: Boolean = false
   override def dataType: DataType = NullType
   override def nullable: Boolean = true
 
   final override val nodePatterns: Seq[TreePattern] = Seq(PARAMETER)
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    throw QueryExecutionErrors.unboundParameterError(name)
+  private def unboundError(): Nothing = {
+    throw SparkException.internalError(
+      s"The parameter `$name` must be bound at the analysis phase.")
   }
 
-  def eval(input: InternalRow): Any = {
-    throw QueryExecutionErrors.unboundParameterError(name)
-  }
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = unboundError()
+
+  def eval(input: InternalRow): Any = unboundError()
 }
 
 
@@ -60,14 +64,7 @@ object Parameter extends QueryErrorsBase {
           messageParameters = Map("name" -> toSQLId(name)))
       }
       plan.transformAllExpressionsWithPruning(_.containsPattern(PARAMETER)) {
-        case param @ Parameter(name) =>
-          if (args.contains(name)) {
-            args(name)
-          } else {
-            param.failAnalysis(
-              errorClass = "UNBOUND_SQL_PARAMETER",
-              messageParameters = Map("name" -> name))
-          }
+        case Parameter(name) if args.contains(name) => args(name)
       }
     } else {
       plan
