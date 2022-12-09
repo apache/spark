@@ -4095,37 +4095,36 @@ def concat_ws(sep: str, *cols: "ColumnOrName") -> Column:
     return _invoke_function("concat_ws", lit(sep), *[_to_col(c) for c in cols])
 
 
-# TODO: enable with SPARK-41402
-# def decode(col: "ColumnOrName", charset: str) -> Column:
-#     """
-#     Computes the first argument into a string from a binary using the provided character set
-#     (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
-#
-#     .. versionadded:: 3.4.0
-#
-#     Parameters
-#     ----------
-#     col : :class:`~pyspark.sql.Column` or str
-#         target column to work on.
-#     charset : str
-#         charset to use to decode to.
-#
-#     Returns
-#     -------
-#     :class:`~pyspark.sql.Column`
-#         the column for computed results.
-#
-#     Examples
-#     --------
-#     >>> df = spark.createDataFrame([('abcd',)], ['a'])
-#     >>> df.select(decode("a", "UTF-8")).show()
-#     +----------------------+
-#     |stringdecode(a, UTF-8)|
-#     +----------------------+
-#     |                  abcd|
-#     +----------------------+
-#     """
-#     return _invoke_function("decode", _to_col(col), lit(charset))
+def decode(col: "ColumnOrName", charset: str) -> Column:
+    """
+    Computes the first argument into a string from a binary using the provided character set
+    (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+    charset : str
+        charset to use to decode to.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for computed results.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('abcd',)], ['a'])
+    >>> df.select(decode("a", "UTF-8")).show()
+    +----------------+
+    |decode(a, UTF-8)|
+    +----------------+
+    |            abcd|
+    +----------------+
+    """
+    return _invoke_function("decode", _to_col(col), lit(charset))
 
 
 def encode(col: "ColumnOrName", charset: str) -> Column:

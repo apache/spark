@@ -5560,11 +5560,11 @@ def decode(col: "ColumnOrName", charset: str) -> Column:
     --------
     >>> df = spark.createDataFrame([('abcd',)], ['a'])
     >>> df.select(decode("a", "UTF-8")).show()
-    +----------------------+
-    |stringdecode(a, UTF-8)|
-    +----------------------+
-    |                  abcd|
-    +----------------------+
+    +----------------+
+    |decode(a, UTF-8)|
+    +----------------+
+    |            abcd|
+    +----------------+
     """
     return _invoke_function("decode", _to_java_column(col), charset)
 
