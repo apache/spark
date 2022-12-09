@@ -4611,45 +4611,18 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
   group = "array_funcs",
   since = "3.4.0")
 case class ArrayCompact(child: Expression)
-  extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
+  extends RuntimeReplaceable with UnaryLike[Expression] with ExpectsInputTypes with NullIntolerant {
+
+  val isNotNull: Expression => Expression = x => IsNotNull(x)
+  lazy val lv = NamedLambdaVariable("arg",
+    child.dataType.asInstanceOf[ArrayType].elementType, true)
+  lazy val lambda = LambdaFunction(isNotNull(lv), Seq(lv))
+
+  override lazy val replacement: Expression = ArrayFilter(child, lambda)
+
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
-  override def dataType: DataType = child.dataType
 
-  @transient private lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
-
-  override def nullSafeEval(array: Any): Any = {
-    val newArray = new Array[Any](array.asInstanceOf[ArrayData].numElements())
-    var pos = 0
-    var hasNull = false
-    array.asInstanceOf[ArrayData].foreach(elementType, (index, v) =>
-      // add elements only if the source has null
-      if (v != null && hasNull) {
-        newArray(pos) = v
-        pos += 1
-      } else if (v == null && !hasNull) {
-        hasNull = true
-        // source has null elements, so copy the elements to newArray
-        for(i <- 0 until index) {
-          newArray(pos) = array.asInstanceOf[ArrayData].get(i, elementType)
-          pos += 1
-        }
-      }
-    )
-    if (hasNull) {
-      new GenericArrayData(newArray.slice(0, pos))
-    } else {
-      array
-    }
-  }
   override def prettyName: String = "array_compact"
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-
-    nullSafeCodeGen(ctx, ev, array => {
-      val expr = ctx.addReferenceObj("arrayCompactExpr", this)
-      s"${ev.value} = (ArrayData)$expr.nullSafeEval($array);"
-    })
-  }
 
   override protected def withNewChildInternal(newChild: Expression): ArrayCompact =
     copy(child = newChild)
