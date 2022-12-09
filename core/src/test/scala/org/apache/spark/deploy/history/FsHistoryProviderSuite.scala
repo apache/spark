@@ -1705,7 +1705,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     provider.stop()
   }
 
-  test("clean up expired event log files that don't exist in listing db") {
+  test("SPARK-41447: clean up expired event log files that don't exist in listing db") {
     val maxAge = TimeUnit.SECONDS.toMillis(10)
     val clock = new ManualClock(maxAge / 2)
     val provider = new FsHistoryProvider(
