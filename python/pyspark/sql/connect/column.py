@@ -694,7 +694,7 @@ class Column:
         >>> df.select(df.name.substr(1, 3).alias("col")).collect()
         [Row(col='Ali'), Row(col='Bob')]
         """
-        from pyspark.sql.connect import function_builder
+        from pyspark.sql.connect.function_builder import functions as F
         from pyspark.sql.connect.functions import lit
 
         if type(startPos) != type(length):
@@ -718,7 +718,7 @@ class Column:
         else:
             start_exp = startPos
 
-        return function_builder.substr(self, start_exp, length_exp)  # type: ignore[attr-defined]
+        return F.substr(self, start_exp, length_exp)  # type: ignore[attr-defined]
 
     def __eq__(self, other: Any) -> "Column":  # type: ignore[override]
         """Returns a binary expression with the current column as the left
