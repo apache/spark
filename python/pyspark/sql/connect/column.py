@@ -787,37 +787,37 @@ class Column:
     def __repr__(self) -> str:
         return "Column<'%s'>" % self._expr.__repr__()
 
-    def otherwise(self, *args, **kwargs):
+    def otherwise(self, *args, **kwargs) -> None:
         raise NotImplementedError("otherwise() is not yet implemented.")
 
-    def over(self, *args, **kwargs):
+    def over(self, *args, **kwargs) -> None:
         raise NotImplementedError("over() is not yet implemented.")
 
-    def isin(self, *args, **kwargs):
+    def isin(self, *args, **kwargs) -> None:
         raise NotImplementedError("isin() is not yet implemented.")
 
-    def when(self, *args, **kwargs):
+    def when(self, *args, **kwargs) -> None:
         raise NotImplementedError("when() is not yet implemented.")
 
-    def getItem(self, *args, **kwargs):
+    def getItem(self, *args, **kwargs) -> None:
         raise NotImplementedError("getItem() is not yet implemented.")
 
-    def astype(self, *args, **kwargs):
+    def astype(self, *args, **kwargs) -> None:
         raise NotImplementedError("astype() is not yet implemented.")
 
-    def between(self, *args, **kwargs):
+    def between(self, *args, **kwargs) -> None:
         raise NotImplementedError("between() is not yet implemented.")
 
-    def getField(self, *args, **kwargs):
+    def getField(self, *args, **kwargs) -> None:
         raise NotImplementedError("getField() is not yet implemented.")
 
-    def withField(self, *args, **kwargs):
+    def awithField(self, *args, **kwargs) -> None:
         raise NotImplementedError("withField() is not yet implemented.")
 
-    def dropFields(self, *args, **kwargs):
+    def dropFields(self, *args, **kwargs) -> None:
         raise NotImplementedError("dropFields() is not yet implemented.")
 
-    def __getitem__(self, k: Any) -> "Column":
+    def __getitem__(self, k: Any) -> None:
         raise NotImplementedError("apply() - __getitem__ is not yet implemented.")
 
     def __iter__(self) -> None:
