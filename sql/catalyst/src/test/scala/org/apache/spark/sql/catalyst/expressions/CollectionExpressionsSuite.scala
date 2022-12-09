@@ -2282,7 +2282,6 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val litFourFourFloat = Literal.create(4.4F, FloatType)
     val litFourFourDouble = Literal.create(4.4, DoubleType)
     val litDString = Literal.create("d", StringType)
-    val litNullString = Literal.create(null, StringType)
 
     // basic additions per type
     checkEvaluation(ArrayInsert(a1, litThreeInt, litThreeInt), Seq(1, 2, 3, 4))
@@ -2312,10 +2311,6 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     // null handling
     checkEvaluation(ArrayInsert(a2, litThreeInt, litThreeInt), Seq(1, 2, 3, null, 4, 5, null))
     checkEvaluation(ArrayInsert(a16, litThreeInt, litDString), Seq("b", null, "d", "a", "g", null))
-    checkEvaluation(
-      ArrayInsert(a16, litThreeInt, litNullString),
-      Seq("b", null, null, "a", "g", null)
-    )
     checkEvaluation(ArrayInsert(a18, litThreeInt, litDString), null)
     checkEvaluation(ArrayInsert(a16, litNullInt, litDString), null)
   }

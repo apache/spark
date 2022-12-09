@@ -3107,7 +3107,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("array_insert functions") {
-    val df1 = Seq((Array[Int](3, 2, 5, 1, 2), 3, 6)).toDF("a", "b", "c")
+    val df1 = Seq((Array[Int](3, 2, 5, 1, 2), 6, 3)).toDF("a", "b", "c")
     checkAnswer(df1.selectExpr("array_insert(a, b, c)"), Seq(Row(Seq(3, 2, 5, 1, 2, 3))))
   }
 
