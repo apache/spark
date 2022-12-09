@@ -558,12 +558,42 @@
         <artifactId>maven-antrun-plugin</artifactId>
         <executions>
           <execution>
+            <id>choose-shell-and-script</id>
+            <phase>validate</phase>
+            <goals>
+              <goal>run</goal>
+            </goals>
+            <configuration>
+              <exportAntProperties>true</exportAntProperties>
+              <target>
+                <condition property="shell" value="powershell.exe" else="bash">
+                  <and>
+                    <os family="windows"/>
+                  </and>
+                </condition>
+                <condition property="spark-build-info-script" value="spark-build-info.ps1"
+                           else="spark-build-info">
+                  <and>
+                    <os family="windows"/>
+                  </and>
+                </condition>
+                <echo>Shell to use for generating spark-version-info.properties file =
+                  ${shell}
+                </echo>
+                <echo>Script to use for generating spark-version-info.properties file =
+                  ${spark-build-info-script}
+                </echo>
+              </target>
+            </configuration>
+          </execution>
+          <execution>
+            <id>generate-spark-build-info</id>
             <phase>generate-resources</phase>
             <configuration>
               <!-- Execute the shell script to generate the spark build information. -->
               <target>
-                <exec executable="bash">
-                  <arg value="${project.basedir}/../build/spark-build-info"/>
+                <exec executable="${shell}">
+                  <arg value="${project.basedir}/../build/${spark-build-info-script}"/>
                   <arg value="${project.build.directory}/extra-resources"/>
                   <arg value="${project.version}"/>
                 </exec>
