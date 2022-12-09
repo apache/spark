@@ -397,13 +397,6 @@ class SparkConnectPlanner(session: SparkSession) {
         .toDF(schema.names: _*)
         .to(schema)
         .logicalPlan
-    } else if (rel.hasCols) {
-      // rename columns
-      val colNames = rel.getCols.getStringsList.asScala.toArray
-      Dataset
-        .ofRows(session, logicalPlan = relation)
-        .toDF(colNames: _*)
-        .logicalPlan
     } else {
       relation
     }

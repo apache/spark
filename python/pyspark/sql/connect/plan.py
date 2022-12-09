@@ -174,16 +174,14 @@ class LocalRelation(LogicalPlan):
     def __init__(
         self,
         table: "pa.Table",
-        schema: Optional[Union[DataType, str, Sequence[str]]] = None,
+        schema: Optional[Union[DataType, str]] = None,
     ) -> None:
         super().__init__(None)
         assert table is not None and isinstance(table, pa.Table)
         self._table = table
 
         if schema is not None:
-            assert isinstance(schema, (DataType, str, list))
-            if isinstance(schema, list):
-                assert all(isinstance(c, str) for c in schema)
+            assert isinstance(schema, (DataType, str))
         self._schema = schema
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
@@ -199,8 +197,6 @@ class LocalRelation(LogicalPlan):
                 plan.local_relation.datatype.CopyFrom(pyspark_types_to_proto_types(self._schema))
             elif isinstance(self._schema, str):
                 plan.local_relation.datatype_str = self._schema
-            else:
-                plan.local_relation.cols.strings.extend(self._schema)
         return plan
 
     def print(self, indent: int = 0) -> str:

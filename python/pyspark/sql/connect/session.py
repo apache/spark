@@ -356,7 +356,7 @@ class SparkSession(object):
         elif _schema_str is not None:
             return DataFrame.withPlan(LocalRelation(table, schema=_schema_str), self)
         elif _cols is not None and len(_cols) > 0:
-            return DataFrame.withPlan(LocalRelation(table, schema=_cols), self)
+            return DataFrame.withPlan(LocalRelation(table), self).toDF(*_cols)
         else:
             return DataFrame.withPlan(LocalRelation(table), self)
 

@@ -316,13 +316,6 @@ message LocalRelation {
 
     // Server will use Catalyst parser to parse this string to DataType.
     string datatype_str = 3;
-
-    // Column names
-    StringList cols = 4;
-  }
-
-  message StringList {
-    repeated string strings = 1;
   }
 }
 
