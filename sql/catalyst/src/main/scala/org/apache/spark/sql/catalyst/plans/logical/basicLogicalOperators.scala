@@ -449,22 +449,27 @@ case class Union(
       AttributeSet.fromAttributeSets(children.map(_.outputSet)).size
   }
 
-  // updating nullability to make all the children consistent
-  override def output: Seq[Attribute] = {
-    children.map(_.output).transpose.map { attrs =>
-      val firstAttr = attrs.head
-      val nullable = attrs.exists(_.nullable)
-      val newDt = attrs.map(_.dataType).reduce(StructType.unionLikeMerge)
-      if (firstAttr.dataType == newDt) {
-        firstAttr.withNullability(nullable)
-      } else {
-        AttributeReference(firstAttr.name, newDt, nullable, firstAttr.metadata)(
-          firstAttr.exprId, firstAttr.qualifier)
-      }
+  /**
+   * Merges a sequence of attributes to have a common datatype and updates the
+   * nullability to be consistent with the attributes being merged.
+   */
+  private def mergeAttributes(attributes: Seq[Attribute]): Attribute = {
+    val firstAttr = attributes.head
+    val nullable = attributes.exists(_.nullable)
+    val newDt = attributes.map(_.dataType).reduce(StructType.unionLikeMerge)
+    if (firstAttr.dataType == newDt) {
+      firstAttr.withNullability(nullable)
+    } else {
+      AttributeReference(firstAttr.name, newDt, nullable, firstAttr.metadata)(
+        firstAttr.exprId, firstAttr.qualifier)
     }
   }
 
-  override def metadataOutput: Seq[Attribute] = children.take(1).flatMap(_.metadataOutput)
+  override def output: Seq[Attribute] = children.map(_.output).transpose.map(mergeAttributes)
+
+  override def metadataOutput: Seq[Attribute] = {
+    children.map(_.metadataOutput).transpose.map(mergeAttributes)
+  }
 
   override lazy val resolved: Boolean = {
     // allChildrenCompatible needs to be evaluated after childrenResolved
