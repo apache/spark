@@ -202,8 +202,8 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "INVALID_TYPED_LITERAL",
   "sqlState" : "42000",
   "messageParameters" : {
-    "value" : "1999 Jan 08",
-    "valueType" : "DATE"
+    "value" : "'1999 Jan 08'",
+    "valueType" : "\"DATE\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -225,8 +225,8 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "INVALID_TYPED_LITERAL",
   "sqlState" : "42000",
   "messageParameters" : {
-    "value" : "1999 08 Jan",
-    "valueType" : "DATE"
+    "value" : "'1999 08 Jan'",
+    "valueType" : "\"DATE\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -264,8 +264,8 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "INVALID_TYPED_LITERAL",
   "sqlState" : "42000",
   "messageParameters" : {
-    "value" : "1999 01 08",
-    "valueType" : "DATE"
+    "value" : "'1999 01 08'",
+    "valueType" : "\"DATE\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -287,8 +287,8 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "INVALID_TYPED_LITERAL",
   "sqlState" : "42000",
   "messageParameters" : {
-    "value" : "1999 08 01",
-    "valueType" : "DATE"
+    "value" : "'1999 08 01'",
+    "valueType" : "\"DATE\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -318,8 +318,8 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "INVALID_TYPED_LITERAL",
   "sqlState" : "42000",
   "messageParameters" : {
-    "value" : "1999 Jan 08",
-    "valueType" : "DATE"
+    "value" : "'1999 Jan 08'",
+    "valueType" : "\"DATE\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -341,8 +341,8 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "INVALID_TYPED_LITERAL",
   "sqlState" : "42000",
   "messageParameters" : {
-    "value" : "1999 08 Jan",
-    "valueType" : "DATE"
+    "value" : "'1999 08 Jan'",
+    "valueType" : "\"DATE\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -380,8 +380,8 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "INVALID_TYPED_LITERAL",
   "sqlState" : "42000",
   "messageParameters" : {
-    "value" : "1999 01 08",
-    "valueType" : "DATE"
+    "value" : "'1999 01 08'",
+    "valueType" : "\"DATE\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -403,8 +403,8 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "INVALID_TYPED_LITERAL",
   "sqlState" : "42000",
   "messageParameters" : {
-    "value" : "1999 08 01",
-    "valueType" : "DATE"
+    "value" : "'1999 08 01'",
+    "valueType" : "\"DATE\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -442,8 +442,8 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "INVALID_TYPED_LITERAL",
   "sqlState" : "42000",
   "messageParameters" : {
-    "value" : "1999 Jan 08",
-    "valueType" : "DATE"
+    "value" : "'1999 Jan 08'",
+    "valueType" : "\"DATE\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -465,8 +465,8 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "INVALID_TYPED_LITERAL",
   "sqlState" : "42000",
   "messageParameters" : {
-    "value" : "1999 08 Jan",
-    "valueType" : "DATE"
+    "value" : "'1999 08 Jan'",
+    "valueType" : "\"DATE\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -504,8 +504,8 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "INVALID_TYPED_LITERAL",
   "sqlState" : "42000",
   "messageParameters" : {
-    "value" : "1999 01 08",
-    "valueType" : "DATE"
+    "value" : "'1999 01 08'",
+    "valueType" : "\"DATE\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -527,8 +527,8 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "INVALID_TYPED_LITERAL",
   "sqlState" : "42000",
   "messageParameters" : {
-    "value" : "1999 08 01",
-    "valueType" : "DATE"
+    "value" : "'1999 08 01'",
+    "valueType" : "\"DATE\""
   },
   "queryContext" : [ {
     "objectType" : "",
