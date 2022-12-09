@@ -201,7 +201,8 @@ public class RetryingBlockTransferor {
         (e instanceof TransportClient.SaslTimeoutException ||
             (e.getCause() != null && e.getCause() instanceof TransportClient.SaslTimeoutException));
     boolean hasRemainingRetries = retryCount < maxRetries;
-    return (isSaslTimeout || isIOException) && hasRemainingRetries && errorHandler.shouldRetryError(e);
+    return (isSaslTimeout || isIOException) &&
+        hasRemainingRetries && errorHandler.shouldRetryError(e);
   }
 
   /**

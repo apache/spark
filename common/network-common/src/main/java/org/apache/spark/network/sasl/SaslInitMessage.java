@@ -46,5 +46,4 @@ public final class SaslInitMessage extends SaslMessage {
     // See comment in encodedLength().
     buf.writeInt((int) body().size());
   }
-
 }

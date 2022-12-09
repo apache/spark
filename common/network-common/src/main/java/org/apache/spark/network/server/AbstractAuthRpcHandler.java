@@ -24,7 +24,6 @@ import java.nio.ByteBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.StreamCallbackWithID;
 import org.apache.spark.network.client.TransportClient;
-import org.apache.spark.network.util.JavaUtils;
 
 
 /**
