@@ -15,22 +15,24 @@
 # limitations under the License.
 #
 import uuid
-from typing import cast
 import unittest
 import decimal
 import datetime
 
-from pyspark.testing.connectutils import PlanOnlyTestFixture
-from pyspark.testing.sqlutils import have_pandas, pandas_requirement_message
+from pyspark.testing.connectutils import (
+    PlanOnlyTestFixture,
+    should_test_connect,
+    connect_requirement_message,
+)
 
-if have_pandas:
+if should_test_connect:
     from pyspark.sql.connect.proto import Expression as ProtoExpression
     import pyspark.sql.connect.plan as p
     from pyspark.sql.connect.column import Column
     import pyspark.sql.connect.functions as fun
 
 
-@unittest.skipIf(not have_pandas, cast(str, pandas_requirement_message))
+@unittest.skipIf(not should_test_connect, connect_requirement_message)
 class SparkConnectColumnExpressionSuite(PlanOnlyTestFixture):
     def test_simple_column_expressions(self):
         df = self.connect.with_plan(p.Read("table"))
@@ -228,7 +230,7 @@ if __name__ == "__main__":
     from pyspark.sql.tests.connect.test_connect_column_expressions import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

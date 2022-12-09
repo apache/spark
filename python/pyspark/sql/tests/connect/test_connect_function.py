@@ -14,22 +14,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Any
 import unittest
 import tempfile
 
-from pyspark.testing.sqlutils import have_pandas, SQLTestUtils
-
 from pyspark.sql import SparkSession
-
-if have_pandas:
-    from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
-    from pyspark.testing.pandasutils import PandasOnSparkTestCase
-else:
-    from pyspark.testing.sqlutils import ReusedSQLTestCase as PandasOnSparkTestCase  # type: ignore
-from pyspark.sql.dataframe import DataFrame
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.utils import ReusedPySparkTestCase
+from pyspark.testing.sqlutils import SQLTestUtils
+
+if should_test_connect:
+    from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
@@ -37,15 +32,8 @@ class SparkConnectFuncTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQL
     """Parent test fixture class for all Spark Connect related
     test cases."""
 
-    if have_pandas:
-        connect: RemoteSparkSession
-    tbl_name: str
-    tbl_name_empty: str
-    df_text: "DataFrame"
-    spark: SparkSession
-
     @classmethod
-    def setUpClass(cls: Any):
+    def setUpClass(cls):
         ReusedPySparkTestCase.setUpClass()
         cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
         cls.hive_available = True
@@ -55,7 +43,7 @@ class SparkConnectFuncTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQL
         cls.connect = RemoteSparkSession.builder.remote().getOrCreate()
 
     @classmethod
-    def tearDownClass(cls: Any) -> None:
+    def tearDownClass(cls):
         ReusedPySparkTestCase.tearDownClass()
 
 
@@ -63,7 +51,7 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
     """These test cases exercise the interface to the proto plan
     generation but do not call Spark."""
 
-    def compare_by_show(self, df1: Any, df2: Any):
+    def compare_by_show(self, df1, df2):
         from pyspark.sql.dataframe import DataFrame as SDF
         from pyspark.sql.connect.dataframe import DataFrame as CDF
 

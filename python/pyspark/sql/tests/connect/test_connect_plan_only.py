@@ -14,13 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import cast
 import unittest
 
-from pyspark.testing.connectutils import PlanOnlyTestFixture
-from pyspark.testing.sqlutils import have_pandas, pandas_requirement_message
+from pyspark.testing.connectutils import (
+    PlanOnlyTestFixture,
+    should_test_connect,
+    connect_requirement_message,
+)
 
-if have_pandas:
+if should_test_connect:
     import pyspark.sql.connect.proto as proto
     from pyspark.sql.connect.column import Column
     from pyspark.sql.connect.plan import WriteOperation
@@ -29,7 +31,7 @@ if have_pandas:
     from pyspark.sql.types import StringType
 
 
-@unittest.skipIf(not have_pandas, cast(str, pandas_requirement_message))
+@unittest.skipIf(not should_test_connect, connect_requirement_message)
 class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
     """These test cases exercise the interface to the proto plan
     generation but do not call Spark."""
@@ -437,7 +439,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertIsNotNone(u)
         expr = u("ThisCol", "ThatCol", "OtherCol")
         self.assertTrue(isinstance(expr, Column))
-        self.assertTrue(isinstance(cast(Column, expr)._expr, UserDefinedFunction))
+        self.assertTrue(isinstance(expr._expr, UserDefinedFunction))
         u_plan = expr.to_plan(self.connect)
         self.assertIsNotNone(u_plan)
 
