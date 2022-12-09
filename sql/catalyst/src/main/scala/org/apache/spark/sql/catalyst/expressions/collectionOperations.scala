@@ -4681,7 +4681,23 @@ case class ArrayAppend(left: Expression, right: Expression)
     nullSafeCodeGen(
       ctx, ev, (left: String, right: String) => {
         val expr = ctx.addReferenceObj("arraysAppendExpr", this)
-        s"${ev.value} = (ArrayData)$expr.nullSafeEval($left, $right);"
+        val newArraySize = ctx.freshName("newArraySize")
+        val i = ctx.freshName("i")
+        val pos = ctx.freshName("pos")
+        val values = ctx.freshName("values")
+        val allocation = CodeGenerator.createArrayData(
+          values, elementType, newArraySize, s" $prettyName failed.")
+        val assignment = CodeGenerator.createArrayAssignment(
+          values, elementType, left, pos, i, true)
+        s"""int $newArraySize = $left.numElements() + 1;
+           |$allocation
+           |int $pos = 0;
+           |for (int $i=0;$i<$left.numElements(); $i ++, $pos ++){
+           |  $assignment
+           |}
+           |${CodeGenerator.setArrayElement(values, elementType, pos, right)}
+           |${ev.value} = $values;
+           |""".stripMargin
       }
     )
   }
