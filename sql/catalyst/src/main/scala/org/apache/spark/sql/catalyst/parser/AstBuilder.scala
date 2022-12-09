@@ -2369,7 +2369,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
 
     def toLiteral[T](f: UTF8String => Option[T], t: DataType): Literal = {
       f(UTF8String.fromString(value)).map(Literal(_, t)).getOrElse {
-        throw QueryParsingErrors.cannotParseValueTypeError(t, value, ctx)
+        throw QueryParsingErrors.cannotParseValueTypeError(valueType, value, ctx)
       }
     }
 

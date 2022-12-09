@@ -30,8 +30,6 @@ import org.apache.spark.sql.types.StringType
  */
 private[sql] object QueryParsingErrors extends QueryErrorsBase {
 
-  import org.apache.spark.sql.types.DataType
-
   def invalidInsertIntoError(ctx: InsertIntoContext): Throwable = {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0001", ctx)
   }
@@ -211,12 +209,12 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def cannotParseValueTypeError(
-      dt: DataType, value: String, ctx: TypeConstructorContext): Throwable = {
+      valueType: String, value: String, ctx: TypeConstructorContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_TYPED_LITERAL",
       messageParameters = Map(
-        "valueType" -> toSQLType(dt),
-        "value" -> toSQLValue(value, dt)
+        "valueType" -> toSQLType(valueType),
+        "value" -> toSQLValue(value, StringType)
       ),
       ctx)
   }
