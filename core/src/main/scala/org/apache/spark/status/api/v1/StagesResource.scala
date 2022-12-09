@@ -16,16 +16,11 @@
  */
 package org.apache.spark.status.api.v1
 
-import java.net.URLDecoder
-import java.nio.charset.StandardCharsets.UTF_8
 import java.util.{HashMap, List => JList, Locale}
 import javax.ws.rs.{NotFoundException => _, _}
 import javax.ws.rs.core.{Context, MediaType, MultivaluedMap, UriInfo}
 
 import scala.collection.JavaConverters._
-
-import org.glassfish.jersey.internal.util.collection.ImmutableMultivaluedMap
-import org.glassfish.jersey.uri.UriComponent
 
 import org.apache.spark.status.api.v1.TaskStatus._
 import org.apache.spark.ui.UIUtils
@@ -148,10 +143,8 @@ private[v1] class StagesResource extends BaseAppResource {
     @Context uriInfo: UriInfo):
   HashMap[String, Object] = {
     withUI { ui =>
-      // Decode URI twice here to avoid percent-encoding twice on the query string
-      val decodeURI = URLDecoder.decode(uriInfo.getRequestUri.getRawQuery, UTF_8.name())
-      val uriQueryParameters = new ImmutableMultivaluedMap[String, String](
-        UriComponent.decodeQuery(decodeURI, true))
+      // Decode URI params twice here to avoid percent-encoding twice
+      val uriQueryParameters = UIUtils.decodeURLParameter(uriInfo.getQueryParameters(true))
       val totalRecords = uriQueryParameters.getFirst("numTasks")
       var isSearch = false
       var searchValue: String = null
