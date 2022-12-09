@@ -322,8 +322,7 @@ class SparkConnectPlanner(session: SparkSession) {
         None,
         rel.getVariableColumnName,
         Seq(rel.getValueColumnName),
-        transformRelation(rel.getInput)
-      )
+        transformRelation(rel.getInput))
     } else {
       val values = rel.getValuesList.asScala.toArray.map { expr =>
         Column(transformExpression(expr))
@@ -335,8 +334,7 @@ class SparkConnectPlanner(session: SparkSession) {
         None,
         rel.getVariableColumnName,
         Seq(rel.getValueColumnName),
-        transformRelation(rel.getInput)
-      )
+        transformRelation(rel.getInput))
     }
   }
 
@@ -372,16 +370,17 @@ class SparkConnectPlanner(session: SparkSession) {
   }
 
   private def parseDatatypeString(sqlText: String): DataType = {
+    val parser = session.sessionState.sqlParser
     var dataType: DataType = null
     try {
-      dataType = session.sessionState.sqlParser.parseTableSchema(sqlText)
+      dataType = parser.parseTableSchema(sqlText)
     } catch {
       case e1: ParseException =>
         try {
-          dataType = session.sessionState.sqlParser.parseDataType(sqlText)
+          dataType = parser.parseDataType(sqlText)
         } catch {
           case e2: ParseException =>
-            dataType = session.sessionState.sqlParser.parseDataType(s"struct<${sqlText.strip}>")
+            dataType = parser.parseDataType(s"struct<${sqlText.strip}>")
         }
     }
     dataType
