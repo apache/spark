@@ -381,7 +381,7 @@ class SparkConnectPlanner(session: SparkSession) {
           parser.parseDataType(sqlText)
         } catch {
           case _: ParseException =>
-            parser.parseDataType(s"struct<${sqlText.strip()}>")
+            parser.parseDataType(s"struct<${sqlText.trim}>")
         }
     }
   }
