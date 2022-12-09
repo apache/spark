@@ -986,7 +986,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         } catch {
           case _: NoSuchElementException =>
             if (reader.modificationTime < maxTime) {
-              logInfo(s"Deleting unlisted expired event log ${reader.rootPath.toString}")
+              logInfo(s"Deleting unlisted event log ${reader.rootPath.toString}")
               deleteLog(fs, reader.rootPath)
             }
         }
