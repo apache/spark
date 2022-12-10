@@ -641,6 +641,9 @@ private[spark] class BlockManager(
       maxOnHeapMemory, maxOffHeapMemory, storageEndpoint, isReRegister = true)
     if (id.executorId != BlockManagerId.INVALID_EXECUTOR_ID) {
       reportAllBlocks()
+    } else {
+      logError("Exiting executor due to block manager re-registration failure")
+      System.exit(-1)
     }
   }
 
