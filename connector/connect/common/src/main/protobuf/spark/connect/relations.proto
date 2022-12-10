@@ -56,6 +56,7 @@ message Relation {
     WithColumns with_columns = 23;
     Hint hint = 24;
     Unpivot unpivot = 25;
+    RandomSplit random_split = 26;
 
     // NA functions
     NAFill fill_na = 90;
@@ -582,4 +583,11 @@ message Unpivot {
 
   // (Required) Name of the value column.
   string value_column_name = 5;
+}
+
+// Randomly splits this Dataset with the provided weights.
+// Note: this message is just a wrapper for input relation.
+message RandomSplit {
+  // (Required) The input relation.
+  Relation input = 1;
 }

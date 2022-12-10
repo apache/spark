@@ -78,6 +78,7 @@ _RENAMECOLUMNSBYNAMETONAMEMAP_RENAMECOLUMNSMAPENTRY = (
 _WITHCOLUMNS = DESCRIPTOR.message_types_by_name["WithColumns"]
 _HINT = DESCRIPTOR.message_types_by_name["Hint"]
 _UNPIVOT = DESCRIPTOR.message_types_by_name["Unpivot"]
+_RANDOMSPLIT = DESCRIPTOR.message_types_by_name["RandomSplit"]
 _JOIN_JOINTYPE = _JOIN.enum_types_by_name["JoinType"]
 _SETOPERATION_SETOPTYPE = _SETOPERATION.enum_types_by_name["SetOpType"]
 Relation = _reflection.GeneratedProtocolMessageType(
@@ -492,6 +493,17 @@ Unpivot = _reflection.GeneratedProtocolMessageType(
     },
 )
 _sym_db.RegisterMessage(Unpivot)
+
+RandomSplit = _reflection.GeneratedProtocolMessageType(
+    "RandomSplit",
+    (_message.Message,),
+    {
+        "DESCRIPTOR": _RANDOMSPLIT,
+        "__module__": "spark.connect.relations_pb2"
+        # @@protoc_insertion_point(class_scope:spark.connect.RandomSplit)
+    },
+)
+_sym_db.RegisterMessage(RandomSplit)
 
 if _descriptor._USE_C_DESCRIPTORS == False:
 

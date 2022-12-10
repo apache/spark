@@ -228,6 +228,30 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertEqual(plan.root.unpivot.variable_column_name, "variable")
         self.assertEqual(plan.root.unpivot.value_column_name, "value")
 
+    def test_random_split(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+
+        relations = df.filter(df.col_name > 3).randomSplit([1, 2, 3], 1)
+        self.assertTrue(len(relations) == 3)
+
+        plan = relations[0]._plan.to_proto(self.connect)
+        self.assertEqual(plan.root.sample.lower_bound, 0.0)
+        self.assertEqual(plan.root.sample.upper_bound, 0.16666666666666666)
+        self.assertEqual(plan.root.sample.with_replacement, False)
+        self.assertEqual(plan.root.sample.HasField("seed"), True)
+
+        plan = relations[1]._plan.to_proto(self.connect)
+        self.assertEqual(plan.root.sample.lower_bound, 0.16666666666666666)
+        self.assertEqual(plan.root.sample.upper_bound, 0.5)
+        self.assertEqual(plan.root.sample.with_replacement, False)
+        self.assertEqual(plan.root.sample.HasField("seed"), True)
+
+        plan = relations[2]._plan.to_proto(self.connect)
+        self.assertEqual(plan.root.sample.lower_bound, 0.5)
+        self.assertEqual(plan.root.sample.upper_bound, 1.0)
+        self.assertEqual(plan.root.sample.with_replacement, False)
+        self.assertEqual(plan.root.sample.HasField("seed"), True)
+
     def test_summary(self):
         df = self.connect.readTable(table_name=self.tbl_name)
         plan = df.filter(df.col_name > 3).summary()._plan.to_proto(self.connect)
