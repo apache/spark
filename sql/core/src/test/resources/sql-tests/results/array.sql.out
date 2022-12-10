@@ -416,12 +416,23 @@ select array_insert(array(1, 2, 3), 4, "4")
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INTERNAL_ERROR",
+  "errorClass" : "DATATYPE_MISMATCH.ARRAY_FUNCTION_DIFF_TYPES",
   "messageParameters" : {
-    "message" : "Undefined error message parameter for error class: 'DATATYPE_MISMATCH.ARRAY_FUNCTION_DIFF_TYPES'. Parameters: Map(functionName -> `array_insert`, sqlExpr -> \"array_insert(array(1, 2, 3), 4, 4)\", left -> \"ARRAY<INT>\", dataType -> \"ARRAY\", right -> \"STRING\")"
-  }
+    "dataType" : "\"ARRAY\"",
+    "functionName" : "`array_insert`",
+    "leftType" : "\"ARRAY<INT>\"",
+    "rightType" : "\"STRING\"",
+    "sqlExpr" : "\"array_insert(array(1, 2, 3), 4, 4)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 43,
+    "fragment" : "array_insert(array(1, 2, 3), 4, \"4\")"
+  } ]
 }
 
 

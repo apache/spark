@@ -4689,12 +4689,42 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(
-      ctx, ev, (first: String, second: String, third: String) => {
-        val expr = ctx.addReferenceObj("arrayInsertExpr", this)
-        s"${ev.value} = (ArrayData)$expr.nullSafeEval($first, $second, $third);"
-      }
-    )
+    nullSafeCodeGen(ctx, ev, (arr, pos, item) => {
+      val posIdx = ctx.freshName("posIdx")
+      val adjustedAllocIdx = ctx.freshName("adjustedAllocIdx")
+      val resLength = ctx.freshName("resLength")
+      val i = ctx.freshName("i")
+      val values = ctx.freshName("values")
+
+      val allocation = CodeGenerator.createArrayData(
+        values, elementType, resLength, s" $prettyName failed.")
+      val assignment = CodeGenerator.createArrayAssignment(values, elementType, arr,
+        adjustedAllocIdx, i, resultArrayElementNullable)
+
+      val defaultIntValue = CodeGenerator.defaultValue(CodeGenerator.JAVA_INT, false)
+      s"""
+         |${CodeGenerator.JAVA_INT} $posIdx = 0;
+         |${CodeGenerator.JAVA_INT} $resLength = $defaultIntValue;
+         |${CodeGenerator.JAVA_INT} $adjustedAllocIdx = $defaultIntValue;
+         |if ($pos < 0) {
+         |  $posIdx = $pos + $arr.numElements();
+         |} else if ($pos > 0) {
+         |  $posIdx = $pos - 1;
+         |}
+         |$resLength = $arr.numElements() + 1;
+         |if ($posIdx < 0 || $posIdx > $arr.numElements()) {
+         |  ${ev.value} = null;
+         |} else {
+         |  $allocation
+         |  for (int $i = 0; $i < $arr.numElements(); $i ++) {
+         |    $adjustedAllocIdx = $i >= $posIdx ? $i + 1 : $i;
+         |    $assignment
+         |  }
+         |  ${CodeGenerator.setArrayElement(values, elementType, posIdx, item)}
+         |  ${ev.value} = $values;
+         |}
+       """.stripMargin
+    })
   }
 
   override def first: Expression = srcArrayExpr
@@ -4703,6 +4733,11 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
 
   override def prettyName: String = "array_insert"
   override def dataType: DataType = first.dataType
+
+  @transient private lazy val elementType: DataType =
+    srcArrayExpr.dataType.asInstanceOf[ArrayType].elementType
+
+  private def resultArrayElementNullable = dataType.asInstanceOf[ArrayType].containsNull
 
   override protected def withNewChildrenInternal(
       newSrcArrayExpr: Expression, newPosExpr: Expression, newItemExpr: Expression): ArrayInsert =
