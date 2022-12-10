@@ -1257,6 +1257,11 @@
           "AES-<mode> with the padding <padding> by the <functionName> function."
         ]
       },
+      "ANALYZE_TABLE_VIEW_NOT_CACHED" : {
+        "message" : [
+          "Temporary view <tableName> is not cached for analyzing columns."
+        ]
+      },
       "CATALOG_OPERATION" : {
         "message" : [
           "Catalog <catalogName> does not support <operation>."
@@ -2866,11 +2871,6 @@
   "_LEGACY_ERROR_TEMP_1232" : {
     "message" : [
       "Partition spec is invalid. The spec (<specKeys>) must match the partition spec (<partitionColumnNames>) defined in table '<tableName>'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1234" : {
-    "message" : [
-      "Temporary view <tableIdent> is not cached for analyzing columns."
     ]
   },
   "_LEGACY_ERROR_TEMP_1235" : {
