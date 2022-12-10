@@ -777,9 +777,11 @@ package object dsl {
         unpivot(ids, variableColumnName, valueColumnName)
 
       def randomSplit(weights: Array[Double], seed: Long): Array[Relation] = {
-        require(weights.forall(_ >= 0),
+        require(
+          weights.forall(_ >= 0),
           s"Weights must be nonnegative, but got ${weights.mkString("[", ",", "]")}")
-        require(weights.sum > 0,
+        require(
+          weights.sum > 0,
           s"Sum of weights must be positive, but got ${weights.mkString("[", ",", "]")}")
 
         lazy val randomSplit = Relation
@@ -792,20 +794,23 @@ package object dsl {
 
         val sum = weights.toSeq.sum
         val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _)
-        normalizedCumWeights.sliding(2).map { x =>
-          Relation
-            .newBuilder()
-            .setSample(
-              Sample
-                .newBuilder()
-                .setInput(randomSplit)
-                .setLowerBound(x(0))
-                .setUpperBound(x(1))
-                .setWithReplacement(false)
-                .setSeed(seed)
-                .build())
-            .build()
-        }.toArray
+        normalizedCumWeights
+          .sliding(2)
+          .map { x =>
+            Relation
+              .newBuilder()
+              .setSample(
+                Sample
+                  .newBuilder()
+                  .setInput(randomSplit)
+                  .setLowerBound(x(0))
+                  .setUpperBound(x(1))
+                  .setWithReplacement(false)
+                  .setSeed(seed)
+                  .build())
+              .build()
+          }
+          .toArray
       }
 
       def randomSplit(weights: Array[Double]): Array[Relation] =
