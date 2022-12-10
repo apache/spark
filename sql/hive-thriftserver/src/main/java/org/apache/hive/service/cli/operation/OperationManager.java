@@ -80,7 +80,7 @@ public class OperationManager extends AbstractService {
 
   private void initOperationLogCapture(String loggingMode) {
     // Register another Appender (with the same layout) that talks to us.
-    AbstractWriterAppender ap = new LogDivertAppender(this, OperationLog.getLoggingLevel(loggingMode));
+    AbstractWriterAppender ap = LogDivertAppender.create(this, OperationLog.getLoggingLevel(loggingMode));
     ((org.apache.logging.log4j.core.Logger)org.apache.logging.log4j.LogManager.getRootLogger()).addAppender(ap);
     ap.start();
   }
