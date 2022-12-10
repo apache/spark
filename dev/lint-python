@@ -69,7 +69,7 @@ function mypy_annotation_test {
 
     echo "starting mypy annotations test..."
     MYPY_REPORT=$( ($MYPY_BUILD \
-      --config-file dev/mypy.ini \
+      --config-file python/mypy.ini \
       --cache-dir /tmp/.mypy_cache/ \
       python/pyspark) 2>&1)
     MYPY_STATUS=$?
@@ -104,7 +104,7 @@ function mypy_data_test {
       -c dev/pyproject.toml \
       --rootdir python \
       --mypy-only-local-stub \
-      --mypy-ini-file dev/mypy.ini \
+      --mypy-ini-file python/mypy.ini \
       python/pyspark ) 2>&1)
 
     PYTEST_STATUS=$?
@@ -127,7 +127,7 @@ function mypy_examples_test {
     echo "starting mypy examples test..."
 
     MYPY_REPORT=$( (MYPYPATH=python $MYPY_BUILD \
-      --config-file dev/mypy.ini \
+      --config-file python/mypy.ini \
       --exclude "mllib/*" \
       examples/src/main/python/) 2>&1)
 
