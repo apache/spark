@@ -27,13 +27,9 @@ import pyspark.sql.connect.proto as proto
 from pyspark.sql.connect.types import pyspark_types_to_proto_types
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import ColumnOrName
+    from pyspark.sql.connect._typing import ColumnOrName, PrimitiveType
     from pyspark.sql.connect.client import SparkConnectClient
     import pyspark.sql.connect.proto as proto
-
-# TODO(SPARK-41329): solve the circular import between _typing and this class
-# if we want to reuse _type.PrimitiveType
-PrimitiveType = Union[bool, float, int, str]
 
 
 def _func_op(name: str, doc: str = "") -> Callable[["Column"], "Column"]:
@@ -554,7 +550,7 @@ class Column:
         return _func_op("not")(_bin_op("==")(self, other))
 
     # string methods
-    def contains(self, other: Union[PrimitiveType, "Column"]) -> "Column":
+    def contains(self, other: Union["PrimitiveType", "Column"]) -> "Column":
         """
         Contains the other element. Returns a boolean :class:`Column` based on a string match.
 
@@ -698,6 +694,9 @@ class Column:
         >>> df.select(df.name.substr(1, 3).alias("col")).collect()
         [Row(col='Ali'), Row(col='Bob')]
         """
+        from pyspark.sql.connect.function_builder import functions as F
+        from pyspark.sql.connect.functions import lit
+
         if type(startPos) != type(length):
             raise TypeError(
                 "startPos and length must be the same type. "
@@ -706,17 +705,16 @@ class Column:
                     length_t=type(length),
                 )
             )
-        from pyspark.sql.connect.function_builder import functions as F
 
         if isinstance(length, int):
-            length_exp = self._lit(length)
+            length_exp = lit(length)
         elif isinstance(length, Column):
             length_exp = length
         else:
             raise TypeError("Unsupported type for substr().")
 
         if isinstance(startPos, int):
-            start_exp = self._lit(startPos)
+            start_exp = lit(startPos)
         else:
             start_exp = startPos
 
@@ -726,8 +724,11 @@ class Column:
         """Returns a binary expression with the current column as the left
         side and the other expression as the right side.
         """
+        from pyspark.sql.connect._typing import PrimitiveType
+        from pyspark.sql.connect.functions import lit
+
         if isinstance(other, get_args(PrimitiveType)):
-            other = self._lit(other)
+            other = lit(other)
         return scalar_function("==", self, other)
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
@@ -778,11 +779,6 @@ class Column:
             return Column(CastExpression(col=self, data_type=dataType))
         else:
             raise TypeError("unexpected type: %s" % type(dataType))
-
-    # TODO(SPARK-41329): solve the circular import between functions.py and
-    # this class if we want to reuse functions.lit
-    def _lit(self, x: Any) -> "Column":
-        return Column(LiteralExpression(x))
 
     def __repr__(self) -> str:
         return "Column<'%s'>" % self._expr.__repr__()
