@@ -826,8 +826,8 @@ class DataFrame(object):
 
     def unpivot(
         self,
-        ids: List["ColumnOrName"],
-        values: List["ColumnOrName"],
+        ids: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]],
+        values: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]],
         variableColumnName: str,
         valueColumnName: str,
     ) -> "DataFrame":
@@ -852,8 +852,24 @@ class DataFrame(object):
         -------
         :class:`DataFrame`
         """
+
+        def to_jcols(
+            cols: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]]
+        ) -> List["ColumnOrName"]:
+            if cols is None:
+                lst = []
+            elif isinstance(cols, tuple):
+                lst = list(cols)
+            elif isinstance(cols, list):
+                lst = cols
+            else:
+                lst = [cols]
+            return lst
+
         return DataFrame.withPlan(
-            plan.Unpivot(self._plan, ids, values, variableColumnName, valueColumnName),
+            plan.Unpivot(
+                self._plan, to_jcols(ids), to_jcols(values), variableColumnName, valueColumnName
+            ),
             self._session,
         )
 

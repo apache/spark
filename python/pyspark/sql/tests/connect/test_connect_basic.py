@@ -783,6 +783,29 @@ class SparkConnectTests(SparkConnectSQLTestCase):
                 """Cannot resolve column name "x" among (a, b, c)""", str(context.exception)
             )
 
+    def test_unpivot(self):
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name)
+            .filter("id > 3")
+            .unpivot(["id"], ["name"], "variable", "value")
+            .toPandas(),
+            self.spark.read.table(self.tbl_name)
+            .filter("id > 3")
+            .unpivot(["id"], ["name"], "variable", "value")
+            .toPandas(),
+        )
+
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name)
+            .filter("id > 3")
+            .unpivot("id", None, "variable", "value")
+            .toPandas(),
+            self.spark.read.table(self.tbl_name)
+            .filter("id > 3")
+            .unpivot("id", None, "variable", "value")
+            .toPandas(),
+        )
+
     def test_with_columns(self):
         # SPARK-41256: test withColumn(s).
         self.assert_eq(
