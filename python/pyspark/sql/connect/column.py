@@ -180,7 +180,12 @@ class LiteralExpression(Expression):
         elif isinstance(self._value, bool):
             expr.literal.boolean = bool(self._value)
         elif isinstance(self._value, int):
-            expr.literal.long = int(self._value)
+            if -2147483648 <= self._value <= 2147483647:
+                expr.literal.integer = int(self._value)
+            elif -9223372036854775808 <= self._value <= 9223372036854775807:
+                expr.literal.long = int(self._value)
+            else:
+                raise ValueError(f"integer {self._value} out of bounds")
         elif isinstance(self._value, float):
             expr.literal.double = float(self._value)
         elif isinstance(self._value, str):
