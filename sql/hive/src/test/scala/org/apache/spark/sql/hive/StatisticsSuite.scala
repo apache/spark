@@ -581,7 +581,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
-  test("analyze non-existent column") {
+  test("analyze not found column") {
     val tableName = "analyzeTable"
     withTable(tableName) {
       sql(s"CREATE TABLE $tableName (key STRING, value STRING) PARTITIONED BY (ds STRING)")
@@ -591,7 +591,10 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
           sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS fakeColumn")
         },
         errorClass = "COLUMN_NOT_FOUND",
-        parameters = Map("colName" -> "`fakeColumn`")
+        parameters = Map(
+          "colName" -> "`fakeColumn`",
+          "caseSensitiveConfig" -> "\"spark.sql.caseSensitive\""
+        )
       )
     }
   }

@@ -64,7 +64,10 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
           sql(s"DESC $tbl key1").collect()
         },
         errorClass = "COLUMN_NOT_FOUND",
-        parameters = Map("colName" -> "`key1`")
+        parameters = Map(
+          "colName" -> "`key1`",
+          "caseSensitiveConfig" -> "\"spark.sql.caseSensitive\""
+        )
       )
     }
   }
@@ -87,7 +90,10 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
             sql(s"DESC $tbl KEY").collect()
           },
           errorClass = "COLUMN_NOT_FOUND",
-          parameters = Map("colName" -> "`KEY`")
+          parameters = Map(
+            "colName" -> "`KEY`",
+            "caseSensitiveConfig" -> "\"spark.sql.caseSensitive\""
+          )
         )
       }
     }

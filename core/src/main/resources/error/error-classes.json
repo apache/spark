@@ -111,7 +111,7 @@
   },
   "COLUMN_NOT_FOUND" : {
     "message" : [
-      "The column <colName> does not exist."
+      "The column <colName> cannot be found. Verify the spelling and correctness of the column name according to the SQL config <caseSensitiveConfig>."
     ]
   },
   "CONCURRENT_QUERY" : {

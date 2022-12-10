@@ -2275,10 +2275,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("columnName" -> toSQLId(columnName)))
   }
 
-  def columnNotExistError(colName: String): Throwable = {
+  def columnNotFoundError(colName: String): Throwable = {
     new AnalysisException(
       errorClass = "COLUMN_NOT_FOUND",
-      messageParameters = Map("colName" -> toSQLId(colName)))
+      messageParameters = Map(
+        "colName" -> toSQLId(colName),
+        "caseSensitiveConfig" -> toSQLConf(SQLConf.CASE_SENSITIVE.key)))
   }
 
   def noSuchTableError(db: String, table: String): Throwable = {
