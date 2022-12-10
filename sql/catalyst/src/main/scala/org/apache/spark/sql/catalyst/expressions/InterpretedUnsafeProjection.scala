@@ -256,6 +256,8 @@ object InterpretedUnsafeProjection {
         // We can't call setNullAt() for DecimalType with precision larger than 18, we call write
         // directly. We can use the unwrapped writer directly.
         unsafeWriter
+      case CalendarIntervalType =>
+        unsafeWriter
       case BooleanType | ByteType =>
         (v, i) => {
           if (!v.isNullAt(i)) {
