@@ -718,7 +718,7 @@ class Column:
         else:
             start_exp = startPos
 
-        return F.substr(self, start_exp, length_exp)  # type: ignore[attr-defined]
+        return F.substr(self, start_exp, length_exp)
 
     def __eq__(self, other: Any) -> "Column":  # type: ignore[override]
         """Returns a binary expression with the current column as the left
