@@ -94,7 +94,7 @@ object FakeTask {
       throw new IllegalArgumentException("Wrong number of task locations")
     }
     val tasks = Array.tabulate[Task[_]](numTasks) { i =>
-      new ShuffleMapTask(stageId, stageAttemptId, null, new Partition {
+      new ShuffleMapTask(0, stageId, stageAttemptId, null, new Partition {
         override def index: Int = i
       }, 1, prefLocs(i), new Properties,
         SparkEnv.get.closureSerializer.newInstance().serialize(TaskMetrics.registered).array())

@@ -1562,7 +1562,8 @@ private[spark] class DAGScheduler(
             val locs = taskIdToLocations(id)
             val part = partitions(id)
             stage.pendingPartitions += id
-            new ShuffleMapTask(stage.id, stage.latestInfo.attemptNumber, taskBinary,
+            new ShuffleMapTask(
+              stage.shuffleDep.shuffleId, stage.id, stage.latestInfo.attemptNumber, taskBinary,
               part, stage.numPartitions, locs, properties, serializedTaskMetrics, Option(jobId),
               Option(sc.applicationId), sc.applicationAttemptId, stage.rdd.isBarrier())
           }
