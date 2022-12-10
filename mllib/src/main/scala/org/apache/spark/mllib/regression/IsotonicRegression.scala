@@ -310,16 +310,15 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
   /**
    * Aggregates points of duplicate feature values into a single point using as label the weighted
    * average of the labels of the points with duplicate feature values. All points for a unique
-   * feature values are aggregated as:
+   * feature value are aggregated as:
    *
-   *   - Aggregated label is the weighted average of all labels
-   *   - Aggregated feature is the weighted average of all equal features[1]
-   *   - Aggregated weight is the sum of all weights
+   *   - Aggregated label is the weighted average of all labels.
+   *   - Aggregated feature is the first encountered feature (i.e. minimum)[1].
+   *   - Aggregated weight is the sum of all weights.
    *
    * [1] Note: It is possible that feature values to be equal up to a resolution due to
-   * representation errors, since we cannot know which feature value to use in that case, we
-   * compute the weighted average of the features. Ideally, all feature values will be equal and
-   * the weighted average is just the value at any point.
+   * representation errors. Ideally, all feature values will be equal and the minimum is
+   * just the value at any point.
    *
    * @param input
    *   Input data of tuples (label, feature, weight). Weights must be non-negative.
@@ -339,26 +338,22 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
     if (cleanInput.length <= 1) {
       cleanInput
     } else {
-      // whether or not two double features are equal up to a precision
-      @inline def areEqual(a: Double, b: Double): Boolean = Precision.equals(a, b)
-
       val pointsAccumulator = new IsotonicRegression.PointsAccumulator
-      var (_, prevFeature, _) = cleanInput.head
 
       // Go through input points, merging all points with approximately equal feature values into
-      // a single point. Equality of features is defined by areEqual method. The label of the
-      // accumulated points is the weighted average of the labels of all points of equal feature
-      // value. It is possible that feature values to be equal up to a resolution due to
-      // representation errors, since we cannot know which feature value to use in that case,
-      // we compute the weighted average of the features.
-      cleanInput.foreach { case point @ (_, feature, _) =>
-        if (areEqual(feature, prevFeature)) {
+      // a single point. Equality of features is defined by shouldAccumulate method. The label of
+      // the accumulated points is the weighted average of the labels of all points of equal feature
+      // value and the feature is the first encountered (i.e. minimum) feature. It is possible that
+      // feature values to be equal up to a resolution due to representation errors.
+      pointsAccumulator := cleanInput.head
+
+      cleanInput.tail.foreach { case point @ (_, feature, _) =>
+        if (pointsAccumulator.shouldAccumulate(feature)) {
           pointsAccumulator += point
         } else {
           pointsAccumulator.appendToOutput()
           pointsAccumulator := point
         }
-        prevFeature = feature
       }
       // Append the last accumulated point
       pointsAccumulator.appendToOutput()
@@ -511,30 +506,37 @@ object IsotonicRegression {
     private var (currentLabel: Double, currentFeature: Double, currentWeight: Double) =
       (0d, 0d, 0d)
 
+    /**
+     * Whether or not this feature is equal to the current accumulated feature up to a precision.
+     * Returns true if they are exactly equal or are adjacent doubles (i.e. no other representable
+     * doubles exist in between).
+     */
+    @inline def shouldAccumulate(feature: Double): Boolean =
+      Precision.equals(currentFeature, feature)
+
     /** Resets the current value of the point accumulator using the provided point. */
-    def :=(point: (Double, Double, Double)): Unit = {
+    @inline def :=(point: (Double, Double, Double)): Unit = {
       val (label, feature, weight) = point
       currentLabel = label * weight
-      currentFeature = feature * weight
+      currentFeature = feature
       currentWeight = weight
     }
 
     /** Accumulates the provided point into the current value of the point accumulator. */
-    def +=(point: (Double, Double, Double)): Unit = {
-      val (label, feature, weight) = point
+    @inline def +=(point: (Double, Double, Double)): Unit = {
+      val (label, _, weight) = point
       currentLabel += label * weight
-      currentFeature += feature * weight
       currentWeight += weight
     }
 
     /** Appends the current value of the point accumulator to the output. */
-    def appendToOutput(): Unit =
+    @inline def appendToOutput(): Unit =
       output += ((
         currentLabel / currentWeight,
-        currentFeature / currentWeight,
+        currentFeature,
         currentWeight))
 
     /** Returns all accumulated points so far. */
-    def getOutput: Array[(Double, Double, Double)] = output.toArray
+    @inline def getOutput: Array[(Double, Double, Double)] = output.toArray
   }
 }

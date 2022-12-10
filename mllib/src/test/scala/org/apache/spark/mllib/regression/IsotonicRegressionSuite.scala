@@ -375,7 +375,21 @@ class IsotonicRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
 
     // duplicate up to resolution error
     assert(
-      makeUnique(Array((1.0, 1.0, 1.0), (1.0, 1.0 - EPSILON, 1.0), (1.0, 1.0 + EPSILON, 1.0))) ===
-        Array((1.0, 1.0, 3.0)))
+      makeUnique(Array(
+        (1.0, 1.0 - EPSILON, 1.0), (1.0, 1.0, 1.0), (1.0, 1.0 + EPSILON, 1.0),
+        (1.0, 1.0 + 2 * EPSILON, 1.0)
+      )) ===
+        Array((1.0, 1.0 - EPSILON, 3.0), (1.0, 1.0 + 2 * EPSILON, 1.0)))
+
+    // infinitely adjacent doubles should fall into buckets of two adjacent doubles
+    // by definition of equality and minimum pooling of approximately equal features
+    val adjacentDoubles = {
+      val base = java.lang.Double.doubleToRawLongBits(1.0)
+      (0 until 10).map(i => java.lang.Double.longBitsToDouble(base + i))
+    }
+
+    assert(
+      makeUnique(adjacentDoubles.map((1.0, _, 1.0)).toArray) ===
+        adjacentDoubles.grouped(2).map(_.min).map((1.0, _, 2.0)).toArray)
   }
 }
