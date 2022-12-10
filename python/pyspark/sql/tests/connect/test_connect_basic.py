@@ -14,36 +14,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Any
 import unittest
 import shutil
-import numpy as np
 import tempfile
 
-import grpc  # type: ignore
-
-from pyspark.testing.sqlutils import have_pandas, SQLTestUtils
-
-if have_pandas:
-    import pandas
-
+from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.sql import SparkSession, Row
 from pyspark.sql.types import StructType, StructField, LongType, StringType
+import pyspark.sql.functions
+from pyspark.testing.utils import ReusedPySparkTestCase
+from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
-if have_pandas:
+if should_test_connect:
+    import grpc
+    import pandas as pd
+    import numpy as np
     from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
     from pyspark.sql.connect.client import ChannelBuilder
     from pyspark.sql.connect.column import Column
     from pyspark.sql.connect.dataframe import DataFrame as CDataFrame
     from pyspark.sql.connect.function_builder import udf
     from pyspark.sql.connect.functions import lit, col
-    from pyspark.testing.pandasutils import PandasOnSparkTestCase
-else:
-    from pyspark.testing.sqlutils import ReusedSQLTestCase as PandasOnSparkTestCase  # type: ignore
-from pyspark.sql.dataframe import DataFrame
-import pyspark.sql.functions
-from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
-from pyspark.testing.utils import ReusedPySparkTestCase
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
@@ -51,15 +43,8 @@ class SparkConnectSQLTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLT
     """Parent test fixture class for all Spark Connect related
     test cases."""
 
-    if have_pandas:
-        connect: RemoteSparkSession
-    tbl_name: str
-    tbl_name_empty: str
-    df_text: "DataFrame"
-    spark: SparkSession
-
     @classmethod
-    def setUpClass(cls: Any):
+    def setUpClass(cls):
         ReusedPySparkTestCase.setUpClass()
         cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
         cls.hive_available = True
@@ -80,12 +65,12 @@ class SparkConnectSQLTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLT
         cls.spark_connect_load_test_data()
 
     @classmethod
-    def tearDownClass(cls: Any) -> None:
+    def tearDownClass(cls):
         cls.spark_connect_clean_up_test_data()
         ReusedPySparkTestCase.tearDownClass()
 
     @classmethod
-    def spark_connect_load_test_data(cls: Any):
+    def spark_connect_load_test_data(cls):
         # Setup Remote Spark Session
         cls.connect = RemoteSparkSession.builder.remote().getOrCreate()
         df = cls.spark.createDataFrame([(x, f"{x}") for x in range(100)], ["id", "name"])
@@ -106,7 +91,7 @@ class SparkConnectSQLTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLT
         empty_df.write.saveAsTable(cls.tbl_name_empty)
 
     @classmethod
-    def spark_connect_clean_up_test_data(cls: Any) -> None:
+    def spark_connect_clean_up_test_data(cls):
         cls.spark.sql("DROP TABLE IF EXISTS {}".format(cls.tbl_name))
         cls.spark.sql("DROP TABLE IF EXISTS {}".format(cls.tbl_name2))
         cls.spark.sql("DROP TABLE IF EXISTS {}".format(cls.tbl_name_empty))
@@ -210,7 +195,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
 
     def test_with_local_data(self):
         """SPARK-41114: Test creating a dataframe using local data"""
-        pdf = pandas.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]})
+        pdf = pd.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]})
         df = self.connect.createDataFrame(pdf)
         rows = df.filter(df.a == lit(3)).collect()
         self.assertTrue(len(rows) == 1)
@@ -218,7 +203,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertEqual(rows[0][1], "c")
 
         # Check correct behavior for empty DataFrame
-        pdf = pandas.DataFrame({"a": []})
+        pdf = pd.DataFrame({"a": []})
         with self.assertRaises(ValueError):
             self.connect.createDataFrame(pdf)
 
@@ -1066,7 +1051,7 @@ if __name__ == "__main__":
     from pyspark.sql.tests.connect.test_connect_basic import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

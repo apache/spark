@@ -14,10 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
 from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
 from pyspark.sql.types import StringType
-from pyspark.testing.sqlutils import have_pandas
 from pyspark.sql.types import (
     ByteType,
     ShortType,
@@ -31,10 +29,11 @@ from pyspark.sql.types import (
     BinaryType,
     BooleanType,
 )
+from pyspark.testing.connectutils import should_test_connect
 
-if have_pandas:
+if should_test_connect:
+    import pandas as pd
     from pyspark.sql.connect.functions import lit
-    import pandas
 
 
 class SparkConnectTests(SparkConnectSQLTestCase):
@@ -88,11 +87,11 @@ class SparkConnectTests(SparkConnectSQLTestCase):
     def test_simple_binary_expressions(self):
         """Test complex expression"""
         df = self.connect.read.table(self.tbl_name)
-        pd = df.select(df.id).where(df.id % lit(30) == lit(0)).sort(df.id.asc()).toPandas()
-        self.assertEqual(len(pd.index), 4)
+        pdf = df.select(df.id).where(df.id % lit(30) == lit(0)).sort(df.id.asc()).toPandas()
+        self.assertEqual(len(pdf.index), 4)
 
-        res = pandas.DataFrame(data={"id": [0, 30, 60, 90]})
-        self.assert_(pd.equals(res), f"{pd.to_string()} != {res.to_string()}")
+        res = pd.DataFrame(data={"id": [0, 30, 60, 90]})
+        self.assert_(pdf.equals(res), f"{pdf.to_string()} != {res.to_string()}")
 
     def test_cast(self):
         df = self.connect.read.table(self.tbl_name)
@@ -150,7 +149,7 @@ if __name__ == "__main__":
     from pyspark.sql.tests.connect.test_connect_column import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
