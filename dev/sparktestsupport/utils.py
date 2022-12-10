@@ -84,7 +84,7 @@ def identify_changed_files_from_git_commits(patch_sha, target_branch=None, targe
         ["git", "diff", "--name-only", patch_sha, diff_target], universal_newlines=True
     )
     # Remove any empty strings
-    return [f for f in raw_output.split("\n") if f]
+    return [f for f in raw_output.split("\n") if f and not f.endswith('README.md')]
 
 
 def determine_modules_to_test(changed_modules, deduplicated=True):
