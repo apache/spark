@@ -633,6 +633,154 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             sdf.select(SF.encode("c", "UTF-8")).toPandas(),
         )
 
+    # TODO(SPARK-41283): To compare toPandas for test cases with dtypes marked
+    def test_date_ts_functions(self):
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        query = """
+            SELECT * FROM VALUES
+            ('1997/02/28 10:30:00', '2023/03/01 06:00:00', 'JST', 1428476400, 2020, 12, 6),
+            ('2000/01/01 04:30:05', '2020/05/01 12:15:00', 'PST', 1403892395, 2022, 12, 6)
+            AS tab(ts1, ts2, tz, seconds, Y, M, D)
+            """
+        # +-------------------+-------------------+---+----------+----+---+---+
+        # |                ts1|                ts2| tz|   seconds|   Y|  M|  D|
+        # +-------------------+-------------------+---+----------+----+---+---+
+        # |1997/02/28 10:30:00|2023/03/01 06:00:00|JST|1428476400|2020| 12|  6|
+        # |2000/01/01 04:30:05|2020/05/01 12:15:00|PST|1403892395|2022| 12|  6|
+        # +-------------------+-------------------+---+----------+----+---+---+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        # With no parameters
+        for cfunc, sfunc in [
+            (CF.current_date, SF.current_date),
+        ]:
+            self.assert_eq(
+                cdf.select(cfunc()).toPandas(),
+                sdf.select(sfunc()).toPandas(),
+            )
+
+        # current_timestamp
+        # [left]:  datetime64[ns, America/Los_Angeles]
+        # [right]: datetime64[ns]
+        # TODO: compare the return values after resolving dtypes difference
+        self.assertEqual(
+            cdf.select(CF.current_timestamp()).count(),
+            sdf.select(SF.current_timestamp()).count(),
+        )
+
+        # localtimestamp
+        s_pdf0 = sdf.select(SF.localtimestamp()).toPandas()
+        c_pdf = cdf.select(CF.localtimestamp()).toPandas()
+        s_pdf1 = sdf.select(SF.localtimestamp()).toPandas()
+        self.assert_eq(s_pdf0 < c_pdf, c_pdf < s_pdf1)
+
+        # With only column parameter
+        for cfunc, sfunc in [
+            (CF.year, SF.year),
+            (CF.quarter, SF.quarter),
+            (CF.month, SF.month),
+            (CF.dayofweek, SF.dayofweek),
+            (CF.dayofmonth, SF.dayofmonth),
+            (CF.dayofyear, SF.dayofyear),
+            (CF.hour, SF.hour),
+            (CF.minute, SF.minute),
+            (CF.second, SF.second),
+            (CF.weekofyear, SF.weekofyear),
+            (CF.last_day, SF.last_day),
+            (CF.unix_timestamp, SF.unix_timestamp),
+        ]:
+            self.assert_eq(
+                cdf.select(cfunc(cdf.ts1)).toPandas(),
+                sdf.select(sfunc(sdf.ts1)).toPandas(),
+            )
+
+        # With format parameter
+        for cfunc, sfunc in [
+            (CF.date_format, SF.date_format),
+            (CF.to_date, SF.to_date),
+        ]:
+            self.assert_eq(
+                cdf.select(cfunc(cdf.ts1, format="yyyy-MM-dd")).toPandas(),
+                sdf.select(sfunc(sdf.ts1, format="yyyy-MM-dd")).toPandas(),
+            )
+        self.compare_by_show(
+            # [left]:  datetime64[ns, America/Los_Angeles]
+            # [right]: datetime64[ns]
+            cdf.select(CF.to_timestamp(cdf.ts1, format="yyyy-MM-dd")),
+            sdf.select(SF.to_timestamp(sdf.ts1, format="yyyy-MM-dd")),
+        )
+
+        # With tz parameter
+        for cfunc, sfunc in [
+            (CF.from_utc_timestamp, SF.from_utc_timestamp),
+            (CF.to_utc_timestamp, SF.to_utc_timestamp),
+            # [left]:  datetime64[ns, America/Los_Angeles]
+            # [right]: datetime64[ns]
+        ]:
+            self.compare_by_show(
+                cdf.select(cfunc(cdf.ts1, tz=cdf.tz)),
+                sdf.select(sfunc(sdf.ts1, tz=sdf.tz)),
+            )
+
+        # With numeric parameter
+        for cfunc, sfunc in [
+            (CF.date_add, SF.date_add),
+            (CF.date_sub, SF.date_sub),
+            (CF.add_months, SF.add_months),
+        ]:
+            self.assert_eq(
+                cdf.select(cfunc(cdf.ts1, cdf.D)).toPandas(),
+                sdf.select(sfunc(sdf.ts1, sdf.D)).toPandas(),
+            )
+
+        # With another timestamp as parameter
+        for cfunc, sfunc in [
+            (CF.datediff, SF.datediff),
+            (CF.months_between, SF.months_between),
+        ]:
+            self.assert_eq(
+                cdf.select(cfunc(cdf.ts1, cdf.ts2)).toPandas(),
+                sdf.select(sfunc(sdf.ts1, sdf.ts2)).toPandas(),
+            )
+
+        # With seconds parameter
+        self.compare_by_show(
+            # [left]:  datetime64[ns, America/Los_Angeles]
+            # [right]: datetime64[ns]
+            cdf.select(CF.timestamp_seconds(cdf.seconds)),
+            sdf.select(SF.timestamp_seconds(sdf.seconds)),
+        )
+
+        # make_date
+        self.assert_eq(
+            cdf.select(CF.make_date(cdf.Y, cdf.M, cdf.D)).toPandas(),
+            sdf.select(SF.make_date(sdf.Y, sdf.M, sdf.D)).toPandas(),
+        )
+
+        # date_trunc
+        self.compare_by_show(
+            # [left]:  datetime64[ns, America/Los_Angeles]
+            # [right]: datetime64[ns]
+            cdf.select(CF.date_trunc("day", cdf.ts1)),
+            sdf.select(SF.date_trunc("day", sdf.ts1)),
+        )
+
+        # trunc
+        self.assert_eq(
+            cdf.select(CF.trunc(cdf.ts1, "year")).toPandas(),
+            sdf.select(SF.trunc(sdf.ts1, "year")).toPandas(),
+        )
+
+        # next_day
+        self.assert_eq(
+            cdf.select(CF.next_day(cdf.ts1, "Mon")).toPandas(),
+            sdf.select(SF.next_day(sdf.ts1, "Mon")).toPandas(),
+        )
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.test_connect_function import *  # noqa: F401
