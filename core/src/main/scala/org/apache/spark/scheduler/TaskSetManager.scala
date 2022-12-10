@@ -1073,7 +1073,7 @@ private[spark] class TaskSetManager(
             // 2) locationOpt.isDefined && locationOpt.get.host != host:
             //    this case implies that the shuffle map output has been migrated to another
             //    host. The task doesn't need to rerun;
-            // 3) location.isEmpty:
+            // 3) locationOpt.isEmpty:
             //    This shouldn't not happen ideally since TaskSetManager handles executor lost first
             //    before DAGScheduler. So the map statues for the successful task must be available
             //    at this moment. keep it here in case the handling order changes.
