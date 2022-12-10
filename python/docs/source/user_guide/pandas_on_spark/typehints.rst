@@ -35,7 +35,7 @@ To avoid the consequences, pandas API on Spark has its own type hinting style to
 schema inference. Pandas API on Spark understands the type hints specified in the return type and converts it
 as a Spark schema for pandas UDFs used internally. The way of type hinting has evolved over time.
 
-In this chapter, it covers the recommended way and the supported ways in detail.
+This chapter covers the recommended way and the supported ways in detail.
 
 .. note::
     The variadic generics support is experimental and unstable in pandas API on Spark.

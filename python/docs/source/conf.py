@@ -224,7 +224,7 @@ html_css_files = [
 # Custom sidebar templates, maps document names to template names.
 #html_sidebars = {}
 
-# Additional templates that should be rendered to pages, map page names to
+# Additional templates that should be rendered to pages; maps page names to
 # template names.
 #html_additional_pages = {}
 
