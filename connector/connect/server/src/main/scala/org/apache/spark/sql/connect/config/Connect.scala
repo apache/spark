@@ -38,9 +38,10 @@ private[spark] object Connect {
 
   val CONNECT_GRPC_ARROW_MAX_BATCH_SIZE =
     ConfigBuilder("spark.connect.grpc.arrow.maxBatchSize")
-      .doc("When using Apache Arrow, limit the maximum size of one arrow batch that " +
-        "can be sent from server side to client side. Currently, we conservatively use 70% " +
-        "of it because the size is not accurate but estimated.")
+      .doc(
+        "When using Apache Arrow, limit the maximum size of one arrow batch that " +
+          "can be sent from server side to client side. Currently, we conservatively use 70% " +
+          "of it because the size is not accurate but estimated.")
       .version("3.4.0")
       .bytesConf(ByteUnit.MiB)
       .createWithDefaultString("4m")
