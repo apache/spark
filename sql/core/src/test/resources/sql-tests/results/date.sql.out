@@ -22,10 +22,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "value" : "2020-01-01中文",
-    "valueType" : "DATE"
+    "value" : "'2020-01-01中文'",
+    "valueType" : "\"DATE\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -68,10 +69,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "value" : "015",
-    "valueType" : "DATE"
+    "value" : "'015'",
+    "valueType" : "\"DATE\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -90,10 +92,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "value" : "2021-4294967297-11",
-    "valueType" : "DATE"
+    "value" : "'2021-4294967297-11'",
+    "valueType" : "\"DATE\""
   },
   "queryContext" : [ {
     "objectType" : "",

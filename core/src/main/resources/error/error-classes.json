@@ -813,6 +813,12 @@
       }
     }
   },
+  "INVALID_TYPED_LITERAL" : {
+    "message" : [
+      "The value of the typed literal <valueType> is invalid: <value>."
+    ],
+    "sqlState" : "42000"
+  },
   "INVALID_WHERE_CONDITION" : {
     "message" : [
       "The WHERE condition <condition> contains invalid expressions: <expressionList>.",
@@ -1597,11 +1603,6 @@
   "_LEGACY_ERROR_TEMP_0018" : {
     "message" : [
       "Function trim doesn't support with type <trimOption>. Please use BOTH, LEADING or TRAILING as trim type."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0019" : {
-    "message" : [
-      "Cannot parse the <valueType> value: <value>."
     ]
   },
   "_LEGACY_ERROR_TEMP_0020" : {
