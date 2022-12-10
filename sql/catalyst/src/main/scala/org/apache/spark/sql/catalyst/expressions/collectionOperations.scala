@@ -4614,7 +4614,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
   since = "3.4.0")
 case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: Expression)
   extends TernaryExpression with ImplicitCastInputTypes with ComplexTypeMergingExpression
-    with QueryErrorsBase{
+    with QueryErrorsBase with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] = {
     (srcArrayExpr.dataType, posExpr.dataType, itemExpr.dataType) match {
@@ -4647,8 +4647,8 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
           messageParameters = Map(
             "functionName" -> toSQLId(prettyName),
             "dataType" -> toSQLType(ArrayType),
-            "left" -> toSQLType(srcArrayExpr.dataType),
-            "right" -> toSQLType(itemExpr.dataType)
+            "leftType" -> toSQLType(first.dataType),
+            "rightType" -> toSQLType(third.dataType)
           )
         )
     }
