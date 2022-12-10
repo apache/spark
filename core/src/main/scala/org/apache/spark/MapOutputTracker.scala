@@ -1132,11 +1132,11 @@ private[spark] class MapOutputTrackerMaster(
    * Get map output location by (shuffleId, mapId)
    */
   def getMapOutputLocation(shuffleId: Int, mapId: Long): Option[BlockManagerId] = {
-    shuffleStatuses.get(shuffleId).map { shuffleStatus =>
+    shuffleStatuses.get(shuffleId).flatMap { shuffleStatus =>
       shuffleStatus.withMapStatuses { mapStatues =>
         mapStatues.filter(_ != null).find(_.mapId == mapId).map(_.location)
       }
-    }.get
+    }
   }
 
   def incrementEpoch(): Unit = {
