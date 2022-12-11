@@ -411,10 +411,10 @@ class MultiIndex(Index):
         ----------
         i : int, str, default -2
             First level of index to be swapped. Can pass level name as string.
-            The type of parameters can be mixed.
+            Parameter types can be mixed.
         j : int, str, default -1
             Second level of index to be swapped. Can pass level name as string.
-            The type of parameters can be mixed.
+            Parameter types can be mixed.
 
         Returns
         -------

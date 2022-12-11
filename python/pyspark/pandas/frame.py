@@ -2606,7 +2606,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 ...     ps.DataFrame({'a': range(1001)}).transpose()
                 Traceback (most recent call last):
                   ...
-                ValueError: Current DataFrame has more then the given limit 1000 rows.
+                ValueError: Current DataFrame's length exceeds the given limit of 1000 rows.
                 Please set 'compute.max_rows' by using 'pyspark.pandas.config.set_option'
                 to retrieve to retrieve more than 1000 rows. Note that, before changing the
                 'compute.max_rows', this operation is considerably expensive.
@@ -4990,7 +4990,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 ...     psdf.dot(psser)
                 Traceback (most recent call last):
                   ...
-                ValueError: Current DataFrame has more than the given limit 1000 rows.
+                ValueError: Current DataFrame's length exceeds the given limit of 1000 rows.
                 Please set 'compute.max_rows' by using 'pyspark.pandas.config.set_option'
                 to retrieve to retrieve more than 1000 rows. Note that, before changing the
                 'compute.max_rows', this operation is considerably expensive.
@@ -5362,7 +5362,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     def _to_spark(self, index_col: Optional[Union[str, List[str]]] = None) -> SparkDataFrame:
         """
-        Same as `to_spark()`, without issueing the advice log when `index_col` is not specified
+        Same as `to_spark()`, without issuing the advice log when `index_col` is not specified
         for internal usage.
         """
         return self.spark.frame(index_col)
@@ -5393,7 +5393,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     def _to_pandas(self) -> pd.DataFrame:
         """
-        Same as `to_pandas()`, without issueing the advice log for internal usage.
+        Same as `to_pandas()`, without issuing the advice log for internal usage.
         """
         return self._internal.to_pandas_frame.copy()
 
@@ -5534,7 +5534,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         nrows: int = None,
     ) -> "DataFrame":
         """
-        Convert structured or record ndarray to DataFrame.
+        Convert structured or recorded ndarray to DataFrame.
 
         Parameters
         ----------
@@ -7820,7 +7820,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 ...     ps.DataFrame({'a': range(1001)}).swapaxes(i=0, j=1)
                 Traceback (most recent call last):
                   ...
-                ValueError: Current DataFrame has more then the given limit 1000 rows.
+                ValueError: Current DataFrame's length exceeds the given limit of 1000 rows.
                 Please set 'compute.max_rows' by using 'pyspark.pandas.config.set_option'
                 to retrieve to retrieve more than 1000 rows. Note that, before changing the
                 'compute.max_rows', this operation is considerably expensive.

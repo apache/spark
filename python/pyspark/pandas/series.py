@@ -1693,7 +1693,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
     def _to_pandas(self) -> pd.Series:
         """
-        Same as `to_pandas()`, without issueing the advice log for internal usage.
+        Same as `to_pandas()`, without issuing the advice log for internal usage.
         """
         return self._to_internal_pandas().copy()
 
