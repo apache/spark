@@ -28,6 +28,8 @@ import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.collection.immutable
 import scala.collection.mutable.HashMap
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration.Duration
 import scala.language.implicitConversions
 import scala.reflect.{classTag, ClassTag}
 import scala.util.control.NonFatal
@@ -2136,7 +2138,10 @@ class SparkContext(config: SparkConf) extends Logging {
     }
     if (env != null) {
       Utils.tryLogNonFatalError {
-        env.metricsSystem.report()
+        val metricsReportFuture = Future {
+          env.metricsSystem.report()
+        } (SparkContext.executionContext)
+        ThreadUtils.awaitResult(metricsReportFuture, Duration.create("1s"))
       }
     }
     Utils.tryLogNonFatalError {
@@ -2671,6 +2676,9 @@ object SparkContext extends Logging {
    */
   private val activeContext: AtomicReference[SparkContext] =
     new AtomicReference[SparkContext](null)
+
+  private val executionContext = ExecutionContext.fromExecutorService(
+    ThreadUtils.newDaemonCachedThreadPool("spark-context", 1))
 
   /**
    * Points to a partially-constructed SparkContext if another thread is in the SparkContext
