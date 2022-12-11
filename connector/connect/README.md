@@ -82,15 +82,15 @@ To use the release version of Spark Connect:
 
 ```bash
 # Run all Spark Connect Python tests as a module.
-./python/run-tests --module pyspark-connect
+./python/run-tests --module pyspark-connect --parallelism 1
 ```
 
 
 ## Development Topics
 
 ### Generate proto generated files for the Python client
-1. Install `buf version 1.8.0`: https://docs.buf.build/installation
-2. Run `pip install grpcio==1.48.1 protobuf==3.19.4 mypy-protobuf==3.3.0`
+1. Install `buf version 1.9.0`: https://docs.buf.build/installation
+2. Run `pip install grpcio==1.48.1 protobuf==3.19.5 mypy-protobuf==3.3.0`
 3. Run `./connector/connect/dev/generate_protos.sh`
 4. Optional Check `./dev/check-codegen-python.py`
 

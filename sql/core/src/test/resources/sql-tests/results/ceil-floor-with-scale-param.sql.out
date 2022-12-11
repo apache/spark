@@ -140,11 +140,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1042",
+  "errorClass" : "WRONG_NUM_ARGS",
   "messageParameters" : {
-    "actualNumber" : "3",
-    "expectedInfo" : "2",
-    "name" : "ceil"
+    "actualNum" : "3",
+    "expectedNum" : "2",
+    "functionName" : "`ceil`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -297,11 +297,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1042",
+  "errorClass" : "WRONG_NUM_ARGS",
   "messageParameters" : {
-    "actualNumber" : "3",
-    "expectedInfo" : "2",
-    "name" : "floor"
+    "actualNum" : "3",
+    "expectedNum" : "2",
+    "functionName" : "`floor`"
   },
   "queryContext" : [ {
     "objectType" : "",

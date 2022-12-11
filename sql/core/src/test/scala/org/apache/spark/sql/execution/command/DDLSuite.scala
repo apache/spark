@@ -1963,6 +1963,25 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     }
   }
 
+  test(s"Support alter table command with CASE_SENSITIVE is true") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> s"true") {
+      withLocale("tr") {
+        val dbName = "DaTaBaSe_I"
+        withDatabase(dbName) {
+          sql(s"CREATE DATABASE $dbName")
+          sql(s"USE $dbName")
+
+          val tabName = "tAb_I"
+          withTable(tabName) {
+            sql(s"CREATE TABLE $tabName(col_I int) USING PARQUET")
+            sql(s"ALTER TABLE $tabName SET TBLPROPERTIES ('foo' = 'a')")
+            checkAnswer(sql(s"SELECT col_I FROM $tabName"), Nil)
+          }
+        }
+      }
+    }
+  }
+
   test("set command rejects SparkConf entries") {
     val ex = intercept[AnalysisException] {
       sql(s"SET ${config.CPUS_PER_TASK.key} = 4")

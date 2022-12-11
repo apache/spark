@@ -18,8 +18,8 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, SortOrder}
-import org.apache.spark.sql.catalyst.plans.logical.{ExposesMetadataColumns, LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Expression, SortOrder}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, MetadataColumn, SupportsMetadataColumns, Table, TableCapability}
 import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics}
@@ -91,7 +91,7 @@ case class DataSourceV2Relation(
       table.asReadable.newScanBuilder(options).build() match {
         case r: SupportsReportStatistics =>
           val statistics = r.estimateStatistics()
-          DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes)
+          DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes, output)
         case _ =>
           Statistics(sizeInBytes = conf.defaultSizeInBytes)
       }
@@ -142,7 +142,7 @@ case class DataSourceV2ScanRelation(
     scan match {
       case r: SupportsReportStatistics =>
         val statistics = r.estimateStatistics()
-        DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes)
+        DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes, output)
       case _ =>
         Statistics(sizeInBytes = conf.defaultSizeInBytes)
     }
@@ -173,7 +173,7 @@ case class StreamingDataSourceV2Relation(
   override def computeStats(): Statistics = scan match {
     case r: SupportsReportStatistics =>
       val statistics = r.estimateStatistics()
-      DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes)
+      DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes, output)
     case _ =>
       Statistics(sizeInBytes = conf.defaultSizeInBytes)
   }
@@ -214,14 +214,52 @@ object DataSourceV2Relation {
   def transformV2Stats(
       v2Statistics: V2Statistics,
       defaultRowCount: Option[BigInt],
-      defaultSizeInBytes: Long): Statistics = {
+      defaultSizeInBytes: Long,
+      output: Seq[Attribute] = Seq.empty): Statistics = {
     val numRows: Option[BigInt] = if (v2Statistics.numRows().isPresent) {
       Some(v2Statistics.numRows().getAsLong)
     } else {
       defaultRowCount
     }
+
+    var colStats: Seq[(Attribute, ColumnStat)] = Seq.empty[(Attribute, ColumnStat)]
+    if (v2Statistics.columnStats().isPresent) {
+      val v2ColumnStat = v2Statistics.columnStats().get()
+      val keys = v2ColumnStat.keySet()
+
+      keys.forEach(key => {
+        val colStat = v2ColumnStat.get(key)
+        val distinct: Option[BigInt] =
+          if (colStat.distinctCount().isPresent) Some(colStat.distinctCount().getAsLong) else None
+        val min: Option[Any] = if (colStat.min().isPresent) Some(colStat.min().get) else None
+        val max: Option[Any] = if (colStat.max().isPresent) Some(colStat.max().get) else None
+        val nullCount: Option[BigInt] =
+          if (colStat.nullCount().isPresent) Some(colStat.nullCount().getAsLong) else None
+        val avgLen: Option[Long] =
+          if (colStat.avgLen().isPresent) Some(colStat.avgLen().getAsLong) else None
+        val maxLen: Option[Long] =
+          if (colStat.maxLen().isPresent) Some(colStat.maxLen().getAsLong) else None
+        val histogram = if (colStat.histogram().isPresent) {
+          val v2Histogram = colStat.histogram().get()
+          val bins = v2Histogram.bins()
+          Some(Histogram(v2Histogram.height(),
+            bins.map(bin => HistogramBin(bin.lo, bin.hi, bin.ndv))))
+        } else {
+          None
+        }
+
+        val catalystColStat = ColumnStat(distinct, min, max, nullCount, avgLen, maxLen, histogram)
+
+        output.foreach(attribute => {
+          if (attribute.name.equals(key.describe())) {
+            colStats = colStats :+ (attribute -> catalystColStat)
+          }
+        })
+      })
+    }
     Statistics(
       sizeInBytes = v2Statistics.sizeInBytes().orElse(defaultSizeInBytes),
-      rowCount = numRows)
+      rowCount = numRows,
+      attributeStats = AttributeMap(colStats))
   }
 }

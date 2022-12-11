@@ -4253,3 +4253,76 @@ setMethod("withWatermark",
             sdf <- callJMethod(x@sdf, "withWatermark", eventTime, delayThreshold)
             dataFrame(sdf)
           })
+
+#' Unpivot a DataFrame from wide format to long format.
+#'
+#' This is the reverse to \code{groupBy(...).pivot(...).agg(...)},
+#' except for the aggregation, which cannot be reversed.
+#'
+#' @param x a SparkDataFrame.
+#' @param ids a character vector or a list of columns
+#' @param values a character vector, a list of columns or \code{NULL}.
+#'               If not NULL must not be empty. If \code{NULL}, uses all columns that
+#'               are not set as \code{ids}.
+#' @param variableColumnName character Name of the variable column.
+#' @param valueColumnName character Name of the value column.
+#' @return a SparkDataFrame.
+#' @aliases unpivot,SparkDataFrame,ANY,ANY,character,character-method
+#' @family SparkDataFrame functions
+#' @rdname unpivot
+#' @name unpivot
+#' @examples
+#' \dontrun{
+#' df <- createDataFrame(data.frame(
+#'   id = 1:3, x = c(1, 3, 5), y = c(2, 4, 6), z = c(-1, 0, 1)
+#' ))
+#'
+#' head(unpivot(df, "id", c("x", "y"), "var", "val"))
+#'
+#' head(unpivot(df, "id", NULL, "var", "val"))
+#' }
+#' @note unpivot since 3.4.0
+setMethod("unpivot",
+          signature(
+            x = "SparkDataFrame", ids = "ANY", values = "ANY",
+            variableColumnName = "character", valueColumnName = "character"
+          ),
+          function(x, ids, values, variableColumnName, valueColumnName) {
+            as_jcols <- function(xs) lapply(
+              xs,
+              function(x) {
+                 if (is.character(x)) {
+                   column(x)@jc
+                 } else {
+                   c@jc
+                 }
+              }
+            )
+
+            sdf <- if (is.null(values)) {
+              callJMethod(
+                x@sdf, "unpivotWithSeq", as_jcols(ids), variableColumnName, valueColumnName
+              )
+            } else {
+              callJMethod(
+                x@sdf, "unpivotWithSeq",
+                as_jcols(ids), as_jcols(values),
+                variableColumnName, valueColumnName
+              )
+            }
+            dataFrame(sdf)
+          })
+
+#' @rdname unpivot
+#' @name melt
+#' @aliases melt,SparkDataFrame,ANY,ANY,character,character-method
+#' @note melt since 3.4.0
+setMethod("melt",
+          signature(
+            x = "SparkDataFrame", ids = "ANY", values = "ANY",
+            variableColumnName = "character", valueColumnName = "character"
+          ),
+          function(x, ids, values, variableColumnName, valueColumnName) {
+            unpivot(x, ids, values, variableColumnName, valueColumnName)
+          }
+)

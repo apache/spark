@@ -33,7 +33,7 @@ import org.apache.spark.{MapOutputTrackerMaster, SparkConf}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.network.shuffle.ExternalBlockStoreClient
-import org.apache.spark.rpc.{IsolatedRpcEndpoint, RpcCallContext, RpcEndpointRef, RpcEnv}
+import org.apache.spark.rpc.{IsolatedThreadSafeRpcEndpoint, RpcCallContext, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedClusterMessages, CoarseGrainedSchedulerBackend}
 import org.apache.spark.shuffle.ShuffleManager
@@ -41,8 +41,8 @@ import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.{RpcUtils, ThreadUtils, Utils}
 
 /**
- * BlockManagerMasterEndpoint is an [[IsolatedRpcEndpoint]] on the master node to track statuses
- * of all the storage endpoints' block managers.
+ * BlockManagerMasterEndpoint is an [[IsolatedThreadSafeRpcEndpoint]] on the master node to
+ * track statuses of all the storage endpoints' block managers.
  */
 private[spark]
 class BlockManagerMasterEndpoint(
@@ -55,7 +55,7 @@ class BlockManagerMasterEndpoint(
     mapOutputTracker: MapOutputTrackerMaster,
     shuffleManager: ShuffleManager,
     isDriver: Boolean)
-  extends IsolatedRpcEndpoint with Logging {
+  extends IsolatedThreadSafeRpcEndpoint with Logging {
 
   // Mapping from executor id to the block manager's local disk directories.
   private val executorIdToLocalDirs =

@@ -240,6 +240,9 @@ private[spark] class ApplicationMaster(
 
       logInfo("ApplicationAttemptId: " + appAttemptId)
 
+      // During shutdown, we may not be able to create an FileSystem object. So, pre-create here.
+      val stagingDirPath = new Path(System.getenv("SPARK_YARN_STAGING_DIR"))
+      val stagingDirFs = stagingDirPath.getFileSystem(yarnConf)
       // This shutdown hook should run *after* the SparkContext is shut down.
       val priority = ShutdownHookManager.SPARK_CONTEXT_SHUTDOWN_PRIORITY - 1
       ShutdownHookManager.addShutdownHook(priority) { () =>
@@ -261,14 +264,14 @@ private[spark] class ApplicationMaster(
           if (!unregistered) {
             // we only want to unregister if we don't want the RM to retry
             if (isLastAttempt) {
-              cleanupStagingDir(new Path(System.getenv("SPARK_YARN_STAGING_DIR")))
+              cleanupStagingDir(stagingDirFs, stagingDirPath)
               unregister(finalStatus, finalMsg)
             } else if (finalStatus == FinalApplicationStatus.SUCCEEDED) {
               // When it's not the last attempt, if unregister failed caused by timeout exception,
               // YARN will rerun the application, AM should not clean staging dir before unregister
               // success.
               unregister(finalStatus, finalMsg)
-              cleanupStagingDir(new Path(System.getenv("SPARK_YARN_STAGING_DIR")))
+              cleanupStagingDir(stagingDirFs, stagingDirPath)
             }
           }
         } catch {
@@ -686,11 +689,15 @@ private[spark] class ApplicationMaster(
    * Clean up the staging directory.
    */
   private def cleanupStagingDir(stagingDirPath: Path): Unit = {
+    val stagingDirFs = stagingDirPath.getFileSystem(yarnConf)
+    cleanupStagingDir(stagingDirFs, stagingDirPath)
+  }
+
+  private def cleanupStagingDir(fs: FileSystem, stagingDirPath: Path): Unit = {
     try {
       val preserveFiles = sparkConf.get(PRESERVE_STAGING_FILES)
       if (!preserveFiles) {
         logInfo("Deleting staging directory " + stagingDirPath)
-        val fs = stagingDirPath.getFileSystem(yarnConf)
         fs.delete(stagingDirPath, true)
       }
     } catch {

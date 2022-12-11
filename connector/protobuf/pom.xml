@@ -28,7 +28,6 @@
   <artifactId>spark-protobuf_2.12</artifactId>
   <properties>
     <sbt.project.name>protobuf</sbt.project.name>
-    <protobuf.version>3.21.9</protobuf.version>
   </properties>
   <packaging>jar</packaging>
   <name>Spark Protobuf</name>
@@ -108,6 +107,14 @@
               </includes>
             </relocation>
           </relocations>
+          <filters>
+            <filter>
+              <artifact>*:*</artifact>
+              <excludes>
+                <exclude>google/protobuf/**</exclude>
+              </excludes>
+            </filter>
+          </filters>
         </configuration>
       </plugin>
     </plugins>
@@ -123,7 +130,7 @@
           <plugin>
             <groupId>com.github.os72</groupId>
             <artifactId>protoc-jar-maven-plugin</artifactId>
-            <version>3.11.4</version>
+            <version>${protoc-jar-maven-plugin.version}</version>
             <!-- Generates Java classes for tests. TODO(Raghu): Generate descriptor files too. -->
             <executions>
               <execution>
