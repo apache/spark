@@ -327,7 +327,8 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         """
         __truediv__ has different behaviour between pandas and PySpark for several cases.
         1. When dividing np.inf by zero, PySpark returns null whereas pandas returns np.inf
-        2. When dividing a positive number by zero, PySpark returns null whereas pandas returns np.inf
+        2. When dividing a positive number by zero, PySpark returns null
+        whereas pandas returns np.inf
         3. When divide -np.inf by zero, PySpark returns null whereas pandas returns -np.inf
         4. When divide negative number by zero, PySpark returns null whereas pandas returns -np.inf
 
@@ -361,7 +362,8 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         """
         __floordiv__ has different behaviour between pandas and PySpark for several cases.
         1. When dividing np.inf by zero, PySpark returns null whereas pandas returns np.inf
-        2. When dividing a positive number by zero, PySpark returns null whereas pandas returns np.inf
+        2. When dividing a positive number by zero, PySpark returns null
+        whereas pandas returns np.inf
         3. When divide -np.inf by zero, PySpark returns null whereas pandas returns -np.inf
         4. When divide negative number by zero, PySpark returns null whereas pandas returns -np.inf
 
