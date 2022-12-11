@@ -4697,7 +4697,7 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
       val values = ctx.freshName("values")
 
       val allocation = CodeGenerator.createArrayData(
-        values, elementType, resLength, s" $prettyName failed.")
+        values, elementType, resLength, s"$prettyName failed.")
       val assignment = CodeGenerator.createArrayAssignment(values, elementType, arr,
         adjustedAllocIdx, i, resultArrayElementNullable)
 
@@ -4734,6 +4734,7 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
 
   override def prettyName: String = "array_insert"
   override def dataType: DataType = first.dataType
+  override def nullable: Boolean = true
 
   @transient private lazy val elementType: DataType =
     srcArrayExpr.dataType.asInstanceOf[ArrayType].elementType
