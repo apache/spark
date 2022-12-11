@@ -2579,11 +2579,8 @@ class SparkContext(config: SparkConf) extends Logging {
         return id
     }
     this.synchronized {
+      nextRddId = new AtomicInteger(0)
       id = nextRddId.getAndIncrement()
-      if (id < 0) {
-        nextRddId = new AtomicInteger(0)
-        id = nextRddId.getAndIncrement()
-      }
     }
     id
   }
