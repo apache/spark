@@ -2693,7 +2693,7 @@ def grouping_id(*cols: "ColumnOrName") -> Column:
 
 def input_file_name() -> Column:
     """
-    Creates a string column for the file name of the current Spark task.
+    Creates a string column for the URI encoded file name of the current Spark task.
 
     .. versionadded:: 1.6.0
 

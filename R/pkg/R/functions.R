@@ -4784,7 +4784,7 @@ setMethod("grouping_id",
           })
 
 #' @details
-#' \code{input_file_name}: Creates a string column with the input file name for a given row.
+#' \code{input_file_name}: Creates a string column with the URI encoded input file name for a given row.
 #' The method should be used with no argument.
 #'
 #' @rdname column_nonaggregate_functions

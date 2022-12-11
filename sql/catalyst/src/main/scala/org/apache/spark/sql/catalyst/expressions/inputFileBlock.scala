@@ -26,7 +26,9 @@ import org.apache.spark.unsafe.types.UTF8String
 
 // scalastyle:off whitespace.end.of.line
 @ExpressionDescription(
-  usage = "_FUNC_() - Returns the name of the file being read, or empty string if not available.",
+  usage =
+    "_FUNC_() - Returns the URI encoded name of the file being read," +
+      " or empty string if not available.",
   examples = """
     Examples:
       > SELECT _FUNC_();

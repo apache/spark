@@ -1273,7 +1273,7 @@ object functions {
   def coalesce(e: Column*): Column = withExpr { Coalesce(e.map(_.expr)) }
 
   /**
-   * Creates a string column for the file name of the current Spark task.
+   * Creates a string column for the URI encoded file name of the current Spark task.
    *
    * @group normal_funcs
    * @since 1.6.0
