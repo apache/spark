@@ -99,39 +99,34 @@ class SparkConnectTests(SparkConnectSQLTestCase):
 
         from pyspark.sql import functions as SF
         from pyspark.sql.connect import functions as CF
-
-        int_min = -2147483648
-        int_max = 2147483647
-
-        long_min = -9223372036854775808
-        long_max = 9223372036854775807
+        from pyspark.sql.connect.column import JVM_INT_MIN, JVM_INT_MAX, JVM_LONG_MIN, JVM_LONG_MAX
 
         cdf1 = cdf.select(
             CF.lit(0),
             CF.lit(1),
             CF.lit(-1),
-            CF.lit(int_max),
-            CF.lit(int_min),
-            CF.lit(int_max + 1),
-            CF.lit(int_min - 1),
-            CF.lit(long_max),
-            CF.lit(long_min),
-            CF.lit(long_max - 1),
-            CF.lit(long_min + 1),
+            CF.lit(JVM_INT_MAX),
+            CF.lit(JVM_INT_MIN),
+            CF.lit(JVM_INT_MAX + 1),
+            CF.lit(JVM_INT_MIN - 1),
+            CF.lit(JVM_LONG_MAX),
+            CF.lit(JVM_LONG_MIN),
+            CF.lit(JVM_LONG_MAX - 1),
+            CF.lit(JVM_LONG_MIN + 1),
         )
 
         sdf1 = sdf.select(
             SF.lit(0),
             SF.lit(1),
             SF.lit(-1),
-            SF.lit(int_max),
-            SF.lit(int_min),
-            SF.lit(int_max + 1),
-            SF.lit(int_min - 1),
-            SF.lit(long_max),
-            SF.lit(long_min),
-            SF.lit(long_max - 1),
-            SF.lit(long_min + 1),
+            SF.lit(JVM_INT_MAX),
+            SF.lit(JVM_INT_MIN),
+            SF.lit(JVM_INT_MAX + 1),
+            SF.lit(JVM_INT_MIN - 1),
+            SF.lit(JVM_LONG_MAX),
+            SF.lit(JVM_LONG_MIN),
+            SF.lit(JVM_LONG_MAX - 1),
+            SF.lit(JVM_LONG_MIN + 1),
         )
 
         self.assertEqual(cdf1.schema, sdf1.schema)
@@ -141,13 +136,13 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             ValueError,
             "integer 9223372036854775808 out of bounds",
         ):
-            cdf.select(CF.lit(long_max + 1)).show()
+            cdf.select(CF.lit(JVM_LONG_MAX + 1)).show()
 
         with self.assertRaisesRegex(
             ValueError,
             "integer -9223372036854775809 out of bounds",
         ):
-            cdf.select(CF.lit(long_min - 1)).show()
+            cdf.select(CF.lit(JVM_LONG_MIN - 1)).show()
 
     def test_cast(self):
         df = self.connect.read.table(self.tbl_name)
