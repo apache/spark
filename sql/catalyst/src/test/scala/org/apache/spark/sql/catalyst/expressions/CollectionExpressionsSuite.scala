@@ -2274,7 +2274,9 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val litFourInt = Literal.create(4, IntegerType)
     val litNullInt = Literal.create(null, IntegerType)
     val litZeroInt = Literal.create(0, IntegerType)
+    val litHundredInt = Literal.create(100, IntegerType)
     val litMinusTwoInt = Literal.create(-2, IntegerType)
+    val litMinusHundredInt = Literal.create(-100, IntegerType)
     val litThreeLong = Literal.create(3L, LongType)
     val litBoolTrue = Literal.create(true, BooleanType)
     val litThreeByte = Literal.create(5.asInstanceOf[Byte], ByteType)
@@ -2307,6 +2309,8 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayInsert(a1, litFourInt, litThreeInt), Seq(1, 2, 4, 3))
     checkEvaluation(ArrayInsert(a1, litMinusTwoInt, litThreeInt), Seq(1, 3, 2, 4))
     checkEvaluation(ArrayInsert(a1, litZeroInt, litThreeInt), Seq(3, 1, 2, 4))
+    checkEvaluation(ArrayInsert(a1, litHundredInt, litThreeInt), null)
+    // checkEvaluation(ArrayInsert(a1, litMinusHundredInt, litThreeInt), null)
 
     // null handling
     checkEvaluation(ArrayInsert(a2, litThreeInt, litThreeInt), Seq(1, 2, 3, null, 4, 5, null))

@@ -458,3 +458,19 @@ select array_insert(array(1, 2, 3), 4, cast(NULL as INT))
 struct<array_insert(array(1, 2, 3), 4, CAST(NULL AS INT)):array<int>>
 -- !query output
 NULL
+
+
+-- !query
+select array_insert(array(2, 3, 4), 5, 1)
+-- !query schema
+struct<array_insert(array(2, 3, 4), 5, 1):array<int>>
+-- !query output
+NULL
+
+
+-- !query
+select array_insert(array(2, 3, 4), -4, 1)
+-- !query schema
+struct<array_insert(array(2, 3, 4), -4, 1):array<int>>
+-- !query output
+NULL

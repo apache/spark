@@ -4713,6 +4713,7 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
          |}
          |$resLength = $arr.numElements() + 1;
          |if ($posIdx < 0 || $posIdx > $arr.numElements()) {
+         |  ${ev.isNull} = true;
          |  ${ev.value} = null;
          |} else {
          |  $allocation
