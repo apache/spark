@@ -47,10 +47,7 @@ label, feature and weight in this order. In case there are multiple tuples with
 the same feature then these tuples are aggregated into a single tuple as follows:
 
 * Aggregated label is the weighted average of all labels.
-* Aggregated feature is the minimum of all features. It is possible
-  that feature values to be equal up to a resolution due to representation errors.
-  Equality is defined by [org.apache.commons.math3.util.Precision.equals](https://commons.apache.org/proper/commons-math/javadocs/api-3.6.1/org/apache/commons/math3/util/Precision.html#equals(double,%20double)).
-  Ideally, all feature values will be equal and the minimum is just the value at any point.
+* Aggregated feature is the unique feature value.
 * Aggregated weight is the sum of all weights.
 
 Additionally, IsotonicRegression algorithm has one

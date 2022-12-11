@@ -23,7 +23,6 @@ import java.util.Arrays.binarySearch
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.commons.math3.util.Precision
 import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
@@ -313,17 +312,11 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
    * feature value are aggregated as:
    *
    *   - Aggregated label is the weighted average of all labels.
-   *   - Aggregated feature is the first encountered feature (i.e. minimum)[1].
+   *   - Aggregated feature is the unique feature value.
    *   - Aggregated weight is the sum of all weights.
    *
-   * [1] Note: It is possible that feature values to be equal up to a resolution due to
-   * representation errors. Ideally, all feature values will be equal and the minimum is
-   * just the value at any point.
-   *
-   * @param input
-   *   Input data of tuples (label, feature, weight). Weights must be non-negative.
-   * @return
-   *   Points with unique feature values.
+   * @param input Input data of tuples (label, feature, weight). Weights must be non-negative.
+   * @return Points with unique feature values.
    */
   private[regression] def makeUnique(
       input: Array[(Double, Double, Double)]): Array[(Double, Double, Double)] = {
@@ -340,22 +333,26 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
     } else {
       val pointsAccumulator = new IsotonicRegression.PointsAccumulator
 
-      // Go through input points, merging all points with approximately equal feature values into
-      // a single point. Equality of features is defined by shouldAccumulate method. The label of
-      // the accumulated points is the weighted average of the labels of all points of equal feature
-      // value and the feature is the first encountered (i.e. minimum) feature. It is possible that
-      // feature values to be equal up to a resolution due to representation errors.
-      pointsAccumulator := cleanInput.head
+      // Go through input points, merging all points with equal feature values into a single point.
+      // Equality of features is defined by shouldAccumulate method. The label of the accumulated
+      // points is the weighted average of the labels of all points of equal feature value.
 
+      // Initialize with first point
+      pointsAccumulator := cleanInput.head
+      // Accumulate the rest
       cleanInput.tail.foreach { case point @ (_, feature, _) =>
         if (pointsAccumulator.shouldAccumulate(feature)) {
+          // Still on a duplicate feature, accumulate
           pointsAccumulator += point
         } else {
+          // A new unique feature encountered:
+          // - append the last accumulated point to unique features output
           pointsAccumulator.appendToOutput()
+          // - and reset
           pointsAccumulator := point
         }
       }
-      // Append the last accumulated point
+      // Append the last accumulated point to unique features output
       pointsAccumulator.appendToOutput()
       pointsAccumulator.getOutput
     }
@@ -506,13 +503,8 @@ object IsotonicRegression {
     private var (currentLabel: Double, currentFeature: Double, currentWeight: Double) =
       (0d, 0d, 0d)
 
-    /**
-     * Whether or not this feature is equal to the current accumulated feature up to a precision.
-     * Returns true if they are exactly equal or are adjacent doubles (i.e. no other representable
-     * doubles exist in between).
-     */
-    @inline def shouldAccumulate(feature: Double): Boolean =
-      Precision.equals(currentFeature, feature)
+    /** Whether or not this feature exactly equals the current accumulated feature. */
+    @inline def shouldAccumulate(feature: Double): Boolean = currentFeature == feature
 
     /** Resets the current value of the point accumulator using the provided point. */
     @inline def :=(point: (Double, Double, Double)): Unit = {
