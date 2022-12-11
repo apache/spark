@@ -992,7 +992,8 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
 
         query = """
             SELECT * FROM VALUES
-            (1, 'abcdef', 'ghij', 'hello world', 'a.b.c.d'), (2, 'abcd', 'efghij', 'how are you', 'a.b.c')
+            (1, 'abcdef', 'ghij', 'hello world', 'a.b.c.d'),
+            (2, 'abcd', 'efghij', 'how are you', 'a.b.c')
             AS tab(a, b, c, d, e)
             """
         # +---+------+------+-----------+-------+
