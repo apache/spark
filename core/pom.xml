@@ -697,26 +697,6 @@
           </relocations>
         </configuration>
       </plugin>
-      <plugin>
-        <groupId>com.github.os72</groupId>
-        <artifactId>protoc-jar-maven-plugin</artifactId>
-        <version>${protoc-jar-maven-plugin.version}</version>
-        <executions>
-          <execution>
-            <phase>generate-sources</phase>
-            <goals>
-              <goal>run</goal>
-            </goals>
-            <configuration>
-              <protocArtifact>com.google.protobuf:protoc:${protobuf.version}</protocArtifact>
-              <protocVersion>${protobuf.version}</protocVersion>
-              <inputDirectories>
-                <include>src/main/protobuf</include>
-              </inputDirectories>
-            </configuration>
-          </execution>
-        </executions>
-      </plugin>
     </plugins>
   </build>
 
@@ -763,6 +743,69 @@
             <configuration>
               <executable>${project.basedir}${file.separator}..${file.separator}R${file.separator}install-dev${script.extension}</executable>
             </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    <profile>
+      <id>default-protoc</id>
+      <activation>
+        <property>
+          <name>!skipDefaultProtoc</name>
+        </property>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>com.github.os72</groupId>
+            <artifactId>protoc-jar-maven-plugin</artifactId>
+            <version>${protoc-jar-maven-plugin.version}</version>
+            <executions>
+              <execution>
+                <phase>generate-sources</phase>
+                <goals>
+                  <goal>run</goal>
+                </goals>
+                <configuration>
+                  <protocArtifact>com.google.protobuf:protoc:${protobuf.version}</protocArtifact>
+                  <protocVersion>${protobuf.version}</protocVersion>
+                  <inputDirectories>
+                    <include>src/main/protobuf</include>
+                  </inputDirectories>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    <profile>
+      <id>user-defined-protoc</id>
+      <properties>
+        <core.protoc.executable.path>${env.CORE_PROTOC_EXEC_PATH}</core.protoc.executable.path>
+      </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>com.github.os72</groupId>
+            <artifactId>protoc-jar-maven-plugin</artifactId>
+            <version>${protoc-jar-maven-plugin.version}</version>
+            <executions>
+              <execution>
+                <phase>generate-sources</phase>
+                <goals>
+                  <goal>run</goal>
+                </goals>
+                <configuration>
+                  <protocArtifact>com.google.protobuf:protoc:${protobuf.version}</protocArtifact>
+                  <protocVersion>${protobuf.version}</protocVersion>
+                  <protocCommand>${core.protoc.executable.path}</protocCommand>
+                  <inputDirectories>
+                    <include>src/main/protobuf</include>
+                  </inputDirectories>
+                </configuration>
+              </execution>
+            </executions>
           </plugin>
         </plugins>
       </build>

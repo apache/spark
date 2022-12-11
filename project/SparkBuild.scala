@@ -115,12 +115,16 @@ object SparkBuild extends PomBuild {
       val connectProtocExecPath = Properties.envOrNone("CONNECT_PROTOC_EXEC_PATH")
       val connectPluginExecPath = Properties.envOrNone("CONNECT_PLUGIN_EXEC_PATH")
       val protobufProtocExecPath = Properties.envOrNone("PROTOBUF_PROTOC_EXEC_PATH")
+      val coreProtocExecPath = Properties.envOrNone("CORE_PROTOC_EXEC_PATH")
       if (connectProtocExecPath.isDefined && connectPluginExecPath.isDefined) {
         sys.props.put("connect.protoc.executable.path", connectProtocExecPath.get)
         sys.props.put("connect.plugin.executable.path", connectPluginExecPath.get)
       }
       if (protobufProtocExecPath.isDefined) {
         sys.props.put("protobuf.protoc.executable.path", protobufProtocExecPath.get)
+      }
+      if (coreProtocExecPath.isDefined) {
+        sys.props.put("core.protoc.executable.path", coreProtocExecPath.get)
       }
     }
     profiles
@@ -644,7 +648,16 @@ object Core {
       val propsFile = baseDirectory.value / "target" / "extra-resources" / "spark-version-info.properties"
       Seq(propsFile)
     }.taskValue
-  )
+  ) ++ {
+    val coreProtocExecPath = sys.props.get("core.protoc.executable.path")
+    if (coreProtocExecPath.isDefined) {
+      Seq(
+        PB.protocExecutable := file(coreProtocExecPath.get)
+      )
+    } else {
+      Seq.empty
+    }
+  }
 }
 
 object SparkConnectCommon {
