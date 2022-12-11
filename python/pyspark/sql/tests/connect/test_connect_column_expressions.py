@@ -94,7 +94,7 @@ class SparkConnectColumnExpressionSuite(PlanOnlyTestFixture):
         self.assertIs(plan.literal.integer, 10)
 
         plan = fun.lit(1 << 33).to_plan(None)
-        self.assertIs(plan.literal.long, 1 << 33)
+        self.assertEqual(plan.literal.long, 1 << 33)
 
     def test_numeric_literal_types(self):
         int_lit = fun.lit(10)
