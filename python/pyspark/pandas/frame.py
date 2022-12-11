@@ -149,7 +149,7 @@ if TYPE_CHECKING:
     from pyspark.pandas.series import Series
 
 
-# These regular expression patterns are complied and defined here to avoid to compile the same
+# These regular expression patterns are compiled and defined here to avoid compiling the same
 # pattern every time it is used in _repr_ and _repr_html_ in DataFrame.
 # Two patterns basically seek the footer string from Pandas'
 REPR_PATTERN = re.compile(r"\n\n\[(?P<rows>[0-9]+) rows x (?P<columns>[0-9]+) columns\]$")
@@ -161,7 +161,7 @@ REPR_HTML_PATTERN = re.compile(
 _flex_doc_FRAME = """
 Get {desc} of dataframe and other, element-wise (binary operator `{op_name}`).
 
-Equivalent to ``{equiv}``. With reverse version, `{reverse}`.
+Equivalent to ``{equiv}``. With the reverse version, `{reverse}`.
 
 Among flexible wrappers (`add`, `sub`, `mul`, `div`) to
 arithmetic operators: `+`, `-`, `*`, `/`, `//`.
@@ -188,8 +188,8 @@ circle          0      360
 triangle        3      180
 rectangle       4      360
 
-Add a scalar with operator version which return the same
-results. Also reverse version.
+Add a scalar with operator version which returns the same
+results. Also the reverse version.
 
 >>> df + 1
            angles  degrees
@@ -273,7 +273,7 @@ circle          1     -359
 triangle       -2     -179
 rectangle      -3     -359
 
-Multiply by constant with reverse version.
+Multiply by constant with the reverse version.
 
 >>> df * 1
            angles  degrees
@@ -369,10 +369,10 @@ class DataFrame(Frame, Generic[T]):
         Spark DataFrame, pandas-on-Spark DataFrame or pandas-on-Spark Series.
         Dict can contain Series, arrays, constants, or list-like objects
     index : Index or array-like
-        Index to use for resulting frame. Will default to RangeIndex if
+        Index to use for the resulting frame. Will default to RangeIndex if
         no indexing information part of input data and no index provided
     columns : Index or array-like
-        Column labels to use for resulting frame. Will default to
+        Column labels to use for the resulting frame. Will default to
         RangeIndex (0, 1, 2, ..., n) if no column labels are provided
     dtype : dtype, default None
         Data type to force. Only a single dtype is allowed. If None, infer
@@ -732,14 +732,14 @@ class DataFrame(Frame, Generic[T]):
         **kwargs: Any,
     ) -> "Series":
         """
-        Applies sfun to each column and returns a pd.Series where the number of rows equal the
+        Applies sfun to each column and returns a pd.Series where the number of rows equals the
         number of columns.
 
         Parameters
         ----------
         sfun : either an 1-arg function that takes a Column and returns a Column, or
             a 2-arg function that takes a Column and its DataType and returns a Column.
-            axis: used only for sanity check because series only support index axis.
+            axis: used only for sanity check because the series only supports index axis.
         name : original pandas API name.
         axis : axis to apply. 0 or 1, or 'index' or 'columns.
         numeric_only : bool, default True
@@ -782,7 +782,7 @@ class DataFrame(Frame, Generic[T]):
 
             sdf = self._internal.spark_frame.select(*exprs)
 
-            # The data is expected to be small so it's fine to transpose/use default index.
+            # The data is expected to be small so it's fine to transpose/use the default index.
             with ps.option_context("compute.max_rows", 1):
                 internal = InternalFrame(
                     spark_frame=sdf,
@@ -2598,7 +2598,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         .. note:: This method is based on an expensive operation due to the nature
             of big data. Internally it needs to generate each row for each value, and
-            then group twice - it is a huge operation. To prevent misusage, this method
+            then group twice - it is a huge operation. To prevent misuse, this method
             has the 'compute.max_rows' default limit of input length, and raises a ValueError.
 
                 >>> from pyspark.pandas.config import option_context
@@ -4563,9 +4563,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Shift DataFrame by desired number of periods.
 
         .. note:: the current implementation of shift uses Spark's Window without
-            specifying partition specification. This leads to move all data into
-            single partition in single machine and could cause serious
-            performance degradation. Avoid this method against very large dataset.
+            specifying partition specification. This leads to moving all data into
+            a single partition in a single machine and could cause serious
+            performance degradation. Avoid this method against very large datasets.
 
         Parameters
         ----------
@@ -4616,9 +4616,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         DataFrame (default is the element in the same column of the previous row).
 
         .. note:: the current implementation of diff uses Spark's Window without
-            specifying partition specification. This leads to move all data into
-            single partition in single machine and could cause serious
-            performance degradation. Avoid this method against very large dataset.
+            specifying partition specification. This leads to moving all data into
+            a single partition in a single machine and could cause serious
+            performance degradation. Avoid this method against very large datasets.
 
         Parameters
         ----------
@@ -4704,7 +4704,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         approx: bool, default False
             If False, will use the exact algorithm and return the exact number of unique.
             If True, it uses the HyperLogLog approximate algorithm, which is significantly faster
-            for large amount of data.
+            for large amounts of data.
             Note: This parameter is specific to pandas-on-Spark and is not found in pandas.
         rsd: float, default 0.05
             Maximum estimation error allowed in the HyperLogLog algorithm.
@@ -4748,7 +4748,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             ]
         )
 
-        # The data is expected to be small so it's fine to transpose/use default index.
+        # The data is expected to be small so it's fine to transpose/use the default index.
         with ps.option_context("compute.max_rows", 1):
             internal = self._internal.copy(
                 spark_frame=sdf,
@@ -4969,7 +4969,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     # TODO: support other as DataFrame or array-like
     def dot(self, other: "Series") -> "Series":
         """
-        Compute the matrix multiplication between the DataFrame and other.
+        Compute the matrix multiplication between the DataFrame and others.
 
         This method computes the matrix product between the DataFrame and the
         values of an other Series
@@ -4978,7 +4978,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         .. note:: This method is based on an expensive operation due to the nature
             of big data. Internally it needs to generate each row for each value, and
-            then group twice - it is a huge operation. To prevent misusage, this method
+            then group twice - it is a huge operation. To prevent misuse, this method
             has the 'compute.max_rows' default limit of input length, and raises a ValueError.
 
                 >>> from pyspark.pandas.config import option_context
@@ -4990,7 +4990,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 ...     psdf.dot(psser)
                 Traceback (most recent call last):
                   ...
-                ValueError: Current DataFrame has more then the given limit 1000 rows.
+                ValueError: Current DataFrame has more than the given limit 1000 rows.
                 Please set 'compute.max_rows' by using 'pyspark.pandas.config.set_option'
                 to retrieve to retrieve more than 1000 rows. Note that, before changing the
                 'compute.max_rows', this operation is considerably expensive.
@@ -5921,9 +5921,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """Fill NA/NaN values.
 
         .. note:: the current implementation of 'method' parameter in fillna uses Spark's Window
-            without specifying partition specification. This leads to move all data into
-            single partition in single machine and could cause serious
-            performance degradation. Avoid this method against very large dataset.
+            without specifying partition specification. This leads to moving all data into
+            a single partition in a single machine and could cause serious
+            performance degradation. Avoid this method against very large datasets.
 
         Parameters
         ----------
@@ -7812,7 +7812,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         .. note:: This method is based on an expensive operation due to the nature
             of big data. Internally it needs to generate each row for each value, and
-            then group twice - it is a huge operation. To prevent misusage, this method
+            then group twice - it is a huge operation. To prevent misuse, this method
             has the 'compute.max_rows' default limit of input length, and raises a ValueError.
 
                 >>> from pyspark.pandas.config import option_context
@@ -11076,9 +11076,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         assigned a rank that is the average of the ranks of those values.
 
         .. note:: the current implementation of rank uses Spark's Window without
-            specifying partition specification. This leads to move all data into
-            single partition in single machine and could cause serious
-            performance degradation. Avoid this method against very large dataset.
+            specifying partition specification. This leads to moving all data into
+            a single partition in a single machine and could cause serious
+            performance degradation. Avoid this method against very large datasets.
 
         Parameters
         ----------
@@ -11784,9 +11784,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Percentage change between the current and a prior element.
 
         .. note:: the current implementation of this API uses Spark's Window without
-            specifying partition specification. This leads to move all data into
-            single partition in single machine and could cause serious
-            performance degradation. Avoid this method against very large dataset.
+            specifying partition specification. This leads to moving all data into
+            a single partition in a single machine and could cause serious
+            performance degradation. Avoid this method against very large datasets.
 
         Parameters
         ----------
@@ -12722,7 +12722,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 *[F.lit(None).cast(StringType()).alias(SPARK_DEFAULT_INDEX_NAME)], *new_columns
             )
 
-            # The data is expected to be small so it's fine to transpose/use default index.
+            # The data is expected to be small so it's fine to transpose/use the default index.
             with ps.option_context("compute.max_rows", 1):
                 internal = InternalFrame(
                     spark_frame=sdf,
