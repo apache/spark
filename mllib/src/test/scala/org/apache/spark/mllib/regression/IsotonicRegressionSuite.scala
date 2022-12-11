@@ -17,7 +17,6 @@
 
 package org.apache.spark.mllib.regression
 
-import org.apache.commons.math3.util.Precision
 import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.{SparkException, SparkFunSuite}
@@ -225,12 +224,18 @@ class IsotonicRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
 
   test("SPARK-41008 isotonic regression with duplicate features differs from sklearn") {
     val model = runIsotonicRegressionOnInput(
-      Seq((2, 1, 1), (1, 1, 1), (0, 2, 1), (1, 2, 1), (0.5, 3, 1), (0, 3, 1)),
+      Seq((1, 0.6, 1), (0, 0.6, 1),
+        (0, 1.0 / 3, 1), (1, 1.0 / 3, 1), (0, 1.0 / 3, 1),
+        (1, 0.2, 1), (0, 0.2, 1), (0, 0.2, 1), (0, 0.2, 1)),
       true,
       2)
 
-    assert(model.boundaries === Array(1.0, 3.0))
-    assert(model.predictions === Array(0.75, 0.75))
+    assert(model.boundaries === Array(0.2, 1.0 / 3, 0.6))
+    assert(model.predictions === Array(0.25, 1.0 / 3, 0.5))
+
+    assert(model.predict(0.6) === 0.5)
+    assert(model.predict(1.0 / 3) === 1.0 / 3)
+    assert(model.predict(0.2) === 0.25)
   }
 
   test("isotonic regression prediction") {
@@ -327,9 +332,8 @@ class IsotonicRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
   test("makeUnique: handle duplicate features") {
     val regressor = new IsotonicRegression()
     import regressor.makeUnique
-    import Precision.EPSILON
 
-    // Note: input must be lexicographically sorted by (feature, label)
+    // Note: input must be lexicographically sorted by feature
 
     // empty
     assert(makeUnique(Array.empty) === Array.empty)
@@ -373,9 +377,14 @@ class IsotonicRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
         (10.0 * 0.3 + 20.0 * 0.3 + 30.0 * 0.4, 2.0, 1.0),
         (10.0, 3.0, 1.0)))
 
-    // duplicate up to resolution error
-    assert(
-      makeUnique(Array((1.0, 1.0, 1.0), (1.0, 1.0 - EPSILON, 1.0), (1.0, 1.0 + EPSILON, 1.0))) ===
-        Array((1.0, 1.0, 3.0)))
+    // don't handle tiny representation errors
+    // e.g. infinitely adjacent doubles are already unique
+    val adjacentDoubles = {
+      // i-th next representable double to 1.0 is java.lang.Double.longBitsToDouble(base + i)
+      val base = java.lang.Double.doubleToRawLongBits(1.0)
+      (0 until 10).map(i => java.lang.Double.longBitsToDouble(base + i))
+        .map((1.0, _, 1.0)).toArray
+    }
+    assert(makeUnique(adjacentDoubles) === adjacentDoubles)
   }
 }
