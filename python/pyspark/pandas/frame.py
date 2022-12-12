@@ -2608,7 +2608,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                   ...
                 ValueError: Current DataFrame's length exceeds the given limit of 1000 rows.
                 Please set 'compute.max_rows' by using 'pyspark.pandas.config.set_option'
-                to retrieve to retrieve more than 1000 rows. Note that, before changing the
+                to retrieve more than 1000 rows. Note that, before changing the
                 'compute.max_rows', this operation is considerably expensive.
 
         Returns
@@ -2696,7 +2696,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 raise ValueError(
                     "Current DataFrame has more then the given limit {0} rows. "
                     "Please set 'compute.max_rows' by using 'pyspark.pandas.config.set_option' "
-                    "to retrieve to retrieve more than {0} rows. Note that, before changing the "
+                    "to retrieve more than {0} rows. Note that, before changing the "
                     "'compute.max_rows', this operation is considerably expensive.".format(
                         max_compute_count
                     )
@@ -4992,7 +4992,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                   ...
                 ValueError: Current DataFrame's length exceeds the given limit of 1000 rows.
                 Please set 'compute.max_rows' by using 'pyspark.pandas.config.set_option'
-                to retrieve to retrieve more than 1000 rows. Note that, before changing the
+                to retrieve more than 1000 rows. Note that, before changing the
                 'compute.max_rows', this operation is considerably expensive.
 
         Parameters
@@ -7813,7 +7813,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         .. note:: This method is based on an expensive operation due to the nature
             of big data. Internally it needs to generate each row for each value, and
             then group twice - it is a huge operation. To prevent misuse, this method
-            has the 'compute.max_rows' default limit of input length, and raises a ValueError.
+            has the 'compute.max_rows' default limit of input length and raises a ValueError.
 
                 >>> from pyspark.pandas.config import option_context
                 >>> with option_context('compute.max_rows', 1000):  # doctest: +NORMALIZE_WHITESPACE
@@ -7822,7 +7822,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                   ...
                 ValueError: Current DataFrame's length exceeds the given limit of 1000 rows.
                 Please set 'compute.max_rows' by using 'pyspark.pandas.config.set_option'
-                to retrieve to retrieve more than 1000 rows. Note that, before changing the
+                to retrieve more than 1000 rows. Note that, before changing the
                 'compute.max_rows', this operation is considerably expensive.
 
         Parameters
@@ -8150,7 +8150,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Parameters
         ----------
         values : iterable or dict
-           The sequence of values to test. If values is a dict,
+           The sequence of values to test. If values are a dict,
            the keys must be the column names, which must match.
            Series and DataFrame are not supported.
 
@@ -8278,13 +8278,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         how: Type of merge to be performed.
             {'left', 'right', 'outer', 'inner'}, default 'inner'
 
-            left: use only keys from left frame, similar to a SQL left outer join; not preserve
+            left: use only keys from left frame, like a SQL left outer join; not preserve
                 key order unlike pandas.
-            right: use only keys from right frame, similar to a SQL right outer join; not preserve
+            right: use only keys from right frame, like a SQL right outer join; not preserve
                 key order unlike pandas.
-            outer: use union of keys from both frames, similar to a SQL full outer join; sort keys
+            outer: use union of keys from both frames, like a SQL full outer join; sort keys
                 lexicographically.
-            inner: use intersection of keys from both frames, similar to a SQL inner join;
+            inner: use intersection of keys from both frames, like a SQL inner join;
                 not preserve the order of the left keys unlike pandas.
         on: Column or index level names to join on. These must be found in both DataFrames. If on
             is None and not merging on indexes then this defaults to the intersection of the
@@ -8680,8 +8680,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         K3   A3  None
 
         Another option to join using the key columns is to use the on parameter. DataFrame.join
-        always uses right’s index but we can use any column in df. This method not preserve the
-        original DataFrame’s index in the result unlike pandas.
+        always uses right’s index but we can use any column in df. This method does not preserve
+        the original DataFrame’s index in the result unlike pandas.
 
         >>> join_psdf = psdf1.join(psdf2.set_index('key'), on='key')
         >>> join_psdf.index
@@ -8743,7 +8743,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         0  1.0  3.0
         1  0.0  4.0
 
-        Null values still persist if the location of that null value does not exist in other
+        Null values persist if the location of that null value does not exist in other
 
         >>> df1 = ps.DataFrame({'A': [None, 0], 'B': [4, None]})
         >>> df2 = ps.DataFrame({'B': [3, 3], 'C': [1, 1]}, index=[1, 2])
@@ -8910,7 +8910,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         1  2  5
         2  3  6
 
-        The DataFrame's length does not increase as a result of the update,
+        The DataFrame's length does not increase because of the update,
         only values at matching index/column labels are updated.
 
         >>> df = ps.DataFrame({'A': ['a', 'b', 'c'], 'B': ['x', 'y', 'z']}, columns=['A', 'B'])
@@ -8922,7 +8922,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         1  b  e
         2  c  f
 
-        For Series, it's name attribute must be set.
+        For Series, its name attribute must be set.
 
         >>> df = ps.DataFrame({'A': ['a', 'b', 'c'], 'B': ['x', 'y', 'z']}, columns=['A', 'B'])
         >>> new_column = ps.Series(['d', 'e'], name='B', index=[0, 2])
@@ -9058,7 +9058,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         This method also supports an optional ``min_periods`` keyword
         that specifies the required minimum number of non-NA observations for
-        each column pair in order to have a valid result:
+        each column pair to have a valid result:
 
         >>> np.random.seed(42)
         >>> df = pd.DataFrame(np.random.randn(20, 3),
@@ -9257,8 +9257,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         1         8          0                  1
         2         0          0                  8
 
-        Extract 25% random elements from the ``Series`` ``df['num_legs']``, with replacement,
-        so the same items could appear more than once.
+        Extract 25% random elements from the ``Series`` ``df['num_legs']`` with replacement
+        so, the same items could appear more than once.
 
         >>> df['num_legs'].sample(frac=0.4, replace=True, random_state=1)  # doctest: +SKIP
         falcon    2
@@ -9266,7 +9266,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         spider    8
         Name: num_legs, dtype: int64
 
-        Specifying the exact number of items to return is not supported at the moment.
+        Specifying the exact number of items to return is not supported now.
 
         >>> df.sample(n=5)  # doctest: +ELLIPSIS
         Traceback (most recent call last):
@@ -9455,7 +9455,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             lambda psser: psser.rename(tuple([i + suffix for i in psser._column_label]))
         )
 
-    # TODO: include, and exclude should be implemented.
+    # TODO: include and exclude should be implemented.
     def describe(self, percentiles: Optional[List[float]] = None) -> "DataFrame":
         """
         Generate descriptive statistics that summarize the central tendency,
@@ -9705,7 +9705,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             # Apply stat functions for each column.
             count_exprs = map(F.count, column_names)
             min_exprs = map(F.min, column_names)
-            # Here we try to flat the multiple map into single list that contains each calculated
+            # Here we try to flat the multiple maps into single list that contains each calculated
             # percentile using `chain`.
             # e.g. flat the `[<map object at 0x7fc1907dc280>, <map object at 0x7fc1907dcc70>]`
             # to `[Column<'percentile_approx(A, 0.2, 10000)'>,
@@ -9786,7 +9786,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ----------
         subset : column label or sequence of labels, optional
             Only consider certain columns for identifying duplicates, by
-            default use all of the columns.
+            default use all the columns.
         keep : {'first', 'last', False}, default 'first'
             Determines which duplicates (if any) to keep.
             - ``first`` : Drop duplicates except for the first occurrence.
@@ -10053,7 +10053,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     def _reindex_index(
         self, index: Optional[Union["Index", Sequence[Any]]], fill_value: Optional[Any]
     ) -> "DataFrame":
-        # When axis is index, we can mimic pandas' by a right outer join.
+        # When axis is index, we can mimic pandas by a right outer join.
         nlevels = self._internal.index_level
         assert nlevels <= 1 or (
             isinstance(index, ps.MultiIndex) and nlevels == index.nlevels
@@ -10485,7 +10485,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         DataFrame. The new inner-most levels are created by pivoting the
         columns of the current dataframe:
 
-          - if the columns have a single level, the output is a Series;
+          - if the columns have a single level, the output is a Series
           - if the columns have multiple levels, the new index
             level(s) is (are) taken from the prescribed level(s) and
             the output is a DataFrame.
