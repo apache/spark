@@ -150,6 +150,7 @@ class SparkConnectPlanner(session: SparkSession) {
     } else {
       transformRelation(rel.getInput)
     }
+
     Sample(
       rel.getLowerBound,
       rel.getUpperBound,
