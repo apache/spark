@@ -7279,7 +7279,7 @@ def unix_timestamp() -> Column:
 
 
 def unix_timestamp(
-        timestamp: Optional["ColumnOrName"] = None, format: str = "yyyy-MM-dd HH:mm:ss"
+    timestamp: Optional["ColumnOrName"] = None, format: str = "yyyy-MM-dd HH:mm:ss"
 ) -> Column:
     """
     Convert time string with given pattern ('yyyy-MM-dd HH:mm:ss', by default)
