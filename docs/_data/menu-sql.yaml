@@ -42,6 +42,8 @@
       url: sql-data-sources-jdbc.html
     - text: Avro Files
       url: sql-data-sources-avro.html
+    - text: Protobuf data
+      url: sql-data-sources-protobuf.html
     - text: Whole Binary Files
       url: sql-data-sources-binaryFile.html
     - text: Troubleshooting
