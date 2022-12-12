@@ -203,9 +203,17 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
         r
       }.getOrElse(action)
     }
+    val newNotMatchedBySourceActions: Seq[MergeAction] =
+      m.notMatchedBySourceActions.map { action: MergeAction =>
+      replaceExplicitDefaultValuesInMergeAction(action, columnNamesToExpressions).map { r =>
+        replaced = true
+        r
+      }.getOrElse(action)
+    }
     if (replaced) {
       m.copy(matchedActions = newMatchedActions,
-        notMatchedActions = newNotMatchedActions)
+        notMatchedActions = newNotMatchedActions,
+        notMatchedBySourceActions = newNotMatchedBySourceActions)
     } else {
       m
     }

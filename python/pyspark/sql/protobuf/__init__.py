@@ -14,10 +14,5 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-apiVersion: scheduling.volcano.sh/v1beta1
-kind: PodGroup
-spec:
-  queue: queue-2u
-  minMember: 1
-  minResources:
-    cpu: "2"
+
+__all__ = ["functions"]

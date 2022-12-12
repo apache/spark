@@ -237,7 +237,7 @@ private[hive] case class HiveGenericUDTF(
   override lazy val elementSchema = StructType(outputInspector.getAllStructFieldRefs.asScala.map {
     field => StructField(field.getFieldName, inspectorToDataType(field.getFieldObjectInspector),
       nullable = true)
-  }.toSeq)
+  }.toArray)
 
   @transient
   private lazy val inputDataTypes: Array[DataType] = children.map(_.dataType).toArray

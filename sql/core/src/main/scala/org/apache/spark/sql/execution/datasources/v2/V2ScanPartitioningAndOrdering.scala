@@ -56,7 +56,7 @@ object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with SQLConfHelpe
           }
         case _: UnknownPartitioning => None
         case p =>
-          logWarning("Spark ignores the partitioning ${p.getClass.getSimpleName}." +
+          logWarning(s"Spark ignores the partitioning ${p.getClass.getSimpleName}." +
             " Please use KeyGroupedPartitioning for better performance")
           None
       }

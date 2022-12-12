@@ -1176,7 +1176,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         num : int
             Number of records to return. Will return this number of records
-            or whataver number is available.
+            or all records if the DataFrame contains less than this number of records.
 
         Returns
         -------
@@ -1211,7 +1211,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         num : int
             Number of records to return. Will return this number of records
-            or whataver number is available.
+            or all records if the DataFrame contains less than this number of records..
 
         Returns
         -------
@@ -1243,7 +1243,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         num : int
             Number of records to return. Will return this number of records
-            or whataver number is available.
+            or all records if the DataFrame contains less than this number of records.
 
         Returns
         -------
@@ -2375,7 +2375,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  2|Alice|
         +---+-----+
 
-        Specify miltiple columns
+        Specify multiple columns
 
         >>> df = spark.createDataFrame([
         ...     (2, "Alice"), (2, "Bob"), (5, "Bob")], schema=["age", "name"])
@@ -2388,7 +2388,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  2|  Bob|
         +---+-----+
 
-        Specify miltiple columns for sorting order at `ascending`.
+        Specify multiple columns for sorting order at `ascending`.
 
         >>> df.orderBy(["age", "name"], ascending=[False, False]).show()
         +---+-----+
@@ -3209,7 +3209,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Parameters
         ----------
         exprs : :class:`Column` or dict of key and value strings
-            Columns or expressions to aggreate DataFrame by.
+            Columns or expressions to aggregate DataFrame by.
 
         Returns
         -------
@@ -4217,8 +4217,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     def crosstab(self, col1: str, col2: str) -> "DataFrame":
         """
         Computes a pair-wise frequency table of the given columns. Also known as a contingency
-        table. The number of distinct values for each column should be less than 1e4. At most 1e6
-        non-zero pair frequencies will be returned.
+        table.
         The first column of each row will be the distinct values of `col1` and the column names
         will be the distinct values of `col2`. The name of the first column will be `$col1_$col2`.
         Pairs that have no occurrences will have zero as their counts.
@@ -4576,13 +4575,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         return DataFrame(jdf, self.sparkSession)
 
-    def toDF(self, *cols: "ColumnOrName") -> "DataFrame":
+    def toDF(self, *cols: str) -> "DataFrame":
         """Returns a new :class:`DataFrame` that with new specified column names
 
         Parameters
         ----------
         *cols : tuple
-            a tuple of string new column name or :class:`Column`. The length of the
+            a tuple of string new column name. The length of the
             list needs to be the same as the number of columns in the initial
             :class:`DataFrame`
 

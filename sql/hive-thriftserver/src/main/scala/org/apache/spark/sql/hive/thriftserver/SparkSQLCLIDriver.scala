@@ -60,6 +60,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
   private val continuedPrompt = "".padTo(prompt.length, ' ')
   private var transport: TSocket = _
   private final val SPARK_HADOOP_PROP_PREFIX = "spark.hadoop."
+  private var exitCode = 0
 
   initializeLogIfNecessary(true)
   installSignalHandler()
@@ -81,6 +82,11 @@ private[hive] object SparkSQLCLIDriver extends Logging {
         }
       }
     })
+  }
+
+  def exit(code: Int): Unit = {
+    exitCode = code
+    System.exit(exitCode)
   }
 
   def main(args: Array[String]): Unit = {
@@ -105,12 +111,12 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     } catch {
       case e: UnsupportedEncodingException =>
         sessionState.close()
-        System.exit(ERROR_PATH_NOT_FOUND)
+        exit(ERROR_PATH_NOT_FOUND)
     }
 
     if (!oproc.process_stage2(sessionState)) {
       sessionState.close()
-      System.exit(ERROR_MISUSE_SHELL_BUILTIN)
+      exit(ERROR_MISUSE_SHELL_BUILTIN)
     }
 
     // Set all properties specified via command line.
@@ -145,7 +151,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     // Clean up after we exit
     ShutdownHookManager.addShutdownHook { () =>
       sessionState.close()
-      SparkSQLEnv.stop()
+      SparkSQLEnv.stop(exitCode)
     }
 
     if (isRemoteMode(sessionState)) {
@@ -190,7 +196,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       sessionState.info = new PrintStream(System.err, true, UTF_8.name())
       sessionState.err = new PrintStream(System.err, true, UTF_8.name())
     } catch {
-      case e: UnsupportedEncodingException => System.exit(ERROR_PATH_NOT_FOUND)
+      case e: UnsupportedEncodingException => exit(ERROR_PATH_NOT_FOUND)
     }
 
     if (sessionState.database != null) {
@@ -211,17 +217,17 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     cli.printMasterAndAppId
 
     if (sessionState.execString != null) {
-      System.exit(cli.processLine(sessionState.execString))
+      exit(cli.processLine(sessionState.execString))
     }
 
     try {
       if (sessionState.fileName != null) {
-        System.exit(cli.processFile(sessionState.fileName))
+        exit(cli.processFile(sessionState.fileName))
       }
     } catch {
       case e: FileNotFoundException =>
         logError(s"Could not open input file for reading. (${e.getMessage})")
-        System.exit(ERROR_PATH_NOT_FOUND)
+        exit(ERROR_PATH_NOT_FOUND)
     }
 
     val reader = new ConsoleReader()
@@ -303,7 +309,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     sessionState.close()
 
-    System.exit(ret)
+    exit(ret)
   }
 
 
@@ -358,7 +364,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     if (cmd_lower.equals("quit") ||
       cmd_lower.equals("exit")) {
       sessionState.close()
-      System.exit(EXIT_SUCCESS)
+      SparkSQLCLIDriver.exit(EXIT_SUCCESS)
     }
     if (tokens(0).toLowerCase(Locale.ROOT).equals("source") ||
       cmd_trimmed.startsWith("!") || isRemoteMode) {
@@ -481,7 +487,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
           // Kill the VM on second ctrl+c
           if (!initialRequest) {
             console.printInfo("Exiting the JVM")
-            System.exit(ERROR_COMMAND_NOT_FOUND)
+            SparkSQLCLIDriver.exit(ERROR_COMMAND_NOT_FOUND)
           }
 
           // Interrupt the CLI thread to stop the current statement and return

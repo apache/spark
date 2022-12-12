@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-addSbtPlugin("com.etsy" % "sbt-checkstyle-plugin" % "3.1.1")
+addSbtPlugin("software.purpledragon" % "sbt-checkstyle-plugin" % "4.0.0")
 
 // sbt-checkstyle-plugin uses an old version of checkstyle. Match it to Maven's.
 // If you are changing the dependency setting for checkstyle plugin,
@@ -25,7 +25,7 @@ libraryDependencies += "com.puppycrawl.tools" % "checkstyle" % "9.3"
 // checkstyle uses guava 31.0.1-jre.
 libraryDependencies += "com.google.guava" % "guava" % "31.0.1-jre"
 
-addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "1.2.0")
+addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "2.0.0")
 
 addSbtPlugin("com.typesafe.sbteclipse" % "sbteclipse-plugin" % "5.2.4")
 
@@ -37,9 +37,9 @@ addSbtPlugin("com.eed3si9n" % "sbt-unidoc" % "0.4.3")
 
 addSbtPlugin("io.spray" % "sbt-revolver" % "0.9.1")
 
-libraryDependencies += "org.ow2.asm"  % "asm" % "9.3"
+libraryDependencies += "org.ow2.asm"  % "asm" % "9.4"
 
-libraryDependencies += "org.ow2.asm"  % "asm-commons" % "9.3"
+libraryDependencies += "org.ow2.asm"  % "asm-commons" % "9.4"
 
 addSbtPlugin("com.simplytyped" % "sbt-antlr4" % "0.8.3")
 

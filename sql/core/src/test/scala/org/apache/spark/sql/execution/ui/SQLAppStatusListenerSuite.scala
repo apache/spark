@@ -21,6 +21,7 @@ import java.util.Properties
 
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.json4s.jackson.JsonMethods._
@@ -979,6 +980,30 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
         spark.sparkContext.removeSparkListener(bytesWrittenListener)
       }
     }
+  }
+
+  test("SPARK-40834: Use SparkListenerSQLExecutionEnd to track final SQL status in UI") {
+    var received = false
+    spark.sparkContext.addSparkListener(new SparkListener {
+      override def onOtherEvent(event: SparkListenerEvent): Unit = {
+        event match {
+          case SparkListenerSQLExecutionEnd(_, _, Some(errorMessage)) =>
+            val error = new ObjectMapper().readTree(errorMessage)
+            assert(error.get("errorClass").toPrettyString === "\"java.lang.Exception\"")
+            assert(error.path("messageParameters").get("message").toPrettyString === "\"test\"")
+            received = true
+          case _ =>
+        }
+      }
+    })
+
+    intercept[Exception] {
+      SQLExecution.withNewExecutionId(spark.range(1).queryExecution) {
+        throw new Exception("test")
+      }
+    }
+    spark.sparkContext.listenerBus.waitUntilEmpty(10000)
+    assert(received)
   }
 }
 

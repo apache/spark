@@ -71,11 +71,11 @@ trait NamedExpression extends Expression {
   def exprId: ExprId
 
   /**
-   * Returns a dot separated fully qualified name for this attribute.  Given that there can be
-   * multiple qualifiers, it is possible that there are other possible way to refer to this
-   * attribute.
+   * Returns a dot separated fully qualified name for this attribute.  If the name or any qualifier
+   * contains `dots`, it is quoted to avoid confusion.  Given that there can be multiple qualifiers,
+   * it is possible that there are other possible way to refer to this attribute.
    */
-  def qualifiedName: String = (qualifier :+ name).mkString(".")
+  def qualifiedName: String = (qualifier :+ name).map(quoteIfNeeded).mkString(".")
 
   /**
    * Optional qualifier for the expression.
@@ -464,8 +464,9 @@ object FileSourceMetadataAttribute {
 
   val FILE_SOURCE_METADATA_COL_ATTR_KEY = "__file_source_metadata_col"
 
-  def apply(name: String, dataType: DataType, nullable: Boolean = true): AttributeReference =
-    AttributeReference(name, dataType, nullable,
+  def apply(name: String, dataType: DataType): AttributeReference =
+    // Metadata column for file sources is always not nullable.
+    AttributeReference(name, dataType, nullable = false,
       new MetadataBuilder()
         .putBoolean(METADATA_COL_ATTR_KEY, value = true)
         .putBoolean(FILE_SOURCE_METADATA_COL_ATTR_KEY, value = true).build())()

@@ -227,7 +227,7 @@ class QueryCompilationErrorsSuite
       parameters = Map[String, String]())
   }
 
-  test("NO_UDF_INTERFACE_ERROR: java udf class does not implement any udf interface") {
+  test("NO_UDF_INTERFACE: java udf class does not implement any udf interface") {
     val className = "org.apache.spark.sql.errors.MyCastToString"
     val e = intercept[AnalysisException](
       spark.udf.registerJava(
@@ -237,7 +237,7 @@ class QueryCompilationErrorsSuite
     )
     checkError(
       exception = e,
-      errorClass = "NO_UDF_INTERFACE_ERROR",
+      errorClass = "NO_UDF_INTERFACE",
       parameters = Map("className" -> className))
   }
 
@@ -412,6 +412,22 @@ class QueryCompilationErrorsSuite
       parameters = Map("objectName" -> "`a`",
         "proposal" ->
           "`__auto_generated_subquery_name`.`m`, `__auto_generated_subquery_name`.`aa`"),
+      context = ExpectedContext(
+        fragment = "a",
+        start = 9,
+        stop = 9)
+    )
+  }
+
+  test("UNRESOLVED_MAP_KEY: proposal columns containing quoted dots") {
+    val query = "select m[a] from (select map('a', 'b') as m, 'aa' as `a.a`)"
+    checkError(
+      exception = intercept[AnalysisException] {sql(query)},
+      errorClass = "UNRESOLVED_MAP_KEY.WITH_SUGGESTION",
+      sqlState = None,
+      parameters = Map("objectName" -> "`a`",
+        "proposal" ->
+          "`__auto_generated_subquery_name`.`m`, `__auto_generated_subquery_name`.`a.a`"),
       context = ExpectedContext(
         fragment = "a",
         start = 9,

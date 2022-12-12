@@ -19,10 +19,12 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TernaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CASE_WHEN, IF, TreePattern}
+import org.apache.spark.sql.catalyst.util.TypeUtils.{toSQLExpr, toSQLId, toSQLType}
 import org.apache.spark.sql.types._
 
 // scalastyle:off line.size.limit
@@ -60,12 +62,24 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (predicate.dataType != BooleanType) {
-      TypeCheckResult.TypeCheckFailure(
-        "type of predicate expression in If should be boolean, " +
-          s"not ${predicate.dataType.catalogString}")
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "1",
+          "requiredType" -> toSQLType(BooleanType),
+          "inputSql" -> toSQLExpr(predicate),
+          "inputType" -> toSQLType(predicate.dataType)
+        )
+      )
     } else if (!TypeCoercion.haveSameType(inputTypesForMerging)) {
-      TypeCheckResult.TypeCheckFailure(s"differing types in '$sql' " +
-        s"(${trueValue.dataType.catalogString} and ${falseValue.dataType.catalogString}).")
+      DataTypeMismatch(
+        errorSubClass = "DATA_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName),
+          "dataType" -> Seq(trueValue.dataType,
+            falseValue.dataType).map(toSQLType).mkString("[", ", ", "]")
+        )
+      )
     } else {
       TypeCheckResult.TypeCheckSuccess
     }
@@ -172,17 +186,24 @@ case class CaseWhen(
         TypeCheckResult.TypeCheckSuccess
       } else {
         val index = branches.indexWhere(_._1.dataType != BooleanType)
-        TypeCheckResult.TypeCheckFailure(
-          s"WHEN expressions in CaseWhen should all be boolean type, " +
-            s"but the ${index + 1}th when expression's type is ${branches(index)._1}")
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> (index + 1).toString,
+            "requiredType" -> toSQLType(BooleanType),
+            "inputSql" -> toSQLExpr(branches(index)._1),
+            "inputType" -> toSQLType(branches(index)._1.dataType)
+          )
+        )
       }
     } else {
-      val branchesStr = branches.map(_._2.dataType).map(dt => s"WHEN ... THEN ${dt.catalogString}")
-        .mkString(" ")
-      val elseStr = elseValue.map(expr => s" ELSE ${expr.dataType.catalogString}").getOrElse("")
-      TypeCheckResult.TypeCheckFailure(
-        "THEN and ELSE expressions should all be same type or coercible to a common type," +
-          s" got CASE $branchesStr$elseStr END")
+      DataTypeMismatch(
+        errorSubClass = "DATA_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName),
+          "dataType" -> inputTypesForMerging.map(toSQLType).mkString("[", ", ", "]")
+        )
+      )
     }
   }
 

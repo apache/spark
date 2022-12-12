@@ -288,7 +288,20 @@ SELECT * FROM (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table or view not found: cte_invisible_inner; line 9 pos 18
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "relationName" : "`cte_invisible_inner`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 164,
+    "stopIndex" : 182,
+    "fragment" : "cte_invisible_inner"
+  } ]
+}
 
 
 -- !query
@@ -310,4 +323,17 @@ SELECT * FROM (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table or view not found: cte_invisible_inner; line 11 pos 18
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "relationName" : "`cte_invisible_inner`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 194,
+    "stopIndex" : 212,
+    "fragment" : "cte_invisible_inner"
+  } ]
+}

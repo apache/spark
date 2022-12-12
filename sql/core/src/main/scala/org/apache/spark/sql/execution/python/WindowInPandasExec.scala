@@ -84,7 +84,7 @@ case class WindowInPandasExec(
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
     child: SparkPlan)
-  extends WindowExecBase {
+  extends WindowExecBase with PythonSQLMetrics {
 
   /**
    * Helper functions and data structures for window bounds
@@ -375,7 +375,8 @@ case class WindowInPandasExec(
         argOffsets,
         pythonInputSchema,
         sessionLocalTimeZone,
-        pythonRunnerConf).compute(pythonInput, context.partitionId(), context)
+        pythonRunnerConf,
+        pythonMetrics).compute(pythonInput, context.partitionId(), context)
 
       val joined = new JoinedRow
 

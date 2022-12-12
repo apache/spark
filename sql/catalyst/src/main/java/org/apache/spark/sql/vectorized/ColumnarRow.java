@@ -19,6 +19,7 @@ package org.apache.spark.sql.vectorized;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
+import org.apache.spark.sql.catalyst.types.*;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
@@ -55,36 +56,33 @@ public final class ColumnarRow extends InternalRow {
         row.setNullAt(i);
       } else {
         DataType dt = data.getChild(i).dataType();
-        if (dt instanceof BooleanType) {
+        PhysicalDataType pdt = dt.physicalDataType();
+        if (pdt instanceof PhysicalBooleanType) {
           row.setBoolean(i, getBoolean(i));
-        } else if (dt instanceof ByteType) {
+        } else if (pdt instanceof PhysicalByteType) {
           row.setByte(i, getByte(i));
-        } else if (dt instanceof ShortType) {
+        } else if (pdt instanceof PhysicalShortType) {
           row.setShort(i, getShort(i));
-        } else if (dt instanceof IntegerType || dt instanceof YearMonthIntervalType) {
+        } else if (pdt instanceof PhysicalIntegerType) {
           row.setInt(i, getInt(i));
-        } else if (dt instanceof LongType || dt instanceof DayTimeIntervalType) {
+        } else if (pdt instanceof PhysicalLongType) {
           row.setLong(i, getLong(i));
-        } else if (dt instanceof FloatType) {
+        } else if (pdt instanceof PhysicalFloatType) {
           row.setFloat(i, getFloat(i));
-        } else if (dt instanceof DoubleType) {
+        } else if (pdt instanceof PhysicalDoubleType) {
           row.setDouble(i, getDouble(i));
-        } else if (dt instanceof StringType) {
+        } else if (pdt instanceof PhysicalStringType) {
           row.update(i, getUTF8String(i).copy());
-        } else if (dt instanceof BinaryType) {
+        } else if (pdt instanceof PhysicalBinaryType) {
           row.update(i, getBinary(i));
-        } else if (dt instanceof DecimalType) {
-          DecimalType t = (DecimalType)dt;
+        } else if (pdt instanceof PhysicalDecimalType) {
+          PhysicalDecimalType t = (PhysicalDecimalType)pdt;
           row.setDecimal(i, getDecimal(i, t.precision(), t.scale()), t.precision());
-        } else if (dt instanceof DateType) {
-          row.setInt(i, getInt(i));
-        } else if (dt instanceof TimestampType) {
-          row.setLong(i, getLong(i));
-        } else if (dt instanceof StructType) {
-          row.update(i, getStruct(i, ((StructType) dt).fields().length).copy());
-        } else if (dt instanceof ArrayType) {
+        } else if (pdt instanceof PhysicalStructType) {
+          row.update(i, getStruct(i, ((PhysicalStructType) pdt).fields().length).copy());
+        } else if (pdt instanceof PhysicalArrayType) {
           row.update(i, getArray(i).copy());
-        } else if (dt instanceof MapType) {
+        } else if (pdt instanceof PhysicalMapType) {
           row.update(i, getMap(i).copy());
         } else {
           throw new RuntimeException("Not implemented. " + dt);

@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.types._
@@ -169,7 +170,18 @@ class PercentileSuite extends SparkFunSuite {
     invalidDataTypes.foreach { dataType =>
       val child = AttributeReference("a", dataType)()
       val percentile = new Percentile(child, percentage)
-      assert(percentile.checkInputDataTypes().isFailure)
+      assert(percentile.checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> "1",
+            "requiredType" -> ("(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" " +
+              "or \"INTERVAL YEAR TO MONTH\")"),
+            "inputSql" -> "\"a\"",
+            "inputType" -> toSQLType(dataType)
+          )
+        )
+      )
     }
 
     val invalidFrequencyDataTypes = Seq(FloatType, DoubleType, BooleanType,
@@ -181,7 +193,18 @@ class PercentileSuite extends SparkFunSuite {
       val child = AttributeReference("a", dataType)()
       val frq = AttributeReference("frq", frequencyType)()
       val percentile = new Percentile(child, percentage, frq)
-      assert(percentile.checkInputDataTypes().isFailure)
+      assert(percentile.checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> "1",
+            "requiredType" -> ("(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" " +
+              "or \"INTERVAL YEAR TO MONTH\")"),
+            "inputSql" -> "\"a\"",
+            "inputType" -> toSQLType(dataType)
+          )
+        )
+      )
     }
 
     for(dataType <- validDataTypes;
@@ -189,7 +212,17 @@ class PercentileSuite extends SparkFunSuite {
       val child = AttributeReference("a", dataType)()
       val frq = AttributeReference("frq", frequencyType)()
       val percentile = new Percentile(child, percentage, frq)
-      assert(percentile.checkInputDataTypes().isFailure)
+      assert(percentile.checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> "3",
+            "requiredType" -> "\"INTEGRAL\"",
+            "inputSql" -> "\"frq\"",
+            "inputType" -> toSQLType(frequencyType)
+          )
+        )
+      )
     }
   }
 
@@ -208,9 +241,32 @@ class PercentileSuite extends SparkFunSuite {
 
     invalidPercentages.foreach { percentage =>
       val percentile2 = new Percentile(child, percentage)
-      assertEqual(percentile2.checkInputDataTypes(),
-        TypeCheckFailure(s"Percentage(s) must be between 0.0 and 1.0, " +
-          s"but got ${percentage.simpleString(100)}"))
+      percentage.eval() match {
+        case array: ArrayData =>
+          assertEqual(percentile2.checkInputDataTypes(),
+            DataTypeMismatch(
+              errorSubClass = "VALUE_OUT_OF_RANGE",
+              messageParameters = Map(
+                "exprName" -> "percentage",
+                "valueRange" -> "[0.0, 1.0]",
+                "currentValue" ->
+                  array.toDoubleArray().map(toSQLValue(_, DoubleType)).mkString(",")
+              )
+            )
+          )
+        case other =>
+          assertEqual(percentile2.checkInputDataTypes(),
+            DataTypeMismatch(
+              errorSubClass = "VALUE_OUT_OF_RANGE",
+              messageParameters = Map(
+                "exprName" -> "percentage",
+                "valueRange" -> "[0.0, 1.0]",
+                "currentValue" ->
+                  Array(other).map(toSQLValue(_, DoubleType)).mkString(",")
+              )
+            )
+          )
+      }
     }
 
     val nonFoldablePercentage = Seq(NonFoldableLiteral(0.5),
@@ -219,8 +275,14 @@ class PercentileSuite extends SparkFunSuite {
     nonFoldablePercentage.foreach { percentage =>
       val percentile3 = new Percentile(child, percentage)
       assertEqual(percentile3.checkInputDataTypes(),
-        TypeCheckFailure(s"The percentage(s) must be a constant literal, " +
-          s"but got ${percentage}"))
+        DataTypeMismatch(
+          errorSubClass = "NON_FOLDABLE_INPUT",
+          messageParameters = Map(
+            "inputName" -> "percentage",
+            "inputType" -> toSQLType(percentage.dataType),
+            "inputExpr" -> toSQLExpr(percentage))
+        )
+      )
     }
 
     val invalidDataTypes = Seq(ByteType, ShortType, IntegerType, LongType, FloatType,
@@ -230,7 +292,17 @@ class PercentileSuite extends SparkFunSuite {
       val percentage = Literal.default(dataType)
       val percentile4 = new Percentile(child, percentage)
       val checkResult = percentile4.checkInputDataTypes()
-      assert(checkResult.isFailure)
+      assert(checkResult ==
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> "2",
+            "requiredType" -> "\"DOUBLE\"",
+            "inputSql" -> toSQLExpr(percentage),
+            "inputType" -> toSQLType(dataType)
+          )
+        )
+      )
     }
   }
 
@@ -261,7 +333,7 @@ class PercentileSuite extends SparkFunSuite {
     assert(new Percentile(
       AttributeReference("a", DoubleType)(),
       percentageExpression = Literal(null, DoubleType)).checkInputDataTypes() ===
-      TypeCheckFailure("Percentage value must not be null"))
+      DataTypeMismatch(errorSubClass = "UNEXPECTED_NULL", Map("exprName" -> "percentage")))
 
     val nullPercentageExprs =
       Seq(CreateArray(Seq(null).map(Literal(_))), CreateArray(Seq(0.1D, null).map(Literal(_))))
@@ -270,7 +342,17 @@ class PercentileSuite extends SparkFunSuite {
       val wrongPercentage = new Percentile(
         AttributeReference("a", DoubleType)(),
         percentageExpression = percentageExpression)
-        assert(wrongPercentage.checkInputDataTypes().isFailure)
+        assert(wrongPercentage.checkInputDataTypes() ==
+          DataTypeMismatch(
+            errorSubClass = "UNEXPECTED_INPUT_TYPE",
+            messageParameters = Map(
+              "paramIndex" -> "2",
+              "requiredType" -> "\"ARRAY<DOUBLE>\"",
+              "inputSql" -> toSQLExpr(percentageExpression),
+              "inputType" -> "\"ARRAY<VOID>\""
+            )
+          )
+        )
     }
   }
 

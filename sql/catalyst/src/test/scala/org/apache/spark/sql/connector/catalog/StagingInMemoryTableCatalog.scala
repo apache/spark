@@ -104,8 +104,7 @@ class StagingInMemoryTableCatalog extends InMemoryTableCatalog with StagingTable
     override def commitStagedChanges(): Unit = {
       val maybePreCommittedTable = tables.putIfAbsent(ident, delegateTable)
       if (maybePreCommittedTable != null) {
-        throw new TableAlreadyExistsException(
-          s"Table with identifier $ident and name $name was already created.")
+        throw new TableAlreadyExistsException(ident.asMultipartIdentifier)
       }
     }
   }

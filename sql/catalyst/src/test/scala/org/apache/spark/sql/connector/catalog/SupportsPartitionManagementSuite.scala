@@ -218,16 +218,22 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
   test("renamePartition") {
     val partTable = createMultiPartTable()
 
-    val errMsg1 = intercept[PartitionsAlreadyExistException] {
+    val e = intercept[PartitionsAlreadyExistException] {
       partTable.renamePartition(InternalRow(0, "abc"), InternalRow(1, "abc"))
-    }.getMessage
-    assert(errMsg1.contains("partitions already exist"))
+    }
+    checkError(e,
+      errorClass = "PARTITIONS_ALREADY_EXIST",
+      parameters = Map("partitionList" -> "PARTITION (`part0` = 1, `part1` = abc)",
+      "tableName" -> "`test`.`ns`.`test_table`"))
 
     val newPart = InternalRow(2, "xyz")
-    val errMsg2 = intercept[NoSuchPartitionException] {
+    val e2 = intercept[NoSuchPartitionException] {
       partTable.renamePartition(newPart, InternalRow(3, "abc"))
-    }.getMessage
-    assert(errMsg2.contains("Partition not found"))
+    }
+    checkError(e2,
+      errorClass = "PARTITIONS_NOT_FOUND",
+      parameters = Map("partitionList" -> "PARTITION (`part0` = 2, `part1` = xyz)",
+        "tableName" -> "`test`.`ns`.`test_table`"))
 
     assert(partTable.renamePartition(InternalRow(0, "abc"), newPart))
     assert(partTable.partitionExists(newPart))

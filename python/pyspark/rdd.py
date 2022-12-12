@@ -4289,7 +4289,7 @@ class RDD(Generic[T_co]):
         Returns
         -------
         :class:`RDD`
-            a :class:`RDD` containing the keys and cogouped values
+            a :class:`RDD` containing the keys and cogrouped values
 
         See Also
         --------
@@ -4330,7 +4330,7 @@ class RDD(Generic[T_co]):
         Returns
         -------
         :class:`RDD`
-            a :class:`RDD` containing the keys and cogouped values
+            a :class:`RDD` containing the keys and cogrouped values
 
         See Also
         --------
@@ -5430,7 +5430,10 @@ class PipelinedRDD(RDD[U], Generic[T, U]):
         if self._bypass_serializer:
             self._jrdd_deserializer = NoOpSerializer()
 
-        if self.ctx.profiler_collector:
+        if (
+            self.ctx.profiler_collector
+            and self.ctx._conf.get("spark.python.profile", "false") == "true"
+        ):
             profiler = self.ctx.profiler_collector.new_profiler(self.ctx)
         else:
             profiler = None

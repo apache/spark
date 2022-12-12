@@ -24,6 +24,7 @@ import org.scalatest.funspec.AnyFunSpec
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, GenericRowWithSchema}
 import org.apache.spark.sql.types._
@@ -86,7 +87,7 @@ class RowTest extends AnyFunSpec with Matchers {
     }
 
     it("getAs() on type extending AnyVal throws an exception when accessing field that is null") {
-      intercept[NullPointerException] {
+      intercept[SparkException] {
         sampleRowWithoutCol3.getInt(sampleRowWithoutCol3.fieldIndex("col3"))
       }
     }

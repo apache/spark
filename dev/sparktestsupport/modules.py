@@ -282,6 +282,17 @@ connect = Module(
     ],
 )
 
+protobuf = Module(
+    name="protobuf",
+    dependencies=[sql],
+    source_file_regexes=[
+        "connector/protobuf",
+    ],
+    sbt_test_goals=[
+        "protobuf/test",
+    ],
+)
+
 sketch = Module(
     name="sketch",
     dependencies=[tags],
@@ -407,6 +418,7 @@ pyspark_core = Module(
         "pyspark.tests.test_daemon",
         "pyspark.tests.test_install_spark",
         "pyspark.tests.test_join",
+        "pyspark.tests.test_memory_profiler",
         "pyspark.tests.test_profiler",
         "pyspark.tests.test_rdd",
         "pyspark.tests.test_rddbarrier",
@@ -423,7 +435,7 @@ pyspark_core = Module(
 
 pyspark_sql = Module(
     name="pyspark-sql",
-    dependencies=[pyspark_core, hive, avro],
+    dependencies=[pyspark_core, hive, avro, protobuf],
     source_file_regexes=["python/pyspark/sql"],
     python_test_goals=[
         # doctests
@@ -443,6 +455,7 @@ pyspark_sql = Module(
         "pyspark.sql.udf",
         "pyspark.sql.window",
         "pyspark.sql.avro.functions",
+        "pyspark.sql.protobuf.functions",
         "pyspark.sql.pandas.conversion",
         "pyspark.sql.pandas.map_ops",
         "pyspark.sql.pandas.group_ops",
@@ -472,6 +485,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.pandas.test_pandas_udf_typehints",
         "pyspark.sql.tests.pandas.test_pandas_udf_typehints_with_future_annotations",
         "pyspark.sql.tests.pandas.test_pandas_udf_window",
+        "pyspark.sql.tests.test_pandas_sqlmetrics",
         "pyspark.sql.tests.test_readwriter",
         "pyspark.sql.tests.test_serde",
         "pyspark.sql.tests.test_session",
@@ -496,6 +510,8 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_connect_plan_only",
         "pyspark.sql.tests.connect.test_connect_select_ops",
         "pyspark.sql.tests.connect.test_connect_basic",
+        "pyspark.sql.tests.connect.test_connect_function",
+        "pyspark.sql.tests.connect.test_connect_column",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and

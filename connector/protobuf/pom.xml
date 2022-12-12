@@ -28,7 +28,6 @@
   <artifactId>spark-protobuf_2.12</artifactId>
   <properties>
     <sbt.project.name>protobuf</sbt.project.name>
-    <protobuf.version>3.21.1</protobuf.version>
   </properties>
   <packaging>jar</packaging>
   <name>Spark Protobuf</name>
@@ -83,7 +82,6 @@
       <version>${protobuf.version}</version>
       <scope>compile</scope>
     </dependency>
-
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
@@ -94,6 +92,7 @@
         <artifactId>maven-shade-plugin</artifactId>
         <configuration>
           <shadedArtifactAttached>false</shadedArtifactAttached>
+          <shadeTestJar>true</shadeTestJar>
           <artifactSet>
             <includes>
               <include>com.google.protobuf:*</include>
@@ -112,4 +111,71 @@
       </plugin>
     </plugins>
   </build>
+  <profiles>
+    <profile>
+      <id>default-protoc</id>
+      <activation>
+        <activeByDefault>true</activeByDefault>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>com.github.os72</groupId>
+            <artifactId>protoc-jar-maven-plugin</artifactId>
+            <version>${protoc-jar-maven-plugin.version}</version>
+            <!-- Generates Java classes for tests. TODO(Raghu): Generate descriptor files too. -->
+            <executions>
+              <execution>
+                <phase>generate-test-sources</phase>
+                <goals>
+                  <goal>run</goal>
+                </goals>
+                <configuration>
+                  <protocArtifact>com.google.protobuf:protoc:${protobuf.version}</protocArtifact>
+                  <protocVersion>${protobuf.version}</protocVersion>
+                  <inputDirectories>
+                    <include>src/test/resources/protobuf</include>
+                  </inputDirectories>
+                  <addSources>test</addSources>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    <profile>
+      <id>user-defined-protoc</id>
+      <properties>
+        <protobuf.protoc.executable.path>${env.PROTOBUF_PROTOC_EXEC_PATH}</protobuf.protoc.executable.path>
+      </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>com.github.os72</groupId>
+            <artifactId>protoc-jar-maven-plugin</artifactId>
+            <version>3.11.4</version>
+            <!-- Generates Java classes for tests. TODO(Raghu): Generate descriptor files too. -->
+            <executions>
+              <execution>
+                <phase>generate-test-sources</phase>
+                <goals>
+                  <goal>run</goal>
+                </goals>
+                <configuration>
+                  <protocArtifact>com.google.protobuf:protoc:${protobuf.version}</protocArtifact>
+                  <protocVersion>${protobuf.version}</protocVersion>
+                  <protocCommand>${protobuf.protoc.executable.path}</protocCommand>
+                  <inputDirectories>
+                    <include>src/test/resources/protobuf</include>
+                  </inputDirectories>
+                  <addSources>test</addSources>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 </project>

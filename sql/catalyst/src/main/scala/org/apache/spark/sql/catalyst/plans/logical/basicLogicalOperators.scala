@@ -273,16 +273,17 @@ case class Generate(
 
   override def producedAttributes: AttributeSet = AttributeSet(generatorOutput)
 
-  def qualifiedGeneratorOutput: Seq[Attribute] = {
-    val qualifiedOutput = qualifier.map { q =>
-      // prepend the new qualifier to the existed one
-      generatorOutput.map(a => a.withQualifier(Seq(q)))
-    }.getOrElse(generatorOutput)
-    val nullableOutput = qualifiedOutput.map {
-      // if outer, make all attributes nullable, otherwise keep existing nullability
-      a => a.withNullability(outer || a.nullable)
+  def nullableOutput: Seq[Attribute] = {
+    generatorOutput.map { a =>
+      a.withNullability(outer || a.nullable)
     }
-    nullableOutput
+  }
+
+  def qualifiedGeneratorOutput: Seq[Attribute] = {
+    qualifier.map { q =>
+      // prepend the new qualifier to the existed one
+      nullableOutput.map(a => a.withQualifier(Seq(q)))
+    }.getOrElse(nullableOutput)
   }
 
   def output: Seq[Attribute] = requiredChildOutput ++ qualifiedGeneratorOutput
@@ -905,7 +906,7 @@ object Range {
   }
 
   def getOutputAttrs: Seq[Attribute] = {
-    StructType(StructField("id", LongType, nullable = false) :: Nil).toAttributes
+    StructType(Array(StructField("id", LongType, nullable = false))).toAttributes
   }
 
   private def typeCoercion: TypeCoercionBase = {
@@ -1626,7 +1627,15 @@ case class SubqueryAlias(
 
   override def output: Seq[Attribute] = {
     val qualifierList = identifier.qualifier :+ alias
-    child.output.map(_.withQualifier(qualifierList))
+    child.output.map { attr =>
+      // `SubqueryAlias` sets a new qualifier for its output columns. It doesn't make sense to still
+      // restrict the hidden columns of natural/using join to be accessed by qualified name only.
+      if (attr.qualifiedAccessOnly) {
+        attr.markAsAllowAnyAccess().withQualifier(qualifierList)
+      } else {
+        attr.withQualifier(qualifierList)
+      }
+    }
   }
 
   override def metadataOutput: Seq[Attribute] = {

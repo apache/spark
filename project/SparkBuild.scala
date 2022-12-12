@@ -85,7 +85,8 @@ object BuildCommons {
   val javaVersion = settingKey[String]("source and target JVM version for javac and scalac")
 
   // Google Protobuf version used for generating the protobuf.
-  val protoVersion = "3.21.1"
+  // SPARK-41247: needs to be consistent with `protobuf.version` in `pom.xml`.
+  val protoVersion = "3.21.9"
   // GRPC version used for Spark Connect.
   val gprcVersion = "1.47.0"
 }
@@ -108,6 +109,18 @@ object SparkBuild extends PomBuild {
     }
     if (profiles.contains("jdwp-test-debug")) {
       sys.props.put("test.jdwp.enabled", "true")
+    }
+    if (profiles.contains("user-defined-protoc")) {
+      val connectProtocExecPath = Properties.envOrNone("CONNECT_PROTOC_EXEC_PATH")
+      val connectPluginExecPath = Properties.envOrNone("CONNECT_PLUGIN_EXEC_PATH")
+      val protobufProtocExecPath = Properties.envOrNone("PROTOBUF_PROTOC_EXEC_PATH")
+      if (connectProtocExecPath.isDefined && connectPluginExecPath.isDefined) {
+        sys.props.put("connect.protoc.executable.path", connectProtocExecPath.get)
+        sys.props.put("connect.plugin.executable.path", connectPluginExecPath.get)
+      }
+      if (protobufProtocExecPath.isDefined) {
+        sys.props.put("protobuf.protoc.executable.path", protobufProtocExecPath.get)
+      }
     }
     profiles
   }
@@ -599,11 +612,32 @@ object SparkParallelTestGrouping {
 
 object Core {
   import scala.sys.process.Process
+  import BuildCommons.protoVersion
+  def buildenv = Process(Seq("uname")).!!.trim.replaceFirst("[^A-Za-z0-9].*", "").toLowerCase
+  def bashpath = Process(Seq("where", "bash")).!!.split("[\r\n]+").head.replace('\\', '/')
   lazy val settings = Seq(
+    // Setting version for the protobuf compiler. This has to be propagated to every sub-project
+    // even if the project is not using it.
+    PB.protocVersion := BuildCommons.protoVersion,
+    // For some reason the resolution from the imported Maven build does not work for some
+    // of these dependendencies that we need to shade later on.
+    libraryDependencies ++= {
+      Seq(
+        "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
+      )
+    },
+    (Compile / PB.targets) := Seq(
+      PB.gens.java -> (Compile / sourceManaged).value
+    ),
     (Compile / resourceGenerators) += Def.task {
       val buildScript = baseDirectory.value + "/../build/spark-build-info"
       val targetDir = baseDirectory.value + "/target/extra-resources/"
-      val command = Seq("bash", buildScript, targetDir, version.value)
+      // support Windows build under cygwin/mingw64, etc
+      val bash = buildenv match {
+        case "cygwin" | "msys2" | "mingw64" | "clang64" => bashpath
+        case _ => "bash"
+      }
+      val command = Seq(bash, buildScript, targetDir, version.value)
       Process(command).!!
       val propsFile = baseDirectory.value / "target" / "extra-resources" / "spark-version-info.properties"
       Seq(propsFile)
@@ -648,11 +682,6 @@ object SparkConnect {
         "com.google.protobuf" % "protobuf-java" % protoVersion
       )
     },
-
-    (Compile / PB.targets) := Seq(
-      PB.gens.java -> (Compile / sourceManaged).value,
-      PB.gens.plugin("grpc-java") -> (Compile / sourceManaged).value
-    ),
 
     (assembly / test) := { },
 
@@ -699,7 +728,26 @@ object SparkConnect {
       case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
       case _ => MergeStrategy.first
     }
-  )
+  ) ++ {
+    val connectProtocExecPath = sys.props.get("connect.protoc.executable.path")
+    val connectPluginExecPath = sys.props.get("connect.plugin.executable.path")
+    if (connectProtocExecPath.isDefined && connectPluginExecPath.isDefined) {
+      Seq(
+        (Compile / PB.targets) := Seq(
+          PB.gens.java -> (Compile / sourceManaged).value,
+          PB.gens.plugin(name = "grpc-java", path = connectPluginExecPath.get) -> (Compile / sourceManaged).value
+        ),
+        PB.protocExecutable := file(connectProtocExecPath.get)
+      )
+    } else {
+      Seq(
+        (Compile / PB.targets) := Seq(
+          PB.gens.java -> (Compile / sourceManaged).value,
+          PB.gens.plugin("grpc-java") -> (Compile / sourceManaged).value
+        )
+      )
+    }
+  }
 }
 
 object SparkProtobuf {
@@ -716,8 +764,10 @@ object SparkProtobuf {
 
     dependencyOverrides += "com.google.protobuf" % "protobuf-java" % protoVersion,
 
-    (Compile / PB.targets) := Seq(
-      PB.gens.java -> (Compile / sourceManaged).value,
+    (Test / PB.protoSources) += (Test / sourceDirectory).value / "resources" / "protobuf",
+
+    (Test / PB.targets) := Seq(
+      PB.gens.java -> target.value / "generated-test-sources"
     ),
 
     (assembly / test) := { },
@@ -748,7 +798,16 @@ object SparkProtobuf {
       case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
       case _ => MergeStrategy.first
     },
-  )
+  ) ++ {
+    val protobufProtocExecPath = sys.props.get("protobuf.protoc.executable.path")
+    if (protobufProtocExecPath.isDefined) {
+      Seq(
+        PB.protocExecutable := file(protobufProtocExecPath.get)
+      )
+    } else {
+      Seq.empty
+    }
+  }
 }
 
 object Unsafe {
@@ -804,7 +863,7 @@ object KubernetesIntegrationTests {
         val bindingsDir = s"$sparkHome/resource-managers/kubernetes/docker/src/main/dockerfiles/spark/bindings"
         val javaImageTag = sys.props.get("spark.kubernetes.test.javaImageTag")
         val dockerFile = sys.props.getOrElse("spark.kubernetes.test.dockerFile",
-            s"$sparkHome/resource-managers/kubernetes/docker/src/main/dockerfiles/spark/Dockerfile.java17")
+            s"$sparkHome/resource-managers/kubernetes/docker/src/main/dockerfiles/spark/Dockerfile")
         val pyDockerFile = sys.props.getOrElse("spark.kubernetes.test.pyDockerFile",
             s"$bindingsDir/python/Dockerfile")
         val rDockerFile = sys.props.getOrElse("spark.kubernetes.test.rDockerFile",
@@ -1166,8 +1225,10 @@ object Unidoc {
         !f.getCanonicalPath.contains("org/apache/spark/unsafe/types/CalendarInterval")))
       .map(_.filterNot(_.getCanonicalPath.contains("python")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/collection")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/io")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/kvstore")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/catalyst")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/connect")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/execution")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/internal")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/hive")))
@@ -1259,7 +1320,7 @@ object Unidoc {
 
 object Checkstyle {
   lazy val settings = Seq(
-    checkstyleSeverityLevel := Some(CheckstyleSeverityLevel.Error),
+    checkstyleSeverityLevel := CheckstyleSeverityLevel.Error,
     (Compile / checkstyle / javaSource) := baseDirectory.value / "src/main/java",
     (Test / checkstyle / javaSource) := baseDirectory.value / "src/test/java",
     checkstyleConfigLocation := CheckstyleConfigLocation.File("dev/checkstyle.xml"),

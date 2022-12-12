@@ -46,9 +46,9 @@ object Cast extends QueryErrorsBase {
    * As per section 6.13 "cast specification" in "Information technology — Database languages " +
    * "- SQL — Part 2: Foundation (SQL/Foundation)":
    * If the <cast operand> is a <value expression>, then the valid combinations of TD and SD
-   * in a <cast specification> are given by the following table. “Y” indicates that the
-   * combination is syntactically valid without restriction; “M” indicates that the combination
-   * is valid subject to other Syntax Rules in this Sub- clause being satisfied; and “N” indicates
+   * in a <cast specification> are given by the following table. "Y" indicates that the
+   * combination is syntactically valid without restriction; "M" indicates that the combination
+   * is valid subject to other Syntax Rules in this Sub- clause being satisfied; and "N" indicates
    * that the combination is not valid:
    * SD                   TD
    *     EN AN C D T TS YM DT BO UDT B RT CT RW
@@ -419,7 +419,7 @@ object Cast extends QueryErrorsBase {
       fallbackConf: Option[(String, String)]): DataTypeMismatch = {
     def withFunSuggest(names: String*): DataTypeMismatch = {
       DataTypeMismatch(
-        errorSubClass = "CAST_WITH_FUN_SUGGESTION",
+        errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
         messageParameters = Map(
           "srcType" -> toSQLType(from),
           "targetType" -> toSQLType(to),

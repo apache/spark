@@ -54,10 +54,10 @@ class MiscFunctionsSuite extends QueryTest with SharedSparkSession {
       SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true") {
       Seq("user", "current_user").foreach { func =>
         checkAnswer(sql(s"select $func"), Row(user))
-      }
-      Seq("user()", "current_user()").foreach { func =>
-        val e = intercept[ParseException](sql(s"select $func"))
-        assert(e.getMessage.contains(func))
+        checkError(
+          exception = intercept[ParseException](sql(s"select $func()")),
+          errorClass = "PARSE_SYNTAX_ERROR",
+          parameters = Map("error" -> s"'$func'", "hint" -> ""))
       }
     }
   }

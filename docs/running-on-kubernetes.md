@@ -857,6 +857,17 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>2.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.driver.service.label.[LabelName]</code></td>
+  <td>(none)</td>
+  <td>
+    Add the Kubernetes <a href="https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/">label</a> specified by <code>LabelName</code> to the driver service.
+    For example, <code>spark.kubernetes.driver.service.label.something=true</code>.
+    Note that Spark also adds its own labels to the driver service
+    for bookkeeping purposes.
+  </td>
+  <td>3.4.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.driver.service.annotation.[AnnotationName]</code></td>
   <td>(none)</td>
   <td>
@@ -1875,10 +1886,6 @@ Submit Spark jobs with the following extra options:
 
 Note that `{{APP_ID}}` is the built-in variable that will be substituted with Spark job ID automatically.
 With the above configuration, the job will be scheduled by YuniKorn scheduler instead of the default Kubernetes scheduler.
-
-##### Limitations
-
-- Apache YuniKorn currently only supports x86 Linux, running Spark on ARM64 (or other platform) with Apache YuniKorn is not supported at present.
 
 ### Stage Level Scheduling Overview
 

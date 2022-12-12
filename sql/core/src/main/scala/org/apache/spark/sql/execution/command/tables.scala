@@ -95,10 +95,10 @@ case class CreateTableLikeCommand(
         DataSource.lookupDataSource(provider.get, sparkSession.sessionState.conf)
       }
       provider
-    } else if (sourceTableDesc.tableType == CatalogTableType.VIEW) {
-      Some(sparkSession.sessionState.conf.defaultDataSourceName)
     } else if (fileFormat.inputFormat.isDefined) {
       Some(DDLUtils.HIVE_PROVIDER)
+    } else if (sourceTableDesc.tableType == CatalogTableType.VIEW) {
+      Some(sparkSession.sessionState.conf.defaultDataSourceName)
     } else {
       sourceTableDesc.provider
     }
@@ -238,7 +238,6 @@ case class AlterTableAddColumnsCommand(
 
     SchemaUtils.checkColumnNameDuplication(
       (colsWithProcessedDefaults ++ catalogTable.schema).map(_.name),
-      "in the table definition of " + table.identifier,
       conf.caseSensitiveAnalysis)
     DDLUtils.checkTableColumns(catalogTable, StructType(colsWithProcessedDefaults))
 
@@ -290,7 +289,7 @@ case class AlterTableAddColumnsCommand(
     colsToAdd.map { col: StructField =>
       if (col.metadata.contains(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
         val foldedStructType = ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
-          StructType(Seq(col)), tableProvider, "ALTER TABLE ADD COLUMNS", true)
+          StructType(Array(col)), tableProvider, "ALTER TABLE ADD COLUMNS", true)
         foldedStructType.fields(0)
       } else {
         col
@@ -940,7 +939,7 @@ case class ShowTablePropertiesCommand(
           }
         case None =>
           properties.filterKeys(!_.startsWith(CatalogTable.VIEW_PREFIX))
-            .toSeq.sortBy(_._1).map(p => Row(p._1, p._2)).toSeq
+            .toSeq.sortBy(_._1).map(p => Row(p._1, p._2))
       }
     }
   }

@@ -3032,10 +3032,12 @@ abstract class JsonSuite
             checkAnswer(readback.filter($"AAA" === 0 && $"bbb" === 1), Seq(Row(0, 1)))
             checkAnswer(readback.filter($"AAA" === 2 && $"bbb" === 3), Seq())
             // Schema inferring
-            val errorMsg = intercept[AnalysisException] {
-              spark.read.json(path.getCanonicalPath).collect()
-            }.getMessage
-            assert(errorMsg.contains("Found duplicate column(s) in the data schema"))
+            checkError(
+              exception = intercept[AnalysisException] {
+                spark.read.json(path.getCanonicalPath).collect()
+              },
+              errorClass = "COLUMN_ALREADY_EXISTS",
+              parameters = Map("columnName" -> "`aaa`"))
           }
           withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
             val readback = spark.read.schema("aaa integer, BBB integer")
@@ -3378,6 +3380,27 @@ abstract class JsonSuite
           checkAnswer(df, Seq(Row(null)))
         }
       }
+    }
+  }
+
+  test("SPARK-40646: parse subsequent fields if the first JSON field does not match schema") {
+    // In this example, the first record has "a.y" as boolean but it needs to be an object.
+    // We should parse "a" as null but continue parsing "b" correctly as it is valid.
+    withTempPath { path =>
+      Seq(
+        """{"a": {"x": 1, "y": true}, "b": {"x": 1}}""",
+        """{"a": {"x": 2}, "b": {"x": 2}}"""").toDF()
+        .repartition(1)
+        .write.text(path.getAbsolutePath)
+
+      val df = spark.read
+        .schema("a struct<x: int, y: struct<x: int>>, b struct<x: int>")
+        .json(path.getAbsolutePath)
+
+      checkAnswer(
+        df,
+        Seq(Row(null, Row(1)), Row(Row(2, null), Row(2)))
+      )
     }
   }
 

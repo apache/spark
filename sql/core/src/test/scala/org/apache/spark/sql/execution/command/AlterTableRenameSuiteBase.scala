@@ -47,10 +47,12 @@ trait AlterTableRenameSuiteBase extends QueryTest with DDLCommandTestUtils {
   }
 
   test("table to rename does not exist") {
-    val errMsg = intercept[AnalysisException] {
+    val e = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalog.dbx.does_not_exist RENAME TO dbx.tab2")
-    }.getMessage
-    assert(errMsg.contains("Table or view not found"))
+    }
+    checkErrorTableNotFound(e, s"`$catalog`.`dbx`.`does_not_exist`",
+      ExpectedContext(s"$catalog.dbx.does_not_exist", 12,
+        11 + s"$catalog.dbx.does_not_exist".length))
   }
 
   test("omit namespace in the destination table") {

@@ -549,7 +549,6 @@ trait ShuffleSpec {
    * clustering expressions.
    *
    * This will only be called when:
-   *  - [[canCreatePartitioning]] returns true.
    *  - [[isCompatibleWith]] returns false on the side where the `clustering` is from.
    */
   def createPartitioning(clustering: Seq[Expression]): Partitioning =
@@ -562,7 +561,7 @@ case object SinglePartitionShuffleSpec extends ShuffleSpec {
     other.numPartitions == 1
   }
 
-  override def canCreatePartitioning: Boolean = true
+  override def canCreatePartitioning: Boolean = false
 
   override def createPartitioning(clustering: Seq[Expression]): Partitioning =
     SinglePartition

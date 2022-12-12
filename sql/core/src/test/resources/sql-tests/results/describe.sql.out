@@ -363,9 +363,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1238",
+  "errorClass" : "PARTITIONS_NOT_FOUND",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "msg" : "Partition not found in table 't' database 'default':\nc -> Us\nd -> 2"
+    "partitionList" : "PARTITION (`c` = Us, `d` = 2)",
+    "tableName" : "`default`.`t`"
   }
 }
 

@@ -25,7 +25,7 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Random
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
@@ -605,15 +605,15 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val serializer3 =
       javaMapSerializerFor(classOf[java.lang.Integer], classOf[java.lang.String])(
         Literal.fromObject(javaMapHasNullKey))
-    checkExceptionInExpression[RuntimeException](
-      serializer3, EmptyRow, "Cannot use null as map key!")
+    checkErrorInExpression[SparkRuntimeException](
+      serializer3, EmptyRow, "NULL_MAP_KEY", Map[String, String]())
 
     // Scala Map
     val serializer4 = scalaMapSerializerFor[java.lang.Integer, String](
       Literal.fromObject(scalaMapHasNullKey))
 
-    checkExceptionInExpression[RuntimeException](
-      serializer4, EmptyRow, "Cannot use null as map key!")
+    checkErrorInExpression[SparkRuntimeException](
+      serializer4, EmptyRow, "NULL_MAP_KEY", Map[String, String]())
   }
 
   test("SPARK-35244: invoke should throw the original exception") {

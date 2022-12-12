@@ -83,6 +83,8 @@ SELECT rpad('hi', 'invalid_length');
 SELECT hex(lpad(unhex(''), 5));
 SELECT hex(lpad(unhex('aabb'), 5));
 SELECT hex(lpad(unhex('aabbcc'), 2));
+SELECT hex(lpad(unhex('123'), 2));
+SELECT hex(lpad(unhex('12345'), 2));
 SELECT hex(lpad(unhex(''), 5, unhex('1f')));
 SELECT hex(lpad(unhex('aa'), 5, unhex('1f')));
 SELECT hex(lpad(unhex('aa'), 6, unhex('1f')));
@@ -97,6 +99,8 @@ SELECT hex(lpad(unhex('aabbcc'), 2, unhex('ff')));
 SELECT hex(rpad(unhex(''), 5));
 SELECT hex(rpad(unhex('aabb'), 5));
 SELECT hex(rpad(unhex('aabbcc'), 2));
+SELECT hex(rpad(unhex('123'), 2));
+SELECT hex(rpad(unhex('12345'), 2));
 SELECT hex(rpad(unhex(''), 5, unhex('1f')));
 SELECT hex(rpad(unhex('aa'), 5, unhex('1f')));
 SELECT hex(rpad(unhex('aa'), 6, unhex('1f')));
@@ -202,6 +206,8 @@ select to_binary('737472696E67', 'hex');
 select to_binary('');
 select to_binary('1', 'hex');
 select to_binary('FF');
+select to_binary('123', 'hex');
+select to_binary('12345', 'hex');
 -- hex invalid
 select to_binary('GG');
 select to_binary('01 AF', 'hex');
@@ -219,3 +225,7 @@ select to_binary(null, cast(null as string));
 -- invalid format
 select to_binary('abc', 1);
 select to_binary('abc', 'invalidFormat');
+CREATE TEMPORARY VIEW fmtTable(fmtField) AS SELECT * FROM VALUES ('invalidFormat');
+SELECT to_binary('abc', fmtField) FROM fmtTable;
+-- Clean up
+DROP VIEW IF EXISTS fmtTable;

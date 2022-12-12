@@ -17,11 +17,12 @@
 
 package org.apache.spark.scheduler
 
-import java.util.Properties
+import java.util.{ArrayList => JArrayList, Collections => JCollections, Properties}
 import java.util.concurrent.{CountDownLatch, Delayed, ScheduledFuture, TimeUnit}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong, AtomicReference}
 
 import scala.annotation.meta.param
+import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
 import scala.language.reflectiveCalls
 import scala.util.control.NonFatal
@@ -176,7 +177,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     override def schedulingMode: SchedulingMode = SchedulingMode.FIFO
     override def rootPool: Pool = new Pool("", schedulingMode, 0, 0)
     override def start() = {}
-    override def stop() = {}
+    override def stop(exitCode: Int) = {}
     override def executorHeartbeatReceived(
         execId: String,
         accumUpdates: Array[(Long, Seq[AccumulatorV2[_, _]])],
@@ -846,7 +847,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       override def schedulingMode: SchedulingMode = SchedulingMode.FIFO
       override def rootPool: Pool = new Pool("", schedulingMode, 0, 0)
       override def start(): Unit = {}
-      override def stop(): Unit = {}
+      override def stop(exitCode: Int): Unit = {}
       override def submitTasks(taskSet: TaskSet): Unit = {
         taskSets += taskSet
       }
@@ -1051,7 +1052,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
    * @param stageId - The current stageId
    * @param attemptIdx - The current attempt count
    * @param numShufflePartitions - The number of partitions in the next stage
-   * @param hostNames - Host on which each task in the task set is executed
+   * @param hostNames - Host on which each task in the task set is executed. In case no hostNames
+   *                  are provided, the tasks will progressively complete on hostA, hostB, etc.
    */
   private def completeShuffleMapStageSuccessfully(
       stageId: Int,
@@ -3088,14 +3090,17 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
     submit(finalRdd, Array(0, 1), properties = new Properties())
 
-    // Finish the first 2 shuffle map stages.
+    // Finish the first shuffle map stages, with shuffle data on hostA and hostB.
     completeShuffleMapStageSuccessfully(0, 0, 2)
     assert(mapOutputTracker.findMissingPartitions(shuffleId1) === Some(Seq.empty))
 
+    // Finish the second shuffle map stages, with shuffle data on hostB and hostD.
     completeShuffleMapStageSuccessfully(1, 0, 2, Seq("hostB", "hostD"))
     assert(mapOutputTracker.findMissingPartitions(shuffleId2) === Some(Seq.empty))
 
-    // Executor lost on hostB, both of stage 0 and 1 should be reran.
+    // Executor lost on hostB, both of stage 0 and 1 should be rerun - as part of re-computation
+    // of stage 2, as we have output on hostB for both stage 0 and stage 1 (see
+    // completeShuffleMapStageSuccessfully).
     runEvent(makeCompletionEvent(
       taskSets(2).tasks(0),
       FetchFailed(makeBlockManagerId("hostB"), shuffleId2, 0L, 0, 0, "ignored"),
@@ -3207,7 +3212,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(failure == null, "job should not fail")
     val failedStages = scheduler.failedStages.toSeq
     assert(failedStages.length == 2)
-    // Shuffle blocks of "hostA" is lost, so first task of the `shuffleMapRdd2` needs to retry.
+    // Shuffle blocks of "hostA" is lost, so first task of the `mapRdd` needs to retry.
     assert(failedStages.collect {
       case stage: ShuffleMapStage if stage.shuffleDep.shuffleId == shuffleId => stage
     }.head.findMissingPartitions() == Seq(0))
@@ -4510,14 +4515,13 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       initPushBasedShuffleConfs(conf)
 
       sc.conf.set("spark.shuffle.push.results.timeout", "1s")
-      val myScheduler = new MyDAGScheduler(
+      val scheduler = new DAGScheduler(
         sc,
         taskScheduler,
         sc.listenerBus,
         mapOutputTracker,
         blockManagerMaster,
-        sc.env,
-        shuffleMergeFinalize = false)
+        sc.env)
 
       val mergerLocs = Seq(makeBlockManagerId("hostA"), makeBlockManagerId("hostB"))
       val timeoutSecs = 1
@@ -4530,16 +4534,20 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       blockStoreClientField.setAccessible(true)
       blockStoreClientField.set(sc.env.blockManager, blockStoreClient)
 
-      val sentHosts = ArrayBuffer[String]()
+      val sentHosts = JCollections.synchronizedList(new JArrayList[String]())
       var hostAInterrupted = false
       doAnswer { (invoke: InvocationOnMock) =>
         val host = invoke.getArgument[String](0)
-        sendRequestsLatch.countDown()
         try {
           if (host == "hostA") {
-            canSendRequestLatch.await(timeoutSecs * 2, TimeUnit.SECONDS)
+            sendRequestsLatch.countDown()
+            canSendRequestLatch.await(timeoutSecs * 5, TimeUnit.SECONDS)
+            // should not reach here, will get interrupted by DAGScheduler
+            sentHosts.add(host)
+          } else {
+            sentHosts.add(host)
+            sendRequestsLatch.countDown()
           }
-          sentHosts += host
         } catch {
           case _: InterruptedException => hostAInterrupted = true
         } finally {
@@ -4550,14 +4558,14 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       val shuffleMapRdd = new MyRDD(sc, 1, Nil)
       val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
       shuffleDep.setMergerLocs(mergerLocs)
-      val shuffleStage = myScheduler.createShuffleMapStage(shuffleDep, 0)
+      val shuffleStage = scheduler.createShuffleMapStage(shuffleDep, 0)
 
-      myScheduler.finalizeShuffleMerge(shuffleStage, registerMergeResults)
+      scheduler.finalizeShuffleMerge(shuffleStage, registerMergeResults)
       sendRequestsLatch.await()
       verify(blockStoreClient, times(2))
         .finalizeShuffleMerge(any(), any(), any(), any(), any())
-      assert(sentHosts.nonEmpty)
-      assert(sentHosts.head === "hostB" && sentHosts.length == 1)
+      assert(1 == sentHosts.size())
+      assert(sentHosts.asScala.toSeq === Seq("hostB"))
       completeLatch.await()
       assert(hostAInterrupted)
     }

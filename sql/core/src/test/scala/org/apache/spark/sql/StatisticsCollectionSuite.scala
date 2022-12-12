@@ -597,11 +597,11 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   test("analyzes column statistics in cached global temporary view") {
     withGlobalTempView("gTempView") {
       val globalTempDB = spark.sharedState.globalTempViewManager.database
-      val errMsg1 = intercept[AnalysisException] {
+      val e1 = intercept[AnalysisException] {
         sql(s"ANALYZE TABLE $globalTempDB.gTempView COMPUTE STATISTICS FOR COLUMNS id")
-      }.getMessage
-      assert(errMsg1.contains("Table or view not found: " +
-        s"$globalTempDB.gTempView"))
+      }
+      checkErrorTableNotFound(e1, s"`$globalTempDB`.`gTempView`",
+        ExpectedContext(s"$globalTempDB.gTempView", 14, 13 + s"$globalTempDB.gTempView".length))
       // Analyzes in a global temporary view
       sql("CREATE GLOBAL TEMP VIEW gTempView AS SELECT 1 id")
       val errMsg2 = intercept[AnalysisException] {
@@ -721,10 +721,12 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         withTable(table) {
           sql(s"CREATE TABLE $table (value string, name string) USING PARQUET")
           val dupCol = if (caseSensitive) "value" else "VaLuE"
-          val errorMsg = intercept[AnalysisException] {
-            sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS value, name, $dupCol")
-          }.getMessage
-          assert(errorMsg.contains("Found duplicate column(s)"))
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS value, name, $dupCol")
+            },
+            errorClass = "COLUMN_ALREADY_EXISTS",
+            parameters = Map("columnName" -> "`value`"))
         }
       }
     }
@@ -793,9 +795,11 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       }
     }
 
-    val errMsg = intercept[AnalysisException] {
+    val e = intercept[AnalysisException] {
       sql(s"ANALYZE TABLES IN db_not_exists COMPUTE STATISTICS")
-    }.getMessage
-    assert(errMsg.contains("Database 'db_not_exists' not found"))
+    }
+    checkError(e,
+      errorClass = "SCHEMA_NOT_FOUND",
+      parameters = Map("schemaName" -> "`db_not_exists`"))
   }
 }
