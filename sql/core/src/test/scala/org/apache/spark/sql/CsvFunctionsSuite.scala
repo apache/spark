@@ -43,6 +43,35 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       Row(Row(1)) :: Nil)
   }
 
+  test("from_csv with non struct schema") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        Seq("1").toDS().select(from_csv($"value", lit("ARRAY<int>"), Map[String, String]().asJava))
+      },
+      errorClass = "INVALID_SCHEMA.NON_STRUCT_TYPE",
+      parameters = Map(
+        "inputSchema" -> "\"ARRAY<int>\"",
+        "dataType" -> "\"ARRAY<INT>\""
+      )
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        Seq("1").toDF("csv").selectExpr(s"from_csv(csv, 'ARRAY<int>')")
+      },
+      errorClass = "INVALID_SCHEMA.NON_STRUCT_TYPE",
+      parameters = Map(
+        "inputSchema" -> "\"ARRAY<int>\"",
+        "dataType" -> "\"ARRAY<INT>\""
+      ),
+      context = ExpectedContext(
+        fragment = "from_csv(csv, 'ARRAY<int>')",
+        start = 0,
+        stop = 26
+      )
+    )
+  }
+
   test("from_csv with option (timestampFormat)") {
     val df = Seq("26/08/2015 18:00").toDS()
     val schema = new StructType().add("time", TimestampType)
@@ -357,11 +386,14 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq("""1,"a"""").toDS().select(from_csv($"value", schema, options)),
       Row(Row(1, "a")))
 
-    val errMsg = intercept[AnalysisException] {
-      Seq(("1", "i int")).toDF("csv", "schema")
-        .select(from_csv($"csv", $"schema", options)).collect()
-    }.getMessage
-    assert(errMsg.contains("Schema should be specified in DDL format as a string literal"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        Seq(("1", "i int")).toDF("csv", "schema")
+          .select(from_csv($"csv", $"schema", options)).collect()
+      },
+      errorClass = "INVALID_SCHEMA.NON_STRING_LITERAL",
+      parameters = Map("inputSchema" -> "\"schema\"")
+    )
 
     checkError(
       exception = intercept[AnalysisException] {

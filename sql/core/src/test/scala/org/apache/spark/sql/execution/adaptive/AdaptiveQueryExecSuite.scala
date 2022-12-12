@@ -2156,8 +2156,15 @@ class AdaptiveQueryExecSuite
         assert(aqeReads.length == 2)
         aqeReads.foreach { c =>
           val stats = c.child.asInstanceOf[QueryStageExec].getRuntimeStatistics
-          assert(stats.sizeInBytes >= 0)
+          val rowCount = stats.rowCount.get
           assert(stats.rowCount.get >= 0)
+          if (rowCount == 0) {
+            // For empty relation, the query stage doesn't serialize any bytes.
+            // The SQLMetric keeps initial value.
+            assert(stats.sizeInBytes == -1)
+          } else {
+            assert(stats.sizeInBytes > 0)
+          }
         }
       }
     }

@@ -36,6 +36,7 @@ import org.apache.spark.internal.config.History
 import org.apache.spark.internal.config.History.HYBRID_STORE_DISK_BACKEND
 import org.apache.spark.internal.config.History.HybridStoreDiskBackend
 import org.apache.spark.internal.config.History.HybridStoreDiskBackend._
+import org.apache.spark.status.protobuf.KVStoreProtobufSerializer
 import org.apache.spark.util.Utils
 import org.apache.spark.util.kvstore._
 
@@ -71,12 +72,14 @@ private[spark] object KVUtils extends Logging {
       path: File,
       metadata: M,
       conf: SparkConf,
-      diskBackend: Option[HybridStoreDiskBackend.Value] = None): KVStore = {
+      diskBackend: Option[HybridStoreDiskBackend.Value] = None,
+      serializer: Option[KVStoreSerializer] = None): KVStore = {
     require(metadata != null, "Metadata is required.")
 
+    val kvSerializer = serializer.getOrElse(new KVStoreScalaSerializer())
     val db = diskBackend.getOrElse(backend(conf)) match {
-      case LEVELDB => new LevelDB(path, new KVStoreScalaSerializer())
-      case ROCKSDB => new RocksDB(path, new KVStoreScalaSerializer())
+      case LEVELDB => new LevelDB(path, kvSerializer)
+      case ROCKSDB => new RocksDB(path, kvSerializer)
     }
     val dbMeta = db.getMetadata(classTag[M].runtimeClass)
     if (dbMeta == null) {
@@ -91,9 +94,26 @@ private[spark] object KVUtils extends Logging {
 
   def createKVStore(
       storePath: Option[File],
-      diskBackend: HybridStoreDiskBackend.Value,
+      live: Boolean,
       conf: SparkConf): KVStore = {
     storePath.map { path =>
+      val diskBackend = if (live) {
+        // For the disk-based KV store of live UI, let's simply make it ROCKSDB only for now,
+        // instead of supporting both LevelDB and RocksDB. RocksDB is built based on LevelDB with
+        // improvements on writes and reads.
+        HybridStoreDiskBackend.ROCKSDB
+      } else {
+        HybridStoreDiskBackend.withName(conf.get(History.HYBRID_STORE_DISK_BACKEND))
+      }
+
+      val serializer = if (live) {
+        // For the disk-based KV store of live UI, let's simply use protobuf serializer only.
+        // The default serializer is slow since it is using JSON+GZip encoding.
+        Some(new KVStoreProtobufSerializer())
+      } else {
+        None
+      }
+
       val dir = diskBackend match {
         case LEVELDB => "listing.ldb"
         case ROCKSDB => "listing.rdb"
@@ -108,7 +128,7 @@ private[spark] object KVUtils extends Logging {
         conf.get(History.HISTORY_LOG_DIR))
 
       try {
-        open(dbPath, metadata, conf, Some(diskBackend))
+        open(dbPath, metadata, conf, Some(diskBackend), serializer)
       } catch {
         // If there's an error, remove the listing database and any existing UI database
         // from the store directory, since it's extremely likely that they'll all contain
@@ -116,12 +136,12 @@ private[spark] object KVUtils extends Logging {
         case _: UnsupportedStoreVersionException | _: MetadataMismatchException =>
           logInfo("Detected incompatible DB versions, deleting...")
           path.listFiles().foreach(Utils.deleteRecursively)
-          open(dbPath, metadata, conf, Some(diskBackend))
+          open(dbPath, metadata, conf, Some(diskBackend), serializer)
         case dbExc @ (_: NativeDB.DBException | _: RocksDBException) =>
           // Get rid of the corrupted data and re-create it.
           logWarning(s"Failed to load disk store $dbPath :", dbExc)
           Utils.deleteRecursively(dbPath)
-          open(dbPath, metadata, conf, Some(diskBackend))
+          open(dbPath, metadata, conf, Some(diskBackend), serializer)
       }
     }.getOrElse(new InMemoryStore())
   }

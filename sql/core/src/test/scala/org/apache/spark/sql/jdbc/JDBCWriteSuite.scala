@@ -502,8 +502,8 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
           .option("createTableColumnTypes", "name CLOB(2000)")
           .jdbc(url1, "TEST.USERDBTYPETEST", properties)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_0030",
-      parameters = Map("dataType" -> "clob(2000)"))
+      errorClass = "UNSUPPORTED_DATATYPE",
+      parameters = Map("typeName" -> "\"CLOB(2000)\""))
   }
 
   test("SPARK-10849: jdbc CreateTableColumnTypes option with invalid syntax") {

@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableExceptio
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, CreateStruct, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
+import org.apache.spark.sql.catalyst.expressions.aggregate.AnyValue
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, Join, LogicalPlan, SerdeInfo, Window}
 import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
@@ -662,12 +663,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     }
   }
 
-  def functionAcceptsOnlyOneArgumentError(name: String): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1044",
-      messageParameters = Map("name" -> name))
-  }
-
   def alterV2TableSetLocationWithPartitionNotSupportedError(): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1045",
@@ -798,12 +793,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map(
         "command" -> command,
         "column" -> quoted))
-  }
-
-  def columnDoesNotExistError(colName: String): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1061",
-      messageParameters = Map("colName" -> colName))
   }
 
   def renameTempViewToExistingViewError(newName: String): Throwable = {
@@ -1009,16 +998,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("inputSchema" -> toSQLExpr(exp)))
   }
 
-  def schemaNotFoldableError(exp: Expression): Throwable = {
+  def schemaIsNotStructTypeError(exp: Expression, dataType: DataType): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1093",
-      messageParameters = Map("expr" -> exp.sql))
-  }
-
-  def schemaIsNotStructTypeError(dataType: DataType): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1094",
-      messageParameters = Map("dataType" -> dataType.toString))
+      errorClass = "INVALID_SCHEMA.NON_STRUCT_TYPE",
+      messageParameters = Map(
+        "inputSchema" -> toSQLExpr(exp),
+        "dataType" -> toSQLType(dataType)
+      ))
   }
 
   def keyValueInMapNotStringError(m: CreateMap): Throwable = {
@@ -2289,6 +2275,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("columnName" -> toSQLId(columnName)))
   }
 
+  def columnNotFoundError(colName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "COLUMN_NOT_FOUND",
+      messageParameters = Map(
+        "colName" -> toSQLId(colName),
+        "caseSensitiveConfig" -> toSQLConf(SQLConf.CASE_SENSITIVE.key)))
+  }
+
   def noSuchTableError(db: String, table: String): Throwable = {
     new NoSuchTableException(db = db, table = table)
   }
@@ -3209,8 +3203,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def columnNotInGroupByClauseError(expression: Expression): Throwable = {
     new AnalysisException(
-      errorClass = "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
-      messageParameters = Map("expression" -> toSQLExpr(expression))
+      errorClass = "MISSING_AGGREGATION",
+      messageParameters = Map(
+        "expression" -> toSQLExpr(expression),
+        "expressionAnyValue" -> toSQLExpr(new AnyValue(expression)))
     )
   }
 

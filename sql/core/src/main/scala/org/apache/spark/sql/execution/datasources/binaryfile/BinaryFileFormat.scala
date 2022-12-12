@@ -152,11 +152,11 @@ object BinaryFileFormat {
    *  - length (LongType): The length of the file in bytes.
    *  - content (BinaryType): The content of the file.
    */
-  val schema = StructType(
-    StructField(PATH, StringType, false) ::
-    StructField(MODIFICATION_TIME, TimestampType, false) ::
-    StructField(LENGTH, LongType, false) ::
-    StructField(CONTENT, BinaryType, true) :: Nil)
+  val schema = StructType(Array(
+    StructField(PATH, StringType, false),
+    StructField(MODIFICATION_TIME, TimestampType, false),
+    StructField(LENGTH, LongType, false),
+    StructField(CONTENT, BinaryType, true)))
 
   private[binaryfile] def createFilterFunction(filter: Filter): Option[FileStatus => Boolean] = {
     filter match {

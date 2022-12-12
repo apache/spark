@@ -145,7 +145,7 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     verifyCastFailure(
       cast(Literal(0L), DateType),
       DataTypeMismatch(
-        "CAST_WITH_FUN_SUGGESTION",
+        "CAST_WITH_FUNC_SUGGESTION",
         Map(
           "srcType" -> "\"BIGINT\"",
           "targetType" -> "\"DATE\"",
@@ -156,7 +156,7 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
         verifyCastFailure(
           cast(dateLiteral, numericType),
           DataTypeMismatch(
-            "CAST_WITH_FUN_SUGGESTION",
+            "CAST_WITH_FUNC_SUGGESTION",
             Map(
               "srcType" -> "\"DATE\"",
               "targetType" -> s""""${numericType.sql}"""",

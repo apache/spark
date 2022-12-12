@@ -93,10 +93,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
+  "errorClass" : "MISSING_AGGREGATION",
   "sqlState" : "42000",
   "messageParameters" : {
-    "expression" : "\"a\""
+    "expression" : "\"a\"",
+    "expressionAnyValue" : "\"any_value(a)\""
   }
 }
 
@@ -108,10 +109,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
+  "errorClass" : "MISSING_AGGREGATION",
   "sqlState" : "42000",
   "messageParameters" : {
-    "expression" : "\"a\""
+    "expression" : "\"a\"",
+    "expressionAnyValue" : "\"any_value(a)\""
   }
 }
 
@@ -349,10 +351,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
+  "errorClass" : "MISSING_AGGREGATION",
   "sqlState" : "42000",
   "messageParameters" : {
-    "expression" : "\"b\""
+    "expression" : "\"b\"",
+    "expressionAnyValue" : "\"any_value(b)\""
   }
 }
 

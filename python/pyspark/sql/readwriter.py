@@ -343,7 +343,7 @@ class DataFrameReader(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -463,7 +463,7 @@ class DataFrameReader(OptionUtils):
         **options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -535,7 +535,7 @@ class DataFrameReader(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -632,7 +632,7 @@ class DataFrameReader(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -740,7 +740,7 @@ class DataFrameReader(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -835,7 +835,7 @@ class DataFrameReader(OptionUtils):
         column : str, optional
             alias of ``partitionColumn`` option. Refer to ``partitionColumn`` in
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
         predicates : list, optional
             a list of expressions suitable for inclusion in WHERE clauses;
             each one defines one partition of the :class:`DataFrame`
@@ -849,7 +849,7 @@ class DataFrameReader(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -1004,7 +1004,7 @@ class DataFrameWriter(OptionUtils):
 
     def option(self, key: str, value: "OptionalPrimitiveType") -> "DataFrameWriter":
         """
-        Adds a output option for the underlying data source.
+        Adds an output option for the underlying data source.
 
         .. versionadded:: 1.5.0
 
@@ -1049,7 +1049,7 @@ class DataFrameWriter(OptionUtils):
         Parameters
         ----------
         **options : dict
-            The dictionary of string keys and prmitive-type values.
+            The dictionary of string keys and primitive-type values.
 
         Examples
         --------
@@ -1058,11 +1058,16 @@ class DataFrameWriter(OptionUtils):
 
         Specify the option 'nullValue' and 'header' with writing a CSV file.
 
+        >>> from pyspark.sql.types import StructType,StructField, StringType, IntegerType
+        >>> schema = StructType([
+        ...     StructField("age",IntegerType(),True),
+        ...     StructField("name",StringType(),True),
+        ... ])
         >>> import tempfile
         >>> with tempfile.TemporaryDirectory() as d:
         ...     # Write a DataFrame into a CSV file with 'nullValue' option set to 'Hyukjin Kwon',
         ...     # and 'header' option set to `True`.
-        ...     df = spark.createDataFrame([(100, "Hyukjin Kwon")], ["age", "name"])
+        ...     df = spark.createDataFrame([(100, None)], schema=schema)
         ...     df.write.options(nullValue="Hyukjin Kwon", header=True).mode(
         ...         "overwrite").format("csv").save(d)
         ...
@@ -1401,7 +1406,7 @@ class DataFrameWriter(OptionUtils):
         -----
         When `mode` is `Append`, if there is an existing table, we will use the format and
         options of the existing table. The column order in the schema of the :class:`DataFrame`
-        doesn't need to be same as that of the existing table. Unlike
+        doesn't need to be the same as that of the existing table. Unlike
         :meth:`DataFrameWriter.insertInto`, :meth:`DataFrameWriter.saveAsTable` will use the
         column names to find the correct column positions.
 
@@ -1480,7 +1485,7 @@ class DataFrameWriter(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -1545,7 +1550,7 @@ class DataFrameWriter(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -1592,7 +1597,7 @@ class DataFrameWriter(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -1667,7 +1672,7 @@ class DataFrameWriter(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -1742,7 +1747,7 @@ class DataFrameWriter(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -1804,7 +1809,7 @@ class DataFrameWriter(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
