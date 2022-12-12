@@ -17,29 +17,35 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.AnalysisErrorAt
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreePattern.{PARAMETER, TreePattern}
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, NullType}
+import org.apache.spark.sql.types.DataType
 
 /**
- * The expression represents a named parameter that should be replaces by a foldable expression.
+ * The expression represents a named parameter that should be replaces by a literal.
  *
  * @param name The identifier of the parameter without the marker.
  */
 case class Parameter(name: String) extends LeafExpression with Unevaluable {
   override lazy val resolved: Boolean = false
-  override def dataType: DataType = NullType
-  override def nullable: Boolean = true
+
+  private def unboundError(methodName: String): Nothing = {
+    throw SparkException.internalError(
+      s"Cannot call `$methodName()` of the unbound parameter `$name`.")
+  }
+  override def dataType: DataType = unboundError("dataType")
+  override def nullable: Boolean = unboundError("nullable")
+
   final override val nodePatterns: Seq[TreePattern] = Seq(PARAMETER)
 }
 
 
 /**
- * Finds all named parameters in the given plan and substitutes them by
- * foldable expressions of `args` values.
+ * Finds all named parameters in the given plan and substitutes them by literals of `args` values.
  */
 object Parameter extends QueryErrorsBase {
   def bind(plan: LogicalPlan, args: Map[String, Expression]): LogicalPlan = {
