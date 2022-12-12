@@ -254,6 +254,8 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
 
       // Put both file paths in spark.files
       sparkAppConf.set("spark.files", s"$HOST_PATH/$localFileName,${remoteFileFullPath}")
+      // Allows to properly read executor logs once the job is finished
+      sparkAppConf.set("spark.kubernetes.executor.deleteOnTermination", "false")
 
       // Run SparkPi and make sure that both files have been properly downloaded on running pods
       val examplesJar = Utils.getTestFileAbsolutePath(getExamplesJarName(), sparkHomeDir)
