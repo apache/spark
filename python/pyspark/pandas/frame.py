@@ -16,7 +16,7 @@
 #
 
 """
-A wrapper class for Spark DataFrame to behave similar to pandas DataFrame.
+A wrapper class for Spark DataFrame to behave like pandas DataFrame.
 """
 from collections import defaultdict, namedtuple
 from collections.abc import Mapping
@@ -189,7 +189,7 @@ triangle        3      180
 rectangle       4      360
 
 Add a scalar with operator version which returns the same
-results. Also the reverse version.
+results. Also, the reverse version.
 
 >>> df + 1
            angles  degrees
@@ -576,7 +576,7 @@ class DataFrame(Frame, Generic[T]):
                 combined.index.name = index_ps.name
             else:
                 # drop un-matched rows in `data`
-                # note that `combine_frames` can not work with a MultiIndex for now
+                # note that `combine_frames` cannot work with a MultiIndex for now
                 combined = combine_frames(data_df, index_df, how="right")
                 combined_labels = combined._internal.column_labels
                 index_labels = [label for label in combined_labels if label[0] == "that"]
@@ -637,7 +637,7 @@ class DataFrame(Frame, Generic[T]):
         `anchor_force_disconnect` flag is set to True, disconnect the original anchor and create
         a new one.
 
-        If `check_same_anchor` is `False`, checking whether or not the same anchor is ignored
+        If `check_same_anchor` is `False`, checking whether the same anchor is ignored
         and force to update the InternalFrame, e.g., replacing the internal with the resolved_copy,
         updating the underlying Spark DataFrame which need to combine a different Spark DataFrame.
 
@@ -1263,7 +1263,7 @@ class DataFrame(Frame, Generic[T]):
         Parameters
         ----------
         func : callable
-            Python function, returns a single value from a single value.
+            Python function returns a single value from a single value.
 
         Returns
         -------
@@ -1292,7 +1292,7 @@ class DataFrame(Frame, Generic[T]):
         0   1.000000   4.494400
         1  11.262736  20.857489
 
-        You can omit the type hint and let pandas-on-Spark infer its type.
+        You can omit type hint and let pandas-on-Spark infer its type.
 
         >>> df.applymap(lambda x: x ** 2)
                    0          1
@@ -1405,7 +1405,7 @@ class DataFrame(Frame, Generic[T]):
         with option_context("compute.default_index_type", "distributed"):
             psdf: DataFrame = DataFrame(GroupBy._spark_groupby(self, func))
 
-            # The codes below basically converts:
+            # The codes below basically convert:
             #
             #           A         B
             #         sum  min  min  max
@@ -1660,7 +1660,7 @@ class DataFrame(Frame, Generic[T]):
         other : DataFrame, Series
             Object with which to compute correlations.
         axis : int, default 0 or 'index'
-            Can only be set to 0 at the moment.
+            Can only be set to 0 now.
         drop : bool, default False
             Drop missing indices from result.
         method : {'pearson', 'spearman', 'kendall'}
@@ -1972,7 +1972,7 @@ class DataFrame(Frame, Generic[T]):
         The column names will be renamed to positional names if they are
         invalid Python identifiers, repeated, or start with an underscore.
         On python versions < 3.7 regular tuples are returned for DataFrames
-        with a large number of columns (>254).
+        with many columns (>254).
 
         Examples
         --------
@@ -2164,7 +2164,7 @@ class DataFrame(Frame, Generic[T]):
         buf : StringIO-like, optional
             Buffer to write to.
         columns : sequence, optional, default None
-            The subset of columns to write. Writes all columns by default.
+            The subset of columns to write. Write all columns is default.
         col_space : int, optional
             The minimum width of each column.
         header : bool, optional
@@ -2177,11 +2177,11 @@ class DataFrame(Frame, Generic[T]):
         formatters : list or dict of one-param. functions, optional
             Formatter functions to apply to columns' elements by position or
             name.
-            The result of each function must be a unicode string.
+            The result of each function must be a Unicode string.
             List must be of length equal to the number of columns.
         float_format : one-parameter function, optional, default None
             Formatter function to apply to columns' elements if they are
-            floats. The result of this function must be a unicode string.
+            floats. The result of this function must be a Unicode string.
         sparsify : bool, optional, default True
             Set to False for a DataFrame with a hierarchical index to print
             every multiindex key at each row.
@@ -2229,7 +2229,7 @@ class DataFrame(Frame, Generic[T]):
 
         Returns
         -------
-        str (or unicode, depending on data and options)
+        str (or Unicode, depending on data and options)
             String representation of the dataframe.
 
         See Also
@@ -2280,7 +2280,7 @@ class DataFrame(Frame, Generic[T]):
         buf : StringIO-like, optional
             Buffer to write to.
         columns : sequence, optional, default None
-            The subset of columns to write. Writes all columns by default.
+            The subset of columns to write. Write all columns is default.
         col_space : int, optional
             The minimum width of each column.
         header : bool, optional
@@ -2293,11 +2293,11 @@ class DataFrame(Frame, Generic[T]):
         formatters : list or dict of one-param. functions, optional
             Formatter functions to apply to columns' elements by position or
             name.
-            The result of each function must be a unicode string.
+            The result of each function must be a Unicode string.
             List must be of length equal to the number of columns.
         float_format : one-parameter function, optional, default None
             Formatter function to apply to columns' elements if they are
-            floats. The result of this function must be a unicode string.
+            floats. The result of this function must be a Unicode string.
         sparsify : bool, optional, default True
             Set to False for a DataFrame with a hierarchical index to print
             every multiindex key at each row.
@@ -2332,7 +2332,7 @@ class DataFrame(Frame, Generic[T]):
 
         Returns
         -------
-        str (or unicode, depending on data and options)
+        str (or Unicode, depending on data and options)
             String representation of the dataframe.
 
         See Also
@@ -2500,7 +2500,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         buf : file descriptor or None
             Buffer to write to. If None, the output is returned as a string.
         columns : list of label, optional
-            The subset of columns to write. Writes all columns by default.
+            The subset of columns to write. Write all columns is default.
         col_space : int, optional
             The minimum width of each column.
         header : bool or list of str, default True
@@ -2512,13 +2512,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             Missing data representation.
         formatters : list of functions or dict of {str: function}, optional
             Formatter functions to apply to columns’ elements by position or name. The result of
-            each function must be a unicode string. List must be of length equal to the number of
+            each function must be a Unicode string. List must be of length equal to the number of
             columns.
         float_format : str, optional
             Format string for floating point numbers.
         sparsify : bool, optional
             Set to False for a DataFrame with a hierarchical index to print every multiindex key at
-            each row. By default, the value will be read from the config module.
+            each row. Default the value will be read from the config module.
         index_names : bool, default True
             Prints the names of the indexes.
         bold_rows : bool, default False
@@ -2528,11 +2528,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             default, ‘l’ will be used for all columns except columns of numbers, which default
             to ‘r’.
         longtable : bool, optional
-            By default, the value will be read from the pandas config module. Use a longtable
+            Default the value will be read from the pandas config module. Use a longtable
             environment instead of tabular. Requires adding a usepackage{longtable} to your LaTeX
             preamble.
         escape : bool, optional
-            By default, the value will be read from the pandas config module. When set to False
+            Default the value will be read from the pandas config module. When set to False
             prevents from escaping latex special characters in column names.
         encoding : str, optional
             A string representing the encoding to use in the output file, defaults to ‘ascii’ on
@@ -2599,7 +2599,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         .. note:: This method is based on an expensive operation due to the nature
             of big data. Internally it needs to generate each row for each value, and
             then group twice - it is a huge operation. To prevent misuse, this method
-            has the 'compute.max_rows' default limit of input length, and raises a ValueError.
+            has the 'compute.max_rows' default limit of input length and raises a ValueError.
 
                 >>> from pyspark.pandas.config import option_context
                 >>> with option_context('compute.max_rows', 1000):  # doctest: +NORMALIZE_WHITESPACE
@@ -2694,7 +2694,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             pdf = self.head(max_compute_count + 1)._to_internal_pandas()
             if len(pdf) > max_compute_count:
                 raise ValueError(
-                    "Current DataFrame has more then the given limit {0} rows. "
+                    "Current DataFrame's length exceeds the given limit of {0} rows. "
                     "Please set 'compute.max_rows' by using 'pyspark.pandas.config.set_option' "
                     "to retrieve more than {0} rows. Note that, before changing the "
                     "'compute.max_rows', this operation is considerably expensive.".format(
@@ -2798,7 +2798,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         either the DataFrame's index (``axis=0``) or the DataFrame's columns
         (``axis=1``).
 
-        See also `Transform and apply a function
+        See also `Transform and apply a function #upgrade link
         <https://koalas.readthedocs.io/en/latest/user_guide/transform_apply.html>`_.
 
         .. note:: when `axis` is 0 or 'index', the `func` is unable to access
@@ -2843,7 +2843,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             `c0, c1, c2 ... cn`. These names are positionally mapped to the returned
             DataFrame in ``func``.
 
-            To specify the column names, you can assign them in a pandas friendly style as below:
+            To specify the column names, you can assign them in a pandas style as below:
 
             >>> def plus_one(x) -> ps.DataFrame[("index", int), [("a", float), ("b", float)]]:
             ...     return x + 1
@@ -2903,7 +2903,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         1  2.0  3.0
         2  2.0  3.0
 
-        You can omit the type hint and let pandas-on-Spark infer its type.
+        You can omit type hint and let pandas-on-Spark infer its type.
 
         >>> df.apply(np.sqrt, axis=0)
              A    B
@@ -2922,7 +2922,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         2    13
         dtype: int64
 
-        Likewise, you can omit the type hint and let pandas-on-Spark infer its type.
+        You can omit type hint and let pandas-on-Spark infer its type.
 
         >>> df.apply(np.sum, axis=1)
         0    13
@@ -2944,7 +2944,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         2    [1, 2]
         dtype: object
 
-        In order to specify the types when `axis` is '1', it should use DataFrame[...]
+        To specify the types when `axis` is '1', it should use DataFrame[...]
         annotation. In this case, the column names are automatically generated.
 
         >>> def identify(x) -> ps.DataFrame[('index', int), [('A', np.int64), ('B', np.int64)]]:
@@ -2975,7 +2975,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             assert callable(func), "the first argument should be a callable function."
             f = func
             # Note that the return type hint specified here affects actual return
-            # type in Spark (e.g., infer_return_type). And, MyPy does not allow
+            # type in Spark (e.g., infer_return_type). And MyPy does not allow
             # redefinition of a function.
             func = lambda *args, **kwargs: f(*args, **kwargs)  # noqa: E731
 
@@ -3124,7 +3124,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Call ``func`` on self producing a Series with transformed values
         and that has the same length as its input.
 
-        See also `Transform and apply a function
+        See also `Transform and apply a function #upgrade link
         <https://koalas.readthedocs.io/en/latest/user_guide/transform_apply.html>`_.
 
         .. note:: this API executes the function once to infer the type which is
@@ -3153,7 +3153,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             Function to use for transforming the data. It must work when pandas Series
             is passed.
         axis : int, default 0 or 'index'
-            Can only be set to 0 at the moment.
+            Can only be set to 0 now.
         *args
             Positional arguments to pass to func.
         **kwargs
@@ -3191,7 +3191,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         1  1  4
         2  4  9
 
-        You can omit the type hint and let pandas-on-Spark infer its type.
+        You can omit type hint and let pandas-on-Spark infer its type.
 
         >>> df.transform(lambda x: x ** 2)
            A  B
@@ -3576,7 +3576,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             return pdf.between_time(start_time, end_time, include_start, include_end).reset_index()
 
         # apply_batch will remove the index of the pandas-on-Spark DataFrame and attach a
-        # default index, which will never be used. So use "distributed" index as a dummy to
+        # default index, which will never be used. Use "distributed" index as a dummy to
         # avoid overhead.
         with option_context("compute.default_index_type", "distributed"):
             psdf = psdf.pandas_on_spark.apply_batch(pandas_between_time)
@@ -3655,7 +3655,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             return pdf.at_time(time, asof, axis).reset_index()
 
         # apply_batch will remove the index of the pandas-on-Spark DataFrame and attach
-        # a default index, which will never be used. So use "distributed" index as a dummy
+        # a default index, which will never be used. Use "distributed" index as a dummy
         # to avoid overhead.
         with option_context("compute.default_index_type", "distributed"):
             psdf = psdf.pandas_on_spark.apply_batch(pandas_at_time)
@@ -3687,7 +3687,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         other : scalar, DataFrame
             Entries where cond is False are replaced with corresponding value from other.
         axis : int, default None
-            Can only be set to 0 at the moment for compatibility with pandas.
+            Can only be set to 0 now for compatibility with pandas.
 
         Returns
         -------
@@ -4148,13 +4148,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             Only remove the given levels from the index. Removes all levels by
             default.
         drop : bool, default False
-            Do not try to insert index into dataframe columns. This resets
+            Do not try to insert index into dataframe columns. This reset
             the index to the default integer index.
         inplace : bool, default False
             Modify the DataFrame in place (do not create a new object).
         col_level : int or str, default 0
             If the columns have multiple levels, determines which level the
-            labels are inserted into. By default it is inserted into the first
+            labels are inserted into. Default it is inserted into the first
             level.
         col_fill : object, default ''
             If the columns have multiple levels, determines how the other
@@ -4625,7 +4625,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         periods : int, default 1
             Periods to shift for calculating difference, accepts negative values.
         axis : int, default 0 or 'index'
-            Can only be set to 0 at the moment.
+            Can only be set to 0 now.
 
         Returns
         -------
@@ -4698,7 +4698,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Parameters
         ----------
         axis : int, default 0 or 'index'
-            Can only be set to 0 at the moment.
+            Can only be set to 0 now.
         dropna : bool, default True
             Don’t include NaN in the count.
         approx: bool, default False
@@ -4897,7 +4897,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ----------
         subset : column label or sequence of labels, optional
             Only consider certain columns for identifying duplicates,
-            by default use all of the columns
+            default use all of the columns
         keep : {'first', 'last', False}, default 'first'
            - ``first`` : Mark duplicates as ``True`` except for the first occurrence.
            - ``last`` : Mark duplicates as ``True`` except for the last occurrence.
@@ -4979,7 +4979,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         .. note:: This method is based on an expensive operation due to the nature
             of big data. Internally it needs to generate each row for each value, and
             then group twice - it is a huge operation. To prevent misuse, this method
-            has the 'compute.max_rows' default limit of input length, and raises a ValueError.
+            has the 'compute.max_rows' default limit of input length and raises a ValueError.
 
                 >>> from pyspark.pandas.config import option_context
                 >>> with option_context(
@@ -5011,7 +5011,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Notes
         -----
-        The dimensions of DataFrame and other must be compatible in order to
+        The dimensions of DataFrame and other must be compatible to
         compute the matrix multiplication. In addition, the column names of
         DataFrame and the index of other must contain the same values, as they
         will be aligned prior to the multiplication.
@@ -5103,7 +5103,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             Names of partitioning columns
         index_col: str or list of str, optional, default: None
             Column names to be used in Spark to represent pandas-on-Spark's index. The index name
-            in pandas-on-Spark is ignored. By default, the index is always lost.
+            in pandas-on-Spark is ignored. Default the index is always lost.
         options : dict
             All other options passed directly into Delta Lake.
 
@@ -5193,7 +5193,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             value specified in `spark.sql.parquet.compression.codec`.
         index_col: str or list of str, optional, default: None
             Column names to be used in Spark to represent pandas-on-Spark's index. The index name
-            in pandas-on-Spark is ignored. By default, the index is always lost.
+            in pandas-on-Spark is ignored. Default the index is always lost.
         options : dict
             All other options passed directly into Spark's data source.
 
@@ -5275,7 +5275,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             Names of partitioning columns
         index_col: str or list of str, optional, default: None
             Column names to be used in Spark to represent pandas-on-Spark's index. The index name
-            in pandas-on-Spark is ignored. By default, the index is always lost.
+            in pandas-on-Spark is ignored. Default the index is always lost.
         options : dict
             All other options passed directly into Spark's data source.
 
@@ -6214,7 +6214,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         Trim values at input threshold(s).
 
-        Assigns values outside boundary to boundary values.
+        Assigns values outside boundary-to-boundary values.
 
         Parameters
         ----------
@@ -6788,9 +6788,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         4  NaN  5.0  NaN
         5  NaN  NaN  6.0
 
-        Notice that, unlike pandas raises an ValueError when duplicated values are found,
-        pandas-on-Spark's pivot still works with its first value it meets during operation because
-        pivot is an expensive operation and it is preferred to permissively execute over failing
+        Notice that, unlike pandas raises an ValueError when duplicated values are found.
+        Pandas-on-Spark's pivot still works with its first value it meets during operation because
+        pivot is an expensive operation, and it is preferred to permissively execute over failing
         fast when processing large data.
 
         >>> df = ps.DataFrame({"foo": ['one', 'one', 'two', 'two'],
@@ -6810,7 +6810,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         one  1.0  NaN  NaN
         two  NaN  3.0  4.0
 
-        It also support multi-index and multi-index column.
+        It also supports multi-index and multi-index column.
         >>> df.columns = pd.MultiIndex.from_tuples([('a', 'foo'), ('a', 'bar'), ('b', 'baz')])
 
         >>> df = df.set_index(('a', 'bar'), append=True)
@@ -7260,10 +7260,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         axis : {0 or 'index', 1 or 'columns'}, default 0
 
             .. versionchanged:: 3.3
-               Set dropping by index by default.
+               Set dropping by index is default.
         index : single label or list-like
             Alternative to specifying axis (``labels, axis=0``
-            is quivalent to ``index=columns``).
+            is equivalent to ``index=columns``).
 
             .. versionchanged:: 3.3
                Added dropping rows by 'index'.
@@ -7595,7 +7595,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         inplace : bool, default False
             if True, perform operation in-place
         kind : str, default None
-            pandas-on-Spark does not allow specifying the sorting algorithm at the moment,
+            pandas-on-Spark does not allow specifying the sorting algorithm now,
             default None
         na_position : {‘first’, ‘last’}, default ‘last’
             first puts NaNs at the beginning, last puts NaNs at the end. Not implemented for
@@ -7679,10 +7679,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         inplace = validate_bool_kwarg(inplace, "inplace")
         axis = validate_axis(axis)
         if axis != 0:
-            raise NotImplementedError("No other axis than 0 are supported at the moment")
+            raise NotImplementedError("No other axis than 0 are supported now")
         if kind is not None:
             raise NotImplementedError(
-                "Specifying the sorting algorithm is not supported at the moment."
+                "Specifying the sorting algorithm is not supported now."
             )
 
         if level is None or (is_list_like(level) and len(level) == 0):  # type: ignore[arg-type]
@@ -8014,7 +8014,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         d  3
         e  3
 
-        When using keep='first' (by default), ties are resolved in order:
+        When using keep='first' (default), ties are resolved in order:
 
         >>> tied_df.nlargest(3, 'X')
            X
@@ -8118,7 +8118,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         d  2
         e  3
 
-        When using keep='first' (by default), ties are resolved in order:
+        When using keep='first' (default), ties are resolved in order:
 
         >>> tied_df.nsmallest(3, 'X')
            X
@@ -9935,7 +9935,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         IE10               404           0.08
         Konqueror          301           1.00
 
-        Create a new index and reindex the dataframe. By default
+        Create a new index and reindex the dataframe. Default
         values in the new index that do not have corresponding
         records in the dataframe are assigned ``NaN``.
 
@@ -10669,7 +10669,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         If the index is not a MultiIndex, the output will be a Series.
 
         .. note:: If the index is a MultiIndex, the output DataFrame could be very wide, and
-            it could cause a serious performance degradation since Spark partitions it row based.
+            it could cause a serious performance degradation since Spark partitions its row based.
 
         Returns
         -------
@@ -10862,7 +10862,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ...    'col6': [True, False, None]},
         ...    columns=['col1', 'col2', 'col3', 'col4', 'col5', 'col6'])
 
-        Default behaviour checks if column-wise values all return True.
+        Default behavior checks if column-wise values all return True.
 
         >>> df.all()
         col1     True
@@ -10948,7 +10948,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ...    'col6': [True, False, None]},
         ...    columns=['col1', 'col2', 'col3', 'col4', 'col5', 'col6'])
 
-        Default behaviour checks if column-wise values all return True.
+        Default behavior checks if column-wise values all return True.
 
         >>> df.any()
         col1    False
@@ -11114,7 +11114,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         2  2.5  2.0
         3  4.0  1.0
 
-        If method is set to 'min', it use lowest rank in group.
+        If method is set to 'min', it uses lowest rank in group.
 
         >>> df.rank(method='min').sort_index()
              A    B
@@ -11123,7 +11123,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         2  2.0  2.0
         3  4.0  1.0
 
-        If method is set to 'max', it use highest rank in group.
+        If method is set to 'max', it uses highest rank in group.
 
         >>> df.rank(method='max').sort_index()
              A    B
@@ -11192,7 +11192,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         regex : string (regular expression)
             Keep labels from axis for which re.search(regex, label) == True.
         axis : int or string axis name
-            The axis to filter on.  By default this is the info axis,
+            The axis to filter on. Default this is the info axis,
             'index' for Series, 'columns' for DataFrame.
 
         Returns
@@ -11376,7 +11376,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         errors : {'ignore', 'raise'}, default 'ignore'
             If 'raise', raise a `KeyError` when a dict-like `mapper`, `index`, or `columns`
             contains labels that are not present in the Index being transformed. If 'ignore',
-            existing keys will be renamed and extra keys will be ignored.
+            existing keys will be renamed, and extra keys will be ignored.
 
         Returns
         -------
@@ -11849,7 +11849,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Parameters
         ----------
         axis : 0 or 'index'
-            Can only be set to 0 at the moment.
+            Can only be set to 0 now.
 
         Returns
         -------
@@ -11927,7 +11927,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Parameters
         ----------
         axis : 0 or 'index'
-            Can only be set to 0 at the moment.
+            Can only be set to 0 now.
 
         Returns
         -------
@@ -12005,7 +12005,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         verbose : bool, optional
             Whether to print the full summary.
         buf : writable buffer, defaults to sys.stdout
-            Where to send the output. By default, the output is printed to
+            Where to send the output. Default the output is printed to
             sys.stdout. Pass a writable buffer if you need to further process
             the output.
         max_cols : int, optional
@@ -12129,20 +12129,20 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         q : float or array-like, default 0.5 (50% quantile)
             0 <= q <= 1, the quantile(s) to compute.
         axis : int or str, default 0 or 'index'
-            Can only be set to 0 at the moment.
+            Can only be set to 0 now.
         numeric_only : bool, default True
-            If False, the quantile of datetime and timedelta data will be computed as well.
-            Can only be set to True at the moment.
+            If False, the quantile of datetime and time delta data will be computed as well.
+            Can only be set to True now.
         accuracy : int, optional
             Default accuracy of approximation. Larger value means better accuracy.
-            The relative error can be deduced by 1.0 / accuracy.
+            The relative error can be reduced by 1.0 / accuracy.
 
         Returns
         -------
         Series or DataFrame
-            If q is an array, a DataFrame will be returned where the
+            If q is an array, a DataFrame will be returned were the
             index is q, the columns are the columns of self, and the values are the quantiles.
-            If q is a float, a Series will be returned where the
+            If q is a float, a Series will be returned were the
             index is the columns of self and the values are the quantiles.
 
         Examples
@@ -12283,8 +12283,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             pandas specific syntax such as `@` is not supported. If you want the pandas syntax,
             you can work around with :meth:`DataFrame.pandas_on_spark.apply_batch`, but you should
             be aware that `query_func` will be executed at different nodes in a distributed manner.
-            So, for example, to use `@` syntax, make sure the variable is serialized by, for
-            example, putting it within the closure as below.
+            So, for example to use `@` syntax, make sure the variable is serialized by
+            putting it within the closure as below.
 
             >>> df = ps.DataFrame({'A': range(2000), 'B': range(2000)})
             >>> def query_func(pdf):
@@ -12505,7 +12505,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         4     7
         dtype: int64
 
-        Assignment is allowed though by default the original DataFrame is not
+        Assignment is allowed though default the original DataFrame is not
         modified.
 
         >>> df.eval('C = A + B')
@@ -12793,7 +12793,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         spider   arthropod     8    0.0
         ostrich       bird     2    NaN
 
-        By default, missing values are not considered, and the mode of wings
+        Default missing values are not considered, and the mode of wings
         are both 0 and 2. Because the resulting DataFrame has two rows,
         the second row of ``species`` and ``legs`` contains ``NaN``.
 
@@ -13158,7 +13158,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         orient : {'columns', 'index'}, default 'columns'
             The "orientation" of the data. If the keys of the passed dict
             should be the columns of the resulting DataFrame, pass 'columns'
-            (default). Otherwise if the keys should be rows, pass 'index'.
+            (default). Otherwise, if the keys should be rows, pass 'index'.
         dtype : dtype, default None
             Data type to force, otherwise infer.
         columns : list, default None
@@ -13177,7 +13177,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        By default the keys of the dict become the DataFrame columns:
+        Default the keys of the dict become the DataFrame columns:
 
         >>> data = {'col_1': [3, 2, 1, 0], 'col_2': [10, 20, 30, 40]}
         >>> ps.DataFrame.from_dict(data)
@@ -13572,7 +13572,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
 def _reduce_spark_multi(sdf: SparkDataFrame, aggs: List[Column]) -> Any:
     """
-    Performs a reduction on a spark DataFrame, the functions being known sql aggregate functions.
+    Performs a reduction on a spark DataFrame, the functions being known SQL aggregate functions.
     """
     assert isinstance(sdf, SparkDataFrame)
     sdf0 = sdf.agg(*aggs)
