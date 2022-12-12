@@ -23,7 +23,6 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 public class JavaSparkSessionSuite {
@@ -54,20 +53,5 @@ public class JavaSparkSessionSuite {
     for (Map.Entry<String, Object> e : map.entrySet()) {
       Assert.assertEquals(spark.conf().get(e.getKey()), e.getValue().toString());
     }
-  }
-
-  @Test
-  public void sqlParameters() {
-    spark = SparkSession.builder().master("local[*]").appName("testing").getOrCreate();
-    Map params = new HashMap();
-    params.put("_i1", "INTERVAL '1-1' YEAR TO MONTH");
-    params.put("p2", "'a\"bc'");
-    Dataset ds = spark.sql(
-      "SELECT :p2, i FROM VALUES (INTERVAL '2-2' YEAR TO MONTH) AS t(i) WHERE i > :_i1",
-      params);
-    List<Row> rows = ds.collectAsList();
-    Assert.assertEquals(1, rows.size());
-    Assert.assertEquals("a\"bc", rows.get(0).getString(0));
-    Assert.assertEquals(java.time.Period.of(2, 2, 0), rows.get(0).get(1));
   }
 }
