@@ -351,6 +351,10 @@ final class ShuffleBlockFetcherIterator(
           }
         }
       }
+
+      override def onSaslTimeout(): Unit = {
+        context.taskMetrics().incSaslRequestRetries(1)
+      }
     }
 
     // Fetch remote shuffle blocks to disk when the request is too large. Since the shuffle data is
