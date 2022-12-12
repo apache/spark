@@ -133,7 +133,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   // Visible for testing.
   private[history] val listing: KVStore = {
-    KVUtils.createKVStore(storePath, hybridStoreDiskBackend, conf)
+    KVUtils.createKVStore(storePath, live = false, conf)
   }
 
   private val diskManager = storePath.map { path =>

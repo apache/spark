@@ -124,16 +124,29 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       Seq(ArrayData(Seq(1, 2, 3), Seq(Seq(1, 2, 3)))).toDF().write.saveAsTable(tableName)
 
       // Test unsupported data types
-      val err1 = intercept[AnalysisException] {
-        sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS data")
-      }
-      assert(err1.message.contains("does not support statistics collection"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS data")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1235",
+        parameters = Map(
+          "name" -> "data",
+          "tableIdent" -> "`spark_catalog`.`default`.`column_stats_test1`",
+          "dataType" -> "ArrayType(IntegerType,true)"
+        )
+      )
 
       // Test invalid columns
-      val err2 = intercept[AnalysisException] {
-        sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS some_random_column")
-      }
-      assert(err2.message.contains("does not exist"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS some_random_column")
+        },
+        errorClass = "COLUMN_NOT_FOUND",
+        parameters = Map(
+          "colName" -> "`some_random_column`",
+          "caseSensitiveConfig" -> "\"spark.sql.caseSensitive\""
+        )
+      )
     }
   }
 

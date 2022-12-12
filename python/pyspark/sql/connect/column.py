@@ -21,18 +21,21 @@ import json
 import decimal
 import datetime
 
-from pyspark.sql.types import TimestampType, DayTimeIntervalType, DateType
+from pyspark.sql.types import TimestampType, DayTimeIntervalType, DataType, DateType
 
 import pyspark.sql.connect.proto as proto
+from pyspark.sql.connect.types import pyspark_types_to_proto_types
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import ColumnOrName
+    from pyspark.sql.connect._typing import ColumnOrName, PrimitiveType
     from pyspark.sql.connect.client import SparkConnectClient
     import pyspark.sql.connect.proto as proto
 
-# TODO(SPARK-41329): solve the circular import between _typing and this class
-# if we want to reuse _type.PrimitiveType
-PrimitiveType = Union[bool, float, int, str]
+
+JVM_INT_MIN = -(1 << 31)
+JVM_INT_MAX = (1 << 31) - 1
+JVM_LONG_MIN = -(1 << 63)
+JVM_LONG_MAX = (1 << 63) - 1
 
 
 def _func_op(name: str, doc: str = "") -> Callable[["Column"], "Column"]:
@@ -183,7 +186,12 @@ class LiteralExpression(Expression):
         elif isinstance(self._value, bool):
             expr.literal.boolean = bool(self._value)
         elif isinstance(self._value, int):
-            expr.literal.long = int(self._value)
+            if JVM_INT_MIN <= self._value <= JVM_INT_MAX:
+                expr.literal.integer = int(self._value)
+            elif JVM_LONG_MIN <= self._value <= JVM_LONG_MAX:
+                expr.literal.long = int(self._value)
+            else:
+                raise ValueError(f"integer {self._value} out of bounds")
         elif isinstance(self._value, float):
             expr.literal.double = float(self._value)
         elif isinstance(self._value, str):
@@ -327,6 +335,7 @@ class UnresolvedFunction(Expression):
         self,
         name: str,
         args: Sequence["Expression"],
+        is_distinct: bool = False,
     ) -> None:
         super().__init__()
 
@@ -336,15 +345,45 @@ class UnresolvedFunction(Expression):
         assert isinstance(args, list) and all(isinstance(arg, Expression) for arg in args)
         self._args = args
 
+        assert isinstance(is_distinct, bool)
+        self._is_distinct = is_distinct
+
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
         fun = proto.Expression()
         fun.unresolved_function.function_name = self._name
         if len(self._args) > 0:
             fun.unresolved_function.arguments.extend([arg.to_plan(session) for arg in self._args])
+        fun.unresolved_function.is_distinct = self._is_distinct
         return fun
 
     def __repr__(self) -> str:
-        return f"({self._name} ({', '.join([str(arg) for arg in self._args])}))"
+        if self._is_distinct:
+            return f"{self._name}(distinct {', '.join([str(arg) for arg in self._args])})"
+        else:
+            return f"{self._name}({', '.join([str(arg) for arg in self._args])})"
+
+
+class CastExpression(Expression):
+    def __init__(
+        self,
+        col: "Column",
+        data_type: Union[DataType, str],
+    ) -> None:
+        super().__init__()
+        self._col = col
+        self._data_type = data_type
+
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
+        fun = proto.Expression()
+        fun.cast.expr.CopyFrom(self._col.to_plan(session))
+        if isinstance(self._data_type, str):
+            fun.cast.type_str = self._data_type
+        else:
+            fun.cast.type.CopyFrom(pyspark_types_to_proto_types(self._data_type))
+        return fun
+
+    def __repr__(self) -> str:
+        return f"({self._col} ({self._data_type}))"
 
 
 class Column:
@@ -357,6 +396,10 @@ class Column:
     """
 
     def __init__(self, expr: Expression) -> None:
+        if not isinstance(expr, Expression):
+            raise TypeError(
+                f"Cannot construct column expected Expression, got {expr} ({type(expr)})"
+            )
         self._expr = expr
 
     __gt__ = _bin_op(">")
@@ -510,8 +553,15 @@ class Column:
     isNull = _unary_op("isNull", _isNull_doc)
     isNotNull = _unary_op("isNotNull", _isNotNull_doc)
 
+    def __ne__(  # type: ignore[override]
+        self,
+        other: Any,
+    ) -> "Column":
+        """binary function"""
+        return _func_op("not")(_bin_op("==")(self, other))
+
     # string methods
-    def contains(self, other: Union[PrimitiveType, "Column"]) -> "Column":
+    def contains(self, other: Union["PrimitiveType", "Column"]) -> "Column":
         """
         Contains the other element. Returns a boolean :class:`Column` based on a string match.
 
@@ -655,6 +705,9 @@ class Column:
         >>> df.select(df.name.substr(1, 3).alias("col")).collect()
         [Row(col='Ali'), Row(col='Bob')]
         """
+        from pyspark.sql.connect.function_builder import functions as F
+        from pyspark.sql.connect.functions import lit
+
         if type(startPos) != type(length):
             raise TypeError(
                 "startPos and length must be the same type. "
@@ -663,17 +716,16 @@ class Column:
                     length_t=type(length),
                 )
             )
-        from pyspark.sql.connect.function_builder import functions as F
 
         if isinstance(length, int):
-            length_exp = self._lit(length)
+            length_exp = lit(length)
         elif isinstance(length, Column):
             length_exp = length
         else:
             raise TypeError("Unsupported type for substr().")
 
         if isinstance(startPos, int):
-            start_exp = self._lit(startPos)
+            start_exp = lit(startPos)
         else:
             start_exp = startPos
 
@@ -683,8 +735,11 @@ class Column:
         """Returns a binary expression with the current column as the left
         side and the other expression as the right side.
         """
+        from pyspark.sql.connect._typing import PrimitiveType
+        from pyspark.sql.connect.functions import lit
+
         if isinstance(other, get_args(PrimitiveType)):
-            other = self._lit(other)
+            other = lit(other)
         return scalar_function("==", self, other)
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
@@ -714,10 +769,63 @@ class Column:
     def name(self) -> str:
         return self._expr.name()
 
-    # TODO(SPARK-41329): solve the circular import between functions.py and
-    # this class if we want to reuse functions.lit
-    def _lit(self, x: Any) -> "Column":
-        return Column(LiteralExpression(x))
+    def cast(self, dataType: Union[DataType, str]) -> "Column":
+        """
+        Casts the column into type ``dataType``.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        dataType : :class:`DataType` or str
+            a DataType or Python string literal with a DDL-formatted string
+            to use when parsing the column to the same type.
+
+        Returns
+        -------
+        :class:`Column`
+            Column representing whether each element of Column is cast into new type.
+        """
+        if isinstance(dataType, (DataType, str)):
+            return Column(CastExpression(col=self, data_type=dataType))
+        else:
+            raise TypeError("unexpected type: %s" % type(dataType))
 
     def __repr__(self) -> str:
         return "Column<'%s'>" % self._expr.__repr__()
+
+    def otherwise(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("otherwise() is not yet implemented.")
+
+    def over(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("over() is not yet implemented.")
+
+    def isin(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("isin() is not yet implemented.")
+
+    def when(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("when() is not yet implemented.")
+
+    def getItem(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("getItem() is not yet implemented.")
+
+    def astype(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("astype() is not yet implemented.")
+
+    def between(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("between() is not yet implemented.")
+
+    def getField(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("getField() is not yet implemented.")
+
+    def withField(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("withField() is not yet implemented.")
+
+    def dropFields(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("dropFields() is not yet implemented.")
+
+    def __getitem__(self, k: Any) -> None:
+        raise NotImplementedError("apply() - __getitem__ is not yet implemented.")
+
+    def __iter__(self) -> None:
+        raise TypeError("Column is not iterable")

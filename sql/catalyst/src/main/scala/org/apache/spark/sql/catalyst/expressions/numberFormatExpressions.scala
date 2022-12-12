@@ -224,17 +224,21 @@ case class TryToNumber(left: Expression, right: Expression)
   group = "string_funcs")
 case class ToCharacter(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
-  private lazy val numberFormat = right.eval().toString.toUpperCase(Locale.ROOT)
-  private lazy val numberFormatter = new ToNumberParser(numberFormat, true)
+  private lazy val numberFormatter = {
+    val value = right.eval()
+    if (value != null) {
+      new ToNumberParser(value.toString.toUpperCase(Locale.ROOT), true)
+    } else {
+      null
+    }
+  }
 
   override def dataType: DataType = StringType
   override def inputTypes: Seq[AbstractDataType] = Seq(DecimalType, StringType)
   override def checkInputDataTypes(): TypeCheckResult = {
     val inputTypeCheck = super.checkInputDataTypes()
     if (inputTypeCheck.isSuccess) {
-      if (right.foldable) {
-        numberFormatter.checkInputDataTypes()
-      } else {
+      if (!right.foldable) {
         DataTypeMismatch(
           errorSubClass = "NON_FOLDABLE_INPUT",
           messageParameters = Map(
@@ -243,6 +247,10 @@ case class ToCharacter(left: Expression, right: Expression)
             "inputExpr" -> toSQLExpr(right)
           )
         )
+      } else if (numberFormatter == null) {
+        TypeCheckResult.TypeCheckSuccess
+      } else {
+        numberFormatter.checkInputDataTypes()
       }
     } else {
       inputTypeCheck
@@ -260,7 +268,7 @@ case class ToCharacter(left: Expression, right: Expression)
     val result =
       code"""
          |${eval.code}
-         |boolean ${ev.isNull} = ${eval.isNull};
+         |boolean ${ev.isNull} = ${eval.isNull} || ($builder == null);
          |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
          |if (!${ev.isNull}) {
          |  ${ev.value} = $builder.format(${eval.value});

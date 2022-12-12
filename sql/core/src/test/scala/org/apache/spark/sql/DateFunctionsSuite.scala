@@ -49,6 +49,19 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
       sql("""SELECT CURDATE()""").collect().head.getDate(0))
     val d4 = DateTimeUtils.currentDate(ZoneId.systemDefault())
     assert(d0 <= d1 && d1 <= d2 && d2 <= d3 && d3 <= d4 && d4 - d0 <= 1)
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT CURDATE(1)")
+      },
+      errorClass = "WRONG_NUM_ARGS",
+      parameters = Map(
+        "functionName" -> "`curdate`",
+        "expectedNum" -> "0",
+        "actualNum" -> "1"
+      ),
+      context = ExpectedContext("", "", 7, 16, "CURDATE(1)")
+    )
   }
 
   test("function current_timestamp and now") {

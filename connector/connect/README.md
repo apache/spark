@@ -82,7 +82,7 @@ To use the release version of Spark Connect:
 
 ```bash
 # Run all Spark Connect Python tests as a module.
-./python/run-tests --module pyspark-connect
+./python/run-tests --module pyspark-connect --parallelism 1
 ```
 
 
