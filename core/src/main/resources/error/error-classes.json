@@ -1906,11 +1906,6 @@
       "<quoted> is a permanent view, which is not supported by streaming reading API such as `DataStreamReader.table` yet."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1020" : {
-    "message" : [
-      "Invalid usage of <elem> in <prettyName>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1021" : {
     "message" : [
       "count(<targetString>.*) is not allowed. Please use count(*) or expand the columns manually, e.g. count(col1, col2)."
