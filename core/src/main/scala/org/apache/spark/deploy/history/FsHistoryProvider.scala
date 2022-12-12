@@ -272,16 +272,16 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
     // Disable the background thread during tests.
     if (!conf.contains(IS_TESTING)) {
+      // A task that periodically checks for event log updates on disk.
+      logDebug(s"Scheduling update thread every $UPDATE_INTERVAL_S seconds")
+      pool.scheduleWithFixedDelay(
+        getRunner(() => checkForLogs()), 0, UPDATE_INTERVAL_S, TimeUnit.SECONDS)
+
       if (conf.get(CLEANER_ENABLED)) {
         // A task that periodically cleans event logs on disk.
         pool.scheduleWithFixedDelay(
           getRunner(() => cleanLogs()), 0, CLEAN_INTERVAL_S, TimeUnit.SECONDS)
       }
-
-      // A task that periodically checks for event log updates on disk.
-      logDebug(s"Scheduling update thread every $UPDATE_INTERVAL_S seconds")
-      pool.scheduleWithFixedDelay(
-        getRunner(() => checkForLogs()), 0, UPDATE_INTERVAL_S, TimeUnit.SECONDS)
 
       if (conf.contains(DRIVER_LOG_DFS_DIR) && conf.get(DRIVER_LOG_CLEANER_ENABLED)) {
         pool.scheduleWithFixedDelay(getRunner(() => cleanDriverLogs()),
@@ -535,11 +535,18 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             }
           } catch {
             case _: NoSuchElementException =>
-              // If the file is currently not being tracked by the SHS, add an entry for it and try
-              // to parse it. This will allow the cleaner code to detect the file as stale later on
-              // if it was not possible to parse it.
+              // If the file is currently not being tracked by the SHS, check whether the log file
+              // has expired, if expired, delete it from log dir, if not, add an entry for it and
+              // try to parse it. This will allow the cleaner code to detect the file as stale
+              // later on if it was not possible to parse it.
               try {
-                if (count < conf.get(UPDATE_BATCHSIZE)) {
+                if (conf.get(CLEANER_ENABLED) &&
+                  reader.modificationTime <
+                    clock.getTimeMillis() - conf.get(MAX_LOG_AGE_S) * 1000) {
+                  logInfo(s"Deleting expired event log ${reader.rootPath.toString}")
+                  deleteLog(fs, reader.rootPath)
+                  false
+                } else if (count < conf.get(UPDATE_BATCHSIZE)) {
                   listing.write(LogInfo(reader.rootPath.toString(), newLastScanTime,
                     LogType.EventLogs, None, None, reader.fileSizeForLastIndex, reader.lastIndex,
                     None, reader.completed))
@@ -977,20 +984,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         listing.delete(classOf[LogInfo], log.logPath)
       }
     }
-    // Delete log files that don't exist in listing database and exceed the configured max age.
-    Option(fs.listStatus(new Path(logDir))).map(_.toSeq).getOrElse(Nil)
-      .flatMap { entry => EventLogFileReader(fs, entry) }
-      .foreach { reader =>
-        try {
-          listing.read(classOf[LogInfo], reader.rootPath.toString)
-        } catch {
-          case _: NoSuchElementException =>
-            if (reader.modificationTime < maxTime) {
-              logInfo(s"Deleting unlisted event log ${reader.rootPath.toString}")
-              deleteLog(fs, reader.rootPath)
-            }
-        }
-      }
 
     // If the number of files is bigger than MAX_LOG_NUM,
     // clean up all completed attempts per application one by one.

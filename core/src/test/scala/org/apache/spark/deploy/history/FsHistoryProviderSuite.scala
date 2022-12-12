@@ -1708,8 +1708,8 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
   test("SPARK-41447: clean up expired event log files that don't exist in listing db") {
     val maxAge = TimeUnit.SECONDS.toMillis(10)
     val clock = new ManualClock(maxAge / 2)
-    val provider = new FsHistoryProvider(
-      createTestConf().set(MAX_LOG_AGE_S.key, s"${maxAge}ms"), clock)
+    val conf = createTestConf().set(MAX_LOG_AGE_S.key, s"${maxAge}ms").set(CLEANER_ENABLED, true)
+    val provider = new FsHistoryProvider(conf, clock)
 
     val log1 = newLogFile("app1", Some("attempt1"), inProgress = false)
     writeFile(log1, None,
@@ -1730,20 +1730,18 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
       SparkListenerApplicationStart("app2", Some("app1"), 3L, "test", Some("attempt1")),
       SparkListenerApplicationEnd(4L)
     )
-    log3.setLastModified(clock.getTimeMillis())
+    log3.setLastModified(0L)
 
     provider.getListing().size should be (0)
 
-    // Move the clock forward so log1 exceeds the max age.
+    // Move the clock forward so log1 and log3 exceed the max age.
     clock.advance(maxAge)
-    provider.cleanLogs()
+    // Avoid unnecessary parse, the expired log files would be cleaned by checkForLogs().
+    provider.checkForLogs()
+    provider.getListing().size should be (1)
     assert(!log1.exists())
-
-    // Do the same for the other log.
-    clock.advance(maxAge)
-    provider.cleanLogs()
-    assert(!log2.exists())
     assert(!log3.exists())
+    assert(log2.exists())
   }
 
   /**
