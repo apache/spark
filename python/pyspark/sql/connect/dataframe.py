@@ -30,6 +30,8 @@ from typing import (
     Type,
 )
 
+import sys
+import random
 import pandas
 import warnings
 from collections.abc import Iterable
@@ -921,7 +923,7 @@ class DataFrame(object):
     def randomSplit(
         self,
         weights: List[float],
-        seed: int,
+        seed: Optional[int] = None,
     ) -> List["DataFrame"]:
         """Randomly splits this :class:`DataFrame` with the provided weights.
 
@@ -943,6 +945,7 @@ class DataFrame(object):
         for w in weights:
             if w < 0.0:
                 raise ValueError("Weights must be positive. Found weight value: %s" % w)
+        seed = seed if seed is not None else random.randint(0, sys.maxsize)
         total = sum(weights)
         if total <= 0:
             raise ValueError("Sum of weights must be positive, but got: %s" % w)
@@ -962,7 +965,7 @@ class DataFrame(object):
                     lower_bound=lowerBound,
                     upper_bound=upperBound,
                     with_replacement=False,
-                    seed=seed,
+                    seed=int(seed),
                 ),
                 session=self._session,
             )
