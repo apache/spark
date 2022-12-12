@@ -5023,14 +5023,14 @@ def slice(
     """
     if isinstance(start, Column):
         _start = start
-    elif isinstance(start, str):
+    elif isinstance(start, int):
         _start = lit(start)
     else:
         raise TypeError(f"start should be a Column or int, but got {type(start).__name__}")
 
     if isinstance(length, Column):
         _length = length
-    elif isinstance(length, str):
+    elif isinstance(length, int):
         _length = lit(length)
     else:
         raise TypeError(f"start should be a Column or int, but got {type(length).__name__}")
