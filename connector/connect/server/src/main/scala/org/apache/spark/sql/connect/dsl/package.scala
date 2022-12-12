@@ -49,6 +49,15 @@ package object dsl {
               .newBuilder()
               .setUnparsedIdentifier(s))
           .build()
+
+      def colRegex: Expression =
+        Expression
+          .newBuilder()
+          .setUnresolvedRegex(
+            Expression.UnresolvedRegex
+              .newBuilder()
+              .setColName(s))
+          .build()
     }
 
     implicit class DslExpression(val expr: Expression) {

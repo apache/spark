@@ -492,6 +492,25 @@ class Expression(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["target", b"target"]
         ) -> None: ...
 
+    class UnresolvedRegex(google.protobuf.message.Message):
+        """Represents all of the input attributes to a given relational operator, for example in
+        "SELECT `(id)?+.+` FROM ...".
+        """
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        COL_NAME_FIELD_NUMBER: builtins.int
+        col_name: builtins.str
+        """(Required) The column name used to extract column with regex."""
+        def __init__(
+            self,
+            *,
+            col_name: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["col_name", b"col_name"]
+        ) -> None: ...
+
     class Alias(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -541,6 +560,7 @@ class Expression(google.protobuf.message.Message):
     UNRESOLVED_STAR_FIELD_NUMBER: builtins.int
     ALIAS_FIELD_NUMBER: builtins.int
     CAST_FIELD_NUMBER: builtins.int
+    UNRESOLVED_REGEX_FIELD_NUMBER: builtins.int
     @property
     def literal(self) -> global___Expression.Literal: ...
     @property
@@ -555,6 +575,8 @@ class Expression(google.protobuf.message.Message):
     def alias(self) -> global___Expression.Alias: ...
     @property
     def cast(self) -> global___Expression.Cast: ...
+    @property
+    def unresolved_regex(self) -> global___Expression.UnresolvedRegex: ...
     def __init__(
         self,
         *,
@@ -565,6 +587,7 @@ class Expression(google.protobuf.message.Message):
         unresolved_star: global___Expression.UnresolvedStar | None = ...,
         alias: global___Expression.Alias | None = ...,
         cast: global___Expression.Cast | None = ...,
+        unresolved_regex: global___Expression.UnresolvedRegex | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -583,6 +606,8 @@ class Expression(google.protobuf.message.Message):
             b"unresolved_attribute",
             "unresolved_function",
             b"unresolved_function",
+            "unresolved_regex",
+            b"unresolved_regex",
             "unresolved_star",
             b"unresolved_star",
         ],
@@ -604,6 +629,8 @@ class Expression(google.protobuf.message.Message):
             b"unresolved_attribute",
             "unresolved_function",
             b"unresolved_function",
+            "unresolved_regex",
+            b"unresolved_regex",
             "unresolved_star",
             b"unresolved_star",
         ],
@@ -618,6 +645,7 @@ class Expression(google.protobuf.message.Message):
         "unresolved_star",
         "alias",
         "cast",
+        "unresolved_regex",
     ] | None: ...
 
 global___Expression = Expression

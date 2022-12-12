@@ -21,6 +21,7 @@ from pyspark.sql.connect.column import (
     ColumnReference,
     UnresolvedFunction,
     SQLExpression,
+    UnresolvedRegex,
 )
 
 from typing import Any, TYPE_CHECKING, Union, List, overload, Optional, Tuple
@@ -87,6 +88,10 @@ def col(col: str) -> Column:
 
 
 column = col
+
+
+def colRegex(col: str) -> Column:
+    return Column(UnresolvedRegex(col))
 
 
 def lit(col: Any) -> Column:

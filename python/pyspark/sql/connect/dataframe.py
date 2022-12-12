@@ -41,7 +41,7 @@ from pyspark.sql.connect.column import (
     scalar_function,
     sql_expression,
 )
-from pyspark.sql.connect.functions import col, lit
+from pyspark.sql.connect.functions import col, colRegex, lit
 from pyspark.sql.types import (
     StructType,
     Row,
