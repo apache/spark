@@ -468,6 +468,22 @@ case class Union(
   override def output: Seq[Attribute] = children.map(_.output).transpose.map(mergeAttributes)
 
   override def metadataOutput: Seq[Attribute] = {
+    // This follows similar code in `CheckAnalysis` to check if the output of a Union is correct,
+    // but just silently doesn't return an output instead of throwing an error.
+    val refDataTypes = children.head.metadataOutput.map(_.dataType)
+    children.tail.foreach { child =>
+      // We can only propagate the metadata output correctly if every child has the same
+      // number of columns
+      if (child.metadataOutput.length != refDataTypes.length) return Nil
+      // Check if the data types match
+      val childDataTypes = child.metadataOutput.map(_.dataType)
+      childDataTypes.zip(refDataTypes).foreach { case (dt1, dt2) =>
+        if (!DataType.equalsStructurally(dt1, dt2, true)) {
+          return Nil
+        }
+      }
+    }
+    // If the metadata output matches, merge the attributes and return them
     children.map(_.metadataOutput).transpose.map(mergeAttributes)
   }
 

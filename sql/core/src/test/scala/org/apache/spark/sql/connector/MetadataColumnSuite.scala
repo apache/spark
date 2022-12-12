@@ -233,13 +233,38 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("Metadata column is propagated through union") {
+  test("SPARK-41498: Metadata column is propagated through union") {
     withTable(tbl) {
       prepareTable()
       val df = spark.table(tbl)
       val dfQuery = df.union(df).select("id", "data", "index", "_partition")
       val expectedAnswer = Seq(Row(1, "a", 0, "3/1"), Row(2, "b", 0, "0/2"), Row(3, "c", 0, "1/3"))
       checkAnswer(dfQuery, expectedAnswer ++ expectedAnswer)
+
+      spark.range(start = 10, end = 20).selectExpr(
+        "id as id", "id as index", "id as _partition")
+        .write.mode("append").saveAsTable("test")
+
+      assert(false)
+    }
+  }
+
+  test("SPARK-41498: Metadata column is not propagated when children of Union " +
+    "have mismatching metadata output") {
+    withTable(tbl) {
+      prepareTable()
+      withTempDir { dir =>
+        spark.range(start = 10, end = 20).selectExpr("bigint(id) as id")
+          .write.mode("overwrite").save(dir.getAbsolutePath)
+        val df = spark.table(tbl)
+        val dfQuery = spark.read.load(dir.getAbsolutePath)
+
+        // Make sure one df contains a metadata column and the other does not
+        assert(!df.queryExecution.logical.metadataOutput.exists(_.name == "_metadata"))
+        assert(dfQuery.queryExecution.logical.metadataOutput.exists(_.name == "_metadata"))
+
+        assert(df.union(dfQuery).queryExecution.logical.metadataOutput.isEmpty)
+      }
     }
   }
 }
