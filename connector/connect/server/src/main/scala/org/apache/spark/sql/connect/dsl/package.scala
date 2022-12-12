@@ -784,7 +784,7 @@ package object dsl {
           weights.sum > 0,
           s"Sum of weights must be positive, but got ${weights.mkString("[", ",", "]")}")
 
-        lazy val randomSplit = Relation
+        val randomSplit = Relation
           .newBuilder()
           .setRandomSplit(
             RandomSplit
