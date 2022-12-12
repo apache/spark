@@ -145,8 +145,6 @@ class SparkConnectPlanner(session: SparkSession) {
       if (sortOrder.nonEmpty) {
         Sort(sortOrder, global = false, logicalPlan)
       } else {
-        // SPARK-12662: If sort order is empty, we materialize the dataset to guarantee determinism
-//        session.sharedState.cacheManager.cacheQuery(this)
         logicalPlan
       }
     } else {
