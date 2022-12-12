@@ -603,7 +603,10 @@ class ExpressionParserSuite extends AnalysisTest {
     checkError(
       exception = parseException("Interval 'interval 1 yearsss 2 monthsss'"),
       errorClass = "INVALID_TYPED_LITERAL",
-      parameters = Map("value" -> "interval 1 yearsss 2 monthsss"),
+      parameters = Map(
+        "valueType" -> "\"INTERVAL\"",
+        "value" -> "'interval 1 yearsss 2 monthsss'"
+      ),
       context = ExpectedContext(
         fragment = "Interval 'interval 1 yearsss 2 monthsss'",
         start = 0,
@@ -617,7 +620,10 @@ class ExpressionParserSuite extends AnalysisTest {
     checkError(
       exception = parseException("Interval 'interval 1 daysss 2 hoursss'"),
       errorClass = "INVALID_TYPED_LITERAL",
-      parameters = Map("value" -> "interval 1 daysss 2 hoursss"),
+      parameters = Map(
+        "valueType" -> "\"INTERVAL\"",
+        "value" -> "'interval 1 daysss 2 hoursss'"
+      ),
       context = ExpectedContext(
         fragment = "Interval 'interval 1 daysss 2 hoursss'",
         start = 0,
@@ -640,7 +646,10 @@ class ExpressionParserSuite extends AnalysisTest {
       checkError(
         exception = parseException("Interval 'interval 3 monthsss 1 hoursss'"),
         errorClass = "INVALID_TYPED_LITERAL",
-        parameters = Map("value" -> "interval 3 monthsss 1 hoursss"),
+        parameters = Map(
+          "valueType" -> "\"INTERVAL\"",
+          "value" -> "'interval 3 monthsss 1 hoursss'"
+        ),
         context = ExpectedContext(
           fragment = "Interval 'interval 3 monthsss 1 hoursss'",
           start = 0,
