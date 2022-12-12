@@ -2164,7 +2164,7 @@ class DataFrame(Frame, Generic[T]):
         buf : StringIO-like, optional
             Buffer to write to.
         columns : sequence, optional, default None
-            The subset of columns to write. Write all columns is default.
+            The subset of columns to write. Write all columns by default.
         col_space : int, optional
             The minimum width of each column.
         header : bool, optional
@@ -2280,7 +2280,7 @@ class DataFrame(Frame, Generic[T]):
         buf : StringIO-like, optional
             Buffer to write to.
         columns : sequence, optional, default None
-            The subset of columns to write. Write all columns is default.
+            The subset of columns to write. Write all columns by default.
         col_space : int, optional
             The minimum width of each column.
         header : bool, optional
@@ -2500,7 +2500,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         buf : file descriptor or None
             Buffer to write to. If None, the output is returned as a string.
         columns : list of label, optional
-            The subset of columns to write. Write all columns is default.
+            The subset of columns to write. Write all columns by default.
         col_space : int, optional
             The minimum width of each column.
         header : bool or list of str, default True
@@ -2798,8 +2798,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         either the DataFrame's index (``axis=0``) or the DataFrame's columns
         (``axis=1``).
 
-        See also `Transform and apply a function #upgrade link
-        <https://koalas.readthedocs.io/en/latest/user_guide/transform_apply.html>`_.
+        See also `Transform and apply a function
+        <https://spark.apache.org/docs/latest/api/python/user_guide/pandas_on_spark/transform_apply.html>`_.
 
         .. note:: when `axis` is 0 or 'index', the `func` is unable to access
             to the whole input series. pandas-on-Spark internally splits the input series into
@@ -3124,8 +3124,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Call ``func`` on self producing a Series with transformed values
         and that has the same length as its input.
 
-        See also `Transform and apply a function #upgrade link
-        <https://koalas.readthedocs.io/en/latest/user_guide/transform_apply.html>`_.
+        See also `Transform and apply a function
+        <https://spark.apache.org/docs/latest/api/python/user_guide/pandas_on_spark/transform_apply.html>`_.
 
         .. note:: this API executes the function once to infer the type which is
              potentially expensive, for instance, when the dataset is created after
@@ -7681,9 +7681,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if axis != 0:
             raise NotImplementedError("No other axis than 0 are supported now")
         if kind is not None:
-            raise NotImplementedError(
-                "Specifying the sorting algorithm is not supported now."
-            )
+            raise NotImplementedError("Specifying the sorting algorithm is not supported now.")
 
         if level is None or (is_list_like(level) and len(level) == 0):  # type: ignore[arg-type]
             by = self._internal.index_spark_columns
