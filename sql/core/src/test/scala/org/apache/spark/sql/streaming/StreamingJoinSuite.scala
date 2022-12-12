@@ -1089,6 +1089,143 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
     )
   }
 
+  /**
+   * Adds data to multiple memory streams such that all the data will be made visible in the
+   * same batch. This is applicable only to MicroBatchExecution, as this coordination cannot be
+   * performed at the driver in ContinuousExecutions.
+   */
+  object TripleMultiAddData {
+    def apply[A](
+        source1: MemoryStream[A], data1: A*)(
+        source2: MemoryStream[A], data2: A*)(
+        source3: MemoryStream[A], data3: A*): StreamAction = {
+      val actions = Seq(AddDataMemory(source1, data1), AddDataMemory(source2, data2),
+          AddDataMemory(source3, data3))
+      StreamProgressLockedActions(actions, desc = actions.mkString("[ ", " | ", " ]"))
+    }
+  }
+
+  test("chained stream-stream outer joins with append mode") {
+    // This test verifies the bugfix of watermark between stateful operators, mentioned in
+    // Spark dev@ mailing list: https://lists.apache.org/thread/r0v8qcxlcxz0tgq0fjbzzj0bowyrnsnb
+
+    def stream(prefix: String, multiplier: Int): (MemoryStream[Int], DataFrame) = {
+      val input = MemoryStream[Int]
+      val df = input.toDF
+        .select(
+            'value as s"${prefix}key",
+            'value.cast("timestamp") as s"${prefix}Time",
+            ('value * multiplier) as s"${prefix}Value")
+        .withWatermark(s"${prefix}Time", "0 seconds")
+
+        (input, df)
+    }
+
+    withSQLConf("spark.sql.streaming.unsupportedOperationCheck" -> "false") {
+      val (inputA, dfA) = stream("a", 2)
+      val (inputB, dfB) = stream("b", 3)
+      val (inputC, dfC) = stream("c", 5)
+
+      val firstJoin = dfA.join(dfB, expr("akey = bkey AND aTime = bTime"), "leftOuter")
+      val secondJoin = firstJoin.join(dfC, expr("akey = ckey AND aTime = cTime"), "leftOuter")
+        .select('akey, 'bkey, 'ckey)
+
+      testStream(secondJoin)(
+        TripleMultiAddData(inputA, 1, 2, 3)(inputB, 3)(inputC, 4, 5),
+
+        // batch 0 (data batch):
+        //
+        // first join
+        // prev watermark: 0
+        // input watermark: min(0, 0) = 0
+        // state watermark for first join: 0 (equality join)
+        // joined output: (3, 3)
+        // left state: 1 (unmatched), 2 (unmatched), 3 (matched)
+        // right state: 3
+        //
+        // second join
+        // prev watermark: 0
+        // input watermark: min(0, 0) = 0
+        // state watermark for second join: 0 (equality join)
+        // joined output: none
+        // left state: (3, 3) (unmatched)
+        // right state: 4, 5
+        //
+        // batch 1 (no-data batch):
+        //
+        // watermark calculation
+        //
+        // input A: 3
+        // input B: 3
+        // input C: 5
+        //
+        // first join
+        // prev watermark: 0
+        // input watermark: min(3, 3) = 3
+        // state watermark for first join: 3 (equality join)
+        // joined output: (1, null), (2, null)
+        // left state: none
+        // right state: 4, 5
+        //
+        // second join
+        // prev watermark: 0
+        // input watermark: min(3, 5) = 3
+        // state watermark for second join: 3 (equality join)
+        // joined output: (3, 3, null), (1, null, null), (2, null, null)
+        // left state: none
+        // right state: 4, 5
+
+        CheckNewAnswer(Row(1, null, null), Row(2, null, null), Row(3, 3, null)),
+
+        TripleMultiAddData(inputA, 6)(inputB, 6)(inputC, 6),
+
+        // batch 2 (data batch):
+        //
+        // first join
+        // prev watermark: 3
+        // input watermark: min(3, 3) = 3
+        // state watermark for first join: 3 (equality join)
+        // joined output: (6, 6)
+        // left state: 6 (matched)
+        // right state: 6
+        //
+        // second join
+        // prev watermark: 3
+        // input watermark: min(3, 5) = 3
+        // state watermark for second join: 3 (equality join)
+        // joined output: (6, 6, 6)
+        // left state: (6, 6) (matched)
+        // right state: 6
+        //
+        // batch 3 (no-data batch):
+        //
+        // watermark calculation
+        //
+        // input A: 6
+        // input B: 6
+        // input C: 6
+        //
+        // first join
+        // prev watermark: 3
+        // input watermark: min(6, 6) = 6
+        // state watermark for first join: 6 (equality join)
+        // joined output: none
+        // left state: none
+        // right state: none
+        //
+        // second join
+        // prev watermark: 3
+        // input watermark: min(6, 6) = 6
+        // state watermark for second join: 6 (equality join)
+        // joined output: none
+        // left state: none
+        // right state: none
+
+        CheckNewAnswer(Row(6, 6, 6))
+      )
+    }
+  }
+
   test("SPARK-26187 restore the stream-stream outer join query from Spark 2.4") {
     val inputStream = MemoryStream[(Int, Long)]
     val df = inputStream.toDS()

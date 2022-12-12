@@ -103,6 +103,13 @@ class IncrementalExecution(
    */
   private val statefulOperatorId = new AtomicInteger(0)
 
+  /**
+   * Records the current id for a given watermark operator in the query plan as the `state`
+   * preparation walks the query plan. This has to start with 1 since we apply * -1 afterwards
+   * and we don't want this to be 0 to be conflicted with stateful operator ID.
+   */
+  private val watermarkOperatorId = new AtomicInteger(1)
+
   /** Get the state info of the next stateful operator */
   private def nextStatefulOperationStateInfo(): StatefulOperatorStateInfo = {
     StatefulOperatorStateInfo(
@@ -113,11 +120,35 @@ class IncrementalExecution(
       numStateStores)
   }
 
+  private def nextWatermarkOperationStateInfo(): StatefulOperatorStateInfo = {
+    StatefulOperatorStateInfo(
+      checkpointLocation,
+      runId,
+      // NOTE: this is to avoid conflict between watermark operator vs stateful operator
+      watermarkOperatorId.getAndIncrement() * -1,
+      currentBatchId,
+      numStateStores)
+  }
+
+  // FIXME: How to deal with behavioral change? there is a config
+  //  SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE and we need to think through what is the right
+  //  behavior when this config is turned off and watermark per operator kicks in.
+
+  private def getWatermarkForLateEvents(operatorId: Long): Long = {
+    offsetSeqMetadata.operatorWatermarksForLateEvents.getOrElse(
+      operatorId, WatermarkTracker.DEFAULT_WATERMARK_MS)
+  }
+
+  private def getWatermarkForEviction(operatorId: Long): Long = {
+    offsetSeqMetadata.operatorWatermarksForEviction.getOrElse(
+      operatorId, WatermarkTracker.DEFAULT_WATERMARK_MS)
+  }
+
   // Watermarks to use for late record filtering and state eviction in stateful operators.
   // Using the previous watermark for late record filtering is a Spark behavior change so we allow
   // this to be disabled.
-  val eventTimeWatermarkForEviction = offsetSeqMetadata.batchWatermarkMs
-  val eventTimeWatermarkForLateEvents =
+  private val eventTimeWatermarkForEviction = offsetSeqMetadata.batchWatermarkMs
+  private val eventTimeWatermarkForLateEvents =
     if (sparkSession.conf.get(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)) {
       prevOffsetSeqMetadata.getOrElse(offsetSeqMetadata).batchWatermarkMs
     } else {
@@ -170,6 +201,9 @@ class IncrementalExecution(
       case a: UpdatingSessionsExec if a.isStreaming =>
         a.copy(numShufflePartitions = Some(numStateStores))
 
+      case et: EventTimeWatermarkExec =>
+        et.copy(stateInfo = Some(nextWatermarkOperationStateInfo))
+
       case StateStoreSaveExec(keys, None, None, None, None, stateFormatVersion,
              UnaryExecNode(agg,
                StateStoreRestoreExec(_, None, _, child))) =>
@@ -178,8 +212,8 @@ class IncrementalExecution(
           keys,
           Some(aggStateInfo),
           Some(outputMode),
-          eventTimeWatermarkForLateEvents = Some(eventTimeWatermarkForLateEvents),
-          eventTimeWatermarkForEviction = Some(eventTimeWatermarkForEviction),
+          Some(getWatermarkForLateEvents(aggStateInfo.operatorId)),
+          Some(getWatermarkForEviction(aggStateInfo.operatorId)),
           stateFormatVersion,
           agg.withNewChildren(
             StateStoreRestoreExec(
@@ -198,55 +232,59 @@ class IncrementalExecution(
             session,
             Some(aggStateInfo),
             Some(outputMode),
-            eventTimeWatermarkForLateEvents = Some(eventTimeWatermarkForLateEvents),
-            eventTimeWatermarkForEviction = Some(eventTimeWatermarkForEviction),
+            Some(getWatermarkForLateEvents(aggStateInfo.operatorId)),
+            Some(getWatermarkForEviction(aggStateInfo.operatorId)),
             stateFormatVersion,
             agg.withNewChildren(
               SessionWindowStateStoreRestoreExec(
                 keys,
                 session,
                 Some(aggStateInfo),
-                eventTimeWatermarkForLateEvents = Some(eventTimeWatermarkForLateEvents),
-                eventTimeWatermarkForEviction = Some(eventTimeWatermarkForEviction),
+                Some(getWatermarkForLateEvents(aggStateInfo.operatorId)),
+                Some(getWatermarkForEviction(aggStateInfo.operatorId)),
                 stateFormatVersion,
                 child) :: Nil))
 
       case StreamingDeduplicateExec(keys, child, None, None, None) =>
+        val stateInfo = nextStatefulOperationStateInfo
         StreamingDeduplicateExec(
           keys,
           child,
-          Some(nextStatefulOperationStateInfo),
-          eventTimeWatermarkForLateEvents = Some(eventTimeWatermarkForLateEvents),
-          eventTimeWatermarkForEviction = Some(eventTimeWatermarkForEviction))
+          Some(stateInfo),
+          Some(getWatermarkForLateEvents(stateInfo.operatorId)),
+          Some(getWatermarkForEviction(stateInfo.operatorId)))
 
       case m: FlatMapGroupsWithStateExec =>
         // We set this to true only for the first batch of the streaming query.
         val hasInitialState = (currentBatchId == 0L && m.hasInitialState)
+        val stateInfo = nextStatefulOperationStateInfo
         m.copy(
-          stateInfo = Some(nextStatefulOperationStateInfo),
+          stateInfo = Some(stateInfo),
           batchTimestampMs = Some(offsetSeqMetadata.batchTimestampMs),
-          eventTimeWatermarkForLateEvents = Some(eventTimeWatermarkForLateEvents),
-          eventTimeWatermarkForEviction = Some(eventTimeWatermarkForEviction),
+          eventTimeWatermarkForLateEvents = Some(getWatermarkForLateEvents(stateInfo.operatorId)),
+          eventTimeWatermarkForEviction = Some(getWatermarkForEviction(stateInfo.operatorId)),
           hasInitialState = hasInitialState
         )
 
       case m: FlatMapGroupsInPandasWithStateExec =>
+        val stateInfo = nextStatefulOperationStateInfo
         m.copy(
-          stateInfo = Some(nextStatefulOperationStateInfo),
+          stateInfo = Some(stateInfo),
           batchTimestampMs = Some(offsetSeqMetadata.batchTimestampMs),
-          eventTimeWatermarkForLateEvents = Some(eventTimeWatermarkForLateEvents),
-          eventTimeWatermarkForEviction = Some(eventTimeWatermarkForEviction)
+          eventTimeWatermarkForLateEvents = Some(getWatermarkForLateEvents(stateInfo.operatorId)),
+          eventTimeWatermarkForEviction = Some(getWatermarkForEviction(stateInfo.operatorId))
         )
 
       case j: StreamingSymmetricHashJoinExec =>
+        val stateInfo = nextStatefulOperationStateInfo
         j.copy(
-          stateInfo = Some(nextStatefulOperationStateInfo),
-          eventTimeWatermarkForLateEvents = Some(eventTimeWatermarkForLateEvents),
-          eventTimeWatermarkForEviction = Some(eventTimeWatermarkForEviction),
+          stateInfo = Some(stateInfo),
+          eventTimeWatermarkForLateEvents = Some(getWatermarkForLateEvents(stateInfo.operatorId)),
+          eventTimeWatermarkForEviction = Some(getWatermarkForEviction(stateInfo.operatorId)),
           stateWatermarkPredicates =
             StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
               j.left.output, j.right.output, j.leftKeys, j.rightKeys, j.condition.full,
-              Some(eventTimeWatermarkForEviction)))
+              Some(getWatermarkForEviction(stateInfo.operatorId))))
 
       case l: StreamingGlobalLimitExec =>
         l.copy(

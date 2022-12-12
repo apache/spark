@@ -78,11 +78,15 @@ object OffsetSeq {
  * bound the lateness of data that will processed. Time unit: milliseconds
  * @param batchTimestampMs: The current batch processing timestamp.
  * Time unit: milliseconds
+ * @param operatorWatermarksForLateEvents: ...FIXME...
+ * @param operatorWatermarksForEviction: ...FIXME...
  * @param conf: Additional conf_s to be persisted across batches, e.g. number of shuffle partitions.
  */
 case class OffsetSeqMetadata(
     batchWatermarkMs: Long = 0,
     batchTimestampMs: Long = 0,
+    operatorWatermarksForLateEvents: Map[Long, Long] = Map.empty,
+    operatorWatermarksForEviction: Map[Long, Long] = Map.empty,
     conf: Map[String, String] = Map.empty) {
   def json: String = Serialization.write(this)(OffsetSeqMetadata.format)
 }
@@ -127,9 +131,12 @@ object OffsetSeqMetadata extends Logging {
   def apply(
       batchWatermarkMs: Long,
       batchTimestampMs: Long,
+      operatorWatermarksForLateEvents: Map[Long, Long],
+      operatorWatermarksForEviction: Map[Long, Long],
       sessionConf: RuntimeConfig): OffsetSeqMetadata = {
     val confs = relevantSQLConfs.map { conf => conf.key -> sessionConf.get(conf.key) }.toMap
-    OffsetSeqMetadata(batchWatermarkMs, batchTimestampMs, confs)
+    OffsetSeqMetadata(batchWatermarkMs, batchTimestampMs, operatorWatermarksForLateEvents,
+      operatorWatermarksForEviction, confs)
   }
 
   /** Set the SparkSession configuration with the values in the metadata */

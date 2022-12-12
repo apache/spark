@@ -97,11 +97,20 @@ trait FlatMapGroupsWithStateExecBase
       case EventTimeTimeout =>
         // Process another non-data batch only if the watermark has changed in this executed plan
         eventTimeWatermarkForEviction.isDefined &&
-          newMetadata.batchWatermarkMs > eventTimeWatermarkForEviction.get
+          newMetadata.operatorWatermarksForEviction.contains(getStateInfo.operatorId) &&
+          newMetadata.operatorWatermarksForEviction(getStateInfo.operatorId) >
+            eventTimeWatermarkForEviction.get
       case _ =>
         false
     }
   }
+
+  // We don't support the notion of event time in the output of FlatMapGroupsWithState, hence
+  // watermark propagation cannot be performed.
+  // FIXME: UnsupportedChecker should disable the cases stateful operators are used "after"
+  //   FlatMapGroupsWithState
+  override def produceWatermark(minInputWatermarkMs: Long): Long =
+    WatermarkTracker.DEFAULT_WATERMARK_MS
 
   /**
    * Process data by applying the user defined function on a per partition basis.

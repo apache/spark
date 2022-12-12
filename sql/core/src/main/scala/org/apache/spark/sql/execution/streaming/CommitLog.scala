@@ -77,7 +77,10 @@ object CommitLog {
 }
 
 
-case class CommitMetadata(nextBatchWatermarkMs: Long = 0) {
+case class CommitMetadata(
+    nextBatchWatermarkMs: Long = 0,
+    operatorWatermarksForLateEvents: Map[Long, Long] = Map.empty,
+    operatorWatermarksForEviction: Map[Long, Long] = Map.empty) {
   def json: String = Serialization.write(this)(CommitMetadata.format)
 }
 

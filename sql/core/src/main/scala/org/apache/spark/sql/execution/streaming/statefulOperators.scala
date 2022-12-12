@@ -95,6 +95,8 @@ trait StateStoreReader extends StatefulOperator {
 
 /** An operator that writes to a StateStore. */
 trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: SparkPlan =>
+  /** FIXME: ...doc... */
+  def produceWatermark(minInputWatermarkMs: Long): Long
 
   override lazy val metrics = statefulOperatorCustomMetrics ++ Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
@@ -548,11 +550,17 @@ case class StateStoreSaveExec(
   override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
     (outputMode.contains(Append) || outputMode.contains(Update)) &&
       eventTimeWatermarkForEviction.isDefined &&
-      newMetadata.batchWatermarkMs > eventTimeWatermarkForEviction.get
+      newMetadata.operatorWatermarksForEviction.contains(getStateInfo.operatorId) &&
+      newMetadata.operatorWatermarksForEviction(getStateInfo.operatorId) >
+        eventTimeWatermarkForEviction.get
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): StateStoreSaveExec =
     copy(child = newChild)
+
+  // This operator will evict based on min input watermark and ensure it will be minimum of
+  // the event time value for the output so far (including output from eviction).
+  override def produceWatermark(minInputWatermarkMs: Long): Long = minInputWatermarkMs
 }
 
 /**
@@ -747,7 +755,9 @@ case class SessionWindowStateStoreSaveExec(
   override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
     (outputMode.contains(Append) || outputMode.contains(Update)) &&
       eventTimeWatermarkForEviction.isDefined &&
-      newMetadata.batchWatermarkMs > eventTimeWatermarkForEviction.get
+      newMetadata.operatorWatermarksForEviction.contains(getStateInfo.operatorId) &&
+      newMetadata.operatorWatermarksForEviction(getStateInfo.operatorId) >
+        eventTimeWatermarkForEviction.get
   }
 
   private def putToStore(iter: Iterator[InternalRow], store: StateStore): Unit = {
@@ -809,8 +819,11 @@ case class SessionWindowStateStoreSaveExec(
       newNumRowsUpdated = stateOpProgress.numRowsUpdated,
       newNumRowsDroppedByWatermark = numRowsDroppedByWatermark)
   }
-}
 
+  // This operator will evict based on min input watermark and ensure it will be minimum of
+  // the event time value for the output so far (including output from eviction).
+  override def produceWatermark(minInputWatermarkMs: Long): Long = minInputWatermarkMs
+}
 
 /** Physical operator for executing streaming Deduplicate. */
 case class StreamingDeduplicateExec(
@@ -895,11 +908,17 @@ case class StreamingDeduplicateExec(
 
   override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
     eventTimeWatermarkForEviction.isDefined &&
-      newMetadata.batchWatermarkMs > eventTimeWatermarkForEviction.get
+      newMetadata.operatorWatermarksForEviction.contains(getStateInfo.operatorId) &&
+      newMetadata.operatorWatermarksForEviction(getStateInfo.operatorId) >
+        eventTimeWatermarkForEviction.get
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): StreamingDeduplicateExec =
     copy(child = newChild)
+
+  // This operator will evict based on min input watermark and ensure it will be minimum of
+  // the event time value for the output so far (including output from eviction).
+  override def produceWatermark(minInputWatermarkMs: Long): Long = minInputWatermarkMs
 }
 
 object StreamingDeduplicateExec {

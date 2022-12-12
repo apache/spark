@@ -360,9 +360,12 @@ class MicroBatchExecution(
         nextOffsets.metadata.foreach { metadata =>
           OffsetSeqMetadata.setSessionConf(metadata, sparkSessionToRunBatches.conf)
           offsetSeqMetadata = OffsetSeqMetadata(
-            metadata.batchWatermarkMs, metadata.batchTimestampMs, sparkSessionToRunBatches.conf)
+            metadata.batchWatermarkMs, metadata.batchTimestampMs,
+            metadata.operatorWatermarksForLateEvents, metadata.operatorWatermarksForEviction,
+            sparkSessionToRunBatches.conf)
           watermarkTracker = WatermarkTracker(sparkSessionToRunBatches.conf)
-          watermarkTracker.setWatermark(metadata.batchWatermarkMs)
+          watermarkTracker.setOperatorWatermarks(
+            metadata.operatorWatermarksForLateEvents, metadata.operatorWatermarksForEviction)
         }
 
         /* identify the current batch id: if commit log indicates we successfully processed the
@@ -501,9 +504,13 @@ class MicroBatchExecution(
       .map(p => p._1 -> p._2.get).toMap
 
     // Update the query metadata
+    val (opWatermarksForLateEvents, opWatermarksForEviction) =
+      watermarkTracker.currentOperatorWatermarks
     offsetSeqMetadata = offsetSeqMetadata.copy(
       batchWatermarkMs = watermarkTracker.currentWatermark,
-      batchTimestampMs = triggerClock.getTimeMillis())
+      batchTimestampMs = triggerClock.getTimeMillis(),
+      operatorWatermarksForLateEvents = opWatermarksForLateEvents,
+      operatorWatermarksForEviction = opWatermarksForEviction)
 
     // Check whether next batch should be constructed
     val lastExecutionRequiresAnotherBatch = noDataBatchesEnabled &&
@@ -740,8 +747,12 @@ class MicroBatchExecution(
     withProgressLocked {
       sinkCommitProgress = batchSinkProgress
       watermarkTracker.updateWatermark(lastExecution.executedPlan)
+      val (opWatermarksForLateEvents, opWatermarksForEviction) =
+        watermarkTracker.currentOperatorWatermarks
       reportTimeTaken("commitOffsets") {
-        assert(commitLog.add(currentBatchId, CommitMetadata(watermarkTracker.currentWatermark)),
+        assert(commitLog.add(currentBatchId,
+          CommitMetadata(watermarkTracker.currentWatermark, opWatermarksForLateEvents,
+            opWatermarksForEviction)),
           "Concurrent update to the commit log. Multiple streaming jobs detected for " +
             s"$currentBatchId")
       }
