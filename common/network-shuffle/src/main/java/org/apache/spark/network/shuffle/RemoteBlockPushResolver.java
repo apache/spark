@@ -1278,9 +1278,13 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       synchronized (partitionInfo) {
         AppShuffleMergePartitionsInfo info =
             appShuffleInfo.shuffles.get(partitionInfo.appAttemptShuffleMergeId.shuffleId);
-        if (isStale(info, partitionInfo.appAttemptShuffleMergeId.shuffleMergeId) ||
-            isTooLate(info, partitionInfo.reduceId)) {
+        boolean isStaleBlockPush = isStale(info, partitionInfo.appAttemptShuffleMergeId.shuffleMergeId);
+        boolean isTooLateBlockPush = isTooLate(info, partitionInfo.reduceId);
+        if (isStaleBlockPush || isTooLateBlockPush) {
           freeDeferredBufs();
+          if (isTooLateBlockPush) {
+            mergeManager.pushMergeMetrics.lateBlockPushes.mark();
+          }
           return;
         }
         // Check whether we can write to disk
