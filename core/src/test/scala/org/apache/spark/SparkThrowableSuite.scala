@@ -150,10 +150,10 @@ class SparkThrowableSuite extends SparkFunSuite {
   test("Error class names should contain only capital letters, numbers and underscores") {
     val allowedChars = "[A-Z0-9_]*"
     errorReader.errorInfoMap.foreach { e =>
-      assert(e._1.matches(allowedChars))
+      assert(e._1.matches(allowedChars), s"Error class: ${e._1} is invalid")
       e._2.subClass.map { s =>
         s.keys.foreach { k =>
-          assert(k.matches(allowedChars))
+          assert(k.matches(allowedChars), s"Error sub-class: $k is invalid")
         }
       }
     }
