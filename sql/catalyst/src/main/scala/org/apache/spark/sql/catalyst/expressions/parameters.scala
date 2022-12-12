@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.analysis.AnalysisErrorAt
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreePattern.{PARAMETER, TreePattern}
 import org.apache.spark.sql.errors.QueryErrorsBase
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -49,7 +48,7 @@ case class Parameter(name: String) extends LeafExpression with Unevaluable {
  */
 object Parameter extends QueryErrorsBase {
   def bind(plan: LogicalPlan, args: Map[String, Expression]): LogicalPlan = {
-    if (!args.isEmpty && SQLConf.get.parametersEnabled) {
+    if (!args.isEmpty) {
       args.filter(!_._2.isInstanceOf[Literal]).headOption.foreach { case (name, expr) =>
         expr.failAnalysis(
           errorClass = "INVALID_SQL_ARG",

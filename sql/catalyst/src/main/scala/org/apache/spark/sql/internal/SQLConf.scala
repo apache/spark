@@ -4027,14 +4027,6 @@ object SQLConf {
     .checkValues(ErrorMessageFormat.values.map(_.toString))
     .createWithDefault(ErrorMessageFormat.PRETTY.toString)
 
-  val PARAMETERS_ENABLED = buildConf("spark.sql.parameters.enabled")
-    .doc("When set to true, `spark.sql()` executes input SQL queries by substituting named " +
-      "parameters by given literal values. If set to false, Spark handles constants " +
-      "with the `:` prefix as regular identifiers and does not consider them as parameters.")
-    .version("3.4.0")
-    .booleanConf
-    .createWithDefault(true)
-
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -4845,8 +4837,6 @@ class SQLConf extends Serializable with Logging {
 
   def allowsTempViewCreationWithMultipleNameparts: Boolean =
     getConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_MULTIPLE_NAME_PARTS)
-
-  def parametersEnabled: Boolean = getConf(SQLConf.PARAMETERS_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 

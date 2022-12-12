@@ -1570,38 +1570,28 @@ class PlanParserSuite extends AnalysisTest {
   }
 
   test("SPARK-41271: parsing of named parameters") {
-    withSQLConf(SQLConf.PARAMETERS_ENABLED.key -> "true") {
-      comparePlans(
-        parsePlan("SELECT :param_1"),
-        Project(UnresolvedAlias(Parameter("param_1"), None) :: Nil, OneRowRelation()))
-      comparePlans(
-        parsePlan("SELECT abs(:1Abc)"),
-        Project(UnresolvedAlias(
-          UnresolvedFunction(
-            "abs" :: Nil,
-            Parameter("1Abc") :: Nil,
-            isDistinct = false), None) :: Nil,
-          OneRowRelation()))
-      comparePlans(
-        parsePlan("SELECT * FROM a LIMIT :limitA"),
-        table("a").select(star()).limit(Parameter("limitA")))
-      // Invalid empty name and invalid symbol in a name
-      checkError(
-        exception = parseException(s"SELECT :-"),
-        errorClass = "PARSE_SYNTAX_ERROR",
-        parameters = Map("error" -> "'-'", "hint" -> ""))
-      checkError(
-        exception = parseException(s"SELECT :"),
-        errorClass = "PARSE_SYNTAX_ERROR",
-        parameters = Map("error" -> "end of input", "hint" -> ""))
-    }
-    withSQLConf(SQLConf.PARAMETERS_ENABLED.key -> "false") {
-      checkError(
-        exception = intercept[ParseException] {
-          parsePlan("SELECT :param_1")
-        },
-        errorClass = "PARSE_SYNTAX_ERROR",
-        parameters = Map("error" -> "':'", "hint" -> ""))
-    }
+    comparePlans(
+      parsePlan("SELECT :param_1"),
+      Project(UnresolvedAlias(Parameter("param_1"), None) :: Nil, OneRowRelation()))
+    comparePlans(
+      parsePlan("SELECT abs(:1Abc)"),
+      Project(UnresolvedAlias(
+        UnresolvedFunction(
+          "abs" :: Nil,
+          Parameter("1Abc") :: Nil,
+          isDistinct = false), None) :: Nil,
+        OneRowRelation()))
+    comparePlans(
+      parsePlan("SELECT * FROM a LIMIT :limitA"),
+      table("a").select(star()).limit(Parameter("limitA")))
+    // Invalid empty name and invalid symbol in a name
+    checkError(
+      exception = parseException(s"SELECT :-"),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'-'", "hint" -> ""))
+    checkError(
+      exception = parseException(s"SELECT :"),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "end of input", "hint" -> ""))
   }
 }

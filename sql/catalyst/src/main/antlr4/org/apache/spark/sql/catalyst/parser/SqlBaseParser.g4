@@ -40,11 +40,6 @@ options { tokenVocab = SqlBaseLexer; }
    * When true, double quoted literals are identifiers rather than STRINGs.
    */
   public boolean double_quoted_identifiers = false;
-
-  /**
-   * When true, identifiers that begin from `:` are considered as named parameters.
-   */
-  public boolean parameters_enabled = false;
 }
 
 singleStatement
@@ -935,7 +930,7 @@ primaryExpression
 
 constant
     : NULL                                                                                     #nullLiteral
-    | {parameters_enabled}? COLON identifier                                                   #parameterLiteral
+    | COLON identifier                                                                         #parameterLiteral
     | interval                                                                                 #intervalLiteral
     | identifier stringLit                                                                     #typeConstructor
     | number                                                                                   #numericLiteral
