@@ -1610,11 +1610,6 @@
       "Function trim doesn't support with type <trimOption>. Please use BOTH, LEADING or TRAILING as trim type."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0020" : {
-    "message" : [
-      "Cannot parse the INTERVAL value: <value>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0022" : {
     "message" : [
       "<msg>."
