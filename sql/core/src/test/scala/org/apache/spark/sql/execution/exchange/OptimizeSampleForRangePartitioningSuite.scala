@@ -69,7 +69,7 @@ class OptimizeSampleForRangePartitioningSuite
     }
   }
 
-  test("Optimize global sort") {
+  test("Optimize range partitioning") {
     Seq(
       ("", "ORDER BY c1"),
       ("", " ORDER BY c1, c2"),
@@ -93,7 +93,7 @@ class OptimizeSampleForRangePartitioningSuite
     }
   }
 
-  test("Do not optimize global sort") {
+  test("Do not optimize range partitioning") {
     Seq(
       ("", "ORDER BY c1"),
       ("/*+ repartition_by_range(c1) */", "")).foreach { case (head, tail) =>

@@ -27,7 +27,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleWriteMetricsReporter, ShuffleWriteProcessor}
 import org.apache.spark.shuffle.sort.SortShuffleManager
-import org.apache.spark.sql.{Dataset, SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
@@ -290,8 +290,8 @@ object ShuffleExchangeExec {
           // re-optimize sample plan
           // this new query execution for sample is still a part of the original plan
           // so we do not need to assign a new execution id.
-          Dataset.ofRows(SparkSession.getActiveSession.orNull, sample)
-            .queryExecution.executedPlan.execute().mapPartitionsInternal { iter =>
+          QueryExecution.prepareExecutedPlan(SparkSession.getActiveSession.orNull, sample)
+            .execute().mapPartitionsInternal { iter =>
             val mutablePair = new MutablePair[InternalRow, Null]()
             // Internally, RangePartitioner runs a job on the RDD that samples keys to compute
             // partition bounds. To get accurate samples, we need to copy the mutable keys.

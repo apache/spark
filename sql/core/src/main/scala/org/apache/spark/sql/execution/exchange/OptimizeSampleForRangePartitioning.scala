@@ -40,6 +40,7 @@ object OptimizeSampleForRangePartitioning extends Rule[SparkPlan] {
       var numShuffleWithoutGlobalSort = 0
       plan.foreach {
         case ShuffleExchangeExec(r: RangePartitioning, child, _) if child.logicalLink.isDefined &&
+          !child.logicalLink.get.isStreaming &&
           r.ordering.flatMap(_.references).size < child.outputSet.size =>
           numRangePartitioning += 1
         case _: ShuffleExchangeExec => numShuffleWithoutGlobalSort += 1

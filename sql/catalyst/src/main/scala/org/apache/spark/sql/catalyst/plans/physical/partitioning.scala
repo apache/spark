@@ -448,6 +448,9 @@ case class RangePartitioning(
   override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec =
     RangeShuffleSpec(this.numPartitions, distribution)
 
+  override lazy val canonicalized: Expression =
+    RangePartitioning(ordering.map(_.canonicalized.asInstanceOf[SortOrder]), numPartitions)
+
   override protected def stringArgs: Iterator[Any] = Iterator(ordering, numPartitions)
 
   override protected def withNewChildrenInternal(
