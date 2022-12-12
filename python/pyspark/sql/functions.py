@@ -8036,7 +8036,7 @@ def sequence(
 
 def from_csv(
     col: "ColumnOrName",
-    schema: Union[StructType, Column, str],
+    schema: Union[Column, str],
     options: Optional[Dict[str, str]] = None,
 ) -> Column:
     """
