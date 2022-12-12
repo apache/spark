@@ -6082,3 +6082,267 @@ def timestamp_seconds(col: "ColumnOrName") -> Column:
     """
 
     return _invoke_function_over_columns("timestamp_seconds", col)
+
+
+# Misc Functions
+
+
+def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None) -> Column:
+    """
+    Returns `null` if the input column is `true`; throws an exception
+    with the provided error message otherwise.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        column name or column that represents the input column to test
+    errMsg : :class:`~pyspark.sql.Column` or str, optional
+        A Python string literal or column containing the error message
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        `null` if the input column is `true` otherwise throws an error with specified message.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(0,1)], ['a', 'b'])
+    >>> df.select(assert_true(df.a < df.b).alias('r')).collect()
+    [Row(r=None)]
+    >>> df.select(assert_true(df.a < df.b, df.a).alias('r')).collect()
+    [Row(r=None)]
+    >>> df.select(assert_true(df.a < df.b, 'error').alias('r')).collect()
+    [Row(r=None)]
+    >>> df.select(assert_true(df.a > df.b, 'My error msg').alias('r')).collect() # doctest: +SKIP
+    ...
+    java.lang.RuntimeException: My error msg
+    ...
+    """
+    if errMsg is None:
+        return _invoke_function_over_columns("assert_true", col)
+    if not isinstance(errMsg, (str, Column)):
+        raise TypeError("errMsg should be a Column or a str, got {}".format(type(errMsg)))
+
+    _err_msg = lit(errMsg) if isinstance(errMsg, str) else _to_col(errMsg)
+
+    return _invoke_function("assert_true", _to_col(col), _err_msg)
+
+
+def raise_error(errMsg: Union[Column, str]) -> Column:
+    """
+    Throws an exception with the provided error message.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    errMsg : :class:`~pyspark.sql.Column` or str
+        A Python string literal or column containing the error message
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        throws an error with specified message.
+
+    Examples
+    --------
+    >>> df = spark.range(1)
+    >>> df.select(raise_error("My error message")).show() # doctest: +SKIP
+    ...
+    java.lang.RuntimeException: My error message
+    ...
+    """
+    if not isinstance(errMsg, (str, Column)):
+        raise TypeError("errMsg should be a Column or a str, got {}".format(type(errMsg)))
+
+    _err_msg = lit(errMsg) if isinstance(errMsg, str) else _to_col(errMsg)
+
+    return _invoke_function("raise_error", _err_msg)
+
+
+def crc32(col: "ColumnOrName") -> Column:
+    """
+    Calculates the cyclic redundancy check value  (CRC32) of a binary column and
+    returns the value as a bigint.
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for computed results.
+
+    .. versionadded:: 3.4.0
+
+    Examples
+    --------
+    >>> spark.createDataFrame([('ABC',)], ['a']).select(crc32('a').alias('crc32')).collect()
+    [Row(crc32=2743272264)]
+    """
+    return _invoke_function_over_columns("crc32", col)
+
+
+def hash(*cols: "ColumnOrName") -> Column:
+    """Calculates the hash code of given columns, and returns the result as an int column.
+
+    .. versionadded:: 2.0.0
+
+    Parameters
+    ----------
+    cols : :class:`~pyspark.sql.Column` or str
+        one or more columns to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        hash value as int column.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('ABC', 'DEF')], ['c1', 'c2'])
+
+    Hash for one column
+
+    >>> df.select(hash('c1').alias('hash')).show()
+    +----------+
+    |      hash|
+    +----------+
+    |-757602832|
+    +----------+
+
+    Two or more columns
+
+    >>> df.select(hash('c1', 'c2').alias('hash')).show()
+    +---------+
+    |     hash|
+    +---------+
+    |599895104|
+    +---------+
+    """
+    return _invoke_function_over_columns("hash", *cols)
+
+
+def xxhash64(*cols: "ColumnOrName") -> Column:
+    """Calculates the hash code of given columns using the 64-bit variant of the xxHash algorithm,
+    and returns the result as a long column. The hash computation uses an initial seed of 42.
+
+    .. versionadded:: 3.0.0
+
+    Parameters
+    ----------
+    cols : :class:`~pyspark.sql.Column` or str
+        one or more columns to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        hash value as long column.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('ABC', 'DEF')], ['c1', 'c2'])
+
+    Hash for one column
+
+    >>> df.select(xxhash64('c1').alias('hash')).show()
+    +-------------------+
+    |               hash|
+    +-------------------+
+    |4105715581806190027|
+    +-------------------+
+
+    Two or more columns
+
+    >>> df.select(xxhash64('c1', 'c2').alias('hash')).show()
+    +-------------------+
+    |               hash|
+    +-------------------+
+    |3233247871021311208|
+    +-------------------+
+    """
+    return _invoke_function_over_columns("xxhash64", *cols)
+
+
+def md5(col: "ColumnOrName") -> Column:
+    """Calculates the MD5 digest and returns the value as a 32 character hex string.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for computed results.
+
+    Examples
+    --------
+    >>> spark.createDataFrame([('ABC',)], ['a']).select(md5('a').alias('hash')).collect()
+    [Row(hash='902fbdd2b1df0c4f70b4a5d23525e932')]
+    """
+    return _invoke_function_over_columns("md5", col)
+
+
+def sha1(col: "ColumnOrName") -> Column:
+    """Returns the hex string result of SHA-1.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for computed results.
+
+    Examples
+    --------
+    >>> spark.createDataFrame([('ABC',)], ['a']).select(sha1('a').alias('hash')).collect()
+    [Row(hash='3c01bdbb26f358bab27f267924aa2c9a03fcfdb8')]
+    """
+    return _invoke_function_over_columns("sha1", col)
+
+
+def sha2(col: "ColumnOrName", numBits: int) -> Column:
+    """Returns the hex string result of SHA-2 family of hash functions (SHA-224, SHA-256, SHA-384,
+    and SHA-512). The numBits indicates the desired bit length of the result, which must have a
+    value of 224, 256, 384, 512, or 0 (which is equivalent to 256).
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+    numBits : int
+        the desired bit length of the result, which must have a
+        value of 224, 256, 384, 512, or 0 (which is equivalent to 256).
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for computed results.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([["Alice"], ["Bob"]], ["name"])
+    >>> df.withColumn("sha2", sha2(df.name, 256)).show(truncate=False)
+    +-----+----------------------------------------------------------------+
+    |name |sha2                                                            |
+    +-----+----------------------------------------------------------------+
+    |Alice|3bc51062973c458d5a6f2d8d64a023246354ad7e064b1e4e009ec8a0699a3043|
+    |Bob  |cd9fb1e148ccd8442e5aa74904cc73bf6fb54d1d54d333bd596aa9bb4bb4e961|
+    +-----+----------------------------------------------------------------+
+    """
+    return _invoke_function("sha2", _to_col(col), lit(numBits))

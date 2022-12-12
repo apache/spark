@@ -24,6 +24,7 @@ from pyspark.testing.utils import ReusedPySparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 if should_test_connect:
+    import grpc
     from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
 
 
@@ -1041,6 +1042,71 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
         self.assert_eq(
             cdf.select(CF.next_day(cdf.ts1, "Mon")).toPandas(),
             sdf.select(SF.next_day(sdf.ts1, "Mon")).toPandas(),
+        )
+
+    def test_misc_functions(self):
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        query = """
+            SELECT a, b, c, BINARY(c) as d FROM VALUES
+            (0, float("NAN"), 'x'), (1, NULL, 'y'), (1, 2.1, 'z'), (0, 0.5, NULL)
+            AS tab(a, b, c)
+            """
+        # +---+----+----+----+
+        # |  a|   b|   c|   d|
+        # +---+----+----+----+
+        # |  0| NaN|   x|[78]|
+        # |  1|null|   y|[79]|
+        # |  1| 2.1|   z|[7A]|
+        # |  0| 0.5|null|null|
+        # +---+----+----+----+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        # test assert_true
+        with self.assertRaises(grpc.RpcError):
+            cdf.select(CF.assert_true(cdf.a > 0, "a should be positive!")).show()
+
+        # test raise_error
+        with self.assertRaises(grpc.RpcError):
+            cdf.select(CF.raise_error("a should be positive!")).show()
+
+        # test crc32
+        self.assert_eq(
+            cdf.select(CF.crc32(cdf.d)).toPandas(),
+            sdf.select(SF.crc32(sdf.d)).toPandas(),
+        )
+
+        # test hash
+        self.assert_eq(
+            cdf.select(CF.hash(cdf.a, "b", cdf.c)).toPandas(),
+            sdf.select(SF.hash(sdf.a, "b", sdf.c)).toPandas(),
+        )
+
+        # test xxhash64
+        self.assert_eq(
+            cdf.select(CF.xxhash64(cdf.a, "b", cdf.c)).toPandas(),
+            sdf.select(SF.xxhash64(sdf.a, "b", sdf.c)).toPandas(),
+        )
+
+        # test md5
+        self.assert_eq(
+            cdf.select(CF.md5(cdf.d), CF.md5("c")).toPandas(),
+            sdf.select(SF.md5(sdf.d), SF.md5("c")).toPandas(),
+        )
+
+        # test sha1
+        self.assert_eq(
+            cdf.select(CF.sha1(cdf.d), CF.sha1("c")).toPandas(),
+            sdf.select(SF.sha1(sdf.d), SF.sha1("c")).toPandas(),
+        )
+
+        # test sha2
+        self.assert_eq(
+            cdf.select(CF.sha2(cdf.c, 256), CF.sha2("d", 512)).toPandas(),
+            sdf.select(SF.sha2(sdf.c, 256), SF.sha2("d", 512)).toPandas(),
         )
 
 
