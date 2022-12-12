@@ -23,6 +23,7 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.storage.StorageLevel
 
@@ -254,21 +255,25 @@ class DatasetCacheSuite extends QueryTest
   }
 
   test("SPARK-27739 Save stats from optimized plan") {
-    withTable("a") {
-      spark.range(4)
-        .selectExpr("id", "id % 2 AS p")
-        .write
-        .partitionBy("p")
-        .saveAsTable("a")
+    // This test doesn't work with V2 as `PruneFileSourcePartitions` rule doesn't prune stored
+    // stats.
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+      withTable("a") {
+        spark.range(4)
+          .selectExpr("id", "id % 2 AS p")
+          .write
+          .partitionBy("p")
+          .saveAsTable("a")
 
-      val df = sql("SELECT * FROM a WHERE p = 0")
-      df.cache()
-      df.count()
-      df.queryExecution.withCachedData match {
-        case i: InMemoryRelation =>
-          // Optimized plan has non-default size in bytes
-          assert(i.statsOfPlanToCache.sizeInBytes !==
-            df.sparkSession.sessionState.conf.defaultSizeInBytes)
+        val df = sql("SELECT * FROM a WHERE p = 0")
+        df.cache()
+        df.count()
+        df.queryExecution.withCachedData match {
+          case i: InMemoryRelation =>
+            // Optimized plan has non-default size in bytes
+            assert(i.statsOfPlanToCache.sizeInBytes !==
+              df.sparkSession.sessionState.conf.defaultSizeInBytes)
+        }
       }
     }
   }

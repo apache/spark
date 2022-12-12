@@ -617,11 +617,11 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
     checkLCAUnsupportedInWindowErrorHelper(
       "select named_struct('s', named_struct('b', sum(salary) * 1.0)) as foo, " +
         s"rank() over (partition by foo.s.b order by avg(bonus)) from $testTable group by dept",
-      lca = "`foo`.`s`.`b`", windowExprRegex = "\"RANK.*\"")
+      lca = "`foo`.`s`.`b`", windowExprRegex = "\"(RANK|rank).*\"")
     checkLCAUnsupportedInWindowErrorHelper(
       "select dept, array(array(1, 2), array(1, 2, 3), array(100)) as foo, " +
         s"rank() over (partition by foo[2][0] order by dept) from $testTable where dept in (1, 6)",
-      lca = "`foo`", windowExprRegex = "\"RANK.*\"")
+      lca = "`foo`", windowExprRegex = "\"(RANK|rank).*\"")
     checkLCAUnsupportedInWindowErrorHelper(
       "select dept, array(named_struct('a', 1), named_struct('a', 2)) as foo, " +
         s"sum(foo[0].a + 1) over (partition by min(bonus) order by dept) " +
@@ -631,7 +631,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
       s"SELECT dept, map('a', 1, 'b', 2) AS foo, foo['b'] AS bar, bar + 1, " +
         s"rank() over (partition by max(bonus) order by bar)" +
         s"from $testTable group by dept",
-      lca = "`bar`", windowExprRegex = "\"RANK.*\"")
+      lca = "`bar`", windowExprRegex = "\"(RANK|rank).*\"")
   }
 
   test("Lateral alias reference attribute further be used by upper plan") {
@@ -873,7 +873,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
     checkLCAUnsupportedInWindowErrorHelper(
       "select name, dept as d, rank() over " +
         s"(partition by d order by salary) as rank from $testTable where dept in (1, 6)",
-      lca = "`d`", windowExprRegex = "\"RANK.*\"")
+      lca = "`d`", windowExprRegex = "\"(RANK|rank).*\"")
     checkLCAUnsupportedInWindowErrorHelper(
       "select name, dept as d, d * 1.0, salary as s, sum(salary) over " +
         s"(partition by d order by s) from $testTable where dept in (1, 6)",
@@ -919,12 +919,12 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
       "select name, dept, rank() over (partition by dept order by salary) as rank, " +
         "rank() over (partition by dept order by rank DESC) as new_rank " +
         s"from $testTable",
-      lca = "`rank`", windowExprRegex = "\"RANK.*\"")
+      lca = "`rank`", windowExprRegex = "\"(RANK|rank).*\"")
     checkLCAUnsupportedInWindowErrorHelper(
       "select name, dept, rank() over (partition by dept order by salary) as rank, " +
         "rank() over (partition by rank order by salary) as new_rank " +
         s"from $testTable",
-      lca = "`rank`", windowExprRegex = "\"RANK.*\"")
+      lca = "`rank`", windowExprRegex = "\"(RANK|rank).*\"")
     checkLCAUnsupportedInWindowErrorHelper(
       "select name, dept, rank() over (partition by dept order by salary) as rank, " +
         "sum(rank) over (partition by dept order by rank) as new_rank " +
@@ -940,7 +940,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
         "sum(rank) over (partition by min order by n) as sum, " +
         "min(jy - 2017) over (partition by rank order by dept) " +
         s"from $testTable",
-      lca = "`new_d`", windowExprRegex = "\"RANK.*\"")
+      lca = "`new_d`", windowExprRegex = "\"(RANK|rank).*\"")
   }
 
   test("Lateral alias basics - Window on Aggregate") {
@@ -991,7 +991,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
         checkLCAUnsupportedInWindowErrorHelper(
           "select dept as d, rank() over (partition by d order by avg(salary)) as rank " +
             s"from $testTable $whereSeg group by dept $havingSeg",
-          lca = "`d`", windowExprRegex = "\"RANK.*\"")
+          lca = "`d`", windowExprRegex = "\"(RANK|rank).*\"")
         checkLCAUnsupportedInWindowErrorHelper(
           "select dept as d, sum(salary) as s, avg(s) over (partition by d order by s) " +
             s"from $testTable $whereSeg group by dept $havingSeg",

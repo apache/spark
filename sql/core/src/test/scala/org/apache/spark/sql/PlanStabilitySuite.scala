@@ -24,6 +24,7 @@ import scala.collection.mutable
 
 import org.apache.commons.io.FileUtils
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.expressions.AttributeSet
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution._
@@ -276,6 +277,9 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
 
 @ExtendedSQLTest
 class TPCDSV1_4_PlanStabilitySuite extends PlanStabilitySuite with TPCDSBase {
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
+
   override val goldenFilePath: String =
     new File(baseResourcePath, s"approved-plans-v1_4").getAbsolutePath
 
@@ -288,6 +292,9 @@ class TPCDSV1_4_PlanStabilitySuite extends PlanStabilitySuite with TPCDSBase {
 
 @ExtendedSQLTest
 class TPCDSV1_4_PlanStabilityWithStatsSuite extends PlanStabilitySuite with TPCDSBase {
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
+
   override def injectStats: Boolean = true
 
   override val goldenFilePath: String =
@@ -302,6 +309,9 @@ class TPCDSV1_4_PlanStabilityWithStatsSuite extends PlanStabilitySuite with TPCD
 
 @ExtendedSQLTest
 class TPCDSV2_7_PlanStabilitySuite extends PlanStabilitySuite with TPCDSBase {
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
+
   override val goldenFilePath: String =
     new File(baseResourcePath, s"approved-plans-v2_7").getAbsolutePath
 
@@ -314,6 +324,9 @@ class TPCDSV2_7_PlanStabilitySuite extends PlanStabilitySuite with TPCDSBase {
 
 @ExtendedSQLTest
 class TPCDSV2_7_PlanStabilityWithStatsSuite extends PlanStabilitySuite with TPCDSBase {
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
+
   override def injectStats: Boolean = true
 
   override val goldenFilePath: String =
@@ -328,6 +341,9 @@ class TPCDSV2_7_PlanStabilityWithStatsSuite extends PlanStabilitySuite with TPCD
 
 @ExtendedSQLTest
 class TPCDSModifiedPlanStabilitySuite extends PlanStabilitySuite with TPCDSBase {
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
+
   override val goldenFilePath: String =
     new File(baseResourcePath, s"approved-plans-modified").getAbsolutePath
 
@@ -340,6 +356,9 @@ class TPCDSModifiedPlanStabilitySuite extends PlanStabilitySuite with TPCDSBase 
 
 @ExtendedSQLTest
 class TPCDSModifiedPlanStabilityWithStatsSuite extends PlanStabilitySuite with TPCDSBase {
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
+
   override def injectStats: Boolean = true
 
   override val goldenFilePath: String =
@@ -354,6 +373,9 @@ class TPCDSModifiedPlanStabilityWithStatsSuite extends PlanStabilitySuite with T
 
 @ExtendedSQLTest
 class TPCHPlanStabilitySuite extends PlanStabilitySuite with TPCHBase {
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
+
   override def goldenFilePath: String = getWorkspaceFilePath(
     "sql", "core", "src", "test", "resources", "tpch-plan-stability").toFile.getAbsolutePath
 

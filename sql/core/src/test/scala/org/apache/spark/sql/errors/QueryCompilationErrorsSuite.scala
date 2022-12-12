@@ -495,20 +495,26 @@ class QueryCompilationErrorsSuite
   }
 
   test("AMBIGUOUS_COLUMN_OR_FIELD: alter column matching multi fields in the struct") {
-    withTable("t") {
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-        sql("CREATE TABLE t(c struct<X:String, x:String>) USING parquet")
-      }
+    // This test doesn't work with V2 as resolving a V2 table requires its schema to be calculated
+    // so the case insensitive resolution during ALTER TABLE causes a `COLUMN_ALREADY_EXISTS` to be
+    // thrown. This is different to V1 as the V1 table resolution in `FindDataSourceTable` happens
+    // after `ResolveFieldNameAndPosition` where `AMBIGUOUS_COLUMN_OR_FIELD` is thrown.
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+      withTable("t") {
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+          sql("CREATE TABLE t(c struct<X:String, x:String>) USING parquet")
+        }
 
-      val query = "ALTER TABLE t CHANGE COLUMN c.X COMMENT 'new comment'"
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(query)
-        },
-        errorClass = "AMBIGUOUS_COLUMN_OR_FIELD",
-        parameters = Map("name" -> "`c`.`X`", "n" -> "2"),
-        context = ExpectedContext(
-          fragment = query, start = 0, stop = 52))
+        val query = "ALTER TABLE t CHANGE COLUMN c.X COMMENT 'new comment'"
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(query)
+          },
+          errorClass = "AMBIGUOUS_COLUMN_OR_FIELD",
+          parameters = Map("name" -> "`c`.`X`", "n" -> "2"),
+          context = ExpectedContext(
+            fragment = query, start = 0, stop = 52))
+      }
     }
   }
 

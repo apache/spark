@@ -105,15 +105,12 @@ class ProtoToParsedPlanTestSuite extends SparkFunSuite with SharedSparkSession {
       .set(org.apache.spark.sql.internal.SQLConf.ANSI_ENABLED.key, false.toString)
   }
 
+  protected val connectPath: Path = {
+    getWorkspaceFilePath("connector", "connect").toAbsolutePath
+  }
+
   protected val baseResourcePath: Path = {
-    getWorkspaceFilePath(
-      "connector",
-      "connect",
-      "common",
-      "src",
-      "test",
-      "resources",
-      "query-tests").toAbsolutePath
+    connectPath.resolve("common/src/test/resources/query-tests")
   }
 
   protected val inputFilePath: Path = baseResourcePath.resolve("queries")
@@ -167,7 +164,7 @@ class ProtoToParsedPlanTestSuite extends SparkFunSuite with SharedSparkSession {
       val planner = new SparkConnectPlanner(spark)
       val catalystPlan =
         analyzer.executeAndCheck(planner.transformRelation(relation), new QueryPlanningTracker)
-      val actual = normalizeExprIds(ReplaceExpressions(catalystPlan)).treeString
+      val actual = normalizePath(normalizeExprIds(ReplaceExpressions(catalystPlan)).treeString)
       val goldenFile = goldenFilePath.resolve(relativePath).getParent.resolve(name + ".explain")
       Try(readGoldenFile(goldenFile)) match {
         case Success(expected) if expected == actual => // Test passes.
@@ -193,6 +190,10 @@ class ProtoToParsedPlanTestSuite extends SparkFunSuite with SharedSparkSession {
               "SPARK_GENERATE_GOLDEN_FILES=1 environment variable set")
       }
     }
+  }
+
+  private def normalizePath(path: String): String = {
+    path.replace(connectPath.toString, "..")
   }
 
   private def readRelation(path: Path): proto.Relation = {

@@ -1573,22 +1573,24 @@ class SubquerySuite extends QueryTest
   }
 
   test("SPARK-26893: Allow pushdown of partition pruning subquery filters to file source") {
-    withTable("a", "b") {
-      spark.range(4).selectExpr("id", "id % 2 AS p").write.partitionBy("p").saveAsTable("a")
-      spark.range(2).write.saveAsTable("b")
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+      withTable("a", "b") {
+        spark.range(4).selectExpr("id", "id % 2 AS p").write.partitionBy("p").saveAsTable("a")
+        spark.range(2).write.saveAsTable("b")
 
-      val df = sql("SELECT * FROM a WHERE p <= (SELECT MIN(id) FROM b)")
-      checkAnswer(df, Seq(Row(0, 0), Row(2, 0)))
-      // need to execute the query before we can examine fs.inputRDDs()
-      assert(stripAQEPlan(df.queryExecution.executedPlan) match {
-        case WholeStageCodegenExec(ColumnarToRowExec(InputAdapter(
-            fs @ FileSourceScanExec(_, _, _, partitionFilters, _, _, _, _, _)))) =>
-          partitionFilters.exists(ExecSubqueryExpression.hasSubquery) &&
-            fs.inputRDDs().forall(
-              _.asInstanceOf[FileScanRDD].filePartitions.forall(
-                _.files.forall(_.urlEncodedPath.contains("p=0"))))
-        case _ => false
-      })
+        val df = sql("SELECT * FROM a WHERE p <= (SELECT MIN(id) FROM b)")
+        checkAnswer(df, Seq(Row(0, 0), Row(2, 0)))
+        // need to execute the query before we can examine fs.inputRDDs()
+        assert(stripAQEPlan(df.queryExecution.executedPlan) match {
+          case WholeStageCodegenExec(ColumnarToRowExec(InputAdapter(
+          fs@FileSourceScanExec(_, _, _, partitionFilters, _, _, _, _, _)))) =>
+            partitionFilters.exists(ExecSubqueryExpression.hasSubquery) &&
+              fs.inputRDDs().forall(
+                _.asInstanceOf[FileScanRDD].filePartitions.forall(
+                  _.files.forall(_.urlEncodedPath.contains("p=0"))))
+          case _ => false
+        })
+      }
     }
   }
 

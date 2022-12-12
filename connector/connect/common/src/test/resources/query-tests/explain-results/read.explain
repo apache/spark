@@ -1,1 +1,1 @@
-Relation [name#0,age#0,job#0] csv
+RelationV2[name#0, age#0, job#0]  csv file:../common/src/test/resources/query-tests/test-data/people.csv

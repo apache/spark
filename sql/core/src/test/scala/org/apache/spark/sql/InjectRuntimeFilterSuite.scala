@@ -209,11 +209,15 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
     // `MergeScalarSubqueries` can duplicate subqueries in the optimized plan and would make testing
     // complicated.
     conf.setConfString(SQLConf.OPTIMIZER_EXCLUDED_RULES.key, MergeScalarSubqueries.ruleName)
+    // This testsuite doesn't work with V2 as `SupportsRuntimeFiltering` is not implemented for
+    // ParquetV2 yet.
+    conf.setConf(SQLConf.USE_V1_SOURCE_LIST, "parquet")
   }
 
   protected override def afterAll(): Unit = try {
     conf.setConfString(SQLConf.OPTIMIZER_EXCLUDED_RULES.key,
       SQLConf.OPTIMIZER_EXCLUDED_RULES.defaultValueString)
+    conf.setConf(SQLConf.USE_V1_SOURCE_LIST, SQLConf.USE_V1_SOURCE_LIST.defaultValueString)
 
     sql("DROP TABLE IF EXISTS bf1")
     sql("DROP TABLE IF EXISTS bf2")

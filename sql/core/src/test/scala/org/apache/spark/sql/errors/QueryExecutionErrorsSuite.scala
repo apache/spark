@@ -552,26 +552,29 @@ class QueryExecutionErrorsSuite
   }
 
   test("INVALID_BUCKET_FILE: error if there exists any malformed bucket files") {
-    val df1 = (0 until 50).map(i => (i % 5, i % 13, i.toString)).
-      toDF("i", "j", "k").as("df1")
+    // This test doesn't work with V2 as bucket handling is not implemented yet.
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+      val df1 = (0 until 50).map(i => (i % 5, i % 13, i.toString)).
+        toDF("i", "j", "k").as("df1")
 
-    withTable("bucketed_table") {
-      df1.write.format("parquet").bucketBy(8, "i").
-        saveAsTable("bucketed_table")
-      val warehouseFilePath = new URI(spark.sessionState.conf.warehousePath).getPath
-      val tableDir = new File(warehouseFilePath, "bucketed_table")
-      Utils.deleteRecursively(tableDir)
-      df1.write.parquet(tableDir.getAbsolutePath)
+      withTable("bucketed_table") {
+        df1.write.format("parquet").bucketBy(8, "i").
+          saveAsTable("bucketed_table")
+        val warehouseFilePath = new URI(spark.sessionState.conf.warehousePath).getPath
+        val tableDir = new File(warehouseFilePath, "bucketed_table")
+        Utils.deleteRecursively(tableDir)
+        df1.write.parquet(tableDir.getAbsolutePath)
 
-      val aggregated = spark.table("bucketed_table").groupBy("i").count()
+        val aggregated = spark.table("bucketed_table").groupBy("i").count()
 
-      checkError(
-        exception = intercept[SparkException] {
-          aggregated.count()
-        },
-        errorClass = "INVALID_BUCKET_FILE",
-        parameters = Map("path" -> ".+"),
-        matchPVals = true)
+        checkError(
+          exception = intercept[SparkException] {
+            aggregated.count()
+          },
+          errorClass = "INVALID_BUCKET_FILE",
+          parameters = Map("path" -> ".+"),
+          matchPVals = true)
+      }
     }
   }
 

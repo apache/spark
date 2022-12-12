@@ -62,6 +62,9 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
   // To make output results deterministic
   override protected def sparkConf: SparkConf = super.sparkConf
     .set(SQLConf.SHUFFLE_PARTITIONS.key, "1")
+    // To avoid `BUG: computeStats called before pushdown on DSv2 relation` with q14a, q14b, q38,
+    // q87 we don't run this test with V2 yet.
+    .set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
 
   protected override def createSparkSession: TestSparkSession = {
     new TestSparkSession(new SparkContext("local[1]", this.getClass.getSimpleName, sparkConf))

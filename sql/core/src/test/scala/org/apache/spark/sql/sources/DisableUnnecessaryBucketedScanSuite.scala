@@ -54,6 +54,17 @@ abstract class DisableUnnecessaryBucketedScanSuite
   with SQLTestUtils
   with AdaptiveSparkPlanHelper {
 
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    // This testsuite doesn't work with V2 as bucket handling is not implemented yet.
+    conf.setConf(SQLConf.USE_V1_SOURCE_LIST, "parquet")
+  }
+
+  protected override def afterAll(): Unit = {
+    super.afterAll()
+    conf.setConf(SQLConf.USE_V1_SOURCE_LIST, SQLConf.USE_V1_SOURCE_LIST.defaultValueString)
+  }
+
   import testImplicits._
 
   private lazy val df1 =

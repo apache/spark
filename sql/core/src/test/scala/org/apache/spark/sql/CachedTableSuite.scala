@@ -1629,33 +1629,36 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
   }
 
   test("SPARK-35332: Make cache plan disable configs configurable - check bucket scan") {
-    withTable("t1", "t2", "t3") {
-      Seq(1, 2, 3).foreach { i =>
-        spark.range(1, 2)
-          .write
-          .format("parquet")
-          .bucketBy(2, "id")
-          .saveAsTable(s"t$i")
-      }
+    // This test doesn't work with V2 as bucket handling is not implemented yet.
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+      withTable("t1", "t2", "t3") {
+        Seq(1, 2, 3).foreach { i =>
+          spark.range(1, 2)
+            .write
+            .format("parquet")
+            .bucketBy(2, "id")
+            .saveAsTable(s"t$i")
+        }
 
-      withCache("t1", "t2", "t3") {
-        withSQLConf(SQLConf.BUCKETING_ENABLED.key -> "true",
-          SQLConf.FILES_MIN_PARTITION_NUM.key -> "1",
-          SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "false") {
-          sql("CACHE TABLE t1")
-          assert(spark.table("t1").rdd.partitions.length == 2)
-
-          withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true") {
+        withCache("t1", "t2", "t3") {
+          withSQLConf(SQLConf.BUCKETING_ENABLED.key -> "true",
+            SQLConf.FILES_MIN_PARTITION_NUM.key -> "1",
+            SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "false") {
+            sql("CACHE TABLE t1")
             assert(spark.table("t1").rdd.partitions.length == 2)
-            sql("CACHE TABLE t2")
-            assert(spark.table("t2").rdd.partitions.length == 1)
-          }
 
-          withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "false") {
-            assert(spark.table("t1").rdd.partitions.length == 2)
-            assert(spark.table("t2").rdd.partitions.length == 1)
-            sql("CACHE TABLE t3")
-            assert(spark.table("t3").rdd.partitions.length == 2)
+            withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true") {
+              assert(spark.table("t1").rdd.partitions.length == 2)
+              sql("CACHE TABLE t2")
+              assert(spark.table("t2").rdd.partitions.length == 1)
+            }
+
+            withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "false") {
+              assert(spark.table("t1").rdd.partitions.length == 2)
+              assert(spark.table("t2").rdd.partitions.length == 1)
+              sql("CACHE TABLE t3")
+              assert(spark.table("t3").rdd.partitions.length == 2)
+            }
           }
         }
       }

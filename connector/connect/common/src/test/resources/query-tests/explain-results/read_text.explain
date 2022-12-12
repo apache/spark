@@ -1,1 +1,1 @@
-Relation [value#0] text
+RelationV2[value#0]  text file:../common/src/test/resources/query-tests/test-data/people.txt

@@ -551,7 +551,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42704",
   "messageParameters" : {
     "name" : "`i`",
-    "referenceNames" : "[`spark_catalog`.`default`.`j1_tbl`.`i`, `spark_catalog`.`default`.`j2_tbl`.`i`]"
+    "referenceNames" : "[`spark_catalog`.`default`.`J1_TBL`.`i`, `spark_catalog`.`default`.`J2_TBL`.`i`]"
   },
   "queryContext" : [ {
     "objectType" : "",

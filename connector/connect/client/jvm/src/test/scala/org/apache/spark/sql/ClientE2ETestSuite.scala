@@ -238,12 +238,9 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
   test("writeTo with create and append") {
     withTable("myTableV2") {
       spark.range(3).writeTo("myTableV2").using("parquet").create()
-      withTable("myTableV2") {
-        assertThrows[StatusRuntimeException] {
-          // Failed to append as Cannot write into v1 table: `spark_catalog`.`default`.`mytablev2`.
-          spark.range(3).writeTo("myTableV2").append()
-        }
-      }
+      spark.range(3, 6).writeTo("myTableV2").append()
+      val result = spark.sql("select * from myTableV2").sort("id").collect()
+      assert(result === Seq(Row(0L), Row(1L), Row(2L), Row(3L), Row(4L), Row(5L)))
     }
   }
 

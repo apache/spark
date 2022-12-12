@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Histogram, Histo
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileTable}
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SQLTestUtils
 
@@ -344,7 +345,7 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
       rowCount: Option[BigInt],
       colStat: Seq[ColumnStat]): Unit = {
     val optimizedPlan = df.queryExecution.optimizedPlan
-    val attributeStats = optimizedPlan.references.zip(colStat)
+    val attributeStats = optimizedPlan.output.zip(colStat)
     assert(optimizedPlan.stats ===
       Statistics(sizeInBytes, rowCount, AttributeMap(attributeStats.toSeq)))
   }
@@ -386,41 +387,46 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
   }
 
   private def checkStatsConversion(tableName: String, isDatasourceTable: Boolean): Unit = {
-    // Create an empty table and run analyze command on it.
-    val createTableSql = if (isDatasourceTable) {
-      s"CREATE TABLE $tableName (c1 INT, c2 STRING) USING PARQUET"
-    } else {
-      s"CREATE TABLE $tableName (c1 INT, c2 STRING)"
-    }
-    sql(createTableSql)
-    // Analyze only one column.
-    sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS c1")
-    val (relation, catalogTable) = spark.table(tableName).queryExecution.analyzed.collect {
-      case catalogRel: HiveTableRelation => (catalogRel, catalogRel.tableMeta)
-      case logicalRel: LogicalRelation => (logicalRel, logicalRel.catalogTable.get)
-    }.head
-    val emptyColStat = ColumnStat(Some(0), None, None, Some(0), Some(4), Some(4))
-    val emptyCatalogColStat = CatalogColumnStat(Some(0), None, None, Some(0), Some(4), Some(4))
-    // Check catalog statistics
-    assert(catalogTable.stats.isDefined)
-    assert(catalogTable.stats.get.sizeInBytes == 0)
-    assert(catalogTable.stats.get.rowCount == Some(0))
-    assert(catalogTable.stats.get.colStats == Map("c1" -> emptyCatalogColStat))
+    // To avoid `BUG: computeStats called before pushdown on DSv2 relation` we don't run this test
+    // with V2 yet.
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+      // Create an empty table and run analyze command on it.
+      val createTableSql = if (isDatasourceTable) {
+        s"CREATE TABLE $tableName (c1 INT, c2 STRING) USING PARQUET"
+      } else {
+        s"CREATE TABLE $tableName (c1 INT, c2 STRING)"
+      }
+      sql(createTableSql)
+      // Analyze only one column.
+      sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS c1")
+      val (relation, catalogTable) = spark.table(tableName).queryExecution.analyzed.collect {
+        case catalogRel: HiveTableRelation => (catalogRel, catalogRel.tableMeta)
+        case logicalRel: LogicalRelation => (logicalRel, logicalRel.catalogTable.get)
+        case dsv2Rel@DataSourceV2Relation(ft: FileTable, _, _, _, _) => (dsv2Rel, ft.v1Table.get)
+      }.head
+      val emptyColStat = ColumnStat(Some(0), None, None, Some(0), Some(4), Some(4))
+      val emptyCatalogColStat = CatalogColumnStat(Some(0), None, None, Some(0), Some(4), Some(4))
+      // Check catalog statistics
+      assert(catalogTable.stats.isDefined)
+      assert(catalogTable.stats.get.sizeInBytes == 0)
+      assert(catalogTable.stats.get.rowCount == Some(0))
+      assert(catalogTable.stats.get.colStats == Map("c1" -> emptyCatalogColStat))
 
-    // Check relation statistics
-    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
-      assert(relation.stats.sizeInBytes == 1)
-      assert(relation.stats.rowCount == Some(0))
-      assert(relation.stats.attributeStats.size == 1)
-      val (attribute, colStat) = relation.stats.attributeStats.head
-      assert(attribute.name == "c1")
-      assert(colStat == emptyColStat)
-    }
-    relation.invalidateStatsCache()
-    withSQLConf(SQLConf.CBO_ENABLED.key -> "false") {
-      assert(relation.stats.sizeInBytes == 0)
-      assert(relation.stats.rowCount.isEmpty)
-      assert(relation.stats.attributeStats.isEmpty)
+      // Check relation statistics
+      withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+        assert(relation.stats.sizeInBytes == 1)
+        assert(relation.stats.rowCount == Some(0))
+        assert(relation.stats.attributeStats.size == 1)
+        val (attribute, colStat) = relation.stats.attributeStats.head
+        assert(attribute.name == "c1")
+        assert(colStat == emptyColStat)
+      }
+      relation.invalidateStatsCache()
+      withSQLConf(SQLConf.CBO_ENABLED.key -> "false") {
+        assert(relation.stats.sizeInBytes == 0)
+        assert(relation.stats.rowCount.isEmpty)
+        assert(relation.stats.attributeStats.isEmpty)
+      }
     }
   }
 }

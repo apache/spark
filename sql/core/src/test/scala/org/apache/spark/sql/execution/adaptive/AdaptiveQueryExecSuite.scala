@@ -224,7 +224,13 @@ class AdaptiveQueryExecSuite
           SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
           SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
         sql("CREATE TABLE t1 USING PARQUET AS SELECT 1 c1")
+        // This test requires at least 2 files in the V2 tables as `DataSourceV2ScanExecBase` can
+        // infer `SinglePartition` and so there is no `Exchange` between the partial and final
+        // aggregates required for distinct that would make the BHJ -> SMJ conversion cost
+        // effective.
+        sql("INSERT INTO t1(c1) VALUES (2)")
         sql("CREATE TABLE t2 USING PARQUET AS SELECT 1 c1")
+        sql("INSERT INTO t2(c1) VALUES (2)")
         val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
           """
             |SELECT * FROM (
@@ -873,23 +879,26 @@ class AdaptiveQueryExecSuite
   }
 
   test("SPARK-30291: AQE should catch the exceptions when doing materialize") {
-    withSQLConf(
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
-      withTable("bucketed_table") {
-        val df1 =
-          (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k").as("df1")
-        df1.write.format("parquet").bucketBy(8, "i").saveAsTable("bucketed_table")
-        val warehouseFilePath = new URI(spark.sessionState.conf.warehousePath).getPath
-        val tableDir = new File(warehouseFilePath, "bucketed_table")
-        Utils.deleteRecursively(tableDir)
-        df1.write.parquet(tableDir.getAbsolutePath)
+    // This testsuite doesn't work with V2 as bucket handling is not implemented yet.
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+        withTable("bucketed_table") {
+          val df1 =
+            (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k").as("df1")
+          df1.write.format("parquet").bucketBy(8, "i").saveAsTable("bucketed_table")
+          val warehouseFilePath = new URI(spark.sessionState.conf.warehousePath).getPath
+          val tableDir = new File(warehouseFilePath, "bucketed_table")
+          Utils.deleteRecursively(tableDir)
+          df1.write.parquet(tableDir.getAbsolutePath)
 
-        val aggregated = spark.table("bucketed_table").groupBy("i").count()
-        val error = intercept[SparkException] {
-          aggregated.count()
+          val aggregated = spark.table("bucketed_table").groupBy("i").count()
+          val error = intercept[SparkException] {
+            aggregated.count()
+          }
+          assert(error.getErrorClass === "INVALID_BUCKET_FILE")
+          assert(error.getMessage contains "Invalid bucket file")
         }
-        assert(error.getErrorClass === "INVALID_BUCKET_FILE")
-        assert(error.getMessage contains "Invalid bucket file")
       }
     }
   }

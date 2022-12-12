@@ -28,6 +28,7 @@ import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin.LogicalPlanWithDatasetId
 import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, FileTable}
 import org.apache.spark.sql.execution.exchange.BroadcastExchangeExec
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.functions._
@@ -376,55 +377,59 @@ class DataFrameJoinSuite extends QueryTest
   }
 
   test("SPARK-24690 enables star schema detection even if CBO disabled") {
-    withTable("r0", "r1", "r2", "r3") {
-      withTempDir { dir =>
+    // To avoid `BUG: computeStats called before pushdown on DSv2 relation` we don't run this test
+    // with V2 yet.
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+      withTable("r0", "r1", "r2", "r3") {
+        withTempDir { dir =>
 
-        withSQLConf(
+          withSQLConf(
             SQLConf.STARSCHEMA_DETECTION.key -> "true",
             SQLConf.CBO_ENABLED.key -> "false",
             SQLConf.PLAN_STATS_ENABLED.key -> "true") {
 
-          val path = dir.getAbsolutePath
+            val path = dir.getAbsolutePath
 
-          // Collects column statistics first
-          spark.range(300).selectExpr("id AS a", "id AS b", "id AS c")
-            .write.mode("overwrite").parquet(s"$path/r0")
-          spark.read.parquet(s"$path/r0").write.saveAsTable("r0")
-          spark.sql("ANALYZE TABLE r0 COMPUTE STATISTICS FOR COLUMNS a, b, c")
+            // Collects column statistics first
+            spark.range(300).selectExpr("id AS a", "id AS b", "id AS c")
+              .write.mode("overwrite").parquet(s"$path/r0")
+            spark.read.parquet(s"$path/r0").write.saveAsTable("r0")
+            spark.sql("ANALYZE TABLE r0 COMPUTE STATISTICS FOR COLUMNS a, b, c")
 
-          spark.range(10).selectExpr("id AS a", "id AS d")
-            .write.mode("overwrite").parquet(s"$path/r1")
-          spark.read.parquet(s"$path/r1").write.saveAsTable("r1")
-          spark.sql("ANALYZE TABLE r1 COMPUTE STATISTICS FOR COLUMNS a")
+            spark.range(10).selectExpr("id AS a", "id AS d")
+              .write.mode("overwrite").parquet(s"$path/r1")
+            spark.read.parquet(s"$path/r1").write.saveAsTable("r1")
+            spark.sql("ANALYZE TABLE r1 COMPUTE STATISTICS FOR COLUMNS a")
 
-          spark.range(50).selectExpr("id AS b", "id AS e")
-            .write.mode("overwrite").parquet(s"$path/r2")
-          spark.read.parquet(s"$path/r2").write.saveAsTable("r2")
-          spark.sql("ANALYZE TABLE r2 COMPUTE STATISTICS FOR COLUMNS b")
+            spark.range(50).selectExpr("id AS b", "id AS e")
+              .write.mode("overwrite").parquet(s"$path/r2")
+            spark.read.parquet(s"$path/r2").write.saveAsTable("r2")
+            spark.sql("ANALYZE TABLE r2 COMPUTE STATISTICS FOR COLUMNS b")
 
-          spark.range(1).selectExpr("id AS c", "id AS f")
-            .write.mode("overwrite").parquet(s"$path/r3")
-          spark.read.parquet(s"$path/r3").write.saveAsTable("r3")
-          spark.sql("ANALYZE TABLE r3 COMPUTE STATISTICS FOR COLUMNS c")
+            spark.range(1).selectExpr("id AS c", "id AS f")
+              .write.mode("overwrite").parquet(s"$path/r3")
+            spark.read.parquet(s"$path/r3").write.saveAsTable("r3")
+            spark.sql("ANALYZE TABLE r3 COMPUTE STATISTICS FOR COLUMNS c")
 
-          val resultDf = sql(
-            s"""SELECT * FROM r0, r1, r2, r3
-               |  WHERE
-               |    r0.a = r1.a AND
-               |    r1.d >= 3 AND
-               |    r0.b = r2.b AND
-               |    r2.e >= 5 AND
-               |    r0.c = r3.c AND
-               |    r3.f <= 100
+            val resultDf = sql(
+              s"""SELECT * FROM r0, r1, r2, r3
+                 |  WHERE
+                 |    r0.a = r1.a AND
+                 |    r1.d >= 3 AND
+                 |    r0.b = r2.b AND
+                 |    r2.e >= 5 AND
+                 |    r0.c = r3.c AND
+                 |    r3.f <= 100
              """.stripMargin)
 
-          val optimized = resultDf.queryExecution.optimizedPlan
-          val optJoins = extractLeftDeepInnerJoins(optimized)
-          val joinOrder = optJoins
-            .flatMap(_.collect { case p: LogicalRelation => p.catalogTable }.head)
-            .map(_.identifier.identifier)
+            val optimized = resultDf.queryExecution.optimizedPlan
+            val optJoins = extractLeftDeepInnerJoins(optimized)
+            val joinOrder = optJoins
+              .flatMap(_.collect { case p: LogicalRelation => p.catalogTable }.head)
+              .map(_.identifier.identifier)
 
-          assert(joinOrder === Seq("r2", "r1", "r3", "r0"))
+            assert(joinOrder === Seq("r2", "r1", "r3", "r0"))
+          }
         }
       }
     }
@@ -449,6 +454,7 @@ class DataFrameJoinSuite extends QueryTest
             assert(broadcastExchanges.size == 1)
             val tables = broadcastExchanges.head.collect {
               case FileSourceScanExec(_, _, _, _, _, _, _, Some(tableIdent), _) => tableIdent
+              case BatchScanExec(_, _, _, _, _, t: FileTable, _, _, _) => t.v1Table.get.identifier
             }
             assert(tables.size == 1)
             assert(tables.head ===

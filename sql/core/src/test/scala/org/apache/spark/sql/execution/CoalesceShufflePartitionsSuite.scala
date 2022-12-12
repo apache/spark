@@ -278,6 +278,8 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite {
     test(s"determining the number of reducers: plan already partitioned$testNameNote") {
       val test: SparkSession => Unit = { spark: SparkSession =>
         try {
+          // This test doesn't work with V2 as bucket handling is not implemented yet.
+          spark.conf.set(SQLConf.USE_V1_SOURCE_LIST.key, "parquet")
           spark.range(1000).write.bucketBy(30, "id").saveAsTable("t")
           // `df1` is hash partitioned by `id`.
           val df1 = spark.read.table("t")
@@ -304,6 +306,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite {
           assert(shuffleReads.length === 0)
         } finally {
           spark.sql("drop table t")
+          spark.conf.set(SQLConf.USE_V1_SOURCE_LIST.key, "")
         }
       }
       withSparkSession(test, 12000, minNumPostShufflePartitions)

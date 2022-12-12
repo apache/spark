@@ -137,9 +137,9 @@ class DebuggingSuite extends DebuggingSuiteBase with DisableAdaptiveExecutionSui
       }
 
       val output = captured.toString()
-        .replaceAll("== FileScan parquet \\[id#\\d+L] .* ==", "== FileScan parquet [id#xL] ==")
+        .replaceAll("== BatchScan parquet.* ==", "== BatchScan parquet ==")
       assert(output.contains(
-        """== FileScan parquet [id#xL] ==
+        """== BatchScan parquet ==
           |Tuples output: 0
           | id LongType: {}
           |""".stripMargin))

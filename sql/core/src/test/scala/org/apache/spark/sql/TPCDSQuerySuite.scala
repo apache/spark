@@ -29,9 +29,12 @@ import org.apache.spark.tags.ExtendedSQLTest
 @ExtendedSQLTest
 class TPCDSQuerySuite extends BenchmarkQueryTest with TPCDSBase {
 
-  override protected def sparkConf: SparkConf =
+  override protected def sparkConf: SparkConf = super.sparkConf
     // Disable read-side char padding so that the generated code is less than 8000.
-    super.sparkConf.set(SQLConf.READ_SIDE_CHAR_PADDING, false)
+    .set(SQLConf.READ_SIDE_CHAR_PADDING, false)
+    // To avoid `BUG: computeStats called before pushdown on DSv2 relation` with q14a, q14b, q38,
+    // q87 we don't run this test with V2 yet.
+    .set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
 
   // q72 is skipped due to GitHub Actions' memory limit.
   tpcdsQueries.filterNot(sys.env.contains("GITHUB_ACTIONS") && _ == "q72").foreach { name =>

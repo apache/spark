@@ -1189,7 +1189,9 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
   }
 
   test("SPARK-32516: legacy path option behavior in load()") {
-    withSQLConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key -> "true") {
+    // This testsuite doesn't work with V2 as LEGACY_PATH_OPTION_BEHAVIOR is not implemented yet.
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
+        SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key -> "true") {
       withTempDir { dir =>
         val path = dir.getCanonicalPath
         Seq(1).toDF.write.mode("overwrite").parquet(path)

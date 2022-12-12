@@ -1,1 +1,1 @@
-Relation [age#0L,name#0] json
+RelationV2[age#0L, name#0]  json file:../common/src/test/resources/query-tests/test-data/people.json

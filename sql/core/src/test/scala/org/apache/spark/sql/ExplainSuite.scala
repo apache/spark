@@ -277,10 +277,13 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
   }
 
   test("explain formatted - check presence of subquery in case of DPP") {
-    withTable("df1", "df2") {
-      withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
-        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
+    // This testsuite doesn't work with V2 as `SupportsRuntimeFiltering` is not implemented for
+    // ParquetV2 yet.
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+      withTable("df1", "df2") {
+        withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+          SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+          SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
           spark.range(1000).select(col("id"), col("id").as("k"))
             .write
             .partitionBy("k")
@@ -320,6 +323,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
             assert(expected_pattern4.r.findAllMatchIn(normalizedOutput).length == 1)
           }
         }
+      }
     }
   }
 
@@ -447,18 +451,21 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
   }
 
   test("Coalesced bucket info should be a part of explain string") {
-    withTable("t1", "t2") {
-      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
-        SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
-        Seq(1, 2).toDF("i").write.bucketBy(8, "i").saveAsTable("t1")
-        Seq(2, 3).toDF("i").write.bucketBy(4, "i").saveAsTable("t2")
-        val df1 = spark.table("t1")
-        val df2 = spark.table("t2")
-        val joined = df1.join(df2, df1("i") === df2("i"))
-        checkKeywordsExistsInExplain(
-          joined,
-          SimpleMode,
-          "SelectedBucketsCount: 8 out of 8 (Coalesced to 4)" :: Nil: _*)
+    // This testsuite doesn't work with V2 as bucket handling is not implemented yet.
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+      withTable("t1", "t2") {
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
+          SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
+          Seq(1, 2).toDF("i").write.bucketBy(8, "i").saveAsTable("t1")
+          Seq(2, 3).toDF("i").write.bucketBy(4, "i").saveAsTable("t2")
+          val df1 = spark.table("t1")
+          val df2 = spark.table("t2")
+          val joined = df1.join(df2, df1("i") === df2("i"))
+          checkKeywordsExistsInExplain(
+            joined,
+            SimpleMode,
+            "SelectedBucketsCount: 8 out of 8 (Coalesced to 4)" :: Nil: _*)
+        }
       }
     }
   }
@@ -698,29 +705,32 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
   }
 
   test("SPARK-32986: Bucketed scan info should be a part of explain string") {
-    withTable("t1", "t2") {
-      Seq((1, 2), (2, 3)).toDF("i", "j").write.bucketBy(8, "i").saveAsTable("t1")
-      Seq(2, 3).toDF("i").write.bucketBy(8, "i").saveAsTable("t2")
-      val df1 = spark.table("t1")
-      val df2 = spark.table("t2")
+    // This testsuite doesn't work with V2 as bucket handling is not implemented yet.
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+      withTable("t1", "t2") {
+        Seq((1, 2), (2, 3)).toDF("i", "j").write.bucketBy(8, "i").saveAsTable("t1")
+        Seq(2, 3).toDF("i").write.bucketBy(8, "i").saveAsTable("t2")
+        val df1 = spark.table("t1")
+        val df2 = spark.table("t2")
 
-      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+          checkKeywordsExistsInExplain(
+            df1.join(df2, df1("i") === df2("i")),
+            "Bucketed: true")
+        }
+
+        withSQLConf(SQLConf.BUCKETING_ENABLED.key -> "false") {
+          checkKeywordsExistsInExplain(
+            df1.join(df2, df1("i") === df2("i")),
+            "Bucketed: false (disabled by configuration)")
+        }
+
+        checkKeywordsExistsInExplain(df1, "Bucketed: false (disabled by query planner)")
+
         checkKeywordsExistsInExplain(
-          df1.join(df2, df1("i") === df2("i")),
-          "Bucketed: true")
+          df1.select("j"),
+          "Bucketed: false (bucket column(s) not read)")
       }
-
-      withSQLConf(SQLConf.BUCKETING_ENABLED.key -> "false") {
-        checkKeywordsExistsInExplain(
-          df1.join(df2, df1("i") === df2("i")),
-          "Bucketed: false (disabled by configuration)")
-      }
-
-      checkKeywordsExistsInExplain(df1, "Bucketed: false (disabled by query planner)" )
-
-      checkKeywordsExistsInExplain(
-        df1.select("j"),
-        "Bucketed: false (bucket column(s) not read)")
     }
   }
 

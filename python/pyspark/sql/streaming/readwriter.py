@@ -918,9 +918,9 @@ class DataStreamWriter:
         ...     time.sleep(5)
         ...     q.stop()
         ...     spark.read.schema(df.schema).parquet(d).show()
-        +...---------+-----+
-        |...timestamp|value|
-        +...---------+-----+
+        +-----+...---------+
+        |value|...timestamp|
+        +-----+...---------+
         ...
         """
         if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
