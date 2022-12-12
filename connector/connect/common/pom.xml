@@ -193,7 +193,7 @@
         <profile>
             <id>user-defined-protoc</id>
             <properties>
-                <connect.protoc.executable.path>${env.CONNECT_PROTOC_EXEC_PATH}</connect.protoc.executable.path>
+                <spark.protoc.executable.path>${env.SPARK_PROTOC_EXEC_PATH}</spark.protoc.executable.path>
                 <connect.plugin.executable.path>${env.CONNECT_PLUGIN_EXEC_PATH}</connect.plugin.executable.path>
             </properties>
             <build>
@@ -203,7 +203,7 @@
                         <artifactId>protobuf-maven-plugin</artifactId>
                         <version>0.6.1</version>
                         <configuration>
-                            <protocExecutable>${connect.protoc.executable.path}</protocExecutable>
+                            <protocExecutable>${spark.protoc.executable.path}</protocExecutable>
                             <pluginId>grpc-java</pluginId>
                             <pluginExecutable>${connect.plugin.executable.path}</pluginExecutable>
                             <protoSourceRoot>src/main/protobuf</protoSourceRoot>
