@@ -23,6 +23,18 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StructField, StructType}
 
 class FileMetadataStructRowIndexSuite extends QueryTest with SharedSparkSession {
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    // This testsuite doesn't work with V2 as `FileFormat` metadata columns are not available yet.
+    spark.conf.set(SQLConf.USE_V1_SOURCE_LIST, "orc,parquet")
+  }
+
+  override def afterAll(): Unit = {
+    spark.conf.set(SQLConf.USE_V1_SOURCE_LIST, SQLConf.USE_V1_SOURCE_LIST.defaultValueString)
+    super.afterAll()
+  }
+
   import testImplicits._
 
   val EXPECTED_ROW_ID_COL = "expected_row_idx"

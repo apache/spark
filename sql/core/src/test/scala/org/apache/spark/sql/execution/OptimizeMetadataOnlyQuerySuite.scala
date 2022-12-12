@@ -30,6 +30,8 @@ class OptimizeMetadataOnlyQuerySuite extends QueryTest with SharedSparkSession {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
+    // This testsuite doesn't work with V2 as `OptimizeMetadataOnlyQuery` doesn't work with V2.
+    spark.conf.set(SQLConf.USE_V1_SOURCE_LIST, "orc,parquet")
     val data = (1 to 10).map(i => (i, s"data-$i", i % 2, if ((i % 2) == 0) "even" else "odd"))
       .toDF("col1", "col2", "partcol1", "partcol2")
     data.write.partitionBy("partcol1", "partcol2").mode("append").saveAsTable("srcpart")
@@ -38,6 +40,7 @@ class OptimizeMetadataOnlyQuerySuite extends QueryTest with SharedSparkSession {
   override protected def afterAll(): Unit = {
     try {
       sql("DROP TABLE IF EXISTS srcpart")
+      spark.conf.set(SQLConf.USE_V1_SOURCE_LIST, SQLConf.USE_V1_SOURCE_LIST.defaultValueString)
     } finally {
       super.afterAll()
     }

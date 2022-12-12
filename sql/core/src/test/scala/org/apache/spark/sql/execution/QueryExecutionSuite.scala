@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, LogicalPlan, OneRowRelation, Project, ShowTables, SubqueryAlias}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
-import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.datasources.v2.ShowTablesExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -238,8 +237,8 @@ class QueryExecutionSuite extends SharedSparkSession {
     withTable("spark_34129") {
       spark.sql("CREATE TABLE spark_34129(id INT) using parquet")
       val df = spark.table("spark_34129")
-      assert(df.queryExecution.optimizedPlan.toString.startsWith(
-        s"Relation $SESSION_CATALOG_NAME.default.spark_34129["))
+      assert(df.queryExecution.optimizedPlan.toString.trim.matches(
+        "RelationV2\\[id#\\d+\\] default.spark_34129"))
     }
   }
 

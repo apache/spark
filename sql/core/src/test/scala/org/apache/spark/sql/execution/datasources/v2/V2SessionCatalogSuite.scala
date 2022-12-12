@@ -30,8 +30,9 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, NamespaceChange, SupportsNamespaces, TableCatalog, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, NamespaceChange, SupportsNamespaces, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetTable
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -185,27 +186,31 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     assert(!catalog.tableExists(testIdent))
 
     // default location
-    val t1 = catalog.createTable(testIdent, schema, emptyTrans, properties).asInstanceOf[V1Table]
-    assert(t1.catalogTable.location ===
+    val t1 =
+      catalog.createTable(testIdent, schema, emptyTrans, properties).asInstanceOf[ParquetTable]
+    assert(t1.v1Table.get.location ===
       spark.sessionState.catalog.defaultTablePath(testIdent.asTableIdentifier))
     catalog.dropTable(testIdent)
 
     // relative path
     properties.put(TableCatalog.PROP_LOCATION, "relative/path")
-    val t2 = catalog.createTable(testIdent, schema, emptyTrans, properties).asInstanceOf[V1Table]
-    assert(t2.catalogTable.location === makeQualifiedPathWithWarehouse("db.db/relative/path"))
+    val t2 =
+      catalog.createTable(testIdent, schema, emptyTrans, properties).asInstanceOf[ParquetTable]
+    assert(t2.v1Table.get.location === makeQualifiedPathWithWarehouse("db.db/relative/path"))
     catalog.dropTable(testIdent)
 
     // absolute path without scheme
     properties.put(TableCatalog.PROP_LOCATION, "/absolute/path")
-    val t3 = catalog.createTable(testIdent, schema, emptyTrans, properties).asInstanceOf[V1Table]
-    assert(t3.catalogTable.location.toString === "file:///absolute/path")
+    val t3 =
+      catalog.createTable(testIdent, schema, emptyTrans, properties).asInstanceOf[ParquetTable]
+    assert(t3.v1Table.get.location.toString === "file:///absolute/path")
     catalog.dropTable(testIdent)
 
     // absolute path with scheme
     properties.put(TableCatalog.PROP_LOCATION, "file:/absolute/path")
-    val t4 = catalog.createTable(testIdent, schema, emptyTrans, properties).asInstanceOf[V1Table]
-    assert(t4.catalogTable.location.toString === "file:/absolute/path")
+    val t4 =
+      catalog.createTable(testIdent, schema, emptyTrans, properties).asInstanceOf[ParquetTable]
+    assert(t4.v1Table.get.location.toString === "file:/absolute/path")
     catalog.dropTable(testIdent)
   }
 
@@ -357,7 +362,8 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     val updated = catalog.alterTable(testIdent,
       TableChange.addColumn(Array("ts"), TimestampType, false))
 
-    assert(updated.schema == schema.add("ts", TimestampType, nullable = false))
+    // V2 FileTable dataSchema is always nullable
+    assert(updated.schema == schema.add("ts", TimestampType, nullable = true))
   }
 
   test("alterTable: add column with comment") {
@@ -370,7 +376,8 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     val updated = catalog.alterTable(testIdent,
       TableChange.addColumn(Array("ts"), TimestampType, false, "comment text"))
 
-    val field = StructField("ts", TimestampType, nullable = false).withComment("comment text")
+    // V2 FileTable dataSchema is always nullable
+    val field = StructField("ts", TimestampType, nullable = true).withComment("comment text")
     assert(updated.schema == schema.add(field))
   }
 
@@ -447,7 +454,8 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
         .add("data", StringType)
     val table = catalog.createTable(testIdent, originalSchema, emptyTrans, emptyProps)
 
-    assert(table.schema == originalSchema)
+    // V2 FileTable dataSchema is always nullable
+    assert(table.schema == originalSchema.asNullable)
 
     val updated = catalog.alterTable(testIdent,
       TableChange.updateColumnNullability(Array("id"), true))
@@ -700,24 +708,27 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     assert(!catalog.tableExists(testIdent))
 
     // default location
-    val t1 = catalog.createTable(testIdent, schema, emptyTrans, emptyProps).asInstanceOf[V1Table]
-    assert(t1.catalogTable.location ===
+    val t1 =
+      catalog.createTable(testIdent, schema, emptyTrans, emptyProps).asInstanceOf[ParquetTable]
+    assert(t1.v1Table.get.location ===
       spark.sessionState.catalog.defaultTablePath(testIdent.asTableIdentifier))
 
     // relative path
     val t2 = catalog.alterTable(testIdent,
-      TableChange.setProperty(TableCatalog.PROP_LOCATION, "relative/path")).asInstanceOf[V1Table]
-    assert(t2.catalogTable.location === makeQualifiedPathWithWarehouse("db.db/relative/path"))
+      TableChange.setProperty(TableCatalog.PROP_LOCATION, "relative/path")
+    ).asInstanceOf[ParquetTable]
+    assert(t2.v1Table.get.location === makeQualifiedPathWithWarehouse("db.db/relative/path"))
 
     // absolute path without scheme
     val t3 = catalog.alterTable(testIdent,
-      TableChange.setProperty(TableCatalog.PROP_LOCATION, "/absolute/path")).asInstanceOf[V1Table]
-    assert(t3.catalogTable.location.toString === "file:///absolute/path")
+      TableChange.setProperty(TableCatalog.PROP_LOCATION, "/absolute/path")
+    ).asInstanceOf[ParquetTable]
+    assert(t3.v1Table.get.location.toString === "file:///absolute/path")
 
     // absolute path with scheme
     val t4 = catalog.alterTable(testIdent, TableChange.setProperty(
-      TableCatalog.PROP_LOCATION, "file:/absolute/path")).asInstanceOf[V1Table]
-    assert(t4.catalogTable.location.toString === "file:/absolute/path")
+      TableCatalog.PROP_LOCATION, "file:/absolute/path")).asInstanceOf[ParquetTable]
+    assert(t4.v1Table.get.location.toString === "file:/absolute/path")
   }
 
   test("dropTable") {

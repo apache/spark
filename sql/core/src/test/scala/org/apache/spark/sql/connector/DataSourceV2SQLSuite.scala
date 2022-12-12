@@ -41,6 +41,7 @@ import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
+import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetTable
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
@@ -287,9 +288,9 @@ class DataSourceV2SQLSuiteV1Filter
 
       sql("CREATE TABLE t2 (id int)")
       val t2 = spark.sessionState.catalogManager.v2SessionCatalog.asTableCatalog
-        .loadTable(Identifier.of(Array("default"), "t2")).asInstanceOf[V1Table]
+        .loadTable(Identifier.of(Array("default"), "t2")).asInstanceOf[ParquetTable]
       // Spark should set the default provider as DEFAULT_DATA_SOURCE_NAME for the session catalog.
-      assert(t2.v1Table.provider == Some(conf.defaultDataSourceName))
+      assert(t2.v1Table.get.provider == Some(conf.defaultDataSourceName))
     }
   }
 
@@ -777,7 +778,7 @@ class DataSourceV2SQLSuiteV1Filter
     // can load the table.
     val t = catalog(SESSION_CATALOG_NAME).asTableCatalog
       .loadTable(Identifier.of(Array("default"), "table_name"))
-    assert(t.isInstanceOf[V1Table], "V1 table wasn't returned as an unresolved table")
+    assert(t.isInstanceOf[ParquetTable], "V1 table wasn't returned as an unresolved table")
   }
 
   test("CreateTableAsSelect: nullable schema") {

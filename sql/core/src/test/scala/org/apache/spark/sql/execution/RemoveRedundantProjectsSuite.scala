@@ -92,7 +92,7 @@ abstract class RemoveRedundantProjectsSuiteBase
 
   test("project with fewer columns") {
     val query = "select a from testView where a > 3"
-    assertProjectExec(query, 1, 1)
+    assertProjectExec(query, 0, 1)
   }
 
   test("aggregate without ordering requirement") {
@@ -103,13 +103,13 @@ abstract class RemoveRedundantProjectsSuiteBase
 
   test("aggregate with ordering requirement") {
     val query = "select a, sum(b) as sum_b from testView group by a"
-    assertProjectExec(query, 1, 1)
+    assertProjectExec(query, 0, 0)
   }
 
   test("join without ordering requirement") {
     val query = "select t1.key, t2.key, t1.a, t2.b from (select key, a, b, c from testView)" +
       " as t1 join (select key, a, b, c from testView) as t2 on t1.c > t2.c and t1.key > 10"
-    assertProjectExec(query, 1, 3)
+    assertProjectExec(query, 2, 3)
   }
 
   test("join with ordering requirement") {
@@ -197,7 +197,7 @@ abstract class RemoveRedundantProjectsSuiteBase
           |)
           |""".stripMargin
 
-      Seq(("UNION", 1, 2), ("UNION ALL", 1, 2)).foreach { case (setOperation, enabled, disabled) =>
+      Seq(("UNION", 1, 1), ("UNION ALL", 1, 1)).foreach { case (setOperation, enabled, disabled) =>
         val query = queryTemplate.format(setOperation)
         assertProjectExec(query, enabled = enabled, disabled = disabled)
       }
@@ -217,7 +217,7 @@ abstract class RemoveRedundantProjectsSuiteBase
         |LIMIT 10
         |""".stripMargin
     // The Project above the Expand is not removed due to SPARK-36020.
-    assertProjectExec(query, 1, 3)
+    assertProjectExec(query, 1, 1)
   }
 
   test("SPARK-36020: Project should not be removed when child's logical link is different") {

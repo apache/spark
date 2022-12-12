@@ -677,28 +677,21 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
 
         // Exception thrown for ambiguous case.
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-          if (conf.getConf(SQLConf.USE_V1_SOURCE_LIST).contains("orc")) {
-            checkError(
-              exception = intercept[AnalysisException] {
-                sql(s"select a from $tableName where a < 0").collect()
-              },
-              errorClass = "AMBIGUOUS_REFERENCE",
-              parameters = Map(
-                "name" -> "`a`",
-                "referenceNames" -> ("[`spark_catalog`.`default`.`spark_32622`.`a`, " +
-                  "`spark_catalog`.`default`.`spark_32622`.`a`]")),
-              context = ExpectedContext(
-                fragment = "a",
-                start = 32,
-                stop = 32))
-          } else {
-            checkError(
-              exception = intercept[AnalysisException] {
-                sql(s"select a from $tableName where a < 0").collect()
-              },
-              errorClass = "COLUMN_ALREADY_EXISTS",
-              parameters = Map("columnName" -> "`a`"))
-          }
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"select a from $tableName where a < 0").collect()
+            },
+            errorClass = "AMBIGUOUS_REFERENCE",
+            parameters = Map(
+              "name" -> "`a`",
+              "referenceNames" -> ("[`spark_catalog`.`default`.`spark_32622`.`a`, " +
+                "`spark_catalog`.`default`.`spark_32622`.`a`]")),
+            context = ExpectedContext(
+              fragment = "a",
+              start = 32,
+              stop = 32
+            )
+          )
         }
       }
 

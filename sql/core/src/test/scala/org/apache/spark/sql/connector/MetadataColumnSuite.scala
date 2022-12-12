@@ -24,6 +24,7 @@ import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryCatalog, InMe
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.functions.struct
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType, StructField, StructType}
 
 class MetadataColumnSuite extends DatasourceV2SQLBase {
@@ -276,36 +277,42 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
   }
 
   test("SPARK-41498: Nested metadata column is propagated through union") {
-    withTempDir { dir =>
-      spark.range(start = 0, end = 10, step = 1, numPartitions = 1)
-        .write.mode("overwrite").save(dir.getAbsolutePath)
-      val df = spark.read.load(dir.getAbsolutePath)
-      val dfQuery = df.union(df).select("_metadata.file_path")
+    // This testsuite doesn't work with V2 as `FileFormat` metadata columns are not available yet.
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+      withTempDir { dir =>
+        spark.range(start = 0, end = 10, step = 1, numPartitions = 1)
+          .write.mode("overwrite").save(dir.getAbsolutePath)
+        val df = spark.read.load(dir.getAbsolutePath)
+        val dfQuery = df.union(df).select("_metadata.file_path")
 
-      val filePath = dir.listFiles(new FilenameFilter {
-        override def accept(dir: File, name: String): Boolean = name.endsWith(".parquet")
-      }).map(_.getAbsolutePath)
-      assert(filePath.length == 1)
-      val expectedAnswer = (1 to 20).map(_ => Row("file:" ++ filePath.head))
-      checkAnswer(dfQuery, expectedAnswer)
+        val filePath = dir.listFiles(new FilenameFilter {
+          override def accept(dir: File, name: String): Boolean = name.endsWith(".parquet")
+        }).map(_.getAbsolutePath)
+        assert(filePath.length == 1)
+        val expectedAnswer = (1 to 20).map(_ => Row("file:" ++ filePath.head))
+        checkAnswer(dfQuery, expectedAnswer)
+      }
     }
   }
 
   test("SPARK-41498: Metadata column is not propagated when children of Union " +
     "have metadata output of different size") {
-    withTable(tbl) {
-      prepareTable()
-      withTempDir { dir =>
-        spark.range(start = 10, end = 20).selectExpr("bigint(id) as id", "string(id) as data")
-          .write.mode("overwrite").save(dir.getAbsolutePath)
-        val df1 = spark.table(tbl)
-        val df2 = spark.read.load(dir.getAbsolutePath)
+    // This testsuite doesn't work with V2 as `FileFormat` metadata columns are not available yet.
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+      withTable(tbl) {
+        prepareTable()
+        withTempDir { dir =>
+          spark.range(start = 10, end = 20).selectExpr("bigint(id) as id", "string(id) as data")
+            .write.mode("overwrite").save(dir.getAbsolutePath)
+          val df1 = spark.table(tbl)
+          val df2 = spark.read.load(dir.getAbsolutePath)
 
-        // Make sure one df contains a metadata column and the other does not
-        assert(!df1.queryExecution.analyzed.metadataOutput.exists(_.name == "_metadata"))
-        assert(df2.queryExecution.analyzed.metadataOutput.exists(_.name == "_metadata"))
+          // Make sure one df contains a metadata column and the other does not
+          assert(!df1.queryExecution.analyzed.metadataOutput.exists(_.name == "_metadata"))
+          assert(df2.queryExecution.analyzed.metadataOutput.exists(_.name == "_metadata"))
 
-        assert(df1.union(df2).queryExecution.analyzed.metadataOutput.isEmpty)
+          assert(df1.union(df2).queryExecution.analyzed.metadataOutput.isEmpty)
+        }
       }
     }
   }

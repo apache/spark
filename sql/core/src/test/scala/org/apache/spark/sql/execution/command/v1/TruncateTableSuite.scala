@@ -136,19 +136,23 @@ trait TruncateTableSuiteBase extends command.TruncateTableSuiteBase {
   }
 
   test("invalidation of tableRelationCache after table truncation") {
-    Seq(false, true).foreach { autoUpdate =>
-      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
-        withNamespaceAndTable("ns", "tbl") { t =>
-          spark.range(100).write.saveAsTable(t)
-          sql(s"ANALYZE TABLE $t COMPUTE STATISTICS")
-          spark.table(t)
-          sql(s"TRUNCATE TABLE $t")
-          spark.table(t)
+    // To avoid `BUG: computeStats called before pushdown on DSv2 relation` we don't run this test
+    // with V2 yet.
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+      Seq(false, true).foreach { autoUpdate =>
+        withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
+          withNamespaceAndTable("ns", "tbl") { t =>
+            spark.range(100).write.saveAsTable(t)
+            sql(s"ANALYZE TABLE $t COMPUTE STATISTICS")
+            spark.table(t)
+            sql(s"TRUNCATE TABLE $t")
+            spark.table(t)
 
-          val catalog = spark.sessionState.catalog
-          val qualifiedTableName = QualifiedTableName("ns", "tbl")
-          val cachedPlan = catalog.getCachedTable(qualifiedTableName)
-          assert(cachedPlan.stats.sizeInBytes == 0)
+            val catalog = spark.sessionState.catalog
+            val qualifiedTableName = QualifiedTableName("ns", "tbl")
+            val cachedPlan = catalog.getCachedTable(qualifiedTableName)
+            assert(cachedPlan.stats.sizeInBytes == 0)
+          }
         }
       }
     }

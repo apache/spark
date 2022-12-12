@@ -50,6 +50,8 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
   protected override def beforeAll(): Unit = {
     super.beforeAll()
     spark.conf.set(SQLConf.LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING, true)
+    // This testsuite doesn't work with V2 as bucket handling is not implemented yet.
+    spark.conf.set(SQLConf.USE_V1_SOURCE_LIST, "json,parquet")
   }
 
   protected override def afterAll(): Unit = {

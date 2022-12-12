@@ -32,6 +32,17 @@ import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructFiel
 
 class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
 
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    // This testsuite doesn't work with V2 as `FileFormat` metadata columns are not available yet.
+    spark.conf.set(SQLConf.USE_V1_SOURCE_LIST, "json,orc,parquet")
+  }
+
+  override def afterAll(): Unit = {
+    spark.conf.set(SQLConf.USE_V1_SOURCE_LIST, SQLConf.USE_V1_SOURCE_LIST.defaultValueString)
+    super.afterAll()
+  }
+
   import testImplicits._
 
   val data0: Seq[Row] = Seq(Row("jack", 24, Row(12345L, "uom")))

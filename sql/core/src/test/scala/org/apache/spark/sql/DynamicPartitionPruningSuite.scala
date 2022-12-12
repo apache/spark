@@ -482,6 +482,7 @@ abstract class DynamicPartitionPruningSuiteBase
             """.stripMargin)
             .write
             .partitionBy("store_id")
+            .format(tableFormat)
             .saveAsTable("fact_aux")
 
           val df = sql(
@@ -514,6 +515,7 @@ abstract class DynamicPartitionPruningSuiteBase
               """.stripMargin)
               .write
               .partitionBy("store_id")
+              .format(tableFormat)
               .saveAsTable("fact_aux")
 
             spark.table("dim_store").cache()
@@ -1693,6 +1695,11 @@ abstract class DynamicPartitionPruningDataSourceSuiteBase
 abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDataSourceSuiteBase {
 
   import testImplicits._
+
+  override protected def initState(): Unit = {
+    super.initState()
+    spark.conf.set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
+  }
 
   /**
    * Check the static scan metrics with and without DPP

@@ -31,11 +31,11 @@ import org.apache.spark.sql.{AnalysisException, _}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics, HiveTableRelation}
-import org.apache.spark.sql.catalyst.plans.logical.HistogramBin
+import org.apache.spark.sql.catalyst.plans.logical.{HistogramBin, SubqueryAlias}
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, StringUtils}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.command.{AnalyzeColumnCommand, CommandUtils, DDLUtils}
-import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileTable}
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.hive.HiveExternalCatalog._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -1275,8 +1275,10 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       }
       // Table lookup will make the table cached.
       spark.table(tableIndent)
-      statsBeforeUpdate = catalog.metastoreCatalog.getCachedDataSourceTable(tableIndent)
-        .asInstanceOf[LogicalRelation].catalogTable.get.stats.get
+      statsBeforeUpdate = catalog.metastoreCatalog.getCachedDataSourceTable(tableIndent) match {
+        case SubqueryAlias(_, DataSourceV2Relation(table: FileTable, _, _, _, _)) =>
+          table.v1Table.get.stats.get
+      }
 
       sql(s"INSERT INTO $tableName SELECT 2")
       if (isAnalyzeColumns) {
@@ -1285,8 +1287,10 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS")
       }
       spark.table(tableIndent)
-      statsAfterUpdate = catalog.metastoreCatalog.getCachedDataSourceTable(tableIndent)
-        .asInstanceOf[LogicalRelation].catalogTable.get.stats.get
+      statsAfterUpdate = catalog.metastoreCatalog.getCachedDataSourceTable(tableIndent) match {
+        case SubqueryAlias(_, DataSourceV2Relation(table: FileTable, _, _, _, _)) =>
+          table.v1Table.get.stats.get
+      }
     }
     (statsBeforeUpdate, statsAfterUpdate)
   }

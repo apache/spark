@@ -855,6 +855,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       withView("v1") {
         withSQLConf(STORE_ANALYZED_PLAN_FOR_VIEW.key -> "true") {
           sql("CREATE TEMPORARY VIEW v1 AS SELECT * FROM t")
+          // Although analyzed plan is stored with the view, file listing and caching is not
+          // triggered until execution with V2 scans
+          sql("SELECT * FROM v1").collect()
           Seq(4, 6, 5).toDF("c1").write.mode("overwrite").format("parquet").saveAsTable("t")
           val e = intercept[SparkException] {
             sql("SELECT * FROM v1").collect()
@@ -872,6 +875,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         withSQLConf(STORE_ANALYZED_PLAN_FOR_VIEW.key -> "true") {
           // alter view from non-legacy to legacy config
           sql("ALTER VIEW v1 AS SELECT * FROM t")
+          // Although analyzed plan is stored with the view, file listing and caching is not
+          // triggered until execution with V2 scans
+          sql("SELECT * FROM v1").collect()
           Seq(2, 4, 6).toDF("c1").write.mode("overwrite").format("parquet").saveAsTable("t")
           val e = intercept[SparkException] {
             sql("SELECT * FROM v1").collect()

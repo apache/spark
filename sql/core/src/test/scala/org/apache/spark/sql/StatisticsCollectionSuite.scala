@@ -370,49 +370,58 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   }
 
   test("invalidation of tableRelationCache after inserts") {
-    val table = "invalidate_catalog_cache_table"
-    Seq(false, true).foreach { autoUpdate =>
-      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
-        withTable(table) {
-          spark.range(100).write.saveAsTable(table)
-          sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
-          spark.table(table)
-          val initialSizeInBytes = getTableFromCatalogCache(table).stats.sizeInBytes
-          spark.range(100).write.mode(SaveMode.Append).saveAsTable(table)
-          spark.table(table)
-          assert(getTableFromCatalogCache(table).stats.sizeInBytes == 2 * initialSizeInBytes)
+    // To avoid `BUG: computeStats called before pushdown on DSv2 relation` we don't run this test
+    // with V2 yet.
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+      val table = "invalidate_catalog_cache_table"
+      Seq(false, true).foreach { autoUpdate =>
+        withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
+          withTable(table) {
+            spark.range(100).write.saveAsTable(table)
+            sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
+            spark.table(table)
+            val initialSizeInBytes = getTableFromCatalogCache(table).stats.sizeInBytes
+            spark.range(100).write.mode(SaveMode.Append).saveAsTable(table)
+            spark.table(table)
+            assert(getTableFromCatalogCache(table).stats.sizeInBytes == 2 * initialSizeInBytes)
+          }
         }
       }
     }
   }
 
   test("invalidation of tableRelationCache after alter table add partition") {
-    val table = "invalidate_catalog_cache_table"
-    Seq(false, true).foreach { autoUpdate =>
-      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
-        withTempDir { dir =>
-          withTable(table) {
-            val path = dir.getCanonicalPath
-            sql(s"""
-              |CREATE TABLE $table (col1 int, col2 int)
-              |USING PARQUET
-              |PARTITIONED BY (col2)
-              |LOCATION '${dir.toURI}'""".stripMargin)
-            sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
-            spark.table(table)
-            assert(getTableFromCatalogCache(table).stats.sizeInBytes == 0)
-            spark.catalog.recoverPartitions(table)
-            val df = Seq((1, 2), (1, 2)).toDF("col2", "col1")
-            df.write.parquet(s"$path/col2=1")
-            sql(s"ALTER TABLE $table ADD PARTITION (col2=1) LOCATION '${dir.toURI}'")
-            spark.table(table)
-            val cachedTable = getTableFromCatalogCache(table)
-            val cachedTableSizeInBytes = cachedTable.stats.sizeInBytes
-            val defaultSizeInBytes = conf.defaultSizeInBytes
-            if (autoUpdate) {
-              assert(cachedTableSizeInBytes != defaultSizeInBytes && cachedTableSizeInBytes > 0)
-            } else {
-              assert(cachedTableSizeInBytes == defaultSizeInBytes)
+    // To avoid `BUG: computeStats called before pushdown on DSv2 relation` we don't run this test
+    // with V2 yet.
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+      val table = "invalidate_catalog_cache_table"
+      Seq(false, true).foreach { autoUpdate =>
+        withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
+          withTempDir { dir =>
+            withTable(table) {
+              val path = dir.getCanonicalPath
+              sql(
+                s"""
+                   |CREATE TABLE $table (col1 int, col2 int)
+                   |USING PARQUET
+                   |PARTITIONED BY (col2)
+                   |LOCATION '${dir.toURI}'""".stripMargin)
+              sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
+              spark.table(table)
+              assert(getTableFromCatalogCache(table).stats.sizeInBytes == 0)
+              spark.catalog.recoverPartitions(table)
+              val df = Seq((1, 2), (1, 2)).toDF("col2", "col1")
+              df.write.parquet(s"$path/col2=1")
+              sql(s"ALTER TABLE $table ADD PARTITION (col2=1) LOCATION '${dir.toURI}'")
+              spark.table(table)
+              val cachedTable = getTableFromCatalogCache(table)
+              val cachedTableSizeInBytes = cachedTable.stats.sizeInBytes
+              val defaultSizeInBytes = conf.defaultSizeInBytes
+              if (autoUpdate) {
+                assert(cachedTableSizeInBytes != defaultSizeInBytes && cachedTableSizeInBytes > 0)
+              } else {
+                assert(cachedTableSizeInBytes == defaultSizeInBytes)
+              }
             }
           }
         }
@@ -756,33 +765,37 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   }
 
   test("SPARK-34119: Keep necessary stats after PruneFileSourcePartitions") {
-    withTable("SPARK_34119") {
-      withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
-        sql(s"CREATE TABLE SPARK_34119 using parquet PARTITIONED BY (p) AS " +
-          "(SELECT id, CAST(id % 5 AS STRING) AS p FROM range(10))")
-        sql(s"ANALYZE TABLE SPARK_34119 COMPUTE STATISTICS FOR ALL COLUMNS")
+    // This test doesn't work with V2 as `PruneFileSourcePartitions` rule doesn't prune stored
+    // stats.
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+      withTable("SPARK_34119") {
+        withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+          sql(s"CREATE TABLE SPARK_34119 using parquet PARTITIONED BY (p) AS " +
+            "(SELECT id, CAST(id % 5 AS STRING) AS p FROM range(10))")
+          sql(s"ANALYZE TABLE SPARK_34119 COMPUTE STATISTICS FOR ALL COLUMNS")
 
-        checkOptimizedPlanStats(sql(s"SELECT id FROM SPARK_34119"),
-          160L,
-          Some(10),
-          Seq(ColumnStat(
-            distinctCount = Some(10),
-            min = Some(0),
-            max = Some(9),
-            nullCount = Some(0),
-            avgLen = Some(LongType.defaultSize),
-            maxLen = Some(LongType.defaultSize))))
+          checkOptimizedPlanStats(sql(s"SELECT id FROM SPARK_34119"),
+            160L,
+            Some(10),
+            Seq(ColumnStat(
+              distinctCount = Some(10),
+              min = Some(0),
+              max = Some(9),
+              nullCount = Some(0),
+              avgLen = Some(LongType.defaultSize),
+              maxLen = Some(LongType.defaultSize))))
 
-        checkOptimizedPlanStats(sql("SELECT id FROM SPARK_34119 WHERE p = '2'"),
-          32L,
-          Some(2),
-          Seq(ColumnStat(
-            distinctCount = Some(2),
-            min = Some(0),
-            max = Some(9),
-            nullCount = Some(0),
-            avgLen = Some(LongType.defaultSize),
-            maxLen = Some(LongType.defaultSize))))
+          checkOptimizedPlanStats(sql("SELECT id FROM SPARK_34119 WHERE p = '2'"),
+            32L,
+            Some(2),
+            Seq(ColumnStat(
+              distinctCount = Some(2),
+              min = Some(0),
+              max = Some(9),
+              nullCount = Some(0),
+              avgLen = Some(LongType.defaultSize),
+              maxLen = Some(LongType.defaultSize))))
+        }
       }
     }
   }

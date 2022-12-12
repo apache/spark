@@ -100,29 +100,33 @@ class PartitionedTablePerfStatsSuite
   }
 
   genericTest("partitioned pruned table reports only selected files") { spec =>
-    assert(spark.sqlContext.getConf(HiveUtils.CONVERT_METASTORE_PARQUET.key) == "true")
-    withTable("test") {
-      withTempDir { dir =>
-        spec.setupTable("test", dir)
-        val df = spark.sql("select * from test")
-        assert(df.count() == 5)
-        assert(df.inputFiles.length == 5)  // unpruned
+    // This test doesn't work with V2 as `PruneFileSourcePartitions` rule doesn't prune partitions.
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+      assert(spark.sqlContext.getConf(HiveUtils.CONVERT_METASTORE_PARQUET.key) == "true")
+      withTable("test") {
+        withTempDir { dir =>
+          spec.setupTable("test", dir)
+          val df = spark.sql("select * from test")
+          assert(df.count() == 5)
+          assert(df.inputFiles.length == 5) // unpruned
 
-        val df2 = spark.sql("select * from test where partCol1 = 3 or partCol2 = 4")
-        assert(df2.count() == 2)
-        assert(df2.inputFiles.length == 2)  // pruned, so we have less files
+          val df2 = spark.sql("select * from test where partCol1 = 3 or partCol2 = 4")
+          assert(df2.count() == 2)
+          df.explain(true)
+          assert(df2.inputFiles.length == 2) // pruned, so we have less files
 
-        val df3 = spark.sql("select * from test where PARTCOL1 = 3 or partcol2 = 4")
-        assert(df3.count() == 2)
-        assert(df3.inputFiles.length == 2)
+          val df3 = spark.sql("select * from test where PARTCOL1 = 3 or partcol2 = 4")
+          assert(df3.count() == 2)
+          assert(df3.inputFiles.length == 2)
 
-        val df4 = spark.sql("select * from test where partCol1 = 999")
-        assert(df4.count() == 0)
-        assert(df4.inputFiles.length == 0)
+          val df4 = spark.sql("select * from test where partCol1 = 999")
+          assert(df4.count() == 0)
+          assert(df4.inputFiles.length == 0)
 
-        val df5 = spark.sql("select * from test where fieldOne = 4")
-        assert(df5.count() == 1)
-        assert(df5.inputFiles.length == 5)
+          val df5 = spark.sql("select * from test where fieldOne = 4")
+          assert(df5.count() == 1)
+          assert(df5.inputFiles.length == 5)
+        }
       }
     }
   }
