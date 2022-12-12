@@ -617,7 +617,7 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
         # test struct
         self.compare_by_show(
             cdf.select(CF.struct(cdf.a, "d", "e", cdf.f)),
-            sdf.select(SF.struct(cdf.a, "d", "e", cdf.f)),
+            sdf.select(SF.struct(sdf.a, "d", "e", sdf.f)),
         )
 
     def test_map_collection_functions(self):
