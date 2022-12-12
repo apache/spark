@@ -1801,15 +1801,15 @@ class Analyzer(override val catalogManager: CatalogManager)
             }
             p.copy(projectList = newProjectList)
 
-          // wrap LCA
           // Implementation notes:
           // In Aggregate, introducing and wrapping this resolved leaf expression
           // LateralColumnAliasReference is especially needed because it needs an accurate condition
-          // to trigger adding a Project above and extracting aggregate functions or grouping
-          // expressions. Such operation can only be done once. With this
-          // LateralColumnAliasReference, the condition can simply be when the whole Aggregate is
-          // resolved. Otherwise, it can't really tell if all aggregate functions are created and
-          // resolved, because the lateral alias reference itself is unresolved.
+          // to trigger adding a Project above and extracting and pushing down aggregate functions
+          // or grouping expressions. Such operation can only be done once. With this
+          // LateralColumnAliasReference, that condition can simply be when the whole Aggregate is
+          // resolved. Otherwise, it can't tell if all aggregate functions are created and
+          // resolved so that it can start the extraction, because the lateral alias reference is
+          // unresolved and can be the argument to functions, blocking the resolution of functions.
           case agg @ Aggregate(_, aggExprs, _) if agg.childrenResolved
               && !ResolveReferences.containsStar(aggExprs)
               && aggExprs.exists(_.containsAnyPattern(UNRESOLVED_ATTRIBUTE, OUTER_REFERENCE)) =>
@@ -1824,39 +1824,6 @@ class Analyzer(override val catalogManager: CatalogManager)
                 wrapLCARefHelper(e, agg, aliasMap)
             }
             agg.copy(aggregateExpressions = newAggExprs)
-//            def insertIntoAliasMap(a: Alias, idx: Int): Unit = {
-//              val prevAliases = aliasMap.getOrElse(a.name, Seq.empty[AliasEntry])
-//              aliasMap += (a.name -> (prevAliases :+ AliasEntry(a, idx)))
-//            }
-//            def wrapLCAReference(e: NamedExpression): NamedExpression = {
-//              e.transformWithPruning(_.containsPattern(UNRESOLVED_ATTRIBUTE)) {
-//                case u: UnresolvedAttribute if aliasMap.contains(u.nameParts.head) &&
-//                  resolveExpressionByPlanChildren(u, agg)
-//                    .isInstanceOf[UnresolvedAttribute] =>
-//                  val aliases = aliasMap.get(u.nameParts.head).get
-//                  aliases.size match {
-//                    case n if n > 1 =>
-//                      throw QueryCompilationErrors.ambiguousLateralColumnAliasError(u.name, n)
-//                    case n if n == 1 && aliases.head.alias.resolved =>
-//                      LateralColumnAliasReference(
-//                        aliases.head.alias, u.nameParts, aliases.head.alias.toAttribute)
-//                    case _ =>
-//                      u
-//                  }
-//              }.asInstanceOf[NamedExpression]
-//            }
-
-//            val newAggExprs = aggExprs.zipWithIndex.map {
-//              case (a: Alias, idx) =>
-//                val LCAResolved = wrapLCAReference(a).asInstanceOf[Alias]
-//                // insert the LCA-resolved alias instead of the unresolved one into map. If it is
-//                // resolved, it can be referenced as LCA by later expressions
-//                insertIntoAliasMap(LCAResolved, idx)
-//                LCAResolved
-//              case (e, _) =>
-//                wrapLCAReference(e)
-//            }
-//            agg.copy(aggregateExpressions = newAggExprs)
         }
       }
     }

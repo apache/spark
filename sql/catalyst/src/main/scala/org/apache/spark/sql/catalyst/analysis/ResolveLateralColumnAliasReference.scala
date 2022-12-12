@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeMap, LateralColumnAliasReference, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeMap, Expression, LateralColumnAliasReference, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -89,8 +89,6 @@ import org.apache.spark.sql.internal.SQLConf
 object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
   case class AliasEntry(alias: Alias, index: Int)
 
-
-
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (!conf.getConf(SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED)) {
       plan
@@ -150,10 +148,10 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
             && aggregateExpressions.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
 
           val newAggExprs = collection.mutable.Set.empty[NamedExpression]
+          val expressionMap = collection.mutable.LinkedHashMap.empty[Expression, NamedExpression]
           val projectExprs = aggregateExpressions.map { exp =>
             exp.transformDown {
               case aggExpr: AggregateExpression =>
-                // TODO (improvement) dedup
                 // Doesn't support referencing a lateral alias in aggregate function
                 if (aggExpr.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
                   aggExpr.collectFirst {
@@ -162,29 +160,37 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
                         lcaRef.nameParts, aggExpr)
                   }
                 }
-                val ne = ResolveAliases.assignAliases(Seq(UnresolvedAlias(aggExpr))).head
+                val ne = expressionMap.getOrElseUpdate(
+                  aggExpr.canonicalized,
+                  ResolveAliases.assignAliases(Seq(UnresolvedAlias(aggExpr))).map {
+                    // TODO temporarily clear the metadata for an issue found in test
+                    case a: Alias => a.copy(a.child, a.name)(
+                      a.exprId, a.qualifier, None, a.nonInheritableMetadataKeys)
+                    case other => other
+                  }.head)
                 newAggExprs += ne
                 ne.toAttribute
               case e if groupingExpressions.exists(_.semanticEquals(e)) =>
-                // TODO (improvement) dedup
                 // TODO one concern here, is condition here be able to match all grouping
                 //  expressions? For example, Agg [age + 10] [a + age + 10], when transforming down,
                 //  is it possible that (a + age) + 10, so that it won't be able to match (age + 10)
                 //  add a test.
-                val alias = ResolveAliases.assignAliases(Seq(UnresolvedAlias(e))).head
-                newAggExprs += alias
-                alias.toAttribute
+                val ne = expressionMap.getOrElseUpdate(
+                  e.canonicalized,
+                  ResolveAliases.assignAliases(Seq(UnresolvedAlias(e))).head)
+                newAggExprs += ne
+                ne.toAttribute
             }.asInstanceOf[NamedExpression]
           }
-          Project(
-            projectList = projectExprs,
-            child = agg.copy(aggregateExpressions = newAggExprs.toSeq)
-          )
-        // TODO: think about a corner case, when the Alias passed to LateralColumnAliasReference
-        //  contains a LateralColumnAliasReference. Is it safe to do a.toAttribute when resolving
-        //  the LateralColumnAliasReference?
+          if (newAggExprs.isEmpty) {
+            agg
+          } else {
+            Project(
+              projectList = projectExprs,
+              child = agg.copy(aggregateExpressions = newAggExprs.toSeq)
+            )
+          }
         // TODO withOrigin?
-
       }
     }
   }
