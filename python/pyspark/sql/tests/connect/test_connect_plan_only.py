@@ -189,7 +189,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
 
         plan = (
             df.filter(df.col_name > 3)
-            .unpivot(["id"], [], "variable", "value")
+            .unpivot(["id"], None, "variable", "value")
             ._plan.to_proto(self.connect)
         )
         self.assertTrue(len(plan.root.unpivot.ids) == 1)
