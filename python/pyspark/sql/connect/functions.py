@@ -3814,6 +3814,948 @@ def create_map(
     return _invoke_function_over_columns("map", *cols)  # type: ignore[arg-type]
 
 
+def element_at(col: "ColumnOrName", extraction: Any) -> Column:
+    """
+    Collection function: Returns element of array at given index in `extraction` if col is array.
+    Returns value for the given key in `extraction` if col is map. If position is negative
+    then location of the element will start from end, if number is outside the
+    array boundaries then None will be returned.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        name of column containing array or map
+    extraction :
+        index to check for in array or key to check for in map
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        value at given position.
+
+    Notes
+    -----
+    The position is not zero based, but 1 based index.
+
+    See Also
+    --------
+    :meth:`get`
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(["a", "b", "c"],)], ['data'])
+    >>> df.select(element_at(df.data, 1)).collect()
+    [Row(element_at(data, 1)='a')]
+    >>> df.select(element_at(df.data, -1)).collect()
+    [Row(element_at(data, -1)='c')]
+
+    >>> df = spark.createDataFrame([({"a": 1.0, "b": 2.0},)], ['data'])
+    >>> df.select(element_at(df.data, lit("a"))).collect()
+    [Row(element_at(data, a)=1.0)]
+    """
+    return _invoke_function("element_at", _to_col(col), lit(extraction))
+
+
+# TODO(SPARK-41434): need to support LambdaFunction Expression first
+# def exists(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column:
+#     """
+#     Returns whether a predicate holds for one or more elements in the array.
+#
+#     .. versionadded:: 3.1.0
+#
+#     Parameters
+#     ----------
+#     col : :class:`~pyspark.sql.Column` or str
+#         name of column or expression
+#     f : function
+#         ``(x: Column) -> Column: ...``  returning the Boolean expression.
+#         Can use methods of :class:`~pyspark.sql.Column`, functions defined in
+#         :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
+#         Python ``UserDefinedFunctions`` are not supported
+#         (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
+#
+#     Returns
+#     -------
+#     :class:`~pyspark.sql.Column`
+#         True if "any" element of an array evaluates to True when passed as an argument to
+#         given function and False otherwise.
+#
+#     Examples
+#     --------
+#     >>> df = spark.createDataFrame([(1, [1, 2, 3, 4]), (2, [3, -1, 0])],("key", "values"))
+#     >>> df.select(exists("values", lambda x: x < 0).alias("any_negative")).show()
+#     +------------+
+#     |any_negative|
+#     +------------+
+#     |       false|
+#     |        true|
+#     +------------+
+#     """
+#     return _invoke_higher_order_function("ArrayExists", [col], [f])
+
+
+def explode(col: "ColumnOrName") -> Column:
+    """
+    Returns a new row for each element in the given array or map.
+    Uses the default column name `col` for elements in the array and
+    `key` and `value` for elements in the map unless specified otherwise.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        one row per array item or map key value.
+
+    See Also
+    --------
+    :meth:`pyspark.functions.posexplode`
+    :meth:`pyspark.functions.explode_outer`
+    :meth:`pyspark.functions.posexplode_outer`
+
+    Examples
+    --------
+    >>> from pyspark.sql import Row
+    >>> eDF = spark.createDataFrame([Row(a=1, intlist=[1,2,3], mapfield={"a": "b"})])
+    >>> eDF.select(explode(eDF.intlist).alias("anInt")).collect()
+    [Row(anInt=1), Row(anInt=2), Row(anInt=3)]
+
+    >>> eDF.select(explode(eDF.mapfield).alias("key", "value")).show()
+    +---+-----+
+    |key|value|
+    +---+-----+
+    |  a|    b|
+    +---+-----+
+    """
+    return _invoke_function_over_columns("explode", col)
+
+
+def explode_outer(col: "ColumnOrName") -> Column:
+    """
+    Returns a new row for each element in the given array or map.
+    Unlike explode, if the array/map is null or empty then null is produced.
+    Uses the default column name `col` for elements in the array and
+    `key` and `value` for elements in the map unless specified otherwise.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        one row per array item or map key value.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame(
+    ...     [(1, ["foo", "bar"], {"x": 1.0}), (2, [], {}), (3, None, None)],
+    ...     ("id", "an_array", "a_map")
+    ... )
+    >>> df.select("id", "an_array", explode_outer("a_map")).show()
+    +---+----------+----+-----+
+    | id|  an_array| key|value|
+    +---+----------+----+-----+
+    |  1|[foo, bar]|   x|  1.0|
+    |  2|        []|null| null|
+    |  3|      null|null| null|
+    +---+----------+----+-----+
+
+    >>> df.select("id", "a_map", explode_outer("an_array")).show()
+    +---+----------+----+
+    | id|     a_map| col|
+    +---+----------+----+
+    |  1|{x -> 1.0}| foo|
+    |  1|{x -> 1.0}| bar|
+    |  2|        {}|null|
+    |  3|      null|null|
+    +---+----------+----+
+    """
+    return _invoke_function_over_columns("explode_outer", col)
+
+
+# TODO(SPARK-41434): need to support LambdaFunction Expression first
+# def filter(
+#         col: "ColumnOrName",
+#         f: Union[Callable[[Column], Column], Callable[[Column, Column], Column]],
+# ) -> Column:
+#     """
+#     Returns an array of elements for which a predicate holds in a given array.
+#
+#     .. versionadded:: 3.1.0
+#
+#     Parameters
+#     ----------
+#     col : :class:`~pyspark.sql.Column` or str
+#         name of column or expression
+#     f : function
+#         A function that returns the Boolean expression.
+#         Can take one of the following forms:
+#
+#         - Unary ``(x: Column) -> Column: ...``
+#         - Binary ``(x: Column, i: Column) -> Column...``, where the second argument is
+#             a 0-based index of the element.
+#
+#         and can use methods of :class:`~pyspark.sql.Column`, functions defined in
+#         :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
+#         Python ``UserDefinedFunctions`` are not supported
+#         (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
+#
+#     Returns
+#     -------
+#     :class:`~pyspark.sql.Column`
+#         filtered array of elements where given function evaluated to True
+#         when passed as an argument.
+#
+#     Examples
+#     --------
+#     >>> df = spark.createDataFrame(
+#     ...     [(1, ["2018-09-20",  "2019-02-03", "2019-07-01", "2020-06-01"])],
+#     ...     ("key", "values")
+#     ... )
+#     >>> def after_second_quarter(x):
+#     ...     return month(to_date(x)) > 6
+#     >>> df.select(
+#     ...     filter("values", after_second_quarter).alias("after_second_quarter")
+#     ... ).show(truncate=False)
+#     +------------------------+
+#     |after_second_quarter    |
+#     +------------------------+
+#     |[2018-09-20, 2019-07-01]|
+#     +------------------------+
+#     """
+#     return _invoke_higher_order_function("ArrayFilter", [col], [f])
+
+
+def flatten(col: "ColumnOrName") -> Column:
+    """
+    Collection function: creates a single array from an array of arrays.
+    If a structure of nested arrays is deeper than two levels,
+    only one level of nesting is removed.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        name of column or expression
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        flattened array.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([([[1, 2, 3], [4, 5], [6]],), ([None, [4, 5]],)], ['data'])
+    >>> df.show(truncate=False)
+    +------------------------+
+    |data                    |
+    +------------------------+
+    |[[1, 2, 3], [4, 5], [6]]|
+    |[null, [4, 5]]          |
+    +------------------------+
+    >>> df.select(flatten(df.data).alias('r')).show()
+    +------------------+
+    |                 r|
+    +------------------+
+    |[1, 2, 3, 4, 5, 6]|
+    |              null|
+    +------------------+
+    """
+    return _invoke_function_over_columns("flatten", col)
+
+
+# TODO(SPARK-41434): need to support LambdaFunction Expression first
+# def forall(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column:
+#     """
+#     Returns whether a predicate holds for every element in the array.
+#
+#     .. versionadded:: 3.1.0
+#
+#     Parameters
+#     ----------
+#     col : :class:`~pyspark.sql.Column` or str
+#         name of column or expression
+#     f : function
+#         ``(x: Column) -> Column: ...``  returning the Boolean expression.
+#         Can use methods of :class:`~pyspark.sql.Column`, functions defined in
+#         :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
+#         Python ``UserDefinedFunctions`` are not supported
+#         (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
+#
+#     Returns
+#     -------
+#     :class:`~pyspark.sql.Column`
+#         True if "all" elements of an array evaluates to True when passed as an argument to
+#         given function and False otherwise.
+#
+#     Examples
+#     --------
+#     >>> df = spark.createDataFrame(
+#     ...     [(1, ["bar"]), (2, ["foo", "bar"]), (3, ["foobar", "foo"])],
+#     ...     ("key", "values")
+#     ... )
+#     >>> df.select(forall("values", lambda x: x.rlike("foo")).alias("all_foo")).show()
+#     +-------+
+#     |all_foo|
+#     +-------+
+#     |  false|
+#     |  false|
+#     |   true|
+#     +-------+
+#     """
+#     return _invoke_higher_order_function("ArrayForAll", [col], [f])
+
+
+# TODO: support options
+def from_csv(
+    col: "ColumnOrName",
+    schema: Union[Column, str],
+) -> Column:
+    """
+    Parses a column containing a CSV string to a row with the specified schema.
+    Returns `null`, in the case of an unparseable string.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        a column or column name in CSV format
+    schema :class:`~pyspark.sql.Column` or str
+        a column, or Python string literal with schema in DDL format, to use
+        when parsing the CSV column.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a column of parsed CSV values
+
+    Examples
+    --------
+    >>> data = [("1,2,3",)]
+    >>> df = spark.createDataFrame(data, ("value",))
+    >>> df.select(from_csv(df.value, "a INT, b INT, c INT").alias("csv")).collect()
+    [Row(csv=Row(a=1, b=2, c=3))]
+    >>> value = data[0][0]
+    >>> df.select(from_csv(df.value, schema_of_csv(value)).alias("csv")).collect()
+    [Row(csv=Row(_c0=1, _c1=2, _c2=3))]
+    >>> data = [("   abc",)]
+    >>> df = spark.createDataFrame(data, ("value",))
+    >>> options = {'ignoreLeadingWhiteSpace': True}
+    >>> df.select(from_csv(df.value, "s string", options).alias("csv")).collect()
+    [Row(csv=Row(s='abc'))]
+    """
+
+    if isinstance(schema, Column):
+        _schema = schema
+    elif isinstance(schema, str):
+        _schema = lit(schema)
+    else:
+        raise TypeError(f"schema should be a Column or str, but got {type(schema).__name__}")
+
+    return _invoke_function("from_csv", _to_col(col), _schema)
+
+
+# TODO: 1, support ArrayType and StructType schema; 2, support options
+def from_json(
+    col: "ColumnOrName",
+    schema: Union[Column, str],
+) -> Column:
+    """
+    Parses a column containing a JSON string into a :class:`MapType` with :class:`StringType`
+    as keys type, :class:`StructType` or :class:`ArrayType` with
+    the specified schema. Returns `null`, in the case of an unparseable string.
+
+    .. versionadded:: 2.1.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        a column or column name in JSON format
+    schema :class:`~pyspark.sql.Column` or str
+        a column, or Python string literal with schema in DDL format, to use when
+        parsing the JSON column.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a new column of complex type from given JSON object.
+
+    Examples
+    --------
+    >>> from pyspark.sql.types import *
+    >>> data = [(1, '''{"a": 1}''')]
+    >>> schema = StructType([StructField("a", IntegerType())])
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> df.select(from_json(df.value, schema).alias("json")).collect()
+    [Row(json=Row(a=1))]
+    >>> df.select(from_json(df.value, "a INT").alias("json")).collect()
+    [Row(json=Row(a=1))]
+    >>> df.select(from_json(df.value, "MAP<STRING,INT>").alias("json")).collect()
+    [Row(json={'a': 1})]
+    >>> data = [(1, '''[{"a": 1}]''')]
+    >>> schema = ArrayType(StructType([StructField("a", IntegerType())]))
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> df.select(from_json(df.value, schema).alias("json")).collect()
+    [Row(json=[Row(a=1)])]
+    >>> schema = schema_of_json(lit('''{"a": 0}'''))
+    >>> df.select(from_json(df.value, schema).alias("json")).collect()
+    [Row(json=Row(a=None))]
+    >>> data = [(1, '''[1, 2, 3]''')]
+    >>> schema = ArrayType(IntegerType())
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> df.select(from_json(df.value, schema).alias("json")).collect()
+    [Row(json=[1, 2, 3])]
+    """
+
+    if isinstance(schema, Column):
+        _schema = schema
+    elif isinstance(schema, str):
+        _schema = lit(schema)
+    else:
+        raise TypeError(f"schema should be a Column or str, but got {type(schema).__name__}")
+
+    return _invoke_function("from_json", _to_col(col), _schema)
+
+
+def get(col: "ColumnOrName", index: Union["ColumnOrName", int]) -> Column:
+    """
+    Collection function: Returns element of array at given (0-based) index.
+    If the index points outside of the array boundaries, then this function
+    returns NULL.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        name of column containing array
+    index : :class:`~pyspark.sql.Column` or str or int
+        index to check for in array
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        value at given position.
+
+    Notes
+    -----
+    The position is not 1 based, but 0 based index.
+
+    See Also
+    --------
+    :meth:`element_at`
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(["a", "b", "c"], 1)], ['data', 'index'])
+    >>> df.select(get(df.data, 1)).show()
+    +------------+
+    |get(data, 1)|
+    +------------+
+    |           b|
+    +------------+
+
+    >>> df.select(get(df.data, -1)).show()
+    +-------------+
+    |get(data, -1)|
+    +-------------+
+    |         null|
+    +-------------+
+
+    >>> df.select(get(df.data, 3)).show()
+    +------------+
+    |get(data, 3)|
+    +------------+
+    |        null|
+    +------------+
+
+    >>> df.select(get(df.data, "index")).show()
+    +----------------+
+    |get(data, index)|
+    +----------------+
+    |               b|
+    +----------------+
+
+    >>> df.select(get(df.data, col("index") - 1)).show()
+    +----------------------+
+    |get(data, (index - 1))|
+    +----------------------+
+    |                     a|
+    +----------------------+
+    """
+    index = lit(index) if isinstance(index, int) else index
+
+    return _invoke_function_over_columns("get", col, index)
+
+
+def get_json_object(col: "ColumnOrName", path: str) -> Column:
+    """
+    Extracts json object from a json string based on json `path` specified, and returns json string
+    of the extracted json object. It will return null if the input json string is invalid.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        string column in json format
+    path : str
+        path to the json object to extract
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        string representation of given JSON object value.
+
+    Examples
+    --------
+    >>> data = [("1", '''{"f1": "value1", "f2": "value2"}'''), ("2", '''{"f1": "value12"}''')]
+    >>> df = spark.createDataFrame(data, ("key", "jstring"))
+    >>> df.select(df.key, get_json_object(df.jstring, '$.f1').alias("c0"), \\
+    ...                   get_json_object(df.jstring, '$.f2').alias("c1") ).collect()
+    [Row(key='1', c0='value1', c1='value2'), Row(key='2', c0='value12', c1=None)]
+    """
+    return _invoke_function("get_json_object", _to_col(col), lit(path))
+
+
+def inline(col: "ColumnOrName") -> Column:
+    """
+    Explodes an array of structs into a table.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        input column of values to explode.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        generator expression with the inline exploded result.
+
+    See Also
+    --------
+    :meth:`explode`
+
+    Examples
+    --------
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(structlist=[Row(a=1, b=2), Row(a=3, b=4)])])
+    >>> df.select(inline(df.structlist)).show()
+    +---+---+
+    |  a|  b|
+    +---+---+
+    |  1|  2|
+    |  3|  4|
+    +---+---+
+    """
+    return _invoke_function_over_columns("inline", col)
+
+
+def inline_outer(col: "ColumnOrName") -> Column:
+    """
+    Explodes an array of structs into a table.
+    Unlike inline, if the array is null or empty then null is produced for each nested column.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        input column of values to explode.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        generator expression with the inline exploded result.
+
+    See Also
+    --------
+    :meth:`explode_outer`
+    :meth:`inline`
+
+    Examples
+    --------
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([
+    ...     Row(id=1, structlist=[Row(a=1, b=2), Row(a=3, b=4)]),
+    ...     Row(id=2, structlist=[])
+    ... ])
+    >>> df.select('id', inline_outer(df.structlist)).show()
+    +---+----+----+
+    | id|   a|   b|
+    +---+----+----+
+    |  1|   1|   2|
+    |  1|   3|   4|
+    |  2|null|null|
+    +---+----+----+
+    """
+    return _invoke_function_over_columns("inline_outer", col)
+
+
+def json_tuple(col: "ColumnOrName", *fields: str) -> Column:
+    """Creates a new row for a json column according to the given field names.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        string column in json format
+    fields : str
+        a field or fields to extract
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a new row for each given field value from json object
+
+    Examples
+    --------
+    >>> data = [("1", '''{"f1": "value1", "f2": "value2"}'''), ("2", '''{"f1": "value12"}''')]
+    >>> df = spark.createDataFrame(data, ("key", "jstring"))
+    >>> df.select(df.key, json_tuple(df.jstring, 'f1', 'f2')).collect()
+    [Row(key='1', c0='value1', c1='value2'), Row(key='2', c0='value12', c1=None)]
+    """
+
+    return _invoke_function("json_tuple", _to_col(col), *[lit(field) for field in fields])
+
+
+def map_concat(
+    *cols: Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]
+) -> Column:
+    """Returns the union of all the given maps.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    cols : :class:`~pyspark.sql.Column` or str
+        column names or :class:`~pyspark.sql.Column`\\s
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a map of merged entries from other maps.
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import map_concat
+    >>> df = spark.sql("SELECT map(1, 'a', 2, 'b') as map1, map(3, 'c') as map2")
+    >>> df.select(map_concat("map1", "map2").alias("map3")).show(truncate=False)
+    +------------------------+
+    |map3                    |
+    +------------------------+
+    |{1 -> a, 2 -> b, 3 -> c}|
+    +------------------------+
+    """
+    if len(cols) == 1 and isinstance(cols[0], (list, set, tuple)):
+        cols = cols[0]  # type: ignore[assignment]
+    return _invoke_function_over_columns("map_concat", *cols)  # type: ignore[arg-type]
+
+
+def map_contains_key(col: "ColumnOrName", value: Any) -> Column:
+    """
+    Returns true if the map contains the key.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        name of column or expression
+    value :
+        a literal value
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        True if key is in the map and False otherwise.
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import map_contains_key
+    >>> df = spark.sql("SELECT map(1, 'a', 2, 'b') as data")
+    >>> df.select(map_contains_key("data", 1)).show()
+    +---------------------------------+
+    |array_contains(map_keys(data), 1)|
+    +---------------------------------+
+    |                             true|
+    +---------------------------------+
+    >>> df.select(map_contains_key("data", -1)).show()
+    +----------------------------------+
+    |array_contains(map_keys(data), -1)|
+    +----------------------------------+
+    |                             false|
+    +----------------------------------+
+    """
+    return array_contains(map_keys(col), lit(value))
+
+
+def map_entries(col: "ColumnOrName") -> Column:
+    """
+    Collection function: Returns an unordered array of all entries in the given map.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        name of column or expression
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        ar array of key value pairs as a struct type
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import map_entries
+    >>> df = spark.sql("SELECT map(1, 'a', 2, 'b') as data")
+    >>> df = df.select(map_entries("data").alias("entries"))
+    >>> df.show()
+    +----------------+
+    |         entries|
+    +----------------+
+    |[{1, a}, {2, b}]|
+    +----------------+
+    >>> df.printSchema()
+    root
+     |-- entries: array (nullable = false)
+     |    |-- element: struct (containsNull = false)
+     |    |    |-- key: integer (nullable = false)
+     |    |    |-- value: string (nullable = false)
+    """
+    return _invoke_function_over_columns("map_entries", col)
+
+
+# TODO(SPARK-41434): need to support LambdaFunction Expression first
+# def map_filter(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Column:
+#     """
+#     Returns a map whose key-value pairs satisfy a predicate.
+#
+#     .. versionadded:: 3.1.0
+#
+#     Parameters
+#     ----------
+#     col : :class:`~pyspark.sql.Column` or str
+#         name of column or expression
+#     f : function
+#         a binary function ``(k: Column, v: Column) -> Column...``
+#         Can use methods of :class:`~pyspark.sql.Column`, functions defined in
+#         :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
+#         Python ``UserDefinedFunctions`` are not supported
+#         (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
+#
+#     Returns
+#     -------
+#     :class:`~pyspark.sql.Column`
+#         filtered map.
+#
+#     Examples
+#     --------
+#     >>> df = spark.createDataFrame([(1, {"foo": 42.0, "bar": 1.0, "baz": 32.0})], ("id", "data"))
+#     >>> df.select(map_filter(
+#     ...     "data", lambda _, v: v > 30.0).alias("data_filtered")
+#     ... ).show(truncate=False)
+#     +--------------------------+
+#     |data_filtered             |
+#     +--------------------------+
+#     |{baz -> 32.0, foo -> 42.0}|
+#     +--------------------------+
+#     """
+#     return _invoke_higher_order_function("MapFilter", [col], [f])
+
+
+def map_from_arrays(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    """Creates a new map from two arrays.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or str
+        name of column containing a set of keys. All elements should not be null
+    col2 : :class:`~pyspark.sql.Column` or str
+        name of column containing a set of values
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a column of map type.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([([2, 5], ['a', 'b'])], ['k', 'v'])
+    >>> df = df.select(map_from_arrays(df.k, df.v).alias("col"))
+    >>> df.show()
+    +----------------+
+    |             col|
+    +----------------+
+    |{2 -> a, 5 -> b}|
+    +----------------+
+    >>> df.printSchema()
+    root
+     |-- col: map (nullable = true)
+     |    |-- key: long
+     |    |-- value: string (valueContainsNull = true)
+    """
+    return _invoke_function_over_columns("map_from_arrays", col1, col2)
+
+
+def map_from_entries(col: "ColumnOrName") -> Column:
+    """
+    Collection function: Converts an array of entries (key value struct types) to a map
+    of values.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        name of column or expression
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a map created from the given array of entries.
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import map_from_entries
+    >>> df = spark.sql("SELECT array(struct(1, 'a'), struct(2, 'b')) as data")
+    >>> df.select(map_from_entries("data").alias("map")).show()
+    +----------------+
+    |             map|
+    +----------------+
+    |{1 -> a, 2 -> b}|
+    +----------------+
+    """
+    return _invoke_function_over_columns("map_from_entries", col)
+
+
+def map_keys(col: "ColumnOrName") -> Column:
+    """
+    Collection function: Returns an unordered array containing the keys of the map.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        name of column or expression
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        keys of the map as an array.
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import map_keys
+    >>> df = spark.sql("SELECT map(1, 'a', 2, 'b') as data")
+    >>> df.select(map_keys("data").alias("keys")).show()
+    +------+
+    |  keys|
+    +------+
+    |[1, 2]|
+    +------+
+    """
+    return _invoke_function_over_columns("map_keys", col)
+
+
+def map_values(col: "ColumnOrName") -> Column:
+    """
+    Collection function: Returns an unordered array containing the values of the map.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        name of column or expression
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        values of the map as an array.
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import map_values
+    >>> df = spark.sql("SELECT map(1, 'a', 2, 'b') as data")
+    >>> df.select(map_values("data").alias("values")).show()
+    +------+
+    |values|
+    +------+
+    |[a, b]|
+    +------+
+    """
+    return _invoke_function_over_columns("map_values", col)
+
+
+# TODO(SPARK-41434): need to support LambdaFunction Expression first
+# def map_zip_with(
+#         col1: "ColumnOrName",
+#         col2: "ColumnOrName",
+#         f: Callable[[Column, Column, Column], Column],
+# ) -> Column:
+#     """
+#     Merge two given maps, key-wise into a single map using a function.
+#
+#     .. versionadded:: 3.1.0
+#
+#     Parameters
+#     ----------
+#     col1 : :class:`~pyspark.sql.Column` or str
+#         name of the first column or expression
+#     col2 : :class:`~pyspark.sql.Column` or str
+#         name of the second column or expression
+#     f : function
+#         a ternary function ``(k: Column, v1: Column, v2: Column) -> Column...``
+#         Can use methods of :class:`~pyspark.sql.Column`, functions defined in
+#         :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
+#         Python ``UserDefinedFunctions`` are not supported
+#         (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
+#
+#     Returns
+#     -------
+#     :class:`~pyspark.sql.Column`
+#         zipped map where entries are calculated by applying given function to each
+#         pair of arguments.
+#
+#     Examples
+#     --------
+#     >>> df = spark.createDataFrame([
+#     ...     (1, {"IT": 24.0, "SALES": 12.00}, {"IT": 2.0, "SALES": 1.4})],
+#     ...     ("id", "base", "ratio")
+#     ... )
+#     >>> df.select(map_zip_with(
+#     ...     "base", "ratio", lambda k, v1, v2: round(v1 * v2, 2)).alias("updated_data")
+#     ... ).show(truncate=False)
+#     +---------------------------+
+#     |updated_data               |
+#     +---------------------------+
+#     |{SALES -> 16.8, IT -> 48.0}|
+#     +---------------------------+
+#     """
+#     return _invoke_higher_order_function("MapZipWith", [col1, col2], [f])
+
+
 # String/Binary functions
 
 

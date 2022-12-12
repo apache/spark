@@ -572,6 +572,280 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             sdf.select(SF.create_map(sdf.d, "e", "e", SF.lit(1))),
         )
 
+        # test element_at
+        self.assert_eq(
+            cdf.select(CF.element_at("a", 1)).toPandas(),
+            sdf.select(SF.element_at("a", 1)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.element_at(cdf.a, 1)).toPandas(),
+            sdf.select(SF.element_at(sdf.a, 1)).toPandas(),
+        )
+
+        # test get
+        self.assert_eq(
+            cdf.select(CF.get("a", 1)).toPandas(),
+            sdf.select(SF.get("a", 1)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.get(cdf.a, 1)).toPandas(),
+            sdf.select(SF.get(sdf.a, 1)).toPandas(),
+        )
+
+    def test_map_collection_functions(self):
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        query = """
+            SELECT * FROM VALUES
+            (MAP('a', 'ab'), MAP('x', 'ab'), MAP(1, 2, 3, 4), 1, 'a', ARRAY(1, 2), ARRAY('X', 'Y')),
+            (MAP('x', 'yz'), MAP('c', NULL), NULL, 2, 'x', ARRAY(3, 4), ARRAY('A', 'B')),
+            (MAP('c', 'de'), NULL, MAP(-1, NULL, -3, -4), -3, 'c', NULL, ARRAY('Z'))
+            AS tab(a, b, c, e, f, g, h)
+            """
+        # +---------+-----------+----------------------+---+---+------+------+
+        # |        a|          b|                     c|  e|  f|     g|     h|
+        # +---------+-----------+----------------------+---+---+------+------+
+        # |{a -> ab}|  {x -> ab}|      {1 -> 2, 3 -> 4}|  1|  a|[1, 2]|[X, Y]|
+        # |{x -> yz}|{c -> null}|                  null|  2|  x|[3, 4]|[A, B]|
+        # |{c -> de}|       null|{-1 -> null, -3 -> -4}| -3|  c|  null|   [Z]|
+        # +---------+-----------+----------------------+---+---+------+------+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        # test map_concat
+        self.compare_by_show(
+            cdf.select(CF.map_concat(cdf.a, "b")),
+            sdf.select(SF.map_concat(sdf.a, "b")),
+        )
+
+        # test map_contains_key
+        self.compare_by_show(
+            cdf.select(CF.map_contains_key(cdf.a, "a"), CF.map_contains_key("c", 3)),
+            sdf.select(SF.map_contains_key(sdf.a, "a"), SF.map_contains_key("c", 3)),
+        )
+
+        # test map_entries
+        self.compare_by_show(
+            cdf.select(CF.map_entries(cdf.a), CF.map_entries("b")),
+            sdf.select(SF.map_entries(sdf.a), SF.map_entries("b")),
+        )
+
+        # test map_from_arrays
+        self.compare_by_show(
+            cdf.select(CF.map_from_arrays(cdf.g, "h")),
+            sdf.select(SF.map_from_arrays(sdf.g, "h")),
+        )
+
+        # test map_keys and map_values
+        self.compare_by_show(
+            cdf.select(CF.map_keys(cdf.a), CF.map_values("b")),
+            sdf.select(SF.map_keys(sdf.a), SF.map_values("b")),
+        )
+
+    def test_generator_functions(self):
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        query = """
+            SELECT * FROM VALUES
+            (ARRAY('a', 'ab'), ARRAY(1, 2, 3), ARRAY(1, NULL, 3),
+             MAP(1, 2, 3, 4), 1, FLOAT(2.0), 3),
+            (ARRAY('x', NULL), NULL, ARRAY(1, 3),
+             NULL, 3, FLOAT(4.0), 5),
+            (NULL, ARRAY(-1, -2, -3), Array(),
+             MAP(-1, NULL, -3, -4), 7, FLOAT('NAN'), 9)
+            AS tab(a, b, c, d, e, f, g)
+            """
+        # +---------+------------+------------+----------------------+---+---+---+
+        # |        a|           b|           c|                     d|  e|  f|  g|
+        # +---------+------------+------------+----------------------+---+---+---+
+        # |  [a, ab]|   [1, 2, 3]|[1, null, 3]|      {1 -> 2, 3 -> 4}|  1|2.0|  3|
+        # |[x, null]|        null|      [1, 3]|                  null|  3|4.0|  5|
+        # |     null|[-1, -2, -3]|          []|{-1 -> null, -3 -> -4}|  7|NaN|  9|
+        # +---------+------------+------------+----------------------+---+---+---+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        # test explode with arrays
+        self.assert_eq(
+            cdf.select(CF.explode(cdf.a), CF.col("b")).toPandas(),
+            sdf.select(SF.explode(sdf.a), SF.col("b")).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.explode("a"), "b").toPandas(),
+            sdf.select(SF.explode("a"), "b").toPandas(),
+        )
+        # test explode with maps
+        self.assert_eq(
+            cdf.select(CF.explode(cdf.d), CF.col("c")).toPandas(),
+            sdf.select(SF.explode(sdf.d), SF.col("c")).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.explode("d"), "c").toPandas(),
+            sdf.select(SF.explode("d"), "c").toPandas(),
+        )
+
+        # test explode_outer with arrays
+        self.assert_eq(
+            cdf.select(CF.explode_outer(cdf.a), CF.col("b")).toPandas(),
+            sdf.select(SF.explode_outer(sdf.a), SF.col("b")).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.explode_outer("a"), "b").toPandas(),
+            sdf.select(SF.explode_outer("a"), "b").toPandas(),
+        )
+        # test explode_outer with maps
+        self.assert_eq(
+            cdf.select(CF.explode_outer(cdf.d), CF.col("c")).toPandas(),
+            sdf.select(SF.explode_outer(sdf.d), SF.col("c")).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.explode_outer("d"), "c").toPandas(),
+            sdf.select(SF.explode_outer("d"), "c").toPandas(),
+        )
+
+        # test flatten
+        self.assert_eq(
+            cdf.select(CF.flatten(CF.array("b", cdf.c)), CF.col("b")).toPandas(),
+            sdf.select(SF.flatten(SF.array("b", sdf.c)), SF.col("b")).toPandas(),
+        )
+
+        # test inline
+        self.assert_eq(
+            cdf.select(CF.expr("ARRAY(STRUCT(e, f), STRUCT(g AS e, f))").alias("X"))
+            .select(CF.inline("X"))
+            .toPandas(),
+            sdf.select(SF.expr("ARRAY(STRUCT(e, f), STRUCT(g AS e, f))").alias("X"))
+            .select(SF.inline("X"))
+            .toPandas(),
+        )
+
+        # test inline_outer
+        self.assert_eq(
+            cdf.select(CF.expr("ARRAY(STRUCT(e, f), STRUCT(g AS e, f))").alias("X"))
+            .select(CF.inline_outer("X"))
+            .toPandas(),
+            sdf.select(SF.expr("ARRAY(STRUCT(e, f), STRUCT(g AS e, f))").alias("X"))
+            .select(SF.inline_outer("X"))
+            .toPandas(),
+        )
+
+    def test_csv_functions(self):
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        query = """
+            SELECT * FROM VALUES
+            ('1,2,3', 'a,b,5.0'),
+            ('3,4,5', 'x,y,6.0')
+            AS tab(a, b)
+            """
+        # +-----+-------+
+        # |    a|      b|
+        # +-----+-------+
+        # |1,2,3|a,b,5.0|
+        # |3,4,5|x,y,6.0|
+        # +-----+-------+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        # test from_csv
+        self.compare_by_show(
+            cdf.select(
+                CF.from_csv(cdf.a, "a INT, b INT, c INT"),
+                CF.from_csv("b", "x STRING, y STRING, z DOUBLE"),
+            ),
+            sdf.select(
+                SF.from_csv(sdf.a, "a INT, b INT, c INT"),
+                SF.from_csv("b", "x STRING, y STRING, z DOUBLE"),
+            ),
+        )
+        self.compare_by_show(
+            cdf.select(
+                CF.from_csv(cdf.a, CF.lit("a INT, b INT, c INT")),
+                CF.from_csv("b", CF.lit("x STRING, y STRING, z DOUBLE")),
+            ),
+            sdf.select(
+                SF.from_csv(sdf.a, SF.lit("a INT, b INT, c INT")),
+                SF.from_csv("b", SF.lit("x STRING, y STRING, z DOUBLE")),
+            ),
+        )
+
+    def test_json_functions(self):
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        query = """
+            SELECT * FROM VALUES
+            ('{"a": 1}', '[1, 2, 3]', '{"f1": "value1", "f2": "value2"}'),
+            ('{"a": 0}', '[4, 5, 6]', '{"f1": "value12"}')
+            AS tab(a, b, c)
+            """
+        # +--------+---------+--------------------------------+
+        # |       a|        b|                               c|
+        # +--------+---------+--------------------------------+
+        # |{"a": 1}|[1, 2, 3]|{"f1": "value1", "f2": "value2"}|
+        # |{"a": 0}|[4, 5, 6]|               {"f1": "value12"}|
+        # +--------+---------+--------------------------------+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        # test from_json
+        for schema in [
+            "a INT",
+            "MAP<STRING,INT>",
+            # StructType([StructField("a", IntegerType())]),
+            # ArrayType(StructType([StructField("a", IntegerType())])),
+        ]:
+            self.compare_by_show(
+                cdf.select(CF.from_json(cdf.a, schema)),
+                sdf.select(SF.from_json(sdf.a, schema)),
+            )
+            self.compare_by_show(
+                cdf.select(CF.from_json("a", schema)),
+                sdf.select(SF.from_json("a", schema)),
+            )
+
+        for schema in [
+            "ARRAY<INT>",
+            # ArrayType(IntegerType()),
+        ]:
+            self.compare_by_show(
+                cdf.select(CF.from_json(cdf.b, schema)),
+                sdf.select(SF.from_json(sdf.b, schema)),
+            )
+            self.compare_by_show(
+                cdf.select(CF.from_json("b", schema)),
+                sdf.select(SF.from_json("b", schema)),
+            )
+
+        # test get_json_object
+        self.assert_eq(
+            cdf.select(
+                CF.get_json_object("c", "$.f1"),
+                CF.get_json_object(cdf.c, "$.f2"),
+            ).toPandas(),
+            sdf.select(
+                SF.get_json_object("c", "$.f1"),
+                SF.get_json_object(sdf.c, "$.f2"),
+            ).toPandas(),
+        )
+
+        # test json_tuple
+        self.assert_eq(
+            cdf.select(CF.json_tuple("c", "f1", "f2")).toPandas(),
+            sdf.select(SF.json_tuple("c", "f1", "f2")).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.json_tuple(cdf.c, "f1", "f2")).toPandas(),
+            sdf.select(SF.json_tuple(sdf.c, "f1", "f2")).toPandas(),
+        )
+
     def test_string_functions(self):
         from pyspark.sql import functions as SF
         from pyspark.sql.connect import functions as CF
