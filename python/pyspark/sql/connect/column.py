@@ -32,6 +32,12 @@ if TYPE_CHECKING:
     import pyspark.sql.connect.proto as proto
 
 
+JVM_INT_MIN = -(1 << 31)
+JVM_INT_MAX = (1 << 31) - 1
+JVM_LONG_MIN = -(1 << 63)
+JVM_LONG_MAX = (1 << 63) - 1
+
+
 def _func_op(name: str, doc: str = "") -> Callable[["Column"], "Column"]:
     def _(self: "Column") -> "Column":
         return scalar_function(name, self)
@@ -180,7 +186,12 @@ class LiteralExpression(Expression):
         elif isinstance(self._value, bool):
             expr.literal.boolean = bool(self._value)
         elif isinstance(self._value, int):
-            expr.literal.long = int(self._value)
+            if JVM_INT_MIN <= self._value <= JVM_INT_MAX:
+                expr.literal.integer = int(self._value)
+            elif JVM_LONG_MIN <= self._value <= JVM_LONG_MAX:
+                expr.literal.long = int(self._value)
+            else:
+                raise ValueError(f"integer {self._value} out of bounds")
         elif isinstance(self._value, float):
             expr.literal.double = float(self._value)
         elif isinstance(self._value, str):
