@@ -2482,7 +2482,7 @@ case class TryElementAt(left: Expression, right: Expression, replacement: Expres
   note = """
     Concat logic for arrays is available since 2.4.0.
   """,
-  group = "array_funcs",
+  group = "collection_funcs",
   since = "1.5.0")
 case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpression
   with QueryErrorsBase {
