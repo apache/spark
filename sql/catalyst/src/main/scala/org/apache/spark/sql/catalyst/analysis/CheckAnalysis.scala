@@ -446,7 +446,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
             groupingExprs.foreach(checkValidGroupingExprs)
             aggregateExprs.foreach(checkValidAggregateExpression)
-            // TODO: if the Aggregate is resolved, it can't contain the LateralColumnAliasReference
 
           case CollectMetrics(name, metrics, _) =>
             if (name == null || name.isEmpty) {

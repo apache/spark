@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Proj
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern.LATERAL_COLUMN_ALIAS_REFERENCE
+import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
@@ -101,6 +102,14 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
    */
   val NAME_PARTS_FROM_UNRESOLVED_ATTR = TreeNodeTag[Seq[String]]("name_parts_from_unresolved_attr")
 
+  private def assignAlias(expr: Expression): NamedExpression = {
+    expr match {
+      case ne: NamedExpression => ne
+      case e =>
+        Alias(e, toPrettySQL(e))()
+    }
+  }
+
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (!conf.getConf(SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED)) {
       plan
@@ -172,14 +181,7 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
                         lcaRef.nameParts, aggExpr)
                   }
                 }
-                val ne = expressionMap.getOrElseUpdate(
-                  aggExpr.canonicalized,
-                  ResolveAliases.assignAliases(Seq(UnresolvedAlias(aggExpr))).map {
-                    // TODO temporarily clear the metadata for an issue found in test
-                    case a: Alias => a.copy(a.child, a.name)(
-                      a.exprId, a.qualifier, None, a.nonInheritableMetadataKeys)
-                    case other => other
-                  }.head)
+                val ne = expressionMap.getOrElseUpdate(aggExpr.canonicalized, assignAlias(aggExpr))
                 newAggExprs += ne
                 ne.toAttribute
               case e if groupingExpressions.exists(_.semanticEquals(e)) =>
@@ -187,9 +189,7 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
                 //  expressions? For example, Agg [age + 10] [1 + age + 10], when transforming down,
                 //  is it possible that (1 + age) + 10, so that it won't be able to match (age + 10)
                 //  add a test.
-                val ne = expressionMap.getOrElseUpdate(
-                  e.canonicalized,
-                  ResolveAliases.assignAliases(Seq(UnresolvedAlias(e))).head)
+                val ne = expressionMap.getOrElseUpdate(e.canonicalized, assignAlias(e))
                 newAggExprs += ne
                 ne.toAttribute
             }.asInstanceOf[NamedExpression]

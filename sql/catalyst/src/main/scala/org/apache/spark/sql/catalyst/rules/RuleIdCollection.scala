@@ -49,6 +49,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.Analyzer$GlobalAggregates" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveAggAliasInGroupBy" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveAggregateFunctions" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveAliases" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveBinaryArithmetic" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveDeserializer" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveEncodersInUDF" ::
@@ -82,7 +83,6 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.DeduplicateRelations" ::
       "org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases" ::
       "org.apache.spark.sql.catalyst.analysis.EliminateUnions" ::
-      "org.apache.spark.sql.catalyst.analysis.ResolveAliases" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveDefaultColumns" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveExpressionsWithNamePlaceholders" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveHints$ResolveCoalesceHints" ::
