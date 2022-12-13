@@ -21,6 +21,37 @@ import org.apache.spark._
 
 class AccumulatorV2Suite extends SparkFunSuite {
 
+  test("Test MapperRowCounter") {
+    val counter = new MapperRowCounter()
+    assert(counter.isZero)
+
+    counter.setPartitionId(0L)
+    counter.add(1L)
+    counter.add(1L)
+    assert(counter.value.get(0).get(0) == 0L)
+    assert(counter.value.get(0).get(1) == 2L)
+
+    counter.reset()
+    assert(counter.isZero)
+    counter.setPartitionId(100L)
+    counter.add(1L)
+    assert(counter.value.get(0).get(0) == 100L)
+    assert(counter.value.get(0).get(1) == 1L)
+
+    val counter2 = new MapperRowCounter()
+    counter2.setPartitionId(40L)
+    counter2.add(1L)
+    counter2.add(1L)
+    counter2.add(1L)
+
+    counter.merge(counter2)
+    assert(counter.value.size() == 2)
+    assert(counter.value.get(0).get(0) == 100L)
+    assert(counter.value.get(0).get(1) == 1L)
+    assert(counter.value.get(1).get(0) == 40L)
+    assert(counter.value.get(1).get(1) == 3L)
+  }
+
   test("LongAccumulator add/avg/sum/count/isZero") {
     val acc = new LongAccumulator
     assert(acc.isZero)
