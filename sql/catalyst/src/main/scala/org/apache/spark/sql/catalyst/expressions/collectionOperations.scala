@@ -4614,7 +4614,7 @@ case class ArrayCompact(expr: Expression, replacement: Expression)
   extends RuntimeReplaceable with InheritAnalysisRules {
 
   def this(expr: Expression) = this(expr,
-    ArrayFilter(expr, ArrayCompact.createLamdbaExpr()))
+    ArrayFilter(expr, ArrayCompact.createLambdaExpr()))
 
   override def parameters: Seq[Expression] = Seq.empty
 
@@ -4626,13 +4626,13 @@ case class ArrayCompact(expr: Expression, replacement: Expression)
 
 object ArrayCompact {
 
-  def apply(expr: Expression) = {
-    new ArrayCompact(expr, ArrayFilter(expr, createLamdbaExpr()))
+  def apply(expr: Expression): ArrayCompact = {
+    new ArrayCompact(expr, ArrayFilter(expr, createLambdaExpr()))
   }
 
-  def createLamdbaExpr() = {
-     val isNotNull: Expression => Expression = x => IsNotNull(x)
-     val lv = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("x")))
+  private def createLambdaExpr() = {
+    val isNotNull: Expression => Expression = x => IsNotNull(x)
+    val lv = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("x")))
     LambdaFunction(isNotNull(lv), Seq(lv))
   }
 }

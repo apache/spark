@@ -514,7 +514,7 @@ org.apache.spark.sql.AnalysisException
     "inputType" : "\"INT\"",
     "paramIndex" : "1",
     "requiredType" : "\"ARRAY\"",
-    "sqlExpr" : "\"array_compact(id)\""
+    "sqlExpr" : "\"filter(id, lambdafunction((x_6 IS NOT NULL), x_6))\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -529,7 +529,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select array_compact(array("1", null, "2", null))
 -- !query schema
-struct<array_compact(array(1, NULL, 2, NULL)):array<string>>
+struct<array_compact():array<string>>
 -- !query output
 ["1","2"]
 
@@ -537,7 +537,7 @@ struct<array_compact(array(1, NULL, 2, NULL)):array<string>>
 -- !query
 select array_compact(array("1", null, "2", null))
 -- !query schema
-struct<array_compact(array(1, NULL, 2, NULL)):array<string>>
+struct<array_compact():array<string>>
 -- !query output
 ["1","2"]
 
@@ -545,7 +545,7 @@ struct<array_compact(array(1, NULL, 2, NULL)):array<string>>
 -- !query
 select array_compact(array(1D, null, 2D, null))
 -- !query schema
-struct<array_compact(array(1.0, NULL, 2.0, NULL)):array<double>>
+struct<array_compact():array<double>>
 -- !query output
 [1.0,2.0]
 
@@ -553,7 +553,7 @@ struct<array_compact(array(1.0, NULL, 2.0, NULL)):array<double>>
 -- !query
 select array_compact(array(array(1, 2, 3, null), null, array(4, null, 6)))
 -- !query schema
-struct<array_compact(array(array(1, 2, 3, NULL), NULL, array(4, NULL, 6))):array<array<int>>>
+struct<array_compact():array<array<int>>>
 -- !query output
 [[1,2,3,null],[4,null,6]]
 
@@ -561,6 +561,6 @@ struct<array_compact(array(array(1, 2, 3, NULL), NULL, array(4, NULL, 6))):array
 -- !query
 select array_compact(array(null))
 -- !query schema
-struct<array_compact(array(NULL)):array<void>>
+struct<array_compact():array<void>>
 -- !query output
 []
