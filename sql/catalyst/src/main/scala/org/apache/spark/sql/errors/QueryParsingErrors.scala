@@ -211,15 +211,11 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   def cannotParseValueTypeError(
       valueType: String, value: String, ctx: TypeConstructorContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0019",
-      messageParameters = Map("valueType" -> valueType, "value" -> value),
-      ctx)
-  }
-
-  def cannotParseIntervalValueError(value: String, ctx: TypeConstructorContext): Throwable = {
-    new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0020",
-      messageParameters = Map("value" -> value),
+      errorClass = "INVALID_TYPED_LITERAL",
+      messageParameters = Map(
+        "valueType" -> toSQLType(valueType),
+        "value" -> toSQLValue(value, StringType)
+      ),
       ctx)
   }
 

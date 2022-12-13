@@ -109,6 +109,11 @@
       "The column <columnName> already exists. Consider to choose another name or rename the existing column."
     ]
   },
+  "COLUMN_NOT_FOUND" : {
+    "message" : [
+      "The column <colName> cannot be found. Verify the spelling and correctness of the column name according to the SQL config <caseSensitiveConfig>."
+    ]
+  },
   "CONCURRENT_QUERY" : {
     "message" : [
       "Another instance of this query was just started by a concurrent session."
@@ -813,6 +818,12 @@
       }
     }
   },
+  "INVALID_TYPED_LITERAL" : {
+    "message" : [
+      "The value of the typed literal <valueType> is invalid: <value>."
+    ],
+    "sqlState" : "42000"
+  },
   "INVALID_WHERE_CONDITION" : {
     "message" : [
       "The WHERE condition <condition> contains invalid expressions: <expressionList>.",
@@ -932,7 +943,7 @@
   },
   "NUM_COLUMNS_MISMATCH" : {
     "message" : [
-      "<operator> can only be performed on tables with the same number of columns, but the first table has <refNumColumns> columns and the <invalidOrdinalNum> table has <invalidNumColumns> columns."
+      "<operator> can only be performed on inputs with the same number of columns, but the first input has <firstNumColumns> columns and the <invalidOrdinalNum> input has <invalidNumColumns> columns."
     ]
   },
   "ORDER_BY_POS_OUT_OF_RANGE" : {
@@ -1611,16 +1622,6 @@
       "Function trim doesn't support with type <trimOption>. Please use BOTH, LEADING or TRAILING as trim type."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0019" : {
-    "message" : [
-      "Cannot parse the <valueType> value: <value>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0020" : {
-    "message" : [
-      "Cannot parse the INTERVAL value: <value>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0022" : {
     "message" : [
       "<msg>."
@@ -2096,11 +2097,6 @@
   "_LEGACY_ERROR_TEMP_1060" : {
     "message" : [
       "<command> does not support nested column: <column>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1061" : {
-    "message" : [
-      "Column <colName> does not exist."
     ]
   },
   "_LEGACY_ERROR_TEMP_1065" : {

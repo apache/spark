@@ -720,6 +720,15 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         assert(Cast.canUpCast(from, to))
       }
     }
+
+    {
+      assert(Cast.canUpCast(DateType, TimestampType))
+      assert(Cast.canUpCast(DateType, TimestampNTZType))
+      assert(Cast.canUpCast(TimestampType, TimestampNTZType))
+      assert(Cast.canUpCast(TimestampNTZType, TimestampType))
+      assert(!Cast.canUpCast(TimestampType, DateType))
+      assert(!Cast.canUpCast(TimestampNTZType, DateType))
+    }
   }
 
   test("SPARK-40389: canUpCast: return false if casting decimal to integral types can cause" +

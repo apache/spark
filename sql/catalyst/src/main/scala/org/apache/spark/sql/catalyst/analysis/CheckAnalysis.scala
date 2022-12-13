@@ -552,7 +552,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                   errorClass = "NUM_COLUMNS_MISMATCH",
                   messageParameters = Map(
                     "operator" -> toSQLStmt(operator.nodeName),
-                    "refNumColumns" -> ref.length.toString,
+                    "firstNumColumns" -> ref.length.toString,
                     "invalidOrdinalNum" -> ordinalNumber(ti + 1),
                     "invalidNumColumns" -> child.output.length.toString))
               }
@@ -565,7 +565,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                   e.failAnalysis(
                     errorClass = "_LEGACY_ERROR_TEMP_2430",
                     messageParameters = Map(
-                      "operator" -> operator.nodeName,
+                      "operator" -> toSQLStmt(operator.nodeName),
                       "ci" -> ordinalNumber(ci),
                       "ti" -> ordinalNumber(ti + 1),
                       "dt1" -> dt1.catalogString,

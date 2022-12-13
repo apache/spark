@@ -47,7 +47,7 @@ if __name__ == "__main__":
     from pyspark.pandas.tests.test_scalars import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
