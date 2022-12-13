@@ -1445,7 +1445,7 @@
       },
       "CORRELATED_REFERENCE" : {
         "message" : [
-          "Expressions <sqlExprs> referencing the outer query are not supported outside of WHERE/HAVING clauses."
+          "Expressions referencing the outer query are not supported outside of WHERE/HAVING clauses: <sqlExprs>"
         ]
       },
       "LATERAL_JOIN_CONDITION_NON_DETERMINISTIC" : {
