@@ -1744,7 +1744,7 @@ class Analyzer(override val catalogManager: CatalogManager)
      *                    the current plan is needed to first try resolving the attribute by its
      *                    children
      */
-    private def wrapLCARefHelper(
+    private def wrapLCARef(
         e: NamedExpression,
         currentPlan: LogicalPlan,
         aliasMap: CaseInsensitiveMap[Seq[AliasEntry]]): NamedExpression = {
@@ -1763,9 +1763,14 @@ class Analyzer(override val catalogManager: CatalogManager)
             case _ => u
           }
         case o: OuterReference
-          if aliasMap.contains(o.nameParts.map(_.head).getOrElse(o.name)) =>
+          if aliasMap.contains(
+            o.getTagValue(ResolveLateralColumnAliasReference.NAME_PARTS_FROM_UNRESOLVED_ATTR)
+              .map(_.head)
+              .getOrElse(o.name)) =>
           // handle OuterReference exactly same as UnresolvedAttribute
-          val nameParts = o.nameParts.getOrElse(Seq(o.name))
+          val nameParts = o
+            .getTagValue(ResolveLateralColumnAliasReference.NAME_PARTS_FROM_UNRESOLVED_ATTR)
+            .getOrElse(Seq(o.name))
           val aliases = aliasMap.get(nameParts.head).get
           aliases.size match {
             case n if n > 1 =>
@@ -1789,7 +1794,7 @@ class Analyzer(override val catalogManager: CatalogManager)
             var aliasMap = CaseInsensitiveMap(Map[String, Seq[AliasEntry]]())
             val newProjectList = projectList.zipWithIndex.map {
               case (a: Alias, idx) =>
-                val lcaWrapped = wrapLCARefHelper(a, p, aliasMap).asInstanceOf[Alias]
+                val lcaWrapped = wrapLCARef(a, p, aliasMap).asInstanceOf[Alias]
                 // Insert the LCA-resolved alias instead of the unresolved one into map. If it is
                 // resolved, it can be referenced as LCA by later expressions (chaining).
                 // Unresolved Alias is also added to the map to perform ambiguous name check, but
@@ -1797,7 +1802,7 @@ class Analyzer(override val catalogManager: CatalogManager)
                 aliasMap = insertIntoAliasMap(lcaWrapped, idx, aliasMap)
                 lcaWrapped
               case (e, _) =>
-                wrapLCARefHelper(e, p, aliasMap)
+                wrapLCARef(e, p, aliasMap)
             }
             p.copy(projectList = newProjectList)
 

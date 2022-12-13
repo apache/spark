@@ -644,8 +644,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             projectList.foreach(_.transformDownWithPruning(
               _.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
               case lcaRef: LateralColumnAliasReference if p.resolved =>
-                failUnresolvedAttribute(
-                  p, UnresolvedAttribute(lcaRef.nameParts), "UNRESOLVED_COLUMN")
+                throw SparkException.internalError("Resolved Project should not contain " +
+                  s"any LateralColumnAliasReference.\nDebugging information: plan: $p",
+                  context = lcaRef.origin.getQueryContext,
+                  summary = lcaRef.origin.context.summary)
             })
 
           case j: Join if !j.duplicateResolved =>
@@ -730,8 +732,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             aggList.foreach(_.transformDownWithPruning(
               _.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
               case lcaRef: LateralColumnAliasReference =>
-                failUnresolvedAttribute(
-                  agg, UnresolvedAttribute(lcaRef.nameParts), "UNRESOLVED_COLUMN")
+                throw SparkException.internalError("Resolved Aggregate should not contain " +
+                  s"any LateralColumnAliasReference.\nDebugging information: plan: $agg",
+                  context = lcaRef.origin.getQueryContext,
+                  summary = lcaRef.origin.context.summary)
             })
 
           case _ => // Analysis successful!
