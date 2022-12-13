@@ -77,6 +77,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveWindowFrame" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveWindowOrder" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$WindowsSubstitution" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$WrapLateralColumnAliasReference" ::
       "org.apache.spark.sql.catalyst.analysis.AnsiTypeCoercion$AnsiCombinedTypeCoercionRule" ::
       "org.apache.spark.sql.catalyst.analysis.ApplyCharTypePadding" ::
       "org.apache.spark.sql.catalyst.analysis.DeduplicateRelations" ::
@@ -88,6 +89,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.ResolveHints$ResolveJoinStrategyHints" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveInlineTables" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveLambdaVariables" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveLateralColumnAliasReference" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveTimeZone" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveUnion" ::
       "org.apache.spark.sql.catalyst.analysis.SubstituteUnresolvedOrdinals" ::

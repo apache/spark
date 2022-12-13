@@ -3399,4 +3399,23 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
           cause = Option(other))
     }
   }
+
+  def ambiguousLateralColumnAlias(name: String, numOfMatches: Int): Throwable = {
+    new AnalysisException(
+      errorClass = "AMBIGUOUS_LATERAL_COLUMN_ALIAS",
+      messageParameters = Map(
+        "name" -> toSQLId(name),
+        "n" -> numOfMatches.toString
+      )
+    )
+  }
+  def ambiguousLateralColumnAlias(nameParts: Seq[String], numOfMatches: Int): Throwable = {
+    new AnalysisException(
+      errorClass = "AMBIGUOUS_LATERAL_COLUMN_ALIAS",
+      messageParameters = Map(
+        "name" -> toSQLId(nameParts),
+        "n" -> numOfMatches.toString
+      )
+    )
+  }
 }
