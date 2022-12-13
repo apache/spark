@@ -664,7 +664,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             Value between 0 and 1 providing the quantile to compute.
         accuracy : int, optional
             Default accuracy of approximation. Larger value means better accuracy.
-            The relative error can be reduced by 1.0 / accuracy.
+            The relative error can be deduced by 1.0 / accuracy.
             This is a panda-on-Spark specific parameter.
 
         Returns

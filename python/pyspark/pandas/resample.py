@@ -16,7 +16,7 @@
 #
 
 """
-A wrapper for ResampledData to behave similar to pandas Resampler.
+A wrapper for ResampledData to behave like pandas Resampler.
 """
 from abc import ABCMeta, abstractmethod
 from distutils.version import LooseVersion
@@ -319,7 +319,7 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
         # in this case:
         # 1, obtain one origin point to bin all timestamps, we can get one (2009-12-31)
         # from the minimum timestamp (2012-01-02);
-        # 2, the default intervals for 'Y' are right-closed, so intervals are:
+        # 2, the default intervals for 'Y' are right closed, so intervals are:
         # (2009-12-31, 2012-12-31], (2012-12-31, 2015-12-31], (2015-12-31, 2018-12-31], ...
         # 3, bin all timestamps, for example, 2022-05-03 belongs to interval
         # (2021-12-31, 2024-12-31], since the default label is 'right', label it with the right

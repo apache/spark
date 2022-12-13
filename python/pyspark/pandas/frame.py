@@ -12133,7 +12133,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             Can only be set to True now.
         accuracy : int, optional
             Default accuracy of approximation. Larger value means better accuracy.
-            The relative error can be reduced by 1.0 / accuracy.
+            The relative error can be deduced by 1.0 / accuracy.
 
         Returns
         -------
