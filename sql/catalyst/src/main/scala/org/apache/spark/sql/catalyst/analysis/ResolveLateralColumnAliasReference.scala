@@ -32,22 +32,26 @@ import org.apache.spark.sql.internal.SQLConf
  * Plan-wise, it handles two types of operators: Project and Aggregate.
  * - in Project, pushing down the referenced lateral alias into a newly created Project, resolve
  *   the attributes referencing these aliases
- * - in Aggregate TODO inserting the Project node above and fall back to the resolution of Project.
+ * - in Aggregate, inserting the Project node above and falling back to the resolution of Project.
  *
  * The whole process is generally divided into two phases:
  * 1) recognize resolved lateral alias, wrap the attributes referencing them with
  *    [[LateralColumnAliasReference]]
- * 2) when the whole operator is resolved, unwrap [[LateralColumnAliasReference]].
- *    For Project, it further resolves the attributes and push down the referenced lateral aliases.
- *    For Aggregate, TODO
+ * 2) when the whole operator is resolved,
+ *    For Project, it unwrap [[LateralColumnAliasReference]], further resolves the attributes and
+ *    push down the referenced lateral aliases.
+ *    For Aggregate, it goes through the whole aggregation list, extracts the aggregation
+ *    expressions and grouping expressions to keep them in this Aggregate node, and add a Project
+ *    above with the original output. It doesn't do anything on [[LateralColumnAliasReference]], but
+ *    completely leave it to the Project in the future turns of this rule.
  *
- * Example for Project:
+ * ** Example for Project:
  * Before rewrite:
  * Project [age AS a, 'a + 1]
  * +- Child
  *
  * After phase 1:
- * Project [age AS a, lateralalias(a) + 1]
+ * Project [age AS a, lca(a) + 1]
  * +- Child
  *
  * After phase 2:
@@ -55,27 +59,27 @@ import org.apache.spark.sql.internal.SQLConf
  * +- Project [child output, age AS a]
  *    +- Child
  *
- * Example for Aggregate TODO
- *
- * For Aggregate, it first wraps the attribute resolved by lateral alias with
- * [[LateralColumnAliasReference]].
- * Before wrap (omit some cast or alias):
+ * ** Example for Aggregate:
+ * Before rewrite:
  * Aggregate [dept#14] [dept#14 AS a#12, 'a + 1, avg(salary#16) AS b#13, 'b + avg(bonus#17)]
  * +- Child [dept#14,name#15,salary#16,bonus#17]
  *
- * After wrap:
+ * After phase 1:
  * Aggregate [dept#14] [dept#14 AS a#12, lca(a) + 1, avg(salary#16) AS b#13, lca(b) + avg(bonus#17)]
  * +- Child [dept#14,name#15,salary#16,bonus#17]
  *
- * When the whole Aggregate is resolved, it inserts a [[Project]] above with the aggregation
- * expression list, but extracts the [[AggregateExpression]] and grouping expressions in the
- * list to the current Aggregate. It restores all the [[LateralColumnAliasReference]] back to
- * [[UnresolvedAttribute]]. The problem falls back to the lateral alias resolution in Project.
- *
- * After restore:
- * Project [dept#14 AS a#12, 'a + 1, avg(salary)#26 AS b#13, 'b + avg(bonus)#27]
+ * After phase 2:
+ * Project [dept#14 AS a#12, lca(a) + 1, avg(salary)#26 AS b#13, lca(b) + avg(bonus)#27]
  * +- Aggregate [dept#14] [avg(salary#16) AS avg(salary)#26, avg(bonus#17) AS avg(bonus)#27,dept#14]
  *    +- Child [dept#14,name#15,salary#16,bonus#17]
+ *
+ * Now the problem falls back to the lateral alias resolution in Project.
+ * After future rounds of this rule:
+ * Project [a#12, a#12 + 1, b#13, b#13 + avg(bonus)#27]
+ * +- Project [dept#14 AS a#12, avg(salary)#26 AS b#13]
+ *    +- Aggregate [dept#14] [avg(salary#16) AS avg(salary)#26, avg(bonus#17) AS avg(bonus)#27,
+ *                            dept#14]
+ *       +- Child [dept#14,name#15,salary#16,bonus#17]
  *
  *
  * The name resolution priority:
@@ -172,8 +176,8 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
                 ne.toAttribute
               case e if groupingExpressions.exists(_.semanticEquals(e)) =>
                 // TODO one concern here, is condition here be able to match all grouping
-                //  expressions? For example, Agg [age + 10] [a + age + 10], when transforming down,
-                //  is it possible that (a + age) + 10, so that it won't be able to match (age + 10)
+                //  expressions? For example, Agg [age + 10] [1 + age + 10], when transforming down,
+                //  is it possible that (1 + age) + 10, so that it won't be able to match (age + 10)
                 //  add a test.
                 val ne = expressionMap.getOrElseUpdate(
                   e.canonicalized,
