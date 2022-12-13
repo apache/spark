@@ -26,7 +26,6 @@ from pyspark.sql.types import (
     DoubleType,
     LongType,
     DecimalType,
-    BinaryType,
     BooleanType,
 )
 from pyspark.testing.connectutils import should_test_connect
@@ -153,25 +152,21 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             df.select(df.id.cast("string")).toPandas(), df2.select(df2.id.cast("string")).toPandas()
         )
 
-        # Test if the arguments can be passed properly.
-        # Do not need to check individual behaviour for the ANSI mode thoroughly.
-        with self.sql_conf({"spark.sql.ansi.enabled": False}):
-            for x in [
-                StringType(),
-                BinaryType(),
-                ShortType(),
-                IntegerType(),
-                LongType(),
-                FloatType(),
-                DoubleType(),
-                ByteType(),
-                DecimalType(10, 2),
-                BooleanType(),
-                DayTimeIntervalType(),
-            ]:
-                self.assert_eq(
-                    df.select(df.id.cast(x)).toPandas(), df2.select(df2.id.cast(x)).toPandas()
-                )
+        for x in [
+            StringType(),
+            ShortType(),
+            IntegerType(),
+            LongType(),
+            FloatType(),
+            DoubleType(),
+            ByteType(),
+            DecimalType(10, 2),
+            BooleanType(),
+            DayTimeIntervalType(),
+        ]:
+            self.assert_eq(
+                df.select(df.id.cast(x)).toPandas(), df2.select(df2.id.cast(x)).toPandas()
+            )
 
     def test_unsupported_functions(self):
         # SPARK-41225: Disable unsupported functions.
