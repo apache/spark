@@ -271,8 +271,23 @@ class DataFrame(object):
     def approxQuantile(self, col: Column, probabilities: Any, relativeError: Any) -> "DataFrame":
         ...
 
-    def colRegex(self, regex: str) -> "DataFrame":
-        ...
+    def colRegex(self, colName: str) -> Column:
+        """
+        Selects column based on the column name specified as a regex and returns it
+        as :class:`Column`.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        colName : str
+            string, column name specified as a regex.
+
+        Returns
+        -------
+        :class:`Column`
+        """
+        return Column(UnresolvedRegex(colName))
 
     @property
     def dtypes(self) -> List[Tuple[str, str]]:
@@ -294,24 +309,6 @@ class DataFrame(object):
             return []
 
         return self.schema.names
-
-    def colRegex(self, colName: str) -> Column:
-        """
-        Selects column based on the column name specified as a regex and returns it
-        as :class:`Column`.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        colName : str
-            string, column name specified as a regex.
-
-        Returns
-        -------
-        :class:`Column`
-        """
-        return Column(UnresolvedRegex(colName))
 
     def sparkSession(self) -> "SparkSession":
         """Returns Spark session that created this :class:`DataFrame`.
