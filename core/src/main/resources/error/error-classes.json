@@ -1536,7 +1536,7 @@
       },
       "WITH_SUGGESTION" : {
         "message" : [
-          "The function requires <expectedNum> parameters but the actual number is <actualNum>."
+          "Consider to change the number of arguments because the function requires <expectedNum> parameters but the actual number is <actualNum>."
         ]
       }
     }
