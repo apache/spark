@@ -24,7 +24,7 @@ import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class RemoveRedundantWindowGroupLimitsSuiteBase
+abstract class RemoveRedundantWindowGroupLimitsSuiteBase
     extends QueryTest
     with SharedSparkSession
     with AdaptiveSparkPlanHelper {

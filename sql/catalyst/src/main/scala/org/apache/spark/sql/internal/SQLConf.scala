@@ -2637,7 +2637,7 @@ object SQLConf {
       .createWithDefault(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD.defaultValue.get)
 
   val WINDOW_GROUP_LIMIT_THRESHOLD =
-    buildConf("spark.sql.window.group.limit.threshold")
+    buildConf("spark.sql.optimizer.windowGroupLimitThreshold")
       .internal()
       .doc("Threshold for filter the dataset by the window group limit before" +
         " window-based top-k computation. By setting this value to -1 window group limit can be" +

@@ -85,7 +85,9 @@ abstract class WindowIterator extends Iterator[InternalRow] {
 
   def output: Seq[Attribute]
 
-  def stream: Iterator[InternalRow]
+  def input: Iterator[InternalRow]
+
+  def limit: Int
 
   val grouping = UnsafeProjection.create(partitionSpec, output)
 
@@ -94,9 +96,9 @@ abstract class WindowIterator extends Iterator[InternalRow] {
   var nextGroup: UnsafeRow = null
   var nextRowAvailable: Boolean = false
   protected[this] def fetchNextRow(): Unit = {
-    nextRowAvailable = stream.hasNext
+    nextRowAvailable = input.hasNext
     if (nextRowAvailable) {
-      nextRow = stream.next().asInstanceOf[UnsafeRow]
+      nextRow = input.next().asInstanceOf[UnsafeRow]
       nextGroup = grouping(nextRow)
     } else {
       nextRow = null
@@ -105,8 +107,7 @@ abstract class WindowIterator extends Iterator[InternalRow] {
   }
   fetchNextRow()
 
-  // Whether or not the rank exceeding the window group limit value.
-  def exceedingLimit(): Boolean
+  var rank = 0
 
   // Increase the rank value.
   def increaseRank(): Unit
@@ -116,7 +117,7 @@ abstract class WindowIterator extends Iterator[InternalRow] {
 
   var bufferIterator: Iterator[InternalRow] = _
 
-  private[this] def fetchNextPartition(): Unit = {
+  private[this] def fetchNextGroup(): Unit = {
     clearRank()
     bufferIterator = createGroupIterator()
   }
@@ -127,7 +128,7 @@ abstract class WindowIterator extends Iterator[InternalRow] {
   override final def next(): InternalRow = {
     // Load the next partition if we need to.
     if ((bufferIterator == null || !bufferIterator.hasNext) && nextRowAvailable) {
-      fetchNextPartition()
+      fetchNextGroup()
     }
 
     if (bufferIterator.hasNext) {
@@ -144,7 +145,7 @@ abstract class WindowIterator extends Iterator[InternalRow] {
 
       def hasNext: Boolean = {
         if (nextRowAvailable) {
-          if (exceedingLimit() && nextGroup == currentGroup) {
+          if (rank >= limit && nextGroup == currentGroup) {
             do {
               fetchNextRow()
             } while (nextRowAvailable && nextGroup == currentGroup)
@@ -168,37 +169,27 @@ abstract class WindowIterator extends Iterator[InternalRow] {
 case class SimpleGroupLimitIterator(
     partitionSpec: Seq[Expression],
     output: Seq[Attribute],
-    stream: Iterator[InternalRow],
+    input: Iterator[InternalRow],
     limit: Int) extends WindowIterator {
-  var count = 0
-
-  override def exceedingLimit(): Boolean = {
-    count >= limit
-  }
 
   override def increaseRank(): Unit = {
-    count += 1
+    rank += 1
   }
 
   override def clearRank(): Unit = {
-    count = 0
+    rank = 0
   }
 }
 
 case class RankGroupLimitIterator(
     partitionSpec: Seq[Expression],
     output: Seq[Attribute],
-    stream: Iterator[InternalRow],
+    input: Iterator[InternalRow],
     orderSpec: Seq[SortOrder],
     limit: Int) extends WindowIterator {
   val ordering = GenerateOrdering.generate(orderSpec, output)
   var count = 0
-  var rank = 0
   var currentRank: UnsafeRow = null
-
-  override def exceedingLimit(): Boolean = {
-    rank >= limit
-  }
 
   override def increaseRank(): Unit = {
     if (count == 0) {
@@ -222,16 +213,11 @@ case class RankGroupLimitIterator(
 case class DenseRankGroupLimitIterator(
     partitionSpec: Seq[Expression],
     output: Seq[Attribute],
-    stream: Iterator[InternalRow],
+    input: Iterator[InternalRow],
     orderSpec: Seq[SortOrder],
     limit: Int) extends WindowIterator {
   val ordering = GenerateOrdering.generate(orderSpec, output)
-  var rank = 0
   var currentRank: UnsafeRow = null
-
-  override def exceedingLimit(): Boolean = {
-    rank >= limit
-  }
 
   override def increaseRank(): Unit = {
     if (currentRank == null) {
