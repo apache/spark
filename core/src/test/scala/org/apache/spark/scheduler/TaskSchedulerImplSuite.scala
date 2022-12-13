@@ -531,7 +531,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     val numFreeCores = 1
     val taskSet = new TaskSet(
       Array(new NotSerializableFakeTask(1, 0), new NotSerializableFakeTask(0, 1)),
-      0, 0, 0, null, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+      0, 0, 0, null, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, None)
     val multiCoreWorkerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", taskCpus),
       new WorkerOffer("executor1", "host1", numFreeCores))
     taskScheduler.submitTasks(taskSet)
@@ -546,7 +546,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     taskScheduler.submitTasks(FakeTask.createTaskSet(1))
     val taskSet2 = new TaskSet(
       Array(new NotSerializableFakeTask(1, 0), new NotSerializableFakeTask(0, 1)),
-      1, 0, 0, null, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+      1, 0, 0, null, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, None)
     taskScheduler.submitTasks(taskSet2)
     taskDescriptions = taskScheduler.resourceOffers(multiCoreWorkerOffers).flatten
     assert(taskDescriptions.map(_.executorId) === Seq("executor0"))
@@ -2152,15 +2152,15 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
 
     val workerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", 1),
       new WorkerOffer("executor1", "host1", 1))
-    val task1 = new ShuffleMapTask(0, 1, 0, null, new Partition {
+    val task1 = new ShuffleMapTask(1, 0, null, new Partition {
       override def index: Int = 0
     }, 1, Seq(TaskLocation("host0", "executor0")), new Properties, null)
 
-    val task2 = new ShuffleMapTask(0, 1, 0, null, new Partition {
+    val task2 = new ShuffleMapTask(1, 0, null, new Partition {
       override def index: Int = 1
     }, 1, Seq(TaskLocation("host1", "executor1")), new Properties, null)
 
-    val taskSet = new TaskSet(Array(task1, task2), 0, 0, 0, null, 0)
+    val taskSet = new TaskSet(Array(task1, task2), 0, 0, 0, null, 0, Some(0))
 
     taskScheduler.submitTasks(taskSet)
     val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten

@@ -32,7 +32,6 @@ import org.apache.spark.rdd.RDD
  *
  * See [[org.apache.spark.scheduler.Task]] for more information.
  *
- * @param shuffleId id of the shuffle
  * @param stageId id of the stage this task belongs to
  * @param stageAttemptId attempt id of the stage this task belongs to
  * @param taskBinary broadcast version of the RDD and the ShuffleDependency. Once deserialized,
@@ -52,7 +51,6 @@ import org.apache.spark.rdd.RDD
  *                  at the same time for a barrier stage.
  */
 private[spark] class ShuffleMapTask(
-    @transient val shuffleId: Int,
     stageId: Int,
     stageAttemptId: Int,
     taskBinary: Broadcast[Array[Byte]],
@@ -71,8 +69,7 @@ private[spark] class ShuffleMapTask(
 
   /** A constructor used only in test suites. This does not require passing in an RDD. */
   def this(partitionId: Int) = {
-    this(0, 0, 0, null, new Partition { override def index: Int = 0 }, 1, null, new Properties,
-      null)
+    this(0, 0, null, new Partition { override def index: Int = 0 }, 1, null, new Properties, null)
   }
 
   @transient private val preferredLocs: Seq[TaskLocation] = {

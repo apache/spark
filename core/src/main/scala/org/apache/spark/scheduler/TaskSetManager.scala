@@ -76,6 +76,8 @@ private[spark] class TaskSetManager(
 
   val tasks = taskSet.tasks
   private val isShuffleMapTasks = tasks(0).isInstanceOf[ShuffleMapTask]
+  // shuffleId is only available when isShuffleMapTasks=true
+  private val shuffleId = taskSet.shuffleId
   private[scheduler] val partitionToIndex = tasks.zipWithIndex
     .map { case (t, idx) => t.partitionId -> idx }.toMap
   val numTasks = tasks.length
@@ -1058,14 +1060,13 @@ private[spark] class TaskSetManager(
         val index = info.index
         lazy val isShuffleMapOutputAvailable = reason match {
           case ExecutorDecommission(_, _) =>
-            val shuffleId = tasks(0).asInstanceOf[ShuffleMapTask].shuffleId
             val mapId = if (conf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL)) {
               info.partitionId
             } else {
               tid
             }
             val locationOpt = env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
-              .getMapOutputLocation(shuffleId, mapId)
+              .getMapOutputLocation(shuffleId.get, mapId)
             // There are 3 cases of locationOpt:
             // 1) locationOpt.isDefined && locationOpt.get.host == host:
             //    this case implies that the shuffle map output is still on the lost executor. The
