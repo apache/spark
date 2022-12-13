@@ -946,6 +946,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertIn("(this, is, not)", str(exc.exception))
 
     def test_column_regexp(self) -> None:
+        # SPARK-41438: test dataframe.colRegex()
         df = self.spark.read.table(self.tbl_name3)
 
         self.assert_eq(

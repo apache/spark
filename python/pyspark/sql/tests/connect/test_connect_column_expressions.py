@@ -231,6 +231,7 @@ class SparkConnectColumnExpressionSuite(PlanOnlyTestFixture):
         self.assertEqual(plan.alias.metadata, '{"pii": true}')
 
     def test_column_regexp(self):
+        # SPARK-41438: test colRegex
         col = fun.colRegex("col_name")
         self.assertIsInstance(col, Column)
         self.assertEqual("Column<'col_name'>", str(col))
