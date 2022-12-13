@@ -291,6 +291,46 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     jdbc(url, table, connectionProperties)
   }
 
+  // scalastyle:off line.size.limit
+  /**
+   * Construct a `DataFrame` representing the database table accessible via JDBC URL
+   * url named table. Partitions of the table will be retrieved in parallel based on the parameters
+   * passed to this function.
+   *
+   * Don't create too many partitions in parallel on a large cluster; otherwise Spark might crash
+   * your external database systems.
+   *
+   * You can find the JDBC-specific option and parameter documentation for reading tables via JDBC in
+   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option">
+   * Data Source Option</a> in the version you use.
+   *
+   * @param table                Name of the table in the external database.
+   * @param columnName           Alias of `partitionColumn` option. Refer to `partitionColumn` in
+   *                             <a href="https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option">
+   *                             Data Source Option</a> in the version you use.
+   * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
+   *                             tag/value. Normally at least a "user" and "password" property
+   *                             should be included. "fetchsize" can be used to control the
+   *                             number of rows per fetch and "queryTimeout" can be used to wait
+   *                             for a Statement object to execute to the given number of seconds.
+   * @since 3.4.0
+   */
+  // scalastyle:on line.size.limit
+  def jdbc(
+            url: String,
+            table: String,
+            columnName: String,
+            partitionColValues: String,
+            numPartitions: Int,
+            connectionProperties: Properties): DataFrame = {
+    // partitionColValues overrides settings in extraOptions.
+    this.extraOptions ++= Map(
+      JDBCOptions.JDBC_PARTITION_COLUMN -> columnName,
+      JDBCOptions.JDBC_PARTITION_COL_VALUES -> partitionColValues,
+      JDBCOptions.JDBC_NUM_PARTITIONS -> numPartitions.toString)
+    jdbc(url, table, connectionProperties)
+  }
+
   /**
    * Construct a `DataFrame` representing the database table accessible via JDBC URL
    * url named table using connection properties. The `predicates` parameter gives a list

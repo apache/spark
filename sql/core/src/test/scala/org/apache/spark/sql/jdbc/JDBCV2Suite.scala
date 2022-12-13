@@ -1536,6 +1536,32 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     }
   }
 
+  test("SPARK-40485 Partitioning using a list of user-provided values") {
+    withTable("h2.test.abc") {
+      sql("CREATE TABLE h2.test.abc AS SELECT * FROM h2.test.people")
+
+      // Test basic functionality of partitionColValues
+      val df1 = spark.read
+        .option("partitionColumn", "id")
+        .option("numPartitions", "2")
+        .option("partitionColValues", "1, 2")
+        .table("h2.test.abc")
+
+      assert(df1.rdd.getNumPartitions === 2)
+      assert(df1.count() === 2)
+
+      // numPartitions will be reduced and only 2 rows will be retrieved
+      val df2 = spark.read
+        .option("partitionColumn", "id")
+        .option("numPartitions", "4")
+        .option("partitionColValues", "1, 2, 3")
+        .table("h2.test.abc")
+
+      assert(df2.rdd.getNumPartitions === 3)
+      assert(df2.count() === 2)
+    }
+  }
+
   test("show tables") {
     checkAnswer(sql("SHOW TABLES IN h2.test"),
       Seq(Row("test", "people", false), Row("test", "empty_table", false),

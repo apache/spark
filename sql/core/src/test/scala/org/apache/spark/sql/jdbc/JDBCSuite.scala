@@ -522,9 +522,10 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
              |  fetchSize '10000' )
            """.stripMargin.replaceAll("\n", " "))
       }.getMessage
-      assert(e.contains("When reading JDBC data sources, users need to specify all or none " +
-        "for the following options: 'partitionColumn', 'lowerBound', 'upperBound', and " +
-        "'numPartitions'"))
+      assert(e.contains("When reading JDBC data sources and using partitioning features, " +
+        "users need to specify the options: 'partitionColumn' and 'numPartitions', in " +
+        "addition users need to specify either 'lowerBound' and 'upperBound' or specify " +
+        "a list of values for 'partitionColValues'."))
     }
   }
 
@@ -627,6 +628,50 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     val df = sql("SELECT * FROM nullparts")
     checkNumPartitions(df, expectedNumPartitions = 3)
     assert(df.collect().length == 4)
+  }
+
+  test("SPARK-40485 Partitioning using a list of user-provided values") {
+    val res = spark.read.jdbc(
+      url = urlWithUserAndPass,
+      table = "TEST.seq",
+      columnName = "id",
+      partitionColValues = "1, 2, 3, 4, 5, 6",
+      numPartitions = 3,
+      connectionProperties = new Properties()
+    )
+    checkNumPartitions(res, expectedNumPartitions = 3)
+    assert(res.count() === 6)
+  }
+
+  test("SPARK-40485 Partitioning is limited by the provided value list") {
+    val res = spark.read.jdbc(
+      url = urlWithUserAndPass,
+      table = "TEST.seq",
+      columnName = "id",
+      partitionColValues = "1, 3, 4, 5, 6, 100",
+      numPartitions = 10,
+      connectionProperties = new Properties()
+    )
+    checkNumPartitions(res, expectedNumPartitions = 6)
+    assert(res.count() === 5)
+  }
+
+  test("SPARK-40485 Partitioning options that are mutually exclusive") {
+    val e = intercept[IllegalArgumentException] {
+      spark.read.format("jdbc")
+        .option("url", urlWithUserAndPass)
+        .option("dbtable", "TEST.seq")
+        .option("columnName", "id")
+        .option("numPartitions", "2")
+        .option("partitionColValues", "1, 2, 3, 4")
+        .option("lowerBound", "1")
+        .option("upperBound", "4")
+        .load()
+    }
+    assert(e.getMessage.contains("When reading JDBC data sources and using partitioning " +
+      "features, users need to specify the options: 'partitionColumn' and 'numPartitions', " +
+      "in addition users need to specify either 'lowerBound' and 'upperBound' or specify " +
+      "a list of values for 'partitionColValues'."))
   }
 
   test("H2 integral types") {

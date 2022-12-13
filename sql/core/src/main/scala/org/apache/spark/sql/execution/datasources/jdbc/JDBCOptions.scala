@@ -126,13 +126,19 @@ class JDBCOptions(
   val lowerBound = parameters.get(JDBC_LOWER_BOUND)
   // the upper bound of the partition column
   val upperBound = parameters.get(JDBC_UPPER_BOUND)
+  // .........COMMENT HERE.........
+  val partitionColValues = parameters.get(JDBCOptions.JDBC_PARTITION_COL_VALUES)
   // numPartitions is also used for data source writing
-  require((partitionColumn.isEmpty && lowerBound.isEmpty && upperBound.isEmpty) ||
-    (partitionColumn.isDefined && lowerBound.isDefined && upperBound.isDefined &&
-      numPartitions.isDefined),
-    s"When reading JDBC data sources, users need to specify all or none for the following " +
-      s"options: '$JDBC_PARTITION_COLUMN', '$JDBC_LOWER_BOUND', '$JDBC_UPPER_BOUND', " +
-      s"and '$JDBC_NUM_PARTITIONS'")
+  require((partitionColumn.isEmpty && lowerBound.isEmpty && upperBound.isEmpty
+    && partitionColValues.isEmpty) ||
+    ((partitionColumn.isDefined && lowerBound.isDefined && upperBound.isDefined &&
+      numPartitions.isDefined) && partitionColValues.isEmpty) ||
+    (partitionColumn.isDefined && numPartitions.isDefined && partitionColValues.isDefined &&
+      lowerBound.isEmpty && upperBound.isEmpty),
+    s"When reading JDBC data sources and using partitioning features, users need to specify " +
+      s"the options: '$JDBC_PARTITION_COLUMN' and '$JDBC_NUM_PARTITIONS', " +
+      s"in addition users need to specify either '$JDBC_LOWER_BOUND' and '$JDBC_UPPER_BOUND' or" +
+      s" specify a list of values for '$JDBC_PARTITION_COL_VALUES'.")
 
   require(!(parameters.get(JDBC_QUERY_STRING).isDefined && partitionColumn.isDefined),
     s"""
@@ -280,6 +286,7 @@ object JDBCOptions {
   val JDBC_LOWER_BOUND = newOption("lowerBound")
   val JDBC_UPPER_BOUND = newOption("upperBound")
   val JDBC_NUM_PARTITIONS = newOption("numPartitions")
+  val JDBC_PARTITION_COL_VALUES = newOption("partitionColValues")
   val JDBC_QUERY_TIMEOUT = newOption("queryTimeout")
   val JDBC_BATCH_FETCH_SIZE = newOption("fetchsize")
   val JDBC_TRUNCATE = newOption("truncate")

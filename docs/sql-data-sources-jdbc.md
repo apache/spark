@@ -140,16 +140,32 @@ logging into the data sources.
   </tr>
 
   <tr>
-    <td><code>partitionColumn, lowerBound, upperBound</code></td>
+    <td><code>partitionColumn</code></td>
     <td>(none)</td>
     <td>
+      This describes the column to be used when reading in parallel from multiple workers. In 
+      addition, <code>numPartitions</code> must be specified as well as either
+      <code>lowerBound</code> and <code>upperBound</code> or <code>partitionColValues</code>.
+      This option applies only to reading.  
+    </td>
+    <td>read</td>
+  </tr>
+
+  <tr>
+    <td><code>lowerBound, upperBound</code></td>
+    <td>(none)</td>
+    <td>
+      These options describe how to partition the table when reading in parallel from multiple
+      workers by providing a way to "slice" the table by interval ranges.
       These options must all be specified if any of them is specified. In addition,
-      <code>numPartitions</code> must be specified. They describe how to partition the table when
-      reading in parallel from multiple workers.
-      <code>partitionColumn</code> must be a numeric, date, or timestamp column from the table in question.
+      <code>numPartitions</code> and <code>partitionColumn</code> must be specified, while 
+      <code>partitionColValues</code> cannot be specified together with these options.
       Notice that <code>lowerBound</code> and <code>upperBound</code> are just used to decide the
-      partition stride, not for filtering the rows in table. So all rows in the table will be
-      partitioned and returned. This option applies only to reading.<br>
+      partition stride, not for filtering the rows in the table. So all rows in the table will be
+      partitioned and returned, including rows with null values in the partitioning column.
+      When using these option <code>partitionColumn</code> must be a numeric, date, or timestamp
+      column from the table in question.
+      This option applies only to reading.  
       Example:<br>
       <code>
          spark.read.format("jdbc")<br>
@@ -158,6 +174,35 @@ logging into the data sources.
            .option("partitionColumn", "c1")<br>
            .option("lowerBound", "1")<br>
            .option("upperBound", "100")<br>
+           .option("numPartitions", "3")<br>
+           .load()
+      </code>
+    </td>
+    <td>read</td>
+  </tr>
+
+  <tr>
+    <td><code>partitionColValues</code></td>
+    <td>(none)</td>
+    <td>
+      This describes how to partition and filter the table when reading in parallel from multiple
+      workers, by providing a list of comma-separated values that can be read in parallel.
+      When using this option <code>numPartitions</code> and <code>partitionColumn</code> must be 
+      specified, while <code>lowerBound, upperBound</code> cannot be specified together with this
+      option. Notice that <code>partitionColValues</code> is used to decide the partition stride
+      and filtering for the rows in the table. So not all rows in the table will be returned, 
+      notably null values in the partitioning column will not be returned.
+      This option applies to columns of every datatype. It is up to the users to provide a list of
+      values that is compatible with <code>partitionColumn</code> datatype and, in general, to 
+      sanitize the provided values so that they can be ingested by the target database. 
+      This option applies only to reading.  
+      Example:<br>
+      <code>
+         spark.read.format("jdbc")<br>
+           .option("url", jdbcUrl)<br>
+           .option("dbtable", "(select c1, c2 from t1) as subq")<br>
+           .option("partitionColumn", "c1")<br>
+           .option("partitionColValues", "1, 2, 3, 4, 5, 6, 7, 8, 9, 10")<br>
            .option("numPartitions", "3")<br>
            .load()
       </code>

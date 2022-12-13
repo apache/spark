@@ -359,9 +359,10 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
         .option("partitionColumn", "foo")
         .save()
     }.getMessage
-    assert(e.contains("When reading JDBC data sources, users need to specify all or none " +
-      "for the following options: 'partitionColumn', 'lowerBound', 'upperBound', and " +
-      "'numPartitions'"))
+    assert(e.contains("When reading JDBC data sources and using partitioning features, " +
+      "users need to specify the options: 'partitionColumn' and 'numPartitions', in " +
+      "addition users need to specify either 'lowerBound' and 'upperBound' or specify " +
+      "a list of values for 'partitionColValues'."))
   }
 
   test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
