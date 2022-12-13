@@ -158,7 +158,7 @@ object Size {
        4
   """,
   since = "3.3.0",
-  group = "collection_funcs")
+  group = "array_funcs")
 case class ArraySize(child: Expression)
   extends RuntimeReplaceable with ImplicitCastInputTypes with UnaryLike[Expression] {
 
