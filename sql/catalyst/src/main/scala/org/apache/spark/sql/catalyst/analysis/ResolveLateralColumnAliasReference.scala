@@ -195,6 +195,9 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
             )
           }
         // TODO withOrigin?
+        // TODO potential risk. named_struct('a', avg(bonus)) AS foo, foo.a AS bar..
+        //  foo.a is resolved to LCA(get struct field .. ). But later avg(bonus) is pushed down.
+        //  it just resolves to the ne in the struct. is it still valid?
       }
     }
   }
