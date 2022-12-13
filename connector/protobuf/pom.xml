@@ -155,7 +155,7 @@
     <profile>
       <id>user-defined-protoc</id>
       <properties>
-        <protobuf.protoc.executable.path>${env.PROTOBUF_PROTOC_EXEC_PATH}</protobuf.protoc.executable.path>
+        <spark.protoc.executable.path>${env.SPARK_PROTOC_EXEC_PATH}</spark.protoc.executable.path>
       </properties>
       <build>
         <plugins>
@@ -173,7 +173,7 @@
                 <configuration>
                   <protocArtifact>com.google.protobuf:protoc:${protobuf.version}</protocArtifact>
                   <protocVersion>${protobuf.version}</protocVersion>
-                  <protocCommand>${protobuf.protoc.executable.path}</protocCommand>
+                  <protocCommand>${spark.protoc.executable.path}</protocCommand>
                   <inputDirectories>
                     <include>src/test/resources/protobuf</include>
                   </inputDirectories>
