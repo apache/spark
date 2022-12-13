@@ -1212,7 +1212,7 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
       > SELECT _FUNC_(array(2, 1, 4, 3));
        [3,4,1,2]
   """,
-  group = "array_funcs",
+  group = "collection_funcs",
   since = "1.5.0",
   note = """
     Reverse logic for arrays is available since 2.4.0.
@@ -2228,7 +2228,7 @@ case class Get(
        b
   """,
   since = "2.4.0",
-  group = "map_funcs")
+  group = "collection_funcs")
 case class ElementAt(
     left: Expression,
     right: Expression,
@@ -2452,7 +2452,7 @@ case class ElementAt(
        b
   """,
   since = "3.3.0",
-  group = "map_funcs")
+  group = "collection_funcs")
 case class TryElementAt(left: Expression, right: Expression, replacement: Expression)
   extends RuntimeReplaceable with InheritAnalysisRules {
   def this(left: Expression, right: Expression) =
