@@ -552,8 +552,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                   errorClass = "NUM_COLUMNS_MISMATCH",
                   messageParameters = Map(
                     "operator" -> toSQLStmt(operator.nodeName),
-                    "leftNumCols" -> ref.length.toString,
-                    "rightNumCols" -> child.output.length.toString))
+                    "firstNumColumns" -> ref.length.toString,
+                    "invalidOrdinalNum" -> ordinalNumber(ti + 1),
+                    "invalidNumColumns" -> child.output.length.toString))
               }
 
               val dataTypesAreCompatibleFn = getDataTypesAreCompatibleFn(operator)

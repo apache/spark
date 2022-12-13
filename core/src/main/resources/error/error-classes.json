@@ -943,7 +943,7 @@
   },
   "NUM_COLUMNS_MISMATCH" : {
     "message" : [
-      "<operator> expects matching number of columns. But the left side (target) has <leftNumCols> while the right side (source) has <rightNumCols>."
+      "<operator> can only be performed on inputs with the same number of columns, but the first input has <firstNumColumns> columns and the <invalidOrdinalNum> input has <invalidNumColumns> columns."
     ]
   },
   "ORDER_BY_POS_OUT_OF_RANGE" : {

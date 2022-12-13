@@ -530,8 +530,10 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
       errorClass = "NUM_COLUMNS_MISMATCH",
       parameters = Map(
         "operator" -> "UNION",
-        "leftNumCols" -> "2",
-        "rightNumCols" -> "3"))
+        "firstNumColumns" -> "2",
+        "invalidOrdinalNum" -> "second",
+        "invalidNumColumns" -> "3")
+    )
 
     df1 = Seq((1, 2, 3)).toDF("a", "b", "c")
     df2 = Seq((4, 5, 6)).toDF("a", "c", "d")
