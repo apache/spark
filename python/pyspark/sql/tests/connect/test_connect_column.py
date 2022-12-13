@@ -26,7 +26,6 @@ from pyspark.sql.types import (
     DoubleType,
     LongType,
     DecimalType,
-    BinaryType,
     BooleanType,
 )
 from pyspark.testing.connectutils import should_test_connect
