@@ -602,8 +602,11 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("INTERVAL '1 year 2 month'", ymIntervalLiteral)
     checkError(
       exception = parseException("Interval 'interval 1 yearsss 2 monthsss'"),
-      errorClass = "_LEGACY_ERROR_TEMP_0020",
-      parameters = Map("value" -> "interval 1 yearsss 2 monthsss"),
+      errorClass = "INVALID_TYPED_LITERAL",
+      parameters = Map(
+        "valueType" -> "\"INTERVAL\"",
+        "value" -> "'interval 1 yearsss 2 monthsss'"
+      ),
       context = ExpectedContext(
         fragment = "Interval 'interval 1 yearsss 2 monthsss'",
         start = 0,
@@ -616,8 +619,11 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("INTERVAL '1 day 2 hour 3 minute 4.005006 second'", dtIntervalLiteral)
     checkError(
       exception = parseException("Interval 'interval 1 daysss 2 hoursss'"),
-      errorClass = "_LEGACY_ERROR_TEMP_0020",
-      parameters = Map("value" -> "interval 1 daysss 2 hoursss"),
+      errorClass = "INVALID_TYPED_LITERAL",
+      parameters = Map(
+        "valueType" -> "\"INTERVAL\"",
+        "value" -> "'interval 1 daysss 2 hoursss'"
+      ),
       context = ExpectedContext(
         fragment = "Interval 'interval 1 daysss 2 hoursss'",
         start = 0,
@@ -639,8 +645,11 @@ class ExpressionParserSuite extends AnalysisTest {
       assertEqual("INTERVAL '3 month 1 hour'", intervalLiteral)
       checkError(
         exception = parseException("Interval 'interval 3 monthsss 1 hoursss'"),
-        errorClass = "_LEGACY_ERROR_TEMP_0020",
-        parameters = Map("value" -> "interval 3 monthsss 1 hoursss"),
+        errorClass = "INVALID_TYPED_LITERAL",
+        parameters = Map(
+          "valueType" -> "\"INTERVAL\"",
+          "value" -> "'interval 3 monthsss 1 hoursss'"
+        ),
         context = ExpectedContext(
           fragment = "Interval 'interval 3 monthsss 1 hoursss'",
           start = 0,

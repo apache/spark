@@ -2417,7 +2417,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
             IntervalUtils.stringToInterval(UTF8String.fromString(value))
           } catch {
             case e: IllegalArgumentException =>
-              val ex = QueryParsingErrors.cannotParseIntervalValueError(value, ctx)
+              val ex = QueryParsingErrors.cannotParseValueTypeError(valueType, value, ctx)
               ex.setStackTrace(e.getStackTrace)
               throw ex
           }
