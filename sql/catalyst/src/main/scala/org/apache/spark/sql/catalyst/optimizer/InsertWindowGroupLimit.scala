@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentRow, DenseRank, EqualTo, Expression, ExpressionSet, GreaterThan, GreaterThanOrEqual, IntegerLiteral, LessThan, LessThanOrEqual, NamedExpression, PredicateHelper, Rank, RowFrame, RowNumber, SpecifiedWindowFrame, UnboundedPreceding, WindowExpression, WindowSpecDefinition}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentRow, DenseRank, EqualTo, Expression, GreaterThan, GreaterThanOrEqual, IntegerLiteral, LessThan, LessThanOrEqual, NamedExpression, PredicateHelper, Rank, RowFrame, RowNumber, SpecifiedWindowFrame, UnboundedPreceding, WindowExpression, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, Window, WindowGroupLimit}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{FILTER, WINDOW}
@@ -52,8 +52,8 @@ object InsertWindowGroupLimit extends Rule[LogicalPlan] with PredicateHelper {
     if (limits.nonEmpty) Some(limits.min) else None
   }
 
-  private def supports(
-      windowExpressions: Seq[NamedExpression]): Boolean = windowExpressions.exists {
+  private def support(
+      windowExpression: NamedExpression): Boolean = windowExpression match {
     case Alias(WindowExpression(_: Rank | _: DenseRank | _: RowNumber, WindowSpecDefinition(_, _,
     SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))), _) => true
     case _ => false
@@ -65,19 +65,18 @@ object InsertWindowGroupLimit extends Rule[LogicalPlan] with PredicateHelper {
     plan.transformWithPruning(_.containsAllPatterns(FILTER, WINDOW), ruleId) {
       case filter @ Filter(condition,
         window @ Window(windowExpressions, partitionSpec, orderSpec, child))
-        if !child.isInstanceOf[WindowGroupLimit] &&
-          supports(windowExpressions) && orderSpec.nonEmpty =>
+        if !child.isInstanceOf[WindowGroupLimit] && windowExpressions.exists(support) &&
+          orderSpec.nonEmpty =>
         val limits = windowExpressions.collect {
-          case alias @ Alias(WindowExpression(rankLikeFunction, _), _) =>
+          case alias @ Alias(WindowExpression(rankLikeFunction, _), _) if support(alias) =>
             extractLimits(condition, alias.toAttribute).map((_, rankLikeFunction))
         }.flatten
 
         // multiple different rank-like functions unsupported.
-        if (limits.isEmpty || ExpressionSet(limits.map(_._2)).size > 1) {
+        if (limits.isEmpty) {
           filter
         } else {
-          val minLimit = limits.minBy(_._1)
-          minLimit match {
+          limits.minBy(_._1) match {
             case (limit, rankLikeFunction) if limit <= conf.windowGroupLimitThreshold =>
               if (limit > 0) {
                 val windowGroupLimit =
