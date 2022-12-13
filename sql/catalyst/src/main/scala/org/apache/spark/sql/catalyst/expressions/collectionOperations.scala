@@ -4616,7 +4616,7 @@ case class ArrayCompact(expr: Expression, replacement: Expression)
   def this(expr: Expression) = this(expr,
     ArrayFilter(expr, ArrayCompact.createLambdaExpr()))
 
-  override def parameters: Seq[Expression] = Seq.empty
+  override def parameters: Seq[Expression] = Seq(expr)
 
   override def prettyName: String = "array_compact"
 
