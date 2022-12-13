@@ -497,7 +497,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
        |  FROM (SELECT dept * 2.0 AS id, id + 1 AS id2 FROM $testTable)) > 5
        |ORDER BY id
        |""".stripMargin
-    withLCAOff { intercept[AnalysisException] { sql(query4) } } // surprisingly can't run ..
+    withLCAOff { intercept[AnalysisException] { sql(query4) } }
     withLCAOn {
       val analyzedPlan = sql(query4).queryExecution.analyzed
       assert(!analyzedPlan.containsPattern(OUTER_REFERENCE))
@@ -517,10 +517,6 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
          |  SELECT id2
          |  FROM (SELECT avg(salary * 1.0) AS id, id + 1 AS id2 FROM $testTable GROUP BY dept)) > 5
          |""".stripMargin
-    // TODO: It no longer returns the following failure:
-    //  [UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.NON_CORRELATED_COLUMNS_IN_GROUP_BY]
-    //  Unsupported subquery expression: A GROUP BY clause in a scalar correlated subquery cannot
-    //  contain non-correlated columns
     val analyzedPlan = sql(query).queryExecution.analyzed
     assert(!analyzedPlan.containsPattern(OUTER_REFERENCE))
   }
@@ -563,12 +559,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
       sql(s"SELECT properties AS foo, foo.joinYear AS bar, bar + 1 " +
         s"FROM $testTable GROUP BY properties HAVING properties.mostRecentEmployer = 'B'"),
       Row(Row(2020, "B"), 2020, 2021))
-    // TODO fix this case without clearing out the metadata
-    //  After applying rule org.apache.spark.sql.catalyst.optimizer.CollapseProject in batch
-    //  Operator Optimization before Inferring Filters, the structural integrity of the plan
-    //  is broken.
-    //  It is because one output with the same exprId has auto generated alias as metadata, but
-    //  others not.
+
     checkAnswer(
       sql(s"SELECT named_struct('avg_salary', avg(salary)) AS foo, foo.avg_salary + 1 AS bar " +
         s"FROM $testTable GROUP BY dept ORDER BY dept"),
@@ -576,15 +567,20 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
     )
   }
 
-//  test("Lateral alias reference attribute further be used by upper plan - Project") {
-//    // this is out of the scope of lateral alias project functionality requirements, but naturally
-//    // supported by the current design
-//    checkAnswer(
-//      sql(s"SELECT properties AS new_properties, new_properties.joinYear AS new_join_year " +
-//        s"FROM $testTable WHERE dept = 1 ORDER BY new_join_year DESC"),
-//      Row(Row(2020, "B"), 2020) :: Row(Row(2019, "A"), 2019) :: Nil
-//    )
-//  }
+  test("Lateral alias reference attribute further be used by upper plan") {
+    // underlying this is not in the scope of lateral alias project but things already supported
+    checkAnswer(
+      sql(s"SELECT properties AS new_properties, new_properties.joinYear AS new_join_year " +
+        s"FROM $testTable WHERE dept = 1 ORDER BY new_join_year DESC"),
+      Row(Row(2020, "B"), 2020) :: Row(Row(2019, "A"), 2019) :: Nil
+    )
+
+    checkAnswer(
+      sql(s"SELECT avg(bonus) AS avg_bonus, avg_bonus * 1.0 AS new_avg_bonus, avg(salary) " +
+        s"FROM $testTable GROUP BY dept ORDER BY new_avg_bonus"),
+      Row(1100, 1100, 9500.0) :: Row(1200, 1200, 12000) :: Row(1250, 1250, 11000) :: Nil
+    )
+  }
 
   test("Lateral alias chaining") {
     // Project
@@ -665,7 +661,10 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
       sql(s"SELECT count(name) AS cnt, cnt + 1, count(unresovled) FROM $testTable GROUP BY dept")
     }.getErrorClass == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
 
-    // TODO: subquery
+    assert(intercept[AnalysisException] {
+      sql(s"SELECT * FROM range(1, 7) WHERE (" +
+        s"SELECT id2 FROM (SELECT 1 AS id, other_id + 1 AS id2)) > 5")
+    }.getErrorClass == "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION")
   }
 
   test("Pushed-down aggregateExpressions should have no duplicates") {
