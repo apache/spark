@@ -65,12 +65,10 @@ case class SparkListenerSpeculativeTaskSubmitted(
   def taskIndex: Int = _taskIndex
   def partitionId: Int = _partitionId
 
-  def updateTaskIndex(index: Int): Unit = {
-    _taskIndex = index
-  }
-
-  def updatePartitionId(partitionId: Int): Unit = {
+  def this(stageId: Int, stageAttemptId: Int, taskIndex: Int, partitionId: Int) = {
+    this(stageId, stageAttemptId)
     _partitionId = partitionId
+    _taskIndex = taskIndex
   }
 }
 

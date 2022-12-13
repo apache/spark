@@ -464,9 +464,10 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
   private def speculativeTaskSubmitEventFromTaskIndex(
     stageId: Int,
     stageAttemptId: Int = 0,
-    taskIndex: Int): SparkListenerSpeculativeTaskSubmitted = {
-    val event = SparkListenerSpeculativeTaskSubmitted(stageId, stageAttemptId)
-    event.updateTaskIndex(taskIndex)
+    taskIndex: Int = -1,
+    partitionId: Int = -1): SparkListenerSpeculativeTaskSubmitted = {
+    val event = new SparkListenerSpeculativeTaskSubmitted(stageId, stageAttemptId,
+      taskIndex = taskIndex, partitionId = partitionId)
     event
   }
 
