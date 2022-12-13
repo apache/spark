@@ -95,7 +95,7 @@ object TaskDataWrapperSerializer {
       status = binary.getStatus,
       taskLocality = binary.getTaskLocality,
       speculative = binary.getSpeculative,
-      accumulatorUpdates = accumulatorUpdates,
+      accumulatorUpdates = accumulatorUpdates.toSeq,
       errorMessage = getOptional(binary.hasErrorMessage, binary.getErrorMessage),
       hasMetrics = binary.getHasMetrics,
       executorDeserializeTime = binary.getExecutorDeserializeTime,
