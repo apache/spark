@@ -640,7 +640,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def invalidFunctionArgumentsError(
       name: String, expectedNum: String, actualNum: Int): Throwable = {
     new AnalysisException(
-      errorClass = "WRONG_NUM_ARGS",
+      errorClass = "WRONG_NUM_ARGS.WITH_SUGGESTION",
       messageParameters = Map(
         "functionName" -> toSQLId(name),
         "expectedNum" -> expectedNum,
@@ -651,8 +651,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       validParametersCount: Seq[Int], name: String, actualNumber: Int): Throwable = {
     if (validParametersCount.isEmpty) {
       new AnalysisException(
-        errorClass = "INVALID_FUNCTION_ARGS",
-        messageParameters = Map("name" -> toSQLId(name)))
+        errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+        messageParameters = Map("functionName" -> toSQLId(name)))
     } else {
       val expectedNumberOfParameters = if (validParametersCount.length == 1) {
         validParametersCount.head.toString

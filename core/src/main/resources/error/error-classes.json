@@ -1531,8 +1531,20 @@
   },
   "WRONG_NUM_ARGS" : {
     "message" : [
-      "The <functionName> requires <expectedNum> parameters but the actual number is <actualNum>."
-    ]
+      "Invalid number of arguments for the function <functionName>."
+    ],
+    "subClass" : {
+      "WITHOUT_SUGGESTION" : {
+        "message" : [
+          ""
+        ]
+      },
+      "WITH_SUGGESTION" : {
+        "message" : [
+          "The function requires <expectedNum> parameters but the actual number is <actualNum>."
+        ]
+      }
+    }
   },
   "_LEGACY_ERROR_TEMP_0001" : {
     "message" : [

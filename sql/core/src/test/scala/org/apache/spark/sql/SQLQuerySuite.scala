@@ -2634,7 +2634,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       exception = intercept[AnalysisException] {
         sql("SELECT nvl(1, 2, 3)")
       },
-      errorClass = "WRONG_NUM_ARGS",
+      errorClass = "WRONG_NUM_ARGS.WITH_SUGGESTION",
       parameters = Map(
         "functionName" -> toSQLId("nvl"),
         "expectedNum" -> "2",
