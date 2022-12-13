@@ -230,16 +230,6 @@ class SparkConnectColumnExpressionSuite(PlanOnlyTestFixture):
         self.assertIsNotNone(plan)
         self.assertEqual(plan.alias.metadata, '{"pii": true}')
 
-    def test_column_regexp(self):
-        # SPARK-41438: test colRegex
-        col = fun.colRegex("col_name")
-        self.assertIsInstance(col, Column)
-        self.assertEqual("Column<'col_name'>", str(col))
-
-        col_plan = col.to_plan(self.session.client)
-        self.assertIsNotNone(col_plan)
-        self.assertEqual(col_plan.unresolved_regex.col_name, "col_name")
-
     def test_column_expressions(self):
         """Test a more complex combination of expressions and their translation into
         the protobuf structure."""

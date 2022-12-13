@@ -35,7 +35,7 @@ if should_test_connect:
     from pyspark.sql.connect.column import Column
     from pyspark.sql.connect.dataframe import DataFrame as CDataFrame
     from pyspark.sql.connect.function_builder import udf
-    from pyspark.sql.connect.functions import colRegex, lit, col
+    from pyspark.sql.connect.functions import lit, col
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
@@ -947,11 +947,12 @@ class SparkConnectTests(SparkConnectSQLTestCase):
 
     def test_column_regexp(self) -> None:
         # SPARK-41438: test dataframe.colRegex()
+        ndf = self.connect.read.table(self.tbl_name3)
         df = self.spark.read.table(self.tbl_name3)
 
         self.assert_eq(
-            self.connect.read.table(self.tbl_name3).select(colRegex("`tes.*\n.*mn`")).toPandas(),
-            self.spark.read.table(self.tbl_name3).select(df.colRegex("`tes.*\n.*mn`")).toPandas(),
+            ndf.select(ndf.colRegex("`tes.*\n.*mn`")).toPandas(),
+            df.select(df.colRegex("`tes.*\n.*mn`")).toPandas(),
         )
 
     def test_agg_with_two_agg_exprs(self) -> None:
