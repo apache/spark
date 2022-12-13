@@ -1089,11 +1089,12 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     // 2. Expressions containing outer references on plan nodes other than allowed operators.
     def failOnInvalidOuterReference(p: LogicalPlan): Unit = {
       p.expressions.foreach(checkMixedReferencesInsideAggregateExpr)
-      if (!canHostOuter(p) && p.expressions.exists(containsOuter)) {
+      val exprs = stripOuterReferences(p.expressions.filter(expr => containsOuter(expr)))
+      if (!canHostOuter(p) && !exprs.isEmpty) {
         p.failAnalysis(
           errorClass =
-            "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_CORRELATED_REFERENCE",
-          messageParameters = Map("treeNode" -> planToString(p)))
+            "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+          messageParameters = Map("sqlExprs" -> exprs.map(toSQLExpr).mkString(",")))
       }
     }
 

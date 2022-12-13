@@ -1471,6 +1471,11 @@
           "A correlated outer name reference within a subquery expression body was not found in the enclosing query: <value>"
         ]
       },
+      "CORRELATED_REFERENCE" : {
+        "message" : [
+          "Expressions referencing the outer query are not supported outside of WHERE/HAVING clauses: <sqlExprs>"
+        ]
+      },
       "LATERAL_JOIN_CONDITION_NON_DETERMINISTIC" : {
         "message" : [
           "Lateral join condition cannot be non-deterministic: <condition>"
@@ -1494,11 +1499,6 @@
       "NON_DETERMINISTIC_LATERAL_SUBQUERIES" : {
         "message" : [
           "Non-deterministic lateral subqueries are not supported when joining with outer relations that produce more than one row<treeNode>"
-        ]
-      },
-      "UNSUPPORTED_CORRELATED_REFERENCE" : {
-        "message" : [
-          "Expressions referencing the outer query are not supported outside of WHERE/HAVING clauses<treeNode>"
         ]
       },
       "UNSUPPORTED_CORRELATED_REFERENCE_DATA_TYPE" : {
