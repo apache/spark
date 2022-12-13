@@ -1212,7 +1212,7 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
       > SELECT _FUNC_(array(2, 1, 4, 3));
        [3,4,1,2]
   """,
-  group = "collection_funcs",
+  group = "array_funcs",
   since = "1.5.0",
   note = """
     Reverse logic for arrays is available since 2.4.0.
@@ -2482,7 +2482,7 @@ case class TryElementAt(left: Expression, right: Expression, replacement: Expres
   note = """
     Concat logic for arrays is available since 2.4.0.
   """,
-  group = "collection_funcs",
+  group = "array_funcs",
   since = "1.5.0")
 case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpression
   with QueryErrorsBase {
