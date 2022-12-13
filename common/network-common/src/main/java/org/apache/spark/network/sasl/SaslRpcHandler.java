@@ -98,13 +98,13 @@ public class SaslRpcHandler extends AbstractAuthRpcHandler {
         // First message in the handshake, setup the necessary state.
         client.setClientId(saslMessage.appId);
         saslServer = new SparkSaslServer(saslMessage.appId, secretKeyHolder,
-            conf.saslServerAlwaysEncrypt());
+          conf.saslServerAlwaysEncrypt());
       }
 
       byte[] response;
       try {
         response = saslServer.response(JavaUtils.bufferToArray(
-            saslMessage.body().nioByteBuffer()));
+          saslMessage.body().nioByteBuffer()));
       } catch (IOException ioe) {
         throw new RuntimeException(ioe);
       }
