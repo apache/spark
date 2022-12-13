@@ -585,8 +585,8 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         exception = intercept[AnalysisException] {
           sql("ANALYZE TABLE tempView COMPUTE STATISTICS FOR COLUMNS id")
         },
-        errorClass = "UNSUPPORTED_FEATURE.ANALYZE_TABLE_VIEW_NOT_CACHED",
-        parameters = Map("tableName" -> "`tempView`")
+        errorClass = "UNSUPPORTED_FEATURE.ANALYZE_UNCACHED_TEMP_VIEW",
+        parameters = Map("viewName" -> "`tempView`")
       )
 
       // Cache the view then analyze it
@@ -611,8 +611,8 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         exception = intercept[AnalysisException] {
           sql(s"ANALYZE TABLE $globalTempDB.gTempView COMPUTE STATISTICS FOR COLUMNS id")
         },
-        errorClass = "UNSUPPORTED_FEATURE.ANALYZE_TABLE_VIEW_NOT_CACHED",
-        parameters = Map("tableName" -> "`global_temp`.`gTempView`")
+        errorClass = "UNSUPPORTED_FEATURE.ANALYZE_UNCACHED_TEMP_VIEW",
+        parameters = Map("viewName" -> "`global_temp`.`gTempView`")
       )
 
       // Cache the view then analyze it

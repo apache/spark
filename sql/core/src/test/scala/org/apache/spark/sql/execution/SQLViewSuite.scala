@@ -222,8 +222,8 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
         },
-        errorClass = "UNSUPPORTED_FEATURE.ANALYZE_TABLE_VIEW_NOT_CACHED",
-        parameters = Map("tableName" -> "`testView`")
+        errorClass = "UNSUPPORTED_FEATURE.ANALYZE_UNCACHED_TEMP_VIEW",
+        parameters = Map("viewName" -> "`testView`")
       )
     }
   }

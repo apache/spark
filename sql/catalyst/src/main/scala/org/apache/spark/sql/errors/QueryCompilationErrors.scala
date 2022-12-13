@@ -2287,8 +2287,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def tempViewNotCachedForAnalyzingColumnsError(tableIdent: TableIdentifier): Throwable = {
     new AnalysisException(
-      errorClass = "UNSUPPORTED_FEATURE.ANALYZE_TABLE_VIEW_NOT_CACHED",
-      messageParameters = Map("tableName" -> toSQLId(tableIdent.toString)))
+      errorClass = "UNSUPPORTED_FEATURE.ANALYZE_UNCACHED_TEMP_VIEW",
+      messageParameters = Map("viewName" -> toSQLId(tableIdent.toString)))
   }
 
   def columnTypeNotSupportStatisticsCollectionError(

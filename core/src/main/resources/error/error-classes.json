@@ -1257,9 +1257,9 @@
           "AES-<mode> with the padding <padding> by the <functionName> function."
         ]
       },
-      "ANALYZE_TABLE_VIEW_NOT_CACHED" : {
+      "ANALYZE_UNCACHED_TEMP_VIEW" : {
         "message" : [
-          "Temporary view <tableName> is not cached for analyzing columns."
+          "The ANALYZE TABLE FOR COLUMNS command can operate on temporary views that have been cached already. Consider to cache the view <viewName>."
         ]
       },
       "CATALOG_OPERATION" : {
