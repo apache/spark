@@ -1706,10 +1706,23 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
   }
 
   test("SPARK-41447: clean up expired event log files that don't exist in listing db") {
+    class TestFsHistoryProvider(conf: SparkConf, clock: Clock)
+      extends FsHistoryProvider(conf, clock) {
+      var doMergeApplicationListingCall = 0
+      override private[history] def doMergeApplicationListing(
+          reader: EventLogFileReader,
+          lastSeen: Long,
+          enableSkipToEnd: Boolean,
+          lastCompactionIndex: Option[Long]): Unit = {
+        super.doMergeApplicationListing(reader, lastSeen, enableSkipToEnd, lastCompactionIndex)
+        doMergeApplicationListingCall += 1
+      }
+    }
+
     val maxAge = TimeUnit.SECONDS.toMillis(10)
     val clock = new ManualClock(maxAge / 2)
     val conf = createTestConf().set(MAX_LOG_AGE_S.key, s"${maxAge}ms").set(CLEANER_ENABLED, true)
-    val provider = new FsHistoryProvider(conf, clock)
+    val provider = new TestFsHistoryProvider(conf, clock)
 
     val log1 = newLogFile("app1", Some("attempt1"), inProgress = false)
     writeFile(log1, None,
@@ -1738,7 +1751,10 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     clock.advance(maxAge)
     // Avoid unnecessary parse, the expired log files would be cleaned by checkForLogs().
     provider.checkForLogs()
+
+    provider.doMergeApplicationListingCall should be (1)
     provider.getListing().size should be (1)
+
     assert(!log1.exists())
     assert(!log3.exists())
     assert(log2.exists())
