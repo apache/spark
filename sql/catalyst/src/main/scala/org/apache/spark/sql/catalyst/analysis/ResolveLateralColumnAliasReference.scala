@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeMap, LateralColumnAliasReference, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern.LATERAL_COLUMN_ALIAS_REFERENCE
 import org.apache.spark.sql.internal.SQLConf
 
@@ -66,6 +67,13 @@ import org.apache.spark.sql.internal.SQLConf
  */
 object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
   case class AliasEntry(alias: Alias, index: Int)
+
+  /**
+   * A tag to store the nameParts from the original unresolved attribute.
+   * It is set for [[OuterReference]], used in the current rule to convert [[OuterReference]] back
+   * to [[LateralColumnAliasReference]].
+   */
+  val NAME_PARTS_FROM_UNRESOLVED_ATTR = TreeNodeTag[Seq[String]]("name_parts_from_unresolved_attr")
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (!conf.getConf(SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED)) {
