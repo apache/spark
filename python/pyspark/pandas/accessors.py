@@ -63,7 +63,7 @@ class PandasOnSparkFrameMethods:
         Attach a column to be used as an identifier of rows similar to the default index.
 
         See also `Default Index type
-        <https://koalas.readthedocs.io/en/latest/user_guide/options.html#default-index-type>`_.
+        <https://spark.apache.org/docs/latest/api/python/user_guide/pandas_on_spark/options.html#default-index-type>`_.
 
         Parameters
         ----------
@@ -204,7 +204,7 @@ class PandasOnSparkFrameMethods:
         DataFrame given to the function is of a batch used internally.
 
         See also `Transform and apply a function
-        <https://koalas.readthedocs.io/en/latest/user_guide/transform_apply.html>`_.
+        <https://spark.apache.org/docs/latest/api/python/user_guide/pandas_on_spark/transform_apply.html>`_.
 
         .. note:: the `func` is unable to access the whole input frame. pandas-on-Spark
             internally splits the input series into multiple batches and calls `func` with each
@@ -438,7 +438,7 @@ class PandasOnSparkFrameMethods:
         each input and output should be the same.
 
         See also `Transform and apply a function
-        <https://koalas.readthedocs.io/en/latest/user_guide/transform_apply.html>`_.
+        <https://spark.apache.org/docs/latest/api/python/user_guide/pandas_on_spark/transform_apply.html>`_.
 
         .. note:: the `func` is unable to access the whole input frame. pandas-on-Spark
             internally splits the input series into multiple batches and calls `func` with each
@@ -777,7 +777,7 @@ class PandasOnSparkSeriesMethods:
         The pandas Series given to the function is of a batch used internally.
 
         See also `Transform and apply a function
-        <https://koalas.readthedocs.io/en/latest/user_guide/transform_apply.html>`_.
+        <https://spark.apache.org/docs/latest/api/python/user_guide/pandas_on_spark/transform_apply.html>`_.
 
         .. note:: the `func` is unable to access the whole input series. pandas-on-Spark
             internally splits the input series into multiple batches and calls `func` with each

@@ -458,7 +458,7 @@ class SparkFrameMethods:
         |      2|      3|  6|  9|
         +-------+-------+---+---+
 
-        Likewise, can be converted back to pandas-on-Spark DataFrame.
+        Can be converted back to pandas-on-Spark DataFrame.
 
         >>> new_spark_df.pandas_api(
         ...     index_col=["index_1", "index_2"])  # doctest: +NORMALIZE_WHITESPACE
