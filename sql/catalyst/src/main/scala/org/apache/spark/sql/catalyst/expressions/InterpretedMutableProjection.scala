@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
+import org.apache.spark.sql.catalyst.util.UnsafeRowUtils.avoidSetNullAt
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{CalendarIntervalType, DataType, DecimalType}
 
 
 /**
@@ -71,15 +71,9 @@ class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mutable
     this
   }
 
-  private[this] def isFixedSizeInVariableRegion(dt: DataType): Boolean = dt match {
-    case _: DecimalType => true
-    case CalendarIntervalType => true
-    case _ => false
-  }
-
   private[this] val fieldWriters: Array[Any => Unit] = validExprs.map { case (e, i) =>
     val writer = InternalRow.getWriter(i, e.dataType)
-    if (!e.nullable || isFixedSizeInVariableRegion(e.dataType)) {
+    if (!e.nullable || avoidSetNullAt(e.dataType)) {
       (v: Any) => writer(mutableRow, v)
     } else {
       (v: Any) => {
