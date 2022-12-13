@@ -1531,7 +1531,7 @@
     "subClass" : {
       "WITHOUT_SUGGESTION" : {
         "message" : [
-          "Please ref to 'https://spark.apache.org/docs/latest/sql-ref-functions.html' for fix."
+          "Please, refer to 'https://spark.apache.org/docs/latest/sql-ref-functions.html' for a fix."
         ]
       },
       "WITH_SUGGESTION" : {
