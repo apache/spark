@@ -675,7 +675,7 @@ class QueryCompilationErrorsSuite
       },
       errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
-        "name" -> "`cast`"
+        "functionName" -> "`cast`"
       ),
       context = ExpectedContext("", "", 7, 13, "CAST(1)")
     )
