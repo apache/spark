@@ -4029,7 +4029,7 @@ object functions {
    * @since 3.4.0
    */
   def array_compact(column: Column): Column = withExpr {
-    ArrayCompact(column.expr)
+    new ArrayCompact(column.expr)
   }
 
   /**

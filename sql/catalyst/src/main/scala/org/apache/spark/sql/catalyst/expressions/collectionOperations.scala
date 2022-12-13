@@ -4626,10 +4626,6 @@ case class ArrayCompact(expr: Expression, replacement: Expression)
 
 object ArrayCompact {
 
-  def apply(expr: Expression): ArrayCompact = {
-    new ArrayCompact(expr, ArrayFilter(expr, createLambdaExpr()))
-  }
-
   private def createLambdaExpr() = {
     val isNotNull: Expression => Expression = x => IsNotNull(x)
     val lv = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("x")))
