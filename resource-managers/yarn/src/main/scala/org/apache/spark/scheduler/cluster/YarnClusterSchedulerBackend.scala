@@ -37,6 +37,7 @@ private[spark] class YarnClusterSchedulerBackend(
 
   override def stop(exitCode: Int): Unit = {
     yarnSchedulerEndpoint.signalDriverStop(exitCode)
+    super.stop()
   }
 
   override def getDriverLogUrls: Option[Map[String, String]] = {
