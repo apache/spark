@@ -943,7 +943,7 @@
   },
   "NUM_COLUMNS_MISMATCH" : {
     "message" : [
-      "<operator> can only be performed on tables with the same number of columns, but the first table has <refNumColumns> columns and the <invalidOrdinalNum> table has <invalidNumColumns> columns."
+      "<operator> can only be performed on inputs with the same number of columns, but the first input has <firstNumColumns> columns and the <invalidOrdinalNum> input has <invalidNumColumns> columns."
     ]
   },
   "ORDER_BY_POS_OUT_OF_RANGE" : {
