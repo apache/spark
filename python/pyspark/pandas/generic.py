@@ -918,7 +918,7 @@ class Frame(object, metaclass=ABCMeta):
             File path. If not specified, the result is returned as
             a string.
         lines: bool, default True
-            If ‘orient’ is ‘records’ write out line delimited json format.
+            If ‘orient’ is ‘records’ write out line delimited JSON format.
             Will throw ValueError if incorrect ‘orient’ since others are not
             list like. It should be always True for now.
         orient: str, default 'records'

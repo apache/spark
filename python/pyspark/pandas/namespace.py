@@ -474,7 +474,7 @@ def read_json(
     path : string
         File path
     lines : bool, default True
-        Read the file as a json object per line. It should be always True for now.
+        Read the file as a JSON object per line. It should be always True for now.
     index_col : str or list of str, optional, default: None
         Index column of table in Spark.
     options : dict
@@ -1250,7 +1250,7 @@ def read_html(
     ----------
     io : str or file-like
         A URL, a file-like object, or a raw string containing HTML. Note that
-        lxml only accepts the http, ftp and file url protocols. If you have a
+        lxml only accepts the http, FTP and file url protocols. If you have a
         URL that starts with ``'https'`` you might try removing the ``'s'``.
 
     match : str or compiled regular expression, optional
