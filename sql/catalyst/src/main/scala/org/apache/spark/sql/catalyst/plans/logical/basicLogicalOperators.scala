@@ -342,7 +342,7 @@ case class Intersect(
     right: LogicalPlan,
     isAll: Boolean) extends SetOperation(left, right) {
 
-  override def nodeName: String = getClass.getSimpleName + ( if ( isAll ) "All" else "" )
+  override def nodeName: String = getClass.getSimpleName + ( if ( isAll ) " All" else "" )
 
   final override val nodePatterns: Seq[TreePattern] = Seq(INTERSECT)
 
@@ -372,7 +372,7 @@ case class Except(
     left: LogicalPlan,
     right: LogicalPlan,
     isAll: Boolean) extends SetOperation(left, right) {
-  override def nodeName: String = getClass.getSimpleName + ( if ( isAll ) "All" else "" )
+  override def nodeName: String = getClass.getSimpleName + ( if ( isAll ) " All" else "" )
   /** We don't use right.output because those rows get excluded from the set. */
   override def output: Seq[Attribute] = left.output
 
@@ -1627,7 +1627,15 @@ case class SubqueryAlias(
 
   override def output: Seq[Attribute] = {
     val qualifierList = identifier.qualifier :+ alias
-    child.output.map(_.withQualifier(qualifierList))
+    child.output.map { attr =>
+      // `SubqueryAlias` sets a new qualifier for its output columns. It doesn't make sense to still
+      // restrict the hidden columns of natural/using join to be accessed by qualified name only.
+      if (attr.qualifiedAccessOnly) {
+        attr.markAsAllowAnyAccess().withQualifier(qualifierList)
+      } else {
+        attr.withQualifier(qualifierList)
+      }
+    }
   }
 
   override def metadataOutput: Seq[Attribute] = {

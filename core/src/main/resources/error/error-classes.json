@@ -115,6 +115,11 @@
       "The column <columnName> already exists. Consider to choose another name or rename the existing column."
     ]
   },
+  "COLUMN_NOT_FOUND" : {
+    "message" : [
+      "The column <colName> cannot be found. Verify the spelling and correctness of the column name according to the SQL config <caseSensitiveConfig>."
+    ]
+  },
   "CONCURRENT_QUERY" : {
     "message" : [
       "Another instance of this query was just started by a concurrent session."
@@ -203,7 +208,7 @@
           "If you have to cast <srcType> to <targetType>, you can set <config> as <configVal>."
         ]
       },
-      "CAST_WITH_FUN_SUGGESTION" : {
+      "CAST_WITH_FUNC_SUGGESTION" : {
         "message" : [
           "cannot cast <srcType> to <targetType>.",
           "To convert values from <srcType> to <targetType>, you can use the functions <functionNames> instead."
@@ -819,6 +824,12 @@
       }
     }
   },
+  "INVALID_TYPED_LITERAL" : {
+    "message" : [
+      "The value of the typed literal <valueType> is invalid: <value>."
+    ],
+    "sqlState" : "42000"
+  },
   "INVALID_WHERE_CONDITION" : {
     "message" : [
       "The WHERE condition <condition> contains invalid expressions: <expressionList>.",
@@ -938,7 +949,7 @@
   },
   "NUM_COLUMNS_MISMATCH" : {
     "message" : [
-      "<operator> can only be performed on tables with the same number of columns, but the first table has <refNumColumns> columns and the <invalidOrdinalNum> table has <invalidNumColumns> columns."
+      "<operator> can only be performed on inputs with the same number of columns, but the first input has <firstNumColumns> columns and the <invalidOrdinalNum> input has <invalidNumColumns> columns."
     ]
   },
   "ORDER_BY_POS_OUT_OF_RANGE" : {
@@ -1261,6 +1272,11 @@
       "AES_MODE" : {
         "message" : [
           "AES-<mode> with the padding <padding> by the <functionName> function."
+        ]
+      },
+      "ANALYZE_UNCACHED_TEMP_VIEW" : {
+        "message" : [
+          "The ANALYZE TABLE FOR COLUMNS command can operate on temporary views that have been cached already. Consider to cache the view <viewName>."
         ]
       },
       "CATALOG_OPERATION" : {
@@ -1608,16 +1624,6 @@
   "_LEGACY_ERROR_TEMP_0018" : {
     "message" : [
       "Function trim doesn't support with type <trimOption>. Please use BOTH, LEADING or TRAILING as trim type."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0019" : {
-    "message" : [
-      "Cannot parse the <valueType> value: <value>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0020" : {
-    "message" : [
-      "Cannot parse the INTERVAL value: <value>."
     ]
   },
   "_LEGACY_ERROR_TEMP_0022" : {
@@ -2022,11 +2028,6 @@
       "Invalid arguments for function <name>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1044" : {
-    "message" : [
-      "Function <name> accepts only one argument."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1045" : {
     "message" : [
       "ALTER TABLE SET LOCATION does not support partition for v2 tables."
@@ -2105,11 +2106,6 @@
   "_LEGACY_ERROR_TEMP_1060" : {
     "message" : [
       "<command> does not support nested column: <column>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1061" : {
-    "message" : [
-      "Column <colName> does not exist."
     ]
   },
   "_LEGACY_ERROR_TEMP_1065" : {
@@ -2882,11 +2878,6 @@
   "_LEGACY_ERROR_TEMP_1232" : {
     "message" : [
       "Partition spec is invalid. The spec (<specKeys>) must match the partition spec (<partitionColumnNames>) defined in table '<tableName>'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1234" : {
-    "message" : [
-      "Temporary view <tableIdent> is not cached for analyzing columns."
     ]
   },
   "_LEGACY_ERROR_TEMP_1235" : {

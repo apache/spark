@@ -242,7 +242,7 @@ public class LogDivertAppender extends AbstractWriterAppender<WriterManager> {
   }
 
   /** This is where the log message will go to */
-  private final CharArrayWriter writer = new CharArrayWriter();
+  private final CharArrayWriter writer;
 
   private static StringLayout getLayout(boolean isVerbose, StringLayout lo) {
     if (isVerbose) {
@@ -276,12 +276,19 @@ public class LogDivertAppender extends AbstractWriterAppender<WriterManager> {
     return getLayout(isVerbose, layout);
   }
 
-  public LogDivertAppender(OperationManager operationManager,
+  public static LogDivertAppender create(OperationManager operationManager,
     OperationLog.LoggingLevel loggingMode) {
+    CharArrayWriter writer = new CharArrayWriter();
+    return new LogDivertAppender(operationManager, loggingMode, writer);
+  }
+
+  private LogDivertAppender(OperationManager operationManager,
+    OperationLog.LoggingLevel loggingMode, CharArrayWriter writer) {
     super("LogDivertAppender", initLayout(loggingMode), null, false, true, Property.EMPTY_ARRAY,
-            new WriterManager(new CharArrayWriter(), "LogDivertAppender",
+            new WriterManager(writer, "LogDivertAppender",
                     initLayout(loggingMode), true));
 
+    this.writer = writer;
     this.isVerbose = (loggingMode == OperationLog.LoggingLevel.VERBOSE);
     this.operationManager = operationManager;
     addFilter(new NameFilter(loggingMode, operationManager));
@@ -301,7 +308,7 @@ public class LogDivertAppender extends AbstractWriterAppender<WriterManager> {
         isVerbose = isCurrModeVerbose;
       }
     }
-
+    super.append(event);
 
     // That should've gone into our writer. Notify the LogContext.
     String logOutput = writer.toString();

@@ -704,7 +704,7 @@ object SupportedBinaryExpr {
  * For example, when the expression is just checking to see if a string starts with a given
  * pattern.
  */
-object LikeSimplification extends Rule[LogicalPlan] {
+object LikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
   // if guards below protect from escapes on trailing %.
   // Cases like "something\%" are not optimized, but this does not affect correctness.
   private val startsWith = "([^_%]+)%".r
@@ -756,16 +756,16 @@ object LikeSimplification extends Rule[LogicalPlan] {
     } else {
       multi match {
         case l: LikeAll =>
-          val and = replacements.reduceLeft(And)
+          val and = buildBalancedPredicate(replacements, And)
           if (remainPatterns.nonEmpty) And(and, l.copy(patterns = remainPatterns)) else and
         case l: NotLikeAll =>
-          val and = replacements.map(Not(_)).reduceLeft(And)
+          val and = buildBalancedPredicate(replacements.map(Not(_)), And)
           if (remainPatterns.nonEmpty) And(and, l.copy(patterns = remainPatterns)) else and
         case l: LikeAny =>
-          val or = replacements.reduceLeft(Or)
+          val or = buildBalancedPredicate(replacements, Or)
           if (remainPatterns.nonEmpty) Or(or, l.copy(patterns = remainPatterns)) else or
         case l: NotLikeAny =>
-          val or = replacements.map(Not(_)).reduceLeft(Or)
+          val or = buildBalancedPredicate(replacements.map(Not(_)), Or)
           if (remainPatterns.nonEmpty) Or(or, l.copy(patterns = remainPatterns)) else or
       }
     }

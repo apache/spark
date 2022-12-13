@@ -18,7 +18,7 @@ lexer grammar SqlBaseLexer;
 
 @members {
   /**
-   * When true, parser should throw ParseExcetion for unclosed bracketed comment.
+   * When true, parser should throw ParseException for unclosed bracketed comment.
    */
   public boolean has_unclosed_bracketed_comment = false;
 

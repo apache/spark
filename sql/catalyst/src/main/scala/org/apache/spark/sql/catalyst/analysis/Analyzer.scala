@@ -345,8 +345,8 @@ class Analyzer(override val catalogManager: CatalogManager)
       UpdateOuterReferences),
     Batch("Cleanup", fixedPoint,
       CleanupAliases),
-    Batch("HandleAnalysisOnlyCommand", Once,
-      HandleAnalysisOnlyCommand)
+    Batch("HandleSpecialCommand", Once,
+      HandleSpecialCommand)
   )
 
   /**
@@ -1822,11 +1822,11 @@ class Analyzer(override val catalogManager: CatalogManager)
             var aliasMap = CaseInsensitiveMap(Map[String, Seq[AliasEntry]]())
             val newAggExprs = aggExprs.zipWithIndex.map {
               case (a: Alias, idx) =>
-                val lcaWrapped = wrapLCARefHelper(a, agg, aliasMap).asInstanceOf[Alias]
+                val lcaWrapped = wrapLCARef(a, agg, aliasMap).asInstanceOf[Alias]
                 aliasMap = insertIntoAliasMap(lcaWrapped, idx, aliasMap)
                 lcaWrapped
               case (e, _) =>
-                wrapLCARefHelper(e, agg, aliasMap)
+                wrapLCARef(e, agg, aliasMap)
             }
             agg.copy(aggregateExpressions = newAggExprs)
         }
@@ -3976,15 +3976,17 @@ class Analyzer(override val catalogManager: CatalogManager)
   }
 
   /**
-   * A rule that marks a command as analyzed so that its children are removed to avoid
-   * being optimized. This rule should run after all other analysis rules are run.
+   * A rule to handle special commands that need to be notified when analysis is done. This rule
+   * should run after all other analysis rules are run.
    */
-  object HandleAnalysisOnlyCommand extends Rule[LogicalPlan] {
+  object HandleSpecialCommand extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       _.containsPattern(COMMAND)) {
       case c: AnalysisOnlyCommand if c.resolved =>
         checkAnalysis(c)
         c.markAsAnalyzed(AnalysisContext.get)
+      case c: KeepAnalyzedQuery if c.resolved =>
+        c.storeAnalyzedQuery()
     }
   }
 }

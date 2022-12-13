@@ -73,6 +73,25 @@ def require_minimum_pyarrow_version() -> None:
         )
 
 
+def require_minimum_grpc_version() -> None:
+    """Raise ImportError if minimum version of grpc is not installed"""
+    minimum_pandas_version = "1.48.1"
+
+    from distutils.version import LooseVersion
+
+    try:
+        import grpc
+    except ImportError as error:
+        raise ImportError(
+            "grpc >= %s must be installed; however, " "it was not found." % minimum_pandas_version
+        ) from error
+    if LooseVersion(grpc.__version__) < LooseVersion(minimum_pandas_version):
+        raise ImportError(
+            "Pandas >= %s must be installed; however, "
+            "your version was %s." % (minimum_pandas_version, grpc.__version__)
+        )
+
+
 def pyarrow_version_less_than_minimum(minimum_pyarrow_version: str) -> bool:
     """Return False if the installed pyarrow version is less than minimum_pyarrow_version
     or if pyarrow is not installed."""

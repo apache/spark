@@ -21,8 +21,7 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{PYSPARK_DRIVER_PYTHON, PYSPARK_PYTHON}
-import org.apache.spark.internal.config.ConfigBuilder
+import org.apache.spark.internal.config.{ConfigBuilder, DYN_ALLOCATION_MAX_EXECUTORS, EXECUTOR_INSTANCES, PYSPARK_DRIVER_PYTHON, PYSPARK_PYTHON}
 
 private[spark] object Config extends Logging {
 
@@ -100,6 +99,17 @@ private[spark] object Config extends Logging {
       .version("3.2.0")
       .booleanConf
       .createWithDefault(true)
+
+  val KUBERNETES_DRIVER_WAIT_TO_REUSE_PVC =
+    ConfigBuilder("spark.kubernetes.driver.waitToReusePersistentVolumeClaims")
+      .doc("If true, driver pod counts the number of created on-demand persistent volume claims " +
+        s"and wait if the number is greater than or equal to the maximum which is " +
+        s"${EXECUTOR_INSTANCES.key} or ${DYN_ALLOCATION_MAX_EXECUTORS.key}. " +
+        s"This config requires both ${KUBERNETES_DRIVER_OWN_PVC.key}=true and " +
+        s"${KUBERNETES_DRIVER_REUSE_PVC.key}=true.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val KUBERNETES_NAMESPACE =
     ConfigBuilder("spark.kubernetes.namespace")
@@ -722,6 +732,19 @@ private[spark] object Config extends Logging {
       .intConf
       .checkValue(value => value > 0, "Maximum number of pending pods should be a positive integer")
       .createWithDefault(Int.MaxValue)
+
+  val KUBERNETES_EXECUTOR_SNAPSHOTS_SUBSCRIBERS_GRACE_PERIOD =
+    ConfigBuilder("spark.kubernetes.executorSnapshotsSubscribersShutdownGracePeriod")
+      .doc("Time to wait for graceful shutdown kubernetes-executor-snapshots-subscribers " +
+        "thread pool. Since it may be called by ShutdownHookManager, where timeout is " +
+        "controlled by hadoop configuration `hadoop.service.shutdown.timeout` " +
+        "(default is 30s). As the whole Spark shutdown procedure shares the above timeout, " +
+        "this value should be short than that to prevent blocking the following shutdown " +
+        "procedures.")
+      .version("3.4.0")
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(value => value > 0, "Gracefully shutdown period must be a positive time value")
+      .createWithDefaultString("20s")
 
   val KUBERNETES_DRIVER_LABEL_PREFIX = "spark.kubernetes.driver.label."
   val KUBERNETES_DRIVER_ANNOTATION_PREFIX = "spark.kubernetes.driver.annotation."

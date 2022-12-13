@@ -168,7 +168,7 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
                 if (aggExpr.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
                   aggExpr.collectFirst {
                     case lcaRef: LateralColumnAliasReference =>
-                      throw QueryCompilationErrors.LateralColumnAliasInAggFuncUnsupportedError(
+                      throw QueryCompilationErrors.lateralColumnAliasInAggFuncUnsupportedError(
                         lcaRef.nameParts, aggExpr)
                   }
                 }

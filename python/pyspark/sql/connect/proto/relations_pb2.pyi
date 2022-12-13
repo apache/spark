@@ -40,6 +40,7 @@ import google.protobuf.internal.containers
 import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
 import pyspark.sql.connect.proto.expressions_pb2
+import pyspark.sql.connect.proto.types_pb2
 import sys
 import typing
 
@@ -83,11 +84,13 @@ class Relation(google.protobuf.message.Message):
     TAIL_FIELD_NUMBER: builtins.int
     WITH_COLUMNS_FIELD_NUMBER: builtins.int
     HINT_FIELD_NUMBER: builtins.int
+    UNPIVOT_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
     SUMMARY_FIELD_NUMBER: builtins.int
     CROSSTAB_FIELD_NUMBER: builtins.int
+    DESCRIBE_FIELD_NUMBER: builtins.int
     UNKNOWN_FIELD_NUMBER: builtins.int
     @property
     def common(self) -> global___RelationCommon: ...
@@ -138,6 +141,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def hint(self) -> global___Hint: ...
     @property
+    def unpivot(self) -> global___Unpivot: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -149,6 +154,8 @@ class Relation(google.protobuf.message.Message):
         """stat functions"""
     @property
     def crosstab(self) -> global___StatCrosstab: ...
+    @property
+    def describe(self) -> global___StatDescribe: ...
     @property
     def unknown(self) -> global___Unknown: ...
     def __init__(
@@ -178,11 +185,13 @@ class Relation(google.protobuf.message.Message):
         tail: global___Tail | None = ...,
         with_columns: global___WithColumns | None = ...,
         hint: global___Hint | None = ...,
+        unpivot: global___Unpivot | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
         summary: global___StatSummary | None = ...,
         crosstab: global___StatCrosstab | None = ...,
+        describe: global___StatDescribe | None = ...,
         unknown: global___Unknown | None = ...,
     ) -> None: ...
     def HasField(
@@ -196,6 +205,8 @@ class Relation(google.protobuf.message.Message):
             b"crosstab",
             "deduplicate",
             b"deduplicate",
+            "describe",
+            b"describe",
             "drop",
             b"drop",
             "drop_na",
@@ -248,6 +259,8 @@ class Relation(google.protobuf.message.Message):
             b"tail",
             "unknown",
             b"unknown",
+            "unpivot",
+            b"unpivot",
             "with_columns",
             b"with_columns",
         ],
@@ -263,6 +276,8 @@ class Relation(google.protobuf.message.Message):
             b"crosstab",
             "deduplicate",
             b"deduplicate",
+            "describe",
+            b"describe",
             "drop",
             b"drop",
             "drop_na",
@@ -315,6 +330,8 @@ class Relation(google.protobuf.message.Message):
             b"tail",
             "unknown",
             b"unknown",
+            "unpivot",
+            b"unpivot",
             "with_columns",
             b"with_columns",
         ],
@@ -345,11 +362,13 @@ class Relation(google.protobuf.message.Message):
         "tail",
         "with_columns",
         "hint",
+        "unpivot",
         "fill_na",
         "drop_na",
         "replace",
         "summary",
         "crosstab",
+        "describe",
         "unknown",
     ] | None: ...
 
@@ -1150,16 +1169,45 @@ class LocalRelation(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     DATA_FIELD_NUMBER: builtins.int
+    DATATYPE_FIELD_NUMBER: builtins.int
+    DATATYPE_STR_FIELD_NUMBER: builtins.int
     data: builtins.bytes
     """Local collection data serialized into Arrow IPC streaming format which contains
     the schema of the data.
     """
+    @property
+    def datatype(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
+    datatype_str: builtins.str
+    """Server will use Catalyst parser to parse this string to DataType."""
     def __init__(
         self,
         *,
         data: builtins.bytes = ...,
+        datatype: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+        datatype_str: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["data", b"data"]) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "datatype", b"datatype", "datatype_str", b"datatype_str", "schema", b"schema"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "data",
+            b"data",
+            "datatype",
+            b"datatype",
+            "datatype_str",
+            b"datatype_str",
+            "schema",
+            b"schema",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["schema", b"schema"]
+    ) -> typing_extensions.Literal["datatype", "datatype_str"] | None: ...
 
 global___LocalRelation = LocalRelation
 
@@ -1485,6 +1533,39 @@ class StatSummary(google.protobuf.message.Message):
     ) -> None: ...
 
 global___StatSummary = StatSummary
+
+class StatDescribe(google.protobuf.message.Message):
+    """Computes basic statistics for numeric and string columns, including count, mean, stddev, min,
+    and max. If no columns are given, this function computes statistics for all numerical or
+    string columns.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    COLS_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    @property
+    def cols(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """(Optional) Columns to compute statistics on."""
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        cols: collections.abc.Iterable[builtins.str] | None = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["cols", b"cols", "input", b"input"]
+    ) -> None: ...
+
+global___StatDescribe = StatDescribe
 
 class StatCrosstab(google.protobuf.message.Message):
     """Computes a pair-wise frequency table of the given columns. Also known as a contingency table.
@@ -1921,3 +2002,66 @@ class Hint(google.protobuf.message.Message):
     ) -> None: ...
 
 global___Hint = Hint
+
+class Unpivot(google.protobuf.message.Message):
+    """Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns set."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    IDS_FIELD_NUMBER: builtins.int
+    VALUES_FIELD_NUMBER: builtins.int
+    VARIABLE_COLUMN_NAME_FIELD_NUMBER: builtins.int
+    VALUE_COLUMN_NAME_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    @property
+    def ids(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.expressions_pb2.Expression
+    ]:
+        """(Required) Id columns."""
+    @property
+    def values(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.expressions_pb2.Expression
+    ]:
+        """(Optional) Value columns to unpivot."""
+    variable_column_name: builtins.str
+    """(Required) Name of the variable column."""
+    value_column_name: builtins.str
+    """(Required) Name of the value column."""
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        ids: collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression]
+        | None = ...,
+        values: collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression]
+        | None = ...,
+        variable_column_name: builtins.str = ...,
+        value_column_name: builtins.str = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "ids",
+            b"ids",
+            "input",
+            b"input",
+            "value_column_name",
+            b"value_column_name",
+            "values",
+            b"values",
+            "variable_column_name",
+            b"variable_column_name",
+        ],
+    ) -> None: ...
+
+global___Unpivot = Unpivot
