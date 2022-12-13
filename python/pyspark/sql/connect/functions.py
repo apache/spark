@@ -92,8 +92,19 @@ column = col
 def lit(col: Any) -> Column:
     if isinstance(col, Column):
         return col
+    elif isinstance(col, list):
+        return array(*[lit(c) for c in col])
+    elif isinstance(col, tuple):
+        return struct(*[lit(c) for c in col])
+    elif isinstance(col, dict):
+        cols = []
+        for k, v in col.items():
+            cols.append(lit(k))
+            cols.append(lit(v))
+        return create_map(*cols)
     else:
-        return Column(LiteralExpression(col))
+        dataType = LiteralExpression._infer_type(col)
+        return Column(LiteralExpression(col, dataType))
 
 
 # def bitwiseNOT(col: "ColumnOrName") -> Column:

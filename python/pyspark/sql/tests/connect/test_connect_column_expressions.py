@@ -68,21 +68,50 @@ class SparkConnectColumnExpressionSuite(PlanOnlyTestFixture):
         val = {"this": "is", 12: [12, 32, 43]}
         map_lit = fun.lit(val)
         map_lit_p = map_lit.to_plan(None)
-        self.assertEqual(2, len(map_lit_p.literal.map.pairs))
-        self.assertEqual("this", map_lit_p.literal.map.pairs[0].key.string)
-        self.assertEqual(12, map_lit_p.literal.map.pairs[1].key.integer)
+
+        self.assertEqual(map_lit_p.unresolved_function.function_name, "map")
+        self.assertEqual(map_lit_p.unresolved_function.arguments[0].literal.string, "this")
+        self.assertEqual(map_lit_p.unresolved_function.arguments[1].literal.string, "is")
+        self.assertEqual(map_lit_p.unresolved_function.arguments[2].literal.integer, 12)
+
+        self.assertEqual(
+            map_lit_p.unresolved_function.arguments[3].unresolved_function.function_name, "array"
+        )
+        self.assertEqual(
+            map_lit_p.unresolved_function.arguments[3]
+            .unresolved_function.arguments[0]
+            .literal.integer,
+            12,
+        )
+        self.assertEqual(
+            map_lit_p.unresolved_function.arguments[3]
+            .unresolved_function.arguments[1]
+            .literal.integer,
+            32,
+        )
+        self.assertEqual(
+            map_lit_p.unresolved_function.arguments[3]
+            .unresolved_function.arguments[2]
+            .literal.integer,
+            43,
+        )
 
         val = {"this": fun.lit("is"), 12: [12, 32, 43]}
         map_lit = fun.lit(val)
         map_lit_p = map_lit.to_plan(None)
-        self.assertEqual(2, len(map_lit_p.literal.map.pairs))
-        self.assertEqual("is", map_lit_p.literal.map.pairs[0].value.string)
+        self.assertEqual(map_lit_p.unresolved_function.function_name, "map")
+        self.assertEqual(len(map_lit_p.unresolved_function.arguments), 4)
+        self.assertEqual(map_lit_p.unresolved_function.arguments[0].literal.string, "this")
+        self.assertEqual(map_lit_p.unresolved_function.arguments[1].literal.string, "is")
+        self.assertEqual(map_lit_p.unresolved_function.arguments[2].literal.integer, 12)
+        self.assertEqual(
+            map_lit_p.unresolved_function.arguments[3].unresolved_function.function_name, "array"
+        )
 
     def test_uuid_literal(self):
         val = uuid.uuid4()
-        lit = fun.lit(val)
         with self.assertRaises(ValueError):
-            lit.to_plan(None)
+            fun.lit(val)
 
     def test_column_literals(self):
         df = self.connect.with_plan(p.Read("table"))
@@ -162,27 +191,34 @@ class SparkConnectColumnExpressionSuite(PlanOnlyTestFixture):
 
         p0 = fun.lit(t0).to_plan(None)
         self.assertIsNotNone(p0)
-        self.assertTrue(p0.literal.HasField("struct"))
+        self.assertEqual(p0.unresolved_function.function_name, "struct")
 
         p1 = fun.lit(t1).to_plan(None)
         self.assertIsNotNone(p1)
-        self.assertTrue(p1.literal.HasField("struct"))
-        self.assertEqual(p1.literal.struct.fields[0].double, 1.0)
+        self.assertEqual(p1.unresolved_function.function_name, "struct")
+        self.assertEqual(p1.unresolved_function.arguments[0].literal.double, 1.0)
 
         p2 = fun.lit(t2).to_plan(None)
         self.assertIsNotNone(p2)
-        self.assertTrue(p2.literal.HasField("struct"))
-        self.assertEqual(p2.literal.struct.fields[0].integer, 1)
-        self.assertEqual(p2.literal.struct.fields[1].string, "xyz")
+        self.assertEqual(p2.unresolved_function.function_name, "struct")
+        self.assertEqual(p2.unresolved_function.arguments[0].literal.integer, 1)
+        self.assertEqual(p2.unresolved_function.arguments[1].literal.string, "xyz")
 
         p3 = fun.lit(t3).to_plan(None)
         self.assertIsNotNone(p3)
-        self.assertTrue(p3.literal.HasField("struct"))
-        self.assertEqual(p3.literal.struct.fields[0].integer, 1)
-        self.assertEqual(p3.literal.struct.fields[1].string, "abc")
-        self.assertEqual(p3.literal.struct.fields[2].struct.fields[0].double, 3.5)
-        self.assertEqual(p3.literal.struct.fields[2].struct.fields[1].boolean, True)
-        self.assertEqual(p3.literal.struct.fields[2].struct.fields[2].null, True)
+        self.assertEqual(p3.unresolved_function.function_name, "struct")
+        self.assertEqual(p3.unresolved_function.arguments[0].literal.integer, 1)
+        self.assertEqual(p3.unresolved_function.arguments[1].literal.string, "abc")
+        self.assertEqual(
+            p3.unresolved_function.arguments[2].unresolved_function.arguments[0].literal.double, 3.5
+        )
+        self.assertEqual(
+            p3.unresolved_function.arguments[2].unresolved_function.arguments[1].literal.boolean,
+            True,
+        )
+        self.assertEqual(
+            p3.unresolved_function.arguments[2].unresolved_function.arguments[2].literal.null, True
+        )
 
     def test_column_alias(self) -> None:
         # SPARK-40809: Support for Column Aliases

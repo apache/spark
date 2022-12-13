@@ -21,7 +21,24 @@ import json
 import decimal
 import datetime
 
-from pyspark.sql.types import TimestampType, DayTimeIntervalType, DataType, DateType
+from pyspark.sql.types import (
+    DateType,
+    NullType,
+    BooleanType,
+    BinaryType,
+    ByteType,
+    ShortType,
+    IntegerType,
+    LongType,
+    FloatType,
+    DoubleType,
+    DecimalType,
+    StringType,
+    DataType,
+    TimestampType,
+    TimestampNTZType,
+    DayTimeIntervalType,
+)
 
 import pyspark.sql.connect.proto as proto
 from pyspark.sql.connect.types import pyspark_types_to_proto_types
@@ -31,7 +48,10 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.client import SparkConnectClient
     import pyspark.sql.connect.proto as proto
 
-
+JVM_BYTE_MIN = -(1 << 7)
+JVM_BYTE_MAX = (1 << 7) - 1
+JVM_SHORT_MIN = -(1 << 15)
+JVM_SHORT_MAX = (1 << 15) - 1
 JVM_INT_MIN = -(1 << 31)
 JVM_INT_MAX = (1 << 31) - 1
 JVM_LONG_MIN = -(1 << 63)
@@ -166,78 +186,147 @@ class LiteralExpression(Expression):
     The Python types are converted best effort into the relevant proto types. On the Spark Connect
     server side, the proto types are converted to the Catalyst equivalents."""
 
-    def __init__(self, value: Any) -> None:
+    def __init__(self, value: Any, dataType: DataType) -> None:
         super().__init__()
+
+        assert isinstance(
+            dataType,
+            (
+                NullType,
+                BinaryType,
+                BooleanType,
+                ByteType,
+                ShortType,
+                IntegerType,
+                LongType,
+                FloatType,
+                DoubleType,
+                DecimalType,
+                StringType,
+                DateType,
+                TimestampType,
+                TimestampNTZType,
+                DayTimeIntervalType,
+            ),
+        )
+
+        if isinstance(dataType, NullType):
+            assert value is None
+
+        if value is not None:
+            if isinstance(dataType, BinaryType):
+                assert isinstance(value, (bytes, bytearray))
+            elif isinstance(dataType, BooleanType):
+                assert isinstance(value, bool)
+            elif isinstance(dataType, ByteType):
+                assert isinstance(value, int) and JVM_BYTE_MIN <= int(value) <= JVM_BYTE_MAX
+            elif isinstance(dataType, ShortType):
+                assert isinstance(value, int) and JVM_SHORT_MIN <= int(value) <= JVM_SHORT_MAX
+            elif isinstance(dataType, IntegerType):
+                assert isinstance(value, int) and JVM_INT_MIN <= int(value) <= JVM_INT_MAX
+            elif isinstance(dataType, LongType):
+                assert isinstance(value, int) and JVM_LONG_MIN <= int(value) <= JVM_LONG_MAX
+            elif isinstance(dataType, FloatType):
+                assert isinstance(value, float)
+            elif isinstance(dataType, DoubleType):
+                assert isinstance(value, float)
+            elif isinstance(dataType, DecimalType):
+                assert isinstance(value, decimal.Decimal)
+            elif isinstance(dataType, StringType):
+                assert isinstance(value, str)
+            elif isinstance(dataType, DateType):
+                assert isinstance(value, (datetime.date, datetime.datetime))
+                if isinstance(value, datetime.date):
+                    value = DateType().toInternal(value)
+                else:
+                    value = DateType().toInternal(value.date())
+            elif isinstance(dataType, TimestampType):
+                assert isinstance(value, datetime.datetime)
+                value = TimestampType().toInternal(value)
+            elif isinstance(dataType, TimestampNTZType):
+                assert isinstance(value, datetime.datetime)
+                value = TimestampNTZType().toInternal(value)
+            elif isinstance(dataType, DayTimeIntervalType):
+                assert isinstance(value, datetime.timedelta)
+                value = DayTimeIntervalType().toInternal(value)
+                assert value is not None
+            else:
+                raise ValueError(f"Unsupported Data Type {dataType}")
+
         self._value = value
+        self._dataType = dataType
+
+    @classmethod
+    def _infer_type(cls, value: Any) -> DataType:
+        if value is None:
+            return NullType()
+        elif isinstance(value, (bytes, bytearray)):
+            return BinaryType()
+        elif isinstance(value, bool):
+            return BooleanType()
+        elif isinstance(value, int):
+            if JVM_INT_MIN <= value <= JVM_INT_MAX:
+                return IntegerType()
+            elif JVM_LONG_MIN <= value <= JVM_LONG_MAX:
+                return LongType()
+            else:
+                raise ValueError(f"integer {value} out of bounds")
+        elif isinstance(value, float):
+            return DoubleType()
+        elif isinstance(value, str):
+            return StringType()
+        elif isinstance(value, decimal.Decimal):
+            return DecimalType()
+        elif isinstance(value, datetime.datetime):
+            return TimestampType()
+        elif isinstance(value, datetime.date):
+            return DateType()
+        elif isinstance(value, datetime.timedelta):
+            return DayTimeIntervalType()
+        else:
+            raise ValueError(f"Unsupported Data Type {type(value).__name__}")
 
     def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
-        """Converts the literal expression to the literal in proto.
-
-        TODO(SPARK-40533) This method always assumes the largest type and can thus
-             create weird interpretations of the literal."""
-
-        from pyspark.sql.connect.functions import lit
+        """Converts the literal expression to the literal in proto."""
 
         expr = proto.Expression()
-        if self._value is None:
+
+        if isinstance(self._dataType, NullType):
             expr.literal.null = True
-        elif isinstance(self._value, (bytes, bytearray)):
+        elif self._value is None:
+            expr.typed_null.CopyFrom(pyspark_types_to_proto_types(self._dataType))
+        elif isinstance(self._dataType, BinaryType):
             expr.literal.binary = bytes(self._value)
-        elif isinstance(self._value, bool):
+        elif isinstance(self._dataType, BooleanType):
             expr.literal.boolean = bool(self._value)
-        elif isinstance(self._value, int):
-            if JVM_INT_MIN <= self._value <= JVM_INT_MAX:
-                expr.literal.integer = int(self._value)
-            elif JVM_LONG_MIN <= self._value <= JVM_LONG_MAX:
-                expr.literal.long = int(self._value)
-            else:
-                raise ValueError(f"integer {self._value} out of bounds")
-        elif isinstance(self._value, float):
+        elif isinstance(self._dataType, ByteType):
+            expr.literal.byte = int(self._value)
+        elif isinstance(self._dataType, ShortType):
+            expr.literal.short = int(self._value)
+        elif isinstance(self._dataType, IntegerType):
+            expr.literal.integer = int(self._value)
+        elif isinstance(self._dataType, LongType):
+            expr.literal.long = int(self._value)
+        elif isinstance(self._dataType, FloatType):
+            expr.literal.float = float(self._value)
+        elif isinstance(self._dataType, DoubleType):
             expr.literal.double = float(self._value)
-        elif isinstance(self._value, str):
-            expr.literal.string = str(self._value)
-        elif isinstance(self._value, decimal.Decimal):
+        elif isinstance(self._dataType, DecimalType):
             expr.literal.decimal.value = str(self._value)
-            expr.literal.decimal.precision = int(decimal.getcontext().prec)
-        elif isinstance(self._value, datetime.datetime):
-            expr.literal.timestamp = TimestampType().toInternal(self._value)
-        elif isinstance(self._value, datetime.date):
-            expr.literal.date = DateType().toInternal(self._value)
-        elif isinstance(self._value, datetime.timedelta):
-            interval = DayTimeIntervalType().toInternal(self._value)
-            assert interval is not None
-            expr.literal.day_time_interval = int(interval)
-        elif isinstance(self._value, list):
-            expr.literal.array.SetInParent()
-            for item in list(self._value):
-                if isinstance(item, Column):
-                    expr.literal.array.values.append(item.to_plan(session).literal)
-                else:
-                    expr.literal.array.values.append(lit(item).to_plan(session).literal)
-        elif isinstance(self._value, tuple):
-            expr.literal.struct.SetInParent()
-            for item in list(self._value):
-                if isinstance(item, Column):
-                    expr.literal.struct.fields.append(item.to_plan(session).literal)
-                else:
-                    expr.literal.struct.fields.append(lit(item).to_plan(session).literal)
-        elif isinstance(self._value, dict):
-            expr.literal.map.SetInParent()
-            for key, value in dict(self._value).items():
-                pair = proto.Expression.Literal.Map.Pair()
-                if isinstance(key, Column):
-                    pair.key.CopyFrom(key.to_plan(session).literal)
-                else:
-                    pair.key.CopyFrom(lit(key).to_plan(session).literal)
-                if isinstance(value, Column):
-                    pair.value.CopyFrom(value.to_plan(session).literal)
-                else:
-                    pair.value.CopyFrom(lit(value).to_plan(session).literal)
-                expr.literal.map.pairs.append(pair)
-        elif isinstance(self._value, Column):
-            expr.CopyFrom(self._value.to_plan(session))
+            expr.literal.decimal.precision = self._dataType.precision
+            expr.literal.decimal.scale = self._dataType.scale
+        elif isinstance(self._dataType, StringType):
+            expr.literal.string = str(self._value)
+        elif isinstance(self._dataType, DateType):
+            expr.literal.date = int(self._value)
+        elif isinstance(self._dataType, TimestampType):
+            expr.literal.timestamp = int(self._value)
+        elif isinstance(self._dataType, TimestampNTZType):
+            expr.literal.timestamp_ntz = int(self._value)
+        elif isinstance(self._dataType, DayTimeIntervalType):
+            expr.literal.day_time_interval = int(self._value)
         else:
-            raise ValueError(f"Could not convert literal for type {type(self._value)}")
+            raise ValueError(f"Unsupported Data Type {self._dataType}")
 
         return expr
 
