@@ -354,6 +354,27 @@ spark.kubernetes.executor.volumes.persistentVolumeClaim.data.mount.readOnly=fals
 
 For a complete list of available options for each supported type of volumes, please refer to the [Spark Properties](#spark-properties) section below.
 
+### PVC-oriented executor pod allocation
+
+Since disks are one of the important resource types, Spark driver provides a fine-grained control
+via a set of configurations. For example, by default, on-demand PVCs are owned by executors and
+the lifecycle of PVCs are tightly coupled with its owner executors.
+However, on-demand PVCs can be owned by driver and reused by another executors during the Spark job's
+lifetime with the following options. This reduces the overhead of PVC creation and deletion.
+
+```
+spark.kubernetes.driver.ownPersistentVolumeClaim=true
+spark.kubernetes.driver.reusePersistentVolumeClaim=true
+```
+
+In addition, since Spark 3.4, Spark driver is able to do PVC-oriented executor allocation which means
+Spark counts the total number of created PVCs which the job can have, and holds on a new executor creation
+if the driver owns the maximum number of PVCs. This helps the transition of the existing PVC from one executor
+to another executor.
+```
+spark.kubernetes.driver.waitToReusePersistentVolumeClaim=true
+```
+
 ## Local Storage
 
 Spark supports using volumes to spill data during shuffles and other operations. To use a volume as local storage, the volume's name should starts with `spark-local-dir-`, for example:
@@ -1474,6 +1495,18 @@ See the [configuration page](configuration.html) for information on Spark config
     sometimes. This config requires <code>spark.kubernetes.driver.ownPersistentVolumeClaim=true.</code>
   </td>
   <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driver.waitToReusePersistentVolumeClaim</code></td>
+  <td><code>false</code></td>
+  <td>
+    If true, driver pod counts the number of created on-demand persistent volume claims
+    and wait if the number is greater than or equal to the total number of volumes which
+    the Spark job is able to have. This config requires both
+    <code>spark.kubernetes.driver.ownPersistentVolumeClaim=true</code> and
+    <code>spark.kubernetes.driver.reusePersistentVolumeClaim=true.</code>
+  </td>
+  <td>3.4.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.disableConfigMap</code></td>
