@@ -966,6 +966,7 @@ class DataFrame(object):
                     upper_bound=upperBound,
                     with_replacement=False,
                     seed=int(seed),
+                    force_stable_sort=True,
                 ),
                 session=self._session,
             )

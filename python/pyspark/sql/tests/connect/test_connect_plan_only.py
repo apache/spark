@@ -242,18 +242,21 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
             self.assertEqual(plan.root.sample.upper_bound, 0.16666666666666666)
             self.assertEqual(plan.root.sample.with_replacement, False)
             self.assertEqual(plan.root.sample.HasField("seed"), True)
+            self.assertEqual(plan.root.sample.force_stable_sort, True)
 
             plan = relations[1]._plan.to_proto(self.connect)
             self.assertEqual(plan.root.sample.lower_bound, 0.16666666666666666)
             self.assertEqual(plan.root.sample.upper_bound, 0.5)
             self.assertEqual(plan.root.sample.with_replacement, False)
             self.assertEqual(plan.root.sample.HasField("seed"), True)
+            self.assertEqual(plan.root.sample.force_stable_sort, True)
 
             plan = relations[2]._plan.to_proto(self.connect)
             self.assertEqual(plan.root.sample.lower_bound, 0.5)
             self.assertEqual(plan.root.sample.upper_bound, 1.0)
             self.assertEqual(plan.root.sample.with_replacement, False)
             self.assertEqual(plan.root.sample.HasField("seed"), True)
+            self.assertEqual(plan.root.sample.force_stable_sort, True)
 
         relations = df.filter(df.col_name > 3).randomSplit([1.0, 2.0, 3.0], 1)
         checkRelations(relations)

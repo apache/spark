@@ -784,14 +784,6 @@ package object dsl {
           weights.sum > 0,
           s"Sum of weights must be positive, but got ${weights.mkString("[", ",", "]")}")
 
-        val randomSplit = Relation
-          .newBuilder()
-          .setRandomSplit(
-            RandomSplit
-              .newBuilder()
-              .setInput(logicalPlan))
-          .build()
-
         val sum = weights.toSeq.sum
         val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _)
         normalizedCumWeights
@@ -802,11 +794,12 @@ package object dsl {
               .setSample(
                 Sample
                   .newBuilder()
-                  .setInput(randomSplit)
+                  .setInput(logicalPlan)
                   .setLowerBound(x(0))
                   .setUpperBound(x(1))
                   .setWithReplacement(false)
                   .setSeed(seed)
+                  .setForceStableSort(true)
                   .build())
               .build()
           }

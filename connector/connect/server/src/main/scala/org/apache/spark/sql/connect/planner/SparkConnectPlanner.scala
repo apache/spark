@@ -132,8 +132,8 @@ class SparkConnectPlanner(session: SparkSession) {
    * wrap such fields into proto messages.
    */
   private def transformSample(rel: proto.Sample): LogicalPlan = {
-    val plan = if (rel.getInput.hasRandomSplit) {
-      val logicalPlan = transformRelation(rel.getInput.getRandomSplit.getInput)
+    val logicalPlan = transformRelation(rel.getInput)
+    val plan = if (rel.getForceStableSort) {
       // It is possible that the underlying dataframe doesn't guarantee the ordering of rows in its
       // constituent partitions each time a split is materialized which could result in
       // overlapping splits. To prevent this, we explicitly sort each input partition to make the
@@ -148,7 +148,7 @@ class SparkConnectPlanner(session: SparkSession) {
         logicalPlan
       }
     } else {
-      transformRelation(rel.getInput)
+      logicalPlan
     }
 
     Sample(

@@ -56,7 +56,6 @@ message Relation {
     WithColumns with_columns = 23;
     Hint hint = 24;
     Unpivot unpivot = 25;
-    RandomSplit random_split = 26;
 
     // NA functions
     NAFill fill_na = 90;
@@ -318,6 +317,10 @@ message Sample {
 
   // (Optional) The random seed.
   optional int64 seed = 5;
+
+  // (Optional) Explicitly sort the underlying plan to make the ordering deterministic.
+  // This flag is only used to randomly splits DataFrame with the provided weights.
+  optional bool force_stable_sort = 6;
 }
 
 // Relation of type [[Range]] that generates a sequence of integers.
@@ -583,11 +586,4 @@ message Unpivot {
 
   // (Required) Name of the value column.
   string value_column_name = 5;
-}
-
-// Randomly splits this Dataset with the provided weights.
-// Note: this message is just a wrapper for input relation.
-message RandomSplit {
-  // (Required) The input relation.
-  Relation input = 1;
 }
