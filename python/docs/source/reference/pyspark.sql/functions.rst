@@ -156,7 +156,6 @@ Collection Functions
     array_position
     element_at
     array_append
-    array_prepend
     array_sort
     array_remove
     array_distinct

@@ -4625,31 +4625,6 @@ case class ArrayAppend(left: Expression, right: Expression)
 
 }
 
-/**
- * Given an array, and another element prepend the element at the start of the array.
- */
-@ExpressionDescription(
-  usage = """_FUNC_(array, element) - Add the element at the start of the array passed as first
-      argument. Type of element should be similar to type of the elements of the array.""",
-  examples = """
-    Examples:
-      > SELECT _FUNC_(array('b', 'd', 'c', 'a'), 'd');
-       ["d","b","d","c","a"]
-
-  """,
-  since = "3.4.0",
-  group = "array_funcs")
-case class ArrayPrepend(left: Expression, right: Expression)
-  extends ArrayAddElement {
-  override def prettyName: String = "array_prepend"
-
-  override val prependFlag: Boolean = true
-
-  protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): ArrayPrepend =
-    copy(left = newLeft, right = newRight)
-
-}
-
 trait ArrayAddElement
   extends BinaryExpression
     with ImplicitCastInputTypes
@@ -4756,14 +4731,4 @@ trait ArrayAddElement
    */
   override def dataType: DataType = left.dataType
 
-}
-object ArrayAddElement
-{
-  def apply(left: Expression, right: Expression, prepend: Boolean): ArrayAddElement = {
-    if (prepend) {
-      ArrayPrepend(left, right)
-    } else {
-      ArrayAppend(left, right)
-    }
-  }
 }
