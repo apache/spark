@@ -1548,8 +1548,20 @@
   },
   "WRONG_NUM_ARGS" : {
     "message" : [
-      "The <functionName> requires <expectedNum> parameters but the actual number is <actualNum>."
-    ]
+      "Invalid number of arguments for the function <functionName>."
+    ],
+    "subClass" : {
+      "WITHOUT_SUGGESTION" : {
+        "message" : [
+          "Please, refer to 'https://spark.apache.org/docs/latest/sql-ref-functions.html' for a fix."
+        ]
+      },
+      "WITH_SUGGESTION" : {
+        "message" : [
+          "Consider to change the number of arguments because the function requires <expectedNum> parameters but the actual number is <actualNum>."
+        ]
+      }
+    }
   },
   "_LEGACY_ERROR_TEMP_0001" : {
     "message" : [
@@ -2016,11 +2028,6 @@
   "_LEGACY_ERROR_TEMP_1041" : {
     "message" : [
       "Undefined function <name>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1043" : {
-    "message" : [
-      "Invalid arguments for function <name>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1045" : {
