@@ -16,7 +16,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "GROUPING_EXPRESSION_WITHOUT_GROUP_BY",
+  "errorClass" : "AGGREGATION_WITHOUT_GROUP_BY",
+  "messageParameters" : {
+    "aggExprs" : "\"count(b) AS `count(b)`\""
+  },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -351,7 +354,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "GROUPING_EXPRESSION_WITHOUT_GROUP_BY",
+  "errorClass" : "AGGREGATION_WITHOUT_GROUP_BY",
+  "messageParameters" : {
+    "aggExprs" : ""
+  },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",

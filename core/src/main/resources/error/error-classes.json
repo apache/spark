@@ -1,4 +1,9 @@
 {
+  "AGGREGATION_WITHOUT_GROUP_BY" : {
+    "message" : [
+      "The query including the aggregate expression <aggExprs> does not include a GROUP BY clause. Add GROUP BY or turn this into the window functions using OVER clauses, or wrap by `first()` (or `first_value()`) if you don't care which value you get."
+    ]
+  },
   "AMBIGUOUS_COLUMN_OR_FIELD" : {
     "message" : [
       "Column or field <name> is ambiguous and has <n> matches."
@@ -495,11 +500,6 @@
       "Column of grouping (<grouping>) can't be found in grouping columns <groupingColumns>"
     ],
     "sqlState" : "42000"
-  },
-  "GROUPING_EXPRESSION_WITHOUT_GROUP_BY" : {
-    "message" : [
-      "The query including grouping and aggregate expressions does not include a GROUP BY clause. Add GROUP BY, aggregate, or turn into the window functions using OVER clauses."
-    ]
   },
   "GROUPING_ID_COLUMN_MISMATCH" : {
     "message" : [

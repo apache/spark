@@ -49,7 +49,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "GROUPING_EXPRESSION_WITHOUT_GROUP_BY",
+  "errorClass" : "AGGREGATION_WITHOUT_GROUP_BY",
+  "messageParameters" : {
+    "aggExprs" : "\"count(b) FILTER (WHERE (a >= 2)) AS `count(b) FILTER (WHERE (a >= 2))`\""
+  },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",

@@ -141,7 +141,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "GROUPING_EXPRESSION_WITHOUT_GROUP_BY",
+  "errorClass" : "AGGREGATION_WITHOUT_GROUP_BY",
+  "messageParameters" : {
+    "aggExprs" : "\"min(a) AS `min(a#x)`\", \"max(a) AS `max(a#x)`\""
+  },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
