@@ -240,12 +240,6 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
       val dfQuery = df.union(df).select("id", "data", "index", "_partition")
       val expectedAnswer = Seq(Row(1, "a", 0, "3/1"), Row(2, "b", 0, "0/2"), Row(3, "c", 0, "1/3"))
       checkAnswer(dfQuery, expectedAnswer ++ expectedAnswer)
-
-      spark.range(start = 10, end = 20).selectExpr(
-        "id as id", "id as index", "id as _partition")
-        .write.mode("append").saveAsTable("test")
-
-      assert(false)
     }
   }
 
@@ -254,16 +248,16 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
     withTable(tbl) {
       prepareTable()
       withTempDir { dir =>
-        spark.range(start = 10, end = 20).selectExpr("bigint(id) as id")
+        spark.range(start = 10, end = 20).selectExpr("bigint(id) as id", "string(id) as data")
           .write.mode("overwrite").save(dir.getAbsolutePath)
-        val df = spark.table(tbl)
-        val dfQuery = spark.read.load(dir.getAbsolutePath)
+        val df1 = spark.table(tbl)
+        val df2 = spark.read.load(dir.getAbsolutePath)
 
         // Make sure one df contains a metadata column and the other does not
-        assert(!df.queryExecution.logical.metadataOutput.exists(_.name == "_metadata"))
-        assert(dfQuery.queryExecution.logical.metadataOutput.exists(_.name == "_metadata"))
+        assert(!df1.queryExecution.logical.metadataOutput.exists(_.name == "_metadata"))
+        assert(df2.queryExecution.logical.metadataOutput.exists(_.name == "_metadata"))
 
-        assert(df.union(dfQuery).queryExecution.logical.metadataOutput.isEmpty)
+        assert(df1.union(df2).queryExecution.logical.metadataOutput.isEmpty)
       }
     }
   }
