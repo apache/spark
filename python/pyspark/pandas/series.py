@@ -6477,7 +6477,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             >>> psser2 = ps.Series([1, 2, 3, 4, 5], index=pd.Index([1, 2, 4, 3, 6]))
             >>> psser1.compare(psser2)  # doctest: +SKIP
             ...
-            ValueError: Can only compare identically labeled Series objects
+            ValueError: Can only compare identically-labeled Series objects
 
             >>> with ps.option_context("compute.eager_check", False):
             ...     psser1.compare(psser2)  # doctest: +SKIP
@@ -6555,7 +6555,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             )
         else:
             if get_option("compute.eager_check") and not self.index.equals(other.index):
-                raise ValueError("Can only compare identically labeled Series objects")
+                raise ValueError("Can only compare identically-labeled Series objects")
 
             combined = combine_frames(self.to_frame(), other.to_frame())
 
