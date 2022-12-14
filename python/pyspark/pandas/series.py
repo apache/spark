@@ -2773,7 +2773,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         Return unique values of Series object.
 
-        Unique are returned in order of appearance. Hash table-based unique,
+        Uniques are returned in order of appearance. Hash table-based unique,
         therefore does NOT sort.
 
         .. note:: This method returns newly created Series whereas pandas returns
@@ -4001,7 +4001,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             0 <= q <= 1, the quantile(s) to compute.
         accuracy : int, optional
             Default accuracy of approximation. Larger value means better accuracy.
-            The relative error can be reduced by 1.0 / accuracy.
+            The relative error can be deduced by 1.0 / accuracy.
 
         Returns
         -------

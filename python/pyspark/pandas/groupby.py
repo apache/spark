@@ -2271,7 +2271,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
             pdf = func(pdf)
 
-            # If schema should be inferred, we don't restore index. pandas seem restoring
+            # If schema should be inferred, we don't restore the index. pandas seems to restore
             # the index in some cases.
             # When Spark output type is specified, without executing it, we don't know
             # if we should restore the index or not. For instance, see the example in

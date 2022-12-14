@@ -239,7 +239,7 @@ def read_csv(
     sep : str, default ‘,’
         Delimiter to use. Non empty string.
     header : int, default ‘infer’
-        Whether to use as the column names, and the start of the data.
+        Whether to use the column names, and the start of the data.
         Default behavior is to infer the column names: if no names are passed
         the behavior is identical to `header=0` and column names are inferred from
         the first line of the file, if column names are passed explicitly then
@@ -1250,7 +1250,7 @@ def read_html(
     ----------
     io : str or file-like
         A URL, a file-like object, or a raw string containing HTML. Note that
-        lxml only accepts the http, FTP and file url protocols. If you have a
+        lxml only accepts the http, FTP and file URL protocols. If you have a
         URL that starts with ``'https'`` you might try removing the ``'s'``.
 
     match : str or compiled regular expression, optional
@@ -2633,7 +2633,7 @@ def concat(
             for psdf in new_objs:
                 columns_to_add = list(set(merged_columns) - set(psdf._internal.column_labels))
 
-                # TODO: NaN and None difference for missing values. pandas seem filling NaN.
+                # TODO: NaN and None difference for missing values. pandas seems to be filling NaN.
                 sdf = psdf._internal.resolved_copy.spark_frame
                 for label in columns_to_add:
                     sdf = sdf.withColumn(name_like_string(label), F.lit(None))
