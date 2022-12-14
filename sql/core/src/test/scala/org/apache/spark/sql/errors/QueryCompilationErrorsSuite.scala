@@ -667,6 +667,19 @@ class QueryCompilationErrorsSuite
       errorClass = "DATATYPE_MISMATCH.INVALID_JSON_SCHEMA",
       parameters = Map("schema" -> "\"INT\"", "sqlExpr" -> "\"from_json(a)\""))
   }
+
+  test("WRONG_NUM_ARGS.WITHOUT_SUGGESTION: wrong args of CAST(parameter types contains DataType)") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT CAST(1)")
+      },
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "functionName" -> "`cast`"
+      ),
+      context = ExpectedContext("", "", 7, 13, "CAST(1)")
+    )
+  }
 }
 
 class MyCastToString extends SparkUserDefinedFunction(

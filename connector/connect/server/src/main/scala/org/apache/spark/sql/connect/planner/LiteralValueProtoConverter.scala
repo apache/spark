@@ -17,11 +17,8 @@
 
 package org.apache.spark.sql.connect.planner
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.connect.proto
-import org.apache.spark.sql.catalyst.{expressions, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{CreateArray, CreateMap, CreateStruct}
+import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -99,20 +96,6 @@ object LiteralValueProtoConverter {
       case proto.Expression.Literal.LiteralTypeCase.DAY_TIME_INTERVAL =>
         expressions.Literal(lit.getDayTimeInterval, DayTimeIntervalType())
 
-      case proto.Expression.Literal.LiteralTypeCase.ARRAY =>
-        val literals = lit.getArray.getValuesList.asScala.toArray.map(toCatalystExpression)
-        CreateArray(literals)
-
-      case proto.Expression.Literal.LiteralTypeCase.STRUCT =>
-        val literals = lit.getStruct.getFieldsList.asScala.toArray.map(toCatalystExpression)
-        CreateStruct(literals)
-
-      case proto.Expression.Literal.LiteralTypeCase.MAP =>
-        val literals = lit.getMap.getPairsList.asScala.toArray.flatMap { pair =>
-          toCatalystExpression(pair.getKey) :: toCatalystExpression(pair.getValue) :: Nil
-        }
-        CreateMap(literals)
-
       case _ =>
         throw InvalidPlanInput(
           s"Unsupported Literal Type: ${lit.getLiteralTypeCase.getNumber}" +
@@ -122,18 +105,6 @@ object LiteralValueProtoConverter {
 
   def toCatalystValue(lit: proto.Expression.Literal): Any = {
     lit.getLiteralTypeCase match {
-      case proto.Expression.Literal.LiteralTypeCase.ARRAY =>
-        lit.getArray.getValuesList.asScala.toArray.map(toCatalystValue)
-
-      case proto.Expression.Literal.LiteralTypeCase.STRUCT =>
-        val literals = lit.getStruct.getFieldsList.asScala.map(toCatalystValue).toSeq
-        InternalRow(literals: _*)
-
-      case proto.Expression.Literal.LiteralTypeCase.MAP =>
-        lit.getMap.getPairsList.asScala.toArray.map { pair =>
-          toCatalystValue(pair.getKey) -> toCatalystValue(pair.getValue)
-        }.toMap
-
       case proto.Expression.Literal.LiteralTypeCase.STRING => lit.getString
 
       case _ => toCatalystExpression(lit).asInstanceOf[expressions.Literal].value

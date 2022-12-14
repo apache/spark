@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.{logical, Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
-import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, SubqueryAlias, Union, UnresolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, SubqueryAlias, Union, Unpivot, UnresolvedHint}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.{toCatalystExpression, toCatalystValue}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -95,6 +95,7 @@ class SparkConnectPlanner(session: SparkSession) {
         transformRenameColumnsByNameToNameMap(rel.getRenameColumnsByNameToNameMap)
       case proto.Relation.RelTypeCase.WITH_COLUMNS => transformWithColumns(rel.getWithColumns)
       case proto.Relation.RelTypeCase.HINT => transformHint(rel.getHint)
+      case proto.Relation.RelTypeCase.UNPIVOT => transformUnpivot(rel.getUnpivot)
       case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
         throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
       case _ => throw InvalidPlanInput(s"${rel.getUnknown} not supported.")
@@ -309,6 +310,34 @@ class SparkConnectPlanner(session: SparkSession) {
     UnresolvedHint(rel.getName, params, transformRelation(rel.getInput))
   }
 
+  private def transformUnpivot(rel: proto.Unpivot): LogicalPlan = {
+    val ids = rel.getIdsList.asScala.toArray.map { expr =>
+      Column(transformExpression(expr))
+    }
+
+    if (rel.getValuesList.isEmpty) {
+      Unpivot(
+        Some(ids.map(_.named)),
+        None,
+        None,
+        rel.getVariableColumnName,
+        Seq(rel.getValueColumnName),
+        transformRelation(rel.getInput))
+    } else {
+      val values = rel.getValuesList.asScala.toArray.map { expr =>
+        Column(transformExpression(expr))
+      }
+
+      Unpivot(
+        Some(ids.map(_.named)),
+        Some(values.map(v => Seq(v.named))),
+        None,
+        rel.getVariableColumnName,
+        Seq(rel.getValueColumnName),
+        transformRelation(rel.getInput))
+    }
+  }
+
   private def transformDeduplicate(rel: proto.Deduplicate): LogicalPlan = {
     if (!rel.hasInput) {
       throw InvalidPlanInput("Deduplicate needs a plan input")
@@ -340,6 +369,21 @@ class SparkConnectPlanner(session: SparkSession) {
     }
   }
 
+  private def parseDatatypeString(sqlText: String): DataType = {
+    val parser = session.sessionState.sqlParser
+    try {
+      parser.parseTableSchema(sqlText)
+    } catch {
+      case _: ParseException =>
+        try {
+          parser.parseDataType(sqlText)
+        } catch {
+          case _: ParseException =>
+            parser.parseDataType(s"struct<${sqlText.trim}>")
+        }
+    }
+  }
+
   private def transformLocalRelation(rel: proto.LocalRelation): LogicalPlan = {
     val (rows, structType) = ArrowConverters.fromBatchWithSchemaIterator(
       Iterator(rel.getData.toByteArray),
@@ -349,7 +393,28 @@ class SparkConnectPlanner(session: SparkSession) {
     }
     val attributes = structType.toAttributes
     val proj = UnsafeProjection.create(attributes, attributes)
-    new logical.LocalRelation(attributes, rows.map(r => proj(r).copy()).toSeq)
+    val relation = logical.LocalRelation(attributes, rows.map(r => proj(r).copy()).toSeq)
+
+    if (!rel.hasDatatype && !rel.hasDatatypeStr) {
+      return relation
+    }
+
+    val schemaType = if (rel.hasDatatype) {
+      DataTypeProtoConverter.toCatalystType(rel.getDatatype)
+    } else {
+      parseDatatypeString(rel.getDatatypeStr)
+    }
+
+    val schemaStruct = schemaType match {
+      case s: StructType => s
+      case d => StructType(Seq(StructField("value", d)))
+    }
+
+    Dataset
+      .ofRows(session, logicalPlan = relation)
+      .toDF(schemaStruct.names: _*)
+      .to(schemaStruct)
+      .logicalPlan
   }
 
   private def transformReadRel(rel: proto.Read): LogicalPlan = {

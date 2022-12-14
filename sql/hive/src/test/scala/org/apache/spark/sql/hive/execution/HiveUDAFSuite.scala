@@ -175,7 +175,7 @@ class HiveUDAFSuite extends QueryTest
         exception = intercept[AnalysisException] {
           sql(s"SELECT $functionName(100)")
         },
-        errorClass = "WRONG_NUM_ARGS",
+        errorClass = "WRONG_NUM_ARGS.WITH_SUGGESTION",
         parameters = Map(
           "functionName" -> toSQLId("longProductSum"),
           "expectedNum" -> "2",

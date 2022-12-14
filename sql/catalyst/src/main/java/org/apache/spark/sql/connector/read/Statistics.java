@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.connector.read;
 
+import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
 import java.util.OptionalLong;
 
 import org.apache.spark.annotation.Evolving;
@@ -35,7 +35,7 @@ import org.apache.spark.sql.connector.read.colstats.ColumnStatistics;
 public interface Statistics {
   OptionalLong sizeInBytes();
   OptionalLong numRows();
-  default Optional<Map<NamedReference, ColumnStatistics>> columnStats() {
-    return Optional.empty();
+  default Map<NamedReference, ColumnStatistics> columnStats() {
+    return new HashMap();
   }
 }

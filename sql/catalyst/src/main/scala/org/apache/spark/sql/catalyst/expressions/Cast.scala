@@ -294,6 +294,9 @@ object Cast extends QueryErrorsBase {
     case (from: DecimalType, to: NumericType) if from.isTighterThan(to) => true
     case (f, t) if legalNumericPrecedence(f, t) => true
     case (DateType, TimestampType) => true
+    case (DateType, TimestampNTZType) => true
+    case (TimestampNTZType, TimestampType) => true
+    case (TimestampType, TimestampNTZType) => true
     case (_: AtomicType, StringType) => true
     case (_: CalendarIntervalType, StringType) => true
     case (NullType, _) => true
@@ -507,7 +510,7 @@ case class Cast(
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CAST)
 
   def ansiEnabled: Boolean = {
-    evalMode == EvalMode.ANSI || evalMode == EvalMode.TRY
+    evalMode == EvalMode.ANSI || (evalMode == EvalMode.TRY && !canUseLegacyCastForTryCast)
   }
 
   // Whether this expression is used for `try_cast()`.
@@ -1267,7 +1270,7 @@ case class Cast(
   }
 
   private def cast(from: DataType, to: DataType): Any => Any = {
-    if (!isTryCast) {
+    if (!isTryCast || canUseLegacyCastForTryCast) {
       castInternal(from, to)
     } else {
       (input: Any) =>
@@ -1277,6 +1280,20 @@ case class Cast(
           case _: Exception =>
             null
         }
+    }
+  }
+
+  // Whether Spark SQL can evaluation the try_cast as the legacy cast, so that no `try...catch`
+  // is needed and the performance can be faster.
+  private lazy val canUseLegacyCastForTryCast: Boolean = {
+    if (!child.resolved) {
+      false
+    } else {
+      (child.dataType, dataType) match {
+        case (StringType, _: FractionalType) => true
+        case (StringType, _: DatetimeType) => true
+        case _ => false
+      }
     }
   }
 
@@ -1345,7 +1362,7 @@ case class Cast(
   protected[this] def castCode(ctx: CodegenContext, input: ExprValue, inputIsNull: ExprValue,
     result: ExprValue, resultIsNull: ExprValue, resultType: DataType, cast: CastFunction): Block = {
     val javaType = JavaCode.javaType(resultType)
-    val castCodeWithTryCatchIfNeeded = if (!isTryCast) {
+    val castCodeWithTryCatchIfNeeded = if (!isTryCast || canUseLegacyCastForTryCast) {
       s"${cast(input, result, resultIsNull)}"
     } else {
       s"""

@@ -824,6 +824,57 @@ class DataFrame(object):
             session=self._session,
         )
 
+    def unpivot(
+        self,
+        ids: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]],
+        values: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]],
+        variableColumnName: str,
+        valueColumnName: str,
+    ) -> "DataFrame":
+        """
+        Returns a new :class:`DataFrame` by unpivot a DataFrame from wide format to long format,
+        optionally leaving identifier columns set.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        ids : list
+            Id columns.
+        values : list, optional
+            Value columns to unpivot.
+        variableColumnName : str
+            Name of the variable column.
+        valueColumnName : str
+            Name of the value column.
+
+        Returns
+        -------
+        :class:`DataFrame`
+        """
+
+        def to_jcols(
+            cols: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]]
+        ) -> List["ColumnOrName"]:
+            if cols is None:
+                lst = []
+            elif isinstance(cols, tuple):
+                lst = list(cols)
+            elif isinstance(cols, list):
+                lst = cols
+            else:
+                lst = [cols]
+            return lst
+
+        return DataFrame.withPlan(
+            plan.Unpivot(
+                self._plan, to_jcols(ids), to_jcols(values), variableColumnName, valueColumnName
+            ),
+            self._session,
+        )
+
+    melt = unpivot
+
     def show(self, n: int = 20, truncate: Union[bool, int] = True, vertical: bool = False) -> None:
         """
         Prints the first ``n`` rows to the console.

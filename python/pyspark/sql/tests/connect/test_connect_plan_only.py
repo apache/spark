@@ -14,13 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import cast
 import unittest
 
-from pyspark.testing.connectutils import PlanOnlyTestFixture
-from pyspark.testing.sqlutils import have_pandas, pandas_requirement_message
+from pyspark.testing.connectutils import (
+    PlanOnlyTestFixture,
+    should_test_connect,
+    connect_requirement_message,
+)
 
-if have_pandas:
+if should_test_connect:
     import pyspark.sql.connect.proto as proto
     from pyspark.sql.connect.column import Column
     from pyspark.sql.connect.plan import WriteOperation
@@ -29,7 +31,7 @@ if have_pandas:
     from pyspark.sql.types import StringType
 
 
-@unittest.skipIf(not have_pandas, cast(str, pandas_requirement_message))
+@unittest.skipIf(not should_test_connect, connect_requirement_message)
 class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
     """These test cases exercise the interface to the proto plan
     generation but do not call Spark."""
@@ -167,6 +169,64 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertEqual(plan.root.replace.replacements[0].new_value.string, "A")
         self.assertEqual(plan.root.replace.replacements[1].old_value.string, "Bob")
         self.assertEqual(plan.root.replace.replacements[1].new_value.string, "B")
+
+    def test_unpivot(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+
+        plan = (
+            df.filter(df.col_name > 3)
+            .unpivot(["id"], ["name"], "variable", "value")
+            ._plan.to_proto(self.connect)
+        )
+        self.assertTrue(all(isinstance(c, proto.Expression) for c in plan.root.unpivot.ids))
+        self.assertEqual(plan.root.unpivot.ids[0].unresolved_attribute.unparsed_identifier, "id")
+        self.assertTrue(all(isinstance(c, proto.Expression) for c in plan.root.unpivot.values))
+        self.assertEqual(
+            plan.root.unpivot.values[0].unresolved_attribute.unparsed_identifier, "name"
+        )
+        self.assertEqual(plan.root.unpivot.variable_column_name, "variable")
+        self.assertEqual(plan.root.unpivot.value_column_name, "value")
+
+        plan = (
+            df.filter(df.col_name > 3)
+            .unpivot(["id"], None, "variable", "value")
+            ._plan.to_proto(self.connect)
+        )
+        self.assertTrue(len(plan.root.unpivot.ids) == 1)
+        self.assertTrue(all(isinstance(c, proto.Expression) for c in plan.root.unpivot.ids))
+        self.assertEqual(plan.root.unpivot.ids[0].unresolved_attribute.unparsed_identifier, "id")
+        self.assertTrue(len(plan.root.unpivot.values) == 0)
+        self.assertEqual(plan.root.unpivot.variable_column_name, "variable")
+        self.assertEqual(plan.root.unpivot.value_column_name, "value")
+
+    def test_melt(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+
+        plan = (
+            df.filter(df.col_name > 3)
+            .melt(["id"], ["name"], "variable", "value")
+            ._plan.to_proto(self.connect)
+        )
+        self.assertTrue(all(isinstance(c, proto.Expression) for c in plan.root.unpivot.ids))
+        self.assertEqual(plan.root.unpivot.ids[0].unresolved_attribute.unparsed_identifier, "id")
+        self.assertTrue(all(isinstance(c, proto.Expression) for c in plan.root.unpivot.values))
+        self.assertEqual(
+            plan.root.unpivot.values[0].unresolved_attribute.unparsed_identifier, "name"
+        )
+        self.assertEqual(plan.root.unpivot.variable_column_name, "variable")
+        self.assertEqual(plan.root.unpivot.value_column_name, "value")
+
+        plan = (
+            df.filter(df.col_name > 3)
+            .melt(["id"], [], "variable", "value")
+            ._plan.to_proto(self.connect)
+        )
+        self.assertTrue(len(plan.root.unpivot.ids) == 1)
+        self.assertTrue(all(isinstance(c, proto.Expression) for c in plan.root.unpivot.ids))
+        self.assertEqual(plan.root.unpivot.ids[0].unresolved_attribute.unparsed_identifier, "id")
+        self.assertTrue(len(plan.root.unpivot.values) == 0)
+        self.assertEqual(plan.root.unpivot.variable_column_name, "variable")
+        self.assertEqual(plan.root.unpivot.value_column_name, "value")
 
     def test_summary(self):
         df = self.connect.readTable(table_name=self.tbl_name)
@@ -379,7 +439,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertIsNotNone(u)
         expr = u("ThisCol", "ThatCol", "OtherCol")
         self.assertTrue(isinstance(expr, Column))
-        self.assertTrue(isinstance(cast(Column, expr)._expr, UserDefinedFunction))
+        self.assertTrue(isinstance(expr._expr, UserDefinedFunction))
         u_plan = expr.to_plan(self.connect)
         self.assertIsNotNone(u_plan)
 

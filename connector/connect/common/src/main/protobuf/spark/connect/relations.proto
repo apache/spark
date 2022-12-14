@@ -20,6 +20,7 @@ syntax = 'proto3';
 package spark.connect;
 
 import "spark/connect/expressions.proto";
+import "spark/connect/types.proto";
 
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
@@ -54,6 +55,7 @@ message Relation {
     Tail tail = 22;
     WithColumns with_columns = 23;
     Hint hint = 24;
+    Unpivot unpivot = 25;
 
     // NA functions
     NAFill fill_na = 90;
@@ -304,6 +306,17 @@ message LocalRelation {
   // Local collection data serialized into Arrow IPC streaming format which contains
   // the schema of the data.
   bytes data = 1;
+
+  // (Optional) The user provided schema.
+  //
+  // The Sever side will update the column names and data types according to this schema.
+  oneof schema {
+
+    DataType datatype = 2;
+
+    // Server will use Catalyst parser to parse this string to DataType.
+    string datatype_str = 3;
+  }
 }
 
 // Relation of type [[Sample]] that samples a fraction of the dataset.
@@ -569,4 +582,22 @@ message Hint {
 
   // (Optional) Hint parameters.
   repeated Expression.Literal parameters = 3;
+}
+
+// Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns set.
+message Unpivot {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) Id columns.
+  repeated Expression ids = 2;
+
+  // (Optional) Value columns to unpivot.
+  repeated Expression values = 3;
+
+  // (Required) Name of the variable column.
+  string variable_column_name = 4;
+
+  // (Required) Name of the value column.
+  string value_column_name = 5;
 }
