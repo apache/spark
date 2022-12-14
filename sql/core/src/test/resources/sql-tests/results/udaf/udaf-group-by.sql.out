@@ -16,16 +16,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "AGGREGATION_WITHOUT_GROUP_BY",
-  "messageParameters" : {
-    "aggExprs" : ""
-  },
+  "errorClass" : "MISSING_GROUP_BY",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 8,
-    "fragment" : "a"
+    "startIndex" : 1,
+    "stopIndex" : 31,
+    "fragment" : "SELECT a, udaf(b) FROM testData"
   } ]
 }
 

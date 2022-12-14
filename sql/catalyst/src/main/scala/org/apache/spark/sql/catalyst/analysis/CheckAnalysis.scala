@@ -398,13 +398,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                   }
                 }
               case e: Attribute if groupingExprs.isEmpty =>
-                // Collect all [[AggregateExpressions]]s.
-                val aggExprs = aggregateExprs.filter(_.collect {
-                  case a: AggregateExpression => a
-                }.nonEmpty)
-                e.failAnalysis(
-                  errorClass = "AGGREGATION_WITHOUT_GROUP_BY",
-                  messageParameters = Map("aggExprs" -> aggExprs.map(toSQLExpr).mkString(", ")))
+                operator.failAnalysis(
+                  errorClass = "MISSING_GROUP_BY",
+                  messageParameters = Map.empty)
               case e: Attribute if !groupingExprs.exists(_.semanticEquals(e)) =>
                 throw QueryCompilationErrors.columnNotInGroupByClauseError(e)
               case s: ScalarSubquery

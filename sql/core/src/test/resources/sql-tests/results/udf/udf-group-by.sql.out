@@ -16,10 +16,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "AGGREGATION_WITHOUT_GROUP_BY",
-  "messageParameters" : {
-    "aggExprs" : "\"udf(count(b)) AS `udf(count(b))`\""
-  },
+  "errorClass" : "MISSING_GROUP_BY",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -331,16 +328,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "AGGREGATION_WITHOUT_GROUP_BY",
-  "messageParameters" : {
-    "aggExprs" : ""
-  },
+  "errorClass" : "MISSING_GROUP_BY",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 21,
-    "stopIndex" : 29,
-    "fragment" : "range(10)"
+    "startIndex" : 1,
+    "stopIndex" : 43,
+    "fragment" : "SELECT udf(id) FROM range(10) HAVING id > 0"
   } ]
 }
 

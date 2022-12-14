@@ -16,16 +16,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "AGGREGATION_WITHOUT_GROUP_BY",
-  "messageParameters" : {
-    "aggExprs" : "\"count(b) AS `count(b)`\""
-  },
+  "errorClass" : "MISSING_GROUP_BY",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 8,
-    "fragment" : "a"
+    "startIndex" : 1,
+    "stopIndex" : 32,
+    "fragment" : "SELECT a, COUNT(b) FROM testData"
   } ]
 }
 
@@ -354,16 +351,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "AGGREGATION_WITHOUT_GROUP_BY",
-  "messageParameters" : {
-    "aggExprs" : ""
-  },
+  "errorClass" : "MISSING_GROUP_BY",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 16,
-    "stopIndex" : 24,
-    "fragment" : "range(10)"
+    "startIndex" : 1,
+    "stopIndex" : 38,
+    "fragment" : "SELECT id FROM range(10) HAVING id > 0"
   } ]
 }
 

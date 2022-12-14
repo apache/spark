@@ -390,10 +390,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "AGGREGATION_WITHOUT_GROUP_BY",
-  "messageParameters" : {
-    "aggExprs" : ""
-  },
+  "errorClass" : "MISSING_GROUP_BY",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
