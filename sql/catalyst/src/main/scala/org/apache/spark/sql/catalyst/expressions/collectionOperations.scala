@@ -4612,26 +4612,22 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
   """,
   group = "array_funcs",
   since = "3.4.0")
-case class ArrayCompact(expr: Expression, replacement: Expression)
-  extends RuntimeReplaceable with InheritAnalysisRules {
+case class ArrayCompact(child: Expression)
+  extends RuntimeReplaceable with UnaryLike[Expression] with ImplicitCastInputTypes {
 
-  def this(expr: Expression) = this(expr,
-    ArrayFilter(expr, ArrayCompact.createLambdaExpr()))
+  lazy val isNotNull: Expression => Expression = x => IsNotNull(x)
+  lazy val lv = NamedLambdaVariable("arg",
+    child.dataType.asInstanceOf[ArrayType].elementType, true)
+  lazy val lambda = LambdaFunction(isNotNull(lv), Seq(lv))
 
-  override def parameters: Seq[Expression] = Seq(expr)
+  override lazy val replacement: Expression = ArrayFilter(child, lambda)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
 
   override def prettyName: String = "array_compact"
 
   override protected def withNewChildInternal(newChild: Expression): ArrayCompact =
-    copy(replacement = newChild)
+    copy(child = newChild)
 }
 
-object ArrayCompact {
-
-  private def createLambdaExpr() = {
-    val isNotNull: Expression => Expression = x => IsNotNull(x)
-    val lv = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("x")))
-    LambdaFunction(isNotNull(lv), Seq(lv))
-  }
-}
 

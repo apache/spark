@@ -5268,13 +5268,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     // unsupported data type
     val invalidDatatypeDF = Seq(1, 2, 3).toDF("a")
-    checkErrorMatchPVals(
+    checkError(
       exception = intercept[AnalysisException] {
         invalidDatatypeDF.select(array_compact($"a"))
       },
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
-        "sqlExpr" ->  """"filter\(a, lambdafunction\(\(x_\d+ IS NOT NULL\), x_\d+\)\)"""",
+        "sqlExpr" -> "\"array_compact(a)\"",
         "paramIndex" -> "1",
         "requiredType" -> "\"ARRAY\"",
         "inputSql" -> "\"a\"",
