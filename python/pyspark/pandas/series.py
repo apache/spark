@@ -134,7 +134,7 @@ if TYPE_CHECKING:
     from pyspark.pandas.indexes import Index
     from pyspark.pandas.spark.accessors import SparkIndexOpsMethods
 
-# This regular expression pattern is comppiled and defined here to avoid to compile the same
+# This regular expression pattern is compiled and defined here to avoid to compile the same
 # pattern every time it is used in _repr_ in Series.
 # This pattern basically seeks the footer string from pandas'
 REPR_PATTERN = re.compile(r"Length: (?P<length>[0-9]+)")

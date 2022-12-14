@@ -900,7 +900,7 @@ class LocIndexer(LocIndexerLike):
     viper            5
     sidewinder       8
 
-    An alienable boolean Series to the column axis being sliced.
+    An alignable boolean Series to the column axis being sliced.
 
     >>> df.loc[:, pd.Series([False, True], index=['max_speed', 'shield'])]
                 shield
