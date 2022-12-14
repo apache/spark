@@ -16,10 +16,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2422",
+  "errorClass" : "GROUPING_EXPRESSIONS_NOT_FOUND",
   "messageParameters" : {
-    "aggExprs" : "()",
-    "sqlExpr" : "testdata.a"
+    "aggExprs" : "",
+    "sqlExpr" : "\"a\""
   },
   "queryContext" : [ {
     "objectType" : "",

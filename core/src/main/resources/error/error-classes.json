@@ -496,6 +496,11 @@
     ],
     "sqlState" : "42000"
   },
+  "GROUPING_EXPRESSIONS_NOT_FOUND" : {
+    "message" : [
+      "Not found any GROUP BY expressions, and <sqlExpr> is not an aggregate function. Wrap <aggExprs> by windowing function(s) or wrap <sqlExpr> by `first()` (or `first_value()`) if you don't care which value you get."
+    ]
+  },
   "GROUPING_ID_COLUMN_MISMATCH" : {
     "message" : [
       "Columns of grouping_id (<groupingIdColumn>) does not match grouping columns (<groupByColumns>)"
@@ -5106,11 +5111,6 @@
   "_LEGACY_ERROR_TEMP_2421" : {
     "message" : [
       "nondeterministic expression <sqlExpr> should not appear in the arguments of an aggregate function."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2422" : {
-    "message" : [
-      "grouping expressions sequence is empty, and '<sqlExpr>' is not an aggregate function. Wrap '<aggExprs>' in windowing function(s) or wrap '<sqlExpr>' in first() (or first_value) if you don't care which value you get."
     ]
   },
   "_LEGACY_ERROR_TEMP_2423" : {

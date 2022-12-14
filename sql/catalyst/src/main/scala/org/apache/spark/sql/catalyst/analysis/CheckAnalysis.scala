@@ -403,10 +403,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                   case a: AggregateExpression => a
                 }.nonEmpty)
                 e.failAnalysis(
-                  errorClass = "_LEGACY_ERROR_TEMP_2422",
+                  errorClass = "GROUPING_EXPRESSIONS_NOT_FOUND",
                   messageParameters = Map(
-                    "sqlExpr" -> e.sql,
-                    "aggExprs" -> aggExprs.map(_.sql).mkString("(", ", ", ")")))
+                    "sqlExpr" -> toSQLExpr(e),
+                    "aggExprs" -> aggExprs.map(toSQLExpr).mkString(", ")))
               case e: Attribute if !groupingExprs.exists(_.semanticEquals(e)) =>
                 throw QueryCompilationErrors.columnNotInGroupByClauseError(e)
               case s: ScalarSubquery
