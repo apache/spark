@@ -41,6 +41,7 @@ from pyspark.sql.types import (
     TimestampType,
     TimestampNTZType,
     ByteType,
+    BinaryType,
     ShortType,
     IntegerType,
     FloatType,
