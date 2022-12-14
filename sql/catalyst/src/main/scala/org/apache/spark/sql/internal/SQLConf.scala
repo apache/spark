@@ -3629,6 +3629,15 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val JSON_ENABLE_PARTIAL_RESULTS =
+    buildConf("spark.sql.json.enablePartialResults")
+      .internal()
+      .doc("When set to true, enables partial results for structs, maps, and arrays in JSON " +
+        "when one or more fields do not match the schema")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val LEGACY_CSV_ENABLE_DATE_TIME_PARSING_FALLBACK =
     buildConf("spark.sql.legacy.csv.enableDateTimeParsingFallback")
       .internal()
@@ -4782,6 +4791,8 @@ class SQLConf extends Serializable with Logging {
   def jsonFilterPushDown: Boolean = getConf(JSON_FILTER_PUSHDOWN_ENABLED)
 
   def avroFilterPushDown: Boolean = getConf(AVRO_FILTER_PUSHDOWN_ENABLED)
+
+  def jsonEnablePartialResults: Boolean = getConf(JSON_ENABLE_PARTIAL_RESULTS)
 
   def jsonEnableDateTimeParsingFallback: Option[Boolean] =
     getConf(LEGACY_JSON_ENABLE_DATE_TIME_PARSING_FALLBACK)
