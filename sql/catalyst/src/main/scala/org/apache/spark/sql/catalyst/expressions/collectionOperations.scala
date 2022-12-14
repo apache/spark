@@ -4671,13 +4671,13 @@ case class ArrayAppend(left: Expression, right: Expression)
     }
     val finalData = new Array[Any](numberOfElements)
     arrayData.foreach(elementType, finalData.update)
-    finalData.update(numberOfElements - 1, elementData)
+    finalData.update(arrayData.numElements(), elementData)
     new GenericArrayData(finalData)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(
-      ctx, ev, (left: String, right: String) => {
+      ctx, ev, (eval1, eval2) => {
         val expr = ctx.addReferenceObj("arraysAppendExpr", this)
         val newArraySize = ctx.freshName("newArraySize")
         val i = ctx.freshName("i")
@@ -4686,14 +4686,14 @@ case class ArrayAppend(left: Expression, right: Expression)
         val allocation = CodeGenerator.createArrayData(
           values, elementType, newArraySize, s" $prettyName failed.")
         val assignment = CodeGenerator.createArrayAssignment(
-          values, elementType, left, pos, i, true)
-        s"""int $newArraySize = $left.numElements() + 1;
+          values, elementType, eval1, pos, i, true)
+        s"""int $newArraySize = $eval1.numElements() + 1;
            |$allocation
            |int $pos = 0;
-           |for (int $i=0;$i<$left.numElements(); $i ++, $pos ++) {
+           |for (int $i=0;$i<$eval1.numElements(); $i ++, $pos ++) {
            |  $assignment
            |}
-           |${CodeGenerator.setArrayElement(values, elementType, pos, right)}
+           |${CodeGenerator.setArrayElement(values, elementType, pos, eval2)}
            |${ev.value} = $values;
            |""".stripMargin
       }
