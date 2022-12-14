@@ -541,7 +541,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
               // later on if it was not possible to parse it.
               try {
                 if (conf.get(CLEANER_ENABLED) && reader.modificationTime <
-                  clock.getTimeMillis() - conf.get(MAX_LOG_AGE_S) * 1000) {
+                    clock.getTimeMillis() - conf.get(MAX_LOG_AGE_S) * 1000) {
                   logInfo(s"Deleting expired event log ${reader.rootPath.toString}")
                   deleteLog(fs, reader.rootPath)
                   false

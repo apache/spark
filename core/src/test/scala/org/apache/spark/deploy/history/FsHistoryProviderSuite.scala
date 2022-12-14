@@ -1705,7 +1705,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     provider.stop()
   }
 
-  test("SPARK-41447: clean up expired event log files that don't exist in listing db") {
+  test("SPARK-41447: Reduce the number of doMergeApplicationListing invocations") {
     class TestFsHistoryProvider(conf: SparkConf, clock: Clock)
       extends FsHistoryProvider(conf, clock) {
       var doMergeApplicationListingCall = 0
