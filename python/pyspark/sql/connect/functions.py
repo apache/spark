@@ -94,14 +94,6 @@ def lit(col: Any) -> Column:
         return col
     elif isinstance(col, list):
         return array(*[lit(c) for c in col])
-    elif isinstance(col, tuple):
-        return struct(*[lit(c) for c in col])
-    elif isinstance(col, dict):
-        cols = []
-        for k, v in col.items():
-            cols.append(lit(k))
-            cols.append(lit(v))
-        return create_map(*cols)
     else:
         dataType = LiteralExpression._infer_type(col)
         return Column(LiteralExpression(col, dataType))
