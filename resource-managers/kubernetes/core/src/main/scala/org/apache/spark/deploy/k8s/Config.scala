@@ -101,12 +101,11 @@ private[spark] object Config extends Logging {
       .createWithDefault(true)
 
   val KUBERNETES_DRIVER_WAIT_TO_REUSE_PVC =
-    ConfigBuilder("spark.kubernetes.driver.waitToReusePersistentVolumeClaims")
+    ConfigBuilder("spark.kubernetes.driver.waitToReusePersistentVolumeClaim")
       .doc("If true, driver pod counts the number of created on-demand persistent volume claims " +
-        s"and wait if the number is greater than or equal to the maximum which is " +
-        s"${EXECUTOR_INSTANCES.key} or ${DYN_ALLOCATION_MAX_EXECUTORS.key}. " +
-        s"This config requires both ${KUBERNETES_DRIVER_OWN_PVC.key}=true and " +
-        s"${KUBERNETES_DRIVER_REUSE_PVC.key}=true.")
+        s"and wait if the number is greater than or equal to the total number of volumes which " +
+        s"the Spark cluster is able to have. This config requires both ${KUBERNETES_DRIVER_OWN_PVC.key}=true " +
+        s"and ${KUBERNETES_DRIVER_REUSE_PVC.key}=true.")
       .version("3.4.0")
       .booleanConf
       .createWithDefault(false)
