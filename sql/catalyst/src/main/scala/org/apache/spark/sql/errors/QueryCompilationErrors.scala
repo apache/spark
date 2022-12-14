@@ -1776,12 +1776,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def incompatibleRangeInputDataTypeError(
-      expression: Expression, dataType: DataType): Throwable = {
+      expression: Expression, dataType: DataType, paramIndex: Int): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1180",
+      errorClass = "UNEXPECTED_INPUT_TYPE",
       messageParameters = Map(
-        "expectedDataType" -> dataType.typeName,
-        "foundDataType" -> expression.dataType.typeName))
+        "paramIndex" -> paramIndex.toString,
+        "requiredType" -> toSQLType(dataType),
+        "inputSql" -> toSQLExpr(expression),
+        "inputType" -> toSQLType(expression.dataType)))
   }
 
   def streamJoinStreamWithoutEqualityPredicateUnsupportedError(plan: LogicalPlan): Throwable = {
