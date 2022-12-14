@@ -4616,23 +4616,12 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
   since = "3.4.0",
   group = "array_funcs")
 case class ArrayAppend(left: Expression, right: Expression)
-  extends ArrayAddElement {
-  override def prettyName: String = "array_append"
-  override val prependFlag: Boolean = false
-
-  protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): ArrayAppend =
-    copy(left = newLeft, right = newRight)
-
-}
-
-trait ArrayAddElement
   extends BinaryExpression
     with ImplicitCastInputTypes
     with ComplexTypeMergingExpression
     with NullIntolerant
-    with QueryErrorsBase{
-
-  val prependFlag: Boolean = false
+    with QueryErrorsBase {
+  override def prettyName: String = "array_append"
 
   @transient protected lazy val elementType: DataType =
     inputTypes.head.asInstanceOf[ArrayType].elementType
@@ -4681,14 +4670,8 @@ trait ArrayAddElement
       throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(numberOfElements)
     }
     val finalData = new Array[Any](numberOfElements)
-    if (prependFlag) {
-      finalData.update(0, elementData)
-      arrayData.foreach(elementType, (i, elem) => finalData.update(i + 1, elem))
-    } else {
-      arrayData.foreach(elementType, finalData.update)
-      finalData.update(numberOfElements - 1, elementData)
-    }
-
+    arrayData.foreach(elementType, finalData.update)
+    finalData.update(numberOfElements - 1, elementData)
     new GenericArrayData(finalData)
   }
 
@@ -4698,7 +4681,6 @@ trait ArrayAddElement
         val expr = ctx.addReferenceObj("arraysAppendExpr", this)
         val newArraySize = ctx.freshName("newArraySize")
         val i = ctx.freshName("i")
-        val prependFlagCode = ctx.freshName("prependFlagCode")
         val pos = ctx.freshName("pos")
         val values = ctx.freshName("values")
         val allocation = CodeGenerator.createArrayData(
@@ -4706,19 +4688,12 @@ trait ArrayAddElement
         val assignment = CodeGenerator.createArrayAssignment(
           values, elementType, left, pos, i, true)
         s"""int $newArraySize = $left.numElements() + 1;
-           |boolean $prependFlagCode = ${prependFlag.toString};
            |$allocation
            |int $pos = 0;
-           |if ($prependFlagCode) {
-           |  ${CodeGenerator.setArrayElement(values, elementType, pos, right)}
-           |  $pos ++;
-           |}
            |for (int $i=0;$i<$left.numElements(); $i ++, $pos ++) {
            |  $assignment
            |}
-           |if (!$prependFlagCode) {
-           |  ${CodeGenerator.setArrayElement(values, elementType, pos, right)}
-           |}
+           |${CodeGenerator.setArrayElement(values, elementType, pos, right)}
            |${ev.value} = $values;
            |""".stripMargin
       }
@@ -4730,5 +4705,7 @@ trait ArrayAddElement
    * the dataType of an unresolved expression (i.e., when `resolved` == false).
    */
   override def dataType: DataType = left.dataType
+  protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): ArrayAppend =
+    copy(left = newLeft, right = newRight)
 
 }
