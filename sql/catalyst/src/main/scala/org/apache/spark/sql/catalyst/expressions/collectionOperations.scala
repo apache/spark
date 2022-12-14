@@ -4607,6 +4607,8 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
     Examples:
       > SELECT _FUNC_(array(1, 2, 3, null));
        [1,2,3]
+      > SELECT _FUNC_(array("a", "b", "c"));
+       ["a","b","c"]
   """,
   group = "array_funcs",
   since = "3.4.0")

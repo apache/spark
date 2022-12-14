@@ -5256,24 +5256,21 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(
       OneRowRelation().selectExpr("array_compact(array(1.0D, 2.0D, null))"),
-      Seq(
-        Row(Seq(1.0, 2.0))
-      )
+      Seq(Row(Seq(1.0, 2.0)))
     )
 
     // complex data type
     checkAnswer(
       OneRowRelation().
         selectExpr("array_compact(array(array(1, null,3), null, array(null, 2, 3)))"),
-      Seq(
-        Row(Seq(Seq(1, null, 3), Seq(null, 2, 3))))
+      Seq(Row(Seq(Seq(1, null, 3), Seq(null, 2, 3))))
     )
 
     // unsupported data type
-    val invalid_Datatype_df = Seq(1, 2, 3).toDF("a")
+    val invalidDatatypeDF = Seq(1, 2, 3).toDF("a")
     checkErrorMatchPVals(
       exception = intercept[AnalysisException] {
-        invalid_Datatype_df.select(array_compact($"a"))
+        invalidDatatypeDF.select(array_compact($"a"))
       },
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(

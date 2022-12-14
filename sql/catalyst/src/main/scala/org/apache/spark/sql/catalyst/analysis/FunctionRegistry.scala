@@ -668,6 +668,7 @@ object FunctionRegistry {
     expression[ArraySort]("array_sort"),
     expression[ArrayExcept]("array_except"),
     expression[ArrayUnion]("array_union"),
+    expression[ArrayCompact]("array_compact"),
     expression[CreateMap]("map"),
     expression[CreateNamedStruct]("named_struct"),
     expression[ElementAt]("element_at"),
@@ -704,7 +705,6 @@ object FunctionRegistry {
     expression[MapZipWith]("map_zip_with"),
     expression[ZipWith]("zip_with"),
     expression[Get]("get"),
-    expression[ArrayCompact]("array_compact"),
 
     CreateStruct.registryEntry,
 

@@ -492,17 +492,7 @@ NULL
 
 
 -- !query
-create temporary view invalid_datatype as select * from values
-(1), (2), (3)
-as invalid_datatype(id)
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-select array_compact(id) from invalid_datatype
+select array_compact(id) from values (1) as t(id)
 -- !query schema
 struct<>
 -- !query output
@@ -535,11 +525,11 @@ struct<array_compact(array(1, NULL, 2, NULL)):array<string>>
 
 
 -- !query
-select array_compact(array("1", null, "2", null))
+select array_compact(array("a", "b", "c"))
 -- !query schema
-struct<array_compact(array(1, NULL, 2, NULL)):array<string>>
+struct<array_compact(array(a, b, c)):array<string>>
 -- !query output
-["1","2"]
+["a","b","c"]
 
 
 -- !query
