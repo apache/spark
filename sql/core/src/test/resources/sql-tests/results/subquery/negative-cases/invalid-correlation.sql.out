@@ -44,11 +44,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "GROUPING_EXPRESSIONS_NOT_FOUND",
-  "messageParameters" : {
-    "aggExprs" : "\"avg(t2b) AS avg\"",
-    "sqlExpr" : "\"t2b\""
-  },
+  "errorClass" : "GROUPING_EXPRESSION_WITHOUT_GROUP_BY",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",

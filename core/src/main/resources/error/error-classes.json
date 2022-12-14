@@ -496,9 +496,9 @@
     ],
     "sqlState" : "42000"
   },
-  "GROUPING_EXPRESSIONS_NOT_FOUND" : {
+  "GROUPING_EXPRESSION_WITHOUT_GROUP_BY" : {
     "message" : [
-      "Not found any GROUP BY expressions, and <sqlExpr> is not an aggregate function. Wrap <aggExprs> by windowing function(s) or wrap <sqlExpr> by `first()` (or `first_value()`) if you don't care which value you get."
+      "The query including grouping and aggregate expressions does not include a GROUP BY clause. Add GROUP BY, aggregate, or turn into the window functions using OVER clauses."
     ]
   },
   "GROUPING_ID_COLUMN_MISMATCH" : {

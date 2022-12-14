@@ -16,11 +16,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "GROUPING_EXPRESSIONS_NOT_FOUND",
-  "messageParameters" : {
-    "aggExprs" : "\"count(b) AS `count(b)`\"",
-    "sqlExpr" : "\"a\""
-  },
+  "errorClass" : "GROUPING_EXPRESSION_WITHOUT_GROUP_BY",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -355,11 +351,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "GROUPING_EXPRESSIONS_NOT_FOUND",
-  "messageParameters" : {
-    "aggExprs" : "",
-    "sqlExpr" : "\"id\""
-  },
+  "errorClass" : "GROUPING_EXPRESSION_WITHOUT_GROUP_BY",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
