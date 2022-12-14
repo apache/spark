@@ -104,7 +104,7 @@ private[spark] object Config extends Logging {
     ConfigBuilder("spark.kubernetes.driver.waitToReusePersistentVolumeClaim")
       .doc("If true, driver pod counts the number of created on-demand persistent volume claims " +
         "and wait if the number is greater than or equal to the total number of volumes which " +
-        "the Spark cluster is able to have. This config requires both " +
+        "the Spark job is able to have. This config requires both " +
         s"${KUBERNETES_DRIVER_OWN_PVC.key}=true and ${KUBERNETES_DRIVER_REUSE_PVC.key}=true.")
       .version("3.4.0")
       .booleanConf

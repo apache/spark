@@ -368,7 +368,7 @@ spark.kubernetes.driver.reusePersistentVolumeClaim=true
 ```
 
 In addition, since Spark 3.4, Spark driver is able to do PVC-oriented executor allocation which means
-Spark counts the total number of created PVCs which the cluster can have and holds on a new executor creation
+Spark counts the total number of created PVCs which the job can have, and holds on a new executor creation
 if the driver owns the maximum number of PVCs. This helps the transition of the existing PVC from one executor
 to another executor.
 ```
