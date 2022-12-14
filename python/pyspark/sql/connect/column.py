@@ -294,7 +294,7 @@ class LiteralExpression(Expression):
         if isinstance(self._dataType, NullType):
             expr.literal.null = True
         elif self._value is None:
-            expr.typed_null.CopyFrom(pyspark_types_to_proto_types(self._dataType))
+            expr.literal.typed_null.CopyFrom(pyspark_types_to_proto_types(self._dataType))
         elif isinstance(self._dataType, BinaryType):
             expr.literal.binary = bytes(self._value)
         elif isinstance(self._dataType, BooleanType):
