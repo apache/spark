@@ -219,13 +219,6 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
       ctx)
   }
 
-  def cannotParseIntervalValueError(value: String, ctx: TypeConstructorContext): Throwable = {
-    new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0020",
-      messageParameters = Map("value" -> value),
-      ctx)
-  }
-
   def literalValueTypeUnsupportedError(
       unsupportedType: String,
       supportedTypes: Seq[String],

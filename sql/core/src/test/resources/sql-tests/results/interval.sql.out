@@ -2211,9 +2211,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0020",
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "value" : "中文 interval 1 day"
+    "value" : "'中文 interval 1 day'",
+    "valueType" : "\"INTERVAL\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2232,9 +2234,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0020",
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "value" : "interval中文 1 day"
+    "value" : "'interval中文 1 day'",
+    "valueType" : "\"INTERVAL\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2253,9 +2257,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0020",
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "value" : "interval 1中文day"
+    "value" : "'interval 1中文day'",
+    "valueType" : "\"INTERVAL\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2392,9 +2398,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0020",
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "value" : "+"
+    "value" : "'+'",
+    "valueType" : "\"INTERVAL\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2413,9 +2421,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0020",
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "value" : "+."
+    "value" : "'+.'",
+    "valueType" : "\"INTERVAL\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2434,9 +2444,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0020",
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "value" : "1"
+    "value" : "'1'",
+    "valueType" : "\"INTERVAL\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2455,9 +2467,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0020",
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "value" : "1.2"
+    "value" : "'1.2'",
+    "valueType" : "\"INTERVAL\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2476,9 +2490,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0020",
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "value" : "- 2"
+    "value" : "'- 2'",
+    "valueType" : "\"INTERVAL\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2497,9 +2513,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0020",
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "value" : "1 day -"
+    "value" : "'1 day -'",
+    "valueType" : "\"INTERVAL\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2518,9 +2536,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0020",
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "value" : "1 day 1"
+    "value" : "'1 day 1'",
+    "valueType" : "\"INTERVAL\""
   },
   "queryContext" : [ {
     "objectType" : "",

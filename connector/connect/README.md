@@ -32,7 +32,7 @@ for example, compiling `connect` module on CentOS 6 or CentOS 7 which the defaul
 specifying the user-defined `protoc` and `protoc-gen-grpc-java` binary files as follows:
 
 ```bash
-export CONNECT_PROTOC_EXEC_PATH=/path-to-protoc-exe
+export SPARK_PROTOC_EXEC_PATH=/path-to-protoc-exe
 export CONNECT_PLUGIN_EXEC_PATH=/path-to-protoc-gen-grpc-java-exe
 ./build/mvn -Phive -Puser-defined-protoc clean package
 ```
@@ -40,7 +40,7 @@ export CONNECT_PLUGIN_EXEC_PATH=/path-to-protoc-gen-grpc-java-exe
 or
 
 ```bash
-export CONNECT_PROTOC_EXEC_PATH=/path-to-protoc-exe
+export SPARK_PROTOC_EXEC_PATH=/path-to-protoc-exe
 export CONNECT_PLUGIN_EXEC_PATH=/path-to-protoc-gen-grpc-java-exe
 ./build/sbt -Puser-defined-protoc clean package
 ```

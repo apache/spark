@@ -87,7 +87,7 @@ object BuildCommons {
 
   // Google Protobuf version used for generating the protobuf.
   // SPARK-41247: needs to be consistent with `protobuf.version` in `pom.xml`.
-  val protoVersion = "3.21.9"
+  val protoVersion = "3.21.11"
   // GRPC version used for Spark Connect.
   val gprcVersion = "1.47.0"
 }
@@ -112,19 +112,13 @@ object SparkBuild extends PomBuild {
       sys.props.put("test.jdwp.enabled", "true")
     }
     if (profiles.contains("user-defined-protoc")) {
-      val connectProtocExecPath = Properties.envOrNone("CONNECT_PROTOC_EXEC_PATH")
+      val sparkProtocExecPath = Properties.envOrNone("SPARK_PROTOC_EXEC_PATH")
       val connectPluginExecPath = Properties.envOrNone("CONNECT_PLUGIN_EXEC_PATH")
-      val protobufProtocExecPath = Properties.envOrNone("PROTOBUF_PROTOC_EXEC_PATH")
-      val coreProtocExecPath = Properties.envOrNone("CORE_PROTOC_EXEC_PATH")
-      if (connectProtocExecPath.isDefined && connectPluginExecPath.isDefined) {
-        sys.props.put("connect.protoc.executable.path", connectProtocExecPath.get)
+      if (sparkProtocExecPath.isDefined) {
+        sys.props.put("spark.protoc.executable.path", sparkProtocExecPath.get)
+      }
+      if (connectPluginExecPath.isDefined) {
         sys.props.put("connect.plugin.executable.path", connectPluginExecPath.get)
-      }
-      if (protobufProtocExecPath.isDefined) {
-        sys.props.put("protobuf.protoc.executable.path", protobufProtocExecPath.get)
-      }
-      if (coreProtocExecPath.isDefined) {
-        sys.props.put("core.protoc.executable.path", coreProtocExecPath.get)
       }
     }
     profiles
@@ -649,10 +643,10 @@ object Core {
       Seq(propsFile)
     }.taskValue
   ) ++ {
-    val coreProtocExecPath = sys.props.get("core.protoc.executable.path")
-    if (coreProtocExecPath.isDefined) {
+    val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
+    if (sparkProtocExecPath.isDefined) {
       Seq(
-        PB.protocExecutable := file(coreProtocExecPath.get)
+        PB.protocExecutable := file(sparkProtocExecPath.get)
       )
     } else {
       Seq.empty
@@ -722,15 +716,15 @@ object SparkConnectCommon {
       case _ => MergeStrategy.first
     }
   ) ++ {
-    val connectProtocExecPath = sys.props.get("connect.protoc.executable.path")
+    val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
     val connectPluginExecPath = sys.props.get("connect.plugin.executable.path")
-    if (connectProtocExecPath.isDefined && connectPluginExecPath.isDefined) {
+    if (sparkProtocExecPath.isDefined && connectPluginExecPath.isDefined) {
       Seq(
         (Compile / PB.targets) := Seq(
           PB.gens.java -> (Compile / sourceManaged).value,
           PB.gens.plugin(name = "grpc-java", path = connectPluginExecPath.get) -> (Compile / sourceManaged).value
         ),
-        PB.protocExecutable := file(connectProtocExecPath.get)
+        PB.protocExecutable := file(sparkProtocExecPath.get)
       )
     } else {
       Seq(
@@ -880,10 +874,10 @@ object SparkProtobuf {
       case _ => MergeStrategy.first
     },
   ) ++ {
-    val protobufProtocExecPath = sys.props.get("protobuf.protoc.executable.path")
-    if (protobufProtocExecPath.isDefined) {
+    val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
+    if (sparkProtocExecPath.isDefined) {
       Seq(
-        PB.protocExecutable := file(protobufProtocExecPath.get)
+        PB.protocExecutable := file(sparkProtocExecPath.get)
       )
     } else {
       Seq.empty

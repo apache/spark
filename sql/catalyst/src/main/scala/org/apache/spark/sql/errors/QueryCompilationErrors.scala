@@ -2289,8 +2289,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def tempViewNotCachedForAnalyzingColumnsError(tableIdent: TableIdentifier): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1234",
-      messageParameters = Map("tableIdent" -> tableIdent.toString))
+      errorClass = "UNSUPPORTED_FEATURE.ANALYZE_UNCACHED_TEMP_VIEW",
+      messageParameters = Map("viewName" -> toSQLId(tableIdent.toString)))
   }
 
   def columnTypeNotSupportStatisticsCollectionError(
@@ -3398,5 +3398,24 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
           messageParameters = Map("funcName" -> toSQLId(funcName)),
           cause = Option(other))
     }
+  }
+
+  def ambiguousLateralColumnAlias(name: String, numOfMatches: Int): Throwable = {
+    new AnalysisException(
+      errorClass = "AMBIGUOUS_LATERAL_COLUMN_ALIAS",
+      messageParameters = Map(
+        "name" -> toSQLId(name),
+        "n" -> numOfMatches.toString
+      )
+    )
+  }
+  def ambiguousLateralColumnAlias(nameParts: Seq[String], numOfMatches: Int): Throwable = {
+    new AnalysisException(
+      errorClass = "AMBIGUOUS_LATERAL_COLUMN_ALIAS",
+      messageParameters = Map(
+        "name" -> toSQLId(nameParts),
+        "n" -> numOfMatches.toString
+      )
+    )
   }
 }
