@@ -173,7 +173,7 @@ private[sql] class ProtobufDeserializer(
         (updater, ordinal, value) => updater.setShort(ordinal, value.asInstanceOf[Short])
 
       case  (
-        BOOLEAN | INT | FLOAT | DOUBLE | LONG | STRING | ENUM | BYTE_STRING,
+        MESSAGE | BOOLEAN | INT | FLOAT | DOUBLE | LONG | STRING | ENUM | BYTE_STRING,
         ArrayType(dataType: DataType, containsNull)) if protoType.isRepeated =>
         newArrayWriter(protoType, protoPath, catalystPath, dataType, containsNull)
 
@@ -236,9 +236,6 @@ private[sql] class ProtobufDeserializer(
           val row = new SpecificInternalRow(st)
           writeRecord(new RowUpdater(row), value.asInstanceOf[DynamicMessage])
           updater.set(ordinal, row)
-
-      case (MESSAGE, ArrayType(st: DataType, containsNull)) =>
-        newArrayWriter(protoType, protoPath, catalystPath, st, containsNull)
 
       case (ENUM, StringType) =>
         (updater, ordinal, value) => updater.set(ordinal, UTF8String.fromString(value.toString))
