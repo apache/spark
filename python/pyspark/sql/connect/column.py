@@ -468,7 +468,7 @@ class UnresolvedRegex(Expression):
         return expr
 
     def __repr__(self) -> str:
-        return f"{self.col_name}"
+        return f"UnresolvedRegex({self.col_name})"
 
 
 class CastExpression(Expression):
