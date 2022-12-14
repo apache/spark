@@ -192,7 +192,7 @@ private[kafka010] class KafkaMicroBatchStream(
     val endPartitionOffsets = end.asInstanceOf[KafkaSourceOffset].partitionToOffsets
 
     if (allDataForTriggerAvailableNow != null) {
-      assertEndOffsetForTriggerAvailableNow(endPartitionOffsets)
+      verifyEndOffsetForTriggerAvailableNow(endPartitionOffsets)
     }
 
     val offsetRanges = kafkaOffsetReader.getOffsetRangesFromResolvedOffsets(
@@ -317,7 +317,7 @@ private[kafka010] class KafkaMicroBatchStream(
     }
   }
 
-  private def assertEndOffsetForTriggerAvailableNow(
+  private def verifyEndOffsetForTriggerAvailableNow(
       endPartitionOffsets: Map[TopicPartition, Long]): Unit = {
     val tpsForPrefetched = allDataForTriggerAvailableNow.keySet
     val tpsForEndOffset = endPartitionOffsets.keySet

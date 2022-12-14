@@ -295,7 +295,7 @@ private[kafka010] class KafkaSource(
     val untilPartitionOffsets = KafkaSourceOffset.getPartitionOffsets(end)
 
     if (allDataForTriggerAvailableNow != null) {
-      assertEndOffsetForTriggerAvailableNow(untilPartitionOffsets)
+      verifyEndOffsetForTriggerAvailableNow(untilPartitionOffsets)
     }
 
     // On recovery, getBatch will get called before getOffset
@@ -354,7 +354,7 @@ private[kafka010] class KafkaSource(
     }
   }
 
-  private def assertEndOffsetForTriggerAvailableNow(
+  private def verifyEndOffsetForTriggerAvailableNow(
       endPartitionOffsets: Map[TopicPartition, Long]): Unit = {
     val tpsForPrefetched = allDataForTriggerAvailableNow.keySet
     val tpsForEndOffset = endPartitionOffsets.keySet
