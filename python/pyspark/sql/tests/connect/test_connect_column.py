@@ -14,9 +14,32 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
+import decimal
+import datetime
+
 from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
-from pyspark.sql.types import StringType
+from pyspark.sql.connect.column import (
+    LiteralExpression,
+    JVM_BYTE_MIN,
+    JVM_BYTE_MAX,
+    JVM_SHORT_MIN,
+    JVM_SHORT_MAX,
+    JVM_INT_MIN,
+    JVM_INT_MAX,
+    JVM_LONG_MIN,
+    JVM_LONG_MAX,
+)
+
 from pyspark.sql.types import (
+    StructField,
+    StructType,
+    ArrayType,
+    MapType,
+    NullType,
+    DateType,
+    TimestampType,
+    TimestampNTZType,
     ByteType,
     ShortType,
     IntegerType,
@@ -92,13 +115,108 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         res = pd.DataFrame(data={"id": [0, 30, 60, 90]})
         self.assert_(pdf.equals(res), f"{pdf.to_string()} != {res.to_string()}")
 
+    def test_literal_with_acceptable_type(self):
+        for value, dataType in [
+            (b"binary\0\0asas", BinaryType()),
+            (True, BooleanType()),
+            (False, BooleanType()),
+            (0, ByteType()),
+            (JVM_BYTE_MIN, ByteType()),
+            (JVM_BYTE_MAX, ByteType()),
+            (0, ShortType()),
+            (JVM_SHORT_MIN, ShortType()),
+            (JVM_SHORT_MAX, ShortType()),
+            (0, IntegerType()),
+            (JVM_INT_MIN, IntegerType()),
+            (JVM_INT_MAX, IntegerType()),
+            (0, LongType()),
+            (JVM_LONG_MIN, LongType()),
+            (JVM_LONG_MAX, LongType()),
+            (0.0, FloatType()),
+            (1.234567, FloatType()),
+            (float("nan"), FloatType()),
+            (float("inf"), FloatType()),
+            (float("-inf"), FloatType()),
+            (0.0, DoubleType()),
+            (1.234567, DoubleType()),
+            (float("nan"), DoubleType()),
+            (float("inf"), DoubleType()),
+            (float("-inf"), DoubleType()),
+            (decimal.Decimal(0.0), DecimalType()),
+            (decimal.Decimal(1.234567), DecimalType()),
+            ("sss", StringType()),
+            (datetime.date(2022, 12, 13), DateType()),
+            (datetime.datetime.now(), DateType()),
+            (datetime.datetime.now(), TimestampType()),
+            (datetime.datetime.now(), TimestampNTZType()),
+            (datetime.timedelta(1, 2, 3), DayTimeIntervalType()),
+        ]:
+            lit = LiteralExpression(value=value, dataType=dataType)
+            self.assertEqual(dataType, lit._dataType)
+
+    def test_literal_with_unsupported_type(self):
+        for value, dataType in [
+            (b"binary\0\0asas", BooleanType()),
+            (True, StringType()),
+            (False, DoubleType()),
+            (JVM_BYTE_MIN - 1, ByteType()),
+            (JVM_BYTE_MAX + 1, ByteType()),
+            (JVM_SHORT_MIN - 1, ShortType()),
+            (JVM_SHORT_MAX + 1, ShortType()),
+            (JVM_INT_MIN - 1, IntegerType()),
+            (JVM_INT_MAX + 1, IntegerType()),
+            (JVM_LONG_MIN - 1, LongType()),
+            (JVM_LONG_MAX + 1, LongType()),
+            (0.1, DecimalType()),
+            (datetime.date(2022, 12, 13), TimestampType()),
+            (datetime.timedelta(1, 2, 3), DateType()),
+            ([1, 2, 3], ArrayType(IntegerType())),
+            ({1: 2}, MapType(IntegerType(), IntegerType())),
+            (
+                {"a": "xyz", "b": 1},
+                StructType([StructField("a", StringType()), StructField("b", IntegerType())]),
+            ),
+        ]:
+            with self.assertRaises(AssertionError):
+                LiteralExpression(value=value, dataType=dataType)
+
+    def test_literal_null(self):
+        for dataType in [
+            NullType(),
+            BinaryType(),
+            BooleanType(),
+            ByteType(),
+            ShortType(),
+            IntegerType(),
+            LongType(),
+            FloatType(),
+            DoubleType(),
+            DecimalType(),
+            DateType(),
+            TimestampType(),
+            TimestampNTZType(),
+            DayTimeIntervalType(),
+        ]:
+            lit_null = LiteralExpression(value=None, dataType=dataType)
+            self.assertTrue(lit_null._value is None)
+            self.assertEqual(dataType, lit_null._dataType)
+
+        for value, dataType in [
+            ("123", NullType()),
+            (123, NullType()),
+            (None, ArrayType(IntegerType())),
+            (None, MapType(IntegerType(), IntegerType())),
+            (None, StructType([StructField("a", StringType())])),
+        ]:
+            with self.assertRaises(AssertionError):
+                LiteralExpression(value=value, dataType=dataType)
+
     def test_literal_integers(self):
         cdf = self.connect.range(0, 1)
         sdf = self.spark.range(0, 1)
 
         from pyspark.sql import functions as SF
         from pyspark.sql.connect import functions as CF
-        from pyspark.sql.connect.column import JVM_INT_MIN, JVM_INT_MAX, JVM_LONG_MIN, JVM_LONG_MAX
 
         cdf1 = cdf.select(
             CF.lit(0),

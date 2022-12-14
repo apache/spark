@@ -77,9 +77,7 @@ message Expression {
       int32 year_month_interval = 20;
       int64 day_time_interval = 21;
 
-      Array array = 22;
-      Struct struct = 23;
-      Map map = 24;
+      DataType typed_null = 22;
     }
 
     // whether the literal type should be treated as a nullable type. Applies to
@@ -106,25 +104,6 @@ message Expression {
       int32 months = 1;
       int32 days = 2;
       int64 microseconds = 3;
-    }
-
-    message Struct {
-      // A possibly heterogeneously typed list of literals
-      repeated Literal fields = 1;
-    }
-
-    message Array {
-      // A homogeneously typed list of literals
-      repeated Literal values = 1;
-    }
-
-    message Map {
-      repeated Pair pairs = 1;
-
-      message Pair {
-        Literal key = 1;
-        Literal value = 2;
-      }
     }
   }
 
