@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.ScalarSubquery._
@@ -787,7 +788,7 @@ object OptimizeOneRowRelationSubquery extends Rule[LogicalPlan] {
           g.copy(generator = newGenerator, child = left)
 
         case o =>
-          throw new IllegalStateException(
+          throw SparkException.internalError(
             s"Unexpected plan when optimizing one row relation subquery: $o")
       }
 
