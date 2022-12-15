@@ -25,7 +25,7 @@ import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.types.DataType
 
 /**
- * The expression represents a named parameter that should be replaces by a literal.
+ * The expression represents a named parameter that should be replaced by a literal.
  *
  * @param name The identifier of the parameter without the marker.
  */
