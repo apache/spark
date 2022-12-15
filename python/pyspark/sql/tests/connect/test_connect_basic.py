@@ -57,6 +57,7 @@ class SparkConnectSQLTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLT
 
         cls.tbl_name = "test_connect_basic_table_1"
         cls.tbl_name2 = "test_connect_basic_table_2"
+        cls.tbl_name3 = "test_connect_basic_table_3"
         cls.tbl_name_empty = "test_connect_basic_table_empty"
 
         # Cleanup test data
@@ -79,6 +80,8 @@ class SparkConnectSQLTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLT
         df.write.saveAsTable(cls.tbl_name)
         df2 = cls.spark.createDataFrame([(x, f"{x}") for x in range(100)], ["col1", "col2"])
         df2.write.saveAsTable(cls.tbl_name2)
+        df3 = cls.spark.createDataFrame([(x, f"{x}") for x in range(100)], ["id", "test\n_column"])
+        df3.write.saveAsTable(cls.tbl_name3)
         empty_table_schema = StructType(
             [
                 StructField("firstname", StringType(), True),
@@ -941,6 +944,16 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         with self.assertRaises(grpc.RpcError) as exc:
             self.connect.range(1, 10).select(col("id").alias("this", "is", "not")).collect()
         self.assertIn("(this, is, not)", str(exc.exception))
+
+    def test_column_regexp(self) -> None:
+        # SPARK-41438: test dataframe.colRegex()
+        ndf = self.connect.read.table(self.tbl_name3)
+        df = self.spark.read.table(self.tbl_name3)
+
+        self.assert_eq(
+            ndf.select(ndf.colRegex("`tes.*\n.*mn`")).toPandas(),
+            df.select(df.colRegex("`tes.*\n.*mn`")).toPandas(),
+        )
 
     def test_agg_with_two_agg_exprs(self) -> None:
         # SPARK-41230: test dataframe.agg()

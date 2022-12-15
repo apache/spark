@@ -555,6 +555,17 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         with self.assertRaises(ValueError):
             wo.command(None)
 
+    def test_column_regexp(self):
+        # SPARK-41438: test colRegex
+        df = self.connect.readTable(table_name=self.tbl_name)
+        col = df.colRegex("col_name")
+        self.assertIsInstance(col, Column)
+        self.assertEqual("Column<'UnresolvedRegex(col_name)'>", str(col))
+
+        col_plan = col.to_plan(self.session.client)
+        self.assertIsNotNone(col_plan)
+        self.assertEqual(col_plan.unresolved_regex.col_name, "col_name")
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.test_connect_plan_only import *  # noqa: F401

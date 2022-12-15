@@ -28,10 +28,10 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.WriteOperation
 import org.apache.spark.sql.{Column, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
-import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.{logical, Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, SubqueryAlias, Union, Unpivot, UnresolvedHint}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
@@ -475,6 +475,8 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Expression.ExprTypeCase.UNRESOLVED_STAR =>
         transformUnresolvedStar(exp.getUnresolvedStar)
       case proto.Expression.ExprTypeCase.CAST => transformCast(exp.getCast)
+      case proto.Expression.ExprTypeCase.UNRESOLVED_REGEX =>
+        transformUnresolvedRegex(exp.getUnresolvedRegex)
       case _ =>
         throw InvalidPlanInput(
           s"Expression with ID: ${exp.getExprTypeCase.getNumber} is not supported")
@@ -592,6 +594,18 @@ class SparkConnectPlanner(session: SparkSession) {
         Cast(
           transformExpression(cast.getExpr),
           session.sessionState.sqlParser.parseDataType(cast.getTypeStr))
+    }
+  }
+
+  private def transformUnresolvedRegex(regex: proto.Expression.UnresolvedRegex): Expression = {
+    val caseSensitive = session.sessionState.conf.caseSensitiveAnalysis
+    regex.getColName match {
+      case ParserUtils.escapedIdentifier(columnNameRegex) =>
+        UnresolvedRegex(columnNameRegex, None, caseSensitive)
+      case ParserUtils.qualifiedEscapedIdentifier(nameParts, columnNameRegex) =>
+        UnresolvedRegex(columnNameRegex, Some(nameParts), caseSensitive)
+      case _ =>
+        UnresolvedAttribute.quotedString(regex.getColName)
     }
   }
 
