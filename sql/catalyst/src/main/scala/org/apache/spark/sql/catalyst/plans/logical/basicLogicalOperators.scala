@@ -477,15 +477,15 @@ case class Union(
       // We can only propagate the metadata output correctly if every child has the same
       // number of columns
       if (child.metadataOutput.length != refDataTypes.length) return Nil
-      // Check if the data types match
+      // Check if the data types match by name and type
       val childDataTypes = child.metadataOutput.map(_.dataType)
       childDataTypes.zip(refDataTypes).foreach { case (dt1, dt2) =>
         if (!DataType.equalsStructurally(dt1, dt2, true) ||
-            !DataType.equalsStructurallyByName(dt1, dt2, conf.resolver) ) {
+            !DataType.equalsStructurallyByName(dt1, dt2, conf.resolver)) {
           return Nil
         }
       }
-      // Check that the names match
+      // Check that the names of the attributes match
       val childAttrNames = child.metadataOutput.map(_.name)
       childAttrNames.zip(refAttrNames).foreach { case (attrName1, attrName2) =>
         if (!conf.resolver(attrName1, attrName2)) {
