@@ -762,7 +762,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     val e2 = intercept[IllegalArgumentException] {
       AnalyzeColumnCommand(TableIdentifier("test"), None, false).run(spark)
     }
-    assert(e1.getMessage.contains("Parameter `columnNames` or `allColumns` are" +
+    assert(e2.getMessage.contains("Parameter `columnNames` or `allColumns` are" +
       " mutually exclusive"))
   }
 
