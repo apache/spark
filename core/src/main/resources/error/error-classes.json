@@ -1280,7 +1280,7 @@
         ]
       },
       "ANALYZE_UNSUPPORTED_COLUMN_TYPE" : {
-        "message": [
+        "message" : [
           "The ANALYZE TABLE FOR COLUMNS command does not support on <colName> (data type: <dataType>) in table <tableName>."
         ]
       },
