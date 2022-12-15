@@ -6365,10 +6365,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if not isinstance(self.index, ps.DatetimeIndex):
             raise TypeError("'last' only supports a DatetimeIndex")
 
-        offset_: Optional[DateOffset] = to_offset(offset)
-        assert offset_ is not None
-
-        from_date = cast(datetime.datetime, self.index.max()) - offset_  # type: ignore[operator]
+        from_date = cast(
+            int,
+            cast(datetime.datetime, self.index.max()) - cast(datetime.timedelta, to_offset(offset)),
+        )
 
         return cast(DataFrame, self.loc[from_date:])
 
@@ -6422,12 +6422,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if not isinstance(self.index, ps.DatetimeIndex):
             raise TypeError("'first' only supports a DatetimeIndex")
 
-        offset_: Optional[DateOffset] = to_offset(offset)
-        assert offset_ is not None
+        to_date = cast(
+            int,
+            cast(datetime.datetime, self.index.min()) + cast(datetime.timedelta, to_offset(offset)),
+        )
 
-        to_date = cast(datetime.datetime, self.index.min()) + offset_  # type: ignore[operator]
-
-        return cast(DataFrame, self.loc[:to_date])  # type: ignore[misc]
+        return cast(DataFrame, self.loc[:to_date])
 
     def pivot_table(
         self,
