@@ -544,6 +544,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
                     clock.getTimeMillis() - conf.get(MAX_LOG_AGE_S) * 1000) {
                   logInfo(s"Deleting expired event log ${reader.rootPath.toString}")
                   deleteLog(fs, reader.rootPath)
+                  // Because the exception could be thrown for either of the two reads,
+                  // when the exception is thrown, we should also cleanup the log info
+                  // from listing db if the first read had succeeded.
+                  listing.delete(classOf[LogInfo], reader.rootPath.toString)
                   false
                 } else if (count < conf.get(UPDATE_BATCHSIZE)) {
                   listing.write(LogInfo(reader.rootPath.toString(), newLastScanTime,
@@ -556,6 +560,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
                 }
               } catch {
                 case _: FileNotFoundException => false
+                case _: NoSuchElementException => false
                 case NonFatal(e) =>
                   logWarning(s"Error while reading new log ${reader.rootPath}", e)
                   false
