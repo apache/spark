@@ -27,25 +27,30 @@ from typing import (
     overload,
     Callable,
     cast,
+    Type,
 )
 
 import pandas
+import warnings
+from collections.abc import Iterable
 
 import pyspark.sql.connect.plan as plan
+from pyspark.sql.connect.readwriter import DataFrameWriter
 from pyspark.sql.connect.column import (
     Column,
-    Expression,
-    LiteralExpression,
-    SQLExpression,
-    ScalarFunctionExpression,
+    scalar_function,
+    sql_expression,
 )
+from pyspark.sql.connect.functions import col, lit
 from pyspark.sql.types import (
     StructType,
     Row,
 )
+from pyspark import _NoValue
+from pyspark._globals import _NoValueType
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import ColumnOrName, ExpressionOrString, LiteralType
+    from pyspark.sql.connect._typing import ColumnOrName, LiteralType, OptionalPrimitiveType
     from pyspark.sql.connect.session import SparkSession
 
 
@@ -54,8 +59,93 @@ class GroupedData(object):
         self._df = df
         self._grouping_cols = [x if isinstance(x, Column) else df[x] for x in grouping_cols]
 
-    def agg(self, measures: Sequence[Expression]) -> "DataFrame":
-        assert len(measures) > 0, "exprs should not be empty"
+    @overload
+    def agg(self, *exprs: Column) -> "DataFrame":
+        ...
+
+    @overload
+    def agg(self, __exprs: Dict[str, str]) -> "DataFrame":
+        ...
+
+    def agg(self, *exprs: Union[Column, Dict[str, str]]) -> "DataFrame":
+        """Compute aggregates and returns the result as a :class:`DataFrame`.
+
+        The available aggregate functions can be:
+
+        1. built-in aggregation functions, such as `avg`, `max`, `min`, `sum`, `count`
+
+        2. group aggregate pandas UDFs, created with :func:`pyspark.sql.functions.pandas_udf`
+
+           .. note:: There is no partial aggregation with group aggregate UDFs, i.e.,
+               a full shuffle is required. Also, all the data of a group will be loaded into
+               memory, so the user should be aware of the potential OOM risk if data is skewed
+               and certain groups are too large to fit in memory.
+
+           .. seealso:: :func:`pyspark.sql.functions.pandas_udf`
+
+        If ``exprs`` is a single :class:`dict` mapping from string to string, then the key
+        is the column to perform aggregation on, and the value is the aggregate function.
+
+        Alternatively, ``exprs`` can also be a list of aggregate :class:`Column` expressions.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        exprs : dict
+            a dict mapping from column name (string) to aggregate functions (string),
+            or a list of :class:`Column`.
+
+        Notes
+        -----
+        Built-in aggregation functions and group aggregate pandas UDFs cannot be mixed
+        in a single call to this function.
+
+        Examples
+        --------
+        >>> from pyspark.sql import functions as F
+        >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (3, "Alice"), (5, "Bob"), (10, "Bob")], ["age", "name"])
+        >>> df.show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  3|Alice|
+        |  5|  Bob|
+        | 10|  Bob|
+        +---+-----+
+
+        Group-by name, and count each group.
+
+        >>> df.groupBy(df.name).agg({"*": "count"}).sort("name").show()
+        +-----+--------+
+        | name|count(1)|
+        +-----+--------+
+        |Alice|       2|
+        |  Bob|       2|
+        +-----+--------+
+
+        Group-by name, and calculate the minimum age.
+
+        >>> df.groupBy(df.name).agg(F.min(df.age)).sort("name").show()
+        +-----+--------+
+        | name|min(age)|
+        +-----+--------+
+        |Alice|       2|
+        |  Bob|       5|
+        +-----+--------+
+        """
+        assert exprs, "exprs should not be empty"
+        if len(exprs) == 1 and isinstance(exprs[0], dict):
+            # Convert the dict into key value pairs
+            measures = [scalar_function(exprs[0][k], col(k)) for k in exprs[0]]
+        else:
+            # Columns
+            assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
+            measures = cast(List[Column], list(exprs))
+
         res = DataFrame.withPlan(
             plan.Aggregate(
                 child=self._df._plan,
@@ -66,27 +156,29 @@ class GroupedData(object):
         )
         return res
 
-    def _map_cols_to_expression(
-        self, fun: str, col: Union[Expression, str]
-    ) -> Sequence[Expression]:
+    def _map_cols_to_expression(self, fun: str, param: Union[Column, str]) -> Sequence[Column]:
         return [
-            ScalarFunctionExpression(fun, Column(col)) if isinstance(col, str) else col,
+            scalar_function(fun, col(param)) if isinstance(param, str) else param,
         ]
 
-    def min(self, col: Union[Expression, str]) -> "DataFrame":
+    def min(self, col: Union[Column, str]) -> "DataFrame":
         expr = self._map_cols_to_expression("min", col)
-        return self.agg(expr)
+        return self.agg(*expr)
 
-    def max(self, col: Union[Expression, str]) -> "DataFrame":
+    def max(self, col: Union[Column, str]) -> "DataFrame":
         expr = self._map_cols_to_expression("max", col)
-        return self.agg(expr)
+        return self.agg(*expr)
 
-    def sum(self, col: Union[Expression, str]) -> "DataFrame":
+    def sum(self, col: Union[Column, str]) -> "DataFrame":
         expr = self._map_cols_to_expression("sum", col)
-        return self.agg(expr)
+        return self.agg(*expr)
+
+    def avg(self, col: Union[Column, str]) -> "DataFrame":
+        expr = self._map_cols_to_expression("avg", col)
+        return self.agg(*expr)
 
     def count(self) -> "DataFrame":
-        return self.agg([ScalarFunctionExpression("count", LiteralExpression(1))])
+        return self.agg(scalar_function("count", lit(1)))
 
 
 class DataFrame(object):
@@ -109,6 +201,11 @@ class DataFrame(object):
     def __repr__(self) -> str:
         return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
 
+    @property
+    def write(self) -> "DataFrameWriter":
+        assert self._plan is not None
+        return DataFrameWriter(self._plan, self._session)
+
     @classmethod
     def withPlan(cls, plan: plan.LogicalPlan, session: "SparkSession") -> "DataFrame":
         """Main initialization method used to construct a new data frame with a child plan."""
@@ -128,7 +225,7 @@ class DataFrame(object):
         """
         return len(self.take(1)) == 0
 
-    def select(self, *cols: "ExpressionOrString") -> "DataFrame":
+    def select(self, *cols: "ColumnOrName") -> "DataFrame":
         return DataFrame.withPlan(plan.Project(self._plan, *cols), session=self._session)
 
     def selectExpr(self, *expr: Union[str, List[str]]) -> "DataFrame":
@@ -148,24 +245,24 @@ class DataFrame(object):
             expr = expr[0]  # type: ignore[assignment]
         for element in expr:
             if isinstance(element, str):
-                sql_expr.append(SQLExpression(element))
+                sql_expr.append(sql_expression(element))
             else:
-                sql_expr.extend([SQLExpression(e) for e in element])
+                sql_expr.extend([sql_expression(e) for e in element])
 
         return DataFrame.withPlan(plan.Project(self._plan, *sql_expr), session=self._session)
 
-    def agg(self, *exprs: Union[Expression, Dict[str, str]]) -> "DataFrame":
+    def agg(self, *exprs: Union[Column, Dict[str, str]]) -> "DataFrame":
         if not exprs:
             raise ValueError("Argument 'exprs' must not be empty")
 
         if len(exprs) == 1 and isinstance(exprs[0], dict):
-            measures = [ScalarFunctionExpression(f, Column(e)) for e, f in exprs[0].items()]
-            return self.groupBy().agg(measures)
+            measures = [scalar_function(f, col(e)) for e, f in exprs[0].items()]
+            return self.groupBy().agg(*measures)
         else:
             # other expressions
-            assert all(isinstance(c, Expression) for c in exprs), "all exprs should be Expression"
-            exprs = cast(Tuple[Expression, ...], exprs)
-            return self.groupBy().agg(exprs)
+            assert all(isinstance(c, Column) for c in exprs), "all exprs should be Expression"
+            exprs = cast(Tuple[Column, ...], exprs)
+            return self.groupBy().agg(*exprs)
 
     def alias(self, alias: str) -> "DataFrame":
         return DataFrame.withPlan(plan.SubqueryAlias(self._plan, alias), session=self._session)
@@ -209,14 +306,43 @@ class DataFrame(object):
         return self._session
 
     def count(self) -> int:
-        """Returns the number of rows in the data frame"""
-        pdd = self.agg(ScalarFunctionExpression("count", LiteralExpression(1))).toPandas()
-        if pdd is None:
-            raise Exception("Empty result")
+        """Returns the number of rows in this :class:`DataFrame`.
+
+        .. versionadded:: 3.4.0
+
+        Returns
+        -------
+        int
+            Number of rows.
+        """
+        pdd = self.agg(scalar_function("count", lit(1))).toPandas()
         return pdd.iloc[0, 0]
 
     def crossJoin(self, other: "DataFrame") -> "DataFrame":
-        ...
+        """
+        Returns the cartesian product with another :class:`DataFrame`.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            Right side of the cartesian product.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Joined DataFrame.
+        """
+        if self._plan is None:
+            raise Exception("Cannot cartesian join when self._plan is empty.")
+        if other._plan is None:
+            raise Exception("Cannot cartesian join when other._plan is empty.")
+
+        return DataFrame.withPlan(
+            plan.Join(left=self._plan, right=other._plan, on=None, how="cross"),
+            session=self._session,
+        )
 
     def coalesce(self, numPartitions: int) -> "DataFrame":
         """
@@ -266,9 +392,6 @@ class DataFrame(object):
             self._session,
         )
 
-    def describe(self, cols: List[Column]) -> Any:
-        ...
-
     def dropDuplicates(self, subset: Optional[List[str]] = None) -> "DataFrame":
         """Return a new :class:`DataFrame` with duplicate rows removed,
         optionally only deduplicating based on certain columns.
@@ -294,6 +417,8 @@ class DataFrame(object):
                 plan.Deduplicate(child=self._plan, column_names=subset), session=self._session
             )
 
+    drop_duplicates = dropDuplicates
+
     def distinct(self) -> "DataFrame":
         """Returns a new :class:`DataFrame` containing the distinct rows in this :class:`DataFrame`.
 
@@ -309,6 +434,21 @@ class DataFrame(object):
         )
 
     def drop(self, *cols: "ColumnOrName") -> "DataFrame":
+        """Returns a new :class:`DataFrame` without specified columns.
+        This is a no-op if schema doesn't contain the given column name(s).
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        cols: str or :class:`Column`
+            a name of the column, or the :class:`Column` to drop
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame without given columns.
+        """
         _cols = list(cols)
         if any(not isinstance(c, (str, Column)) for c in _cols):
             raise TypeError(
@@ -325,10 +465,29 @@ class DataFrame(object):
             session=self._session,
         )
 
-    def filter(self, condition: Expression) -> "DataFrame":
-        return DataFrame.withPlan(
-            plan.Filter(child=self._plan, filter=condition), session=self._session
-        )
+    def filter(self, condition: Union[Column, str]) -> "DataFrame":
+        """Filters rows using the given condition.
+
+        :func:`where` is an alias for :func:`filter`.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        condition : :class:`Column` or str
+            a :class:`Column` of :class:`types.BooleanType`
+            or a string of SQL expression.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Filtered DataFrame.
+        """
+        if isinstance(condition, str):
+            expr = sql_expression(condition)
+        else:
+            expr = condition
+        return DataFrame.withPlan(plan.Filter(child=self._plan, filter=expr), session=self._session)
 
     def first(self) -> Optional[Row]:
         """Returns the first row as a :class:`Row`.
@@ -382,7 +541,7 @@ class DataFrame(object):
         ----------
         num : int
             Number of records to return. Will return this number of records
-            or whataver number is available.
+            or all records if the DataFrame contains less than this number of records..
 
         Returns
         -------
@@ -395,7 +554,7 @@ class DataFrame(object):
     def join(
         self,
         other: "DataFrame",
-        on: Optional[Union[str, List[str], Column]] = None,
+        on: Optional[Union[str, List[str], Column, List[Column]]] = None,
         how: Optional[str] = None,
     ) -> "DataFrame":
         if self._plan is None:
@@ -409,9 +568,39 @@ class DataFrame(object):
         )
 
     def limit(self, n: int) -> "DataFrame":
+        """Limits the result count to the number specified.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        num : int
+            Number of records to return. Will return this number of records
+            or all records if the DataFrame contains less than this number of records.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Subset of the records
+        """
         return DataFrame.withPlan(plan.Limit(child=self._plan, limit=n), session=self._session)
 
     def offset(self, n: int) -> "DataFrame":
+        """Returns a new :class: `DataFrame` by skipping the first `n` rows.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        num : int
+            Number of records to return. Will return this number of records
+            or all records if the DataFrame contains less than this number of records.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Subset of the records
+        """
         return DataFrame.withPlan(plan.Offset(child=self._plan, offset=n), session=self._session)
 
     def tail(self, num: int) -> List[Row]:
@@ -427,7 +616,7 @@ class DataFrame(object):
         ----------
         num : int
             Number of records to return. Will return this number of records
-            or whataver number is available.
+            or all records if the DataFrame contains less than this number of records.
 
         Returns
         -------
@@ -444,6 +633,8 @@ class DataFrame(object):
             plan.Sort(self._plan, columns=list(cols), is_global=True), session=self._session
         )
 
+    orderBy = sort
+
     def sortWithinPartitions(self, *cols: "ColumnOrName") -> "DataFrame":
         """Sort within each partition by a specific column"""
         return DataFrame.withPlan(
@@ -457,6 +648,31 @@ class DataFrame(object):
         withReplacement: bool = False,
         seed: Optional[int] = None,
     ) -> "DataFrame":
+        """Returns a sampled subset of this :class:`DataFrame`.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        withReplacement : bool, optional
+            Sample with replacement or not (default ``False``).
+        fraction : float
+            Fraction of rows to generate, range [0.0, 1.0].
+        seed : int, optional
+            Seed for sampling (default a random seed).
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Sampled rows from given DataFrame.
+
+        Notes
+        -----
+        This is not guaranteed to provide exactly the fraction specified of the total
+        count of the given :class:`DataFrame`.
+
+        `fraction` is required and, `withReplacement` and `seed` are optional.
+        """
         if not isinstance(fraction, float):
             raise TypeError(f"'fraction' must be float, but got {type(fraction).__name__}")
         if not isinstance(withReplacement, bool):
@@ -476,6 +692,54 @@ class DataFrame(object):
             ),
             session=self._session,
         )
+
+    def withColumnRenamed(self, existing: str, new: str) -> "DataFrame":
+        """Returns a new :class:`DataFrame` by renaming an existing column.
+        This is a no-op if schema doesn't contain the given column name.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        existing : str
+            string, name of the existing column to rename.
+        new : str
+            string, new name of the column.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with renamed column.
+        """
+        return self.withColumnsRenamed({existing: new})
+
+    def withColumnsRenamed(self, colsMap: Dict[str, str]) -> "DataFrame":
+        """
+        Returns a new :class:`DataFrame` by renaming multiple columns.
+        This is a no-op if schema doesn't contain the given column names.
+
+        .. versionadded:: 3.4.0
+           Added support for multiple columns renaming
+
+        Parameters
+        ----------
+        colsMap : dict
+            a dict of existing column names and corresponding desired column names.
+            Currently, only single map is supported.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with renamed columns.
+
+        See Also
+        --------
+        :meth:`withColumnRenamed`
+        """
+        if not isinstance(colsMap, dict):
+            raise TypeError("colsMap must be dict of existing column name and new column name.")
+
+        return DataFrame.withPlan(plan.RenameColumnsNameByName(self._plan, colsMap), self._session)
 
     def _show_string(
         self, n: int = 20, truncate: Union[bool, int] = True, vertical: bool = False
@@ -503,6 +767,114 @@ class DataFrame(object):
         assert pdf is not None
         return pdf["show_string"][0]
 
+    def withColumns(self, colsMap: Dict[str, Column]) -> "DataFrame":
+        """
+        Returns a new :class:`DataFrame` by adding multiple columns or replacing the
+        existing columns that have the same names.
+
+        The colsMap is a map of column name and column, the column must only refer to attributes
+        supplied by this Dataset. It is an error to add columns that refer to some other Dataset.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        colsMap : dict
+            a dict of column name and :class:`Column`.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with new or replaced columns.
+        """
+        if not isinstance(colsMap, dict):
+            raise TypeError("colsMap must be dict of column name and column.")
+
+        return DataFrame.withPlan(
+            plan.WithColumns(self._plan, colsMap),
+            session=self._session,
+        )
+
+    def withColumn(self, colName: str, col: Column) -> "DataFrame":
+        """
+        Returns a new :class:`DataFrame` by adding a column or replacing the
+        existing column that has the same name.
+
+        The column expression must be an expression over this :class:`DataFrame`; attempting to add
+        a column from some other :class:`DataFrame` will raise an error.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        colName : str
+            string, name of the new column.
+        col : :class:`Column`
+            a :class:`Column` expression for the new column.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with new or replaced column.
+        """
+        if not isinstance(col, Column):
+            raise TypeError("col should be Column")
+        return DataFrame.withPlan(
+            plan.WithColumns(self._plan, {colName: col}),
+            session=self._session,
+        )
+
+    def unpivot(
+        self,
+        ids: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]],
+        values: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]],
+        variableColumnName: str,
+        valueColumnName: str,
+    ) -> "DataFrame":
+        """
+        Returns a new :class:`DataFrame` by unpivot a DataFrame from wide format to long format,
+        optionally leaving identifier columns set.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        ids : list
+            Id columns.
+        values : list, optional
+            Value columns to unpivot.
+        variableColumnName : str
+            Name of the variable column.
+        valueColumnName : str
+            Name of the value column.
+
+        Returns
+        -------
+        :class:`DataFrame`
+        """
+
+        def to_jcols(
+            cols: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]]
+        ) -> List["ColumnOrName"]:
+            if cols is None:
+                lst = []
+            elif isinstance(cols, tuple):
+                lst = list(cols)
+            elif isinstance(cols, list):
+                lst = cols
+            else:
+                lst = [cols]
+            return lst
+
+        return DataFrame.withPlan(
+            plan.Unpivot(
+                self._plan, to_jcols(ids), to_jcols(values), variableColumnName, valueColumnName
+            ),
+            self._session,
+        )
+
+    melt = unpivot
+
     def show(self, n: int = 20, truncate: Union[bool, int] = True, vertical: bool = False) -> None:
         """
         Prints the first ``n`` rows to the console.
@@ -524,9 +896,62 @@ class DataFrame(object):
         print(self._show_string(n, truncate, vertical))
 
     def union(self, other: "DataFrame") -> "DataFrame":
+        """Return a new :class:`DataFrame` containing union of rows in this and another
+        :class:`DataFrame`.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            Another :class:`DataFrame` that needs to be unioned
+
+        Returns
+        -------
+        :class:`DataFrame`
+
+        See Also
+        --------
+        DataFrame.unionAll
+
+        Notes
+        -----
+        This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union
+        (that does deduplication of elements), use this function followed by :func:`distinct`.
+
+        Also as standard in SQL, this function resolves columns by position (not by name).
+        """
         return self.unionAll(other)
 
     def unionAll(self, other: "DataFrame") -> "DataFrame":
+        """Return a new :class:`DataFrame` containing union of rows in this and another
+        :class:`DataFrame`.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            Another :class:`DataFrame` that needs to be combined
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Combined DataFrame
+
+        Notes
+        -----
+        This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union
+        (that does deduplication of elements), use this function followed by :func:`distinct`.
+
+        Also as standard in SQL, this function resolves columns by position (not by name).
+
+        :func:`unionAll` is an alias to :func:`union`
+
+        See Also
+        --------
+        DataFrame.union
+        """
         if other._plan is None:
             raise ValueError("Argument to Union does not contain a valid plan.")
         return DataFrame.withPlan(
@@ -636,7 +1061,7 @@ class DataFrame(object):
             session=self._session,
         )
 
-    def where(self, condition: Expression) -> "DataFrame":
+    def where(self, condition: Union[Column, str]) -> "DataFrame":
         return self.filter(condition)
 
     @property
@@ -727,6 +1152,208 @@ class DataFrame(object):
             session=self._session,
         )
 
+    def dropna(
+        self,
+        how: str = "any",
+        thresh: Optional[int] = None,
+        subset: Optional[Union[str, Tuple[str, ...], List[str]]] = None,
+    ) -> "DataFrame":
+        """Returns a new :class:`DataFrame` omitting rows with null values.
+        :func:`DataFrame.dropna` and :func:`DataFrameNaFunctions.drop` are aliases of each other.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        how : str, optional
+            'any' or 'all'.
+            If 'any', drop a row if it contains any nulls.
+            If 'all', drop a row only if all its values are null.
+        thresh: int, optional
+            default None
+            If specified, drop rows that have less than `thresh` non-null values.
+            This overwrites the `how` parameter.
+        subset : str, tuple or list, optional
+            optional list of column names to consider.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with null only rows excluded.
+        """
+        min_non_nulls: Optional[int] = None
+
+        if how is not None:
+            if not isinstance(how, str):
+                raise TypeError(f"how should be a str, but got {type(how).__name__}")
+            if how == "all":
+                min_non_nulls = 1
+            elif how == "any":
+                min_non_nulls = None
+            else:
+                raise ValueError("how ('" + how + "') should be 'any' or 'all'")
+
+        if thresh is not None:
+            if not isinstance(thresh, int):
+                raise TypeError(f"thresh should be a int, but got {type(thresh).__name__}")
+
+            # 'thresh' overwrites 'how'
+            min_non_nulls = thresh
+
+        _cols: List[str] = []
+        if subset is not None:
+            if isinstance(subset, str):
+                _cols = [subset]
+            elif isinstance(subset, (tuple, list)):
+                for c in subset:
+                    if not isinstance(c, str):
+                        raise TypeError(
+                            f"cols should be a str, tuple[str] or list[str], "
+                            f"but got {type(c).__name__}"
+                        )
+                _cols = list(subset)
+            else:
+                raise TypeError(
+                    f"cols should be a str, tuple[str] or list[str], "
+                    f"but got {type(subset).__name__}"
+                )
+
+        return DataFrame.withPlan(
+            plan.NADrop(child=self._plan, cols=_cols, min_non_nulls=min_non_nulls),
+            session=self._session,
+        )
+
+    def replace(
+        self,
+        to_replace: Union[
+            "LiteralType", List["LiteralType"], Dict["LiteralType", "OptionalPrimitiveType"]
+        ],
+        value: Optional[
+            Union["OptionalPrimitiveType", List["OptionalPrimitiveType"], _NoValueType]
+        ] = _NoValue,
+        subset: Optional[List[str]] = None,
+    ) -> "DataFrame":
+        """Returns a new :class:`DataFrame` replacing a value with another value.
+        :func:`DataFrame.replace` and :func:`DataFrameNaFunctions.replace` are
+        aliases of each other.
+        Values to_replace and value must have the same type and can only be numerics, booleans,
+        or strings. Value can have None. When replacing, the new value will be cast
+        to the type of the existing column.
+        For numeric replacements all values to be replaced should have unique
+        floating point representation. In case of conflicts (for example with `{42: -1, 42.0: 1}`)
+        and arbitrary replacement will be used.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        to_replace : bool, int, float, string, list or dict
+            Value to be replaced.
+            If the value is a dict, then `value` is ignored or can be omitted, and `to_replace`
+            must be a mapping between a value and a replacement.
+        value : bool, int, float, string or None, optional
+            The replacement value must be a bool, int, float, string or None. If `value` is a
+            list, `value` should be of the same length and type as `to_replace`.
+            If `value` is a scalar and `to_replace` is a sequence, then `value` is
+            used as a replacement for each item in `to_replace`.
+        subset : list, optional
+            optional list of column names to consider.
+            Columns specified in subset that do not have matching data type are ignored.
+            For example, if `value` is a string, and subset contains a non-string column,
+            then the non-string column is simply ignored.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with replaced values.
+        """
+        if value is _NoValue:
+            if isinstance(to_replace, dict):
+                value = None
+            else:
+                raise TypeError("value argument is required when to_replace is not a dictionary.")
+
+        # Helper functions
+        def all_of(types: Union[Type, Tuple[Type, ...]]) -> Callable[[Iterable], bool]:
+            """Given a type or tuple of types and a sequence of xs
+            check if each x is instance of type(s)
+
+            >>> all_of(bool)([True, False])
+            True
+            >>> all_of(str)(["a", 1])
+            False
+            """
+
+            def all_of_(xs: Iterable) -> bool:
+                return all(isinstance(x, types) for x in xs)
+
+            return all_of_
+
+        all_of_bool = all_of(bool)
+        all_of_str = all_of(str)
+        all_of_numeric = all_of((float, int))
+
+        # Validate input types
+        valid_types = (bool, float, int, str, list, tuple)
+        if not isinstance(to_replace, valid_types + (dict,)):
+            raise TypeError(
+                "to_replace should be a bool, float, int, string, list, tuple, or dict. "
+                "Got {0}".format(type(to_replace))
+            )
+
+        if (
+            not isinstance(value, valid_types)
+            and value is not None
+            and not isinstance(to_replace, dict)
+        ):
+            raise TypeError(
+                "If to_replace is not a dict, value should be "
+                "a bool, float, int, string, list, tuple or None. "
+                "Got {0}".format(type(value))
+            )
+
+        if isinstance(to_replace, (list, tuple)) and isinstance(value, (list, tuple)):
+            if len(to_replace) != len(value):
+                raise ValueError(
+                    "to_replace and value lists should be of the same length. "
+                    "Got {0} and {1}".format(len(to_replace), len(value))
+                )
+
+        if not (subset is None or isinstance(subset, (list, tuple, str))):
+            raise TypeError(
+                "subset should be a list or tuple of column names, "
+                "column name or None. Got {0}".format(type(subset))
+            )
+
+        # Reshape input arguments if necessary
+        if isinstance(to_replace, (float, int, str)):
+            to_replace = [to_replace]
+
+        if isinstance(to_replace, dict):
+            rep_dict = to_replace
+            if value is not None:
+                warnings.warn("to_replace is a dict and value is not None. value will be ignored.")
+        else:
+            if isinstance(value, (float, int, str)) or value is None:
+                value = [value for _ in range(len(to_replace))]
+            rep_dict = dict(zip(to_replace, cast("Iterable[Optional[Union[float, str]]]", value)))
+
+        if isinstance(subset, str):
+            subset = [subset]
+
+        # Verify we were not passed in mixed type generics.
+        if not any(
+            all_of_type(rep_dict.keys())
+            and all_of_type(x for x in rep_dict.values() if x is not None)
+            for all_of_type in [all_of_bool, all_of_str, all_of_numeric]
+        ):
+            raise ValueError("Mixed type replacements are not supported")
+
+        return DataFrame.withPlan(
+            plan.NAReplace(child=self._plan, cols=subset, replacements=rep_dict),
+            session=self._session,
+        )
+
     @property
     def stat(self) -> "DataFrameStatFunctions":
         """Returns a :class:`DataFrameStatFunctions` for statistic functions.
@@ -740,12 +1367,78 @@ class DataFrame(object):
         return DataFrameStatFunctions(self)
 
     def summary(self, *statistics: str) -> "DataFrame":
+        """Computes specified statistics for numeric and string columns.
+
+        .. versionadded:: 3.4.0
+
+        Available statistics are:
+        count
+        mean
+        stddev
+        min
+        max
+        arbitrary approximate percentiles specified as a percentage (e.g. 75%)
+        count_distinct
+        approx_count_distinct
+
+        Notes
+        -----
+        If no statistics are given, this function computes 'count', 'mean', 'stddev', 'min',
+        'approximate quartiles' (percentiles at 25%, 50%, and 75%), and 'max'.
+        This function is meant for exploratory data analysis, as we make no guarantee about the
+        backward compatibility of the schema of the resulting :class:`DataFrame`. If you want to
+        programmatically compute summary statistics, use the `agg` function instead.
+
+        Parameters
+        ----------
+        statistics : str, list, optional
+             Statistics from above list to be computed.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            A new DataFrame that computes specified statistics for given DataFrame.
+        """
         _statistics: List[str] = list(statistics)
         for s in _statistics:
             if not isinstance(s, str):
                 raise TypeError(f"'statistics' must be list[str], but got {type(s).__name__}")
         return DataFrame.withPlan(
             plan.StatSummary(child=self._plan, statistics=_statistics),
+            session=self._session,
+        )
+
+    def describe(self, *cols: str) -> "DataFrame":
+        """Computes basic statistics for numeric and string columns.
+
+        .. versionadded:: 3.4.0
+
+        This include count, mean, stddev, min, and max. If no columns are
+        given, this function computes statistics for all numerical or string columns.
+
+        Notes
+        -----
+        This function is meant for exploratory data analysis, as we make no
+        guarantee about the backward compatibility of the schema of the resulting
+        :class:`DataFrame`.
+        Use summary for expanded statistics and control over which statistics to compute.
+
+        Parameters
+        ----------
+        cols : str, list, optional
+             Column name or list of column names to describe by (default All columns).
+
+        Returns
+        -------
+        :class:`DataFrame`
+            A new DataFrame that describes (provides statistics) given DataFrame.
+        """
+        _cols: List[str] = list(cols)
+        for s in _cols:
+            if not isinstance(s, str):
+                raise TypeError(f"'cols' must be list[str], but got {type(s).__name__}")
+        return DataFrame.withPlan(
+            plan.StatDescribe(child=self._plan, cols=_cols),
             session=self._session,
         )
 
@@ -799,9 +1492,9 @@ class DataFrame(object):
         # Check for alias
         alias = self._get_alias()
         if alias is not None:
-            return Column(alias)
+            return col(alias)
         else:
-            return Column(name)
+            return col(name)
 
     def _print_plan(self) -> str:
         if self._plan:
@@ -921,6 +1614,23 @@ class DataFrame(object):
             raise Exception("Cannot analyze on empty plan.")
         query = self._plan.to_proto(self._session.client)
         return self._session.client._analyze(query).input_files
+
+    def toDF(self, *cols: str) -> "DataFrame":
+        """Returns a new :class:`DataFrame` that with new specified column names
+
+        Parameters
+        ----------
+        *cols : tuple
+            a tuple of string new column name or :class:`Column`. The length of the
+            list needs to be the same as the number of columns in the initial
+            :class:`DataFrame`
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with new column names.
+        """
+        return DataFrame.withPlan(plan.RenameColumns(self._plan, list(cols)), self._session)
 
     def transform(self, func: Callable[..., "DataFrame"], *args: Any, **kwargs: Any) -> "DataFrame":
         """Returns a new :class:`DataFrame`. Concise syntax for chaining custom transformations.
@@ -1047,6 +1757,44 @@ class DataFrame(object):
         """
         print(self._explain_string(extended=extended, mode=mode))
 
+    def createTempView(self, name: str) -> None:
+        """Creates a local temporary view with this :class:`DataFrame`.
+
+        The lifetime of this temporary table is tied to the :class:`SparkSession`
+        that was used to create this :class:`DataFrame`.
+        throws :class:`TempTableAlreadyExistsException`, if the view name already exists in the
+        catalog.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        name : str
+            Name of the view.
+        """
+        command = plan.CreateView(
+            child=self._plan, name=name, is_global=False, replace=False
+        ).command(session=self._session.client)
+        self._session.client.execute_command(command)
+
+    def createOrReplaceTempView(self, name: str) -> None:
+        """Creates or replaces a local temporary view with this :class:`DataFrame`.
+
+        The lifetime of this temporary table is tied to the :class:`SparkSession`
+        that was used to create this :class:`DataFrame`.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        name : str
+            Name of the view.
+        """
+        command = plan.CreateView(
+            child=self._plan, name=name, is_global=False, replace=True
+        ).command(session=self._session.client)
+        self._session.client.execute_command(command)
+
     def createGlobalTempView(self, name: str) -> None:
         """Creates a global temporary view with this :class:`DataFrame`.
 
@@ -1165,6 +1913,28 @@ class DataFrameNaFunctions:
         return self.df.fillna(value=value, subset=subset)
 
     fill.__doc__ = DataFrame.fillna.__doc__
+
+    def drop(
+        self,
+        how: str = "any",
+        thresh: Optional[int] = None,
+        subset: Optional[Union[str, Tuple[str, ...], List[str]]] = None,
+    ) -> DataFrame:
+        return self.df.dropna(how=how, thresh=thresh, subset=subset)
+
+    drop.__doc__ = DataFrame.dropna.__doc__
+
+    def replace(
+        self,
+        to_replace: Union[List["LiteralType"], Dict["LiteralType", "OptionalPrimitiveType"]],
+        value: Optional[
+            Union["OptionalPrimitiveType", List["OptionalPrimitiveType"], _NoValueType]
+        ] = _NoValue,
+        subset: Optional[List[str]] = None,
+    ) -> DataFrame:
+        return self.df.replace(to_replace, value, subset)
+
+    replace.__doc__ = DataFrame.replace.__doc__
 
 
 class DataFrameStatFunctions:

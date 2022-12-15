@@ -475,7 +475,7 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
         mean_udf = self.pandas_agg_mean_udf
 
         with QuietTest(self.sc):
-            with self.assertRaisesRegex(AnalysisException, "nor.*aggregate function"):
+            with self.assertRaisesRegex(AnalysisException, "[MISSING_AGGREGATION]"):
                 df.groupby(df.id).agg(plus_one(df.v)).collect()
 
         with QuietTest(self.sc):
@@ -551,7 +551,7 @@ if __name__ == "__main__":
     from pyspark.sql.tests.pandas.test_pandas_udf_grouped_agg import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

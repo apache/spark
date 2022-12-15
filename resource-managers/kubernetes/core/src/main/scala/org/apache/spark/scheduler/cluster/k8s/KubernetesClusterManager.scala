@@ -103,7 +103,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     val subscribersExecutor = ThreadUtils
       .newDaemonThreadPoolScheduledExecutor(
         "kubernetes-executor-snapshots-subscribers", 2)
-    val snapshotsStore = new ExecutorPodsSnapshotsStoreImpl(subscribersExecutor)
+    val snapshotsStore = new ExecutorPodsSnapshotsStoreImpl(subscribersExecutor, conf = sc.conf)
 
     val executorPodsLifecycleEventHandler = new ExecutorPodsLifecycleManager(
       sc.conf,

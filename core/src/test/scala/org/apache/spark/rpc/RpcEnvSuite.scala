@@ -962,7 +962,8 @@ abstract class RpcEnvSuite extends SparkFunSuite {
     val singleThreadedEnv = createRpcEnv(
       new SparkConf().set(Network.RPC_NETTY_DISPATCHER_NUM_THREADS, 1), "singleThread", 0)
     try {
-      val blockingEndpoint = singleThreadedEnv.setupEndpoint("blocking", new IsolatedRpcEndpoint {
+      val blockingEndpoint = singleThreadedEnv
+        .setupEndpoint("blocking", new IsolatedThreadSafeRpcEndpoint {
         override val rpcEnv: RpcEnv = singleThreadedEnv
 
         override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {

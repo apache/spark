@@ -1186,8 +1186,8 @@ class DDLParserSuite extends AnalysisTest {
     val fragment = "bad_type"
     checkError(
       exception = parseException(sql),
-      errorClass = "_LEGACY_ERROR_TEMP_0030",
-      parameters = Map("dataType" -> "bad_type"),
+      errorClass = "UNSUPPORTED_DATATYPE",
+      parameters = Map("typeName" -> "\"BAD_TYPE\""),
       context = ExpectedContext(
         fragment = fragment,
         start = 47,

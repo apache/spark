@@ -218,10 +218,13 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       }.getMessage
       assert(e4.contains(
         s"$viewName is a temp view. 'ANALYZE TABLE' expects a table or permanent view."))
-      val e5 = intercept[AnalysisException] {
-        sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
-      }.getMessage
-      assert(e5.contains(s"Temporary view `$viewName` is not cached for analyzing columns."))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
+        },
+        errorClass = "UNSUPPORTED_FEATURE.ANALYZE_UNCACHED_TEMP_VIEW",
+        parameters = Map("viewName" -> "`testView`")
+      )
     }
   }
 
@@ -952,9 +955,10 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
               sql("SELECT * FROM v3")
             }
             checkError(e,
-              errorClass = "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
+              errorClass = "MISSING_AGGREGATION",
               parameters = Map(
-                "expression" -> "\"c1\""))
+                "expression" -> "\"c1\"",
+                "expressionAnyValue" -> "\"any_value(c1)\""))
           }
           withSQLConf(GROUP_BY_ALIASES.key -> "false") {
             val e = intercept[AnalysisException] {

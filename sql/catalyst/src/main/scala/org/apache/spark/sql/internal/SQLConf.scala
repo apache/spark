@@ -3629,6 +3629,15 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val JSON_ENABLE_PARTIAL_RESULTS =
+    buildConf("spark.sql.json.enablePartialResults")
+      .internal()
+      .doc("When set to true, enables partial results for structs, maps, and arrays in JSON " +
+        "when one or more fields do not match the schema")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val LEGACY_CSV_ENABLE_DATE_TIME_PARSING_FALLBACK =
     buildConf("spark.sql.legacy.csv.enableDateTimeParsingFallback")
       .internal()
@@ -4026,6 +4035,17 @@ object SQLConf {
     .stringConf.transform(_.toUpperCase(Locale.ROOT))
     .checkValues(ErrorMessageFormat.values.map(_.toString))
     .createWithDefault(ErrorMessageFormat.PRETTY.toString)
+
+  val LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED =
+    buildConf("spark.sql.lateralColumnAlias.enableImplicitResolution")
+      .internal()
+      .doc("Enable resolving implicit lateral column alias defined in the same SELECT list. For " +
+        "example, with this conf turned on, for query `SELECT 1 AS a, a + 1` the `a` in `a + 1` " +
+        "can be resolved as the previously defined `1 AS a`. But note that table column has " +
+        "higher resolution priority than the lateral column alias.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
 
   /**
    * Holds information about keys that have been deprecated.
@@ -4771,6 +4791,8 @@ class SQLConf extends Serializable with Logging {
   def jsonFilterPushDown: Boolean = getConf(JSON_FILTER_PUSHDOWN_ENABLED)
 
   def avroFilterPushDown: Boolean = getConf(AVRO_FILTER_PUSHDOWN_ENABLED)
+
+  def jsonEnablePartialResults: Boolean = getConf(JSON_ENABLE_PARTIAL_RESULTS)
 
   def jsonEnableDateTimeParsingFallback: Option[Boolean] =
     getConf(LEGACY_JSON_ENABLE_DATE_TIME_PARSING_FALLBACK)

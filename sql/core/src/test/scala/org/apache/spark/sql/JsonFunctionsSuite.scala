@@ -848,11 +848,14 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq("""{"id":1,"city":"Moscow"}""").toDS().select(from_json($"value", schema, options)),
       Row(Row(1, "Moscow")))
 
-    val errMsg = intercept[AnalysisException] {
-      Seq(("""{"i":1}""", "i int")).toDF("json", "schema")
-        .select(from_json($"json", $"schema", options)).collect()
-    }.getMessage
-    assert(errMsg.contains("Schema should be specified in DDL format as a string literal"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        Seq(("""{"i":1}""", "i int")).toDF("json", "schema")
+          .select(from_json($"json", $"schema", options)).collect()
+      },
+      errorClass = "INVALID_SCHEMA.NON_STRING_LITERAL",
+      parameters = Map("inputSchema" -> "\"schema\"")
+    )
   }
 
   test("schema_of_json - infers the schema of foldable JSON string") {
@@ -917,8 +920,17 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df1.select(from_json($"c0", st)), Row(Row(123456, null)))
     val df2 = Seq("""{"data": {"c2": [19], "c1": 123456}}""").toDF("c0")
     checkAnswer(df2.select(from_json($"c0", new StructType().add("data", st))), Row(Row(null)))
-    val df3 = Seq("""[{"c2": [19], "c1": 123456}]""").toDF("c0")
-    checkAnswer(df3.select(from_json($"c0", ArrayType(st))), Row(Array(Row(123456, null))))
+
+    withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
+      val df3 = Seq("""[{"c2": [19], "c1": 123456}]""").toDF("c0")
+      checkAnswer(df3.select(from_json($"c0", ArrayType(st))), Row(Array(Row(123456, null))))
+    }
+
+    withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
+      val df3 = Seq("""[{"c2": [19], "c1": 123456}]""").toDF("c0")
+      checkAnswer(df3.select(from_json($"c0", ArrayType(st))), Row(null))
+    }
+
     val df4 = Seq("""{"c2": [19]}""").toDF("c0")
     checkAnswer(df4.select(from_json($"c0", MapType(StringType, st))), Row(null))
   }
@@ -930,10 +942,20 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
 
     // "c2" is expected to be an array of structs but it is a struct in the data.
     val df = Seq("""[{"c2": {"a": 1}, "c1": "abc"}]""").toDF("c0")
-    checkAnswer(
-      df.select(from_json($"c0", ArrayType(st))),
-      Row(Array(Row("abc", null)))
-    )
+
+    withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
+      checkAnswer(
+        df.select(from_json($"c0", ArrayType(st))),
+        Row(Array(Row("abc", null)))
+      )
+    }
+
+    withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
+      checkAnswer(
+        df.select(from_json($"c0", ArrayType(st))),
+        Row(null)
+      )
+    }
   }
 
   test("SPARK-40646: return partial results for JSON maps") {
@@ -943,10 +965,20 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
 
     // Map "c2" has "k2" key that is a string, not an integer.
     val df = Seq("""{"c1": {"k1": 1, "k2": "A", "k3": 3}, "c2": "abc"}""").toDF("c0")
-    checkAnswer(
-      df.select(from_json($"c0", st)),
-      Row(Row(null, "abc"))
-    )
+
+    withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
+      checkAnswer(
+        df.select(from_json($"c0", st)),
+        Row(Row(null, "abc"))
+      )
+    }
+
+    withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
+      checkAnswer(
+        df.select(from_json($"c0", st)),
+        Row(Row(null, null))
+      )
+    }
   }
 
   test("SPARK-40646: return partial results for JSON arrays") {
@@ -987,10 +1019,20 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     // Value "a" cannot be parsed as an integer,
     // the error cascades to "c2", thus making its value null.
     val df = Seq("""[{"c1": [{"c2": ["a"]}]}]""").toDF("c0")
-    checkAnswer(
-      df.select(from_json($"c0", ArrayType(st))),
-      Row(Array(Row(null)))
-    )
+
+    withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
+      checkAnswer(
+        df.select(from_json($"c0", ArrayType(st))),
+        Row(Array(Row(null)))
+      )
+    }
+
+    withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
+      checkAnswer(
+        df.select(from_json($"c0", ArrayType(st))),
+        Row(null)
+      )
+    }
   }
 
   test("SPARK-33270: infers schema for JSON field with spaces and pass them to from_json") {

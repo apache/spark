@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableExceptio
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, CreateStruct, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
+import org.apache.spark.sql.catalyst.expressions.aggregate.AnyValue
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, Join, LogicalPlan, SerdeInfo, Window}
 import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
@@ -639,7 +640,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def invalidFunctionArgumentsError(
       name: String, expectedNum: String, actualNum: Int): Throwable = {
     new AnalysisException(
-      errorClass = "WRONG_NUM_ARGS",
+      errorClass = "WRONG_NUM_ARGS.WITH_SUGGESTION",
       messageParameters = Map(
         "functionName" -> toSQLId(name),
         "expectedNum" -> expectedNum,
@@ -648,10 +649,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def invalidFunctionArgumentNumberError(
       validParametersCount: Seq[Int], name: String, actualNumber: Int): Throwable = {
-    if (validParametersCount.length == 0) {
+    if (validParametersCount.isEmpty) {
       new AnalysisException(
-        errorClass = "_LEGACY_ERROR_TEMP_1043",
-        messageParameters = Map("name" -> name))
+        errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+        messageParameters = Map("functionName" -> toSQLId(name)))
     } else {
       val expectedNumberOfParameters = if (validParametersCount.length == 1) {
         validParametersCount.head.toString
@@ -660,12 +661,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       }
       invalidFunctionArgumentsError(name, expectedNumberOfParameters, actualNumber)
     }
-  }
-
-  def functionAcceptsOnlyOneArgumentError(name: String): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1044",
-      messageParameters = Map("name" -> name))
   }
 
   def alterV2TableSetLocationWithPartitionNotSupportedError(): Throwable = {
@@ -798,12 +793,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map(
         "command" -> command,
         "column" -> quoted))
-  }
-
-  def columnDoesNotExistError(colName: String): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1061",
-      messageParameters = Map("colName" -> colName))
   }
 
   def renameTempViewToExistingViewError(newName: String): Throwable = {
@@ -1009,16 +998,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("inputSchema" -> toSQLExpr(exp)))
   }
 
-  def schemaNotFoldableError(exp: Expression): Throwable = {
+  def schemaIsNotStructTypeError(exp: Expression, dataType: DataType): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1093",
-      messageParameters = Map("expr" -> exp.sql))
-  }
-
-  def schemaIsNotStructTypeError(dataType: DataType): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1094",
-      messageParameters = Map("dataType" -> dataType.toString))
+      errorClass = "INVALID_SCHEMA.NON_STRUCT_TYPE",
+      messageParameters = Map(
+        "inputSchema" -> toSQLExpr(exp),
+        "dataType" -> toSQLType(dataType)
+      ))
   }
 
   def keyValueInMapNotStringError(m: CreateMap): Throwable = {
@@ -2289,14 +2275,22 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("columnName" -> toSQLId(columnName)))
   }
 
+  def columnNotFoundError(colName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "COLUMN_NOT_FOUND",
+      messageParameters = Map(
+        "colName" -> toSQLId(colName),
+        "caseSensitiveConfig" -> toSQLConf(SQLConf.CASE_SENSITIVE.key)))
+  }
+
   def noSuchTableError(db: String, table: String): Throwable = {
     new NoSuchTableException(db = db, table = table)
   }
 
   def tempViewNotCachedForAnalyzingColumnsError(tableIdent: TableIdentifier): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1234",
-      messageParameters = Map("tableIdent" -> tableIdent.toString))
+      errorClass = "UNSUPPORTED_FEATURE.ANALYZE_UNCACHED_TEMP_VIEW",
+      messageParameters = Map("viewName" -> toSQLId(tableIdent.toString)))
   }
 
   def columnTypeNotSupportStatisticsCollectionError(
@@ -3209,8 +3203,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def columnNotInGroupByClauseError(expression: Expression): Throwable = {
     new AnalysisException(
-      errorClass = "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
-      messageParameters = Map("expression" -> toSQLExpr(expression))
+      errorClass = "MISSING_AGGREGATION",
+      messageParameters = Map(
+        "expression" -> toSQLExpr(expression),
+        "expressionAnyValue" -> toSQLExpr(new AnyValue(expression)))
     )
   }
 
@@ -3413,6 +3409,25 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "tableName" -> toSQLId(nameParts),
         "operation" ->
           s"creating generated columns with GENERATED ALWAYS AS expressions in $statement"
+      )
+    )
+  }
+
+  def ambiguousLateralColumnAlias(name: String, numOfMatches: Int): Throwable = {
+    new AnalysisException(
+      errorClass = "AMBIGUOUS_LATERAL_COLUMN_ALIAS",
+      messageParameters = Map(
+        "name" -> toSQLId(name),
+        "n" -> numOfMatches.toString
+      )
+    )
+  }
+  def ambiguousLateralColumnAlias(nameParts: Seq[String], numOfMatches: Int): Throwable = {
+    new AnalysisException(
+      errorClass = "AMBIGUOUS_LATERAL_COLUMN_ALIAS",
+      messageParameters = Map(
+        "name" -> toSQLId(nameParts),
+        "n" -> numOfMatches.toString
       )
     )
   }

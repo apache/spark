@@ -20,24 +20,20 @@ from typing import TYPE_CHECKING, Optional, Any, Iterable, Union
 
 import pyspark.sql.connect.proto as proto
 import pyspark.sql.types
-from pyspark.sql.connect.column import (
-    Column,
-    Expression,
-    ScalarFunctionExpression,
-)
+from pyspark.sql.connect.column import Expression, UnresolvedFunction, Column
+from pyspark.sql.connect.functions import col
 
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import (
         ColumnOrName,
-        ExpressionOrString,
         FunctionBuilderCallable,
         UserDefinedFunctionCallable,
     )
     from pyspark.sql.connect.client import SparkConnectClient
 
 
-def _build(name: str, *args: "ExpressionOrString") -> ScalarFunctionExpression:
+def _build(name: str, *args: "ColumnOrName") -> Column:
     """
     Simple wrapper function that converts the arguments into the appropriate types.
     Parameters
@@ -47,17 +43,17 @@ def _build(name: str, *args: "ExpressionOrString") -> ScalarFunctionExpression:
 
     Returns
     -------
-    :class:`ScalarFunctionExpression`
+    :class:`UnresolvedFunction`
     """
-    cols = [x if isinstance(x, Expression) else Column.from_qualified_name(x) for x in args]
-    return ScalarFunctionExpression(name, *cols)
+    cols = [arg if isinstance(arg, Column) else col(arg) for arg in args]
+    return Column(UnresolvedFunction(name, [col._expr for col in cols]))
 
 
 class FunctionBuilder:
     """This class is used to build arbitrary functions used in expressions"""
 
     def __getattr__(self, name: str) -> "FunctionBuilderCallable":
-        def _(*args: "ExpressionOrString") -> ScalarFunctionExpression:
+        def _(*args: "ColumnOrName") -> Column:
             return _build(name, *args)
 
         _.__doc__ = f"""Function to apply {name}"""
@@ -68,7 +64,7 @@ functions = FunctionBuilder()
 
 
 class UserDefinedFunction(Expression):
-    """A user defied function is an expresison that has a reference to the actual
+    """A user defied function is an expression that has a reference to the actual
     Python callable attached. During plan generation, the client sends a command to
     the server to register the UDF before execution. The expression object can be
     reused and is not attached to a specific execution. If the internal name of
@@ -107,8 +103,8 @@ class UserDefinedFunction(Expression):
 def _create_udf(
     function: Any, return_type: Union[str, pyspark.sql.types.DataType]
 ) -> "UserDefinedFunctionCallable":
-    def wrapper(*cols: "ColumnOrName") -> UserDefinedFunction:
-        return UserDefinedFunction(func=function, return_type=return_type, args=cols)
+    def wrapper(*cols: "ColumnOrName") -> "Column":
+        return Column(UserDefinedFunction(func=function, return_type=return_type, args=cols))
 
     return wrapper
 
