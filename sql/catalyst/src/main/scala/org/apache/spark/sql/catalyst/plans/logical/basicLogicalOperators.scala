@@ -972,9 +972,10 @@ case class Range(
 
   require(step != 0, s"step ($step) cannot be 0")
 
-  def this(start: Expression, end: Expression, step: Expression, numSlices: Expression) =
+  def this(start: Expression, end: Expression, step: Expression, numSlices: Expression) = {
     this(Range.toLong(start, 1), Range.toLong(end, 2), Range.toLong(step, 3),
       Some(Range.toInt(numSlices, 4)))
+  }
 
   def this(start: Expression, end: Expression, step: Expression) =
     this(Range.toLong(start, 1), Range.toLong(end, 2), Range.toLong(step, 3), None)

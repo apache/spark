@@ -1770,6 +1770,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       errorClass = "UNEXPECTED_INPUT_TYPE",
       messageParameters = Map(
         "paramIndex" -> paramIndex.toString,
+        "functionName" -> toSQLId("range"),
         "requiredType" -> toSQLType(dataType),
         "inputSql" -> toSQLExpr(expression),
         "inputType" -> toSQLType(expression.dataType)))
