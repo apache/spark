@@ -152,7 +152,7 @@ class ExecutorPodsAllocator(
       applicationId: String,
       schedulerBackend: KubernetesClusterSchedulerBackend,
       snapshots: Seq[ExecutorPodsSnapshot]): Unit = {
-    val k8sKnownExecIds = snapshots.flatMap(_.executorPods.keys)
+    val k8sKnownExecIds = snapshots.flatMap(_.executorPods.keys).distinct
     newlyCreatedExecutors --= k8sKnownExecIds
     schedulerKnownNewlyCreatedExecs --= k8sKnownExecIds
 
@@ -162,7 +162,7 @@ class ExecutorPodsAllocator(
     val k8sKnownPVCNames = snapshots.flatMap(_.executorPods.values.map(_.pod)).flatMap { pod =>
       pod.getSpec.getVolumes.asScala
         .flatMap { v => Option(v.getPersistentVolumeClaim).map(_.getClaimName) }
-    }
+    }.distinct
 
     // transfer the scheduler backend known executor requests from the newlyCreatedExecutors
     // to the schedulerKnownNewlyCreatedExecs
