@@ -1628,4 +1628,23 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       }
     }
   }
+
+  test("Don't support MapType") {
+    val tableName = "analyzeTable_column"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (key STRING, value MAP<STRING, STRING>) " +
+        s"PARTITIONED BY (ds STRING)")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS value")
+        },
+        errorClass = "UNSUPPORTED_FEATURE.ANALYZE_UNSUPPORTED_COLUMN_TYPE",
+        parameters = Map(
+          "columnType" -> "\"MAP<STRING, STRING>\"",
+          "columnName" -> "`value`",
+          "tableName" -> "`spark_catalog`.`default`.`analyzetable_column`"
+        )
+      )
+    }
+  }
 }

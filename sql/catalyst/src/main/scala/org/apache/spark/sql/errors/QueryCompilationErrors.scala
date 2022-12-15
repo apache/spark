@@ -2298,11 +2298,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       tableIdent: TableIdentifier,
       dataType: DataType): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1235",
+      errorClass = "UNSUPPORTED_FEATURE.ANALYZE_UNSUPPORTED_COLUMN_TYPE",
       messageParameters = Map(
-        "name" -> name,
-        "tableIdent" -> tableIdent.toString,
-        "dataType" -> dataType.toString))
+        "columnType" -> toSQLType(dataType),
+        "columnName" -> toSQLId(name),
+        "tableName" -> toSQLId(tableIdent.toString)))
   }
 
   def analyzeTableNotSupportedOnViewsError(): Throwable = {
