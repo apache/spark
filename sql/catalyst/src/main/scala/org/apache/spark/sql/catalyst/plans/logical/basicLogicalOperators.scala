@@ -919,7 +919,7 @@ object Range {
       .filter(_ != null)
       .getOrElse {
         throw QueryCompilationErrors
-          .incompatibleRangeInputDataTypeError(expression, dataType, paramIndex)
+          .unexpectedInputDataTypeError("range", paramIndex, dataType, expression)
       }.asInstanceOf[T]
   }
 

@@ -1764,13 +1764,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map.empty)
   }
 
-  def incompatibleRangeInputDataTypeError(
-      expression: Expression, dataType: DataType, paramIndex: Int): Throwable = {
+  def unexpectedInputDataTypeError(
+      functionName: String,
+      paramIndex: Int,
+      dataType: DataType,
+      expression: Expression): Throwable = {
     new AnalysisException(
       errorClass = "UNEXPECTED_INPUT_TYPE",
       messageParameters = Map(
         "paramIndex" -> paramIndex.toString,
-        "functionName" -> toSQLId("range"),
+        "functionName" -> toSQLId(functionName),
         "requiredType" -> toSQLType(dataType),
         "inputSql" -> toSQLExpr(expression),
         "inputType" -> toSQLType(expression.dataType)))
