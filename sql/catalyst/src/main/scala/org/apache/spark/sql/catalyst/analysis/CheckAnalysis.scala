@@ -325,6 +325,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               errorClass = "_LEGACY_ERROR_TEMP_2413",
               messageParameters = Map("argName" -> e.prettyName))
 
+          case p: Parameter =>
+            p.failAnalysis(
+              errorClass = "UNBOUND_SQL_PARAMETER",
+              messageParameters = Map("name" -> toSQLId(p.name)))
+
           case _ =>
         })
 

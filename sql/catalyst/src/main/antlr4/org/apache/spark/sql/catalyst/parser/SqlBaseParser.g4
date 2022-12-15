@@ -930,6 +930,7 @@ primaryExpression
 
 constant
     : NULL                                                                                     #nullLiteral
+    | COLON identifier                                                                         #parameterLiteral
     | interval                                                                                 #intervalLiteral
     | identifier stringLit                                                                     #typeConstructor
     | number                                                                                   #numericLiteral
