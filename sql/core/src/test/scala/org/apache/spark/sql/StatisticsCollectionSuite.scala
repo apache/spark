@@ -131,8 +131,8 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         },
         errorClass = "UNSUPPORTED_FEATURE.ANALYZE_UNSUPPORTED_COLUMN_TYPE",
         parameters = Map(
-          "colName" -> "`data`",
-          "dataType" -> "\"ARRAY<INT>\"",
+          "columnType" -> "\"ARRAY<INT>\"",
+          "columnName" -> "`data`",
           "tableName" -> "`spark_catalog`.`default`.`column_stats_test1`"
         )
       )

@@ -1640,8 +1640,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         },
         errorClass = "UNSUPPORTED_FEATURE.ANALYZE_UNSUPPORTED_COLUMN_TYPE",
         parameters = Map(
-          "colName" -> "`value`",
-          "dataType" -> "\"MAP<STRING, STRING>\"",
+          "columnType" -> "\"MAP<STRING, STRING>\"",
+          "columnName" -> "`value`",
           "tableName" -> "`spark_catalog`.`default`.`analyzetable_column`"
         )
       )

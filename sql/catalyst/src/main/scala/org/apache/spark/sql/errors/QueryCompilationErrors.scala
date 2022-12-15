@@ -2300,8 +2300,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.ANALYZE_UNSUPPORTED_COLUMN_TYPE",
       messageParameters = Map(
-        "colName" -> toSQLId(name),
-        "dataType" -> toSQLType(dataType),
+        "columnType" -> toSQLType(dataType),
+        "columnName" -> toSQLId(name),
         "tableName" -> toSQLId(tableIdent.toString)))
   }
 
