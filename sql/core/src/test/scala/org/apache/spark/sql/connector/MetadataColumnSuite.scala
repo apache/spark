@@ -277,8 +277,8 @@ class MetadataTestTable extends Table with SupportsMetadataColumns {
   override def metadataColumns(): Array[MetadataColumn] =
     Array(
       new MetadataColumn {
-        override def name: String = "index"
-        override def dataType: DataType = IntegerType
+        override def name: String = "_metadata"
+        override def dataType: DataType = StructType(StructField("index", IntegerType) :: Nil)
         override def comment: String = ""
       }
     )
@@ -289,22 +289,34 @@ class TypeMismatchTable extends MetadataTestTable {
   override def metadataColumns(): Array[MetadataColumn] =
     Array(
       new MetadataColumn {
-        override def name: String = "index"
-        override def dataType: DataType = StringType
+        override def name: String = "_metadata"
+        override def dataType: DataType = StructType(StructField("index", StringType) :: Nil)
         override def comment: String =
           "Used to create a type mismatch with the metadata col in `MetadataTestTable`"
       }
     )
 }
 
-class NameMismatchTable extends MetadataTestTable {
+class AttrNameMismatchTable extends MetadataTestTable {
   override def metadataColumns(): Array[MetadataColumn] =
     Array(
       new MetadataColumn {
         override def name: String = "wrongName"
-        override def dataType: DataType = IntegerType
+        override def dataType: DataType = StructType(StructField("index", IntegerType) :: Nil)
         override def comment: String =
           "Used to create a name mismatch with the metadata col in `MetadataTestTable`"
+      })
+}
+
+class FieldNameMismatchTable extends MetadataTestTable {
+  override def metadataColumns(): Array[MetadataColumn] =
+    Array(
+      new MetadataColumn {
+        override def name: String = "_metadata"
+        override def dataType: DataType = StructType(StructField("wrongName", IntegerType) :: Nil)
+        override def comment: String =
+          "Used to create a name mismatch with the struct field in the metadata col of " +
+            "`MetadataTestTable`"
       })
 }
 
@@ -328,13 +340,23 @@ class MetadataTypeMismatchCatalog extends TestV2SessionCatalogBase[TypeMismatchT
   }
 }
 
-class MetadataNameMismatchCatalog extends TestV2SessionCatalogBase[NameMismatchTable] {
+class MetadataAttrNameMismatchCatalog extends TestV2SessionCatalogBase[AttrNameMismatchTable] {
   override protected def newTable(
     name: String,
     schema: StructType,
     partitions: Array[Transform],
-    properties: java.util.Map[String, String]): NameMismatchTable = {
-    new NameMismatchTable
+    properties: java.util.Map[String, String]): AttrNameMismatchTable = {
+    new AttrNameMismatchTable
+  }
+}
+
+class MetadataFieldNameMismatchCatalog extends TestV2SessionCatalogBase[FieldNameMismatchTable] {
+  override protected def newTable(
+    name: String,
+    schema: StructType,
+    partitions: Array[Transform],
+    properties: java.util.Map[String, String]): FieldNameMismatchTable = {
+    new FieldNameMismatchTable
   }
 }
 
@@ -368,11 +390,21 @@ class MetadataColumnMismatchSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-41498: Metadata column is not propagated when children of Union " +
-    "have a name mismatch in a metadata column") {
+    "have an attribute name mismatch in a metadata column") {
     withTable("tbl", "nameMismatchTbl") {
       val df = getDfWithCatalog("tbl", classOf[MetadataTestCatalog].getName)
       val nameMismatchDf =
-        getDfWithCatalog("nameMismatchTbl", classOf[MetadataNameMismatchCatalog].getName)
+        getDfWithCatalog("nameMismatchTbl", classOf[MetadataAttrNameMismatchCatalog].getName)
+      assert(df.union(nameMismatchDf).queryExecution.analyzed.metadataOutput.isEmpty)
+    }
+  }
+
+  test("SPARK-41498: Metadata column is not propagated when children of Union " +
+    "have a field name mismatch in a metadata column") {
+    withTable("tbl", "nameMismatchTbl") {
+      val df = getDfWithCatalog("tbl", classOf[MetadataTestCatalog].getName)
+      val nameMismatchDf =
+        getDfWithCatalog("nameMismatchTbl", classOf[MetadataFieldNameMismatchCatalog].getName)
       assert(df.union(nameMismatchDf).queryExecution.analyzed.metadataOutput.isEmpty)
     }
   }

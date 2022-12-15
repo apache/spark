@@ -480,7 +480,8 @@ case class Union(
       // Check if the data types match
       val childDataTypes = child.metadataOutput.map(_.dataType)
       childDataTypes.zip(refDataTypes).foreach { case (dt1, dt2) =>
-        if (!DataType.equalsStructurally(dt1, dt2, true)) {
+        if (!DataType.equalsStructurally(dt1, dt2, true) ||
+            !DataType.equalsStructurallyByName(dt1, dt2, conf.resolver) ) {
           return Nil
         }
       }
