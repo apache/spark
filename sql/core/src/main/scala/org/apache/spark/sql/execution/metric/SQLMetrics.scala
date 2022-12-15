@@ -55,8 +55,10 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
 
   override def merge(other: AccumulatorV2[Long, Long]): Unit = other match {
     case o: SQLMetric =>
-      if (_value < 0) _value = 0
-      if (o.value > 0) _value += o.value
+      if (o.value > 0) {
+        if (_value < 0) _value = 0
+        _value += o.value
+      }
     case _ => throw QueryExecutionErrors.cannotMergeClassWithOtherClassError(
       this.getClass.getName, other.getClass.getName)
   }

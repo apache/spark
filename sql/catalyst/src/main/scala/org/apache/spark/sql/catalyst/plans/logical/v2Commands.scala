@@ -32,10 +32,20 @@ import org.apache.spark.sql.connector.write.{RowLevelOperation, RowLevelOperatio
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.{BooleanType, DataType, MetadataBuilder, StringType, StructType}
 
+// For v2 DML commands, it may end up with the v1 fallback code path and need to build a DataFrame
+// which is required by the DS v1 API. We need to keep the analyzed input query plan to build
+// that DataFrame, instead of the optimized query plan, as building DataFrame optimizes the
+// query plan again. This trait defines a `storeAnalyzedQuery` function which will be called at
+// the end of analysis, and implementations should copy the input query plan into a non-child
+// field so that it won't be transformed by the optimizer.
+trait KeepAnalyzedQuery extends Command {
+  def storeAnalyzedQuery(): Command
+}
+
 /**
  * Base trait for DataSourceV2 write commands
  */
-trait V2WriteCommand extends UnaryCommand {
+trait V2WriteCommand extends UnaryCommand with KeepAnalyzedQuery {
   def table: NamedRelation
   def query: LogicalPlan
   def isByName: Boolean
@@ -77,9 +87,11 @@ case class AppendData(
     query: LogicalPlan,
     writeOptions: Map[String, String],
     isByName: Boolean,
-    write: Option[Write] = None) extends V2WriteCommand {
+    write: Option[Write] = None,
+    analyzedQuery: Option[LogicalPlan] = None) extends V2WriteCommand {
   override def withNewQuery(newQuery: LogicalPlan): AppendData = copy(query = newQuery)
   override def withNewTable(newTable: NamedRelation): AppendData = copy(table = newTable)
+  override def storeAnalyzedQuery(): Command = copy(analyzedQuery = Some(query))
   override protected def withNewChildInternal(newChild: LogicalPlan): AppendData =
     copy(query = newChild)
 }
@@ -109,7 +121,8 @@ case class OverwriteByExpression(
     query: LogicalPlan,
     writeOptions: Map[String, String],
     isByName: Boolean,
-    write: Option[Write] = None) extends V2WriteCommand {
+    write: Option[Write] = None,
+    analyzedQuery: Option[LogicalPlan] = None) extends V2WriteCommand {
   override lazy val resolved: Boolean = {
     table.resolved && query.resolved && outputResolved && deleteExpr.resolved
   }
@@ -121,6 +134,7 @@ case class OverwriteByExpression(
     copy(table = newTable)
   }
 
+  override def storeAnalyzedQuery(): Command = copy(analyzedQuery = Some(query))
   override protected def withNewChildInternal(newChild: LogicalPlan): OverwriteByExpression =
     copy(query = newChild)
 }
@@ -158,6 +172,9 @@ case class OverwritePartitionsDynamic(
   override def withNewTable(newTable: NamedRelation): OverwritePartitionsDynamic = {
     copy(table = newTable)
   }
+
+  // OverwritePartitionsDynamic has no v1 fallback
+  override def storeAnalyzedQuery(): Command = this
 
   override protected def withNewChildInternal(newChild: LogicalPlan): OverwritePartitionsDynamic =
     copy(query = newChild)
@@ -249,6 +266,9 @@ case class ReplaceData(
 
   override def withNewTable(newTable: NamedRelation): ReplaceData = copy(table = newTable)
 
+  // ReplaceData has no v1 fallback
+  override def storeAnalyzedQuery(): Command = this
+
   override protected def withNewChildInternal(newChild: LogicalPlan): ReplaceData = {
     copy(query = newChild)
   }
@@ -301,7 +321,9 @@ case class CreateTableAsSelect(
     query: LogicalPlan,
     tableSpec: TableSpec,
     writeOptions: Map[String, String],
-    ignoreIfExists: Boolean) extends BinaryCommand with V2CreateTablePlan {
+    ignoreIfExists: Boolean,
+    analyzedQuery: Option[LogicalPlan] = None)
+  extends BinaryCommand with V2CreateTablePlan with KeepAnalyzedQuery {
 
   override def tableSchema: StructType = query.schema
   override def left: LogicalPlan = name
@@ -322,6 +344,8 @@ case class CreateTableAsSelect(
   override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
     this.copy(partitioning = rewritten)
   }
+
+  override def storeAnalyzedQuery(): Command = copy(analyzedQuery = Some(query))
 
   override protected def withNewChildrenInternal(
     newLeft: LogicalPlan,
@@ -372,7 +396,9 @@ case class ReplaceTableAsSelect(
     query: LogicalPlan,
     tableSpec: TableSpec,
     writeOptions: Map[String, String],
-    orCreate: Boolean) extends BinaryCommand with V2CreateTablePlan {
+    orCreate: Boolean,
+    analyzedQuery: Option[LogicalPlan] = None)
+  extends BinaryCommand with V2CreateTablePlan with KeepAnalyzedQuery {
 
   override def tableSchema: StructType = query.schema
   override def left: LogicalPlan = name
@@ -389,6 +415,8 @@ case class ReplaceTableAsSelect(
     assert(name.resolved)
     name.asInstanceOf[ResolvedIdentifier].identifier
   }
+
+  override def storeAnalyzedQuery(): Command = copy(analyzedQuery = Some(query))
 
   override protected def withNewChildrenInternal(
       newLeft: LogicalPlan,

@@ -140,7 +140,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS",
+  "errorClass" : "WRONG_NUM_ARGS.WITH_SUGGESTION",
   "messageParameters" : {
     "actualNum" : "3",
     "expectedNum" : "2",
@@ -297,7 +297,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS",
+  "errorClass" : "WRONG_NUM_ARGS.WITH_SUGGESTION",
   "messageParameters" : {
     "actualNum" : "3",
     "expectedNum" : "2",

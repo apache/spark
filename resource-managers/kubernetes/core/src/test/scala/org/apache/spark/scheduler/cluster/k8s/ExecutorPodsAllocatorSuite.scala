@@ -39,7 +39,7 @@ import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, KubernetesExecutorSp
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
-import org.apache.spark.internal.config.DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT
+import org.apache.spark.internal.config.{DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT, EXECUTOR_INSTANCES}
 import org.apache.spark.resource._
 import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils._
 import org.apache.spark.util.ManualClock
@@ -91,6 +91,9 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
   private var pvcWithNamespace: PVC_WITH_NAMESPACE = _
 
   @Mock
+  private var pvcResource: io.fabric8.kubernetes.client.dsl.Resource[PersistentVolumeClaim] = _
+
+  @Mock
   private var labeledPersistentVolumeClaims: LABELED_PERSISTENT_VOLUME_CLAIMS = _
 
   @Mock
@@ -139,6 +142,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     when(kubernetesClient.persistentVolumeClaims()).thenReturn(persistentVolumeClaims)
     when(persistentVolumeClaims.inNamespace("default")).thenReturn(pvcWithNamespace)
     when(pvcWithNamespace.withLabel(any(), any())).thenReturn(labeledPersistentVolumeClaims)
+    when(pvcWithNamespace.resource(any())).thenReturn(pvcResource)
     when(labeledPersistentVolumeClaims.list()).thenReturn(persistentVolumeClaimList)
     when(persistentVolumeClaimList.getItems).thenReturn(Seq.empty[PersistentVolumeClaim].asJava)
   }
@@ -807,6 +811,116 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
 
     when(persistentVolumeClaimList.getItems).thenReturn(Seq(pvc1, pvc2).asJava)
     podsAllocatorUnderTest invokePrivate getReusablePVCs("appId", Seq("pvc-1"))
+  }
+
+  test("SPARK-41410: Support waitToReusePersistentVolumeClaims") {
+    val prefix = "spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1"
+    val confWithPVC = conf.clone
+      .set(KUBERNETES_DRIVER_OWN_PVC.key, "true")
+      .set(KUBERNETES_DRIVER_REUSE_PVC.key, "true")
+      .set(KUBERNETES_DRIVER_WAIT_TO_REUSE_PVC.key, "true")
+      .set(EXECUTOR_INSTANCES.key, "1")
+      .set(s"$prefix.mount.path", "/spark-local-dir")
+      .set(s"$prefix.mount.readOnly", "false")
+      .set(s"$prefix.option.claimName", "OnDemand")
+      .set(s"$prefix.option.sizeLimit", "200Gi")
+      .set(s"$prefix.option.storageClass", "gp3")
+
+    when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]), meq(secMgr),
+      meq(kubernetesClient), any(classOf[ResourceProfile])))
+      .thenAnswer((invocation: InvocationOnMock) => {
+        val k8sConf: KubernetesExecutorConf = invocation.getArgument(0)
+        KubernetesExecutorSpec(
+          executorPodWithIdAndVolume(k8sConf.executorId.toInt, k8sConf.resourceProfileId),
+          Seq(persistentVolumeClaim("pvc-0", "gp3", "200Gi")))
+      })
+
+    podsAllocatorUnderTest = new ExecutorPodsAllocator(
+      confWithPVC, secMgr, executorBuilder,
+      kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
+
+    when(podsWithNamespace
+      .withField("status.phase", "Pending"))
+      .thenReturn(labeledPods)
+    when(labeledPods
+      .withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID))
+      .thenReturn(labeledPods)
+    when(labeledPods
+      .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
+      .thenReturn(labeledPods)
+    when(labeledPods
+      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any()))
+      .thenReturn(labeledPods)
+
+    val startTime = Instant.now.toEpochMilli
+    waitForExecutorPodsClock.setTime(startTime)
+
+    val counter = PrivateMethod[AtomicInteger](Symbol("PVC_COUNTER"))()
+    assert(podsAllocatorUnderTest.invokePrivate(counter).get() === 0)
+
+    // Target 1 executor, make sure it's requested, even with an empty initial snapshot.
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 1))
+    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 1)
+    verify(podsWithNamespace).resource(podWithAttachedContainerForIdAndVolume(1))
+    assert(podsAllocatorUnderTest.invokePrivate(counter).get() === 1)
+
+    // Mark executor as running, verify that subsequent allocation cycle is a no-op.
+    snapshotsStore.updatePod(runningExecutor(1))
+    snapshotsStore.notifySubscribers()
+    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 0)
+    verify(podResource, times(1)).create()
+    verify(podResource, never()).delete()
+    verify(pvcWithNamespace, times(1)).resource(any())
+    assert(podsAllocatorUnderTest.invokePrivate(counter).get() === 1)
+
+    // Request a new executor, make sure that no new pod and pvc are created
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 2))
+    snapshotsStore.notifySubscribers()
+    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 0)
+    verify(podResource, times(1)).create()
+    assert(podsAllocatorUnderTest.invokePrivate(counter).get() === 1)
+  }
+
+  test("SPARK-41410: An exception during PVC creation should not increase PVC counter") {
+    val prefix = "spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1"
+    val confWithPVC = conf.clone
+      .set(KUBERNETES_DRIVER_OWN_PVC.key, "true")
+      .set(KUBERNETES_DRIVER_REUSE_PVC.key, "true")
+      .set(KUBERNETES_DRIVER_WAIT_TO_REUSE_PVC.key, "true")
+      .set(EXECUTOR_INSTANCES.key, "1")
+      .set(s"$prefix.mount.path", "/spark-local-dir")
+      .set(s"$prefix.mount.readOnly", "false")
+      .set(s"$prefix.option.claimName", "OnDemand")
+      .set(s"$prefix.option.sizeLimit", "200Gi")
+      .set(s"$prefix.option.storageClass", "gp3")
+
+    when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]), meq(secMgr),
+      meq(kubernetesClient), any(classOf[ResourceProfile])))
+      .thenAnswer((invocation: InvocationOnMock) => {
+        val k8sConf: KubernetesExecutorConf = invocation.getArgument(0)
+        KubernetesExecutorSpec(
+          executorPodWithIdAndVolume(k8sConf.executorId.toInt, k8sConf.resourceProfileId),
+          Seq(persistentVolumeClaim("pvc-0", "gp3", "200Gi")))
+      })
+
+    podsAllocatorUnderTest = new ExecutorPodsAllocator(
+      confWithPVC, secMgr, executorBuilder,
+      kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
+
+    val startTime = Instant.now.toEpochMilli
+    waitForExecutorPodsClock.setTime(startTime)
+
+    val counter = PrivateMethod[AtomicInteger](Symbol("PVC_COUNTER"))()
+    assert(podsAllocatorUnderTest.invokePrivate(counter).get() === 0)
+
+    when(pvcResource.create()).thenThrow(new KubernetesClientException("PVC fails to create"))
+    intercept[KubernetesClientException] {
+      podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 1))
+    }
+    assert(podsAllocatorUnderTest.invokePrivate(counter).get() === 0)
+    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 0)
   }
 
   private def executorPodAnswer(): Answer[KubernetesExecutorSpec] =

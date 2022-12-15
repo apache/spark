@@ -155,9 +155,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_CORRELATED_REFERENCE",
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
   "messageParameters" : {
-    "treeNode" : "Aggregate [min(outer(t2a#x)) AS min(outer(t2.t2a))#x]\n+- SubqueryAlias t3\n   +- View (`t3`, [t3a#x,t3b#x,t3c#x])\n      +- Project [cast(t3a#x as int) AS t3a#x, cast(t3b#x as int) AS t3b#x, cast(t3c#x as int) AS t3c#x]\n         +- Project [t3a#x, t3b#x, t3c#x]\n            +- SubqueryAlias t3\n               +- LocalRelation [t3a#x, t3b#x, t3c#x]\n"
+    "sqlExprs" : "\"min(t2a) AS `min(outer(t2.t2a))`\""
   },
   "queryContext" : [ {
     "objectType" : "",

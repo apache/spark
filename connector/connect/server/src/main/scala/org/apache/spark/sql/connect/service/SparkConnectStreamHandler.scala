@@ -23,11 +23,13 @@ import scala.util.control.NonFatal
 import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanRequest, ExecutePlanResponse}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, QueryStageExec}
@@ -37,9 +39,6 @@ import org.apache.spark.util.ThreadUtils
 
 class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResponse])
     extends Logging {
-
-  // The maximum batch size in bytes for a single batch of data to be returned via proto.
-  private val MAX_BATCH_SIZE: Long = 4 * 1024 * 1024
 
   def handle(v: ExecutePlanRequest): Unit = {
     val session =
@@ -64,12 +63,12 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
     val schema = dataframe.schema
     val maxRecordsPerBatch = spark.sessionState.conf.arrowMaxRecordsPerBatch
     val timeZoneId = spark.sessionState.conf.sessionLocalTimeZone
+    // Conservatively sets it 70% because the size is not accurate but estimated.
+    val maxBatchSize = (SparkEnv.get.conf.get(CONNECT_GRPC_ARROW_MAX_BATCH_SIZE) * 0.7).toLong
 
     SQLExecution.withNewExecutionId(dataframe.queryExecution, Some("collectArrow")) {
       val rows = dataframe.queryExecution.executedPlan.execute()
       val numPartitions = rows.getNumPartitions
-      // Conservatively sets it 70% because the size is not accurate but estimated.
-      val maxBatchSize = (MAX_BATCH_SIZE * 0.7).toLong
       var numSent = 0
 
       if (numPartitions > 0) {

@@ -60,27 +60,51 @@ class Expression(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         EXPR_FIELD_NUMBER: builtins.int
-        CAST_TO_TYPE_FIELD_NUMBER: builtins.int
+        TYPE_FIELD_NUMBER: builtins.int
+        TYPE_STR_FIELD_NUMBER: builtins.int
         @property
         def expr(self) -> global___Expression:
             """(Required) the expression to be casted."""
         @property
-        def cast_to_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
-            """(Required) the data type that the expr to be casted to."""
+        def type(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
+        type_str: builtins.str
+        """If this is set, Server will use Catalyst parser to parse this string to DataType."""
         def __init__(
             self,
             *,
             expr: global___Expression | None = ...,
-            cast_to_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+            type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+            type_str: builtins.str = ...,
         ) -> None: ...
         def HasField(
             self,
-            field_name: typing_extensions.Literal["cast_to_type", b"cast_to_type", "expr", b"expr"],
+            field_name: typing_extensions.Literal[
+                "cast_to_type",
+                b"cast_to_type",
+                "expr",
+                b"expr",
+                "type",
+                b"type",
+                "type_str",
+                b"type_str",
+            ],
         ) -> builtins.bool: ...
         def ClearField(
             self,
-            field_name: typing_extensions.Literal["cast_to_type", b"cast_to_type", "expr", b"expr"],
+            field_name: typing_extensions.Literal[
+                "cast_to_type",
+                b"cast_to_type",
+                "expr",
+                b"expr",
+                "type",
+                b"type",
+                "type_str",
+                b"type_str",
+            ],
         ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["cast_to_type", b"cast_to_type"]
+        ) -> typing_extensions.Literal["type", "type_str"] | None: ...
 
     class Literal(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -166,87 +190,6 @@ class Expression(google.protobuf.message.Message):
                 ],
             ) -> None: ...
 
-        class Struct(google.protobuf.message.Message):
-            DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-            FIELDS_FIELD_NUMBER: builtins.int
-            @property
-            def fields(
-                self,
-            ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-                global___Expression.Literal
-            ]:
-                """A possibly heterogeneously typed list of literals"""
-            def __init__(
-                self,
-                *,
-                fields: collections.abc.Iterable[global___Expression.Literal] | None = ...,
-            ) -> None: ...
-            def ClearField(
-                self, field_name: typing_extensions.Literal["fields", b"fields"]
-            ) -> None: ...
-
-        class Array(google.protobuf.message.Message):
-            DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-            VALUES_FIELD_NUMBER: builtins.int
-            @property
-            def values(
-                self,
-            ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-                global___Expression.Literal
-            ]:
-                """A homogeneously typed list of literals"""
-            def __init__(
-                self,
-                *,
-                values: collections.abc.Iterable[global___Expression.Literal] | None = ...,
-            ) -> None: ...
-            def ClearField(
-                self, field_name: typing_extensions.Literal["values", b"values"]
-            ) -> None: ...
-
-        class Map(google.protobuf.message.Message):
-            DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-            class Pair(google.protobuf.message.Message):
-                DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-                KEY_FIELD_NUMBER: builtins.int
-                VALUE_FIELD_NUMBER: builtins.int
-                @property
-                def key(self) -> global___Expression.Literal: ...
-                @property
-                def value(self) -> global___Expression.Literal: ...
-                def __init__(
-                    self,
-                    *,
-                    key: global___Expression.Literal | None = ...,
-                    value: global___Expression.Literal | None = ...,
-                ) -> None: ...
-                def HasField(
-                    self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
-                ) -> builtins.bool: ...
-                def ClearField(
-                    self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
-                ) -> None: ...
-
-            PAIRS_FIELD_NUMBER: builtins.int
-            @property
-            def pairs(
-                self,
-            ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-                global___Expression.Literal.Map.Pair
-            ]: ...
-            def __init__(
-                self,
-                *,
-                pairs: collections.abc.Iterable[global___Expression.Literal.Map.Pair] | None = ...,
-            ) -> None: ...
-            def ClearField(
-                self, field_name: typing_extensions.Literal["pairs", b"pairs"]
-            ) -> None: ...
-
         NULL_FIELD_NUMBER: builtins.int
         BINARY_FIELD_NUMBER: builtins.int
         BOOLEAN_FIELD_NUMBER: builtins.int
@@ -264,9 +207,7 @@ class Expression(google.protobuf.message.Message):
         CALENDAR_INTERVAL_FIELD_NUMBER: builtins.int
         YEAR_MONTH_INTERVAL_FIELD_NUMBER: builtins.int
         DAY_TIME_INTERVAL_FIELD_NUMBER: builtins.int
-        ARRAY_FIELD_NUMBER: builtins.int
-        STRUCT_FIELD_NUMBER: builtins.int
-        MAP_FIELD_NUMBER: builtins.int
+        TYPED_NULL_FIELD_NUMBER: builtins.int
         NULLABLE_FIELD_NUMBER: builtins.int
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
         null: builtins.bool
@@ -292,11 +233,7 @@ class Expression(google.protobuf.message.Message):
         year_month_interval: builtins.int
         day_time_interval: builtins.int
         @property
-        def array(self) -> global___Expression.Literal.Array: ...
-        @property
-        def struct(self) -> global___Expression.Literal.Struct: ...
-        @property
-        def map(self) -> global___Expression.Literal.Map: ...
+        def typed_null(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
         nullable: builtins.bool
         """whether the literal type should be treated as a nullable type. Applies to
         all members of union other than the Typed null (which should directly
@@ -327,17 +264,13 @@ class Expression(google.protobuf.message.Message):
             calendar_interval: global___Expression.Literal.CalendarInterval | None = ...,
             year_month_interval: builtins.int = ...,
             day_time_interval: builtins.int = ...,
-            array: global___Expression.Literal.Array | None = ...,
-            struct: global___Expression.Literal.Struct | None = ...,
-            map: global___Expression.Literal.Map | None = ...,
+            typed_null: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
             nullable: builtins.bool = ...,
             type_variation_reference: builtins.int = ...,
         ) -> None: ...
         def HasField(
             self,
             field_name: typing_extensions.Literal[
-                "array",
-                b"array",
                 "binary",
                 b"binary",
                 "boolean",
@@ -362,20 +295,18 @@ class Expression(google.protobuf.message.Message):
                 b"literal_type",
                 "long",
                 b"long",
-                "map",
-                b"map",
                 "null",
                 b"null",
                 "short",
                 b"short",
                 "string",
                 b"string",
-                "struct",
-                b"struct",
                 "timestamp",
                 b"timestamp",
                 "timestamp_ntz",
                 b"timestamp_ntz",
+                "typed_null",
+                b"typed_null",
                 "year_month_interval",
                 b"year_month_interval",
             ],
@@ -383,8 +314,6 @@ class Expression(google.protobuf.message.Message):
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "array",
-                b"array",
                 "binary",
                 b"binary",
                 "boolean",
@@ -409,8 +338,6 @@ class Expression(google.protobuf.message.Message):
                 b"literal_type",
                 "long",
                 b"long",
-                "map",
-                b"map",
                 "null",
                 b"null",
                 "nullable",
@@ -419,14 +346,14 @@ class Expression(google.protobuf.message.Message):
                 b"short",
                 "string",
                 b"string",
-                "struct",
-                b"struct",
                 "timestamp",
                 b"timestamp",
                 "timestamp_ntz",
                 b"timestamp_ntz",
                 "type_variation_reference",
                 b"type_variation_reference",
+                "typed_null",
+                b"typed_null",
                 "year_month_interval",
                 b"year_month_interval",
             ],
@@ -451,9 +378,7 @@ class Expression(google.protobuf.message.Message):
             "calendar_interval",
             "year_month_interval",
             "day_time_interval",
-            "array",
-            "struct",
-            "map",
+            "typed_null",
         ] | None: ...
 
     class UnresolvedAttribute(google.protobuf.message.Message):
@@ -487,6 +412,7 @@ class Expression(google.protobuf.message.Message):
 
         FUNCTION_NAME_FIELD_NUMBER: builtins.int
         ARGUMENTS_FIELD_NUMBER: builtins.int
+        IS_DISTINCT_FIELD_NUMBER: builtins.int
         IS_USER_DEFINED_FUNCTION_FIELD_NUMBER: builtins.int
         function_name: builtins.str
         """(Required) name (or unparsed name for user defined function) for the unresolved function."""
@@ -497,6 +423,8 @@ class Expression(google.protobuf.message.Message):
             global___Expression
         ]:
             """(Optional) Function arguments. Empty arguments are allowed."""
+        is_distinct: builtins.bool
+        """(Required) Indicate if this function should be applied on distinct values."""
         is_user_defined_function: builtins.bool
         """(Required) Indicate if this is a user defined function.
 
@@ -508,6 +436,7 @@ class Expression(google.protobuf.message.Message):
             *,
             function_name: builtins.str = ...,
             arguments: collections.abc.Iterable[global___Expression] | None = ...,
+            is_distinct: builtins.bool = ...,
             is_user_defined_function: builtins.bool = ...,
         ) -> None: ...
         def ClearField(
@@ -517,6 +446,8 @@ class Expression(google.protobuf.message.Message):
                 b"arguments",
                 "function_name",
                 b"function_name",
+                "is_distinct",
+                b"is_distinct",
                 "is_user_defined_function",
                 b"is_user_defined_function",
             ],
@@ -559,6 +490,25 @@ class Expression(google.protobuf.message.Message):
         ) -> None: ...
         def ClearField(
             self, field_name: typing_extensions.Literal["target", b"target"]
+        ) -> None: ...
+
+    class UnresolvedRegex(google.protobuf.message.Message):
+        """Represents all of the input attributes to a given relational operator, for example in
+        "SELECT `(id)?+.+` FROM ...".
+        """
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        COL_NAME_FIELD_NUMBER: builtins.int
+        col_name: builtins.str
+        """(Required) The column name used to extract column with regex."""
+        def __init__(
+            self,
+            *,
+            col_name: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["col_name", b"col_name"]
         ) -> None: ...
 
     class Alias(google.protobuf.message.Message):
@@ -610,6 +560,7 @@ class Expression(google.protobuf.message.Message):
     UNRESOLVED_STAR_FIELD_NUMBER: builtins.int
     ALIAS_FIELD_NUMBER: builtins.int
     CAST_FIELD_NUMBER: builtins.int
+    UNRESOLVED_REGEX_FIELD_NUMBER: builtins.int
     @property
     def literal(self) -> global___Expression.Literal: ...
     @property
@@ -624,6 +575,8 @@ class Expression(google.protobuf.message.Message):
     def alias(self) -> global___Expression.Alias: ...
     @property
     def cast(self) -> global___Expression.Cast: ...
+    @property
+    def unresolved_regex(self) -> global___Expression.UnresolvedRegex: ...
     def __init__(
         self,
         *,
@@ -634,6 +587,7 @@ class Expression(google.protobuf.message.Message):
         unresolved_star: global___Expression.UnresolvedStar | None = ...,
         alias: global___Expression.Alias | None = ...,
         cast: global___Expression.Cast | None = ...,
+        unresolved_regex: global___Expression.UnresolvedRegex | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -652,6 +606,8 @@ class Expression(google.protobuf.message.Message):
             b"unresolved_attribute",
             "unresolved_function",
             b"unresolved_function",
+            "unresolved_regex",
+            b"unresolved_regex",
             "unresolved_star",
             b"unresolved_star",
         ],
@@ -673,6 +629,8 @@ class Expression(google.protobuf.message.Message):
             b"unresolved_attribute",
             "unresolved_function",
             b"unresolved_function",
+            "unresolved_regex",
+            b"unresolved_regex",
             "unresolved_star",
             b"unresolved_star",
         ],
@@ -687,6 +645,7 @@ class Expression(google.protobuf.message.Message):
         "unresolved_star",
         "alias",
         "cast",
+        "unresolved_regex",
     ] | None: ...
 
 global___Expression = Expression

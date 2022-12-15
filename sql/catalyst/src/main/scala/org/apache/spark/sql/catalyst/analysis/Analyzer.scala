@@ -288,6 +288,8 @@ class Analyzer(override val catalogManager: CatalogManager)
       AddMetadataColumns ::
       DeduplicateRelations ::
       ResolveReferences ::
+      WrapLateralColumnAliasReference ::
+      ResolveLateralColumnAliasReference ::
       ResolveExpressionsWithNamePlaceholders ::
       ResolveDeserializer ::
       ResolveNewInstance ::
@@ -343,8 +345,8 @@ class Analyzer(override val catalogManager: CatalogManager)
       UpdateOuterReferences),
     Batch("Cleanup", fixedPoint,
       CleanupAliases),
-    Batch("HandleAnalysisOnlyCommand", Once,
-      HandleAnalysisOnlyCommand)
+    Batch("HandleSpecialCommand", Once,
+      HandleSpecialCommand)
   )
 
   /**
@@ -1672,7 +1674,7 @@ class Analyzer(override val catalogManager: CatalogManager)
               // Only Project and Aggregate can host star expressions.
               case u @ (_: Project | _: Aggregate) =>
                 Try(s.expand(u.children.head, resolver)) match {
-                  case Success(expanded) => expanded.map(wrapOuterReference)
+                  case Success(expanded) => expanded.map(wrapOuterReference(_))
                   case Failure(_) => throw e
                 }
               // Do not use the outer plan to resolve the star expression
@@ -2143,7 +2145,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       case u @ UnresolvedAttribute(nameParts) => withPosition(u) {
         try {
           AnalysisContext.get.outerPlan.get.resolveChildren(nameParts, resolver) match {
-            case Some(resolved) => wrapOuterReference(resolved)
+            case Some(resolved) => wrapOuterReference(resolved, Some(nameParts))
             case None => u
           }
         } catch {
@@ -3903,15 +3905,17 @@ class Analyzer(override val catalogManager: CatalogManager)
   }
 
   /**
-   * A rule that marks a command as analyzed so that its children are removed to avoid
-   * being optimized. This rule should run after all other analysis rules are run.
+   * A rule to handle special commands that need to be notified when analysis is done. This rule
+   * should run after all other analysis rules are run.
    */
-  object HandleAnalysisOnlyCommand extends Rule[LogicalPlan] {
+  object HandleSpecialCommand extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       _.containsPattern(COMMAND)) {
       case c: AnalysisOnlyCommand if c.resolved =>
         checkAnalysis(c)
         c.markAsAnalyzed(AnalysisContext.get)
+      case c: KeepAnalyzedQuery if c.resolved =>
+        c.storeAnalyzedQuery()
     }
   }
 }

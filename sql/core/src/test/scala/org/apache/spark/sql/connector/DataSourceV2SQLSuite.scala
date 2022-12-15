@@ -29,12 +29,15 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchDatabaseException, NoSuchNamespaceException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.plans.logical.ColumnStat
+import org.apache.spark.sql.catalyst.statsEstimation.StatsEstimationTestBase
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
@@ -46,7 +49,7 @@ import org.apache.spark.unsafe.types.UTF8String
 
 abstract class DataSourceV2SQLSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = true)
-  with DeleteFromTests with DatasourceV2SQLBase {
+  with DeleteFromTests with DatasourceV2SQLBase with StatsEstimationTestBase {
 
   protected val v2Source = classOf[FakeV2Provider].getName
   override protected val v2Format = v2Source
@@ -2769,6 +2772,25 @@ class DataSourceV2SQLSuiteV1Filter
               |SELECT * FROM t VERSION AS OF '2'
               |""".stripMargin
         ).collect() === Array(Row(1), Row(2)))
+    }
+  }
+
+  test("SPARK-41378: test column stats") {
+    spark.sql("CREATE TABLE testcat.test (id bigint NOT NULL, data string)")
+    spark.sql("INSERT INTO testcat.test values (1, 'test1'), (2, null), (3, null)," +
+      " (4, null), (5, 'test5')")
+    val df = spark.sql("select * from testcat.test")
+
+    val expectedColumnStats = Seq(
+      "id" -> ColumnStat(Some(5), None, None, Some(0), None, None, None, 2),
+      "data" -> ColumnStat(Some(3), None, None, Some(3), None, None, None, 2))
+    df.queryExecution.optimizedPlan.collect {
+      case scan: DataSourceV2ScanRelation =>
+        val stats = scan.stats
+        assert(stats.sizeInBytes == 200)
+        assert(stats.rowCount.get == 5)
+        assert(stats.attributeStats ==
+          toAttributeMap(expectedColumnStats, df.queryExecution.optimizedPlan))
     }
   }
 

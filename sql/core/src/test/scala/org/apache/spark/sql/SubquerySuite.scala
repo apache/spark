@@ -964,17 +964,15 @@ class SubquerySuite extends QueryTest
             |               WHERE t1.c1 = t2.c1)
           """.stripMargin)
       }
-      checkErrorMatchPVals(
+      checkError(
         exception1,
-        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_CORRELATED_REFERENCE",
-        parameters = Map("treeNode" -> "(?s).*"),
-        sqlState = None,
+        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+        parameters = Map("sqlExprs" -> "\"explode(arr_c2)\""),
         context = ExpectedContext(
           fragment = "LATERAL VIEW explode(t2.arr_c2) q AS c2",
           start = 68,
-          stop = 106))
-      assert(exception1.getMessage.contains(
-        "Expressions referencing the outer query are not supported outside of WHERE/HAVING"))
+          stop = 106)
+      )
     }
   }
 
