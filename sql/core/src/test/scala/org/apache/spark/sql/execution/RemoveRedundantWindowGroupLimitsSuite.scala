@@ -21,7 +21,6 @@ import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.window.WindowGroupLimitExec
 import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 abstract class RemoveRedundantWindowGroupLimitsSuiteBase
@@ -34,23 +33,17 @@ abstract class RemoveRedundantWindowGroupLimitsSuiteBase
     assert(collectWithSubqueries(plan) { case exec: WindowGroupLimitExec => exec }.length == count)
   }
 
-  private def checkWindowGroupLimits(query: String, enabledCount: Int, disabledCount: Int): Unit = {
-    withSQLConf(SQLConf.REMOVE_REDUNDANT_WINDOW_GROUP_LIMITS_ENABLED.key -> "true") {
-      val df = sql(query)
-      checkNumWindowGroupLimits(df, enabledCount)
-      val result = df.collect()
-      withSQLConf(SQLConf.REMOVE_REDUNDANT_WINDOW_GROUP_LIMITS_ENABLED.key -> "false") {
-        val df = sql(query)
-        checkNumWindowGroupLimits(df, disabledCount)
-        checkAnswer(df, result)
-      }
-    }
+  private def checkWindowGroupLimits(query: String, count: Int): Unit = {
+    val df = sql(query)
+    checkNumWindowGroupLimits(df, count)
+    val result = df.collect()
+    checkAnswer(df, result)
   }
 
   test("remove redundant WindowGroupLimits") {
     withTempView("t") {
       spark.range(0, 100).withColumn("value", lit(1)).createOrReplaceTempView("t")
-      val query =
+      val query1 =
         """
           |SELECT *
           |FROM (
@@ -61,7 +54,20 @@ abstract class RemoveRedundantWindowGroupLimitsSuiteBase
           |)
           |WHERE rn < 3
           |""".stripMargin
-      checkWindowGroupLimits(query, 1, 2)
+      checkWindowGroupLimits(query1, 1)
+
+      val query2 =
+        """
+          |SELECT *
+          |FROM (
+          |    SELECT id, rank() OVER w AS rn
+          |    FROM t
+          |    GROUP BY id
+          |    WINDOW w AS (ORDER BY max(value))
+          |)
+          |WHERE rn < 3
+          |""".stripMargin
+      checkWindowGroupLimits(query2, 2)
     }
   }
 }

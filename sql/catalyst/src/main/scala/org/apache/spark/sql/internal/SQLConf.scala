@@ -1783,14 +1783,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val REMOVE_REDUNDANT_WINDOW_GROUP_LIMITS_ENABLED =
-    buildConf("spark.sql.execution.removeRedundantWindowGroupLimits")
-      .internal()
-      .doc("Whether to remove redundant physical window group limit node")
-    .version("3.4.0")
-    .booleanConf
-    .createWithDefault(true)
-
   val REPLACE_HASH_WITH_SORT_AGG_ENABLED = buildConf("spark.sql.execution.replaceHashWithSortAgg")
     .internal()
     .doc("Whether to replace hash aggregate node with sort aggregate based on children's ordering")

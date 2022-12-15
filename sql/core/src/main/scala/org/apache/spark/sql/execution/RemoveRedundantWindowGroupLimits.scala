@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.window.{Final, Partial, WindowGroupLimitExec}
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Remove redundant partial WindowGroupLimitExec node from the spark plan. A partial
@@ -27,17 +26,9 @@ import org.apache.spark.sql.internal.SQLConf
  */
 object RemoveRedundantWindowGroupLimits extends Rule[SparkPlan] {
 
-  def apply(plan: SparkPlan): SparkPlan = {
-    if (!conf.getConf(SQLConf.REMOVE_REDUNDANT_WINDOW_GROUP_LIMITS_ENABLED)) {
-      plan
-    } else {
-      removeWindowGroupLimits(plan)
-    }
-  }
-
-  private def removeWindowGroupLimits(plan: SparkPlan): SparkPlan = plan transform {
+  def apply(plan: SparkPlan): SparkPlan = plan transform {
     case outer @ WindowGroupLimitExec(
-      _, _, _, _, Final, WindowGroupLimitExec(_, _, _, _, Partial, child))
+    _, _, _, _, Final, WindowGroupLimitExec(_, _, _, _, Partial, child))
       if child.outputPartitioning.satisfies(outer.requiredChildDistribution.head) =>
       val newOuter = outer.withNewChildren(Seq(child))
       newOuter
