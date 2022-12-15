@@ -1067,7 +1067,7 @@ def atanh(col: "ColumnOrName") -> Column:
 def bin(col: "ColumnOrName") -> Column:
     """Returns the string representation of the binary value of the given column.
 
-    .. versionadded:: 1.5.0
+    .. versionadded:: 3.4.0
 
     Parameters
     ----------
@@ -5896,16 +5896,10 @@ def sentences(
     |[[Hello, world], [How, are, you]]|
     +---------------------------------+
     """
-    if language is None:
-        language = lit("")
-    elif isinstance(language, str):
-        language = lit(language)
-    if country is None:
-        country = lit("")
-    elif isinstance(country, str):
-        language = lit(country)
+    _language = lit("") if language is None else _to_col(language)
+    _country = lit("") if country is None else _to_col(country)
 
-    return _invoke_function("sentences", _to_col(string), language, country)
+    return _invoke_function("sentences", _to_col(string), _language, _country)
 
 
 def substring(str: "ColumnOrName", pos: int, len: int) -> Column:
@@ -6281,79 +6275,6 @@ def soundex(col: "ColumnOrName") -> Column:
     [Row(soundex='P362'), Row(soundex='U612')]
     """
     return _invoke_function_over_columns("soundex", col)
-
-
-def bin(col: "ColumnOrName") -> Column:
-    """Returns the string representation of the binary value of the given column.
-
-    .. versionadded:: 3.4.0
-
-    Parameters
-    ----------
-    col : :class:`~pyspark.sql.Column` or str
-        target column to work on.
-
-    Returns
-    -------
-    :class:`~pyspark.sql.Column`
-        binary representation of given value as string.
-
-    Examples
-    --------
-    >>> df = spark.createDataFrame([2,5], "INT")
-    >>> df.select(bin(df.value).alias('c')).collect()
-    [Row(c='10'), Row(c='101')]
-    """
-    return _invoke_function_over_columns("bin", col)
-
-
-def hex(col: "ColumnOrName") -> Column:
-    """Computes hex value of the given column, which could be :class:`pyspark.sql.types.StringType`,
-    :class:`pyspark.sql.types.BinaryType`, :class:`pyspark.sql.types.IntegerType` or
-    :class:`pyspark.sql.types.LongType`.
-
-    .. versionadded:: 3.4.0
-
-    Parameters
-    ----------
-    col : :class:`~pyspark.sql.Column` or str
-        target column to work on.
-
-    Returns
-    -------
-    :class:`~pyspark.sql.Column`
-        hexadecimal representation of given value as string.
-
-    Examples
-    --------
-    >>> spark.createDataFrame([('ABC', 3)], ['a', 'b']).select(hex('a'), hex('b')).collect()
-    [Row(hex(a)='414243', hex(b)='3')]
-    """
-    return _invoke_function_over_columns("hex", col)
-
-
-def unhex(col: "ColumnOrName") -> Column:
-    """Inverse of hex. Interprets each pair of characters as a hexadecimal number
-    and converts to the byte representation of number.
-
-    .. versionadded:: 3.4.0
-
-    Parameters
-    ----------
-    col : :class:`~pyspark.sql.Column` or str
-        target column to work on.
-
-    Returns
-    -------
-    :class:`~pyspark.sql.Column`
-        string representation of given hexadecimal value.
-
-    Examples
-    --------
-    >>> spark.createDataFrame([('414243',)], ['a']).select(unhex('a')).collect()
-    [Row(unhex(a)=bytearray(b'ABC'))]
-    """
-    return _invoke_function_over_columns("unhex", col)
 
 
 def length(col: "ColumnOrName") -> Column:
