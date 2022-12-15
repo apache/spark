@@ -19,14 +19,14 @@ package org.apache.spark.internal.plugin
 
 import org.apache.spark.api.plugin.DriverPlugin
 import org.apache.spark.internal.Logging
-import org.apache.spark.rpc.{IsolatedRpcEndpoint, RpcCallContext, RpcEnv}
+import org.apache.spark.rpc.{IsolatedThreadSafeRpcEndpoint, RpcCallContext, RpcEnv}
 
 case class PluginMessage(pluginName: String, message: AnyRef)
 
 private class PluginEndpoint(
     plugins: Map[String, DriverPlugin],
     override val rpcEnv: RpcEnv)
-  extends IsolatedRpcEndpoint with Logging {
+  extends IsolatedThreadSafeRpcEndpoint with Logging {
 
   override def receive: PartialFunction[Any, Unit] = {
     case PluginMessage(pluginName, message) =>

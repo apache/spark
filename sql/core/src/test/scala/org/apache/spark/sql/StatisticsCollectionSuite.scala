@@ -124,16 +124,29 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       Seq(ArrayData(Seq(1, 2, 3), Seq(Seq(1, 2, 3)))).toDF().write.saveAsTable(tableName)
 
       // Test unsupported data types
-      val err1 = intercept[AnalysisException] {
-        sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS data")
-      }
-      assert(err1.message.contains("does not support statistics collection"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS data")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1235",
+        parameters = Map(
+          "name" -> "data",
+          "tableIdent" -> "`spark_catalog`.`default`.`column_stats_test1`",
+          "dataType" -> "ArrayType(IntegerType,true)"
+        )
+      )
 
       // Test invalid columns
-      val err2 = intercept[AnalysisException] {
-        sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS some_random_column")
-      }
-      assert(err2.message.contains("does not exist"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS some_random_column")
+        },
+        errorClass = "COLUMN_NOT_FOUND",
+        parameters = Map(
+          "colName" -> "`some_random_column`",
+          "caseSensitiveConfig" -> "\"spark.sql.caseSensitive\""
+        )
+      )
     }
   }
 
@@ -581,10 +594,13 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     withTempView("tempView") {
       // Analyzes in a temporary view
       sql("CREATE TEMPORARY VIEW tempView AS SELECT 1 id")
-      val errMsg = intercept[AnalysisException] {
-        sql("ANALYZE TABLE tempView COMPUTE STATISTICS FOR COLUMNS id")
-      }.getMessage
-      assert(errMsg.contains("Temporary view `tempView` is not cached for analyzing columns"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("ANALYZE TABLE tempView COMPUTE STATISTICS FOR COLUMNS id")
+        },
+        errorClass = "UNSUPPORTED_FEATURE.ANALYZE_UNCACHED_TEMP_VIEW",
+        parameters = Map("viewName" -> "`tempView`")
+      )
 
       // Cache the view then analyze it
       sql("CACHE TABLE tempView")
@@ -604,11 +620,13 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         ExpectedContext(s"$globalTempDB.gTempView", 14, 13 + s"$globalTempDB.gTempView".length))
       // Analyzes in a global temporary view
       sql("CREATE GLOBAL TEMP VIEW gTempView AS SELECT 1 id")
-      val errMsg2 = intercept[AnalysisException] {
-        sql(s"ANALYZE TABLE $globalTempDB.gTempView COMPUTE STATISTICS FOR COLUMNS id")
-      }.getMessage
-      assert(errMsg2.contains(
-        s"Temporary view `$globalTempDB`.`gTempView` is not cached for analyzing columns"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ANALYZE TABLE $globalTempDB.gTempView COMPUTE STATISTICS FOR COLUMNS id")
+        },
+        errorClass = "UNSUPPORTED_FEATURE.ANALYZE_UNCACHED_TEMP_VIEW",
+        parameters = Map("viewName" -> "`global_temp`.`gTempView`")
+      )
 
       // Cache the view then analyze it
       sql(s"CACHE TABLE $globalTempDB.gTempView")

@@ -27,7 +27,7 @@ import scala.util.matching.Regex
 import org.apache.hadoop.hive.common.StatsSetupConst
 
 import org.apache.spark.metrics.source.HiveCatalogMetrics
-import org.apache.spark.sql._
+import org.apache.spark.sql.{AnalysisException, _}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics, HiveTableRelation}
@@ -42,7 +42,6 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
-
 
 class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleton {
 
@@ -582,6 +581,24 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
+  test("analyze not found column") {
+    val tableName = "analyzeTable"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (key STRING, value STRING) PARTITIONED BY (ds STRING)")
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS fakeColumn")
+        },
+        errorClass = "COLUMN_NOT_FOUND",
+        parameters = Map(
+          "colName" -> "`fakeColumn`",
+          "caseSensitiveConfig" -> "\"spark.sql.caseSensitive\""
+        )
+      )
+    }
+  }
+
   test("analyze non-existent partition") {
 
     def assertAnalysisException(analyzeCommand: String, errorMessage: String): Unit = {
@@ -745,7 +762,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     val e2 = intercept[IllegalArgumentException] {
       AnalyzeColumnCommand(TableIdentifier("test"), None, false).run(spark)
     }
-    assert(e1.getMessage.contains("Parameter `columnNames` or `allColumns` are" +
+    assert(e2.getMessage.contains("Parameter `columnNames` or `allColumns` are" +
       " mutually exclusive"))
   }
 

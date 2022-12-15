@@ -74,7 +74,7 @@ private[spark] class AppStatusListener(
   private val liveStages = new ConcurrentHashMap[(Int, Int), LiveStage]()
   private val liveJobs = new HashMap[Int, LiveJob]()
   private[spark] val liveExecutors = new HashMap[String, LiveExecutor]()
-  private val deadExecutors = new HashMap[String, LiveExecutor]()
+  private[spark] val deadExecutors = new HashMap[String, LiveExecutor]()
   private val liveTasks = new HashMap[Long, LiveTask]()
   private val liveRDDs = new HashMap[Int, LiveRDD]()
   private val pools = new HashMap[String, SchedulerPool]()
@@ -674,22 +674,30 @@ private[spark] class AppStatusListener(
       delta
     }.orNull
 
-    val (completedDelta, failedDelta, killedDelta) = event.reason match {
+    // SPARK-41187: For `SparkListenerTaskEnd` with `Resubmitted` reason, which is raised by
+    // executor lost, it can lead to negative `LiveStage.activeTasks` since there's no
+    // corresponding `SparkListenerTaskStart` event for each of them. The negative activeTasks
+    // will make the stage always remains in the live stage list as it can never meet the
+    // condition activeTasks == 0. This in turn causes the dead executor to never be retained
+    // if that live stage's submissionTime is less than the dead executor's removeTime.
+    val (completedDelta, failedDelta, killedDelta, activeDelta) = event.reason match {
       case Success =>
-        (1, 0, 0)
+        (1, 0, 0, 1)
       case _: TaskKilled =>
-        (0, 0, 1)
+        (0, 0, 1, 1)
       case _: TaskCommitDenied =>
-        (0, 0, 1)
+        (0, 0, 1, 1)
+      case _ @ Resubmitted =>
+        (0, 1, 0, 0)
       case _ =>
-        (0, 1, 0)
+        (0, 1, 0, 1)
     }
 
     Option(liveStages.get((event.stageId, event.stageAttemptId))).foreach { stage =>
       if (metricsDelta != null) {
         stage.metrics = LiveEntityHelpers.addMetrics(stage.metrics, metricsDelta)
       }
-      stage.activeTasks -= 1
+      stage.activeTasks -= activeDelta
       stage.completedTasks += completedDelta
       if (completedDelta > 0) {
         stage.completedIndices.add(event.taskInfo.index)
@@ -699,7 +707,7 @@ private[spark] class AppStatusListener(
       if (killedDelta > 0) {
         stage.killedSummary = killedTasksSummary(event.reason, stage.killedSummary)
       }
-      stage.activeTasksPerExecutor(event.taskInfo.executorId) -= 1
+      stage.activeTasksPerExecutor(event.taskInfo.executorId) -= activeDelta
 
       stage.peakExecutorMetrics.compareAndUpdatePeakValues(event.taskExecutorMetrics)
       stage.executorSummary(event.taskInfo.executorId).peakExecutorMetrics
@@ -718,7 +726,7 @@ private[spark] class AppStatusListener(
       // Store both stage ID and task index in a single long variable for tracking at job level.
       val taskIndex = (event.stageId.toLong << Integer.SIZE) | event.taskInfo.index
       stage.jobs.foreach { job =>
-        job.activeTasks -= 1
+        job.activeTasks -= activeDelta
         job.completedTasks += completedDelta
         if (completedDelta > 0) {
           job.completedIndices.add(taskIndex)
@@ -774,7 +782,7 @@ private[spark] class AppStatusListener(
     }
 
     liveExecutors.get(event.taskInfo.executorId).foreach { exec =>
-      exec.activeTasks -= 1
+      exec.activeTasks -= activeDelta
       exec.completedTasks += completedDelta
       exec.failedTasks += failedDelta
       exec.totalDuration += event.taskInfo.duration

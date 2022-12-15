@@ -15,12 +15,49 @@
 # limitations under the License.
 #
 
-from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
-from pyspark.testing.sqlutils import have_pandas
+import decimal
+import datetime
 
-if have_pandas:
+from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
+from pyspark.sql.connect.column import (
+    Column,
+    LiteralExpression,
+    JVM_BYTE_MIN,
+    JVM_BYTE_MAX,
+    JVM_SHORT_MIN,
+    JVM_SHORT_MAX,
+    JVM_INT_MIN,
+    JVM_INT_MAX,
+    JVM_LONG_MIN,
+    JVM_LONG_MAX,
+)
+
+from pyspark.sql.types import (
+    StructField,
+    StructType,
+    ArrayType,
+    MapType,
+    NullType,
+    DateType,
+    TimestampType,
+    TimestampNTZType,
+    ByteType,
+    BinaryType,
+    ShortType,
+    IntegerType,
+    FloatType,
+    DayTimeIntervalType,
+    StringType,
+    DoubleType,
+    LongType,
+    DecimalType,
+    BooleanType,
+)
+from pyspark.testing.connectutils import should_test_connect
+
+if should_test_connect:
+    import pandas as pd
     from pyspark.sql.connect.functions import lit
-    import pandas
 
 
 class SparkConnectTests(SparkConnectSQLTestCase):
@@ -74,11 +111,210 @@ class SparkConnectTests(SparkConnectSQLTestCase):
     def test_simple_binary_expressions(self):
         """Test complex expression"""
         df = self.connect.read.table(self.tbl_name)
-        pd = df.select(df.id).where(df.id % lit(30) == lit(0)).sort(df.id.asc()).toPandas()
-        self.assertEqual(len(pd.index), 4)
+        pdf = df.select(df.id).where(df.id % lit(30) == lit(0)).sort(df.id.asc()).toPandas()
+        self.assertEqual(len(pdf.index), 4)
 
-        res = pandas.DataFrame(data={"id": [0, 30, 60, 90]})
-        self.assert_(pd.equals(res), f"{pd.to_string()} != {res.to_string()}")
+        res = pd.DataFrame(data={"id": [0, 30, 60, 90]})
+        self.assert_(pdf.equals(res), f"{pdf.to_string()} != {res.to_string()}")
+
+    def test_literal_with_acceptable_type(self):
+        for value, dataType in [
+            (b"binary\0\0asas", BinaryType()),
+            (True, BooleanType()),
+            (False, BooleanType()),
+            (0, ByteType()),
+            (JVM_BYTE_MIN, ByteType()),
+            (JVM_BYTE_MAX, ByteType()),
+            (0, ShortType()),
+            (JVM_SHORT_MIN, ShortType()),
+            (JVM_SHORT_MAX, ShortType()),
+            (0, IntegerType()),
+            (JVM_INT_MIN, IntegerType()),
+            (JVM_INT_MAX, IntegerType()),
+            (0, LongType()),
+            (JVM_LONG_MIN, LongType()),
+            (JVM_LONG_MAX, LongType()),
+            (0.0, FloatType()),
+            (1.234567, FloatType()),
+            (float("nan"), FloatType()),
+            (float("inf"), FloatType()),
+            (float("-inf"), FloatType()),
+            (0.0, DoubleType()),
+            (1.234567, DoubleType()),
+            (float("nan"), DoubleType()),
+            (float("inf"), DoubleType()),
+            (float("-inf"), DoubleType()),
+            (decimal.Decimal(0.0), DecimalType()),
+            (decimal.Decimal(1.234567), DecimalType()),
+            ("sss", StringType()),
+            (datetime.date(2022, 12, 13), DateType()),
+            (datetime.datetime.now(), DateType()),
+            (datetime.datetime.now(), TimestampType()),
+            (datetime.datetime.now(), TimestampNTZType()),
+            (datetime.timedelta(1, 2, 3), DayTimeIntervalType()),
+        ]:
+            lit = LiteralExpression(value=value, dataType=dataType)
+            self.assertEqual(dataType, lit._dataType)
+
+    def test_literal_with_unsupported_type(self):
+        for value, dataType in [
+            (b"binary\0\0asas", BooleanType()),
+            (True, StringType()),
+            (False, DoubleType()),
+            (JVM_BYTE_MIN - 1, ByteType()),
+            (JVM_BYTE_MAX + 1, ByteType()),
+            (JVM_SHORT_MIN - 1, ShortType()),
+            (JVM_SHORT_MAX + 1, ShortType()),
+            (JVM_INT_MIN - 1, IntegerType()),
+            (JVM_INT_MAX + 1, IntegerType()),
+            (JVM_LONG_MIN - 1, LongType()),
+            (JVM_LONG_MAX + 1, LongType()),
+            (0.1, DecimalType()),
+            (datetime.date(2022, 12, 13), TimestampType()),
+            (datetime.timedelta(1, 2, 3), DateType()),
+            ([1, 2, 3], ArrayType(IntegerType())),
+            ({1: 2}, MapType(IntegerType(), IntegerType())),
+            (
+                {"a": "xyz", "b": 1},
+                StructType([StructField("a", StringType()), StructField("b", IntegerType())]),
+            ),
+        ]:
+            with self.assertRaises(AssertionError):
+                LiteralExpression(value=value, dataType=dataType)
+
+    def test_literal_null(self):
+        for dataType in [
+            NullType(),
+            BinaryType(),
+            BooleanType(),
+            ByteType(),
+            ShortType(),
+            IntegerType(),
+            LongType(),
+            FloatType(),
+            DoubleType(),
+            DecimalType(),
+            DateType(),
+            TimestampType(),
+            TimestampNTZType(),
+            DayTimeIntervalType(),
+        ]:
+            lit_null = LiteralExpression(value=None, dataType=dataType)
+            self.assertTrue(lit_null._value is None)
+            self.assertEqual(dataType, lit_null._dataType)
+
+            cdf = self.connect.range(0, 1).select(Column(lit_null))
+            self.assertEqual(dataType, cdf.schema.fields[0].dataType)
+
+        for value, dataType in [
+            ("123", NullType()),
+            (123, NullType()),
+            (None, ArrayType(IntegerType())),
+            (None, MapType(IntegerType(), IntegerType())),
+            (None, StructType([StructField("a", StringType())])),
+        ]:
+            with self.assertRaises(AssertionError):
+                LiteralExpression(value=value, dataType=dataType)
+
+    def test_literal_integers(self):
+        cdf = self.connect.range(0, 1)
+        sdf = self.spark.range(0, 1)
+
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        cdf1 = cdf.select(
+            CF.lit(0),
+            CF.lit(1),
+            CF.lit(-1),
+            CF.lit(JVM_INT_MAX),
+            CF.lit(JVM_INT_MIN),
+            CF.lit(JVM_INT_MAX + 1),
+            CF.lit(JVM_INT_MIN - 1),
+            CF.lit(JVM_LONG_MAX),
+            CF.lit(JVM_LONG_MIN),
+            CF.lit(JVM_LONG_MAX - 1),
+            CF.lit(JVM_LONG_MIN + 1),
+        )
+
+        sdf1 = sdf.select(
+            SF.lit(0),
+            SF.lit(1),
+            SF.lit(-1),
+            SF.lit(JVM_INT_MAX),
+            SF.lit(JVM_INT_MIN),
+            SF.lit(JVM_INT_MAX + 1),
+            SF.lit(JVM_INT_MIN - 1),
+            SF.lit(JVM_LONG_MAX),
+            SF.lit(JVM_LONG_MIN),
+            SF.lit(JVM_LONG_MAX - 1),
+            SF.lit(JVM_LONG_MIN + 1),
+        )
+
+        self.assertEqual(cdf1.schema, sdf1.schema)
+        self.assert_eq(cdf1.toPandas(), sdf1.toPandas())
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "integer 9223372036854775808 out of bounds",
+        ):
+            cdf.select(CF.lit(JVM_LONG_MAX + 1)).show()
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "integer -9223372036854775809 out of bounds",
+        ):
+            cdf.select(CF.lit(JVM_LONG_MIN - 1)).show()
+
+    def test_cast(self):
+        # SPARK-41412: test basic Column.cast
+        df = self.connect.read.table(self.tbl_name)
+        df2 = self.spark.read.table(self.tbl_name)
+
+        self.assert_eq(
+            df.select(df.id.cast("string")).toPandas(), df2.select(df2.id.cast("string")).toPandas()
+        )
+
+        for x in [
+            StringType(),
+            ShortType(),
+            IntegerType(),
+            LongType(),
+            FloatType(),
+            DoubleType(),
+            ByteType(),
+            DecimalType(10, 2),
+            BooleanType(),
+            DayTimeIntervalType(),
+        ]:
+            self.assert_eq(
+                df.select(df.id.cast(x)).toPandas(), df2.select(df2.id.cast(x)).toPandas()
+            )
+
+    def test_unsupported_functions(self):
+        # SPARK-41225: Disable unsupported functions.
+        c = self.connect.range(1).id
+        for f in (
+            "otherwise",
+            "over",
+            "isin",
+            "when",
+            "getItem",
+            "astype",
+            "between",
+            "getField",
+            "withField",
+            "dropFields",
+        ):
+            with self.assertRaises(NotImplementedError):
+                getattr(c, f)()
+
+        with self.assertRaises(NotImplementedError):
+            c["a"]
+
+        with self.assertRaises(TypeError):
+            for x in c:
+                pass
 
 
 if __name__ == "__main__":
@@ -86,7 +322,7 @@ if __name__ == "__main__":
     from pyspark.sql.tests.connect.test_connect_column import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

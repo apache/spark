@@ -33,7 +33,7 @@ from pyspark.testing.utils import PySparkTestCase
 
 
 @unittest.skipIf(not has_memory_profiler, "Must have memory-profiler installed.")
-@unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+@unittest.skipIf(not have_pandas, pandas_requirement_message)
 class MemoryProfilerTests(PySparkTestCase):
     def setUp(self):
         self._old_sys_path = list(sys.path)
@@ -156,7 +156,7 @@ if __name__ == "__main__":
     from pyspark.tests.test_memory_profiler import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
