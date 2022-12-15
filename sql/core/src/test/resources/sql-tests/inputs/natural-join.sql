@@ -52,6 +52,8 @@ SELECT nt1.k, nt2.k FROM nt1 natural join nt2;
 
 SELECT k FROM (SELECT nt2.k FROM nt1 natural join nt2);
 
+SELECT nt2.k AS key FROM nt1 natural join nt2 ORDER BY key;
+
 SELECT nt1.k, nt2.k FROM nt1 natural join nt2 where k = "one";
 
 SELECT * FROM (SELECT * FROM nt1 natural join nt2);
