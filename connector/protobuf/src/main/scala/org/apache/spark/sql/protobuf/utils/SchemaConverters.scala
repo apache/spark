@@ -106,29 +106,28 @@ object SchemaConverters {
             MapType(keyType, valueType, valueContainsNull = false).defaultConcreteType,
             nullable = false))
       case MESSAGE =>
-        // Setting the circularReferenceDepth to 0 allows the field to be recursed once, setting
-        // it to 1 allows it to be recursed twice, and setting it to 2 allows it to be recursed
-        // thrice. circularReferenceDepth value greater than 2 is not allowed. If the not
-        // specified, it will default to -1, which disables recursive fields.
+        // If the `recursive.fields.max.depth` value is not specified, it will default to -1;
+        // recursive fields are not permitted. Setting it to 0 allows the field to be recursed once,
+        // 1 allows it to be recursed twice, and 2 allows it to be recursed thrice. A value
+        // greater than 2 is not allowed, and if a protobuf record has more depth for recursive
+        // fields than the allowed value, it will be truncated and some fields may be discarded.
         val recordName = fd.getMessageType.getFullName
-        if (existingRecordNames.contains(recordName) &&
-          protobufOptions.circularReferenceDepth < 0 ) {
+        val recursiveDepth = existingRecordNames.getOrElse(recordName, 0)
+        val recursiveFieldMaxDepth = protobufOptions.recursiveFieldMaxDepth
+        if (existingRecordNames.contains(recordName) && recursiveFieldMaxDepth < 0 ) {
           throw QueryCompilationErrors.foundRecursionInProtobufSchema(fd.toString())
         } else if (existingRecordNames.contains(recordName) &&
-          existingRecordNames.getOrElse(recordName, 0)
-            > protobufOptions.circularReferenceDepth) {
-          return Some(StructField(fd.getName, NullType, nullable = false))
+          recursiveDepth > recursiveFieldMaxDepth) {
+          Some(NullType)
+        } else {
+          val newRecordNames = existingRecordNames + (recordName -> (recursiveDepth + 1))
+          Option(
+            fd.getMessageType.getFields.asScala
+              .flatMap(structFieldFor(_, newRecordNames, protobufOptions))
+              .toSeq)
+            .filter(_.nonEmpty)
+            .map(StructType.apply)
         }
-
-        val newRecordNames = existingRecordNames +
-          (recordName -> (existingRecordNames.getOrElse(recordName, 0) + 1))
-
-        Option(
-          fd.getMessageType.getFields.asScala
-            .flatMap(structFieldFor(_, newRecordNames, protobufOptions))
-            .toSeq)
-          .filter(_.nonEmpty)
-          .map(StructType.apply)
       case other =>
         throw QueryCompilationErrors.protobufTypeUnsupportedYetError(other.toString)
     }

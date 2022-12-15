@@ -1016,7 +1016,7 @@
   },
   "RECURSIVE_PROTOBUF_SCHEMA" : {
     "message" : [
-      "Found recursive reference in Protobuf schema, which can not be processed by Spark by default: <fieldDescriptor>. try setting the option `circularReferenceDepth` as 0 or 1 or 2. Going beyond 3 levels of recursion is not allowed."
+      "Found recursive reference in Protobuf schema, which can not be processed by Spark by default: <fieldDescriptor>. try setting the option `recursive.fields.max.depth` as 0 or 1 or 2. Going beyond 3 levels of recursion is not allowed."
     ]
   },
   "RENAME_SRC_PATH_NOT_FOUND" : {

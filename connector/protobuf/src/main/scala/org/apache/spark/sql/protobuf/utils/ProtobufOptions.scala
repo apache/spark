@@ -39,11 +39,13 @@ private[sql] class ProtobufOptions(
   val parseMode: ParseMode =
     parameters.get("mode").map(ParseMode.fromString).getOrElse(FailFastMode)
 
-  // Setting the circularReferenceDepth to 0 allows the field to be recursed once, setting
-  // it to 1 allows it to be recursed twice, and setting it to 2 allows it to be recursed
-  // thrice. circularReferenceDepth value greater than 2 is not allowed. If the not
-  // specified, it will default to -1, which disables recursive fields.
-  val circularReferenceDepth: Int = parameters.getOrElse("circularReferenceDepth", "-1").toInt
+  // Setting the `recursive.fields.max.depth` to 0 allows the field to be recurse once,
+  // 1 allows it to be recurse twice, and 2 allows it to be recurse three times. A value
+  // of `recursive.fields.max.depth` greater than 2 is not permitted. If it is not specified,
+  // the default value is -1; recursive fields are not permitted. If a protobuf record has
+  // more depth than the allowed value for recursive fields, it will be truncated and some
+  // fields may be discarded.
+  val recursiveFieldMaxDepth: Int = parameters.getOrElse("recursive.fields.max.depth", "-1").toInt
 }
 
 private[sql] object ProtobufOptions {

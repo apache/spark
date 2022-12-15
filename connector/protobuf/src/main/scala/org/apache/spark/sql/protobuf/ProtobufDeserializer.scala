@@ -156,7 +156,8 @@ private[sql] class ProtobufDeserializer(
     (protoType.getJavaType, catalystType) match {
 
       case (null, NullType) => (updater, ordinal, _) => updater.setNullAt(ordinal)
-
+      // It is possible that this will result in data being dropped, This is intentional,
+      // to catch recursive fields and drop them as necessary.
       case (MESSAGE, NullType) => (updater, ordinal, _) => updater.setNullAt(ordinal)
 
       // TODO: we can avoid boxing if future version of Protobuf provide primitive accessors.

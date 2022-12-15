@@ -26,7 +26,7 @@ import com.google.protobuf.{ByteString, DynamicMessage}
 import org.apache.spark.sql.{Column, QueryTest, Row}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.functions.{lit, struct}
-import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos.{messageA, messageB, messageC, CEO, CTO, Employee, EventRecursiveA, EventRecursiveB, EventWithRecursion, OneOfEvent, OneOfEventWithRecursion, SimpleMessageRepeated, SVP, VP}
+import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos.{messageA, messageB, messageC, EM, EM2, Employee, EventRecursiveA, EventRecursiveB, EventWithRecursion, IC, OneOfEvent, OneOfEventWithRecursion, SimpleMessageRepeated}
 import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos.SimpleMessageRepeated.NestedEnum
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 import org.apache.spark.sql.test.SharedSparkSession
@@ -846,16 +846,16 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     val descriptor = ProtobufUtils.buildDescriptor(testFileDesc, "Employee")
 
     val manager = Employee.newBuilder().setFirstName("firstName").setLastName("lastName").build()
-    val ceo = CEO.newBuilder().setTeamsize(100).setCeoManager(manager).build()
-    val cto = CTO.newBuilder().setTeamsize(100).setCtoManager(manager).build()
-    val svp = SVP.newBuilder().setTeamsize(100).setSvpManager(manager).build()
-    val vp = VP.newBuilder().setTeamsize(100).setVpManager(manager).build()
+    val em2 = EM2.newBuilder().setTeamsize(100).setEm2Manager(manager).build()
+    val em = EM.newBuilder().setTeamsize(100).setEmManager(manager).build()
+    val ic = IC.newBuilder().addSkills("java").setIcManager(manager).build()
     val employee = Employee.newBuilder().setFirstName("firstName")
-      .setLastName("lastName").setCeo(ceo).setCto(cto).setSvp(svp).setVp(vp).build()
+      .setLastName("lastName").setEm2(em2).setEm(em).setIc(ic).build()
 
     val df = Seq(employee.toByteArray).toDF("protoEvent")
     val options = new java.util.HashMap[String, String]()
-    options.put("circularReferenceDepth", "1")
+    options.put("recursive.fields.max.depth", "1")
+
     val fromProtoDf = df.select(
       functions.from_protobuf($"protoEvent", "Employee", testFileDesc, options) as 'sample)
 
@@ -877,9 +877,9 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     val eventFromSpark = Employee.parseFrom(
       toDf.select("toProto").take(1).toSeq(0).getAs[Array[Byte]](0))
 
-    assert(eventFromSpark.getVp.getVpManager.getFirstName.equals("firstName"))
-    assert(eventFromSpark.getVp.getVpManager.getLastName.equals("lastName"))
-    assert(eventFromSpark.getCto.getCtoManager.getFirstName.isEmpty)
+    assert(eventFromSpark.getIc.getIcManager.getFirstName.equals("firstName"))
+    assert(eventFromSpark.getIc.getIcManager.getLastName.equals("lastName"))
+    assert(eventFromSpark.getEm2.getEm2Manager.getFirstName.isEmpty)
   }
 
   test("Verify OneOf field with recursive fields between from_protobuf -> to_protobuf " +
@@ -906,7 +906,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     val df = Seq(oneOfEventWithRecursion.toByteArray).toDF("value")
 
     val options = new java.util.HashMap[String, String]()
-    options.put("circularReferenceDepth", "0")
+    options.put("recursive.fields.max.depth", "0")
 
     val fromProtoDf = df.select(
       functions.from_protobuf($"value",

@@ -206,58 +206,22 @@ message Employee {
     IC ic = 3;
     EM em = 4;
     EM2 em2 = 5;
-    Director dir = 6;
-    SeniorDirector sDir = 7;
-    VP vp = 8;
-    SVP svp = 9;
-    CTO cto = 10;
-    CEO ceo = 11;
   }
 }
 
 message IC {
   repeated string skills = 1;
-  Employee icManager = 2;		// EM or EM2 or Director..
+  Employee icManager = 2;
 }
 
 message EM {
   int64 teamsize = 1;
-  Employee emManager = 2;		// EM2 or Director..
+  Employee emManager = 2;
 }
 
 message EM2 {
   int64 teamsize = 1;
-  Employee em2Manager = 2;		// Director or Senior Director..
-}
-
-message Director {
-  int64 teamsize = 1;
-  Employee dirManager = 2;		// Senior Director or VP..
-}
-
-message SeniorDirector {
-  int64 teamsize = 1;
-  Employee sdManager = 2;		// VP or SVP...
-}
-
-message VP {
-  int64 teamsize = 1;
-  Employee vpManager = 2;		// SVP or CTO...
-}
-
-message SVP {
-  int64 teamsize = 1;
-  Employee svpManager = 2;		// CTO or CET
-}
-
-message CTO {
-  int64 teamsize = 1;
-  Employee ctoManager = 2;		// CEO
-}
-
-message CEO {
-  int64 teamsize = 1;
-  Employee ceoManager = 2;		// null
+  Employee em2Manager = 2;
 }
 
 message OneOfEventWithRecursion {
