@@ -172,9 +172,9 @@ private[spark] object ThreadUtils {
    * of a RejectedExecutionHandler
    */
   def newDaemonSingleThreadExecutorWithRejectedExecutionHandler(
-    threadName: String,
-    taskQueueCapacity: Int,
-    rejectedExecutionHandler: RejectedExecutionHandler): ThreadPoolExecutor = {
+      threadName: String,
+      taskQueueCapacity: Int,
+      rejectedExecutionHandler: RejectedExecutionHandler): ThreadPoolExecutor = {
 
     val threadFactory = new ThreadFactoryBuilder().setDaemon(true).setNameFormat(threadName).build()
 
