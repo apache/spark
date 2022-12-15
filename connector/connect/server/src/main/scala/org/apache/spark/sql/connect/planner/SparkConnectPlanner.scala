@@ -481,6 +481,10 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Expression.ExprTypeCase.UNRESOLVED_REGEX =>
         transformUnresolvedRegex(exp.getUnresolvedRegex)
       case proto.Expression.ExprTypeCase.SORT_ORDER => transformSortOrder(exp.getSortOrder)
+      case proto.Expression.ExprTypeCase.LAMBDA_FUNCTION =>
+        transformLambdaFunction(exp.getLambdaFunction)
+      case proto.Expression.ExprTypeCase.UNRESOLVED_NAMED_LAMBDA_VARIABLE =>
+        transformUnresolvedNamedLambdaVariable(exp.getUnresolvedNamedLambdaVariable)
       case _ =>
         throw InvalidPlanInput(
           s"Expression with ID: ${exp.getExprTypeCase.getNumber} is not supported")
@@ -625,6 +629,34 @@ class SparkConnectPlanner(session: SparkSession) {
       case _ =>
         UnresolvedAttribute.quotedString(regex.getColName)
     }
+  }
+
+  private def transformLambdaFunction(lambda: proto.Expression.LambdaFunction): Expression = {
+    if (lambda.getArgumentsCount == 0) {
+      throw InvalidPlanInput("LambdaFunction requires at least one variable!")
+    }
+
+    val variables = lambda.getArgumentsList.asScala.toSeq.map(transformExpression).map {
+      case variable: UnresolvedNamedLambdaVariable => variable
+      case other =>
+        throw InvalidPlanInput(
+          "LambdaFunction requires all arguments to be " +
+            s"UnresolvedNamedLambdaVariable, but got $other")
+    }
+
+    LambdaFunction(
+      function = transformExpression(lambda.getFunction),
+      arguments = variables,
+      hidden = lambda.getHidden)
+  }
+
+  private def transformUnresolvedNamedLambdaVariable(
+      variable: proto.Expression.UnresolvedNamedLambdaVariable): Expression = {
+    if (variable.getNamePartsCount == 0) {
+      throw InvalidPlanInput("UnresolvedNamedLambdaVariable requires at least one name part!")
+    }
+
+    UnresolvedNamedLambdaVariable(variable.getNamePartsList.asScala.toSeq)
   }
 
   private def transformSetOperation(u: proto.SetOperation): LogicalPlan = {

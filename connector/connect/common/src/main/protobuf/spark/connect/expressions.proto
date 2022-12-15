@@ -38,6 +38,8 @@ message Expression {
     Cast cast = 7;
     UnresolvedRegex unresolved_regex = 8;
     SortOrder sort_order = 9;
+    LambdaFunction lambda_function = 10;
+    UnresolvedNamedLambdaVariable unresolved_named_lambda_variable = 11;
   }
 
   // SortOrder is used to specify the  data ordering, it is normally used in Sort and Window.
@@ -190,5 +192,27 @@ message Expression {
 
     // (Optional) Alias metadata expressed as a JSON map.
     optional string metadata = 3;
+  }
+
+  message LambdaFunction {
+    // (Required) The lambda function.
+    Expression function = 1;
+
+    // (Required) Function arguments. Must not be empty.
+    //
+    // All arguments must be UnresolvedNamedLambdaVariables.
+    repeated Expression arguments = 2;
+
+    // (Required) A lambda function can be hidden when a user wants to
+    // process an completely independent expression in a 'HigherOrderFunction',
+    // the lambda function and its variables are then only used for internal
+    // bookkeeping within the higher order function.
+    bool hidden = 3;
+  }
+
+  message UnresolvedNamedLambdaVariable {
+
+    // (Required) a list of name parts for the variable. Must not be empty.
+    repeated string name_parts = 1;
   }
 }
