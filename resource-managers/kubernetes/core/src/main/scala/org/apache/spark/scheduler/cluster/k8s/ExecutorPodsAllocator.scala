@@ -152,6 +152,7 @@ class ExecutorPodsAllocator(
       applicationId: String,
       schedulerBackend: KubernetesClusterSchedulerBackend,
       snapshots: Seq[ExecutorPodsSnapshot]): Unit = {
+    logDebug(s"Received ${snapshots.size} snapshots")
     val k8sKnownExecIds = snapshots.flatMap(_.executorPods.keys).distinct
     newlyCreatedExecutors --= k8sKnownExecIds
     schedulerKnownNewlyCreatedExecs --= k8sKnownExecIds
@@ -353,7 +354,8 @@ class ExecutorPodsAllocator(
     }
 
     val remainingSlotFromPendingPods = maxPendingPods - totalNotRunningPodCount
-    if (remainingSlotFromPendingPods > 0 && podsToAllocateWithRpId.size > 0) {
+    if (remainingSlotFromPendingPods > 0 && podsToAllocateWithRpId.size > 0 &&
+        !(snapshots.isEmpty && podAllocOnPVC && maxPVCs <= PVC_COUNTER.get())) {
       ExecutorPodsAllocator.splitSlots(podsToAllocateWithRpId, remainingSlotFromPendingPods)
         .foreach { case ((rpId, podCountForRpId, targetNum), sharedSlotFromPendingPods) =>
         val numMissingPodsForRpId = targetNum - podCountForRpId
