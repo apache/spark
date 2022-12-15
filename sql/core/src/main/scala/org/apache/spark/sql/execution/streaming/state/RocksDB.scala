@@ -560,10 +560,11 @@ case class RocksDBConf(
 
 object RocksDBConf {
   /** Common prefix of all confs in SQLConf that affects RocksDB */
-  val ROCKSDB_CONF_NAME_PREFIX = "spark.sql.streaming.stateStore.rocksdb"
+  val ROCKSDB_SQL_CONF_NAME_PREFIX = "spark.sql.streaming.stateStore.rocksdb"
 
   private case class ConfEntry(name: String, default: String) {
-    def fullName: String = s"$ROCKSDB_CONF_NAME_PREFIX.${name}".toLowerCase(Locale.ROOT)
+    def sqlConfFullName: String = s"$ROCKSDB_SQL_CONF_NAME_PREFIX.${name}".toLowerCase(Locale.ROOT)
+    def lowerCaseName: String = name.toLowerCase(Locale.ROOT)
   }
 
   // Configuration that specifies whether to compact the RocksDB data every time data is committed
@@ -597,45 +598,61 @@ object RocksDBConf {
   private val TRACK_TOTAL_NUMBER_OF_ROWS = ConfEntry("trackTotalNumberOfRows", "true")
 
   def apply(storeConf: StateStoreConf): RocksDBConf = {
-    val confs = CaseInsensitiveMap[String](storeConf.confs)
+    val sqlConfs = CaseInsensitiveMap[String](storeConf.stateStoreSQLConfs)
+    val extraConfs = CaseInsensitiveMap[String](storeConf.extraOptions)
 
-    def getBooleanConf(conf: ConfEntry): Boolean = {
-      Try { confs.getOrElse(conf.fullName, conf.default).toBoolean } getOrElse {
-        throw new IllegalArgumentException(s"Invalid value for '${conf.fullName}', must be boolean")
+    def getBooleanFromSQLConf(conf: ConfEntry): Boolean = {
+      Try { sqlConfs.getOrElse(conf.sqlConfFullName, conf.default).toBoolean } getOrElse {
+        throw new IllegalArgumentException(
+          s"Invalid value for '${conf.sqlConfFullName}', must be boolean"
+        )
       }
     }
 
-    def getIntConf(conf: ConfEntry): Int = {
-      Try { confs.getOrElse(conf.fullName, conf.default).toInt } getOrElse {
-        throw new IllegalArgumentException(s"Invalid value for '${conf.fullName}', " +
+    def getIntFromSQLConf(conf: ConfEntry): Int = {
+      Try { sqlConfs.getOrElse(conf.sqlConfFullName, conf.default).toInt } getOrElse {
+        throw new IllegalArgumentException(s"Invalid value for '${conf.sqlConfFullName}', " +
           "must be an integer")
       }
     }
 
-    def getPositiveLongConf(conf: ConfEntry): Long = {
-      Try { confs.getOrElse(conf.fullName, conf.default).toLong } filter { _ >= 0 } getOrElse {
+    def getPositiveLongFromSQLConf(conf: ConfEntry): Long = {
+      Try {
+        sqlConfs.getOrElse(conf.sqlConfFullName, conf.default).toLong
+      } filter { _ >= 0 } getOrElse {
         throw new IllegalArgumentException(
-          s"Invalid value for '${conf.fullName}', must be a positive integer")
+          s"Invalid value for '${conf.sqlConfFullName}', must be a positive integer"
+        )
       }
     }
 
-    def getPositiveIntConf(conf: ConfEntry): Int = {
-      Try { confs.getOrElse(conf.fullName, conf.default).toInt } filter { _ >= 0 } getOrElse {
+    def getPositiveIntFromSQLConf(conf: ConfEntry): Int = {
+      Try {
+        sqlConfs.getOrElse(conf.sqlConfFullName, conf.default).toInt
+      } filter { _ >= 0 } getOrElse {
         throw new IllegalArgumentException(
-          s"Invalid value for '${conf.fullName}', must be a positive integer")
+          s"Invalid value for '${conf.sqlConfFullName}', must be a positive integer"
+        )
+      }
+    }
+
+    def getLongFromExtraOptions(conf: ConfEntry): Long = {
+      Try { extraConfs.getOrElse(conf.lowerCaseName, conf.default).toLong } getOrElse {
+        throw new IllegalArgumentException(s"Invalid value for '${conf.lowerCaseName}', " +
+          "must be an integer")
       }
     }
 
     RocksDBConf(
       storeConf.minVersionsToRetain,
-      getBooleanConf(COMPACT_ON_COMMIT_CONF),
-      getPositiveLongConf(BLOCK_SIZE_KB_CONF),
-      getPositiveLongConf(BLOCK_CACHE_SIZE_MB_CONF),
-      getPositiveLongConf(LOCK_ACQUIRE_TIMEOUT_MS_CONF),
-      getBooleanConf(RESET_STATS_ON_LOAD),
-      getPositiveIntConf(FORMAT_VERSION),
-      getBooleanConf(TRACK_TOTAL_NUMBER_OF_ROWS),
-      getIntConf(MAX_OPEN_FILES_CONF))
+      getBooleanFromSQLConf(COMPACT_ON_COMMIT_CONF),
+      getPositiveLongFromSQLConf(BLOCK_SIZE_KB_CONF),
+      getPositiveLongFromSQLConf(BLOCK_CACHE_SIZE_MB_CONF),
+      getPositiveLongFromSQLConf(LOCK_ACQUIRE_TIMEOUT_MS_CONF),
+      getBooleanFromSQLConf(RESET_STATS_ON_LOAD),
+      getPositiveIntFromSQLConf(FORMAT_VERSION),
+      getBooleanFromSQLConf(TRACK_TOTAL_NUMBER_OF_ROWS),
+      getIntFromSQLConf(MAX_OPEN_FILES_CONF))
   }
 
   def apply(): RocksDBConf = apply(new StateStoreConf())
