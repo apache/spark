@@ -908,8 +908,40 @@ class Column:
     def over(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("over() is not yet implemented.")
 
-    def isin(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("isin() is not yet implemented.")
+    def isin(self, *cols: Any) -> "Column":
+        """
+        A boolean expression that is evaluated to true if the value of this
+        expression is contained by the evaluated values of the arguments.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        cols
+            The result will only be true at a location if any value matches in the Column.
+
+        Returns
+        -------
+        :class:`Column`
+            Column of booleans showing whether each element in the Column is contained in cols.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
+        >>> df[df.name.isin("Bob", "Mike")].collect()
+        [Row(age=5, name='Bob')]
+        >>> df[df.age.isin([1, 2, 3])].collect()
+        [Row(age=2, name='Alice')]
+        """
+        from pyspark.sql.connect.functions import lit
+
+        if len(cols) == 1 and isinstance(cols[0], (list, set)):
+            _cols = list(cols[0])
+        else:
+            _cols = list(cols)
+
+        return Column(UnresolvedFunction("in", [self._expr] + [lit(c)._expr for c in _cols]))
 
     def when(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("when() is not yet implemented.")
