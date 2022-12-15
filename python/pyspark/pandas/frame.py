@@ -2164,7 +2164,7 @@ class DataFrame(Frame, Generic[T]):
         buf : StringIO-like, optional
             Buffer to write to.
         columns : sequence, optional, default None
-            The subset of columns to write. Write all columns by default.
+            The subset of columns to write. Writes all columns by default.
         col_space : int, optional
             The minimum width of each column.
         header : bool, optional
@@ -2280,7 +2280,7 @@ class DataFrame(Frame, Generic[T]):
         buf : StringIO-like, optional
             Buffer to write to.
         columns : sequence, optional, default None
-            The subset of columns to write. Write all columns by default.
+            The subset of columns to write. Writes all columns by default.
         col_space : int, optional
             The minimum width of each column.
         header : bool, optional
@@ -2500,7 +2500,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         buf : file descriptor or None
             Buffer to write to. If None, the output is returned as a string.
         columns : list of label, optional
-            The subset of columns to write. Write all columns by default.
+            The subset of columns to write. Writes all columns by default.
         col_space : int, optional
             The minimum width of each column.
         header : bool or list of str, default True

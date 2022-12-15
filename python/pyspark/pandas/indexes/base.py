@@ -922,7 +922,7 @@ class Index(IndexOpsMixin):
     def to_series(self, name: Optional[Name] = None) -> Series:
         """
         Create a Series with both index and values equal to the index keys
-        useful with a map for returning an indexer based on an index.
+        useful with map for returning an indexer based on an index.
 
         Parameters
         ----------
