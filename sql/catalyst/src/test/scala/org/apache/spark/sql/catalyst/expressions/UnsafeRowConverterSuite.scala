@@ -277,7 +277,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
     // assert(setToNullAfterCreation.get(11) === rowWithNoNullColumns.get(11))
   }
 
-  testBothCodegenAndInterpreted("intervals initialized as null") {
+  testBothCodegenAndInterpreted("SPARK-41535: intervals initialized as null") {
     val factory = UnsafeProjection
     val fieldTypes: Array[DataType] = Array(CalendarIntervalType, CalendarIntervalType)
     val converter = factory.create(fieldTypes)

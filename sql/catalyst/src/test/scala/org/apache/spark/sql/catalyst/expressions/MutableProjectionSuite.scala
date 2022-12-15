@@ -127,7 +127,7 @@ class MutableProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
     testRows(bufferSchema, buffer, scalaRows)
   }
 
-  testBothCodegenAndInterpreted("unsafe buffer with null intervals") {
+  testBothCodegenAndInterpreted("SPARK-41535: unsafe buffer with null intervals") {
     val bufferSchema = StructType(Array(
       StructField("intv1", CalendarIntervalType, nullable = true),
       StructField("intv2", CalendarIntervalType, nullable = true)))
@@ -141,7 +141,7 @@ class MutableProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
     testRows(bufferSchema, buffer, scalaRows)
   }
 
-  testBothCodegenAndInterpreted("generic buffer with null intervals") {
+  testBothCodegenAndInterpreted("SPARK-41535: generic buffer with null intervals") {
     val bufferSchema = StructType(Array(
       StructField("intv1", CalendarIntervalType, nullable = true),
       StructField("intv2", CalendarIntervalType, nullable = true)))
