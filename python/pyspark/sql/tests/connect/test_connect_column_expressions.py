@@ -64,50 +64,6 @@ class SparkConnectColumnExpressionSuite(PlanOnlyTestFixture):
         bin_lit_p = bin_lit.to_plan(None)
         self.assertEqual(bin_lit_p.literal.binary, val)
 
-    def test_map_literal(self):
-        val = {"this": "is", 12: [12, 32, 43]}
-        map_lit = fun.lit(val)
-        map_lit_p = map_lit.to_plan(None)
-
-        self.assertEqual(map_lit_p.unresolved_function.function_name, "map")
-        self.assertEqual(map_lit_p.unresolved_function.arguments[0].literal.string, "this")
-        self.assertEqual(map_lit_p.unresolved_function.arguments[1].literal.string, "is")
-        self.assertEqual(map_lit_p.unresolved_function.arguments[2].literal.integer, 12)
-
-        self.assertEqual(
-            map_lit_p.unresolved_function.arguments[3].unresolved_function.function_name, "array"
-        )
-        self.assertEqual(
-            map_lit_p.unresolved_function.arguments[3]
-            .unresolved_function.arguments[0]
-            .literal.integer,
-            12,
-        )
-        self.assertEqual(
-            map_lit_p.unresolved_function.arguments[3]
-            .unresolved_function.arguments[1]
-            .literal.integer,
-            32,
-        )
-        self.assertEqual(
-            map_lit_p.unresolved_function.arguments[3]
-            .unresolved_function.arguments[2]
-            .literal.integer,
-            43,
-        )
-
-        val = {"this": fun.lit("is"), 12: [12, 32, 43]}
-        map_lit = fun.lit(val)
-        map_lit_p = map_lit.to_plan(None)
-        self.assertEqual(map_lit_p.unresolved_function.function_name, "map")
-        self.assertEqual(len(map_lit_p.unresolved_function.arguments), 4)
-        self.assertEqual(map_lit_p.unresolved_function.arguments[0].literal.string, "this")
-        self.assertEqual(map_lit_p.unresolved_function.arguments[1].literal.string, "is")
-        self.assertEqual(map_lit_p.unresolved_function.arguments[2].literal.integer, 12)
-        self.assertEqual(
-            map_lit_p.unresolved_function.arguments[3].unresolved_function.function_name, "array"
-        )
-
     def test_uuid_literal(self):
         val = uuid.uuid4()
         with self.assertRaises(ValueError):
@@ -181,44 +137,6 @@ class SparkConnectColumnExpressionSuite(PlanOnlyTestFixture):
 
         lit_list_plan = fun.lit([fun.lit(10), fun.lit("str")]).to_plan(None)
         self.assertIsNotNone(lit_list_plan)
-
-    def test_tuple_to_literal(self):
-        """Test conversion of tuples to struct literals"""
-        t0 = ()
-        t1 = (1.0,)
-        t2 = (1, "xyz")
-        t3 = (1, "abc", (3.5, True, None))
-
-        p0 = fun.lit(t0).to_plan(None)
-        self.assertIsNotNone(p0)
-        self.assertEqual(p0.unresolved_function.function_name, "struct")
-
-        p1 = fun.lit(t1).to_plan(None)
-        self.assertIsNotNone(p1)
-        self.assertEqual(p1.unresolved_function.function_name, "struct")
-        self.assertEqual(p1.unresolved_function.arguments[0].literal.double, 1.0)
-
-        p2 = fun.lit(t2).to_plan(None)
-        self.assertIsNotNone(p2)
-        self.assertEqual(p2.unresolved_function.function_name, "struct")
-        self.assertEqual(p2.unresolved_function.arguments[0].literal.integer, 1)
-        self.assertEqual(p2.unresolved_function.arguments[1].literal.string, "xyz")
-
-        p3 = fun.lit(t3).to_plan(None)
-        self.assertIsNotNone(p3)
-        self.assertEqual(p3.unresolved_function.function_name, "struct")
-        self.assertEqual(p3.unresolved_function.arguments[0].literal.integer, 1)
-        self.assertEqual(p3.unresolved_function.arguments[1].literal.string, "abc")
-        self.assertEqual(
-            p3.unresolved_function.arguments[2].unresolved_function.arguments[0].literal.double, 3.5
-        )
-        self.assertEqual(
-            p3.unresolved_function.arguments[2].unresolved_function.arguments[1].literal.boolean,
-            True,
-        )
-        self.assertEqual(
-            p3.unresolved_function.arguments[2].unresolved_function.arguments[2].literal.null, True
-        )
 
     def test_column_alias(self) -> None:
         # SPARK-40809: Support for Column Aliases

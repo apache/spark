@@ -556,6 +556,16 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       sparkTestRelation.select(col("id").cast("string")))
   }
 
+  test("Test colRegex") {
+    comparePlans(
+      connectTestRelation.select("id".colRegex),
+      sparkTestRelation.select(sparkTestRelation.colRegex("id")))
+
+    comparePlans(
+      connectTestRelation.select("`(_1)?+.+`".colRegex),
+      sparkTestRelation.select(sparkTestRelation.colRegex("`(_1)?+.+`")))
+  }
+
   test("Test Hint") {
     comparePlans(connectTestRelation.hint("COALESCE", 3), sparkTestRelation.hint("COALESCE", 3))
   }

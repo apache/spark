@@ -806,6 +806,11 @@
       }
     }
   },
+  "INVALID_SQL_ARG" : {
+    "message" : [
+      "The argument <name> of `sql()` is invalid. Consider to replace it by a SQL literal statement."
+    ]
+  },
   "INVALID_SQL_SYNTAX" : {
     "message" : [
       "Invalid SQL syntax: <inputString>"
@@ -1145,6 +1150,11 @@
   "UNABLE_TO_CONVERT_TO_PROTOBUF_MESSAGE_TYPE" : {
     "message" : [
       "Unable to convert SQL type <toType> to Protobuf type <protobufType>."
+    ]
+  },
+  "UNBOUND_SQL_PARAMETER" : {
+    "message" : [
+      "Found the unbound parameter: <name>. Please, fix `args` and provide a mapping of the parameter to a SQL literal statement."
     ]
   },
   "UNCLOSED_BRACKETED_COMMENT" : {

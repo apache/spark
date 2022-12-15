@@ -20,6 +20,7 @@ import datetime
 
 from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
 from pyspark.sql.connect.column import (
+    Column,
     LiteralExpression,
     JVM_BYTE_MIN,
     JVM_BYTE_MAX,
@@ -201,6 +202,9 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             lit_null = LiteralExpression(value=None, dataType=dataType)
             self.assertTrue(lit_null._value is None)
             self.assertEqual(dataType, lit_null._dataType)
+
+            cdf = self.connect.range(0, 1).select(Column(lit_null))
+            self.assertEqual(dataType, cdf.schema.fields[0].dataType)
 
         for value, dataType in [
             ("123", NullType()),

@@ -96,6 +96,9 @@ object LiteralValueProtoConverter {
       case proto.Expression.Literal.LiteralTypeCase.DAY_TIME_INTERVAL =>
         expressions.Literal(lit.getDayTimeInterval, DayTimeIntervalType())
 
+      case proto.Expression.Literal.LiteralTypeCase.TYPED_NULL =>
+        expressions.Literal(null, DataTypeProtoConverter.toCatalystType(lit.getTypedNull))
+
       case _ =>
         throw InvalidPlanInput(
           s"Unsupported Literal Type: ${lit.getLiteralTypeCase.getNumber}" +
