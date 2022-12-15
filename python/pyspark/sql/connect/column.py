@@ -294,7 +294,7 @@ class LiteralExpression(Expression):
         if isinstance(self._dataType, NullType):
             expr.literal.null = True
         elif self._value is None:
-            expr.typed_null.CopyFrom(pyspark_types_to_proto_types(self._dataType))
+            expr.literal.typed_null.CopyFrom(pyspark_types_to_proto_types(self._dataType))
         elif isinstance(self._dataType, BinaryType):
             expr.literal.binary = bytes(self._value)
         elif isinstance(self._dataType, BooleanType):
@@ -450,6 +450,25 @@ class UnresolvedFunction(Expression):
             return f"{self._name}(distinct {', '.join([str(arg) for arg in self._args])})"
         else:
             return f"{self._name}({', '.join([str(arg) for arg in self._args])})"
+
+
+class UnresolvedRegex(Expression):
+    def __init__(
+        self,
+        col_name: str,
+    ) -> None:
+        super().__init__()
+
+        assert isinstance(col_name, str)
+        self.col_name = col_name
+
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
+        expr = proto.Expression()
+        expr.unresolved_regex.col_name = self.col_name
+        return expr
+
+    def __repr__(self) -> str:
+        return f"UnresolvedRegex({self.col_name})"
 
 
 class CastExpression(Expression):

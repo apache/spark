@@ -36,6 +36,7 @@ message Expression {
     UnresolvedStar unresolved_star = 5;
     Alias alias = 6;
     Cast cast = 7;
+    UnresolvedRegex unresolved_regex = 8;
   }
 
   message Cast {
@@ -145,6 +146,13 @@ message Expression {
     // (Optional) The target of the expansion, either be a table name or struct name, this
     // is a list of identifiers that is the path of the expansion.
     repeated string target = 1;
+  }
+
+  // Represents all of the input attributes to a given relational operator, for example in
+  // "SELECT `(id)?+.+` FROM ...".
+  message UnresolvedRegex {
+    // (Required) The column name used to extract column with regex.
+    string col_name = 1;
   }
 
   message Alias {
