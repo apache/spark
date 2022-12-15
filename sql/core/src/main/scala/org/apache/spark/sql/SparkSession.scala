@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.encoders._
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Parameter}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.ExternalCommandRunner
@@ -609,18 +609,48 @@ class SparkSession private(
    * ----------------- */
 
   /**
+   * Executes a SQL query substituting named parameters by the given arguments,
+   * returning the result as a `DataFrame`.
+   * This API eagerly runs DDL/DML commands, but not for SELECT queries.
+   *
+   * @param sqlText A SQL statement with named parameters to execute.
+   * @param args A map of parameter names to literal values.
+   *
+   * @since 3.4.0
+   */
+  @Experimental
+  def sql(sqlText: String, args: Map[String, String]): DataFrame = withActive {
+    val tracker = new QueryPlanningTracker
+    val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
+      val parser = sessionState.sqlParser
+      val parsedArgs = args.mapValues(parser.parseExpression).toMap
+      Parameter.bind(parser.parsePlan(sqlText), parsedArgs)
+    }
+    Dataset.ofRows(self, plan, tracker)
+  }
+
+  /**
+   * Executes a SQL query substituting named parameters by the given arguments,
+   * returning the result as a `DataFrame`.
+   * This API eagerly runs DDL/DML commands, but not for SELECT queries.
+   *
+   * @param sqlText A SQL statement with named parameters to execute.
+   * @param args A map of parameter names to literal values.
+   *
+   * @since 3.4.0
+   */
+  @Experimental
+  def sql(sqlText: String, args: java.util.Map[String, String]): DataFrame = {
+    sql(sqlText, args.asScala.toMap)
+  }
+
+  /**
    * Executes a SQL query using Spark, returning the result as a `DataFrame`.
    * This API eagerly runs DDL/DML commands, but not for SELECT queries.
    *
    * @since 2.0.0
    */
-  def sql(sqlText: String): DataFrame = withActive {
-    val tracker = new QueryPlanningTracker
-    val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
-      sessionState.sqlParser.parsePlan(sqlText)
-    }
-    Dataset.ofRows(self, plan, tracker)
-  }
+  def sql(sqlText: String): DataFrame = sql(sqlText, Map.empty[String, String])
 
   /**
    * Execute an arbitrary string command inside an external execution engine rather than Spark.
