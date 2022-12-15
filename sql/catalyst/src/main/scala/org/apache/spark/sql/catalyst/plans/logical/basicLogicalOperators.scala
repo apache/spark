@@ -469,8 +469,10 @@ case class Union(
 
   override def metadataOutput: Seq[Attribute] = {
     // This follows similar code in `CheckAnalysis` to check if the output of a Union is correct,
-    // but just silently doesn't return an output instead of throwing an error.
+    // but just silently doesn't return an output instead of throwing an error. It also ensures
+    // that the attribute names are the same.
     val refDataTypes = children.head.metadataOutput.map(_.dataType)
+    val refAttrNames = children.head.metadataOutput.map(_.name)
     children.tail.foreach { child =>
       // We can only propagate the metadata output correctly if every child has the same
       // number of columns
@@ -479,6 +481,13 @@ case class Union(
       val childDataTypes = child.metadataOutput.map(_.dataType)
       childDataTypes.zip(refDataTypes).foreach { case (dt1, dt2) =>
         if (!DataType.equalsStructurally(dt1, dt2, true)) {
+          return Nil
+        }
+      }
+      // Check that the names match
+      val childAttrNames = child.metadataOutput.map(_.name)
+      childAttrNames.zip(refAttrNames).foreach { case (attrName1, attrName2) =>
+        if (!conf.resolver(attrName1, attrName2)) {
           return Nil
         }
       }

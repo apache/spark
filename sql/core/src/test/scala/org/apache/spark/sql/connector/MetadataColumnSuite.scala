@@ -17,8 +17,13 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
+import org.apache.spark.sql.connector.catalog.{MetadataColumn, SupportsMetadataColumns, Table, TableCapability}
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.functions.struct
+import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
+import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{DataType, IntegerType, StringType, StructType}
 
 class MetadataColumnSuite extends DatasourceV2SQLBase {
   import testImplicits._
@@ -244,7 +249,7 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
   }
 
   test("SPARK-41498: Metadata column is not propagated when children of Union " +
-    "have mismatching metadata output") {
+    "have metadata output of different size") {
     withTable(tbl) {
       prepareTable()
       withTempDir { dir =>
@@ -254,11 +259,121 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
         val df2 = spark.read.load(dir.getAbsolutePath)
 
         // Make sure one df contains a metadata column and the other does not
-        assert(!df1.queryExecution.logical.metadataOutput.exists(_.name == "_metadata"))
-        assert(df2.queryExecution.logical.metadataOutput.exists(_.name == "_metadata"))
+        assert(!df1.queryExecution.analyzed.metadataOutput.exists(_.name == "_metadata"))
+        assert(df2.queryExecution.analyzed.metadataOutput.exists(_.name == "_metadata"))
 
-        assert(df1.union(df2).queryExecution.logical.metadataOutput.isEmpty)
+        assert(df1.union(df2).queryExecution.analyzed.metadataOutput.isEmpty)
       }
+    }
+  }
+}
+
+class MetadataTestTable extends Table with SupportsMetadataColumns {
+
+  override def name(): String = "fake"
+  override def schema(): StructType = StructType(Nil)
+  override def capabilities(): java.util.Set[TableCapability] =
+    java.util.EnumSet.of(TableCapability.BATCH_READ)
+  override def metadataColumns(): Array[MetadataColumn] =
+    Array(
+      new MetadataColumn {
+        override def name: String = "index"
+        override def dataType: DataType = IntegerType
+        override def comment: String = ""
+      }
+    )
+}
+
+class TypeMismatchTable extends MetadataTestTable {
+
+  override def metadataColumns(): Array[MetadataColumn] =
+    Array(
+      new MetadataColumn {
+        override def name: String = "index"
+        override def dataType: DataType = StringType
+        override def comment: String =
+          "Used to create a type mismatch with the metadata col in `MetadataTestTable`"
+      }
+    )
+}
+
+class NameMismatchTable extends MetadataTestTable {
+  override def metadataColumns(): Array[MetadataColumn] =
+    Array(
+      new MetadataColumn {
+        override def name: String = "wrongName"
+        override def dataType: DataType = IntegerType
+        override def comment: String =
+          "Used to create a name mismatch with the metadata col in `MetadataTestTable`"
+      })
+}
+
+class MetadataTestCatalog extends TestV2SessionCatalogBase[MetadataTestTable] {
+  override protected def newTable(
+    name: String,
+    schema: StructType,
+    partitions: Array[Transform],
+    properties: java.util.Map[String, String]): MetadataTestTable = {
+    new MetadataTestTable
+  }
+}
+
+class MetadataTypeMismatchCatalog extends TestV2SessionCatalogBase[TypeMismatchTable] {
+  override protected def newTable(
+    name: String,
+    schema: StructType,
+    partitions: Array[Transform],
+    properties: java.util.Map[String, String]): TypeMismatchTable = {
+    new TypeMismatchTable
+  }
+}
+
+class MetadataNameMismatchCatalog extends TestV2SessionCatalogBase[NameMismatchTable] {
+  override protected def newTable(
+    name: String,
+    schema: StructType,
+    partitions: Array[Transform],
+    properties: java.util.Map[String, String]): NameMismatchTable = {
+    new NameMismatchTable
+  }
+}
+
+class MetadataColumnMismatchSuite extends QueryTest with SharedSparkSession {
+
+  override protected def afterEach(): Unit = {
+    super.afterEach()
+    spark.sessionState.catalogManager.reset()
+  }
+
+  private def getDfWithCatalog(tblName: String, catalogName: String): DataFrame = {
+    // Reset the catalog manager to set a new V2 session catalog, as once loaded
+    // it doesn't check the config value anymore
+    spark.sessionState.catalogManager.reset()
+    var df: DataFrame = null
+    withSQLConf(V2_SESSION_CATALOG_IMPLEMENTATION.key -> catalogName) {
+      spark.range(10).write.saveAsTable(tblName)
+      df = spark.table(tblName)
+    }
+    df
+  }
+
+  test("SPARK-41498: Metadata column is not propagated when children of Union " +
+    "have a type mismatch in a metadata column") {
+    withTable("tbl", "typeMismatchTbl") {
+      val df = getDfWithCatalog("tbl", classOf[MetadataTestCatalog].getName)
+      val typeMismatchDf =
+        getDfWithCatalog("typeMismatchTbl", classOf[MetadataTypeMismatchCatalog].getName)
+      assert(df.union(typeMismatchDf).queryExecution.analyzed.metadataOutput.isEmpty)
+    }
+  }
+
+  test("SPARK-41498: Metadata column is not propagated when children of Union " +
+    "have a name mismatch in a metadata column") {
+    withTable("tbl", "nameMismatchTbl") {
+      val df = getDfWithCatalog("tbl", classOf[MetadataTestCatalog].getName)
+      val nameMismatchDf =
+        getDfWithCatalog("nameMismatchTbl", classOf[MetadataNameMismatchCatalog].getName)
+      assert(df.union(nameMismatchDf).queryExecution.analyzed.metadataOutput.isEmpty)
     }
   }
 }
