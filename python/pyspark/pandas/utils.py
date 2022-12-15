@@ -368,7 +368,7 @@ def align_diff_frames(
         - full: `resolve_func` should resolve only common columns from 'this' and 'that' DataFrames.
             For instance, if 'this' has columns A, B, C and that has B, C, D, `this_columns` and
             'that_columns' in this function are B, C and B, C.
-        - left: `resolve_func` should resolve columns including that column.
+        - left: `resolve_func` should resolve columns including `that` column.
             For instance, if 'this' has columns A, B, C and that has B, C, D, `this_columns` is
             B, C but `that_columns` are B, C, D.
         - inner: Same as 'full' mode; however, internally performs inner join instead.

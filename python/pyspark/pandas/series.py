@@ -2050,9 +2050,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """Fill NA/NaN values.
 
         .. note:: the current implementation of 'method' parameter in fillna uses Spark's Window
-            without specifying partition specification. This leads to move all data into
+            without specifying partition specification. This leads to moveing all data into
             a single partition in a single machine and could cause serious
-            performance degradation. Avoid this method against very large dataset.
+            performance degradation. Avoid this method with very large datasets.
 
         Parameters
         ----------
@@ -3262,9 +3262,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         the Series and its shifted self.
 
         .. note:: the current implementation of rank uses Spark's Window without
-            specifying partition specification. This leads to move all data into
+            specifying partition specification. This leads to moveing all data into
             a single partition in a single machine and could cause serious
-            performance degradation. Avoid this method against very large dataset.
+            performance degradation. Avoid this method with very large datasets.
 
         .. versionadded:: 3.4.0
 
@@ -4075,9 +4075,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         assigned a rank that is the average of the ranks of those values.
 
         .. note:: the current implementation of rank uses Spark's Window without
-            specifying partition specification. This leads to move all data into
+            specifying partition specification. This leads to moveing all data into
             a single partition in a single machine and could cause serious
-            performance degradation. Avoid this method against very large dataset.
+            performance degradation. Avoid this method with very large datasets.
 
         Parameters
         ----------
@@ -4252,9 +4252,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         DataFrame (default is the element in the same column of the previous row).
 
         .. note:: the current implementation of diff uses Spark's Window without
-            specifying partition specification. This leads to move all data into
+            specifying partition specification. This leads to moveing all data into
             a single partition in a single machine and could cause serious
-            performance degradation. Avoid this method against very large dataset.
+            performance degradation. Avoid this method with very large datasets.
 
         Parameters
         ----------
@@ -5484,9 +5484,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Percentage change between the current and a prior element.
 
         .. note:: the current implementation of this API uses Spark's Window without
-            specifying partition specification. This leads to move all data into
+            specifying partition specification. This leads to moveing all data into
             a single partition in a single machine and could cause serious
-            performance degradation. Avoid this method against very large dataset.
+            performance degradation. Avoid this method with very large datasets.
 
         Parameters
         ----------

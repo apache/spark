@@ -75,7 +75,7 @@ class PandasOnSparkFrameMethods:
               .. note:: this uses Spark's Window without specifying partition specification.
                   This leads to moving all data into a single partition in a single machine and
                   could cause serious performance degradation.
-                  Avoid this method against very large datasets.
+                  Avoid this method with very large datasets.
 
             - 'distributed-sequence' : a sequence that increases one by one,
               by group-by and group-map approach in a distributed manner.

@@ -1126,9 +1126,9 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         Shift Series/Index by desired number of periods.
 
         .. note:: the current implementation of shift uses Spark's Window without
-            specifying partition specification. This leads to move all data into
+            specifying partition specification. This leads to moveing all data into
             a single partition in a single machine and could cause serious
-            performance degradation. Avoid this method against very large datasets.
+            performance degradation. Avoid this method with very large datasets.
 
         Parameters
         ----------

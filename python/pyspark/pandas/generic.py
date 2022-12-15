@@ -159,9 +159,9 @@ class Frame(object, metaclass=ABCMeta):
         Returns a DataFrame or Series of the same size containing the cumulative minimum.
 
         .. note:: the current implementation of cummin uses Spark's Window without
-            specifying partition specification. This leads to move all data into a
+            specifying partition specification. This leads to moveing all data into a
             single partition in a single machine and could cause serious
-            performance degradation. Avoid this method against very large datasets.
+            performance degradation. Avoid this method with very large datasets.
 
         Parameters
         ----------
@@ -219,9 +219,9 @@ class Frame(object, metaclass=ABCMeta):
         Returns a DataFrame or Series of the same size containing the cumulative maximum.
 
         .. note:: the current implementation of cummax uses Spark's Window without
-            specifying partition specification. This leads to move all data into a
+            specifying partition specification. This leads to moveing all data into a
             single partition in a single machine and could cause serious
-            performance degradation. Avoid this method against very large datasets.
+            performance degradation. Avoid this method with very large datasets.
 
         Parameters
         ----------
@@ -280,9 +280,9 @@ class Frame(object, metaclass=ABCMeta):
         Returns a DataFrame or Series of the same size containing the cumulative sum.
 
         .. note:: the current implementation of cumsum uses Spark's Window without
-            specifying partition specification. This leads to move all data into a
+            specifying partition specification. This leads to moveing all data into a
             single partition in a single machine and could cause serious
-            performance degradation. Avoid this method against very large datasets.
+            performance degradation. Avoid this method with very large datasets.
 
         Parameters
         ----------
@@ -343,9 +343,9 @@ class Frame(object, metaclass=ABCMeta):
         Returns a DataFrame or Series of the same size containing the cumulative product.
 
         .. note:: the current implementation of cumprod uses Spark's Window without
-            specifying partition specification. This leads to move all data into a
+            specifying partition specification. This leads to moveing all data into a
             single partition in a single machine and could cause serious
-            performance degradation. Avoid this method against very large datasets.
+            performance degradation. Avoid this method with very large datasets.
 
         .. note:: unlike pandas', pandas-on-Spark's emulates cumulative product by
             ``exp(sum(log(...)))`` trick. Therefore, it only works for positive numbers.
@@ -3228,9 +3228,9 @@ class Frame(object, metaclass=ABCMeta):
         Synonym for `DataFrame.fillna()` or `Series.fillna()` with ``method=`bfill```.
 
         .. note:: the current implementation of 'bfill' uses Spark's Window
-            without specifying partition specification. This leads to move all data into a
+            without specifying partition specification. This leads to moveing all data into a
             single partition in a single machine and could cause serious
-            performance degradation. Avoid this method against very large datasets.
+            performance degradation. Avoid this method with very large datasets.
 
         Parameters
         ----------
@@ -3307,9 +3307,9 @@ class Frame(object, metaclass=ABCMeta):
         Synonym for `DataFrame.fillna()` or `Series.fillna()` with ``method=`ffill```.
 
         .. note:: the current implementation of 'ffill' uses Spark's Window
-            without specifying partition specification. This leads to move all data into a
+            without specifying partition specification. This leads to moveing all data into a
             single a partition in a single machine and could cause serious
-            performance degradation. Avoid this method against very large datasets.
+            performance degradation. Avoid this method with very large datasets.
 
         Parameters
         ----------
@@ -3387,9 +3387,9 @@ class Frame(object, metaclass=ABCMeta):
         Fill NaN values using an interpolation method.
 
         .. note:: the current implementation of interpolate uses Spark's Window without
-            specifying partition specification. This leads to move all data into a
+            specifying partition specification. This leads to moveing all data into a
             single partition in a single machine and could cause serious
-            performance degradation. Avoid this method against very large datasets.
+            performance degradation. Avoid this method with very large datasets.
 
         .. versionadded:: 3.4.0
 

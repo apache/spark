@@ -1258,7 +1258,7 @@ class DataFrame(Frame, Generic[T]):
              >>> def square(x) -> np.int32:
              ...     return x ** 2
 
-             pandas-on-Spark uses return type hint and does not try to infer the type.
+             pandas-on-Spark uses return type hints and does not try to infer the type.
 
         Parameters
         ----------
@@ -1292,7 +1292,7 @@ class DataFrame(Frame, Generic[T]):
         0   1.000000   4.494400
         1  11.262736  20.857489
 
-        You can omit type hint and let pandas-on-Spark infer its type.
+        You can omit type hints and let pandas-on-Spark infer its type.
 
         >>> df.applymap(lambda x: x ** 2)
                    0          1
@@ -2221,7 +2221,7 @@ class DataFrame(Frame, Generic[T]):
             Whether the generated HTML is for IPython Notebook.
         border : int
             A ``border=border`` attribute is included in the opening
-            `<table>` tag. Default ``pd.options.html.border``.
+            `<table>` tag. By default ``pd.options.html.border``.
         table_id : str, optional
             A css id is included in the opening `<table>` tag if specified.
         render_links : bool, default False
@@ -2518,7 +2518,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             Format string for floating point numbers.
         sparsify : bool, optional
             Set to False for a DataFrame with a hierarchical index to print every multiindex key at
-            each row. Default the value will be read from the config module.
+            each row. By default the value will be read from the config module.
         index_names : bool, default True
             Prints the names of the indexes.
         bold_rows : bool, default False
@@ -2528,11 +2528,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             default, ‘l’ will be used for all columns except columns of numbers, which default
             to ‘r’.
         longtable : bool, optional
-            Default the value will be read from the pandas config module. Use a longtable
+            By default the value will be read from the pandas config module. Use a longtable
             environment instead of tabular. Requires adding a usepackage{longtable} to your LaTeX
             preamble.
         escape : bool, optional
-            Default the value will be read from the pandas config module. When set to False
+            By default the value will be read from the pandas config module. When set to False
             prevents from escaping latex special characters in column names.
         encoding : str, optional
             A string representing the encoding to use in the output file, defaults to ‘ascii’ on
@@ -2831,7 +2831,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             >>> def square(s) -> ps.Series[np.int32]:
             ...     return s ** 2
 
-            pandas-on-Spark uses return type hint and does not try to infer the type.
+            pandas-on-Spark uses return type hints and does not try to infer the type.
 
             In case when axis is 1, it requires to specify `DataFrame` or scalar value
             with type hints as below:
@@ -2903,7 +2903,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         1  2.0  3.0
         2  2.0  3.0
 
-        You can omit type hint and let pandas-on-Spark infer its type.
+        You can omit type hints and let pandas-on-Spark infer its type.
 
         >>> df.apply(np.sqrt, axis=0)
              A    B
@@ -2922,7 +2922,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         2    13
         dtype: int64
 
-        You can omit type hint and let pandas-on-Spark infer its type.
+        You can omit type hints and let pandas-on-Spark infer its type.
 
         >>> df.apply(np.sum, axis=1)
         0    13
@@ -2974,7 +2974,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if not isinstance(func, types.FunctionType):
             assert callable(func), "the first argument should be a callable function."
             f = func
-            # Note that the return type hint specified here affects actual return
+            # Note that the return type hints specified here affects actual return
             # type in Spark (e.g., infer_return_type). And MyPy does not allow
             # redefinition of a function.
             func = lambda *args, **kwargs: f(*args, **kwargs)  # noqa: E731
@@ -3136,7 +3136,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
              >>> def square(x) -> ps.Series[np.int32]:
              ...     return x ** 2
 
-             pandas-on-Spark uses return type hint and does not try to infer the type.
+             pandas-on-Spark uses return type hints and does not try to infer the type.
 
         .. note:: the series within ``func`` is actually multiple pandas series as the
             segments of the whole pandas-on-Spark series; therefore, the length of each series
@@ -3191,7 +3191,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         1  1  4
         2  4  9
 
-        You can omit type hint and let pandas-on-Spark infer its type.
+        You can omit type hints and let pandas-on-Spark infer its type.
 
         >>> df.transform(lambda x: x ** 2)
            A  B
@@ -3230,7 +3230,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if not isinstance(func, types.FunctionType):
             assert callable(func), "the first argument should be a callable function."
             f = func
-            # Note that the return type hint specified here affects actual return
+            # Note that the return type hints specified here affects actual return
             # type in Spark (e.g., infer_return_type). And, MyPy does not allow
             # redefinition of a function.
             func = lambda *args, **kwargs: f(*args, **kwargs)  # noqa: E731
@@ -4154,7 +4154,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             Modify the DataFrame in place (do not create a new object).
         col_level : int or str, default 0
             If the columns have multiple levels, determines which level the
-            labels are inserted into. Default it is inserted into the first
+            labels are inserted into. By default it is inserted into the first
             level.
         col_fill : object, default ''
             If the columns have multiple levels, determines how the other
@@ -4565,7 +4565,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         .. note:: the current implementation of shift uses Spark's Window without
             specifying partition specification. This leads to moving all data into
             a single partition in a single machine and could cause serious
-            performance degradation. Avoid this method against very large datasets.
+            performance degradation. Avoid this method with very large datasets.
 
         Parameters
         ----------
@@ -4618,7 +4618,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         .. note:: the current implementation of diff uses Spark's Window without
             specifying partition specification. This leads to moving all data into
             a single partition in a single machine and could cause serious
-            performance degradation. Avoid this method against very large datasets.
+            performance degradation. Avoid this method with very large datasets.
 
         Parameters
         ----------
@@ -5103,7 +5103,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             Names of partitioning columns
         index_col: str or list of str, optional, default: None
             Column names to be used in Spark to represent pandas-on-Spark's index. The index name
-            in pandas-on-Spark is ignored. Default the index is always lost.
+            in pandas-on-Spark is ignored. By default the index is always lost.
         options : dict
             All other options passed directly into Delta Lake.
 
@@ -5193,7 +5193,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             value specified in `spark.sql.parquet.compression.codec`.
         index_col: str or list of str, optional, default: None
             Column names to be used in Spark to represent pandas-on-Spark's index. The index name
-            in pandas-on-Spark is ignored. Default the index is always lost.
+            in pandas-on-Spark is ignored. By default the index is always lost.
         options : dict
             All other options passed directly into Spark's data source.
 
@@ -5275,7 +5275,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             Names of partitioning columns
         index_col: str or list of str, optional, default: None
             Column names to be used in Spark to represent pandas-on-Spark's index. The index name
-            in pandas-on-Spark is ignored. Default the index is always lost.
+            in pandas-on-Spark is ignored. By default the index is always lost.
         options : dict
             All other options passed directly into Spark's data source.
 
@@ -5923,7 +5923,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         .. note:: the current implementation of 'method' parameter in fillna uses Spark's Window
             without specifying partition specification. This leads to moving all data into
             a single partition in a single machine and could cause serious
-            performance degradation. Avoid this method against very large datasets.
+            performance degradation. Avoid this method with very large datasets.
 
         Parameters
         ----------
@@ -9933,7 +9933,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         IE10               404           0.08
         Konqueror          301           1.00
 
-        Create a new index and reindex the dataframe. Default
+        Create a new index and reindex the dataframe. By default
         values in the new index that do not have corresponding
         records in the dataframe are assigned ``NaN``.
 
@@ -11076,7 +11076,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         .. note:: the current implementation of rank uses Spark's Window without
             specifying partition specification. This leads to moving all data into
             a single partition in a single machine and could cause serious
-            performance degradation. Avoid this method against very large datasets.
+            performance degradation. Avoid this method with very large datasets.
 
         Parameters
         ----------
@@ -11190,7 +11190,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         regex : string (regular expression)
             Keep labels from axis for which re.search(regex, label) == True.
         axis : int or string axis name
-            The axis to filter on. Default this is the info axis,
+            The axis to filter on. By default this is the info axis,
             'index' for Series, 'columns' for DataFrame.
 
         Returns
@@ -11784,7 +11784,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         .. note:: the current implementation of this API uses Spark's Window without
             specifying partition specification. This leads to moving all data into
             a single partition in a single machine and could cause serious
-            performance degradation. Avoid this method against very large datasets.
+            performance degradation. Avoid this method with very large datasets.
 
         Parameters
         ----------
@@ -12003,7 +12003,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         verbose : bool, optional
             Whether to print the full summary.
         buf : writable buffer, defaults to sys.stdout
-            Where to send the output. Default the output is printed to
+            Where to send the output. By default the output is printed to
             sys.stdout. Pass a writable buffer if you need to further process
             the output.
         max_cols : int, optional
@@ -12138,9 +12138,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Returns
         -------
         Series or DataFrame
-            If q is an array, a DataFrame will be returned were the
+            If q is an array, a DataFrame will be returned where the
             index is q, the columns are the columns of self, and the values are the quantiles.
-            If q is a float, a Series will be returned were the
+            If q is a float, a Series will be returned where the
             index is the columns of self and the values are the quantiles.
 
         Examples
@@ -12503,7 +12503,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         4     7
         dtype: int64
 
-        Assignment is allowed though default the original DataFrame is not
+        Assignment is allowed though by default the original DataFrame is not
         modified.
 
         >>> df.eval('C = A + B')
@@ -12791,7 +12791,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         spider   arthropod     8    0.0
         ostrich       bird     2    NaN
 
-        Default missing values are not considered, and the mode of wings
+        By default missing values are not considered, and the mode of wings
         are both 0 and 2. Because the resulting DataFrame has two rows,
         the second row of ``species`` and ``legs`` contains ``NaN``.
 
@@ -13175,7 +13175,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        Default the keys of the dict become the DataFrame columns:
+        By default the keys of the dict become the DataFrame columns:
 
         >>> data = {'col_1': [3, 2, 1, 0], 'col_2': [10, 20, 30, 40]}
         >>> ps.DataFrame.from_dict(data)
