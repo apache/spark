@@ -73,7 +73,7 @@ class StateStoreConf(
    * Additional configurations related to state store. This will capture all configs in
    * SQLConf that start with `spark.sql.streaming.stateStore.`
    */
-  val stateStoreSQLConfs: Map[String, String] =
+  val sqlConfs: Map[String, String] =
     sqlConf.getAllConfs.filter(_._1.startsWith("spark.sql.streaming.stateStore."))
 }
 
