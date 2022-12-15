@@ -353,6 +353,9 @@ class ExecutorPodsAllocator(
       }
     }
 
+    // Try to request new executors only when there exist remaining slots within the maximum
+    // number of pending pods and new snapshot arrives in case of waiting for releasing of the
+    // existing PVCs
     val remainingSlotFromPendingPods = maxPendingPods - totalNotRunningPodCount
     if (remainingSlotFromPendingPods > 0 && podsToAllocateWithRpId.size > 0 &&
         !(snapshots.isEmpty && podAllocOnPVC && maxPVCs <= PVC_COUNTER.get())) {
