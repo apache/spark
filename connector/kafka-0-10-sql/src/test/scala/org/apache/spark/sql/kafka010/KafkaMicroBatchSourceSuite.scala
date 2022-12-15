@@ -42,11 +42,9 @@ import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.AsyncProgressTrackingMicroBatchExecution.{
-  ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS, ASYNC_PROGRESS_TRACKING_ENABLED
-}
+import org.apache.spark.sql.execution.streaming.AsyncProgressTrackingMicroBatchExecution.{ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS, ASYNC_PROGRESS_TRACKING_ENABLED}
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
-import org.apache.spark.sql.functions.{count, window}
+import org.apache.spark.sql.functions.{count, expr, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.sql.streaming.{StreamingQuery, StreamTest, Trigger}
@@ -241,28 +239,16 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase with 
           .start()
       }
 
-      def readResults(): ListBuffer[String] = {
-        val data = new ListBuffer[String]()
-        val readQuery = spark.readStream
+      def readResults(): List[String] = {
+        spark.read
           .format("kafka")
           .option("kafka.bootstrap.servers", testUtils.brokerAddress)
           .option("startingOffsets", "earliest")
           .option("subscribe", outputTopic)
           .load()
-          .writeStream
-          .foreachBatch((ds: Dataset[Row], batchId: Long) => {
-            ds.collect.foreach((row: Row) => {
-              val v: String = new String(row.getAs("value").asInstanceOf[Array[Byte]])
-              data += v
-            }: Unit)
-          }).start()
-
-        try {
-          readQuery.processAllAvailable()
-        } finally {
-          readQuery.stop()
-        }
-        data
+          .select(expr("CAST(value AS string)"))
+          .toDF
+          .collect().map(_.getAs[String]("value")).toList
       }
 
       val query = startQuery()
@@ -275,7 +261,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase with 
       val data = readResults()
       data should equal (dataSent)
 
-      //Restart query
+      // Restart query
 
       testUtils.sendMessages(inputTopic, (15 until 30).map { case x =>
         val m = s"foo-$x"

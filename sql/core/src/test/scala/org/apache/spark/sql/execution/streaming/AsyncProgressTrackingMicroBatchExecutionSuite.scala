@@ -22,11 +22,11 @@ import java.util.concurrent.{CountDownLatch, Semaphore, TimeUnit}
 
 import scala.collection.mutable.ListBuffer
 
-import org.apache.spark.TestUtils
 import org.scalatest.BeforeAndAfter
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Seconds, Span}
 
+import org.apache.spark.TestUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.connector.read.streaming
 import org.apache.spark.sql.execution.streaming.AsyncProgressTrackingMicroBatchExecution.{ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS, ASYNC_PROGRESS_TRACKING_ENABLED, ASYNC_PROGRESS_TRACKING_OVERRIDE_SINK_SUPPORT_CHECK}
@@ -719,10 +719,7 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     )
   }
 
-  // Tests that errors that occurred during async offset log write gets bubbled up
-  // to the main stream execution thread
-  test("bubble up async offset log write errors 1:" +
-    " offset file already exists for a batch") {
+  def testAsyncWriteErrorsAlreadyExists(path: String): Unit = {
     val inputData = new MemoryStream[Int](id = 0, sqlContext = sqlContext)
     val ds = inputData.toDS()
     val checkpointLocation = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
@@ -739,10 +736,9 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
       CheckAnswer(0),
       Execute { q =>
         waitPendingOffsetWrites(q)
-        // to simulate write error by writing a file for the next offset i.e. 1.
-        // This should create a conflict
+        // to simulate write error
         import java.io._
-        val pw = new PrintWriter(new File(checkpointLocation + "/offsets/1"))
+        val pw = new PrintWriter(new File(checkpointLocation + path))
         pw.write("Hello, world")
         pw.close
       },
@@ -760,50 +756,21 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     )
   }
 
+  // Tests that errors that occurred during async offset log write gets bubbled up
+  // to the main stream execution thread
+  test("bubble up async offset log write errors 1:" +
+    " offset file already exists for a batch") {
+    testAsyncWriteErrorsAlreadyExists("/offsets/1")
+  }
+
   // Tests that errors that occurred during async commit log write gets bubbled up
   // to the main stream execution thread
   test("bubble up async commit log write errors 1:" +
     " commit file already exists for a batch") {
-    val inputData = new MemoryStream[Int](id = 0, sqlContext = sqlContext)
-    val ds = inputData.toDS()
-    val checkpointLocation = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
-
-    testStream(
-      ds,
-      extraOptions = Map(
-        ASYNC_PROGRESS_TRACKING_ENABLED -> "true",
-        ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS -> "0"
-      )
-    )(
-      StartStream(checkpointLocation = checkpointLocation),
-      AddData(inputData, 0),
-      CheckAnswer(0),
-      Execute { q =>
-        waitPendingOffsetWrites(q)
-        // to simulate write error
-        import java.io._
-        val pw = new PrintWriter(new File(checkpointLocation + "/commits/1"))
-        pw.write("Hello, world")
-        pw.close
-      },
-      AddData(inputData, 1),
-      Execute {
-        q =>
-          eventually(timeout(Span(5, Seconds))) {
-            val e = intercept[StreamingQueryException] {
-              q.processAllAvailable()
-            }
-            e.getCause.getCause.getMessage should include(
-              "Concurrent update to the log. Multiple streaming jobs detected for 1")
-          }
-      }
-    )
+    testAsyncWriteErrorsAlreadyExists("/commits/1")
   }
 
-  // Tests that errors that occurred during async offset log write gets bubbled up
-  // to the main stream execution thread
-  test("bubble up async offset log write errors 2:" +
-    " cannot write offset files due to permissions issue") {
+  def testAsyncWriteErrorsPermissionsIssue(path: String): Unit = {
     val inputData = new MemoryStream[Int](id = 0, sqlContext = sqlContext)
     val ds = inputData.toDS()
     val checkpointLocation = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
@@ -822,7 +789,7 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
         waitPendingOffsetWrites(q)
         // to simulate write error
         import java.io._
-        val commitDir = new File(checkpointLocation + "/offsets")
+        val commitDir = new File(checkpointLocation + path)
         commitDir.setReadOnly()
 
       },
@@ -837,45 +804,20 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
           }
       }
     )
+  }
+
+    // Tests that errors that occurred during async offset log write gets bubbled up
+  // to the main stream execution thread
+  test("bubble up async offset log write errors 2:" +
+    " cannot write offset files due to permissions issue") {
+    testAsyncWriteErrorsPermissionsIssue("/offsets")
   }
 
   // Tests that errors that occurred during async commit log write gets bubbled up
   // to the main stream execution thread
   test("bubble up async commit log write errors 2" +
     ": commit file already exists for a batch") {
-    val inputData = new MemoryStream[Int](id = 0, sqlContext = sqlContext)
-    val ds = inputData.toDS()
-    val checkpointLocation = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
-
-    testStream(
-      ds,
-      extraOptions = Map(
-        ASYNC_PROGRESS_TRACKING_ENABLED -> "true",
-        ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS -> "0"
-      )
-    )(
-      StartStream(checkpointLocation = checkpointLocation),
-      AddData(inputData, 0),
-      CheckAnswer(0),
-      Execute { q =>
-        waitPendingOffsetWrites(q)
-        // to simulate write error
-        import java.io._
-        val commitDir = new File(checkpointLocation + "/commits")
-        commitDir.setReadOnly()
-
-      },
-      AddData(inputData, 1),
-      Execute {
-        q =>
-          eventually(timeout(Span(5, Seconds))) {
-            val e = intercept[StreamingQueryException] {
-              q.processAllAvailable()
-            }
-            e.getCause.getCause.getMessage should include("Permission denied")
-          }
-      }
-    )
+    testAsyncWriteErrorsPermissionsIssue("/commits")
   }
 
   class MemoryStreamCapture[A: Encoder](
