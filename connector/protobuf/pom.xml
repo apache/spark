@@ -162,7 +162,7 @@
           <plugin>
             <groupId>com.github.os72</groupId>
             <artifactId>protoc-jar-maven-plugin</artifactId>
-            <version>3.11.4</version>
+            <version>${protoc-jar-maven-plugin.version}</version>
             <!-- Generates Java classes for tests. TODO(Raghu): Generate descriptor files too. -->
             <executions>
               <execution>
