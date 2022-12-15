@@ -105,6 +105,7 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
+    "functionName" : "`range`",
     "inputSql" : "\"NULL\"",
     "inputType" : "\"VOID\"",
     "paramIndex" : "2",
@@ -129,6 +130,7 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
+    "functionName" : "`range`",
     "inputSql" : "\"array(1, 2, 3)\"",
     "inputType" : "\"ARRAY<INT>\"",
     "paramIndex" : "2",
