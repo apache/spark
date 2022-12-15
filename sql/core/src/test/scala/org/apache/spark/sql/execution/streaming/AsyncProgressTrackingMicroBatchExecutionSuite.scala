@@ -17,28 +17,27 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.io.{File, OutputStream}
-import java.util.concurrent.{CountDownLatch, Semaphore, ThreadPoolExecutor, TimeUnit}
+import java.io.File
+import java.util.concurrent.{CountDownLatch, Semaphore, TimeUnit}
 
 import scala.collection.mutable.ListBuffer
 
-import org.apache.hadoop.fs.Path
+import org.apache.spark.TestUtils
 import org.scalatest.BeforeAndAfter
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Seconds, Span}
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.streaming.WriteToStream
 import org.apache.spark.sql.connector.read.streaming
 import org.apache.spark.sql.execution.streaming.AsyncProgressTrackingMicroBatchExecution.{ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS, ASYNC_PROGRESS_TRACKING_ENABLED, ASYNC_PROGRESS_TRACKING_OVERRIDE_SINK_SUPPORT_CHECK}
 import org.apache.spark.sql.functions.{column, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{StreamingQuery, StreamingQueryException, StreamTest, Trigger}
 import org.apache.spark.sql.streaming.util.StreamManualClock
-import org.apache.spark.util.{Clock, Utils}
+import org.apache.spark.util.Utils
 
 class AsyncProgressTrackingMicroBatchExecutionSuite
-    extends StreamTest
+  extends StreamTest
     with BeforeAndAfter
     with Matchers {
 
@@ -494,7 +493,7 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
 
     try {
       countDownLatch.await(streamingTimeout.toMillis, TimeUnit.MILLISECONDS)
-      // make sure the batch 20 in the commit log writes to durable storage
+      // make sure the batch 21 in the commit log writes to durable storage
       eventually(timeout(Span(5, Seconds))) {
         val files = getListOfFiles(checkpointLocation + "/commits")
           .filter(file => !file.isHidden)
@@ -691,7 +690,7 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
 
     try {
       countDownLatch.await(streamingTimeout.toMillis, TimeUnit.MILLISECONDS)
-      // make sure the batch 20 in the commit log writes to durable storage
+      // make sure the batch 21 in the commit log writes to durable storage
       eventually(timeout(Span(5, Seconds))) {
         val files = getListOfFiles(checkpointLocation + "/commits")
           .filter(file => !file.isHidden)
@@ -720,46 +719,10 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     )
   }
 
-  class FailAsyncProgressTrackingMicroBatchExecution(
-      sparkSession: SparkSession,
-      trigger: Trigger,
-      triggerClock: Clock,
-      extraOptions: Map[String, String],
-      plan: WriteToStream)
-      extends AsyncProgressTrackingMicroBatchExecution(
-        sparkSession,
-        trigger,
-        triggerClock,
-        extraOptions,
-        plan
-      ) {
-
-    override val offsetLog = new FailAsyncOffsetSeqLog(
-      sparkSession,
-      checkpointFile("offsets"),
-      asyncWritesExecutorService,
-      asyncProgressTrackingCheckpointingIntervalMs
-    )
-  }
-
-  class FailAsyncOffsetSeqLog(
-      sparkSession: SparkSession,
-      path: String,
-      executorService: ThreadPoolExecutor,
-      offsetCommitIntervalMs: Long)
-      extends AsyncOffsetSeqLog(sparkSession, path, executorService, offsetCommitIntervalMs) {
-
-    override def write(
-        batchMetadataFile: Path,
-        fn: OutputStream => Unit): Unit = {
-
-      throw new Exception("test fail")
-    }
-  }
-
   // Tests that errors that occurred during async offset log write gets bubbled up
   // to the main stream execution thread
-  test("bubble up async offset log write errors") {
+  test("bubble up async offset log write errors 1:" +
+    " offset file already exists for a batch") {
     val inputData = new MemoryStream[Int](id = 0, sqlContext = sqlContext)
     val ds = inputData.toDS()
     val checkpointLocation = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
@@ -790,7 +753,7 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
             val e = intercept[StreamingQueryException] {
               q.processAllAvailable()
             }
-            e.getCause.getCause.getMessage should include(
+            TestUtils.assertExceptionMsg(e,
               "Concurrent update to the log. Multiple streaming jobs detected for 1")
           }
       }
@@ -799,7 +762,8 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
 
   // Tests that errors that occurred during async commit log write gets bubbled up
   // to the main stream execution thread
-  test("bubble up async commit log write errors 1") {
+  test("bubble up async commit log write errors 1:" +
+    " commit file already exists for a batch") {
     val inputData = new MemoryStream[Int](id = 0, sqlContext = sqlContext)
     val ds = inputData.toDS()
     val checkpointLocation = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
@@ -838,7 +802,8 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
 
   // Tests that errors that occurred during async offset log write gets bubbled up
   // to the main stream execution thread
-  test("bubble up async offset log write errors 2") {
+  test("bubble up async offset log write errors 2:" +
+    " cannot write offset files due to permissions issue") {
     val inputData = new MemoryStream[Int](id = 0, sqlContext = sqlContext)
     val ds = inputData.toDS()
     val checkpointLocation = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
@@ -876,7 +841,8 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
 
   // Tests that errors that occurred during async commit log write gets bubbled up
   // to the main stream execution thread
-  test("bubble up async commit log write errors 2") {
+  test("bubble up async commit log write errors 2" +
+    ": commit file already exists for a batch") {
     val inputData = new MemoryStream[Int](id = 0, sqlContext = sqlContext)
     val ds = inputData.toDS()
     val checkpointLocation = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
@@ -916,7 +882,7 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
       id: Int,
       sqlContext: SQLContext,
       numPartitions: Option[Int] = None)
-      extends MemoryStream[A](id, sqlContext, numPartitions = numPartitions) {
+    extends MemoryStream[A](id, sqlContext, numPartitions = numPartitions) {
 
     val commits = new ListBuffer[streaming.Offset]()
     val commitThreads = new ListBuffer[Thread]()
@@ -1003,11 +969,11 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     }
 
     // make sure that the source commits is being executed by the main stream execution thread
-    inputData.commitThreads.foreach(thread => {
+    inputData.commitThreads.foreach{ thread =>
       thread.getName should include("stream execution thread for")
       thread.getName should include(query.id.toString)
       thread.getName should include(query.runId.toString)
-    })
+    }
     commitLogFiles should equal(offsetLogFiles)
   }
 
@@ -1105,10 +1071,7 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
       .sorted should equal(Array(0, 3, 4, 7))
   }
 
-  test(
-    "recovery when first offset is not zero and" +
-    " not commit log entries"
-  ) {
+  test("recovery when first offset is not zero and not commit log entries") {
     val inputData = new MemoryStreamCapture[Int](id = 0, sqlContext = sqlContext)
     val ds = inputData.toDS()
 
@@ -1161,7 +1124,6 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
       StopStream
     )
 
-
     getListOfFiles(checkpointLocation + "/offsets")
       .filter(file => !file.isHidden)
       .map(file => file.getName.toInt)
@@ -1178,7 +1140,8 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
 
     val checkpointLocation = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
 
-    // create a scenario in which the offset log only contains batch 2 and commit log is empty
+    // create a scenario in which the offset log only
+    // contains batch 0, 2, 5 and commit log only contain 0, 2
     testStream(ds)(
       StartStream(checkpointLocation = checkpointLocation),
       AddData(inputData, 0),
@@ -1212,7 +1175,6 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     new File(checkpointLocation + "/commits/.5.crc").delete()
     new File(checkpointLocation + "/commits/5").delete()
 
-
     getListOfFiles(checkpointLocation + "/offsets")
       .filter(file => !file.isHidden)
       .map(file => file.getName.toInt)
@@ -1236,6 +1198,7 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
       AddData(inputData2, 4),
       AddData(inputData2, 5),
       StartStream(checkpointLocation = checkpointLocation),
+      // since
       CheckNewAnswer(3, 4, 5),
       StopStream
     )
@@ -1250,16 +1213,14 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
       .sorted should equal(Array(0, 2, 5))
   }
 
-  test(
-    "recovery when gaps in in offset and" +
-    " commit log"
-  ) {
+  test("recovery when gaps in in offset and commit log") {
     val inputData = new MemoryStreamCapture[Int](id = 0, sqlContext = sqlContext)
     val ds = inputData.toDS()
 
     val checkpointLocation = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
 
-    // create a scenario in which the offset log only contains batch 2 and commit log is empty
+    // create a scenario in which the offset log only
+    // contains batch 0, 2 and commit log only contains 9
     testStream(ds)(
       StartStream(checkpointLocation = checkpointLocation),
       AddData(inputData, 0),
@@ -1375,7 +1336,6 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
      * Turn async progress tracking off and test recovery
      */
     testStream(ds)(
-      // need to to set processing time to something so manual clock will work
       StartStream(checkpointLocation = checkpointLocation),
       AddData(inputData, 4),
       CheckNewAnswer(1, 2, 3, 4),
@@ -1453,7 +1413,6 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
      * Turn async progress tracking off
      */
     testStream(ds)(
-      // need to to set processing time to something so manual clock will work
       StartStream(checkpointLocation = checkpointLocation),
       AddData(inputData, 4),
       CheckNewAnswer(4),
@@ -1544,7 +1503,6 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
      * Turn async progress tracking off
      */
     testStream(ds)(
-      // need to to set processing time to something so manual clock will work
       StartStream(checkpointLocation = checkpointLocation),
       AddData(inputData, 10),
       CheckNewAnswer(7, 8, 9, 10),
@@ -1562,7 +1520,6 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
       },
       StopStream
     )
-    // batches 0 and 3 should be logged
     getListOfFiles(checkpointLocation + "/offsets")
       .filter(file => !file.isHidden)
       .map(file => file.getName.toInt)
@@ -1595,9 +1552,9 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
 
       query.processAllAvailable()
     }
-    e.getMessage should include(
-      "Stateful streaming queries does not support async progress tracking at this moment."
-    )
+
+    TestUtils.assertExceptionMsg(
+      e, "Stateful streaming queries does not support async progress tracking at this moment.")
   }
 
   test("Fail on pipelines using unsupported sinks") {
@@ -1676,6 +1633,7 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
           AdvanceManualClock(100),
           CheckNewAnswer(8),
           Execute { q =>
+            // offset log and commit log entries for batch 0 should be purged
             waitPendingOffsetWrites(q)
             getListOfFiles(checkpointLocation + "/offsets")
               .filter(file => !file.isHidden)
@@ -1732,7 +1690,8 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
           AdvanceManualClock(100),
           CheckNewAnswer(13),
           Execute { q =>
-            waitPendingOffsetWrites(q)
+            // offset log and commit log entries for batch 3 and 7 should be purged
+          waitPendingOffsetWrites(q)
             getListOfFiles(checkpointLocation + "/offsets")
               .filter(file => !file.isHidden)
               .map(file => file.getName.toInt)
@@ -1827,12 +1786,11 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
                 .sorted should contain allElementsOf (Array(3, 7))
             }
           },
+          // add a couple additional batches to make sure
+          // purge happens
           AddData(inputData, 8),
           AdvanceManualClock(100),
-          // the commit log entry for batch 7 may not be written yet at this point
           CheckNewAnswer(8),
-          // run another batch to make sure commit log entry
-          // for batch 7 has been written and purge is triggered
           AddData(inputData, 9),
           AdvanceManualClock(100),
           CheckNewAnswer(9),

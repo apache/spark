@@ -231,10 +231,10 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase with 
       def startQuery(): StreamingQuery = {
         reader.writeStream
           .format("kafka")
-          .option("checkpointLocation", dir.getCanonicalPath)
           .option("kafka.bootstrap.servers", testUtils.brokerAddress)
           .option("kafka.max.block.ms", "5000")
           .option("topic", outputTopic)
+          .option("checkpointLocation", dir.getCanonicalPath)
           .option(ASYNC_PROGRESS_TRACKING_ENABLED, true)
           .option(ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS, 1000)
           .queryName("kafkaStream")
@@ -248,7 +248,8 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase with 
           .option("kafka.bootstrap.servers", testUtils.brokerAddress)
           .option("startingOffsets", "earliest")
           .option("subscribe", outputTopic)
-          .load().writeStream
+          .load()
+          .writeStream
           .foreachBatch((ds: Dataset[Row], batchId: Long) => {
             ds.collect.foreach((row: Row) => {
               val v: String = new String(row.getAs("value").asInstanceOf[Array[Byte]])
@@ -274,9 +275,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase with 
       val data = readResults()
       data should equal (dataSent)
 
-      /**
-       * Restart query
-       */
+      //Restart query
 
       testUtils.sendMessages(inputTopic, (15 until 30).map { case x =>
         val m = s"foo-$x"

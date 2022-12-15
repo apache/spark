@@ -346,10 +346,10 @@ class MicroBatchExecution(
          * The offset log may not be contiguous */
         val prevBatchId = offsetLog.getPrevBatchFromStorage(latestBatchId)
         if (latestBatchId != 0 && prevBatchId.isDefined) {
-            val secondLatestOffsets = offsetLog.get(prevBatchId.get).getOrElse({
-              throw new IllegalStateException(s"Offset metadata for batch ${prevBatchId}" +
-                s" cannot be found.  This should not happen.")
-            })
+          val secondLatestOffsets = offsetLog.get(prevBatchId.get).getOrElse({
+            throw new IllegalStateException(s"Offset metadata for batch ${prevBatchId}" +
+              s" cannot be found.  This should not happen.")
+          })
           committedOffsets = secondLatestOffsets.toStreamProgress(sources)
         }
 
@@ -768,7 +768,7 @@ class MicroBatchExecution(
     }
   }
 
-    /** Execute a function while locking the stream from making an progress */
+  /** Execute a function while locking the stream from making an progress */
   private[sql] def withProgressLocked[T](f: => T): T = {
     awaitProgressLock.lock()
     try {

@@ -38,7 +38,7 @@ object AsyncProgressTrackingMicroBatchExecution {
       extraOptions: Map[String, String]): Long = {
     extraOptions
       .getOrElse(
-        AsyncProgressTrackingMicroBatchExecution.ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS,
+        ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS,
         "1000"
       )
       .toLong
@@ -49,16 +49,17 @@ object AsyncProgressTrackingMicroBatchExecution {
  * Class to execute micro-batches when async progress tracking is enabled
  */
 class AsyncProgressTrackingMicroBatchExecution(
-    sparkSession: SparkSession,
-    trigger: Trigger,
-    triggerClock: Clock,
-    extraOptions: Map[String, String],
-    plan: WriteToStream)
+  sparkSession: SparkSession,
+  trigger: Trigger,
+  triggerClock: Clock,
+  extraOptions: Map[String, String],
+  plan: WriteToStream)
     extends MicroBatchExecution(sparkSession, trigger, triggerClock, extraOptions, plan) {
 
+  import AsyncProgressTrackingMicroBatchExecution._
+
   protected val asyncProgressTrackingCheckpointingIntervalMs: Long
-  = AsyncProgressTrackingMicroBatchExecution
-    .getAsyncProgressTrackingCheckpointingIntervalMs(extraOptions)
+  = getAsyncProgressTrackingCheckpointingIntervalMs(extraOptions)
 
   // Offsets that are ready to be committed by the source.
   // This is needed so that we can call source commit in the same thread as micro-batch execution
@@ -70,6 +71,7 @@ class AsyncProgressTrackingMicroBatchExecution(
 
   override val triggerExecutor: TriggerExecutor = validateAndGetTrigger()
 
+  // used to check during the first batch if the pipeline is stateful
   private var isFirstBatch: Boolean = true
 
   // thread pool is only one thread because we want offset
@@ -112,8 +114,8 @@ class AsyncProgressTrackingMicroBatchExecution(
     new AsyncCommitLog(sparkSession, checkpointFile("commits"), asyncWritesExecutorService)
 
   override def markMicroBatchExecutionStart(): Unit = {
-    // check if pipeline is stateful
-    checkNotStatefulPipeline
+    // check if streamign query is stateful
+    checkNotStatefulStreamingQuery
   }
 
   override def cleanUpLastExecutedMicroBatch(): Unit = {
@@ -133,7 +135,6 @@ class AsyncProgressTrackingMicroBatchExecution(
       .thenAccept(tuple => {
         val (batchId, persistedToDurableStorage) = tuple
         if (persistedToDurableStorage) {
-
           // batch id cache not initialized
           if (lastBatchPersistedToDurableStorage.get == -1) {
             lastBatchPersistedToDurableStorage.set(
@@ -149,15 +150,16 @@ class AsyncProgressTrackingMicroBatchExecution(
               sourceCommitQueue.add(prevBatchOff.get)
             } else {
               throw new IllegalStateException(
-                s"batch ${lastBatchPersistedToDurableStorage.get()} doesn't exist"
-              )
+                s"Failed to commit processed data in the source because batch " +
+                  s"${lastBatchPersistedToDurableStorage.get()} doesn't exist in the offset log")
             }
           }
           lastBatchPersistedToDurableStorage.set(batchId)
         }
       })
       .exceptionally((th: Throwable) => {
-        logError("Encountered error while performing async offset write", th)
+        logError(s"Encountered error while performing" +
+          s" async offset write for batch ${currentBatchId}", th)
         errorNotifier.markError(th)
         return
       })
@@ -175,11 +177,12 @@ class AsyncProgressTrackingMicroBatchExecution(
     reportTimeTaken("commitOffsets") {
       // check if current batch there is a async write for the offset log is issued for this batch
       // if so, we should do the same for commit log
-      if (!offsetLog.getAsyncOffsetWrite(currentBatchId).isEmpty) {
+      if (offsetLog.getAsyncOffsetWrite(currentBatchId).nonEmpty) {
         commitLog
           .addAsync(currentBatchId, CommitMetadata(watermarkTracker.currentWatermark))
           .exceptionally((th: Throwable) => {
-            logError("Got exception during async write", th)
+            logError(s"Got exception during async write to commit log" +
+              s" for batch ${currentBatchId}", th)
             errorNotifier.markError(th)
             return
           })
@@ -225,7 +228,7 @@ class AsyncProgressTrackingMicroBatchExecution(
     // validate that the pipeline is using a supported sink
     if (!extraOptions
       .get(
-        AsyncProgressTrackingMicroBatchExecution.ASYNC_PROGRESS_TRACKING_OVERRIDE_SINK_SUPPORT_CHECK
+        ASYNC_PROGRESS_TRACKING_OVERRIDE_SINK_SUPPORT_CHECK
       )
       .getOrElse("false")
       .toBoolean) {
@@ -268,15 +271,15 @@ class AsyncProgressTrackingMicroBatchExecution(
     }
   }
 
-  private def checkNotStatefulPipeline: Unit = {
+  private def checkNotStatefulStreamingQuery: Unit = {
     if (isFirstBatch) {
       lastExecution.executedPlan.collect {
         case p if p.isInstanceOf[StateStoreWriter] =>
           throw new IllegalArgumentException(
             "Stateful streaming queries does not support async progress tracking at this moment."
           )
-          isFirstBatch = false
       }
+      isFirstBatch = false
     }
   }
 }

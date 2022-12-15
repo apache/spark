@@ -28,7 +28,11 @@ import org.apache.spark.sql.SparkSession
  * Implementation of CommitLog to perform asynchronous writes to storage
  */
 class AsyncCommitLog(sparkSession: SparkSession, path: String, executorService: ThreadPoolExecutor)
-    extends CommitLog(sparkSession, path) {
+  extends CommitLog(sparkSession, path) {
+
+  // the cache needs to be enabled because we may not be persisting every entry to durable storage
+  // entries not persisted to durable storage will just be stored in memory for faster lookups
+  assert(metadataCacheEnabled == true)
 
   // A queue of batches written to storage.  Used to keep track when to purge old batches
   val writtenToDurableStorage =
@@ -56,6 +60,7 @@ class AsyncCommitLog(sparkSession: SparkSession, path: String, executorService: 
       }
     })
 
+    batchCache.put(batchId, metadata)
     future
   }
 
@@ -77,8 +82,7 @@ class AsyncCommitLog(sparkSession: SparkSession, path: String, executorService: 
   }
 
   /**
-   * Purge entries in the commit log up to thresholdBatchId.  This method is synchronized so that
-   * async writes and purging does not happen concurrently
+   * Purge entries in the commit log up to thresholdBatchId.
    * @param thresholdBatchId
    */
   override def purge(thresholdBatchId: Long): Unit = {
