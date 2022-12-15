@@ -562,18 +562,18 @@ object RocksDBConf {
   /** Common prefix of all confs in SQLConf that affects RocksDB */
   val ROCKSDB_SQL_CONF_NAME_PREFIX = "spark.sql.streaming.stateStore.rocksdb"
 
-  private abstract class ConfEntry(name: String, default: String) {
+  private abstract class ConfEntry(name: String, val default: String) {
     def fullName: String = name.toLowerCase(Locale.ROOT)
   }
 
-  private case class SQLConfEntry(name: String, default: String)
+  private case class SQLConfEntry(name: String, override val default: String)
     extends ConfEntry(name, default) {
 
     override def fullName: String =
       s"$ROCKSDB_SQL_CONF_NAME_PREFIX.${name}".toLowerCase(Locale.ROOT)
   }
 
-  private case class ExtraConfEntry(name: String, default: String)
+  private case class ExtraConfEntry(name: String, override val default: String)
     extends ConfEntry(name, default)
 
   // Configuration that specifies whether to compact the RocksDB data every time data is committed
