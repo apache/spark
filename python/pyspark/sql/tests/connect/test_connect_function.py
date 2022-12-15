@@ -942,7 +942,7 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             sdf.select(SF.to_json(SF.struct(SF.lit("a"), SF.lit("b")))),
         )
 
-    def test_string_functions(self):
+    def test_string_functions_one_arg(self):
         from pyspark.sql import functions as SF
         from pyspark.sql.connect import functions as CF
 
@@ -970,6 +970,15 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             (CF.ltrim, SF.ltrim),
             (CF.rtrim, SF.rtrim),
             (CF.trim, SF.trim),
+            (CF.sentences, SF.sentences),
+            (CF.initcap, SF.initcap),
+            (CF.soundex, SF.soundex),
+            (CF.bin, SF.bin),
+            (CF.hex, SF.hex),
+            (CF.unhex, SF.unhex),
+            (CF.length, SF.length),
+            (CF.octet_length, SF.octet_length),
+            (CF.bit_length, SF.bit_length),
             (CF.reverse, SF.reverse),
         ]:
             self.assert_eq(
@@ -977,9 +986,38 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
                 sdf.select(sfunc("a"), sfunc(sdf.b)).toPandas(),
             )
 
+    def test_string_functions_multi_args(self):
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        query = """
+            SELECT * FROM VALUES
+            (1, 'abcdef', 'ghij', 'hello world', 'a.b.c.d'),
+            (2, 'abcd', 'efghij', 'how are you', 'a.b.c')
+            AS tab(a, b, c, d, e)
+            """
+        # +---+------+------+-----------+-------+
+        # |  a|     b|     c|          d|      e|
+        # +---+------+------+-----------+-------+
+        # |  1|abcdef|  ghij|hello world|a.b.c.d|
+        # |  2|  abcd|efghij|how are you|  a.b.c|
+        # +---+------+------+-----------+-------+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        # TODO(SPARK-41473): Resolve the data type mismatch issue and enable the
+        # Disable the test because:
+        # Cannot resolve "format_number(a, 2)" due to data type mismatch:
+        # Parameter 2 requires the ("INT" or "STRING") type, however "2" has the type "BIGINT"
+        # self.assert_eq(
+        #     cdf.select(CF.format_number(cdf.a, 2)).toPandas(),
+        #     sdf.select(SF.format_number(sdf.a, 2)).toPandas(),
+        # )
+
         self.assert_eq(
-            cdf.select(CF.concat_ws("-", cdf.a, "c")).toPandas(),
-            sdf.select(SF.concat_ws("-", sdf.a, "c")).toPandas(),
+            cdf.select(CF.concat_ws("-", cdf.b, "c")).toPandas(),
+            sdf.select(SF.concat_ws("-", sdf.b, "c")).toPandas(),
         )
 
         self.assert_eq(
@@ -990,6 +1028,61 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
         self.assert_eq(
             cdf.select(CF.encode("c", "UTF-8")).toPandas(),
             sdf.select(SF.encode("c", "UTF-8")).toPandas(),
+        )
+
+        self.assert_eq(
+            cdf.select(CF.format_string("%d %s", cdf.a, cdf.b)).toPandas(),
+            sdf.select(SF.format_string("%d %s", sdf.a, sdf.b)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.instr(cdf.b, "b")).toPandas(), sdf.select(SF.instr(sdf.b, "b")).toPandas()
+        )
+        self.assert_eq(
+            cdf.select(CF.overlay(cdf.b, cdf.c, 2)).toPandas(),
+            sdf.select(SF.overlay(sdf.b, sdf.c, 2)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.substring(cdf.b, 1, 2)).toPandas(),
+            sdf.select(SF.substring(sdf.b, 1, 2)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.substring_index(cdf.e, ".", 2)).toPandas(),
+            sdf.select(SF.substring_index(sdf.e, ".", 2)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.levenshtein(cdf.b, cdf.c)).toPandas(),
+            sdf.select(SF.levenshtein(sdf.b, sdf.c)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.locate("e", cdf.b)).toPandas(),
+            sdf.select(SF.locate("e", sdf.b)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.lpad(cdf.b, 10, "#")).toPandas(),
+            sdf.select(SF.lpad(sdf.b, 10, "#")).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.rpad(cdf.b, 10, "#")).toPandas(),
+            sdf.select(SF.rpad(sdf.b, 10, "#")).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.repeat(cdf.b, 2)).toPandas(), sdf.select(SF.repeat(sdf.b, 2)).toPandas()
+        )
+        self.assert_eq(
+            cdf.select(CF.split(cdf.b, "[bd]")).toPandas(),
+            sdf.select(SF.split(sdf.b, "[bd]")).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.regexp_extract(cdf.b, "(a+)(b)?(c)", 1)).toPandas(),
+            sdf.select(SF.regexp_extract(sdf.b, "(a+)(b)?(c)", 1)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.regexp_replace(cdf.b, "(a+)(b)?(c)", "--")).toPandas(),
+            sdf.select(SF.regexp_replace(sdf.b, "(a+)(b)?(c)", "--")).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.translate(cdf.b, "abc", "xyz")).toPandas(),
+            sdf.select(SF.translate(sdf.b, "abc", "xyz")).toPandas(),
         )
 
     # TODO(SPARK-41283): To compare toPandas for test cases with dtypes marked
