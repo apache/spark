@@ -397,7 +397,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                       messageParameters = Map("sqlExpr" -> expr.sql))
                   }
                 }
-              case e: Attribute if groupingExprs.isEmpty =>
+              case _: Attribute if groupingExprs.isEmpty =>
                 operator.failAnalysis(
                   errorClass = "MISSING_GROUP_BY",
                   messageParameters = Map.empty)
