@@ -688,7 +688,7 @@ class Catalog:
         ``spark.sql.sources.default`` will be used.
 
         Optionally, a schema can be provided as the schema of the returned :class:`DataFrame` and
-        create an external table.
+        created external table.
 
         .. versionadded:: 2.0.0
 

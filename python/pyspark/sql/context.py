@@ -143,7 +143,7 @@ class SQLContext:
     @classmethod
     def getOrCreate(cls: Type["SQLContext"], sc: SparkContext) -> "SQLContext":
         """
-        Get the existing SQLContext or create a new one with a given SparkContext.
+        Get the existing SQLContext or create a new one with given SparkContext.
 
         .. versionadded:: 1.6.0
 
@@ -514,7 +514,7 @@ class SQLContext:
         ``spark.sql.sources.default`` will be used.
 
         Optionally, a schema can be provided as the schema of the returned :class:`DataFrame` and
-        create an external table.
+        created external table.
 
         .. versionadded:: 1.3.0
 
@@ -638,7 +638,7 @@ class SQLContext:
     def read(self) -> DataFrameReader:
         """
         Returns a :class:`DataFrameReader` that can be used to read data
-        as a :class:`DataFrame`.
+        in as a :class:`DataFrame`.
 
         .. versionadded:: 1.4.0
 
