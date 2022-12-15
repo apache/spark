@@ -833,7 +833,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
     def divmod(self, other: Any) -> Tuple["Series", "Series"]:
         """
-        Return Integer division and modulo of series and other, elementwise
+        Return Integer division and modulo of series and other, element-wise
         (binary operator `divmod`).
 
         Parameters
@@ -853,7 +853,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
     def rdivmod(self, other: Any) -> Tuple["Series", "Series"]:
         """
-        Return Integer division and modulo of series and other, elementwise
+        Return Integer division and modulo of series and other, element-wise
         (binary operator `rdivmod`).
 
         Parameters
@@ -1078,7 +1078,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         See Also
         --------
         Series.apply : For applying more complex functions on a Series.
-        DataFrame.applymap : Apply a function elementwise on a whole DataFrame.
+        DataFrame.applymap : Apply a function element-wise on a whole DataFrame.
 
         Notes
         -----
@@ -5548,7 +5548,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         See Also
         --------
-        Series.combine : Perform elementwise operation on two Series
+        Series.combine : Perform element-wise operation on two Series
             using a given function.
 
         Notes
