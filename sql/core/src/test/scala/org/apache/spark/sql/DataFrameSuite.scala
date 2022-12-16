@@ -2135,7 +2135,8 @@ class DataFrameSuite extends QueryTest
       // We can't leverage LogicalRDD.fromDataset here, since it triggers physical planning and
       // there is no matching physical node for OutputListAwareStatsTestPlan.
       val optimizedPlan = df.queryExecution.optimizedPlan
-      val rewrite = LogicalRDD.buildOutputAssocForRewrite(optimizedPlan.output, df.logicalPlan.output)
+      val rewrite = LogicalRDD.buildOutputAssocForRewrite(optimizedPlan.output,
+        df.logicalPlan.output)
       val logicalRDD = LogicalRDD(
         df.logicalPlan.output, spark.sparkContext.emptyRDD[InternalRow], isStreaming = true)(
         spark, Some(LogicalRDD.rewriteStatistics(optimizedPlan.stats, rewrite.get)), None)
