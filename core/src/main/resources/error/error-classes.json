@@ -863,6 +863,11 @@
     ],
     "sqlState" : "42000"
   },
+  "MISSING_GROUP_BY" : {
+    "message" : [
+      "The query does not include a GROUP BY clause. Add GROUP BY or turn it into the window functions using OVER clauses."
+    ]
+  },
   "MISSING_STATIC_PARTITION_COLUMN" : {
     "message" : [
       "Unknown static partition column: <columnName>"
@@ -5114,11 +5119,6 @@
   "_LEGACY_ERROR_TEMP_2421" : {
     "message" : [
       "nondeterministic expression <sqlExpr> should not appear in the arguments of an aggregate function."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2422" : {
-    "message" : [
-      "grouping expressions sequence is empty, and '<sqlExpr>' is not an aggregate function. Wrap '<aggExprs>' in windowing function(s) or wrap '<sqlExpr>' in first() (or first_value) if you don't care which value you get."
     ]
   },
   "_LEGACY_ERROR_TEMP_2423" : {
