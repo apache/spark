@@ -294,9 +294,9 @@ abstract class TypeCoercionBase {
 
     /** Build new children with the widest types for each attribute among all the children */
     private def buildNewChildrenWithWiderTypes(children: Seq[LogicalPlan]): Seq[LogicalPlan] = {
-      children.foreach(child => checkInternalError(
-        child.output.length == children.head.output.length,
-        "All children must have the same number of outputs."))
+      checkInternalError(
+        children.forall(_.output.length == children.head.output.length),
+        "All children must have the same number of outputs.")
 
       // Get a sequence of data types, each of which is the widest type of this specific attribute
       // in all the children
