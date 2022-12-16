@@ -691,24 +691,26 @@ class SparkConnectPlanner(session: SparkSession) {
     }
   }
 
-  private def transformSort(rel: proto.Sort): LogicalPlan = {
-    assert(rel.getSortFieldsCount > 0, "'sort_fields' must be present and contain elements.")
+  private def transformSort(sort: proto.Sort): LogicalPlan = {
+    assert(sort.getOrderCount > 0, "'order' must be present and contain elements.")
     logical.Sort(
-      child = transformRelation(rel.getInput),
-      global = rel.getIsGlobal,
-      order = rel.getSortFieldsList.asScala.map(transformSortOrderExpression).toSeq)
+      child = transformRelation(sort.getInput),
+      global = sort.getIsGlobal,
+      order = sort.getOrderList.asScala.toSeq.map(transformSortOrderExpression))
   }
 
-  private def transformSortOrderExpression(so: proto.Sort.SortField): expressions.SortOrder = {
+  private def transformSortOrderExpression(order: proto.Expression.SortOrder) = {
     expressions.SortOrder(
-      child = transformUnresolvedExpression(so.getExpression),
-      direction = so.getDirection match {
-        case proto.Sort.SortDirection.SORT_DIRECTION_DESCENDING => expressions.Descending
-        case _ => expressions.Ascending
+      child = transformExpression(order.getChild),
+      direction = order.getDirection match {
+        case proto.Expression.SortOrder.SortDirection.SORT_DIRECTION_ASCENDING =>
+          expressions.Ascending
+        case _ => expressions.Descending
       },
-      nullOrdering = so.getNulls match {
-        case proto.Sort.SortNulls.SORT_NULLS_LAST => expressions.NullsLast
-        case _ => expressions.NullsFirst
+      nullOrdering = order.getNullOrdering match {
+        case proto.Expression.SortOrder.NullOrdering.SORT_NULLS_FIRST =>
+          expressions.NullsFirst
+        case _ => expressions.NullsLast
       },
       sameOrderExpressions = Seq.empty)
   }

@@ -37,6 +37,26 @@ message Expression {
     Alias alias = 6;
     Cast cast = 7;
     UnresolvedRegex unresolved_regex = 8;
+    SortOrder sort_order = 9;
+  }
+
+  message SortOrder {
+
+    Expression child = 1;
+
+    SortDirection direction = 2;
+
+    NullOrdering null_ordering = 3;
+
+    enum SortDirection {
+      SORT_DIRECTION_ASCENDING = 0;
+      SORT_DIRECTION_DESCENDING = 1;
+    }
+
+    enum NullOrdering {
+      SORT_NULLS_FIRST = 0;
+      SORT_NULLS_LAST = 1;
+    }
   }
 
   message Cast {
