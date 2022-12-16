@@ -95,6 +95,8 @@ import org.apache.spark.sql.internal.SQLConf
 object WrapLateralColumnAliasReference extends Rule[LogicalPlan] {
   import ResolveLateralColumnAliasReference.AliasEntry
 
+  def resolver: Resolver = conf.resolver
+
   private def insertIntoAliasMap(
       a: Alias,
       idx: Int,
@@ -112,9 +114,10 @@ object WrapLateralColumnAliasReference extends Rule[LogicalPlan] {
    */
   private def resolveByLateralAlias(
       nameParts: Seq[String], lateralAlias: Alias): Option[LateralColumnAliasReference] = {
-    val resolvedAttr = SimpleAnalyzer.resolveExpressionByPlanOutput(
+    val resolvedAttr = Analyzer.resolveExpressionByPlanOutput(
       expr = UnresolvedAttribute(nameParts),
       plan = LocalRelation(Seq(lateralAlias.toAttribute)),
+      resolver = resolver,
       throws = false
     ).asInstanceOf[NamedExpression]
     if (resolvedAttr.resolved) {
@@ -139,8 +142,8 @@ object WrapLateralColumnAliasReference extends Rule[LogicalPlan] {
       aliasMap: CaseInsensitiveMap[Seq[AliasEntry]]): NamedExpression = {
     e.transformWithPruning(_.containsAnyPattern(UNRESOLVED_ATTRIBUTE, OUTER_REFERENCE)) {
       case u: UnresolvedAttribute if aliasMap.contains(u.nameParts.head) &&
-        SimpleAnalyzer.resolveExpressionByPlanChildren(
-          u, currentPlan).isInstanceOf[UnresolvedAttribute] =>
+        Analyzer.resolveExpressionByPlanChildren(
+          u, currentPlan, resolver).isInstanceOf[UnresolvedAttribute] =>
         val aliases = aliasMap.get(u.nameParts.head).get
         aliases.size match {
           case n if n > 1 =>
