@@ -1167,6 +1167,11 @@
       "Found an unclosed bracketed comment. Please, append */ at the end of the comment."
     ]
   },
+  "UNEXPECTED_INPUT_TYPE" : {
+    "message" : [
+      "Parameter <paramIndex> of function <functionName> requires the <requiredType> type, however <inputSql> has the type <inputType>."
+    ]
+  },
   "UNKNOWN_PROTOBUF_MESSAGE_TYPE" : {
     "message" : [
       "Attempting to treat <descriptorName> as a Message, but it was <containingType>"
@@ -2635,18 +2640,6 @@
   "_LEGACY_ERROR_TEMP_1178" : {
     "message" : [
       "The number of partitions can't be specified with unspecified distribution. Invalid writer requirements detected."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1179" : {
-    "message" : [
-      "Table-valued function <name> with alternatives: <usage>",
-      "cannot be applied to (<arguments>): <details>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1180" : {
-    "message" : [
-      "Incompatible input data type.",
-      "Expected: <expectedDataType>; Found: <foundDataType>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1181" : {

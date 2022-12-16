@@ -80,12 +80,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1179",
+  "errorClass" : "WRONG_NUM_ARGS.WITH_SUGGESTION",
   "messageParameters" : {
-    "arguments" : "integer, integer, integer, integer, integer",
-    "details" : "[WRONG_NUM_ARGS.WITH_SUGGESTION] Invalid number of arguments for the function `range`. Consider to change the number of arguments because the function requires [1, 2, 3, 4] parameters but the actual number is 5.",
-    "name" : "range",
-    "usage" : "\n    range(start: long, end: long, step: long, numSlices: integer)\n    range(start: long, end: long, step: long)\n    range(start: long, end: long)\n    range(end: long)"
+    "actualNum" : "5",
+    "expectedNum" : "[1, 2, 3, 4]",
+    "functionName" : "`range`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -104,12 +103,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1179",
+  "errorClass" : "UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "arguments" : "integer, void",
-    "details" : "Incompatible input data type.\nExpected: long; Found: void.",
-    "name" : "range",
-    "usage" : "\n    range(start: long, end: long, step: long, numSlices: integer)\n    range(start: long, end: long, step: long)\n    range(start: long, end: long)\n    range(end: long)"
+    "functionName" : "`range`",
+    "inputSql" : "\"NULL\"",
+    "inputType" : "\"VOID\"",
+    "paramIndex" : "2",
+    "requiredType" : "\"BIGINT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -128,12 +128,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1179",
+  "errorClass" : "UNEXPECTED_INPUT_TYPE",
   "messageParameters" : {
-    "arguments" : "array",
-    "details" : "Incompatible input data type.\nExpected: long; Found: array.",
-    "name" : "range",
-    "usage" : "\n    range(start: long, end: long, step: long, numSlices: integer)\n    range(start: long, end: long, step: long)\n    range(start: long, end: long)\n    range(end: long)"
+    "functionName" : "`range`",
+    "inputSql" : "\"array(1, 2, 3)\"",
+    "inputType" : "\"ARRAY<INT>\"",
+    "paramIndex" : "2",
+    "requiredType" : "\"BIGINT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -152,12 +153,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1179",
+  "errorClass" : "FAILED_FUNCTION_CALL",
   "messageParameters" : {
-    "arguments" : "integer, integer, integer",
-    "details" : "[FAILED_FUNCTION_CALL] Failed preparing of the function `range` for call. Please, double check function's arguments.",
-    "name" : "range",
-    "usage" : "\n    range(start: long, end: long, step: long, numSlices: integer)\n    range(start: long, end: long, step: long)\n    range(start: long, end: long)\n    range(end: long)"
+    "funcName" : "`range`"
   },
   "queryContext" : [ {
     "objectType" : "",
