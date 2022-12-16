@@ -42,7 +42,7 @@ class SparkSession(
   /**
    * Returns a `DataFrame` with no rows or columns.
    *
-   * @since 2.0.0
+   * @since 3.4.0
    */
   @transient
   lazy val emptyDataFrame: Dataset = newDataset { builder =>
