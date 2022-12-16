@@ -4662,9 +4662,8 @@ case class ArrayAppend(left: Expression, right: Expression)
   }
 
 
-  override protected def nullSafeEval(input1: Any, input2: Any): Any = {
-    val arrayData = input1.asInstanceOf[ArrayData]
-    val elementData = input2
+  override protected def nullSafeEval(arr: Any, elementData: Any): Any = {
+    val arrayData = arr.asInstanceOf[ArrayData]
     val numberOfElements = arrayData.numElements() + 1
     if (numberOfElements > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
       throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(numberOfElements)
@@ -4689,8 +4688,9 @@ case class ArrayAppend(left: Expression, right: Expression)
            |int $newArraySize = $eval1.numElements() + 1;
            |$allocation
            |int $i = 0;
-           |for (; $i < $eval1.numElements(); $i ++) {
+           |while ($i < $eval1.numElements()) {
            |  $assignment
+           |  $i ++;
            |}
            |${CodeGenerator.setArrayElement(values, elementType, i, eval2)}
            |${ev.value} = $values;
