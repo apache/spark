@@ -4678,7 +4678,6 @@ case class ArrayAppend(left: Expression, right: Expression)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(
       ctx, ev, (eval1, eval2) => {
-        val expr = ctx.addReferenceObj("arraysAppendExpr", this)
         val newArraySize = ctx.freshName("newArraySize")
         val i = ctx.freshName("i")
         val pos = ctx.freshName("pos")
