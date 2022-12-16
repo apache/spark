@@ -74,7 +74,7 @@ class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
     taskScheduler.taskSetsFailed += taskSet.id
   }
 
-  override def speculativeTaskSubmitted(task: Task[_], taskIndex: Int = -1): Unit = {
+  override def speculativeTaskSubmitted(task: Task[_], taskIndex: Int): Unit = {
     taskScheduler.speculativeTasks += task.partitionId
   }
 }

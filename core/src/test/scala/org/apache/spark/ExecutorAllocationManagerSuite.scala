@@ -700,29 +700,29 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 3)
     doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
 
-    (0 to 9).foreach(execId => onExecutorAddedDefaultProfile(manager, execId.toString))
-    (0 to 39).map { i => createTaskInfo(i, i, executorId = s"${i / 4}")}.foreach {
+    (0 until 10).foreach(execId => onExecutorAddedDefaultProfile(manager, execId.toString))
+    (0 until 40).map { i => createTaskInfo(i, i, executorId = s"${i / 4}")}.foreach {
       info => post(SparkListenerTaskStart(0, 0, info))
     }
     assert(numExecutorsTarget(manager, defaultProfile.id) === 10)
     assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 10)
     // 30 tasks (0 - 29) finished
-    (0 to 29).map { i => createTaskInfo(i, i, executorId = s"${i / 4}")}.foreach {
+    (0 until 30).map { i => createTaskInfo(i, i, executorId = s"${i / 4}")}.foreach {
       info => post(SparkListenerTaskEnd(0, 0, null, Success, info, new ExecutorMetrics, null)) }
     // 10 speculative tasks (30 - 39) launch for the remaining tasks
-    (30 to 39).foreach { index =>
+    (30 until 40).foreach { index =>
       post(speculativeTaskSubmitEventFromTaskIndex(0, taskIndex = index))}
     clock.advance(1000)
     manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
     assert(numExecutorsTarget(manager, defaultProfile.id) === 5)
     assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 5)
-    (0 to 4).foreach { i => assert(removeExecutorDefaultProfile(manager, i.toString))}
-    (0 to 4).foreach { i => onExecutorRemoved(manager, i.toString)}
+    (0 until 5).foreach { i => assert(removeExecutorDefaultProfile(manager, i.toString))}
+    (0 until 5).foreach { i => onExecutorRemoved(manager, i.toString)}
 
     // 5 original tasks (30 - 34) finished before speculative task start,
     // the speculative task will be removed from pending tasks
     // executors needed = (5 + 5) / 4 + 1
-    (30 to 34).map { i =>
+    (30 until 35).map { i =>
       createTaskInfo(i, i, executorId = s"${i / 4}")}
       .foreach { info => post(
         SparkListenerTaskEnd(0, 0, null, Success, info, new ExecutorMetrics, null))}
@@ -731,7 +731,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(numExecutorsTarget(manager, defaultProfile.id) === 3)
     assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 3)
 
-    (40 to 44).map { i =>
+    (40 until 45).map { i =>
       createTaskInfo(i, i - 5, executorId = s"${i / 4}", speculative = true)
     }.foreach {
       info => post(SparkListenerTaskStart(0, 0, info))
@@ -741,12 +741,12 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(numExecutorsTarget(manager, defaultProfile.id) === 3)
     assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 3)
 
-    (35 to 38).map { i =>
+    (35 until 39).map { i =>
       createTaskInfo(i, i, executorId = s"${i / 4}")
     }.foreach {
       info => post(SparkListenerTaskEnd(0, 0, null, Success, info, new ExecutorMetrics, null))
     }
-    (35 to 38).map { i =>
+    (35 until 39).map { i =>
       createTaskInfo(i + 5, i, executorId = s"${(i + 5) / 4}", speculative = true)
     }.foreach {
       info => post(SparkListenerTaskEnd(0, 0, null, TaskKilled("attempt"),

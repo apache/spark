@@ -383,7 +383,7 @@ private[spark] class DAGScheduler(
   /**
    * Called by the TaskSetManager when it decides a speculative task is needed.
    */
-  def speculativeTaskSubmitted(task: Task[_], taskIndex: Int = -1): Unit = {
+  def speculativeTaskSubmitted(task: Task[_], taskIndex: Int): Unit = {
     eventProcessLoop.post(SpeculativeTaskSubmitted(task, taskIndex))
   }
 
