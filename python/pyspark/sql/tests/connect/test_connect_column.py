@@ -347,9 +347,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         # SPARK-41225: Disable unsupported functions.
         c = self.connect.range(1).id
         for f in (
-            "otherwise",
             "over",
-            "when",
             "getItem",
             "astype",
             "between",

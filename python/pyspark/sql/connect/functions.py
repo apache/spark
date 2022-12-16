@@ -16,6 +16,7 @@
 #
 from pyspark.sql.connect.column import (
     Column,
+    CaseWhen,
     Expression,
     LiteralExpression,
     ColumnReference,
@@ -549,53 +550,53 @@ def spark_partition_id() -> Column:
     return _invoke_function("spark_partition_id")
 
 
-# TODO(SPARK-41319): Support case-when in Column
-# def when(condition: Column, value: Any) -> Column:
-#     """Evaluates a list of conditions and returns one of multiple possible result expressions.
-#     If :func:`pyspark.sql.Column.otherwise` is not invoked, None is returned for unmatched
-#     conditions.
-#
-#     .. versionadded:: 3.4.0
-#
-#     Parameters
-#     ----------
-#     condition : :class:`~pyspark.sql.Column`
-#         a boolean :class:`~pyspark.sql.Column` expression.
-#     value :
-#         a literal value, or a :class:`~pyspark.sql.Column` expression.
-#
-#     Returns
-#     -------
-#     :class:`~pyspark.sql.Column`
-#         column representing when expression.
-#
-#     Examples
-#     --------
-#     >>> df = spark.range(3)
-#     >>> df.select(when(df['id'] == 2, 3).otherwise(4).alias("age")).show()
-#     +---+
-#     |age|
-#     +---+
-#     |  4|
-#     |  4|
-#     |  3|
-#     +---+
-#
-#     >>> df.select(when(df.id == 2, df.id + 1).alias("age")).show()
-#     +----+
-#     | age|
-#     +----+
-#     |null|
-#     |null|
-#     |   3|
-#     +----+
-#     """
-#     # Explicitly not using ColumnOrName type here to make reading condition less opaque
-#     if not isinstance(condition, Column):
-#         raise TypeError("condition should be a Column")
-#     v = value._jc if isinstance(value, Column) else value
-#
-#     return _invoke_function("when", condition._jc, v)
+def when(condition: Column, value: Any) -> Column:
+    """Evaluates a list of conditions and returns one of multiple possible result expressions.
+    If :func:`pyspark.sql.Column.otherwise` is not invoked, None is returned for unmatched
+    conditions.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    condition : :class:`~pyspark.sql.Column`
+        a boolean :class:`~pyspark.sql.Column` expression.
+    value :
+        a literal value, or a :class:`~pyspark.sql.Column` expression.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        column representing when expression.
+
+    Examples
+    --------
+    >>> df = spark.range(3)
+    >>> df.select(when(df['id'] == 2, 3).otherwise(4).alias("age")).show()
+    +---+
+    |age|
+    +---+
+    |  4|
+    |  4|
+    |  3|
+    +---+
+
+    >>> df.select(when(df.id == 2, df.id + 1).alias("age")).show()
+    +----+
+    | age|
+    +----+
+    |null|
+    |null|
+    |   3|
+    +----+
+    """
+    # Explicitly not using ColumnOrName type here to make reading condition less opaque
+    if not isinstance(condition, Column):
+        raise TypeError("condition should be a Column")
+
+    value_col = value if isinstance(value, Column) else lit(value)
+
+    return Column(CaseWhen(branches=[(condition._expr, value_col._expr)], else_value=None))
 
 
 # Sort Functions
