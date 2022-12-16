@@ -817,6 +817,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         )
 
     def test_random_split(self):
+        # SPARK-41440: test randomSplit(weights, seed).
         relations = (
             self.connect.read.table(self.tbl_name).filter("id > 3").randomSplit([1.0, 2.0, 3.0], 2)
         )

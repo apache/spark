@@ -230,6 +230,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertEqual(plan.root.unpivot.value_column_name, "value")
 
     def test_random_split(self):
+        # SPARK-41440: test randomSplit(weights, seed).
         from typing import List
 
         df = self.connect.readTable(table_name=self.tbl_name)
@@ -317,6 +318,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertEqual(plan.root.sample.upper_bound, 0.3)
         self.assertEqual(plan.root.sample.with_replacement, False)
         self.assertEqual(plan.root.sample.HasField("seed"), False)
+        self.assertEqual(plan.root.sample.force_stable_sort, False)
 
         plan = (
             df.filter(df.col_name > 3)
@@ -327,6 +329,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertEqual(plan.root.sample.upper_bound, 0.4)
         self.assertEqual(plan.root.sample.with_replacement, True)
         self.assertEqual(plan.root.sample.seed, -1)
+        self.assertEqual(plan.root.sample.force_stable_sort, False)
 
     def test_sort(self):
         df = self.connect.readTable(table_name=self.tbl_name)
