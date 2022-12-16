@@ -405,9 +405,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       new StructType().add("f1", IntegerType))
 
     val schema = StructType(dataTypes.map(t => StructField(t.getClass.getName, t)))
-    comparePlans(
-      connectTestRelation.to(schema),
-      sparkTestRelation.to(schema))
+    comparePlans(connectTestRelation.to(schema), sparkTestRelation.to(schema))
   }
 
   test("Test toDF") {
