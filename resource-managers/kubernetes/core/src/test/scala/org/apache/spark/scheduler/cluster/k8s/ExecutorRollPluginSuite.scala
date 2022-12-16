@@ -149,11 +149,19 @@ class ExecutorRollPluginSuite extends SparkFunSuite with PrivateMethodTester {
     Option.empty, Option.empty, Map(), Option.empty, Set(),
     metrics, Map(), Map(), 1, false, Set())
 
+  val execWithBiggestTotalShuffleWrite = new ExecutorSummary("14", "host:port", true, 1,
+    10, 10, 1, 1, 1,
+    4, 0, 2, 280,
+    30, 100, 100,
+    15, false, 20, new Date(1639300001000L),
+    Option.empty, Option.empty, Map(), Option.empty, Set(),
+    metrics, Map(), Map(), 1, false, Set())
+
   val list = Seq(driverSummary, execWithSmallestID, execWithSmallestAddTime,
     execWithBiggestTotalGCTime, execWithBiggestTotalDuration, execWithBiggestFailedTasks,
     execWithBiggestAverageDuration, execWithoutTasks, execNormal, execWithTwoDigitID,
     execWithBiggestPeakJVMOnHeapMemory, execWithBiggestPeakJVMOffHeapMemory,
-    execWithBiggestDiskUsed)
+    execWithBiggestDiskUsed, execWithBiggestTotalShuffleWrite)
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -225,6 +233,11 @@ class ExecutorRollPluginSuite extends SparkFunSuite with PrivateMethodTester {
 
   test("Policy: DISK_USED") {
     assert(plugin.invokePrivate(_choose(list, ExecutorRollPolicy.DISK_USED)).contains("13"))
+  }
+
+  test("Policy: TOTAL_SHUFFLE_WRITE") {
+    assert(plugin.invokePrivate(
+      _choose(list, ExecutorRollPolicy.TOTAL_SHUFFLE_WRITE)).contains("14"))
   }
 
   test("Policy: OUTLIER - Work like TOTAL_DURATION if there is no outlier") {
@@ -386,6 +399,19 @@ class ExecutorRollPluginSuite extends SparkFunSuite with PrivateMethodTester {
       metrics, Map(), Map(), 1, false, Set())
     assert(
       plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.DISK_USED)) ==
+        plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.OUTLIER_NO_FALLBACK)))
+  }
+
+  test("Policy: OUTLIER_NO_FALLBACK - Detect a total shuffle write outlier") {
+    val outlier = new ExecutorSummary("9999", "host:port", true, 1,
+      0, 10, 1, 0, 0,
+      3, 0, 1, 100,
+      0, 0, 0,
+      1000, false, 0, new Date(1639300001000L),
+      Option.empty, Option.empty, Map(), Option.empty, Set(),
+      metrics, Map(), Map(), 1, false, Set())
+    assert(
+      plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.TOTAL_SHUFFLE_WRITE)) ==
         plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.OUTLIER_NO_FALLBACK)))
   }
 }
