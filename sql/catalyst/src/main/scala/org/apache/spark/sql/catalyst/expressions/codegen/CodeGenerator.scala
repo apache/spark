@@ -1459,7 +1459,7 @@ object CodeGenerator extends Logging {
     val parentClassLoader = new ParentClassLoader(Utils.getContextOrSparkClassLoader)
     evaluator.setParentClassLoader(parentClassLoader)
     // Cannot be under package codegen, or fail with java.lang.InstantiationException
-    evaluator.setClassName("org.apache.spark.sql.catalyst.expressions.GeneratedClass")
+    evaluator.setClassName("org.apache.spark.sql.catalyst.expressions.GeneratedClass" + code.hashCode().abs)
     evaluator.setDefaultImports(
       classOf[Platform].getName,
       classOf[InternalRow].getName,
