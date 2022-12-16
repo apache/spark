@@ -20,7 +20,7 @@ import tempfile
 
 from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.sql import SparkSession, Row
-from pyspark.sql.types import StructType, StructField, LongType, StringType, IntegerType
+from pyspark.sql.types import DataType, StructType, StructField, LongType, StringType, IntegerType
 import pyspark.sql.functions
 from pyspark.testing.utils import ReusedPySparkTestCase
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
@@ -388,6 +388,23 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             self.spark.sql(query).schema.__repr__(),
             self.connect.sql(query).schema.__repr__(),
         )
+
+    def test_to(self):
+        # SPARK-41464: test DataFrame.to()
+        cdf = self.connect.read.table(self.tbl_name).toDF("col1", "col2")
+        df = (
+            self.spark.read.table(self.tbl_name)
+            .toDF("col1", "col2")
+            .to(StructType().add("col1", IntegerType()).add("col2", StringType()))
+        )
+
+        # TODO: add cases for StructType after 'pyspark_types_to_proto_types' support StructType
+        for schema in [
+            "struct<col1 int, col2 string>",
+            "col1 int, col2 string",
+        ]:
+            self.assertEqual(cdf.to(schema).schema, df.schema)
+            self.assert_eq(cdf.to(schema).toPandas(), df.toPandas())
 
     def test_toDF(self):
         # SPARK-41310: test DataFrame.toDF()

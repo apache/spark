@@ -29,7 +29,11 @@ if should_test_connect:
     from pyspark.sql.connect.plan import WriteOperation
     from pyspark.sql.connect.readwriter import DataFrameReader
     from pyspark.sql.connect.function_builder import UserDefinedFunction, udf
-    from pyspark.sql.types import StringType
+    from pyspark.sql.types import (
+        IntegerType,
+        StringType,
+        StructType,
+    )
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
@@ -536,6 +540,18 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         with self.assertRaises(ValueError) as context:
             df.repartition(-1)._plan.to_proto(self.connect)
         self.assertTrue("numPartitions must be positive" in str(context.exception))
+
+    def test_to(self):
+        # SPARK-41464: test `to` API in Python client.
+        df = self.connect.readTable(table_name=self.tbl_name)
+
+        # TODO: add cases for StructType after 'pyspark_types_to_proto_types' support StructType
+        for schema in [
+            "struct<col1 int, col2 string>",
+            "col1 int, col2 string",
+        ]:
+            new_plan = df.to(schema)._plan.to_proto(self.connect)
+            self.assertEqual(schema, new_plan.root.to_schema.datatype_str)
 
     def test_unsupported_functions(self):
         # SPARK-41225: Disable unsupported functions.

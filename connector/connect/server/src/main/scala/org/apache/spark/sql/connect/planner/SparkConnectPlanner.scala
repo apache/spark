@@ -89,6 +89,7 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Relation.RelTypeCase.DESCRIBE => transformStatDescribe(rel.getDescribe)
       case proto.Relation.RelTypeCase.CROSSTAB =>
         transformStatCrosstab(rel.getCrosstab)
+      case proto.Relation.RelTypeCase.TO_SCHEMA => transformToSchema(rel.getToSchema)
       case proto.Relation.RelTypeCase.RENAME_COLUMNS_BY_SAME_LENGTH_NAMES =>
         transformRenameColumnsBySamelenghtNames(rel.getRenameColumnsBySameLengthNames)
       case proto.Relation.RelTypeCase.RENAME_COLUMNS_BY_NAME_TO_NAME_MAP =>
@@ -287,6 +288,24 @@ class SparkConnectPlanner(session: SparkSession) {
       .ofRows(session, transformRelation(rel.getInput))
       .stat
       .crosstab(rel.getCol1, rel.getCol2)
+      .logicalPlan
+  }
+
+  private def transformToSchema(rel: proto.ToSchema): LogicalPlan = {
+    val schemaType = if (rel.hasDatatype) {
+      DataTypeProtoConverter.toCatalystType(rel.getDatatype)
+    } else {
+      parseDatatypeString(rel.getDatatypeStr)
+    }
+
+    val schemaStruct = schemaType match {
+      case s: StructType => s
+      case d => StructType(Seq(StructField("value", d)))
+    }
+
+    Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .to(schemaStruct)
       .logicalPlan
   }
 
