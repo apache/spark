@@ -962,6 +962,18 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             self.spark.read.table(self.tbl_name).agg({"name": "min", "id": "max"}).toPandas(),
         )
 
+    def test_subtract(self):
+        # SPARK-41453: test dataframe.subtract()
+        ndf1 = self.connect.read.table(self.tbl_name)
+        ndf2 = ndf1.filter("id > 3")
+        df1 = self.spark.read.table(self.tbl_name)
+        df2 = df1.filter("id > 3")
+
+        self.assert_eq(
+            ndf1.subtract(ndf2).toPandas(),
+            df1.subtract(df2).toPandas(),
+        )
+
     def test_write_operations(self):
         with tempfile.TemporaryDirectory() as d:
             df = self.connect.range(50)

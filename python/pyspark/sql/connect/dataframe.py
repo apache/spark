@@ -1004,6 +1004,31 @@ class DataFrame(object):
             session=self._session,
         )
 
+    def subtract(self, other: "DataFrame") -> "DataFrame":
+        """Return a new :class:`DataFrame` containing rows in this :class:`DataFrame`
+        but not in another :class:`DataFrame`.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            Another :class:`DataFrame` that needs to be subtracted.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Subtracted DataFrame.
+
+        Notes
+        -----
+        This is equivalent to `EXCEPT DISTINCT` in SQL.
+        """
+        return DataFrame.withPlan(
+            plan.SetOperation(self._plan, other._plan, "except", is_all=False),
+            session=self._session,
+        )
+
     def exceptAll(self, other: "DataFrame") -> "DataFrame":
         """Return a new :class:`DataFrame` containing rows in this :class:`DataFrame` but
         not in another :class:`DataFrame` while preserving duplicates.
