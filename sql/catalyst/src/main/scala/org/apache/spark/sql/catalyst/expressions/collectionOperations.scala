@@ -4680,19 +4680,19 @@ case class ArrayAppend(left: Expression, right: Expression)
       ctx, ev, (eval1, eval2) => {
         val newArraySize = ctx.freshName("newArraySize")
         val i = ctx.freshName("i")
-        val pos = ctx.freshName("pos")
         val values = ctx.freshName("values")
         val allocation = CodeGenerator.createArrayData(
           values, elementType, newArraySize, s" $prettyName failed.")
         val assignment = CodeGenerator.createArrayAssignment(
-          values, elementType, eval1, pos, i, true)
-        s"""int $newArraySize = $eval1.numElements() + 1;
+          values, elementType, eval1, i, i, true)
+        s"""
+           |int $newArraySize = $eval1.numElements() + 1;
            |$allocation
-           |int $pos = 0;
-           |for (int $i=0;$i<$eval1.numElements(); $i ++, $pos ++) {
+           |int $i = 0;
+           |for (; $i < $eval1.numElements(); $i ++) {
            |  $assignment
            |}
-           |${CodeGenerator.setArrayElement(values, elementType, pos, eval2)}
+           |${CodeGenerator.setArrayElement(values, elementType, i, eval2)}
            |${ev.value} = $values;
            |""".stripMargin
       }
