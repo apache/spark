@@ -77,7 +77,7 @@ def _to_seq(
     converter: Optional[Callable[["ColumnOrName"], JavaObject]] = None,
 ) -> JavaObject:
     """
-    Convert a list of Column (or names) into a JVM Seq of Column.
+    Convert a list of Columns (or names) into a JVM Seq of Column.
 
     An optional `converter` could be used to convert items in `cols`
     into JVM Column objects.
@@ -94,7 +94,7 @@ def _to_list(
     converter: Optional[Callable[["ColumnOrName"], JavaObject]] = None,
 ) -> JavaObject:
     """
-    Convert a list of Column (or names) into a JVM (Scala) List of Column.
+    Convert a list of Columns (or names) into a JVM (Scala) List of Columns.
 
     An optional `converter` could be used to convert items in `cols`
     into JVM Column objects.
@@ -419,7 +419,7 @@ class Column:
         ----------
         key
             a literal value, or a :class:`Column` expression.
-            The result will only be true at a location if item matches in the column.
+            The result will only be true at a location if the item matches in the column.
 
              .. deprecated:: 3.0.0
                  :class:`Column` as a parameter is deprecated.
@@ -458,14 +458,14 @@ class Column:
         ----------
         name
             a literal value, or a :class:`Column` expression.
-            The result will only be true at a location if field matches in the Column.
+            The result will only be true at a location if the field matches in the Column.
 
              .. deprecated:: 3.0.0
                  :class:`Column` as a parameter is deprecated.
         Returns
         -------
         :class:`Column`
-            Column representing whether each element of Column gotten by name.
+            Column representing whether each element of Column got by name.
 
         Examples
         --------
@@ -511,7 +511,7 @@ class Column:
         -------
         :class:`Column`
             Column representing whether each element of Column
-            which field added/replaced by fieldName.
+            which field was added/replaced by fieldName.
 
         Examples
         --------
@@ -542,7 +542,7 @@ class Column:
     def dropFields(self, *fieldNames: str) -> "Column":
         """
         An expression that drops fields in :class:`StructType` by name.
-        This is a no-op if schema doesn't contain field name(s).
+        This is a no-op if the schema doesn't contain field name(s).
 
         .. versionadded:: 3.1.0
 
@@ -851,7 +851,7 @@ class Column:
 
     # order
     _asc_doc = """
-    Returns a sort expression based on ascending order of the column.
+    Returns a sort expression based on the ascending order of the column.
 
     Examples
     --------

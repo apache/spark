@@ -239,6 +239,11 @@
           "Input to the function <functionName> cannot contain elements of the \"MAP\" type. In Spark, same maps may have different hashcode, thus hash expressions are prohibited on \"MAP\" elements. To restore previous behavior set \"spark.sql.legacy.allowHashOnMapType\" to \"true\"."
         ]
       },
+      "INPUT_SIZE_NOT_ONE" : {
+        "message" : [
+          "Length of <exprName> should be 1"
+        ]
+      },
       "INVALID_ARG_VALUE" : {
         "message" : [
           "The <inputName> value must to be a <requireType> literal of <validValues>, but got <inputValue>."
@@ -806,6 +811,11 @@
       }
     }
   },
+  "INVALID_SQL_ARG" : {
+    "message" : [
+      "The argument <name> of `sql()` is invalid. Consider to replace it by a SQL literal statement."
+    ]
+  },
   "INVALID_SQL_SYNTAX" : {
     "message" : [
       "Invalid SQL syntax: <inputString>"
@@ -852,6 +862,11 @@
       "Add the columns or the expression to the GROUP BY, aggregate the expression, or use <expressionAnyValue> if you do not care which of the values within a group is returned."
     ],
     "sqlState" : "42000"
+  },
+  "MISSING_GROUP_BY" : {
+    "message" : [
+      "The query does not include a GROUP BY clause. Add GROUP BY or turn it into the window functions using OVER clauses."
+    ]
   },
   "MISSING_STATIC_PARTITION_COLUMN" : {
     "message" : [
@@ -1147,9 +1162,19 @@
       "Unable to convert SQL type <toType> to Protobuf type <protobufType>."
     ]
   },
+  "UNBOUND_SQL_PARAMETER" : {
+    "message" : [
+      "Found the unbound parameter: <name>. Please, fix `args` and provide a mapping of the parameter to a SQL literal statement."
+    ]
+  },
   "UNCLOSED_BRACKETED_COMMENT" : {
     "message" : [
       "Found an unclosed bracketed comment. Please, append */ at the end of the comment."
+    ]
+  },
+  "UNEXPECTED_INPUT_TYPE" : {
+    "message" : [
+      "Parameter <paramIndex> of function <functionName> requires the <requiredType> type, however <inputSql> has the type <inputType>."
     ]
   },
   "UNKNOWN_PROTOBUF_MESSAGE_TYPE" : {
@@ -1277,6 +1302,11 @@
       "ANALYZE_UNCACHED_TEMP_VIEW" : {
         "message" : [
           "The ANALYZE TABLE FOR COLUMNS command can operate on temporary views that have been cached already. Consider to cache the view <viewName>."
+        ]
+      },
+      "ANALYZE_UNSUPPORTED_COLUMN_TYPE" : {
+        "message" : [
+          "The ANALYZE TABLE FOR COLUMNS command does not support the type <columnType> of the column <columnName> in the table <tableName>."
         ]
       },
       "CATALOG_OPERATION" : {
@@ -1476,6 +1506,11 @@
           "A correlated outer name reference within a subquery expression body was not found in the enclosing query: <value>"
         ]
       },
+      "CORRELATED_REFERENCE" : {
+        "message" : [
+          "Expressions referencing the outer query are not supported outside of WHERE/HAVING clauses: <sqlExprs>"
+        ]
+      },
       "LATERAL_JOIN_CONDITION_NON_DETERMINISTIC" : {
         "message" : [
           "Lateral join condition cannot be non-deterministic: <condition>"
@@ -1499,11 +1534,6 @@
       "NON_DETERMINISTIC_LATERAL_SUBQUERIES" : {
         "message" : [
           "Non-deterministic lateral subqueries are not supported when joining with outer relations that produce more than one row<treeNode>"
-        ]
-      },
-      "UNSUPPORTED_CORRELATED_REFERENCE" : {
-        "message" : [
-          "Expressions referencing the outer query are not supported outside of WHERE/HAVING clauses<treeNode>"
         ]
       },
       "UNSUPPORTED_CORRELATED_REFERENCE_DATA_TYPE" : {
@@ -1553,8 +1583,20 @@
   },
   "WRONG_NUM_ARGS" : {
     "message" : [
-      "The <functionName> requires <expectedNum> parameters but the actual number is <actualNum>."
-    ]
+      "Invalid number of arguments for the function <functionName>."
+    ],
+    "subClass" : {
+      "WITHOUT_SUGGESTION" : {
+        "message" : [
+          "Please, refer to 'https://spark.apache.org/docs/latest/sql-ref-functions.html' for a fix."
+        ]
+      },
+      "WITH_SUGGESTION" : {
+        "message" : [
+          "Consider to change the number of arguments because the function requires <expectedNum> parameters but the actual number is <actualNum>."
+        ]
+      }
+    }
   },
   "_LEGACY_ERROR_TEMP_0001" : {
     "message" : [
@@ -2021,11 +2063,6 @@
   "_LEGACY_ERROR_TEMP_1041" : {
     "message" : [
       "Undefined function <name>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1043" : {
-    "message" : [
-      "Invalid arguments for function <name>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1045" : {
@@ -2615,18 +2652,6 @@
       "The number of partitions can't be specified with unspecified distribution. Invalid writer requirements detected."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1179" : {
-    "message" : [
-      "Table-valued function <name> with alternatives: <usage>",
-      "cannot be applied to (<arguments>): <details>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1180" : {
-    "message" : [
-      "Incompatible input data type.",
-      "Expected: <expectedDataType>; Found: <foundDataType>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1181" : {
     "message" : [
       "Stream-stream join without equality predicate is not supported."
@@ -2878,11 +2903,6 @@
   "_LEGACY_ERROR_TEMP_1232" : {
     "message" : [
       "Partition spec is invalid. The spec (<specKeys>) must match the partition spec (<partitionColumnNames>) defined in table '<tableName>'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1235" : {
-    "message" : [
-      "Column <name> in table <tableIdent> is of type <dataType>, and Spark does not support statistics collection on this column type."
     ]
   },
   "_LEGACY_ERROR_TEMP_1236" : {
@@ -5104,11 +5124,6 @@
   "_LEGACY_ERROR_TEMP_2421" : {
     "message" : [
       "nondeterministic expression <sqlExpr> should not appear in the arguments of an aggregate function."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2422" : {
-    "message" : [
-      "grouping expressions sequence is empty, and '<sqlExpr>' is not an aggregate function. Wrap '<aggExprs>' in windowing function(s) or wrap '<sqlExpr>' in first() (or first_value) if you don't care which value you get."
     ]
   },
   "_LEGACY_ERROR_TEMP_2423" : {

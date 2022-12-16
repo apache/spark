@@ -2634,7 +2634,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       exception = intercept[AnalysisException] {
         sql("SELECT nvl(1, 2, 3)")
       },
-      errorClass = "WRONG_NUM_ARGS",
+      errorClass = "WRONG_NUM_ARGS.WITH_SUGGESTION",
       parameters = Map(
         "functionName" -> toSQLId("nvl"),
         "expectedNum" -> "2",
@@ -4586,6 +4586,45 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       sql("CREATE TABLE t1(c1 bigint) USING PARQUET")
       sql("CREATE TABLE t2(c2 bigint) USING PARQUET")
       sql("SELECT /*+ hash(t2) */ * FROM t1 join t2 on c1 = c2")
+    }
+  }
+
+  test("SPARK-41538: Metadata column should be appended at the end of project") {
+    val tableName = "table_1"
+    val viewName = "view_1"
+    withTable(tableName) {
+      withView(viewName) {
+        sql(s"CREATE TABLE $tableName (a ARRAY<STRING>, s STRUCT<id: STRING>) USING parquet")
+        val id = "id1"
+        sql(s"INSERT INTO $tableName values(ARRAY('a'), named_struct('id', '$id'))")
+        sql(
+          s"""
+             |CREATE VIEW $viewName (id)
+             |AS WITH source AS (
+             |    SELECT * FROM $tableName
+             |),
+             |renamed AS (
+             |    SELECT s.id FROM source
+             |)
+             |SELECT id FROM renamed
+             |""".stripMargin)
+        val query =
+          s"""
+             |with foo AS (
+             |  SELECT '$id' as id
+             |),
+             |bar AS (
+             |  SELECT '$id' as id
+             |)
+             |SELECT
+             |  1
+             |FROM foo
+             |FULL OUTER JOIN bar USING(id)
+             |FULL OUTER JOIN $viewName USING(id)
+             |WHERE foo.id IS NOT NULL
+             |""".stripMargin
+        checkAnswer(sql(query), Row(1))
+      }
     }
   }
 }

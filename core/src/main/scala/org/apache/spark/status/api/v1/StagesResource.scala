@@ -143,7 +143,8 @@ private[v1] class StagesResource extends BaseAppResource {
     @Context uriInfo: UriInfo):
   HashMap[String, Object] = {
     withUI { ui =>
-      val uriQueryParameters = uriInfo.getQueryParameters(true)
+      // Decode URI params twice here to avoid percent-encoding twice
+      val uriQueryParameters = UIUtils.decodeURLParameter(uriInfo.getQueryParameters(true))
       val totalRecords = uriQueryParameters.getFirst("numTasks")
       var isSearch = false
       var searchValue: String = null
@@ -204,7 +205,7 @@ private[v1] class StagesResource extends BaseAppResource {
       pageLength = queryParameters.getFirst("length").toInt
     }
     withUI(_.store.taskList(stageId, stageAttemptId, pageStartIndex, pageLength,
-      indexName(columnNameToSort), isAscendingStr.equalsIgnoreCase("asc")))
+      indexName(columnNameToSort), "asc".equalsIgnoreCase(isAscendingStr)))
   }
 
   // Filters task list based on search parameter

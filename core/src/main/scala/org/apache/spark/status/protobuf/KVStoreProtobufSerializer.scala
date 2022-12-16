@@ -17,18 +17,21 @@
 
 package org.apache.spark.status.protobuf
 
-import org.apache.spark.status.JobDataWrapper
+import org.apache.spark.status.{JobDataWrapper, TaskDataWrapper}
 import org.apache.spark.status.KVUtils.KVStoreScalaSerializer
 
 private[spark] class KVStoreProtobufSerializer extends KVStoreScalaSerializer {
   override def serialize(o: Object): Array[Byte] = o match {
     case j: JobDataWrapper => JobDataWrapperSerializer.serialize(j)
+    case t: TaskDataWrapper => TaskDataWrapperSerializer.serialize(t)
     case other => super.serialize(other)
   }
 
   override def deserialize[T](data: Array[Byte], klass: Class[T]): T = klass match {
     case _ if classOf[JobDataWrapper].isAssignableFrom(klass) =>
       JobDataWrapperSerializer.deserialize(data).asInstanceOf[T]
+    case _ if classOf[TaskDataWrapper].isAssignableFrom(klass) =>
+      TaskDataWrapperSerializer.deserialize(data).asInstanceOf[T]
     case other => super.deserialize(data, klass)
   }
 }

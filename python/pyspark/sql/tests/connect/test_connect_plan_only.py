@@ -463,6 +463,14 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertTrue(plan3.root.set_op.by_name)
         self.assertEqual(proto.SetOperation.SET_OP_TYPE_UNION, plan3.root.set_op.set_op_type)
 
+    def test_subtract(self):
+        # SPARK-41453: test `subtract` API for Python client.
+        df1 = self.connect.readTable(table_name=self.tbl_name)
+        df2 = self.connect.readTable(table_name=self.tbl_name)
+        plan1 = df1.subtract(df2)._plan.to_proto(self.connect)
+        self.assertTrue(not plan1.root.set_op.is_all)
+        self.assertEqual(proto.SetOperation.SET_OP_TYPE_EXCEPT, plan1.root.set_op.set_op_type)
+
     def test_except(self):
         # SPARK-41010: test `except` API for Python client.
         df1 = self.connect.readTable(table_name=self.tbl_name)
@@ -554,6 +562,17 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         wo.mode = "unknown"
         with self.assertRaises(ValueError):
             wo.command(None)
+
+    def test_column_regexp(self):
+        # SPARK-41438: test colRegex
+        df = self.connect.readTable(table_name=self.tbl_name)
+        col = df.colRegex("col_name")
+        self.assertIsInstance(col, Column)
+        self.assertEqual("Column<'UnresolvedRegex(col_name)'>", str(col))
+
+        col_plan = col.to_plan(self.session.client)
+        self.assertIsNotNone(col_plan)
+        self.assertEqual(col_plan.unresolved_regex.col_name, "col_name")
 
 
 if __name__ == "__main__":
