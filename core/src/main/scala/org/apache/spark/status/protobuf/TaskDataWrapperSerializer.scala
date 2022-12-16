@@ -22,6 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.status.TaskDataWrapper
 import org.apache.spark.status.api.v1.AccumulableInfo
 import org.apache.spark.status.protobuf.Utils.getOptional
+import org.apache.spark.util.Utils.weakIntern
 
 object TaskDataWrapperSerializer {
   def serialize(input: TaskDataWrapper): Array[Byte] = {
@@ -90,10 +91,10 @@ object TaskDataWrapperSerializer {
       launchTime = binary.getLaunchTime,
       resultFetchStart = binary.getResultFetchStart,
       duration = binary.getDuration,
-      executorId = binary.getExecutorId,
-      host = binary.getHost,
-      status = binary.getStatus,
-      taskLocality = binary.getTaskLocality,
+      executorId = weakIntern(binary.getExecutorId),
+      host = weakIntern(binary.getHost),
+      status = weakIntern(binary.getStatus),
+      taskLocality = weakIntern(binary.getTaskLocality),
       speculative = binary.getSpeculative,
       accumulatorUpdates = accumulatorUpdates.toSeq,
       errorMessage = getOptional(binary.hasErrorMessage, binary.getErrorMessage),
