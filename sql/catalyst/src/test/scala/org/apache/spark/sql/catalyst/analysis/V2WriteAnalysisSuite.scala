@@ -22,6 +22,7 @@ import java.util.Locale
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Cast, LessThanOrEqual, Literal}
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
@@ -523,11 +524,12 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     assertNotResolved(parsedPlan)
     assertAnalysisErrorClass(
       parsedPlan,
-      "NOT_ENOUGH_DATA_COLUMNS",
+      "NUM_COLUMNS_MISMATCH",
       Map(
-        "tableName" -> "`table-name`",
-        "tableCols" -> "[`x`, `y`]",
-        "dataCols" -> "[`y`]"
+        "operator" -> toSQLStmt(parsedPlan.nodeName),
+        "firstNumColumns" -> "2",
+        "invalidOrdinalNum" -> "second",
+        "invalidNumColumns" -> "1"
       )
     )
   }
@@ -542,11 +544,12 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     assertNotResolved(parsedPlan)
     assertAnalysisErrorClass(
       parsedPlan,
-      "NOT_ENOUGH_DATA_COLUMNS",
+      "NUM_COLUMNS_MISMATCH",
       Map(
-        "tableName" -> "`table-name`",
-        "tableCols" -> "[`x`, `y`]",
-        "dataCols" -> "[`y`]"
+        "operator" -> toSQLStmt(parsedPlan.nodeName),
+        "firstNumColumns" -> "2",
+        "invalidOrdinalNum" -> "second",
+        "invalidNumColumns" -> "1"
       )
     )
   }

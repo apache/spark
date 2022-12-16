@@ -193,7 +193,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
       c.copy(
         tableDesc = existingTable,
         query = Some(TableOutputResolver.resolveOutputColumns(
-          tableDesc.qualifiedName, existingTable.schema.toAttributes, newQuery,
+          c, tableDesc.qualifiedName, existingTable.schema.toAttributes, newQuery,
           byName = true, conf)))
 
     // Here we normalize partition, bucket and sort column names, w.r.t. the case sensitivity
@@ -378,8 +378,10 @@ object PreprocessTableInsertion extends Rule[LogicalPlan] {
     val expectedColumns = insert.table.output.filterNot(a => staticPartCols.contains(a.name))
 
     if (expectedColumns.length != insert.query.schema.length) {
-      throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
-        tblName, insert.table.output, insert.query.output, staticPartCols)
+      val firstNumColumns = insert.table.output.size
+      val invalidNumColumns = insert.query.schema.length + staticPartCols.size
+      throw QueryCompilationErrors.numColumnsMismatchError(
+        insert, firstNumColumns , 0, invalidNumColumns)
     }
 
     val partitionsTrackedByCatalog = catalogTable.isDefined &&
@@ -395,7 +397,7 @@ object PreprocessTableInsertion extends Rule[LogicalPlan] {
     }
 
     val newQuery = TableOutputResolver.resolveOutputColumns(
-      tblName, expectedColumns, insert.query, byName = false, conf)
+      insert, tblName, expectedColumns, insert.query, byName = false, conf)
     if (normalizedPartSpec.nonEmpty) {
       if (normalizedPartSpec.size != partColNames.length) {
         throw QueryCompilationErrors.requestedPartitionsMismatchTablePartitionsError(

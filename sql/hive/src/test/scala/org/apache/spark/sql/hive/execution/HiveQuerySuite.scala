@@ -1258,11 +1258,13 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
           """INSERT INTO TABLE dp_test PARTITION(dp)
             |SELECT key, value, key % 5 FROM src""".stripMargin)
       },
-      errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+      errorClass = "NUM_COLUMNS_MISMATCH",
       parameters = Map(
-        "tableName" -> "`spark_catalog`.`default`.`dp_test`",
-        "tableCols" -> "[`key`, `value`, `dp`, `sp`]",
-        "dataCols" -> "[`key`, `value`, `(key % 5)`]")
+        "operator" -> "INSERTINTOSTATEMENT",
+        "firstNumColumns" -> "4",
+        "invalidOrdinalNum" -> "second",
+        "invalidNumColumns" -> "3"
+      )
     )
 
     sql("SET hive.exec.dynamic.partition.mode=nonstrict")

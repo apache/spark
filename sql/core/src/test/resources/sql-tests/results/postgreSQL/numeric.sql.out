@@ -3831,11 +3831,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "NOT_ENOUGH_DATA_COLUMNS",
+  "errorClass" : "NUM_COLUMNS_MISMATCH",
   "messageParameters" : {
-    "dataCols" : "[`id`, `id`, `val`, `val`, `(val * val)`]",
-    "tableCols" : "[`id1`, `id2`, `result`]",
-    "tableName" : "`spark_catalog`.`default`.`num_result`"
+    "firstNumColumns" : "3",
+    "invalidNumColumns" : "5",
+    "invalidOrdinalNum" : "second",
+    "operator" : "INSERTINTOSTATEMENT"
   }
 }
 

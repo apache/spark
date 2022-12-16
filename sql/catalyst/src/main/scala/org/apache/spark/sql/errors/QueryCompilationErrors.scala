@@ -2007,19 +2007,27 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "tableColumns" -> expected.map(c => s"'${c.name}'").mkString(", "),
         "dataColumns" -> query.output.map(c => s"'${c.name}'").mkString(", ")))
   }
+  
+  def numColumnsMismatchError(
+      operator: LogicalPlan,
+      firstNumColumns: Int,
+      invalidOrdinalNum: Int,
+      invalidNumColumns: Int): Throwable = {
 
-  def cannotWriteNotEnoughColumnsToTableError(
-      tableName: String,
-      targetColumns: Seq[Attribute],
-      insertedColumns: Seq[Attribute],
-      staticPartCols: Set[String] = Set.empty): Throwable = {
+    def ordinalNumber(i: Int): String = i match {
+      case 0 => "first"
+      case 1 => "second"
+      case 2 => "third"
+      case i => s"${i + 1}th"
+    }
+
     new AnalysisException(
-      errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+      errorClass = "NUM_COLUMNS_MISMATCH",
       messageParameters = Map(
-        "tableName" -> toSQLId(tableName),
-        "tableCols" -> targetColumns.map(c => toSQLId(c.name)).mkString("[", ", ", "]"),
-        "dataCols" -> (insertedColumns.map(c => toSQLId(c.name)) ++
-          staticPartCols.map(c => toSQLId(c))).mkString("[", ", ", "]")
+        "operator" -> toSQLStmt(operator.nodeName),
+        "firstNumColumns" -> firstNumColumns.toString,
+        "invalidOrdinalNum" -> ordinalNumber(invalidOrdinalNum + 1),
+        "invalidNumColumns" -> invalidNumColumns.toString
       )
     )
   }

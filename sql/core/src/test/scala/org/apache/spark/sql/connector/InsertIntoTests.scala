@@ -20,7 +20,6 @@ package org.apache.spark.sql.connector
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode}
@@ -125,16 +124,16 @@ abstract class InsertIntoTests(
     sql(s"CREATE TABLE $t1 (id bigint, data string, missing string) USING $v2Format")
     val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
 
-    val tableName = if (catalogAndNamespace.isEmpty) s"default.$t1" else t1
     checkError(
       exception = intercept[AnalysisException] {
         doInsert(t1, df)
       },
-      errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+      errorClass = "NUM_COLUMNS_MISMATCH",
       parameters = Map(
-        "tableName" -> toSQLId(tableName),
-        "tableCols" -> "[`id`, `data`, `missing`]",
-        "dataCols" -> "[`id`, `data`]")
+        "operator" -> "APPENDDATA",
+        "firstNumColumns" -> "3",
+        "invalidOrdinalNum" -> "second",
+        "invalidNumColumns" -> "2")
     )
     verifyTable(t1, Seq.empty[(Long, String, String)].toDF("id", "data", "missing"))
   }

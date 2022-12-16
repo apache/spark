@@ -203,19 +203,20 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
 
   test("insert with column list - mismatched target table out size after rewritten query") {
     val cols = Seq("c1", "c2", "c3", "c4")
-    val tableName = format match {
-      case "foo" => "`testcat`.`t1`"
-      case _ => "`spark_catalog`.`default`.`t1`"
+    val operator = format match {
+      case "foo" => "APPENDDATA"
+      case _ => "INSERTINTOSTATEMENT"
     }
     withTable("t1") {
       createTable("t1", cols, Seq.fill(4)("int"))
       checkError(
         exception = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1) values(1)")),
-        errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+        errorClass = "NUM_COLUMNS_MISMATCH",
         parameters = Map(
-          "tableName" -> tableName,
-          "tableCols" -> "[`c1`, `c2`, `c3`, `c4`]",
-          "dataCols" -> "[`col1`]"
+          "operator" -> operator,
+          "firstNumColumns" -> "4",
+          "invalidOrdinalNum" -> "second",
+          "invalidNumColumns" -> "1"
         )
       )
     }
@@ -226,11 +227,12 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"INSERT INTO t1 partition(c3=3, c4=4) (c1) values(1)")
         },
-        errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+        errorClass = "NUM_COLUMNS_MISMATCH",
         parameters = Map(
-          "tableName" -> tableName,
-          "tableCols" -> "[`c1`, `c2`, `c3`, `c4`]",
-          "dataCols" -> "[`col1`, `c3`, `c4`]"
+          "operator" -> operator,
+          "firstNumColumns" -> "4",
+          "invalidOrdinalNum" -> "second",
+          "invalidNumColumns" -> "3"
         )
       )
     }

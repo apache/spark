@@ -360,11 +360,12 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         exception = intercept[AnalysisException] {
           sql(s"INSERT INTO TABLE $tableName PARTITION(b=1, c=2) SELECT 1, 2, 3")
         },
-        errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+        errorClass = "NUM_COLUMNS_MISMATCH",
         parameters = Map(
-          "tableName" -> s"`spark_catalog`.`default`.`$tableName`",
-          "tableCols" -> "[`a`, `d`, `b`, `c`]",
-          "dataCols" -> "[`1`, `2`, `3`, `b`, `c`]"
+          "operator" -> "INSERTINTOSTATEMENT",
+          "firstNumColumns" -> "4",
+          "invalidOrdinalNum" -> "second",
+          "invalidNumColumns" -> "5"
         )
       )
   }

@@ -150,11 +150,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
              |INSERT OVERWRITE TABLE jsonTable SELECT a FROM jt
             """.stripMargin)
       },
-      errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+      errorClass = "NUM_COLUMNS_MISMATCH",
       parameters = Map(
-        "tableName" -> "`unknown`",
-        "tableCols" -> "[`a`, `b`]",
-        "dataCols" -> "[`a`]"
+        "operator" -> "INSERTINTOSTATEMENT",
+        "firstNumColumns" -> "2",
+        "invalidOrdinalNum" -> "second",
+        "invalidNumColumns" -> "1"
       )
     )
   }
@@ -649,11 +650,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("insert into t select 1, 2.0D, 3")
           },
-          errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+          errorClass = "NUM_COLUMNS_MISMATCH",
           parameters = Map(
-            "tableName" -> "`spark_catalog`.`default`.`t`",
-            "tableCols" -> "[`i`, `d`]",
-            "dataCols" -> "[`1`, `2`.`0`, `3`]"
+            "operator" -> "INSERTINTOSTATEMENT",
+            "firstNumColumns" -> "2",
+            "invalidOrdinalNum" -> "second",
+            "invalidNumColumns" -> "3"
           )
         )
 
@@ -661,11 +663,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("insert into t select 1")
           },
-          errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+          errorClass = "NUM_COLUMNS_MISMATCH",
           parameters = Map(
-            "tableName" -> "`spark_catalog`.`default`.`t`",
-            "tableCols" -> "[`i`, `d`]",
-            "dataCols" -> "[`1`]"
+            "operator" -> "INSERTINTOSTATEMENT",
+            "firstNumColumns" -> "2",
+            "invalidOrdinalNum" -> "second",
+            "invalidNumColumns" -> "1"
           )
         )
 
@@ -903,11 +906,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         sql("INSERT OVERWRITE TABLE jsonTable(a) SELECT a FROM jt")
       },
-      errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+      errorClass = "NUM_COLUMNS_MISMATCH",
       parameters = Map(
-        "tableName" -> "`unknown`",
-        "tableCols" -> "[`a`, `b`]",
-        "dataCols" -> "[`a`]"
+        "operator" -> "INSERTINTOSTATEMENT",
+        "firstNumColumns" -> "2",
+        "invalidOrdinalNum" -> "second",
+        "invalidNumColumns" -> "1"
       )
     )
   }
@@ -1137,11 +1141,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           sql("insert into t select t1.id, t2.id, t1.val, t2.val, t1.val * t2.val " +
             "from num_data t1, num_data t2")
         },
-        errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+        errorClass = "NUM_COLUMNS_MISMATCH",
         parameters = Map(
-          "tableName" -> "`spark_catalog`.`default`.`t`",
-          "tableCols" -> "[`id1`, `int2`, `result`]",
-          "dataCols" -> "[`id`, `id`, `val`, `val`, `(val * val)`]"
+          "operator" -> "INSERTINTOSTATEMENT",
+          "firstNumColumns" -> "3",
+          "invalidOrdinalNum" -> "second",
+          "invalidNumColumns" -> "5"
         )
       )
     }
@@ -1184,11 +1189,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("insert into t values(true)")
           },
-          errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+          errorClass = "NUM_COLUMNS_MISMATCH",
           parameters = Map(
-            "tableName" -> "`spark_catalog`.`default`.`t`",
-            "tableCols" -> "[`i`, `s`]",
-            "dataCols" -> "[`col1`]"
+            "operator" -> "INSERTINTOSTATEMENT",
+            "firstNumColumns" -> "2",
+            "invalidOrdinalNum" -> "second",
+            "invalidNumColumns" -> "1"
           )
         )
       }
@@ -1272,11 +1278,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("insert into t (i) values (true)")
         },
-        errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+        errorClass = "NUM_COLUMNS_MISMATCH",
         parameters = Map(
-          "tableName" -> "`spark_catalog`.`default`.`t`",
-          "tableCols" -> "[`i`, `s`]",
-          "dataCols" -> "[`col1`]"
+          "operator" -> "INSERTINTOSTATEMENT",
+          "firstNumColumns" -> "2",
+          "invalidOrdinalNum" -> "second",
+          "invalidNumColumns" -> "1"
         )
       )
     }
@@ -1286,11 +1293,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("insert into t (i) values (default)")
         },
-        errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+        errorClass = "NUM_COLUMNS_MISMATCH",
         parameters = Map(
-          "tableName" -> "`spark_catalog`.`default`.`t`",
-          "tableCols" -> "[`i`, `s`]",
-          "dataCols" -> "[`col1`]"
+          "operator" -> "INSERTINTOSTATEMENT",
+          "firstNumColumns" -> "2",
+          "invalidOrdinalNum" -> "second",
+          "invalidNumColumns" -> "1"
         )
       )
     }
@@ -1300,10 +1308,13 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("insert into t (s) values (default)")
         },
-        errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+        errorClass = "NUM_COLUMNS_MISMATCH",
         parameters = Map(
-          "tableName" -> "`spark_catalog`.`default`.`t`",
-          "tableCols" -> "[`i`, `s`]", "dataCols" -> "[`col1`]")
+          "operator" -> "INSERTINTOSTATEMENT",
+          "firstNumColumns" -> "2",
+          "invalidOrdinalNum" -> "second",
+          "invalidNumColumns" -> "1"
+        )
       )
     }
     withTable("t") {
@@ -1312,11 +1323,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("insert into t (i, q) select true from (select 1)")
         },
-        errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+        errorClass = "NUM_COLUMNS_MISMATCH",
         parameters = Map(
-          "tableName" -> "`spark_catalog`.`default`.`t`",
-          "tableCols" -> "[`i`, `s`, `q`]",
-          "dataCols" -> "[`true`, `i`]"
+          "operator" -> "INSERTINTOSTATEMENT",
+          "firstNumColumns" -> "3",
+          "invalidOrdinalNum" -> "second",
+          "invalidNumColumns" -> "2"
         )
       )
     }
@@ -1330,11 +1342,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("insert into t (i) values (true)")
           },
-          errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+          errorClass = "NUM_COLUMNS_MISMATCH",
           parameters = Map(
-            "tableName" -> "`spark_catalog`.`default`.`t`",
-            "tableCols" -> "[`i`, `s`]",
-            "dataCols" -> "[`col1`]"
+            "operator" -> "INSERTINTOSTATEMENT",
+            "firstNumColumns" -> "2",
+            "invalidOrdinalNum" -> "second",
+            "invalidNumColumns" -> "1"
           )
         )
       }
@@ -1344,11 +1357,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("insert into t (i) values (default)")
           },
-          errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+          errorClass = "NUM_COLUMNS_MISMATCH",
           parameters = Map(
-            "tableName" -> "`spark_catalog`.`default`.`t`",
-            "tableCols" -> "[`i`, `s`]",
-            "dataCols" -> "[`col1`]"
+            "operator" -> "INSERTINTOSTATEMENT",
+            "firstNumColumns" -> "2",
+            "invalidOrdinalNum" -> "second",
+            "invalidNumColumns" -> "1"
           )
         )
       }
@@ -1358,11 +1372,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("insert into t (s) values (default)")
           },
-          errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+          errorClass = "NUM_COLUMNS_MISMATCH",
           parameters = Map(
-            "tableName" -> "`spark_catalog`.`default`.`t`",
-            "tableCols" -> "[`i`, `s`]",
-            "dataCols" -> "[`col1`]"
+            "operator" -> "INSERTINTOSTATEMENT",
+            "firstNumColumns" -> "2",
+            "invalidOrdinalNum" -> "second",
+            "invalidNumColumns" -> "1"
           )
         )
       }
@@ -1372,11 +1387,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("insert into t partition(i='true') (s) values(5)")
           },
-          errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+          errorClass = "NUM_COLUMNS_MISMATCH",
           parameters = Map(
-            "tableName" -> "`spark_catalog`.`default`.`t`",
-            "tableCols" -> "[`s`, `q`, `i`]",
-            "dataCols" -> "[`col1`, `i`]"
+            "operator" -> "INSERTINTOSTATEMENT",
+            "firstNumColumns" -> "3",
+            "invalidOrdinalNum" -> "second",
+            "invalidNumColumns" -> "2"
           )
         )
       }
@@ -1386,11 +1402,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("insert into t partition(i='false') (q) select 43")
           },
-          errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+          errorClass = "NUM_COLUMNS_MISMATCH",
           parameters = Map(
-            "tableName" -> "`spark_catalog`.`default`.`t`",
-            "tableCols" -> "[`s`, `q`, `i`]",
-            "dataCols" -> "[`43`, `i`]"
+            "operator" -> "INSERTINTOSTATEMENT",
+            "firstNumColumns" -> "3",
+            "invalidOrdinalNum" -> "second",
+            "invalidNumColumns" -> "2"
           )
         )
       }
@@ -1400,11 +1417,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("insert into t partition(i='false') (q) select default")
           },
-          errorClass = "NOT_ENOUGH_DATA_COLUMNS",
+          errorClass = "NUM_COLUMNS_MISMATCH",
           parameters = Map(
-            "tableName" -> "`spark_catalog`.`default`.`t`",
-            "tableCols" -> "[`s`, `q`, `i`]",
-            "dataCols" -> "[`default`, `i`]"
+            "operator" -> "INSERTINTOSTATEMENT",
+            "firstNumColumns" -> "3",
+            "invalidOrdinalNum" -> "second",
+            "invalidNumColumns" -> "2"
           )
         )
       }
