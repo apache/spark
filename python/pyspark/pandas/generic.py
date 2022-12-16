@@ -657,7 +657,7 @@ class Frame(object, metaclass=ABCMeta):
         quotechar: str = '"',
         date_format: Optional[str] = None,
         escapechar: Optional[str] = None,
-        num_files: Optional[int] = None,
+        repartition: Optional[int] = None,
         mode: str = "w",
         partition_cols: Optional[Union[str, List[str]]] = None,
         index_col: Optional[Union[str, List[str]]] = None,
@@ -672,7 +672,7 @@ class Frame(object, metaclass=ABCMeta):
         .. note:: pandas-on-Spark writes CSV files into the directory, `path`, and writes
             multiple `part-...` files in the directory when `path` is specified.
             This behavior was inherited from Apache Spark. The number of files can
-            be controlled by `num_files`.
+            be controlled by `repartition`.
 
         Parameters
         ----------
@@ -694,7 +694,7 @@ class Frame(object, metaclass=ABCMeta):
         escapechar: str, default None
             String of length 1. Character used to escape `sep` and `quotechar`
             when appropriate.
-        num_files: the number of files to be written in `path` directory when
+        repartition: the number of files to be written in `path` directory when
             this is a path.
         mode: str
             Python write mode, default 'w'.
@@ -748,7 +748,7 @@ class Frame(object, metaclass=ABCMeta):
         2012-02-29 12:00:00,US,2
         2012-03-31 12:00:00,JP,3
 
-        >>> df.cummax().to_csv(path=r'%s/to_csv/foo.csv' % path, num_files=1)
+        >>> df.cummax().to_csv(path=r'%s/to_csv/foo.csv' % path, repartition=1)
         >>> ps.read_csv(
         ...    path=r'%s/to_csv/foo.csv' % path
         ... ).sort_values(by="date")  # doctest: +ELLIPSIS, +NORMALIZE_WHITESPACE
@@ -765,7 +765,7 @@ class Frame(object, metaclass=ABCMeta):
         2012-02-29 12:00:00
         2012-03-31 12:00:00
 
-        >>> df.date.to_csv(path=r'%s/to_csv/foo.csv' % path, num_files=1)
+        >>> df.date.to_csv(path=r'%s/to_csv/foo.csv' % path, repartition=1)
         >>> ps.read_csv(
         ...     path=r'%s/to_csv/foo.csv' % path
         ... ).sort_values(by="date")  # doctest: +ELLIPSIS, +NORMALIZE_WHITESPACE
@@ -779,7 +779,7 @@ class Frame(object, metaclass=ABCMeta):
         >>> df.set_index("country", append=True, inplace=True)
         >>> df.date.to_csv(
         ...     path=r'%s/to_csv/bar.csv' % path,
-        ...     num_files=1,
+        ...     repartition=1,
         ...     index_col=["index1", "index2"])
         >>> ps.read_csv(
         ...     path=r'%s/to_csv/bar.csv' % path, index_col=["index1", "index2"]
@@ -884,7 +884,7 @@ class Frame(object, metaclass=ABCMeta):
         self,
         path: Optional[str] = None,
         compression: str = "uncompressed",
-        num_files: Optional[int] = None,
+        repartition: Optional[int] = None,
         mode: str = "w",
         orient: str = "records",
         lines: bool = True,
@@ -901,7 +901,7 @@ class Frame(object, metaclass=ABCMeta):
         .. note:: pandas-on-Spark writes JSON files into the directory, `path`, and writes
             multiple `part-...` files in the directory when `path` is specified.
             This behavior was inherited from Apache Spark. The number of files can
-            be controlled by `num_files`.
+            be controlled by `repartition`.
 
         .. note:: output JSON format is different from pandas'. It always uses `orient='records'`
             for its output. This behavior might have to change soon.
@@ -927,7 +927,7 @@ class Frame(object, metaclass=ABCMeta):
             A string representing the compression to use in the output file,
             only used when the first argument is a filename. By default, the
             compression is inferred from the filename.
-        num_files: the number of files to be written in `path` directory when
+        repartition: the number of files to be written in `path` directory when
             this is a path.
         mode: str
             Python write mode, default 'w'.
@@ -965,7 +965,7 @@ class Frame(object, metaclass=ABCMeta):
         >>> df['col 1'].to_json()
         '[{"col 1":"a"},{"col 1":"c"}]'
 
-        >>> df.to_json(path=r'%s/to_json/foo.json' % path, num_files=1)
+        >>> df.to_json(path=r'%s/to_json/foo.json' % path, repartition=1)
         >>> ps.read_json(
         ...     path=r'%s/to_json/foo.json' % path
         ... ).sort_values(by="col 1")
@@ -973,7 +973,7 @@ class Frame(object, metaclass=ABCMeta):
         0     a     b
         1     c     d
 
-        >>> df['col 1'].to_json(path=r'%s/to_json/foo.json' % path, num_files=1, index_col="index")
+        >>> df['col 1'].to_json(path=r'%s/to_json/foo.json' % path, repartition=1, index_col="index")
         >>> ps.read_json(
         ...     path=r'%s/to_json/foo.json' % path, index_col="index"
         ... ).sort_values(by="col 1")  # doctest: +NORMALIZE_WHITESPACE
