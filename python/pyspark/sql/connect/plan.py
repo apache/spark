@@ -1050,6 +1050,60 @@ class Unpivot(LogicalPlan):
         return plan
 
 
+class CollectMetrics(LogicalPlan):
+    """Logical plan object for a CollectMetrics operation."""
+
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        name: str,
+        exprs: List["ColumnOrName"],
+        is_observation: bool,
+    ) -> None:
+        super().__init__(child)
+        self._name = name
+        self._exprs = exprs
+        self._is_observation = is_observation
+
+    def col_to_expr(self, col: "ColumnOrName", session: "SparkConnectClient") -> proto.Expression:
+        if isinstance(col, Column):
+            return col.to_plan(session)
+        else:
+            return self.unresolved_attr(col)
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+
+        plan = proto.Relation()
+        plan.collect_metrics.input.CopyFrom(self._child.plan(session))
+        plan.collect_metrics.name = self._name
+        plan.collect_metrics.metrics.extend([self.col_to_expr(x, session) for x in self._exprs])
+        plan.collect_metrics.is_observation = self._is_observation
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
+        return (
+            f"{' ' * indent}"
+            f"<CollectMetrics name={self._name}, exprs={self._exprs}, "
+            f"is_observation={self._is_observation}>"
+            f"\n{c_buf}"
+        )
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+            <li>
+                <b>CollectMetrics</b><br />
+                name: {self._name}
+                exprs: {self._exprs}
+                is_observation: {self._is_observation}
+                {self._child._repr_html_() if self._child is not None else ""}
+            </li>
+        </uL>
+        """
+
+
 class NAFill(LogicalPlan):
     def __init__(
         self, child: Optional["LogicalPlan"], cols: Optional[List[str]], values: List[Any]

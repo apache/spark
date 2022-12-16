@@ -29,7 +29,7 @@ import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanResponse, SqlCommand}
 import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
-import org.apache.spark.sql.{Column, Dataset, Encoders, SparkSession}
+import org.apache.spark.sql.{Column, Dataset, Encoders, Observation, SparkSession}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, Sort, SubqueryAlias, Union, Unpivot, UnresolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{CollectMetrics, CommandResult, Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, Sort, SubqueryAlias, Union, Unpivot, UnresolvedHint}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
@@ -113,6 +113,8 @@ class SparkConnectPlanner(val session: SparkSession) {
         transformRepartitionByExpression(rel.getRepartitionByExpression)
       case proto.Relation.RelTypeCase.FRAME_MAP =>
         transformFrameMap(rel.getFrameMap)
+      case proto.Relation.RelTypeCase.COLLECT_METRICS =>
+        transformCollectMetrics(rel.getCollectMetrics)
       case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
         throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
 
@@ -569,6 +571,22 @@ class SparkConnectPlanner(val session: SparkSession) {
       partitionExpressions,
       transformRelation(rel.getInput),
       numPartitionsOpt)
+  }
+
+  private def transformCollectMetrics(rel: proto.CollectMetrics): LogicalPlan = {
+    val metrics = rel.getMetricsList.asScala.map { expr =>
+      Column(transformExpression(expr))
+    }
+
+    if (rel.getIsObservation) {
+      val observation = Observation(rel.getName)
+      Dataset
+        .ofRows(session, transformRelation(rel.getInput))
+        .observe(observation, metrics.head, metrics.tail: _*)
+        .logicalPlan
+    } else {
+      CollectMetrics(rel.getName, metrics.map(_.named), transformRelation(rel.getInput))
+    }
   }
 
   private def transformDeduplicate(rel: proto.Deduplicate): LogicalPlan = {

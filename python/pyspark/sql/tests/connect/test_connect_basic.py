@@ -1631,6 +1631,34 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.assert_eq(relations[i].toPandas(), datasets[i].toPandas())
             i += 1
 
+    def test_observe(self):
+        # SPARK-41527: test DataFrame.observe()
+        from pyspark.sql import Observation
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name)
+            .filter("id > 3")
+            .observe("my_metric", CF.min("id"), CF.max("id"), CF.sum("id"))
+            .toPandas(),
+            self.spark.read.table(self.tbl_name)
+            .filter("id > 3")
+            .observe("my_metric", SF.min("id"), SF.max("id"), SF.sum("id"))
+            .toPandas(),
+        )
+
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name)
+            .filter("id > 3")
+            .observe(Observation("my_metric"), CF.min("id"), CF.max("id"), CF.sum("id"))
+            .toPandas(),
+            self.spark.read.table(self.tbl_name)
+            .filter("id > 3")
+            .observe(Observation("my_metric"), SF.min("id"), SF.max("id"), SF.sum("id"))
+            .toPandas(),
+        )
+
     def test_with_columns(self):
         # SPARK-41256: test withColumn(s).
         self.assert_eq(

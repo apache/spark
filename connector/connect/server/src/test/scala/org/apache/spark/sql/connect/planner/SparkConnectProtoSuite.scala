@@ -26,7 +26,7 @@ import org.apache.spark.SparkClassNotFoundException
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression
 import org.apache.spark.connect.proto.Join.JoinType
-import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Observation, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Distinct, LocalRelation, Log
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.dsl.MockRemoteSession
 import org.apache.spark.sql.connect.dsl.commands._
-import org.apache.spark.sql.connect.dsl.expressions._
+import org.apache.spark.sql.connect.dsl.expressions.{proto_min, _}
 import org.apache.spark.sql.connect.dsl.plans._
 import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.toConnectProtoValue
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog, TableCatalog}
@@ -938,6 +938,50 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     val sparkPlan1 =
       sparkTestRelation.melt(Array(Column("id")), "variable", "value")
     comparePlans(connectPlan1, sparkPlan1)
+  }
+
+  test("Test observe") {
+    val connectPlan0 =
+      connectTestRelation.observe(
+        "my_metric",
+        proto_min("id".protoAttr).as("min_val"),
+        proto_max("id".protoAttr).as("max_val"),
+        proto_sum("id".protoAttr))
+    val sparkPlan0 =
+      sparkTestRelation.observe(
+        "my_metric",
+        min(Column("id")).as("min_val"),
+        max(Column("id")).as("max_val"),
+        sum(Column("id")))
+    comparePlans(connectPlan0, sparkPlan0)
+
+    val connectPlan1 =
+      connectTestRelation.observe("my_metric", proto_min("id".protoAttr).as("min_val"))
+    val sparkPlan1 =
+      sparkTestRelation.observe("my_metric", min(Column("id")).as("min_val"))
+    comparePlans(connectPlan1, sparkPlan1)
+
+    val connectPlan2 =
+      connectTestRelation.observe(
+        Observation("my_metric"),
+        proto_min("id".protoAttr).as("min_val"),
+        proto_max("id".protoAttr).as("max_val"),
+        proto_sum("id".protoAttr))
+    val sparkPlan2 =
+      sparkTestRelation.observe(
+        Observation("my_metric"),
+        min(Column("id")).as("min_val"),
+        max(Column("id")).as("max_val"),
+        sum(Column("id")))
+    comparePlans(connectPlan2, sparkPlan2)
+
+    val connectPlan3 =
+      connectTestRelation.observe(
+        Observation("my_metric"),
+        proto_min("id".protoAttr).as("min_val"))
+    val sparkPlan3 =
+      sparkTestRelation.observe(Observation("my_metric"), min(Column("id")).as("min_val"))
+    comparePlans(connectPlan3, sparkPlan3)
   }
 
   test("Test RandomSplit") {

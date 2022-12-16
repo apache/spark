@@ -42,6 +42,7 @@ from collections.abc import Iterable
 
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
+from pyspark.sql import Observation
 from pyspark.sql.types import Row, StructType
 from pyspark.sql.dataframe import (
     DataFrame as PySparkDataFrame,
@@ -779,6 +780,75 @@ class DataFrame:
         return splits
 
     randomSplit.__doc__ = PySparkDataFrame.randomSplit.__doc__
+
+    def observe(
+        self,
+        observation: Union["Observation", str],
+        *exprs: Column,
+    ) -> "DataFrame":
+        """Define (named) metrics to observe on the DataFrame. This method returns an 'observed'
+        DataFrame that returns the same result as the input, with the following guarantees:
+
+        * It will compute the defined aggregates (metrics) on all the data that is flowing through
+            the Dataset at that point.
+
+        * It will report the value of the defined aggregate columns as soon as we reach a completion
+            point. A completion point is either the end of a query (batch mode) or the end of a
+            streaming epoch. The value of the aggregates only reflects the data processed since
+            the previous completion point.
+
+        The metrics columns must either contain a literal (e.g. lit(42)), or should contain one or
+        more aggregate functions (e.g. sum(a) or sum(a + b) + avg(c) - lit(1)). Expressions that
+        contain references to the input Dataset's columns must always be wrapped in an aggregate
+        function.
+
+        A user can observe these metrics by adding
+        Python's :class:`~pyspark.sql.streaming.StreamingQueryListener`,
+        Scala/Java's ``org.apache.spark.sql.streaming.StreamingQueryListener`` or Scala/Java's
+        ``org.apache.spark.sql.util.QueryExecutionListener`` to the spark session.
+
+        .. versionadded:: 3.3.0
+
+        Parameters
+        ----------
+        observation : :class:`Observation` or str
+            `str` to specify the name, or an :class:`Observation` instance to obtain the metric.
+
+            .. versionchanged:: 3.4.0
+               Added support for `str` in this parameter.
+        exprs : :class:`Column`
+            column expressions (:class:`Column`).
+
+        Returns
+        -------
+        :class:`DataFrame`
+            the observed :class:`DataFrame`.
+
+        Notes
+        -----
+        When ``observation`` is :class:`Observation`, this method only supports batch queries.
+        When ``observation`` is a string, this method works for both batch and streaming queries.
+        Continuous execution is currently not supported yet.
+        """
+        from pyspark.sql import Observation
+
+        if len(exprs) == 0:
+            raise ValueError("'exprs' should not be empty")
+        if not all(isinstance(c, Column) for c in exprs):
+            raise ValueError("all 'exprs' should be Column")
+
+        if isinstance(observation, Observation):
+            return DataFrame.withPlan(
+                plan.CollectMetrics(self._plan, observation._name, exprs, True),
+                self._session,
+            )
+        elif isinstance(observation, str):
+            return DataFrame.withPlan(
+                plan.CollectMetrics(self._plan, observation, exprs, False),
+                self._session,
+            )
+        else:
+            raise ValueError("'observation' should be either `Observation` or `str`.")
 
     def show(self, n: int = 20, truncate: Union[bool, int] = True, vertical: bool = False) -> None:
         print(self._show_string(n, truncate, vertical))
@@ -1519,9 +1589,6 @@ class DataFrame:
 
     def withWatermark(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("withWatermark() is not implemented.")
-
-    def observe(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("observe() is not implemented.")
 
     def foreach(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("foreach() is not implemented.")
