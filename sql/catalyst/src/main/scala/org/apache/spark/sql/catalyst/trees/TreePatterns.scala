@@ -25,7 +25,7 @@ object TreePattern extends Enumeration  {
   // Expression patterns (alphabetically ordered)
   val AGGREGATE_EXPRESSION = Value(0)
   val ALIAS: Value = Value
-  val AND_OR: Value = Value
+  val AND: Value = Value
   val ARRAYS_ZIP: Value = Value
   val ATTRIBUTE_REFERENCE: Value = Value
   val APPEND_COLUMNS: Value = Value
@@ -70,6 +70,7 @@ object TreePattern extends Enumeration  {
   val NULL_CHECK: Value = Value
   val NULL_LITERAL: Value = Value
   val SERIALIZE_FROM_OBJECT: Value = Value
+  val OR: Value = Value
   val OUTER_REFERENCE: Value = Value
   val PARAMETER: Value = Value
   val PIVOT: Value = Value
