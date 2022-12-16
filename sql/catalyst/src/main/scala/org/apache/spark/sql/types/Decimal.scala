@@ -374,7 +374,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       if (scale < _scale) {
         // Easier case: we just need to divide our scale down
         val diff = _scale - scale
-        val pow10diff = POW_10(diff)
+        val pow10diff = POW_10(math.min(diff, MAX_LONG_DIGITS))
         // % and / always round to 0
         val droppedDigits = lv % pow10diff
         lv /= pow10diff
@@ -388,12 +388,13 @@ final class Decimal extends Ordered[Decimal] with Serializable {
               lv += 1L
             }
           case ROUND_HALF_UP =>
-            if (math.abs(droppedDigits) * 2 >= pow10diff) {
+            if (diff <= MAX_LONG_DIGITS && math.abs(droppedDigits) * 2 >= pow10diff) {
               lv += (if (droppedDigits < 0) -1L else 1L)
             }
           case ROUND_HALF_EVEN =>
             val doubled = math.abs(droppedDigits) * 2
-            if (doubled > pow10diff || doubled == pow10diff && lv % 2 != 0) {
+            if (diff <= MAX_LONG_DIGITS &&
+              (doubled > pow10diff || doubled == pow10diff && lv % 2 != 0)) {
               lv += (if (droppedDigits < 0) -1L else 1L)
             }
           case _ =>
