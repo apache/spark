@@ -48,7 +48,7 @@ import org.apache.spark.sql.types._
  * As commands are executed eagerly, this also includes errors thrown during the execution of
  * commands, which users can see immediately.
  */
-private[sql] object QueryCompilationErrors extends QueryErrorsBase with LookupCatalog {
+private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def groupingIDMismatchError(groupingID: GroupingID, groupByExprs: Seq[Expression]): Throwable = {
     new AnalysisException(
@@ -631,11 +631,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with LookupCa
       messageParameters = Map("dt" -> dt.toString))
   }
 
-  def unresolvedRoutineError(name: FunctionIdentifier): Throwable = {
+  def unresolvedRoutineError(name: FunctionIdentifier, searchPath: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "UNRESOLVED_ROUTINE",
-      messageParameters = Map("routineName" -> toSQLId(name.funcName),
-        "searchPath" -> getFormattedSQLSearchPath))
+      messageParameters = Map(
+        "routineName" -> toSQLId(name.funcName),
+        "searchPath" -> searchPath.mkString("[", ", ", "]")))
   }
 
   def invalidFunctionArgumentsError(

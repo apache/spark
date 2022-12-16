@@ -34,20 +34,6 @@ private[sql] trait LookupCatalog extends Logging {
   def currentCatalog: CatalogPlugin = catalogManager.currentCatalog
 
   /**
-   * Return the search path
-   */
-  def getSQLSearchPath(): Seq[Seq[String]] = {
-    Seq(Seq("system", "builtin"),
-      Seq("system", "session"),
-      Seq(currentCatalog.name, catalogManager.currentNamespace.toString))
-  }
-
-  def getFormattedSQLSearchPath(): String = {
-    "[ " + getSQLSearchPath().map(elem =>
-      elem.map(ident => ident.mkString(".")).mkString(", ")) + " ]"
-  }
-
-  /**
    * Extract catalog plugin and remaining identifier names.
    *
    * This does not substitute the default catalog if no catalog is set in the identifier.
