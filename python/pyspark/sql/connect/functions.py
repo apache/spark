@@ -16,7 +16,6 @@
 #
 
 import inspect
-import uuid
 
 from pyspark.sql.connect.column import (
     Column,
@@ -27,7 +26,6 @@ from pyspark.sql.connect.column import (
     UnresolvedFunction,
     SQLExpression,
     LambdaFunction,
-    UnresolvedNamedLambdaVariable,
 )
 
 from typing import Any, TYPE_CHECKING, Union, List, overload, Optional, Tuple, Callable, ValuesView
@@ -127,19 +125,14 @@ def _create_lambda(f: Callable) -> LambdaFunction:
     parameters = _get_lambda_parameters(f)
 
     arg_names = ["x", "y", "z"]
-
-    arg_cols: List[Column] = []
-    for arg in arg_names[: len(parameters)]:
-        # TODO: How to make sure lambda variable names are unique? RPC for increasing ID?
-        _uuid = str(uuid.uuid4()).replace("-", "_")
-        arg_cols.append(Column(UnresolvedNamedLambdaVariable([f"{arg}_{_uuid}"])))
+    arg_cols = [column(arg) for arg in arg_names[: len(parameters)]]
 
     result = f(*arg_cols)
 
     if not isinstance(result, Column):
         raise ValueError(f"Callable {f} should return Column, got {type(result)}")
 
-    return LambdaFunction(result._expr, [arg._expr for arg in arg_cols])
+    return LambdaFunction(result._expr, [arg_col._expr for arg_col in arg_cols])
 
 
 def _invoke_higher_order_function(
@@ -158,6 +151,7 @@ def _invoke_higher_order_function(
 
     :return: a Column
     """
+    assert len(funs) == 1
     _cols = [_to_col(c) for c in cols]
     _funs = [_create_lambda(f) for f in funs]
 

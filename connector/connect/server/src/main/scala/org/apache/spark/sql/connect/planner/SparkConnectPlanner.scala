@@ -573,6 +573,47 @@ class SparkConnectPlanner(session: SparkSession) {
         val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
         Some(In(children.head, children.tail))
 
+      case "___lambda_function___" =>
+        // UnresolvedFunction[___lambda_function___, ["x, y -> x < y", "x", "y"]]
+
+        if (fun.getArgumentsCount < 2) {
+          throw InvalidPlanInput(
+            "LambdaFunction requires at least 2 child expressions: LamdaFunction, Arguments")
+        }
+
+        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
+
+        val function = children.head
+
+        val variableNames = children.tail.map {
+          case variable: UnresolvedAttribute if variable.nameParts.length == 1 =>
+            variable.nameParts.head
+          case other =>
+            throw InvalidPlanInput(
+              "LambdaFunction requires all arguments to be UnresolvedAttribute with " +
+                s"single name part, but got $other")
+        }
+
+        // generate unique variable names: Map(x -> x_0, y -> y_1)
+        val newVariables = variableNames.map { name =>
+          val uniqueName = UnresolvedNamedLambdaVariable.freshVarName(name)
+          (name, UnresolvedNamedLambdaVariable(Seq(uniqueName)))
+        }.toMap
+
+        // rewrite function by replacing UnresolvedAttribute with UnresolvedNamedLambdaVariable
+        val rewrittenFunction = function transform {
+          case variable: UnresolvedAttribute
+              if variable.nameParts.length == 1 &&
+                newVariables.contains(variable.nameParts.head) =>
+            newVariables(variable.nameParts.head)
+        }
+
+        // LambdaFunction["x_0, y_1 -> x_0 < y_1", ["x_0", "y_1"]]
+        Some(
+          LambdaFunction(
+            function = rewrittenFunction,
+            arguments = variableNames.map(newVariables)))
+
       case _ => None
     }
   }
@@ -629,34 +670,6 @@ class SparkConnectPlanner(session: SparkSession) {
       case _ =>
         UnresolvedAttribute.quotedString(regex.getColName)
     }
-  }
-
-  private def transformLambdaFunction(lambda: proto.Expression.LambdaFunction): Expression = {
-    if (lambda.getArgumentsCount == 0) {
-      throw InvalidPlanInput("LambdaFunction requires at least one variable!")
-    }
-
-    val variables = lambda.getArgumentsList.asScala.toSeq.map(transformExpression).map {
-      case variable: UnresolvedNamedLambdaVariable => variable
-      case other =>
-        throw InvalidPlanInput(
-          "LambdaFunction requires all arguments to be " +
-            s"UnresolvedNamedLambdaVariable, but got $other")
-    }
-
-    LambdaFunction(
-      function = transformExpression(lambda.getFunction),
-      arguments = variables,
-      hidden = lambda.getHidden)
-  }
-
-  private def transformUnresolvedNamedLambdaVariable(
-      variable: proto.Expression.UnresolvedNamedLambdaVariable): Expression = {
-    if (variable.getNamePartsCount == 0) {
-      throw InvalidPlanInput("UnresolvedNamedLambdaVariable requires at least one name part!")
-    }
-
-    UnresolvedNamedLambdaVariable(variable.getNamePartsList.asScala.toSeq)
   }
 
   private def transformSetOperation(u: proto.SetOperation): LogicalPlan = {

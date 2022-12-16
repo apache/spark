@@ -539,36 +539,11 @@ class CastExpression(Expression):
         return f"({self._col} ({self._data_type}))"
 
 
-class UnresolvedNamedLambdaVariable(Expression):
-    def __init__(
-        self,
-        name_parts: Sequence[str],
-    ) -> None:
-        super().__init__()
-
-        assert (
-            isinstance(name_parts, list)
-            and len(name_parts) > 0
-            and all(isinstance(p, str) for p in name_parts)
-        )
-
-        self._name_parts = name_parts
-
-    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
-        expr = proto.Expression()
-        expr.unresolved_named_lambda_variable.name_parts.extend(self._name_parts)
-        return expr
-
-    def __repr__(self) -> str:
-        return f"(UnresolvedNamedLambdaVariable({', '.join(self._name_parts)})"
-
-
 class LambdaFunction(Expression):
     def __init__(
         self,
         function: Expression,
         arguments: Sequence[Expression],
-        hidden: bool = False,
     ) -> None:
         super().__init__()
 
@@ -577,29 +552,23 @@ class LambdaFunction(Expression):
         assert (
             isinstance(arguments, list)
             and len(arguments) > 0
-            and all(
-                isinstance(arg, UnresolvedNamedLambdaVariable) for arg in arguments
-            )  # all arguments must be UnresolvedNamedLambdaVariable now
+            and all(isinstance(arg, ColumnReference) for arg in arguments)
         )
-
-        assert isinstance(hidden, bool)
 
         self._function = function
         self._arguments = arguments
-        self._hidden = hidden
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
-        expr = proto.Expression()
-        expr.lambda_function.function.CopyFrom(self._function.to_plan(session))
-        expr.lambda_function.arguments.extend([arg.to_plan(session) for arg in self._arguments])
-        expr.lambda_function.hidden = self._hidden
-        return expr
+        unresolved_function = UnresolvedFunction(
+            name="___lambda_function___", args=[self._function] + list(self._arguments)
+        )
+
+        return unresolved_function.to_plan(session)
 
     def __repr__(self) -> str:
         return (
             f"(LambdaFunction({str(self._function)}, "
-            + f"{', '.join([str(arg) for arg in self._arguments])}, "
-            + f"{self._hidden})"
+            + f"{', '.join([str(arg) for arg in self._arguments])})"
         )
 
 
