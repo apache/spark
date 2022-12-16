@@ -803,7 +803,7 @@ class Catalog:
         --------
         >>> spark.createDataFrame([(1, 1)]).createTempView("my_table")
 
-        Droppping the temporary view.
+        Dropping the temporary view.
 
         >>> spark.catalog.dropTempView("my_table")
         True
@@ -840,7 +840,7 @@ class Catalog:
         --------
         >>> spark.createDataFrame([(1, 1)]).createGlobalTempView("my_table")
 
-        Droppping the global view.
+        Dropping the global view.
 
         >>> spark.catalog.dropGlobalTempView("my_table")
         True

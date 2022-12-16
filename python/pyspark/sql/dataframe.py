@@ -1176,7 +1176,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         num : int
             Number of records to return. Will return this number of records
-            or whataver number is available.
+            or all records if the DataFrame contains less than this number of records.
 
         Returns
         -------
@@ -1211,7 +1211,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         num : int
             Number of records to return. Will return this number of records
-            or whataver number is available.
+            or all records if the DataFrame contains less than this number of records..
 
         Returns
         -------
@@ -1243,7 +1243,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         num : int
             Number of records to return. Will return this number of records
-            or whataver number is available.
+            or all records if the DataFrame contains less than this number of records.
 
         Returns
         -------
@@ -2375,7 +2375,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  2|Alice|
         +---+-----+
 
-        Specify miltiple columns
+        Specify multiple columns
 
         >>> df = spark.createDataFrame([
         ...     (2, "Alice"), (2, "Bob"), (5, "Bob")], schema=["age", "name"])
@@ -2388,7 +2388,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  2|  Bob|
         +---+-----+
 
-        Specify miltiple columns for sorting order at `ascending`.
+        Specify multiple columns for sorting order at `ascending`.
 
         >>> df.orderBy(["age", "name"], ascending=[False, False]).show()
         +---+-----+
@@ -3209,7 +3209,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Parameters
         ----------
         exprs : :class:`Column` or dict of key and value strings
-            Columns or expressions to aggreate DataFrame by.
+            Columns or expressions to aggregate DataFrame by.
 
         Returns
         -------

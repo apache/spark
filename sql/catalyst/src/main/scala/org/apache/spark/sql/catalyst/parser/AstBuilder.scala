@@ -2417,7 +2417,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
             IntervalUtils.stringToInterval(UTF8String.fromString(value))
           } catch {
             case e: IllegalArgumentException =>
-              val ex = QueryParsingErrors.cannotParseIntervalValueError(value, ctx)
+              val ex = QueryParsingErrors.cannotParseValueTypeError(valueType, value, ctx)
               ex.setStackTrace(e.getStackTrace)
               throw ex
           }
@@ -2918,7 +2918,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       case SqlBaseParser.MAP =>
         MapType(typedVisit(ctx.dataType(0)), typedVisit(ctx.dataType(1)))
       case SqlBaseParser.STRUCT =>
-        StructType(Option(ctx.complexColTypeList).toSeq.flatMap(visitComplexColTypeList))
+        StructType(Option(ctx.complexColTypeList).toArray.flatMap(visitComplexColTypeList))
     }
   }
 
@@ -2926,14 +2926,14 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    * Create top level table schema.
    */
   protected def createSchema(ctx: ColTypeListContext): StructType = {
-    StructType(Option(ctx).toSeq.flatMap(visitColTypeList))
+    StructType(Option(ctx).toArray.flatMap(visitColTypeList))
   }
 
   /**
    * Create top level table schema.
    */
   protected def createSchema(ctx: CreateOrReplaceTableColTypeListContext): StructType = {
-    StructType(Option(ctx).toSeq.flatMap(visitCreateOrReplaceTableColTypeList))
+    StructType(Option(ctx).toArray.flatMap(visitCreateOrReplaceTableColTypeList))
   }
 
   /**
@@ -3034,7 +3034,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    * Create a [[StructType]] from a sequence of [[StructField]]s.
    */
   protected def createStructType(ctx: ComplexColTypeListContext): StructType = {
-    StructType(Option(ctx).toSeq.flatMap(visitComplexColTypeList))
+    StructType(Option(ctx).toArray.flatMap(visitComplexColTypeList))
   }
 
   /**
@@ -4836,5 +4836,12 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    */
   override def visitTimestampdiff(ctx: TimestampdiffContext): Expression = withOrigin(ctx) {
     TimestampDiff(ctx.unit.getText, expression(ctx.startTimestamp), expression(ctx.endTimestamp))
+  }
+
+  /**
+   * Create a named parameter which represents a literal with a non-bound value and unknown type.
+   * */
+  override def visitParameterLiteral(ctx: ParameterLiteralContext): Expression = withOrigin(ctx) {
+    Parameter(ctx.identifier().getText)
   }
 }

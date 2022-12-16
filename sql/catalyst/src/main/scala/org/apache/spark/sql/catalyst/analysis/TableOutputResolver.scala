@@ -220,6 +220,17 @@ object TableOutputResolver {
     }
   }
 
+  // For table insertions, capture the overflow errors and show proper message.
+  // Without this method, the overflow errors of castings will show hints for turning off ANSI SQL
+  // mode, which are not helpful since the behavior is controlled by the store assignment policy.
+  def checkCastOverflowInTableInsert(cast: Cast, columnName: String): Expression = {
+    if (canCauseCastOverflow(cast)) {
+      CheckOverflowInTableInsert(cast, columnName)
+    } else {
+      cast
+    }
+  }
+
   private def containsIntegralOrDecimalType(dt: DataType): Boolean = dt match {
     case _: IntegralType | _: DecimalType => true
     case a: ArrayType => containsIntegralOrDecimalType(a.elementType)
@@ -253,11 +264,7 @@ object TableOutputResolver {
           val cast = Cast(queryExpr, tableAttr.dataType, Option(conf.sessionLocalTimeZone),
             ansiEnabled = true)
           cast.setTagValue(Cast.BY_TABLE_INSERTION, ())
-          if (canCauseCastOverflow(cast)) {
-            CheckOverflowInTableInsert(cast, tableAttr.name)
-          } else {
-            cast
-          }
+          checkCastOverflowInTableInsert(cast, tableAttr.name)
         case StoreAssignmentPolicy.LEGACY =>
           Cast(queryExpr, tableAttr.dataType, Option(conf.sessionLocalTimeZone),
             ansiEnabled = false)

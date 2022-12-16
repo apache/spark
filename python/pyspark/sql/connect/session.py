@@ -16,17 +16,35 @@
 #
 
 from threading import RLock
-from typing import Optional, Any, Union, Dict, cast, overload
-import pandas as pd
+from collections.abc import Sized
 
-import pyspark.sql.types
+import numpy as np
+import pandas as pd
+import pyarrow as pa
+
+from pyspark.sql.types import DataType, StructType
+
 from pyspark.sql.connect.client import SparkConnectClient
 from pyspark.sql.connect.dataframe import DataFrame
-from pyspark.sql.connect.plan import SQL, Range
+from pyspark.sql.connect.plan import SQL, Range, LocalRelation
 from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.utils import to_str
-from . import plan
-from ._typing import OptionalPrimitiveType
+
+from typing import (
+    Optional,
+    Any,
+    Union,
+    Dict,
+    List,
+    Tuple,
+    cast,
+    overload,
+    Iterable,
+    TYPE_CHECKING,
+)
+
+if TYPE_CHECKING:
+    from pyspark.sql.connect._typing import OptionalPrimitiveType
 
 
 # TODO(SPARK-38912): This method can be dropped once support for Python 3.8 is dropped
@@ -240,7 +258,11 @@ class SparkSession(object):
         """
         return DataFrameReader(self)
 
-    def createDataFrame(self, data: "pd.DataFrame") -> "DataFrame":
+    def createDataFrame(
+        self,
+        data: Union["pd.DataFrame", "np.ndarray", Iterable[Any]],
+        schema: Optional[Union[StructType, str, List[str], Tuple[str, ...]]] = None,
+    ) -> "DataFrame":
         """
         Creates a :class:`DataFrame` from a :class:`pandas.DataFrame`.
 
@@ -249,7 +271,15 @@ class SparkSession(object):
 
         Parameters
         ----------
-        data : :class:`pandas.DataFrame`
+        data : :class:`pandas.DataFrame` or :class:`list`, or :class:`numpy.ndarray`.
+        schema : :class:`pyspark.sql.types.DataType`, str or list, optional
+
+            When ``schema`` is :class:`pyspark.sql.types.DataType` or a datatype string, it must
+            match the real data, or an exception will be thrown at runtime. If the given schema is
+            not :class:`pyspark.sql.types.StructType`, it will be wrapped into a
+            :class:`pyspark.sql.types.StructType` as its only field, and the field name will be
+            "value". Each record will also be wrapped into a tuple, which can be converted to row
+            later.
 
         Returns
         -------
@@ -264,9 +294,71 @@ class SparkSession(object):
 
         """
         assert data is not None
-        if len(data) == 0:
+        if isinstance(data, DataFrame):
+            raise TypeError("data is already a DataFrame")
+        if isinstance(data, Sized) and len(data) == 0:
             raise ValueError("Input data cannot be empty")
-        return DataFrame.withPlan(plan.LocalRelation(data), self)
+
+        _schema: Optional[StructType] = None
+        _schema_str: Optional[str] = None
+        _cols: Optional[List[str]] = None
+
+        if isinstance(schema, StructType):
+            _schema = schema
+
+        elif isinstance(schema, str):
+            _schema_str = schema
+
+        elif isinstance(schema, (list, tuple)):
+            # Must re-encode any unicode strings to be consistent with StructField names
+            _cols = [x.encode("utf-8") if not isinstance(x, str) else x for x in schema]
+
+        # Create the Pandas DataFrame
+        if isinstance(data, pd.DataFrame):
+            pdf = data
+
+        elif isinstance(data, np.ndarray):
+            # `data` of numpy.ndarray type will be converted to a pandas DataFrame,
+            if data.ndim not in [1, 2]:
+                raise ValueError("NumPy array input should be of 1 or 2 dimensions.")
+
+            pdf = pd.DataFrame(data)
+
+            if _cols is None:
+                if data.ndim == 1 or data.shape[1] == 1:
+                    _cols = ["value"]
+                else:
+                    _cols = ["_%s" % i for i in range(1, data.shape[1] + 1)]
+
+        else:
+            pdf = pd.DataFrame(list(data))
+
+            if _cols is None:
+                _cols = ["_%s" % i for i in range(1, pdf.shape[1] + 1)]
+
+        # Validate number of columns
+        num_cols = pdf.shape[1]
+        if _schema is not None and len(_schema.fields) != num_cols:
+            raise ValueError(
+                f"Length mismatch: Expected axis has {num_cols} elements, "
+                f"new values have {len(_schema.fields)} elements"
+            )
+        elif _cols is not None and len(_cols) != num_cols:
+            raise ValueError(
+                f"Length mismatch: Expected axis has {num_cols} elements, "
+                f"new values have {len(_cols)} elements"
+            )
+
+        table = pa.Table.from_pandas(pdf)
+
+        if _schema is not None:
+            return DataFrame.withPlan(LocalRelation(table, schema=_schema), self)
+        elif _schema_str is not None:
+            return DataFrame.withPlan(LocalRelation(table, schema=_schema_str), self)
+        elif _cols is not None and len(_cols) > 0:
+            return DataFrame.withPlan(LocalRelation(table), self).toDF(*_cols)
+        else:
+            return DataFrame.withPlan(LocalRelation(table), self)
 
     @property
     def client(self) -> "SparkConnectClient":
@@ -279,9 +371,7 @@ class SparkSession(object):
         """
         return self._client
 
-    def register_udf(
-        self, function: Any, return_type: Union[str, pyspark.sql.types.DataType]
-    ) -> str:
+    def register_udf(self, function: Any, return_type: Union[str, DataType]) -> str:
         return self._client.register_udf(function, return_type)
 
     def sql(self, sql_string: str) -> "DataFrame":

@@ -127,12 +127,6 @@ case class ParquetScan(
     ("[]", "[]")
   }
 
-  override def description(): String = {
-    super.description() + ", PushedFilters: " + seqToString(pushedFilters) +
-      ", PushedAggregation: " + pushedAggregationsStr +
-      ", PushedGroupBy: " + pushedGroupByStr
-  }
-
   override def getMetaData(): Map[String, String] = {
     super.getMetaData() ++ Map("PushedFilters" -> seqToString(pushedFilters)) ++
       Map("PushedAggregation" -> pushedAggregationsStr) ++

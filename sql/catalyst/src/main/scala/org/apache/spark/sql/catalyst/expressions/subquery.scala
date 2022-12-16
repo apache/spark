@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.sql.catalyst.analysis.ResolveLateralColumnAliasReference.NAME_PARTS_FROM_UNRESOLVED_ATTR
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, HintInfo, LogicalPlan}
@@ -158,8 +159,12 @@ object SubExprUtils extends PredicateHelper {
   /**
    * Wrap attributes in the expression with [[OuterReference]]s.
    */
-  def wrapOuterReference[E <: Expression](e: E): E = {
-    e.transform { case a: Attribute => OuterReference(a) }.asInstanceOf[E]
+  def wrapOuterReference[E <: Expression](e: E, nameParts: Option[Seq[String]] = None): E = {
+    e.transform { case a: Attribute =>
+      val o = OuterReference(a)
+      nameParts.map(o.setTagValue(NAME_PARTS_FROM_UNRESOLVED_ATTR, _))
+      o
+    }.asInstanceOf[E]
   }
 
   /**

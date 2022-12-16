@@ -58,6 +58,7 @@ object TreePattern extends Enumeration  {
   val JSON_TO_STRUCT: Value = Value
   val LAMBDA_FUNCTION: Value = Value
   val LAMBDA_VARIABLE: Value = Value
+  val LATERAL_COLUMN_ALIAS_REFERENCE: Value = Value
   val LATERAL_SUBQUERY: Value = Value
   val LIKE_FAMLIY: Value = Value
   val LIST_SUBQUERY: Value = Value
@@ -70,6 +71,7 @@ object TreePattern extends Enumeration  {
   val NULL_LITERAL: Value = Value
   val SERIALIZE_FROM_OBJECT: Value = Value
   val OUTER_REFERENCE: Value = Value
+  val PARAMETER: Value = Value
   val PIVOT: Value = Value
   val PLAN_EXPRESSION: Value = Value
   val PYTHON_UDF: Value = Value

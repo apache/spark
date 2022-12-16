@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, METADATA_COL_ATTR_KEY}
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.BitSet
 import org.apache.spark.util.collection.ImmutableBitSet
@@ -190,7 +190,10 @@ case class Alias(child: Expression, name: String)(
 
   override def toAttribute: Attribute = {
     if (resolved) {
-      AttributeReference(name, child.dataType, child.nullable, metadata)(exprId, qualifier)
+      val a = AttributeReference(name, child.dataType, child.nullable, metadata)(exprId, qualifier)
+      // Alias has its own qualifier. It doesn't make sense to still restrict the hidden columns
+      // of natural/using join to be accessed by qualified name only.
+      if (a.qualifiedAccessOnly) a.markAsAllowAnyAccess() else a
     } else {
       UnresolvedAttribute.quoted(name)
     }
@@ -426,6 +429,39 @@ case class OuterReference(e: NamedExpression)
   override def toAttribute: Attribute = e.toAttribute
   override def newInstance(): NamedExpression = OuterReference(e.newInstance())
   final override val nodePatterns: Seq[TreePattern] = Seq(OUTER_REFERENCE)
+}
+
+/**
+ * A placeholder used to hold a [[NamedExpression]] that has been temporarily resolved as the
+ * reference to a lateral column alias.
+ *
+ * This is created and removed by Analyzer rule [[ResolveLateralColumnAlias]].
+ * There should be no [[LateralColumnAliasReference]] beyond analyzer: if the plan passes all
+ * analysis check, then all [[LateralColumnAliasReference]] should already be removed.
+ *
+ * @param ne the resolved [[NamedExpression]] by lateral column alias
+ * @param nameParts the named parts of the original [[UnresolvedAttribute]]. Used to restore back
+ *                  to [[UnresolvedAttribute]] when needed
+ * @param a the attribute of referenced lateral column alias. Used to match alias when unwrapping
+ *          and resolving LateralColumnAliasReference
+ */
+case class LateralColumnAliasReference(ne: NamedExpression, nameParts: Seq[String], a: Attribute)
+  extends LeafExpression with NamedExpression with Unevaluable {
+  assert(ne.resolved)
+  override def name: String =
+    nameParts.map(n => if (n.contains(".")) s"`$n`" else n).mkString(".")
+  override def exprId: ExprId = ne.exprId
+  override def qualifier: Seq[String] = ne.qualifier
+  override def toAttribute: Attribute = ne.toAttribute
+  override def newInstance(): NamedExpression =
+    LateralColumnAliasReference(ne.newInstance(), nameParts, a)
+
+  override def nullable: Boolean = ne.nullable
+  override def dataType: DataType = ne.dataType
+  override def prettyName: String = "lateralAliasReference"
+  override def sql: String = s"$prettyName($name)"
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(LATERAL_COLUMN_ALIAS_REFERENCE)
 }
 
 object VirtualColumn {

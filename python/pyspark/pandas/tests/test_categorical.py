@@ -436,7 +436,7 @@ class CategoricalTest(ComparisonTestBase, TestUtils):
 
         pdf, psdf = self.df_pair
 
-        def identity(x) -> ps.Series[psdf.b.dtype]:  # type: ignore[name-defined]
+        def identity(x) -> ps.Series[psdf.b.dtype]:
             return x
 
         self.assert_eq(
@@ -796,7 +796,7 @@ if __name__ == "__main__":
     from pyspark.pandas.tests.test_categorical import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

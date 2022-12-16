@@ -1393,7 +1393,7 @@ class SparkSession(SparkConversionMixin):
         >>> spark.readStream
         <pyspark.sql.streaming.readwriter.DataStreamReader object ...>
 
-        The example below uses Rate source that generates rows continously.
+        The example below uses Rate source that generates rows continuously.
         After that, we operate a modulo by 3, and then write the stream out to the console.
         The streaming query stops in 3 seconds.
 
