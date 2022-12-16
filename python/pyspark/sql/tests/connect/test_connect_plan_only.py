@@ -468,7 +468,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         df1 = self.connect.readTable(table_name=self.tbl_name)
         df2 = self.connect.readTable(table_name=self.tbl_name)
         plan1 = df1.subtract(df2)._plan.to_proto(self.connect)
-        self.assertTrue(plan1.root.set_op.is_all == False)
+        self.assertTrue(not plan1.root.set_op.is_all)
         self.assertEqual(proto.SetOperation.SET_OP_TYPE_EXCEPT, plan1.root.set_op.set_op_type)
 
     def test_except(self):
