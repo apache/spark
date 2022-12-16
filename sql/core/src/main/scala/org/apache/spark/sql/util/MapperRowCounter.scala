@@ -21,7 +21,7 @@ import java.{lang => jl}
 import org.apache.spark.util.AccumulatorV2
 
 /**
- * An [[AccumulatorV2 counter]] for collecting a list of (mapper id, row count).
+ * An AccumulatorV2 counter for collecting a list of (mapper id, row count).
  *
  * @since 3.4.0
  */
