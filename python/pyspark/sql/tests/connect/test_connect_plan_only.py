@@ -29,11 +29,7 @@ if should_test_connect:
     from pyspark.sql.connect.plan import WriteOperation
     from pyspark.sql.connect.readwriter import DataFrameReader
     from pyspark.sql.connect.function_builder import UserDefinedFunction, udf
-    from pyspark.sql.types import (
-        IntegerType,
-        StringType,
-        StructType,
-    )
+    from pyspark.sql.types import StringType
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
