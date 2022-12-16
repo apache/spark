@@ -1025,7 +1025,8 @@ class DataFrame(object):
         This is equivalent to `EXCEPT DISTINCT` in SQL.
         """
         return DataFrame.withPlan(
-            plan.SetOperation(self._plan, other._plan, "except", is_all=False), session=self._session
+            plan.SetOperation(self._plan, other._plan, "except", is_all=False),
+            session=self._session,
         )
 
     def exceptAll(self, other: "DataFrame") -> "DataFrame":
