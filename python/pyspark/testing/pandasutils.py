@@ -22,11 +22,6 @@ import warnings
 from contextlib import contextmanager
 from distutils.version import LooseVersion
 
-import pandas as pd
-from pandas.api.types import is_list_like  # type: ignore[attr-defined]
-from pandas.core.dtypes.common import is_numeric_dtype
-from pandas.testing import assert_frame_equal, assert_index_equal, assert_series_equal
-
 from pyspark import pandas as ps
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.indexes import Index
@@ -36,7 +31,7 @@ from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 tabulate_requirement_message = None
 try:
-    from tabulate import tabulate  # noqa: F401
+    from tabulate import tabulate
 except ImportError as e:
     # If tabulate requirement is not satisfied, skip related tests.
     tabulate_requirement_message = str(e)
@@ -44,7 +39,7 @@ have_tabulate = tabulate_requirement_message is None
 
 matplotlib_requirement_message = None
 try:
-    import matplotlib  # noqa: F401
+    import matplotlib
 except ImportError as e:
     # If matplotlib requirement is not satisfied, skip related tests.
     matplotlib_requirement_message = str(e)
@@ -52,7 +47,7 @@ have_matplotlib = matplotlib_requirement_message is None
 
 plotly_requirement_message = None
 try:
-    import plotly  # noqa: F401
+    import plotly
 except ImportError as e:
     # If plotly requirement is not satisfied, skip related tests.
     plotly_requirement_message = str(e)
@@ -72,6 +67,10 @@ class PandasOnSparkTestCase(ReusedSQLTestCase):
         return lambda x: getattr(x, func)()
 
     def assertPandasEqual(self, left, right, check_exact=True):
+        import pandas as pd
+        from pandas.core.dtypes.common import is_numeric_dtype
+        from pandas.testing import assert_frame_equal, assert_index_equal, assert_series_equal
+
         if isinstance(left, pd.DataFrame) and isinstance(right, pd.DataFrame):
             try:
                 if LooseVersion(pd.__version__) >= LooseVersion("1.1"):
@@ -157,6 +156,8 @@ class PandasOnSparkTestCase(ReusedSQLTestCase):
           - Compare floats rounding to the number of decimal places, 7 after
             dropping missing values (NaN, NaT, None)
         """
+        import pandas as pd
+
         if isinstance(left, pd.DataFrame) and isinstance(right, pd.DataFrame):
             msg = (
                 "DataFrames are not almost equal: "
@@ -217,6 +218,9 @@ class PandasOnSparkTestCase(ReusedSQLTestCase):
         :param almost: if this is enabled, the comparison is delegated to `unittest`'s
                        `assertAlmostEqual`. See its documentation for more details.
         """
+        import pandas as pd
+        from pandas.api.types import is_list_like
+
         lobj = self._to_pandas(left)
         robj = self._to_pandas(right)
         if isinstance(lobj, (pd.DataFrame, pd.Series, pd.Index)):

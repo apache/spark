@@ -29,14 +29,14 @@ ERRORS=$(./build/mvn \
     -Dscalafmt.skip=false \
     -Dscalafmt.validateOnly=true \
     -Dscalafmt.changedOnly=false \
-    -pl connector/connect \
+    -pl connector/connect/server \
     2>&1 | grep -e "^Requires formatting" \
 )
 
 if test ! -z "$ERRORS"; then
   echo -e "The scalafmt check failed on connector/connect at following occurrences:\n\n$ERRORS\n"
   echo "Before submitting your change, please make sure to format your code using the following command:"
-  echo "./build/mvn -Pscala-2.12 scalafmt:format -Dscalafmt.skip=fase -Dscalafmt.validateOnly=false -Dscalafmt.changedOnly=false -pl connector/connect"
+  echo "./build/mvn -Pscala-2.12 scalafmt:format -Dscalafmt.skip=false -Dscalafmt.validateOnly=false -Dscalafmt.changedOnly=false -pl connector/connect/server"
   exit 1
 else
   echo -e "Scalafmt checks passed."
