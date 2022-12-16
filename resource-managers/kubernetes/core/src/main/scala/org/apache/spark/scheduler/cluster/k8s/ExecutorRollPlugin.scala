@@ -128,6 +128,8 @@ class ExecutorRollDriverPlugin extends DriverPlugin with Logging {
         listWithoutDriver.sortBy(getPeakMetrics(_, "JVMHeapMemory")).reverse
       case ExecutorRollPolicy.PEAK_JVM_OFFHEAP_MEMORY =>
         listWithoutDriver.sortBy(getPeakMetrics(_, "JVMOffHeapMemory")).reverse
+      case ExecutorRollPolicy.DISK_USED =>
+        listWithoutDriver.sortBy(_.diskUsed).reverse
       case ExecutorRollPolicy.OUTLIER =>
         // If there is no outlier we fallback to TOTAL_DURATION policy.
         outliersFromMultipleDimensions(listWithoutDriver) ++
@@ -151,7 +153,8 @@ class ExecutorRollDriverPlugin extends DriverPlugin with Logging {
       outliers(listWithoutDriver, e => e.totalGCTime) ++
       outliers(listWithoutDriver, e => e.failedTasks) ++
       outliers(listWithoutDriver, e => getPeakMetrics(e, "JVMHeapMemory")) ++
-      outliers(listWithoutDriver, e => getPeakMetrics(e, "JVMOffHeapMemory"))
+      outliers(listWithoutDriver, e => getPeakMetrics(e, "JVMOffHeapMemory")) ++
+      outliers(listWithoutDriver, e => e.diskUsed)
 
   /**
    * Return executors whose metrics is outstanding, '(value - mean) > 2-sigma'. This is
