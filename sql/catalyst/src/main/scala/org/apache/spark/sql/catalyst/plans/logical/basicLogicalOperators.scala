@@ -468,25 +468,26 @@ case class Union(
   override def output: Seq[Attribute] = children.map(_.output).transpose.map(mergeAttributes)
 
   override def metadataOutput: Seq[Attribute] = {
+    val childrenMetadataOutput = children.map(_.metadataOutput)
     // This follows similar code in `CheckAnalysis` to check if the output of a Union is correct,
     // but just silently doesn't return an output instead of throwing an error. It also ensures
     // that the attribute names are the same.
-    val refDataTypes = children.head.metadataOutput.map(_.dataType)
-    val refAttrNames = children.head.metadataOutput.map(_.name)
-    children.tail.foreach { child =>
+    val refDataTypes = childrenMetadataOutput.head.map(_.dataType)
+    val refAttrNames = childrenMetadataOutput.head.map(_.name)
+    childrenMetadataOutput.tail.foreach { childMetadataOutput =>
       // We can only propagate the metadata output correctly if every child has the same
       // number of columns
-      if (child.metadataOutput.length != refDataTypes.length) return Nil
+      if (childMetadataOutput.length != refDataTypes.length) return Nil
       // Check if the data types match by name and type
-      val childDataTypes = child.metadataOutput.map(_.dataType)
+      val childDataTypes = childMetadataOutput.map(_.dataType)
       childDataTypes.zip(refDataTypes).foreach { case (dt1, dt2) =>
         if (!DataType.equalsStructurally(dt1, dt2, true) ||
-            !DataType.equalsStructurallyByName(dt1, dt2, conf.resolver)) {
+           !DataType.equalsStructurallyByName(dt1, dt2, conf.resolver)) {
           return Nil
         }
       }
       // Check that the names of the attributes match
-      val childAttrNames = child.metadataOutput.map(_.name)
+      val childAttrNames = childMetadataOutput.map(_.name)
       childAttrNames.zip(refAttrNames).foreach { case (attrName1, attrName2) =>
         if (!conf.resolver(attrName1, attrName2)) {
           return Nil
@@ -494,7 +495,7 @@ case class Union(
       }
     }
     // If the metadata output matches, merge the attributes and return them
-    children.map(_.metadataOutput).transpose.map(mergeAttributes)
+    childrenMetadataOutput.transpose.map(mergeAttributes)
   }
 
   override lazy val resolved: Boolean = {
