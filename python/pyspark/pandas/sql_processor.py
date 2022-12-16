@@ -73,7 +73,7 @@ def sql(
         in pandas-on-Spark is ignored. By default, the index is always lost.
 
         .. note:: If you want to preserve the index, explicitly use :func:`DataFrame.reset_index`,
-            and pass it to the sql statement with `index_col` parameter.
+            and pass it to the SQL statement with `index_col` parameter.
 
             For example,
 
@@ -207,7 +207,7 @@ def _get_local_scope() -> Dict[str, Any]:
     try:
         return inspect.stack()[_CAPTURE_SCOPES][0].f_locals
     except Exception:
-        # TODO (rxin, thunterdb): use a more narrow scope exception.
+        # TODO (rxin, thunterdb): use a narrower scope exception.
         # See https://github.com/pyspark.pandas/pull/448
         return {}
 
@@ -223,7 +223,7 @@ def _get_ipython_scope() -> Dict[str, Any]:
         shell = get_ipython()
         return shell.user_ns
     except Exception:
-        # TODO (rxin, thunterdb): use a more narrow scope exception.
+        # TODO (rxin, thunterdb): use a narrower scope exception.
         # See https://github.com/pyspark.pandas/pull/448
         return None
 

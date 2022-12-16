@@ -368,7 +368,7 @@ def align_diff_frames(
         - full: `resolve_func` should resolve only common columns from 'this' and 'that' DataFrames.
             For instance, if 'this' has columns A, B, C and that has B, C, D, `this_columns` and
             'that_columns' in this function are B, C and B, C.
-        - left: `resolve_func` should resolve columns including that columns.
+        - left: `resolve_func` should resolve columns including `that` column.
             For instance, if 'this' has columns A, B, C and that has B, C, D, `this_columns` is
             B, C but `that_columns` are B, C, D.
         - inner: Same as 'full' mode; however, internally performs inner join instead.
@@ -526,7 +526,7 @@ def validate_arguments_and_invoke_function(
 
     This function validates all the arguments, removes the ones that are not supported if they
     are simply the default value (i.e. most likely the user didn't explicitly specify it). It
-    throws a TypeError if the user explicitly specify an argument that is not supported by the
+    throws a TypeError if the user explicitly specifies an argument that is not supported by the
     pandas version available.
 
     For example usage, look at DataFrame.to_html().
@@ -640,7 +640,7 @@ def name_like_string(name: Optional[Name]) -> str:
 
 def is_name_like_tuple(value: Any, allow_none: bool = True, check_type: bool = False) -> bool:
     """
-    Check the given tuple is be able to be used as a name.
+    Check the given tuple is to be able to be used as a name.
 
     Examples
     --------
