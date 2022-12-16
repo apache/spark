@@ -639,6 +639,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "searchPath" -> searchPath.mkString("[", ", ", "]")))
   }
 
+  def unresolvedRoutineError(
+      nameParts: Seq[String],
+      searchPath: Seq[String],
+      context: Origin): Throwable = {
+    new AnalysisException(
+      errorClass = "UNRESOLVED_ROUTINE",
+      messageParameters = Map(
+        "routineName" -> toSQLId(nameParts),
+        "searchPath" -> searchPath.mkString("[", ", ", "]")
+      ),
+      origin = context)
+  }
+
   def invalidFunctionArgumentsError(
       name: String, expectedNum: String, actualNum: Int): Throwable = {
     new AnalysisException(
@@ -2354,19 +2367,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map(
         "tablePath" -> tablePath,
         "config" -> SQLConf.ALLOW_NON_EMPTY_LOCATION_IN_CTAS.key))
-  }
-
-  def noSuchFunctionError(
-      rawName: Seq[String],
-      t: TreeNode[_],
-      fullName: Option[Seq[String]] = None): Throwable = {
-      new AnalysisException(
-        errorClass = "UNRESOLVED_ROUTINE",
-        messageParameters = Map(
-          "routineName" -> toSQLId(rawName),
-          "searchPath" -> getFormattedSQLSearchPath
-        ),
-        origin = t.origin)
   }
 
   def unsetNonExistentPropertyError(property: String, table: TableIdentifier): Throwable = {

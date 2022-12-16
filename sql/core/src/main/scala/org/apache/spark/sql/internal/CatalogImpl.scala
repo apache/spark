@@ -274,7 +274,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
           className = className,
           isTemporary = true)
 
-      case _ => throw QueryCompilationErrors.noSuchFunctionError(ident, plan)
+      case _ => throw QueryCompilationErrors.unresolvedRoutineError(ident, Seq.empty, plan.origin)
     }
   }
 

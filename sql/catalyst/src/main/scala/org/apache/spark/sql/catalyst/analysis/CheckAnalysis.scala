@@ -170,8 +170,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         u.tableNotFound(u.multipartIdentifier)
 
       case u: UnresolvedFunc =>
-        throw QueryCompilationErrors.noSuchFunctionError(
-          u.multipartIdentifier, u, u.possibleQualifiedName)
+        throw QueryCompilationErrors.unresolvedRoutineError(
+          u.multipartIdentifier, Seq.empty, u.origin)
 
       case u: UnresolvedHint =>
         u.failAnalysis(

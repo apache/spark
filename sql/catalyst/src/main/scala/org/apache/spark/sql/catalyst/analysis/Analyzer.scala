@@ -2185,7 +2185,7 @@ class Analyzer(override val catalogManager: CatalogManager)
               externalFunctionNameSet.add(fullName)
               f
             } else {
-              throw QueryCompilationErrors.noSuchFunctionError(nameParts, f, Some(fullName))
+              throw QueryCompilationErrors.unresolvedRoutineError(nameParts, Seq.empty, f.origin)
             }
           }
       }
@@ -2283,7 +2283,9 @@ class Analyzer(override val catalogManager: CatalogManager)
                 messageParameters = Map(
                   "class" -> other.getClass.getCanonicalName))
               // We don't support persistent high-order functions yet.
-            }.getOrElse(throw QueryCompilationErrors.noSuchFunctionError(nameParts, u))
+            }.getOrElse {
+              throw QueryCompilationErrors.unresolvedRoutineError(nameParts, Seq.empty, u.origin)
+            }
           }
 
           case u if !u.childrenResolved => u // Skip until children are resolved.
