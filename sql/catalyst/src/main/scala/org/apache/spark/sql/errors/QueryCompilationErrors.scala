@@ -631,7 +631,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with LookupCa
       messageParameters = Map("dt" -> dt.toString))
   }
 
-  def functionUndefinedError(name: FunctionIdentifier): Throwable = {
+  def unresolvedRoutineError(name: FunctionIdentifier): Throwable = {
     new AnalysisException(
       errorClass = "UNRESOLVED_ROUTINE",
       messageParameters = Map("routineName" -> toSQLId(name.funcName),
