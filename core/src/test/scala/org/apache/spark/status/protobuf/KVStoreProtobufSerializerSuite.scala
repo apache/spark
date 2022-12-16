@@ -185,11 +185,11 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
           javaVersion = "1.8",
           javaHome = "/tmp/java",
           scalaVersion = "2.13"),
-        sparkProperties = Seq(("1", "2")),
-        hadoopProperties = Seq(("1", "2")),
-        systemProperties = Seq(("1", "2")),
-        metricsProperties = Seq(("1", "2")),
-        classpathEntries = Seq(("1", "2")),
+        sparkProperties = Seq(("spark.conf.1", "1"), ("spark.conf.2", "2")),
+        hadoopProperties = Seq(("hadoop.conf.conf1", "1"), ("hadoop.conf2", "val2")),
+        systemProperties = Seq(("sys.prop.1", "value1"), ("sys.prop.2", "value2")),
+        metricsProperties = Seq(("metric.1", "klass1"), ("metric2", "klass2")),
+        classpathEntries = Seq(("/jar1", "System"), ("/jar2", "User")),
         resourceProfiles = Seq(new ResourceProfileInfo(
           id = 0,
           executorResources = Map(
@@ -201,7 +201,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
             "1" -> new ExecutorResourceRequest(
               resourceName = "exec2",
               amount = 1,
-              discoveryScript = "script0",
+              discoveryScript = "script1",
               vendor = "apache")
           ),
           taskResources = Map(

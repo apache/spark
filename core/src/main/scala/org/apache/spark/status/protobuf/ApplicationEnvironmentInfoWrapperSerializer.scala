@@ -48,19 +48,19 @@ object ApplicationEnvironmentInfoWrapperSerializer {
     val builder = StoreTypes.ApplicationEnvironmentInfo.newBuilder()
     builder.setRuntime(runtimeBuilder.build())
     info.sparkProperties.foreach { pair =>
-      builder.addSparkProperties(serializePairSS(pair))
+      builder.addSparkProperties(serializePairStrings(pair))
     }
     info.hadoopProperties.foreach { pair =>
-      builder.addHadoopProperties(serializePairSS(pair))
+      builder.addHadoopProperties(serializePairStrings(pair))
     }
     info.systemProperties.foreach { pair =>
-      builder.addSystemProperties(serializePairSS(pair))
+      builder.addSystemProperties(serializePairStrings(pair))
     }
     info.metricsProperties.foreach { pair =>
-      builder.addMetricsProperties(serializePairSS(pair))
+      builder.addMetricsProperties(serializePairStrings(pair))
     }
     info.classpathEntries.foreach { pair =>
-      builder.addClasspathEntries(serializePairSS(pair))
+      builder.addClasspathEntries(serializePairStrings(pair))
     }
     info.resourceProfiles.foreach { profile =>
       builder.addResourceProfiles(serializeResourceProfileInfo(profile))
@@ -75,7 +75,7 @@ object ApplicationEnvironmentInfoWrapperSerializer {
       javaHome = info.getRuntime.getJavaHome,
       scalaVersion = info.getRuntime.getScalaVersion
     )
-    val pairSSToTuple = (pair: StoreTypes.ApplicationEnvironmentInfo.PairSS) => {
+    val pairSSToTuple = (pair: StoreTypes.PairStrings) => {
       (pair.getValue1, pair.getValue2)
     }
     new ApplicationEnvironmentInfo(
@@ -90,9 +90,8 @@ object ApplicationEnvironmentInfoWrapperSerializer {
     )
   }
 
-  private def serializePairSS(pair: (String, String)):
-    StoreTypes.ApplicationEnvironmentInfo.PairSS = {
-    val builder = StoreTypes.ApplicationEnvironmentInfo.PairSS.newBuilder()
+  private def serializePairStrings(pair: (String, String)): StoreTypes.PairStrings = {
+    val builder = StoreTypes.PairStrings.newBuilder()
     builder.setValue1(pair._1)
     builder.setValue2(pair._2)
     builder.build()

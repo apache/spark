@@ -131,17 +131,18 @@ message RuntimeInfo {
   string scala_version = 3;
 }
 
+message PairStrings {
+  string value1 = 1;
+  string value2 = 2;
+}
+
 message ApplicationEnvironmentInfo {
-  message PairSS {
-    string value1 = 1;
-    string value2 = 2;
-  }
   RuntimeInfo runtime = 1;
-  repeated PairSS spark_properties = 2;
-  repeated PairSS hadoop_properties = 3;
-  repeated PairSS system_properties = 4;
-  repeated PairSS metrics_properties = 5;
-  repeated PairSS classpath_entries = 6;
+  repeated PairStrings spark_properties = 2;
+  repeated PairStrings hadoop_properties = 3;
+  repeated PairStrings system_properties = 4;
+  repeated PairStrings metrics_properties = 5;
+  repeated PairStrings classpath_entries = 6;
   repeated ResourceProfileInfo resource_profiles = 7;
 }
 
