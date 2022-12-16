@@ -577,4 +577,36 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       $"csv", schema_of_csv("1,2\n2"), Map.empty[String, String].asJava))
     checkAnswer(actual, Row(Row(1, "2\n2")))
   }
+
+  test("SPARK-41049: make to_csv function deterministic") {
+    val df = sparkContext.parallelize(1 to 5).toDF("value")
+    val v1 = rand().*(lit(10000)).cast(IntegerType)
+    val v2 = to_csv(struct(v1.as("testCsvField")))
+    val withSingleCsvValue = df.select(v1, v1, v2, v2).collect()
+    withSingleCsvValue.foreach(row => {
+      val values = Seq(
+        row.getInt(0).toString,
+        row.getInt(1).toString,
+        row.getString(2),
+        row.getString(3))
+
+      assert(row.length == 4)
+      assert(values.size == 4)
+      assert(values.forall(_ == values.head))
+    })
+
+    val v3 = to_csv(struct(v1.as("testCsvField1"), v1.as("testCsvField2")))
+    val withMultipleCsvValues = df.select(v1, v1, v3, v3).collect()
+    withMultipleCsvValues.foreach(row => {
+      val values = Array(
+        row.getInt(0).toString,
+        row.getInt(1).toString) ++
+        row.getString(2).split(",") ++
+        row.getString(3).split(",")
+
+      assert(row.length == 4)
+      assert(values.length == 6)
+      assert(values.forall(_ == values.head))
+    })
+  }
 }
