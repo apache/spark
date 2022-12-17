@@ -221,10 +221,12 @@ class SparkConnectTests(SparkConnectSQLTestCase):
 
         for schema in [
             StructType(
-                [StructField("col1", IntegerType(), True),
-                 StructField("col2", IntegerType(), True),
-                 StructField("col3", IntegerType(), True),
-                 StructField("col4", IntegerType(), True)]
+                [
+                    StructField("col1", IntegerType(), True),
+                    StructField("col2", IntegerType(), True),
+                    StructField("col3", IntegerType(), True),
+                    StructField("col4", IntegerType(), True),
+                ]
             ),
             "struct<col1 int, col2 int, col3 int, col4 int>",
             "col1 int, col2 int, col3 int, col4 int",

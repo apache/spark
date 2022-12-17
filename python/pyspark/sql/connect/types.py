@@ -88,6 +88,7 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
         raise Exception(f"Unsupported data type {data_type}")
     return ret
 
+
 def proto_schema_to_pyspark_data_type(schema: pb2.DataType) -> DataType:
     if schema.HasField("null"):
         return NullType()
