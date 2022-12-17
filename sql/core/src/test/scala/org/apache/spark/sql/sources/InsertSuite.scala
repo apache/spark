@@ -152,7 +152,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       },
       errorClass = "NUM_COLUMNS_MISMATCH",
       parameters = Map(
-        "operator" -> "INSERTINTOSTATEMENT",
+        "operator" -> "INSERT INTO",
         "firstNumColumns" -> "2",
         "invalidOrdinalNum" -> "second",
         "invalidNumColumns" -> "1"
@@ -652,7 +652,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           },
           errorClass = "NUM_COLUMNS_MISMATCH",
           parameters = Map(
-            "operator" -> "INSERTINTOSTATEMENT",
+            "operator" -> "INSERT INTO",
             "firstNumColumns" -> "2",
             "invalidOrdinalNum" -> "second",
             "invalidNumColumns" -> "3"
@@ -665,7 +665,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           },
           errorClass = "NUM_COLUMNS_MISMATCH",
           parameters = Map(
-            "operator" -> "INSERTINTOSTATEMENT",
+            "operator" -> "INSERT INTO",
             "firstNumColumns" -> "2",
             "invalidOrdinalNum" -> "second",
             "invalidNumColumns" -> "1"
@@ -908,7 +908,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       },
       errorClass = "NUM_COLUMNS_MISMATCH",
       parameters = Map(
-        "operator" -> "INSERTINTOSTATEMENT",
+        "operator" -> "INSERT INTO",
         "firstNumColumns" -> "2",
         "invalidOrdinalNum" -> "second",
         "invalidNumColumns" -> "1"
@@ -1143,7 +1143,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         },
         errorClass = "NUM_COLUMNS_MISMATCH",
         parameters = Map(
-          "operator" -> "INSERTINTOSTATEMENT",
+          "operator" -> "INSERT INTO",
           "firstNumColumns" -> "3",
           "invalidOrdinalNum" -> "second",
           "invalidNumColumns" -> "5"
@@ -1191,7 +1191,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           },
           errorClass = "NUM_COLUMNS_MISMATCH",
           parameters = Map(
-            "operator" -> "INSERTINTOSTATEMENT",
+            "operator" -> "INSERT INTO",
             "firstNumColumns" -> "2",
             "invalidOrdinalNum" -> "second",
             "invalidNumColumns" -> "1"
@@ -1280,7 +1280,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         },
         errorClass = "NUM_COLUMNS_MISMATCH",
         parameters = Map(
-          "operator" -> "INSERTINTOSTATEMENT",
+          "operator" -> "INSERT INTO",
           "firstNumColumns" -> "2",
           "invalidOrdinalNum" -> "second",
           "invalidNumColumns" -> "1"
@@ -1295,7 +1295,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         },
         errorClass = "NUM_COLUMNS_MISMATCH",
         parameters = Map(
-          "operator" -> "INSERTINTOSTATEMENT",
+          "operator" -> "INSERT INTO",
           "firstNumColumns" -> "2",
           "invalidOrdinalNum" -> "second",
           "invalidNumColumns" -> "1"
@@ -1310,7 +1310,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         },
         errorClass = "NUM_COLUMNS_MISMATCH",
         parameters = Map(
-          "operator" -> "INSERTINTOSTATEMENT",
+          "operator" -> "INSERT INTO",
           "firstNumColumns" -> "2",
           "invalidOrdinalNum" -> "second",
           "invalidNumColumns" -> "1"
@@ -1325,7 +1325,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         },
         errorClass = "NUM_COLUMNS_MISMATCH",
         parameters = Map(
-          "operator" -> "INSERTINTOSTATEMENT",
+          "operator" -> "INSERT INTO",
           "firstNumColumns" -> "3",
           "invalidOrdinalNum" -> "second",
           "invalidNumColumns" -> "2"
@@ -1344,7 +1344,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           },
           errorClass = "NUM_COLUMNS_MISMATCH",
           parameters = Map(
-            "operator" -> "INSERTINTOSTATEMENT",
+            "operator" -> "INSERT INTO",
             "firstNumColumns" -> "2",
             "invalidOrdinalNum" -> "second",
             "invalidNumColumns" -> "1"
@@ -1359,7 +1359,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           },
           errorClass = "NUM_COLUMNS_MISMATCH",
           parameters = Map(
-            "operator" -> "INSERTINTOSTATEMENT",
+            "operator" -> "INSERT INTO",
             "firstNumColumns" -> "2",
             "invalidOrdinalNum" -> "second",
             "invalidNumColumns" -> "1"
@@ -1374,7 +1374,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           },
           errorClass = "NUM_COLUMNS_MISMATCH",
           parameters = Map(
-            "operator" -> "INSERTINTOSTATEMENT",
+            "operator" -> "INSERT INTO",
             "firstNumColumns" -> "2",
             "invalidOrdinalNum" -> "second",
             "invalidNumColumns" -> "1"
@@ -1389,7 +1389,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           },
           errorClass = "NUM_COLUMNS_MISMATCH",
           parameters = Map(
-            "operator" -> "INSERTINTOSTATEMENT",
+            "operator" -> "INSERT INTO",
             "firstNumColumns" -> "3",
             "invalidOrdinalNum" -> "second",
             "invalidNumColumns" -> "2"
@@ -1404,7 +1404,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           },
           errorClass = "NUM_COLUMNS_MISMATCH",
           parameters = Map(
-            "operator" -> "INSERTINTOSTATEMENT",
+            "operator" -> "INSERT INTO",
             "firstNumColumns" -> "3",
             "invalidOrdinalNum" -> "second",
             "invalidNumColumns" -> "2"
@@ -1419,7 +1419,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           },
           errorClass = "NUM_COLUMNS_MISMATCH",
           parameters = Map(
-            "operator" -> "INSERTINTOSTATEMENT",
+            "operator" -> "INSERT INTO",
             "firstNumColumns" -> "3",
             "invalidOrdinalNum" -> "second",
             "invalidNumColumns" -> "2"

@@ -30,7 +30,6 @@ import org.apache.spark.sql.types.{ArrayType, DataType, DecimalType, IntegralTyp
 
 object TableOutputResolver {
   def resolveOutputColumns(
-      operator: LogicalPlan,
       tableName: String,
       expected: Seq[Attribute],
       query: LogicalPlan,
@@ -46,8 +45,8 @@ object TableOutputResolver {
       reorderColumnsByName(query.output, expected, conf, errors += _)
     } else {
       if (expected.size > query.output.size) {
-        throw QueryCompilationErrors.numColumnsMismatchError(
-          operator, expected.size, 0, query.output.size)
+        throw QueryCompilationErrors.insertMismatchedColumnNumberError(
+          expected.size, 0, query.output.size)
       }
 
       query.output.zip(expected).flatMap {

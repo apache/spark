@@ -2007,9 +2007,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "tableColumns" -> expected.map(c => s"'${c.name}'").mkString(", "),
         "dataColumns" -> query.output.map(c => s"'${c.name}'").mkString(", ")))
   }
-  
-  def numColumnsMismatchError(
-      operator: LogicalPlan,
+
+  def insertMismatchedColumnNumberError(
       firstNumColumns: Int,
       invalidOrdinalNum: Int,
       invalidNumColumns: Int): Throwable = {
@@ -2024,7 +2023,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "NUM_COLUMNS_MISMATCH",
       messageParameters = Map(
-        "operator" -> toSQLStmt(operator.nodeName),
+        "operator" -> "INSERT INTO",
         "firstNumColumns" -> firstNumColumns.toString,
         "invalidOrdinalNum" -> ordinalNumber(invalidOrdinalNum + 1),
         "invalidNumColumns" -> invalidNumColumns.toString

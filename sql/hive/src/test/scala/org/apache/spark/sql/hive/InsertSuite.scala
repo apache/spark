@@ -362,7 +362,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         },
         errorClass = "NUM_COLUMNS_MISMATCH",
         parameters = Map(
-          "operator" -> "INSERTINTOSTATEMENT",
+          "operator" -> "INSERT INTO",
           "firstNumColumns" -> "4",
           "invalidOrdinalNum" -> "second",
           "invalidNumColumns" -> "5"

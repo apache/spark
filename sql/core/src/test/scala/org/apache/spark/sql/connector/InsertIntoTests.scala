@@ -130,7 +130,7 @@ abstract class InsertIntoTests(
       },
       errorClass = "NUM_COLUMNS_MISMATCH",
       parameters = Map(
-        "operator" -> "APPENDDATA",
+        "operator" -> "INSERT INTO",
         "firstNumColumns" -> "3",
         "invalidOrdinalNum" -> "second",
         "invalidNumColumns" -> "2")

@@ -22,7 +22,6 @@ import java.util.Locale
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Cast, LessThanOrEqual, Literal}
-import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
@@ -526,7 +525,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
       parsedPlan,
       "NUM_COLUMNS_MISMATCH",
       Map(
-        "operator" -> toSQLStmt(parsedPlan.nodeName),
+        "operator" -> "INSERT INTO",
         "firstNumColumns" -> "2",
         "invalidOrdinalNum" -> "second",
         "invalidNumColumns" -> "1"
@@ -546,7 +545,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
       parsedPlan,
       "NUM_COLUMNS_MISMATCH",
       Map(
-        "operator" -> toSQLStmt(parsedPlan.nodeName),
+        "operator" -> "INSERT INTO",
         "firstNumColumns" -> "2",
         "invalidOrdinalNum" -> "second",
         "invalidNumColumns" -> "1"

@@ -1260,7 +1260,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       },
       errorClass = "NUM_COLUMNS_MISMATCH",
       parameters = Map(
-        "operator" -> "INSERTINTOSTATEMENT",
+        "operator" -> "INSERT INTO",
         "firstNumColumns" -> "4",
         "invalidOrdinalNum" -> "second",
         "invalidNumColumns" -> "3"

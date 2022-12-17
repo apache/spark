@@ -203,17 +203,13 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
 
   test("insert with column list - mismatched target table out size after rewritten query") {
     val cols = Seq("c1", "c2", "c3", "c4")
-    val operator = format match {
-      case "foo" => "APPENDDATA"
-      case _ => "INSERTINTOSTATEMENT"
-    }
     withTable("t1") {
       createTable("t1", cols, Seq.fill(4)("int"))
       checkError(
         exception = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1) values(1)")),
         errorClass = "NUM_COLUMNS_MISMATCH",
         parameters = Map(
-          "operator" -> operator,
+          "operator" -> "INSERT INTO",
           "firstNumColumns" -> "4",
           "invalidOrdinalNum" -> "second",
           "invalidNumColumns" -> "1"
@@ -229,7 +225,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
         },
         errorClass = "NUM_COLUMNS_MISMATCH",
         parameters = Map(
-          "operator" -> operator,
+          "operator" -> "INSERT INTO",
           "firstNumColumns" -> "4",
           "invalidOrdinalNum" -> "second",
           "invalidNumColumns" -> "3"
