@@ -307,6 +307,18 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
     }
   }
 
+  testBothCodegenAndInterpreted("SPARK-41535: interval array containing nulls") {
+    val factory = UnsafeProjection
+    val fieldTypes: Array[DataType] = Array(ArrayType(CalendarIntervalType))
+    val converter = factory.create(fieldTypes)
+
+    val row = new SpecificInternalRow(fieldTypes)
+    val values = Array(new CalendarInterval(0, 7, 0L), null)
+    row.update(0, createArray(values: _*))
+    val unsafeRow: UnsafeRow = converter.apply(row)
+    testArrayInterval(unsafeRow.getArray(0), values)
+  }
+
   testBothCodegenAndInterpreted("basic conversion with struct type") {
     val factory = UnsafeProjection
     val fieldTypes: Array[DataType] = Array(
@@ -357,6 +369,13 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
       8 + scala.math.ceil(values.length / 64.toDouble) * 8 + roundedSize(4 * values.length))
     values.zipWithIndex.foreach {
       case (value, index) => assert(array.getInt(index) == value)
+    }
+  }
+
+  private def testArrayInterval(array: UnsafeArrayData, values: Seq[CalendarInterval]): Unit = {
+    assert(array.numElements == values.length)
+    values.zipWithIndex.foreach {
+      case (value, index) => assert(array.getInterval(index) == value)
     }
   }
 
