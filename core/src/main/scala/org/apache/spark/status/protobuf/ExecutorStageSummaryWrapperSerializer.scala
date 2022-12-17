@@ -25,7 +25,7 @@ object ExecutorStageSummaryWrapperSerializer {
   def serialize(input: ExecutorStageSummaryWrapper): Array[Byte] = {
     val info = serializeExecutorStageSummary(input.info)
     val builder = StoreTypes.ExecutorStageSummaryWrapper.newBuilder()
-      .setStageId(input.stageId)
+      .setStageId(input.stageId.toLong)
       .setStageAttemptId(input.stageAttemptId)
       .setExecutorId(input.executorId)
       .setInfo(info)
@@ -36,7 +36,7 @@ object ExecutorStageSummaryWrapperSerializer {
     val binary = StoreTypes.ExecutorStageSummaryWrapper.parseFrom(bytes)
     val info = deserializeExecutorStageSummary(binary.getInfo)
     new ExecutorStageSummaryWrapper(
-      stageId = binary.getStageId,
+      stageId = binary.getStageId.toInt,
       stageAttemptId = binary.getStageAttemptId,
       executorId = binary.getExecutorId,
       info = info)
