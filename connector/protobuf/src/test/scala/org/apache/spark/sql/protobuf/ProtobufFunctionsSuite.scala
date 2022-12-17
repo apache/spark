@@ -23,10 +23,9 @@ import scala.collection.JavaConverters._
 
 import com.google.protobuf.{ByteString, DynamicMessage}
 
-import org.apache.spark.sql.{Column, QueryTest, Row}
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.functions.{lit, struct}
-import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos.{messageA, messageB, messageC, EM, EM2, Employee, EventRecursiveA, EventRecursiveB, EventWithRecursion, IC, OneOfEvent, OneOfEventWithRecursion, SimpleMessageRepeated}
+import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos.{messageA, messageB, messageC, EM, EM2, Employee, EventPerson, EventRecursiveA, EventRecursiveB, EventWithRecursion, IC, OneOfEvent, OneOfEventWithRecursion, SimpleMessageRepeated}
 import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos.SimpleMessageRepeated.NestedEnum
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 import org.apache.spark.sql.test.SharedSparkSession
@@ -818,7 +817,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     }
   }
 
-  test("Fail for recursion field with different field names without circularReferenceDepth") {
+  test("Fail for recursion field with complex schema without recursive.fields.max.depth") {
     val aEventWithRecursion = EventWithRecursion.newBuilder().setKey(2).build()
     val aaEventWithRecursion = EventWithRecursion.newBuilder().setKey(3).build()
     val aaaEventWithRecursion = EventWithRecursion.newBuilder().setKey(4).build()
@@ -842,7 +841,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     }
   }
 
-  test("recursion field with different field names with circularReferenceDepth") {
+  test("Verify recursion field with complex schema with recursive.fields.max.depth") {
     val descriptor = ProtobufUtils.buildDescriptor(testFileDesc, "Employee")
 
     val manager = Employee.newBuilder().setFirstName("firstName").setLastName("lastName").build()
@@ -882,31 +881,34 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     assert(eventFromSpark.getEm2.getEm2Manager.getFirstName.isEmpty)
   }
 
-  test("Verify OneOf field with recursive fields between from_protobuf -> to_protobuf " +
+  test("Verify OneOf field with recursive fields between from_protobuf -> to_protobuf." +
     "and struct -> from_protobuf") {
     val descriptor = ProtobufUtils.buildDescriptor(testFileDesc, "OneOfEventWithRecursion")
 
-    val recursiveANested = EventRecursiveA.newBuilder()
-      .setKey("keyNested3").build()
-    val oneOfEventNested = OneOfEventWithRecursion.newBuilder()
-      .setKey("keyNested2")
-      .setValue("valueNested2")
-      .setRecursiveA(recursiveANested).build()
+    val nestedTwo = OneOfEventWithRecursion.newBuilder()
+      .setKey("keyNested2").setValue("valueNested2").build()
+    val nestedOne = EventRecursiveA.newBuilder()
+      .setKey("keyNested1")
+      .setRecursiveA(nestedTwo).build()
+    val oneOfRecursionEvent = OneOfEventWithRecursion.newBuilder()
+      .setKey("keyNested0")
+      .setValue("valueNested0")
+      .setRecursiveA(nestedOne).build()
     val recursiveA = EventRecursiveA.newBuilder().setKey("recursiveAKey")
-      .setRecursiveA(oneOfEventNested).build()
+      .setRecursiveA(oneOfRecursionEvent).build()
     val recursiveB = EventRecursiveB.newBuilder()
       .setKey("recursiveBKey")
       .setValue("recursiveBvalue").build()
     val oneOfEventWithRecursion = OneOfEventWithRecursion.newBuilder()
-      .setKey("key1")
-      .setValue("value1")
+      .setKey("key")
+      .setValue("value")
       .setRecursiveB(recursiveB)
       .setRecursiveA(recursiveA).build()
 
     val df = Seq(oneOfEventWithRecursion.toByteArray).toDF("value")
 
     val options = new java.util.HashMap[String, String]()
-    options.put("recursive.fields.max.depth", "0")
+    options.put("recursive.fields.max.depth", "1")
 
     val fromProtoDf = df.select(
       functions.from_protobuf($"value",
@@ -930,9 +932,11 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     val eventFromSpark = OneOfEventWithRecursion.parseFrom(
       toDf.select("toProto").take(1).toSeq(0).getAs[Array[Byte]](0))
 
-    assert(eventFromSpark.getRecursiveA.getRecursiveA.getKey.equals("keyNested2"))
-    assert(eventFromSpark.getRecursiveA.getRecursiveA.getValue.equals("valueNested2"))
-    assert(eventFromSpark.getRecursiveA.getRecursiveA.getRecursiveA.getKey.isEmpty)
+    var recursiveField = eventFromSpark.getRecursiveA.getRecursiveA
+    assert(recursiveField.getKey.equals("keyNested0"))
+    assert(recursiveField.getValue.equals("valueNested0"))
+    assert(recursiveField.getRecursiveA.getKey.equals("keyNested1"))
+    assert(recursiveField.getRecursiveA.getRecursiveA.getKey.isEmpty())
 
     val expectedFields = descriptor.getFields.asScala.map(f => f.getName)
     eventFromSpark.getDescriptorForType.getFields.asScala.map(f => {
@@ -1103,7 +1107,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       Row(
         Row("key1",
           Row(
-            Row("keyNested2", null, null, "valueNested2"),
+            Row("keyNested0", null, null, "valueNested0"),
             "recursiveAKey"),
           null,
           "value1")
@@ -1115,13 +1119,142 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
 
     val eventFromSparkSchema = OneOfEventWithRecursion.parseFrom(
       dataDfToProto.select("toProto").take(1).toSeq(0).getAs[Array[Byte]](0))
-    assert(eventFromSpark.getRecursiveA.getRecursiveA.getKey.equals("keyNested2"))
-    assert(eventFromSpark.getRecursiveA.getRecursiveA.getValue.equals("valueNested2"))
-    assert(eventFromSpark.getRecursiveA.getRecursiveA.getRecursiveA.getKey.isEmpty)
+    recursiveField = eventFromSparkSchema.getRecursiveA.getRecursiveA
+    assert(recursiveField.getKey.equals("keyNested0"))
+    assert(recursiveField.getValue.equals("valueNested0"))
+    assert(recursiveField.getRecursiveA.getKey.isEmpty())
     eventFromSparkSchema.getDescriptorForType.getFields.asScala.map(f => {
       assert(expectedFields.contains(f.getName))
     })
   }
 
+  test("Verify recursive.fields.max.depth Levels 0,1, and 2 with Simple Schema") {
+    val eventPerson3 = EventPerson.newBuilder().setName("person3").build()
+    val eventPerson2 = EventPerson.newBuilder().setName("person2").setBff(eventPerson3).build()
+    val eventPerson1 = EventPerson.newBuilder().setName("person1").setBff(eventPerson2).build()
+    val eventPerson0 = EventPerson.newBuilder().setName("person0").setBff(eventPerson1).build()
+    val df = Seq(eventPerson0.toByteArray).toDF("value")
 
+    val optionsZero = new java.util.HashMap[String, String]()
+    optionsZero.put("recursive.fields.max.depth", "0")
+    val schemaZero = DataType.fromJson(
+        s"""{
+           |  "type" : "struct",
+           |  "fields" : [ {
+           |    "name" : "sample",
+           |    "type" : {
+           |      "type" : "struct",
+           |      "fields" : [ {
+           |        "name" : "name",
+           |        "type" : "string",
+           |        "nullable" : true
+           |      }, {
+           |        "name" : "bff",
+           |        "type" : "void",
+           |        "nullable" : true
+           |      } ]
+           |    },
+           |    "nullable" : true
+           |  } ]
+           |}""".stripMargin).asInstanceOf[StructType]
+    val expectedDfZero = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row(Row("person0", null)))), schemaZero)
+
+    testFromProtobufWithOptions(df, expectedDfZero, optionsZero)
+
+    val optionsOne = new java.util.HashMap[String, String]()
+    optionsOne.put("recursive.fields.max.depth", "1")
+    val schemaOne = DataType.fromJson(
+      s"""{
+         |  "type" : "struct",
+         |  "fields" : [ {
+         |    "name" : "sample",
+         |    "type" : {
+         |      "type" : "struct",
+         |      "fields" : [ {
+         |        "name" : "name",
+         |        "type" : "string",
+         |        "nullable" : true
+         |      }, {
+         |        "name" : "bff",
+         |        "type" : {
+         |          "type" : "struct",
+         |          "fields" : [ {
+         |            "name" : "name",
+         |            "type" : "string",
+         |            "nullable" : true
+         |          }, {
+         |            "name" : "bff",
+         |            "type" : "void",
+         |            "nullable" : true
+         |          } ]
+         |        },
+         |        "nullable" : true
+         |      } ]
+         |    },
+         |    "nullable" : true
+         |  } ]
+         |}""".stripMargin).asInstanceOf[StructType]
+    val expectedDfOne = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row(Row("person0", Row("person1", null))))), schemaOne)
+    testFromProtobufWithOptions(df, expectedDfOne, optionsOne)
+
+    val optionsTwo = new java.util.HashMap[String, String]()
+    optionsTwo.put("recursive.fields.max.depth", "2")
+    val schemaTwo = DataType.fromJson(
+      s"""{
+         |  "type" : "struct",
+         |  "fields" : [ {
+         |    "name" : "sample",
+         |    "type" : {
+         |      "type" : "struct",
+         |      "fields" : [ {
+         |        "name" : "name",
+         |        "type" : "string",
+         |        "nullable" : true
+         |      }, {
+         |        "name" : "bff",
+         |        "type" : {
+         |          "type" : "struct",
+         |          "fields" : [ {
+         |            "name" : "name",
+         |            "type" : "string",
+         |            "nullable" : true
+         |          }, {
+         |            "name" : "bff",
+         |            "type" : {
+         |              "type" : "struct",
+         |              "fields" : [ {
+         |                "name" : "name",
+         |                "type" : "string",
+         |                "nullable" : true
+         |              }, {
+         |                "name" : "bff",
+         |                "type" : "void",
+         |                "nullable" : true
+         |              } ]
+         |            },
+         |            "nullable" : true
+         |          } ]
+         |        },
+         |        "nullable" : true
+         |      } ]
+         |    },
+         |    "nullable" : true
+         |  } ]
+         |}""".stripMargin).asInstanceOf[StructType]
+    val expectedDfTwo = spark.createDataFrame(spark.sparkContext.parallelize(
+      Seq(Row(Row("person0", Row("person1", Row("person2", null)))))), schemaTwo)
+    testFromProtobufWithOptions(df, expectedDfTwo, optionsTwo)
+  }
+
+  def testFromProtobufWithOptions(
+    df: DataFrame,
+    expectedDf: DataFrame,
+    options: java.util.HashMap[String, String]): Unit = {
+    val fromProtoDf = df.select(
+      functions.from_protobuf($"value", "EventPerson", testFileDesc, options) as 'sample)
+    assert(expectedDf.schema === fromProtoDf.schema)
+    checkAnswer(fromProtoDf, expectedDf)
+  }
 }

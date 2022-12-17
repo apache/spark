@@ -51,7 +51,9 @@ object SchemaConverters {
       protobufOptions: ProtobufOptions): SchemaType = ScalaReflectionLock.synchronized {
     SchemaType(
       StructType(descriptor.getFields.asScala.flatMap(
-        structFieldFor(_, Map.empty, protobufOptions: ProtobufOptions)).toArray),
+        structFieldFor(_,
+          Map(descriptor.getFullName -> 1),
+          protobufOptions: ProtobufOptions)).toArray),
       nullable = true)
   }
 
@@ -107,14 +109,21 @@ object SchemaConverters {
             nullable = false))
       case MESSAGE =>
         // If the `recursive.fields.max.depth` value is not specified, it will default to -1;
-        // recursive fields are not permitted. Setting it to 0 allows the field to be recursed once,
-        // 1 allows it to be recursed twice, and 2 allows it to be recursed thrice. A value
-        // greater than 2 is not allowed, and if a protobuf record has more depth for recursive
-        // fields than the allowed value, it will be truncated and some fields may be discarded.
+        // recursive fields are not permitted. Setting it to 0 drops all recursive fields,
+        // 1 allows it to be recursed once, and 2 allows it to be recursed twice and so on.
+        // A value greater than 10 is not allowed, and if a protobuf record has more depth for
+        // recursive fields than the allowed value, it will be truncated and some fields may be
+        // discarded.
+        // SQL Schema for the protobuf message `message Person { string name = 1; Person bff = 2}`
+        // will vary based on the value of "recursive.fields.max.depth".
+        // 0: struct<name: string, bff: null>
+        // 1: struct<name string, bff: <name: string, bff: null>>
+        // 2: struct<name string, bff: <name: string, bff: struct<name: string, bff: null>>> ...
         val recordName = fd.getMessageType.getFullName
         val recursiveDepth = existingRecordNames.getOrElse(recordName, 0)
         val recursiveFieldMaxDepth = protobufOptions.recursiveFieldMaxDepth
-        if (existingRecordNames.contains(recordName) && recursiveFieldMaxDepth < 0 ) {
+        if (existingRecordNames.contains(recordName) && (recursiveFieldMaxDepth < 0 ||
+          recursiveFieldMaxDepth > 10)) {
           throw QueryCompilationErrors.foundRecursionInProtobufSchema(fd.toString())
         } else if (existingRecordNames.contains(recordName) &&
           recursiveDepth > recursiveFieldMaxDepth) {
