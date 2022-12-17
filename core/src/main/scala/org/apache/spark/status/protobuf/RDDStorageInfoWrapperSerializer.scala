@@ -93,11 +93,7 @@ object RDDStorageInfoWrapperSerializer {
           Some(info.getDataDistributionList.asScala.map(deserializeRDDDataDistribution).toSeq)
         },
       partitions =
-        if (info.getPartitionsList.isEmpty) {
-          None
-        } else {
-          Some(info.getPartitionsList.asScala.map(deserializeRDDPartitionInfo).toSeq)
-        }
+        Some(info.getPartitionsList.asScala.map(deserializeRDDPartitionInfo).toSeq)
     )
   }
 
