@@ -574,7 +574,7 @@ class SparkConnectPlanner(val session: SparkSession) {
   }
 
   private def transformCollectMetrics(rel: proto.CollectMetrics): LogicalPlan = {
-    val metrics = rel.getMetricsList.asScala.map { expr =>
+    val metrics = rel.getMetricsList.asScala.toSeq.map { expr =>
       Column(transformExpression(expr))
     }
 
