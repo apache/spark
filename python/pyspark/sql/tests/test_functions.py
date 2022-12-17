@@ -23,6 +23,7 @@ import math
 import unittest
 
 from py4j.protocol import Py4JJavaError
+from pyspark.errors import PySparkException
 from pyspark.sql import Row, Window, types
 from pyspark.sql.functions import (
     udf,
@@ -66,6 +67,14 @@ from pyspark.sql.functions import (
     map_concat,
     map_from_entries,
     expr,
+    schema_of_json,
+    schema_of_csv,
+    from_csv,
+    greatest,
+    when,
+    window,
+    session_window,
+    bucket,
 )
 from pyspark.sql import functions
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
@@ -644,6 +653,15 @@ class FunctionsTests(ReusedSQLTestCase):
             )
         )
 
+        with self.assertRaises(PySparkException) as pe:
+            df.select(least(df.a).alias("least")).collect()
+
+        self.check_error(
+            exception=pe,
+            error_class="PYSPARK.WRONG_NUM_COLUMNS",
+            message_parameters={"funcName": "least"},
+        )
+
     def test_overlay(self):
         from pyspark.sql.functions import col, lit, overlay
         from itertools import chain
@@ -687,6 +705,24 @@ class FunctionsTests(ReusedSQLTestCase):
                     df.select(overlay("x", "y", "pos", "len").alias("ol")).collect() == exp,
                 ]
             )
+        )
+
+        with self.assertRaises(PySparkException) as pe:
+            df.select(overlay(df.x, df.y, 7.5, 0).alias("ol")).collect()
+
+        self.check_error(
+            exception=pe,
+            error_class="PYSPARK.NOT_COLUMN_OR_INTEGER_OR_STRING",
+            message_parameters={"argName": "pos", "argType": "float"},
+        )
+
+        with self.assertRaises(PySparkException) as pe:
+            df.select(overlay(df.x, df.y, 7, 0.5).alias("ol")).collect()
+
+        self.check_error(
+            exception=pe,
+            error_class="PYSPARK.NOT_COLUMN_OR_INTEGER_OR_STRING",
+            message_parameters={"argName": "len", "argType": "float"},
         )
 
     def test_percentile_approx(self):
@@ -760,24 +796,54 @@ class FunctionsTests(ReusedSQLTestCase):
         from pyspark.sql.functions import col, transform
 
         # Should fail with varargs
-        with self.assertRaises(ValueError):
+        with self.assertRaises(PySparkException) as pe:
             transform(col("foo"), lambda *x: lit(1))
 
+        self.check_error(
+            exception=pe,
+            error_class="PYSPARK.UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION",
+            message_parameters={"funcName": "<lambda>"},
+        )
+
         # Should fail with kwargs
-        with self.assertRaises(ValueError):
+        with self.assertRaises(PySparkException) as pe:
             transform(col("foo"), lambda **x: lit(1))
 
+        self.check_error(
+            exception=pe,
+            error_class="PYSPARK.UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION",
+            message_parameters={"funcName": "<lambda>"},
+        )
+
         # Should fail with nullary function
-        with self.assertRaises(ValueError):
+        with self.assertRaises(PySparkException) as pe:
             transform(col("foo"), lambda: lit(1))
 
+        self.check_error(
+            exception=pe,
+            error_class="PYSPARK.WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION",
+            message_parameters={"funcName": "<lambda>", "numArgs": "0"},
+        )
+
         # Should fail with quaternary function
-        with self.assertRaises(ValueError):
+        with self.assertRaises(PySparkException) as pe:
             transform(col("foo"), lambda x1, x2, x3, x4: lit(1))
 
+        self.check_error(
+            exception=pe,
+            error_class="PYSPARK.WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION",
+            message_parameters={"funcName": "<lambda>", "numArgs": "4"},
+        )
+
         # Should fail if function doesn't return Column
-        with self.assertRaises(ValueError):
+        with self.assertRaises(PySparkException) as pe:
             transform(col("foo"), lambda x: 1)
+
+        self.check_error(
+            exception=pe,
+            error_class="PYSPARK.HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN",
+            message_parameters={"funcName": "<lambda>", "returnType": "int"},
+        )
 
     def test_nested_higher_order_function(self):
         # SPARK-35382: lambda vars must be resolved properly in nested higher order functions
@@ -957,9 +1023,14 @@ class FunctionsTests(ReusedSQLTestCase):
         self.assertIn("java.lang.RuntimeException", str(cm.exception))
         self.assertIn("2000000", str(cm.exception))
 
-        with self.assertRaises(TypeError) as cm:
+        with self.assertRaises(PySparkException) as pe:
             df.select(assert_true(df.id < 2, 5))
-        self.assertEqual("errMsg should be a Column or a str, got <class 'int'>", str(cm.exception))
+
+        self.check_error(
+            exception=pe,
+            error_class="PYSPARK.NOT_COLUMN_OR_STRING",
+            message_parameters={"argName": "errMsg", "argType": "int"},
+        )
 
     def test_raise_error(self):
         from pyspark.sql.functions import raise_error
@@ -976,10 +1047,13 @@ class FunctionsTests(ReusedSQLTestCase):
         self.assertIn("java.lang.RuntimeException", str(cm.exception))
         self.assertIn("barfoo", str(cm.exception))
 
-        with self.assertRaises(TypeError) as cm:
+        with self.assertRaises(PySparkException) as pe:
             df.select(raise_error(None))
-        self.assertEqual(
-            "errMsg should be a Column or a str, got <class 'NoneType'>", str(cm.exception)
+
+        self.check_error(
+            exception=pe,
+            error_class="PYSPARK.NOT_COLUMN_OR_STRING",
+            message_parameters={"argName": "errMsg", "argType": "NoneType"},
         )
 
     def test_sum_distinct(self):
@@ -1031,8 +1105,14 @@ class FunctionsTests(ReusedSQLTestCase):
             self.assertEqual(actual, expected)
 
         df = self.spark.range(10)
-        with self.assertRaisesRegex(ValueError, "lit does not allow a column in a list"):
+        with self.assertRaises(PySparkException) as pe:
             lit([df.id, df.id])
+
+        self.check_error(
+            exception=pe,
+            error_class="PYSPARK.COLUMN_IN_LIST",
+            message_parameters={"funcName": "lit"},
+        )
 
     # Test added for SPARK-39832; change Python API to accept both col & str as input
     def test_regexp_replace(self):
@@ -1149,6 +1229,88 @@ class FunctionsTests(ReusedSQLTestCase):
         self.assertEqual(expected, dict(actual["items"]))
         self.assertEqual({**expected, **expected2}, dict(actual["merged"]))
         self.assertEqual(expected, actual["from_items"])
+
+    def test_schema_of_json(self):
+        with self.assertRaises(PySparkException) as pe:
+            schema_of_json(1)
+
+        self.check_error(
+            exception=pe,
+            error_class="PYSPARK.NOT_COLUMN_OR_STRING",
+            message_parameters={"argName": "json", "argType": "int"},
+        )
+
+    def test_schema_of_csv(self):
+        with self.assertRaises(PySparkException) as pe:
+            schema_of_csv(1)
+
+        self.check_error(
+            exception=pe,
+            error_class="PYSPARK.NOT_COLUMN_OR_STRING",
+            message_parameters={"argName": "csv", "argType": "int"},
+        )
+
+    def test_from_csv(self):
+        df = self.spark.range(10)
+        with self.assertRaises(PySparkException) as pe:
+            from_csv(df.id, 1)
+
+        self.check_error(
+            exception=pe,
+            error_class="PYSPARK.NOT_COLUMN_OR_STRING",
+            message_parameters={"argName": "schema", "argType": "int"},
+        )
+
+    def test_greatest(self):
+        df = self.spark.range(10)
+        with self.assertRaises(PySparkException) as pe:
+            greatest(df.id)
+
+        self.check_error(
+            exception=pe,
+            error_class="PYSPARK.WRONG_NUM_COLUMNS",
+            message_parameters={"funcName": "greatest"},
+        )
+
+    def test_when(self):
+        with self.assertRaises(PySparkException) as pe:
+            when("id", 1)
+
+        self.check_error(
+            exception=pe,
+            error_class="PYSPARK.NOT_A_COLUMN",
+            message_parameters={"argName": "condition", "argType": "str"},
+        )
+
+    def test_window(self):
+        with self.assertRaises(PySparkException) as pe:
+            window("date", 5)
+
+        self.check_error(
+            exception=pe,
+            error_class="PYSPARK.NOT_A_STRING",
+            message_parameters={"argName": "windowDuration", "argType": "int"},
+        )
+
+    def test_session_window(self):
+        with self.assertRaises(PySparkException) as pe:
+            session_window("date", 5)
+
+        self.check_error(
+            exception=pe,
+            error_class="PYSPARK.NOT_COLUMN_OR_STRING",
+            message_parameters={"argName": "gapDuration", "argType": "int"},
+        )
+
+    def test_bucket(self):
+        with self.assertRaises(PySparkException) as pe:
+            bucket("5", "id")
+
+        self.check_error(
+            exception=pe,
+            error_class="PYSPARK.NOT_COLUMN_OR_INTEGER",
+            message_parameters={"argName": "numBuckets", "argType": "str"},
+        )
 
 
 if __name__ == "__main__":

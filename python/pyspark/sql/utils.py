@@ -102,6 +102,17 @@ class CapturedException(Exception):
         else:
             return None
 
+    def getMessageParameters(self) -> Optional[dict]:
+        assert SparkContext._gateway is not None
+
+        gw = SparkContext._gateway
+        if self._origin is not None and is_instance_of(
+            gw, self._origin, "org.apache.spark.SparkThrowable"
+        ):
+            return self._origin.getMessageParameters()
+        else:
+            return None
+
 
 class AnalysisException(CapturedException):
     """
