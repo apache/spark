@@ -17,7 +17,7 @@
 
 package org.apache.spark.status.protobuf
 
-import org.apache.spark.status.{ExecutorStageSummaryWrapper, JobDataWrapper, TaskDataWrapper}
+import org.apache.spark.status._
 import org.apache.spark.status.KVUtils.KVStoreScalaSerializer
 
 private[spark] class KVStoreProtobufSerializer extends KVStoreScalaSerializer {
@@ -25,6 +25,8 @@ private[spark] class KVStoreProtobufSerializer extends KVStoreScalaSerializer {
     case j: JobDataWrapper => JobDataWrapperSerializer.serialize(j)
     case t: TaskDataWrapper => TaskDataWrapperSerializer.serialize(t)
     case e: ExecutorStageSummaryWrapper => ExecutorStageSummaryWrapperSerializer.serialize(e)
+    case a: ApplicationEnvironmentInfoWrapper =>
+      ApplicationEnvironmentInfoWrapperSerializer.serialize(a)
     case other => super.serialize(other)
   }
 
@@ -35,6 +37,8 @@ private[spark] class KVStoreProtobufSerializer extends KVStoreScalaSerializer {
       TaskDataWrapperSerializer.deserialize(data).asInstanceOf[T]
     case _ if classOf[ExecutorStageSummaryWrapper].isAssignableFrom(klass) =>
       ExecutorStageSummaryWrapperSerializer.deserialize(data).asInstanceOf[T]
+    case _ if classOf[ApplicationEnvironmentInfoWrapper].isAssignableFrom(klass) =>
+      ApplicationEnvironmentInfoWrapperSerializer.deserialize(data).asInstanceOf[T]
     case other => super.deserialize(data, klass)
   }
 }
