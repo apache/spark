@@ -216,8 +216,15 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     checkKeywordsNotExist(sql("describe functioN Upper"),
       "Extended Usage")
 
-    val e = intercept[AnalysisException](sql("describe functioN abcadf"))
-    assert(e.message.contains("Undefined function: abcadf"))
+    val sqlText = "describe functioN abcadf"
+    checkError(
+      exception = intercept[AnalysisException](sql(sqlText)),
+      errorClass = "UNRESOLVED_ROUTINE",
+      parameters = Map("routineName" -> "`abcadf`", "searchPath" -> "[]"),
+      context = ExpectedContext(
+        fragment = sqlText,
+        start = 0,
+        stop = 23))
 
     checkKeywordsExist(sql("describe functioN  `~`"),
       "Function: ~",
