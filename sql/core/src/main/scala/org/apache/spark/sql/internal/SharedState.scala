@@ -109,13 +109,18 @@ private[sql] class SharedState(
    * A status store to query SQL status/metrics of this Spark application, based on SQL-specific
    * [[org.apache.spark.scheduler.SparkListenerEvent]]s.
    */
-  val statusStore: SQLAppStatusStore = {
-    val kvStore = sparkContext.statusStore.store.asInstanceOf[ElementTrackingStore]
-    val listener = new SQLAppStatusListener(conf, kvStore, live = true)
-    sparkContext.listenerBus.addToStatusQueue(listener)
-    val statusStore = new SQLAppStatusStore(kvStore, Some(listener))
-    sparkContext.ui.foreach(new SQLTab(statusStore, _))
-    statusStore
+  val statusStore: SQLAppStatusStore = SharedState.synchronized {
+    if (Option(SharedState.singleSQLAppStatusStore).isEmpty) {
+      val kvStore = sparkContext.statusStore.store.asInstanceOf[ElementTrackingStore]
+      val listener = new SQLAppStatusListener(conf, kvStore, live = true)
+      sparkContext.listenerBus.addToStatusQueue(listener)
+      val statusStore = new SQLAppStatusStore(kvStore, Some(listener))
+      sparkContext.ui.foreach(new SQLTab(statusStore, _))
+      SharedState.singleSQLAppStatusStore = statusStore
+      statusStore
+    } else {
+      SharedState.singleSQLAppStatusStore
+    }
   }
 
   /**
@@ -189,6 +194,8 @@ private[sql] class SharedState(
 
 object SharedState extends Logging {
   @volatile private var fsUrlStreamHandlerFactoryInitialized = false
+
+  private var singleSQLAppStatusStore: SQLAppStatusStore = null
 
   private def setFsUrlStreamHandlerFactory(conf: SparkConf, hadoopConf: Configuration): Unit = {
     if (!fsUrlStreamHandlerFactoryInitialized &&

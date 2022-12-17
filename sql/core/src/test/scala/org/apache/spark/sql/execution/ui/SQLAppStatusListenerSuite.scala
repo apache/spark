@@ -53,7 +53,7 @@ import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.UI_RETAINED_EXECUTIONS
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.{SharedSparkSession, TestSparkSession}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.status.ElementTrackingStore
@@ -605,6 +605,13 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     assert(metrics(driverMetric.id) === expectedValue)
     assert(metrics.contains(driverMetric2.id))
     assert(metrics(driverMetric2.id) === expectedValue2)
+  }
+
+  test("SPARK-41555: Multi sparkSession should share single SQLAppStatusStore") {
+    val sparkSession1 = createSparkSession
+    val sparkSession2 = new TestSparkSession(sparkSession1.sparkContext)
+
+    assert(sparkSession1.sharedState.statusStore == sparkSession2.sharedState.statusStore)
   }
 
   test("roundtripping SparkListenerDriverAccumUpdates through JsonProtocol (SPARK-18462)") {
