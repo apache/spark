@@ -22,7 +22,7 @@ import java.util.Date
 import org.apache.spark.{JobExecutionStatus, SparkFunSuite}
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.metrics.ExecutorMetricType
-import org.apache.spark.resource.{ExecutorResourceRequest, TaskResourceRequest}
+import org.apache.spark.resource.{ExecutorResourceRequest, ResourceInformation, TaskResourceRequest}
 import org.apache.spark.status._
 import org.apache.spark.status.api.v1._
 
@@ -456,6 +456,135 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
           }
         }
       }
+    }
+  }
+
+  test("Executor Summary") {
+    val memoryMetrics =
+      Some(new MemoryMetrics(
+        usedOnHeapStorageMemory = 15,
+        usedOffHeapStorageMemory = 16,
+        totalOnHeapStorageMemory = 17,
+        totalOffHeapStorageMemory = 18))
+    val peakMemoryMetric =
+      Some(new ExecutorMetrics(Array(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L, 1024L)))
+    val resources =
+      Map("resource1" -> new ResourceInformation("re1", Array("add1", "add2")))
+    val input = new ExecutorSummaryWrapper(
+      info = new ExecutorSummary(
+        id = "id_1",
+        hostPort = "localhost:7777",
+        isActive = true,
+        rddBlocks = 1,
+        memoryUsed = 64,
+        diskUsed = 128,
+        totalCores = 2,
+        maxTasks = 6,
+        activeTasks = 5,
+        failedTasks = 4,
+        completedTasks = 3,
+        totalTasks = 7,
+        totalDuration = 8,
+        totalGCTime = 9,
+        totalInputBytes = 10,
+        totalShuffleRead = 11,
+        totalShuffleWrite = 12,
+        isBlacklisted = false,
+        maxMemory = 256,
+        addTime = new Date(13),
+        removeTime = Some(new Date(14)),
+        removeReason = Some("reason_1"),
+        executorLogs = Map("log1" -> "logs/log1.log", "log2" -> "/log/log2.log"),
+        memoryMetrics = memoryMetrics,
+        blacklistedInStages = Set(19, 20, 21),
+        peakMemoryMetrics = peakMemoryMetric,
+        attributes = Map("attri1" -> "value1", "attri2" -> "val2"),
+        resources = resources,
+        resourceProfileId = 22,
+        isExcluded = true,
+        excludedInStages = Set(23, 24)
+      )
+    )
+
+    val bytes = serializer.serialize(input)
+    val result = serializer.deserialize(bytes, classOf[ExecutorSummaryWrapper])
+
+    assert(result.info.id == input.info.id)
+    assert(result.info.hostPort == input.info.hostPort)
+    assert(result.info.isActive == input.info.isActive)
+    assert(result.info.rddBlocks == input.info.rddBlocks)
+    assert(result.info.memoryUsed == input.info.memoryUsed)
+    assert(result.info.diskUsed == input.info.diskUsed)
+    assert(result.info.totalCores == input.info.totalCores)
+    assert(result.info.maxTasks == input.info.maxTasks)
+    assert(result.info.activeTasks == input.info.activeTasks)
+    assert(result.info.failedTasks == input.info.failedTasks)
+    assert(result.info.completedTasks == input.info.completedTasks)
+    assert(result.info.totalTasks == input.info.totalTasks)
+    assert(result.info.totalDuration == input.info.totalDuration)
+    assert(result.info.totalGCTime == input.info.totalGCTime)
+    assert(result.info.totalInputBytes == input.info.totalInputBytes)
+    assert(result.info.totalShuffleRead == input.info.totalShuffleRead)
+    assert(result.info.totalShuffleWrite == input.info.totalShuffleWrite)
+    assert(result.info.isBlacklisted == input.info.isBlacklisted)
+    assert(result.info.maxMemory == input.info.maxMemory)
+    assert(result.info.addTime == input.info.addTime)
+    assert(result.info.removeTime == input.info.removeTime)
+    assert(result.info.removeReason == input.info.removeReason)
+
+    assert(result.info.executorLogs.size == input.info.executorLogs.size)
+    result.info.executorLogs.keys.foreach { k =>
+      assert(input.info.executorLogs.contains(k))
+      assert(result.info.executorLogs(k) == input.info.executorLogs(k))
+    }
+
+    assert(result.info.memoryMetrics.isDefined == input.info.memoryMetrics.isDefined)
+    if (result.info.memoryMetrics.isDefined && input.info.memoryMetrics.isDefined) {
+      assert(result.info.memoryMetrics.get.usedOnHeapStorageMemory ==
+        input.info.memoryMetrics.get.usedOnHeapStorageMemory)
+      assert(result.info.memoryMetrics.get.usedOffHeapStorageMemory ==
+        input.info.memoryMetrics.get.usedOffHeapStorageMemory)
+      assert(result.info.memoryMetrics.get.totalOnHeapStorageMemory ==
+        input.info.memoryMetrics.get.totalOnHeapStorageMemory)
+      assert(result.info.memoryMetrics.get.totalOffHeapStorageMemory ==
+        input.info.memoryMetrics.get.totalOffHeapStorageMemory)
+    }
+
+    assert(result.info.blacklistedInStages.size == input.info.blacklistedInStages.size)
+    result.info.blacklistedInStages.foreach { stage =>
+      assert(input.info.blacklistedInStages.contains(stage))
+    }
+
+    assert(result.info.peakMemoryMetrics.isDefined == input.info.peakMemoryMetrics.isDefined)
+    if (result.info.peakMemoryMetrics.isDefined && input.info.peakMemoryMetrics.isDefined) {
+      ExecutorMetricType.metricToOffset.foreach { case (name, index) =>
+        result.info.peakMemoryMetrics.get.getMetricValue(name) ==
+          input.info.peakMemoryMetrics.get.getMetricValue(name)
+      }
+    }
+
+    assert(result.info.attributes.size == input.info.attributes.size)
+    result.info.attributes.keys.foreach { k =>
+      assert(input.info.attributes.contains(k))
+      assert(result.info.attributes(k) == input.info.attributes(k))
+    }
+
+    assert(result.info.resources.size == input.info.resources.size)
+    result.info.resources.keys.foreach { k =>
+      assert(input.info.resources.contains(k))
+      assert(result.info.resources(k).name == input.info.resources(k).name)
+      result.info.resources(k).addresses.zip(input.info.resources(k).addresses).foreach {
+        case (a1, a2) =>
+          assert(a1 == a2)
+      }
+    }
+
+    assert(result.info.resourceProfileId == input.info.resourceProfileId)
+    assert(result.info.isExcluded == input.info.isExcluded)
+
+    assert(result.info.excludedInStages.size == input.info.excludedInStages.size)
+    result.info.excludedInStages.foreach { stage =>
+      assert(input.info.excludedInStages.contains(stage))
     }
   }
 }

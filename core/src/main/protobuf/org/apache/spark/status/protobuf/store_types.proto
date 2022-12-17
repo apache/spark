@@ -240,3 +240,53 @@ message RDDStorageInfo {
 message RDDStorageInfoWrapper {
   RDDStorageInfo info = 1;
 }
+
+message MemoryMetrics {
+  int64 used_on_heap_storage_memory = 1;
+  int64 used_off_heap_storage_memory = 2;
+  int64 total_on_heap_storage_memory = 3;
+  int64 total_off_heap_storage_memory = 4;
+}
+
+message ResourceInformation {
+  string name = 1;
+  repeated string addresses = 2;
+}
+
+message ExecutorSummary {
+  string id = 1;
+  string host_port = 2;
+  bool is_active = 3;
+  int32 rdd_blocks = 4;
+  int64 memory_used = 5;
+  int64 disk_used = 6;
+  int32 total_cores = 7;
+  int32 max_tasks = 8;
+  int32 active_tasks = 9;
+  int32 failed_tasks = 10;
+  int32 completed_tasks = 11;
+  int32 total_tasks = 12;
+  int64 total_duration = 13;
+  int64 total_gc_time = 14;
+  int64 total_input_bytes = 15;
+  int64 total_shuffle_read = 16;
+  int64 total_shuffle_write = 17;
+  bool is_blacklisted = 18;
+  int64 max_memory = 19;
+  int64 add_time = 20;
+  optional int64 remove_time = 21;
+  optional string remove_reason = 22;
+  map<string, string> executor_logs = 23;
+  optional MemoryMetrics memory_metrics = 24;
+  repeated int32 blacklisted_in_stages = 25;
+  optional ExecutorMetrics peak_memory_metrics = 26;
+  map<string, string> attributes = 27;
+  map<string, ResourceInformation> resources = 28;
+  int32 resource_profile_id = 29;
+  bool is_excluded = 30;
+  repeated int32 excluded_in_stages = 31;
+}
+
+message ExecutorSummaryWrapper {
+  ExecutorSummary info = 1;
+}

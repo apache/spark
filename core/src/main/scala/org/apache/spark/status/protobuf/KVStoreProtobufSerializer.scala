@@ -31,6 +31,8 @@ private[spark] class KVStoreProtobufSerializer extends KVStoreScalaSerializer {
     case a: ApplicationInfoWrapper => ApplicationInfoWrapperSerializer.serialize(a)
     case r: RDDStorageInfoWrapper =>
       RDDStorageInfoWrapperSerializer.serialize(r)
+    case r: ExecutorSummaryWrapper =>
+      ExecutorSummaryWrapperSerializer.serialize(r)
     case other => super.serialize(other)
   }
 
@@ -47,6 +49,8 @@ private[spark] class KVStoreProtobufSerializer extends KVStoreScalaSerializer {
       ApplicationInfoWrapperSerializer.deserialize(data).asInstanceOf[T]
     case _ if classOf[RDDStorageInfoWrapper].isAssignableFrom(klass) =>
       RDDStorageInfoWrapperSerializer.deserialize(data).asInstanceOf[T]
+    case _ if classOf[ExecutorSummaryWrapper].isAssignableFrom(klass) =>
+      ExecutorSummaryWrapperSerializer.deserialize(data).asInstanceOf[T]
     case other => super.deserialize(data, klass)
   }
 }
