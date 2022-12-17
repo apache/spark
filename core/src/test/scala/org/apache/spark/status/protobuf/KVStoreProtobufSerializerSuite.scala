@@ -21,8 +21,8 @@ import java.util.Date
 
 import org.apache.spark.{JobExecutionStatus, SparkFunSuite}
 import org.apache.spark.resource.{ExecutorResourceRequest, TaskResourceRequest}
-import org.apache.spark.status.{ApplicationEnvironmentInfoWrapper, JobDataWrapper, TaskDataWrapper}
-import org.apache.spark.status.api.v1.{AccumulableInfo, ApplicationEnvironmentInfo, JobData, ResourceProfileInfo, RuntimeInfo}
+import org.apache.spark.status.{ApplicationEnvironmentInfoWrapper, JobDataWrapper, RDDStorageInfoWrapper, TaskDataWrapper}
+import org.apache.spark.status.api.v1.{AccumulableInfo, ApplicationEnvironmentInfo, JobData, RDDDataDistribution, RDDPartitionInfo, RDDStorageInfo, ResourceProfileInfo, RuntimeInfo}
 
 class KVStoreProtobufSerializerSuite extends SparkFunSuite {
   private val serializer = new KVStoreProtobufSerializer()
@@ -253,6 +253,99 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         assert(p1.taskResources.contains(k))
         assert(p2.taskResources.contains(k))
         assert(p1.taskResources(k) == p2.taskResources(k))
+      }
+    }
+  }
+
+  test("RDD Storage Info") {
+    val rddDataDistribution = Seq(
+      new RDDDataDistribution(
+        address = "add1",
+        memoryUsed = 6,
+        memoryRemaining = 8,
+        diskUsed = 100,
+        onHeapMemoryUsed = Some(101),
+        offHeapMemoryUsed = Some(102),
+        onHeapMemoryRemaining = Some(103),
+        offHeapMemoryRemaining = Some(104))
+    )
+    val rddPartitionInfo = Seq(
+      new RDDPartitionInfo(
+        blockName = "block_1",
+        storageLevel = "IN_MEM",
+        memoryUsed = 105,
+        diskUsed = 106,
+        executors = Seq("exec_0", "exec_1"))
+    )
+    val inputs = Seq(
+      new RDDStorageInfoWrapper(
+        info = new RDDStorageInfo(
+          id = 1,
+          name = "rdd_1",
+          numPartitions = 2,
+          numCachedPartitions = 3,
+          storageLevel = "ON_DISK",
+          memoryUsed = 64,
+          diskUsed = 128,
+          dataDistribution = Some(rddDataDistribution),
+          partitions = Some(rddPartitionInfo)
+        )
+      ),
+      new RDDStorageInfoWrapper(
+        info = new RDDStorageInfo(
+          id = 2,
+          name = "rdd_2",
+          numPartitions = 7,
+          numCachedPartitions = 4,
+          storageLevel = "IN_MEMORY",
+          memoryUsed = 70,
+          diskUsed = 256,
+          dataDistribution = None,
+          partitions = None
+        )
+      ),
+    )
+    inputs.foreach { input =>
+      val bytes = serializer.serialize(input)
+      val result = serializer.deserialize(bytes, classOf[RDDStorageInfoWrapper])
+      assert(result.info.id == input.info.id)
+      assert(result.info.name == input.info.name)
+      assert(result.info.numPartitions == input.info.numPartitions)
+      assert(result.info.numCachedPartitions == input.info.numCachedPartitions)
+      assert(result.info.storageLevel == input.info.storageLevel)
+      assert(result.info.memoryUsed == input.info.memoryUsed)
+      assert(result.info.diskUsed == input.info.diskUsed)
+
+      assert(result.info.dataDistribution.isDefined == input.info.dataDistribution.isDefined)
+      if (result.info.dataDistribution.isDefined && input.info.dataDistribution.isDefined) {
+        assert(result.info.dataDistribution.get.length == input.info.dataDistribution.get.length)
+        result.info.dataDistribution.get.zip(input.info.dataDistribution.get).foreach {
+          case (d1, d2) =>
+            assert(d1.address == d2.address)
+            assert(d1.memoryUsed == d2.memoryUsed)
+            assert(d1.memoryRemaining == d2.memoryRemaining)
+            assert(d1.diskUsed == d2.diskUsed)
+            assert(d1.onHeapMemoryUsed == d2.onHeapMemoryUsed)
+            assert(d1.offHeapMemoryUsed == d2.offHeapMemoryUsed)
+            assert(d1.onHeapMemoryRemaining == d2.onHeapMemoryRemaining)
+            assert(d1.offHeapMemoryRemaining == d2.offHeapMemoryRemaining)
+        }
+      }
+
+      assert(result.info.partitions.isDefined == input.info.partitions.isDefined)
+      if (result.info.partitions.isDefined && input.info.partitions.isDefined) {
+        assert(result.info.partitions.get.length == input.info.partitions.get.length)
+        result.info.partitions.get.zip(input.info.partitions.get).foreach {
+          case (p1, p2) =>
+            assert(p1.blockName == p2.blockName)
+            assert(p1.storageLevel == p2.storageLevel)
+            assert(p1.memoryUsed == p2.memoryUsed)
+            assert(p1.diskUsed == p2.diskUsed)
+            assert(p1.executors.length == p2.executors.length)
+            p1.executors.zip(p2.executors).foreach { case (e1, e2) =>
+              e1 == e2
+            }
+        }
       }
     }
   }
