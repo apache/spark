@@ -23,6 +23,7 @@ import math
 import unittest
 
 from py4j.protocol import Py4JJavaError
+from pyspark.errors import PySparkException
 from pyspark.sql import Row, Window, types
 from pyspark.sql.functions import (
     udf,
@@ -66,6 +67,13 @@ from pyspark.sql.functions import (
     map_concat,
     map_from_entries,
     expr,
+    schema_of_json,
+    schema_of_csv,
+    from_csv,
+    greatest,
+    when,
+    window,
+    session_window,
 )
 from pyspark.sql import functions
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
@@ -644,6 +652,13 @@ class FunctionsTests(ReusedSQLTestCase):
             )
         )
 
+        with self.assertRaises(PySparkException) as pe:
+            df.select(least(df.a).alias("least")).collect()
+
+        self.checkError(
+            exception=pe, error_class="WRONG_NUM_COLUMNS", message_parameters={"func_name": "least"}
+        )
+
     def test_overlay(self):
         from pyspark.sql.functions import col, lit, overlay
         from itertools import chain
@@ -687,6 +702,24 @@ class FunctionsTests(ReusedSQLTestCase):
                     df.select(overlay("x", "y", "pos", "len").alias("ol")).collect() == exp,
                 ]
             )
+        )
+
+        with self.assertRaises(PySparkException) as pe:
+            df.select(overlay(df.x, df.y, 7.5, 0).alias("ol")).collect()
+
+        self.checkError(
+            exception=pe,
+            error_class="NOT_COLUMN_OR_INTEGER_OR_STRING",
+            message_parameters={"arg_name": "pos", "arg_type": "float"},
+        )
+
+        with self.assertRaises(PySparkException) as pe:
+            df.select(overlay(df.x, df.y, 7, 0.5).alias("ol")).collect()
+
+        self.checkError(
+            exception=pe,
+            error_class="NOT_COLUMN_OR_INTEGER_OR_STRING",
+            message_parameters={"arg_name": "len", "arg_type": "float"},
         )
 
     def test_percentile_approx(self):
@@ -957,9 +990,14 @@ class FunctionsTests(ReusedSQLTestCase):
         self.assertIn("java.lang.RuntimeException", str(cm.exception))
         self.assertIn("2000000", str(cm.exception))
 
-        with self.assertRaises(TypeError) as cm:
+        with self.assertRaises(PySparkException) as pe:
             df.select(assert_true(df.id < 2, 5))
-        self.assertEqual("errMsg should be a Column or a str, got <class 'int'>", str(cm.exception))
+
+        self.checkError(
+            exception=pe,
+            error_class="NOT_COLUMN_OR_STRING",
+            message_parameters={"arg_name": "errMsg", "arg_type": "int"},
+        )
 
     def test_raise_error(self):
         from pyspark.sql.functions import raise_error
@@ -976,10 +1014,13 @@ class FunctionsTests(ReusedSQLTestCase):
         self.assertIn("java.lang.RuntimeException", str(cm.exception))
         self.assertIn("barfoo", str(cm.exception))
 
-        with self.assertRaises(TypeError) as cm:
+        with self.assertRaises(PySparkException) as pe:
             df.select(raise_error(None))
-        self.assertEqual(
-            "errMsg should be a Column or a str, got <class 'NoneType'>", str(cm.exception)
+
+        self.checkError(
+            exception=pe,
+            error_class="NOT_COLUMN_OR_STRING",
+            message_parameters={"arg_name": "errMsg", "arg_type": "NoneType"},
         )
 
     def test_sum_distinct(self):
@@ -1149,6 +1190,78 @@ class FunctionsTests(ReusedSQLTestCase):
         self.assertEqual(expected, dict(actual["items"]))
         self.assertEqual({**expected, **expected2}, dict(actual["merged"]))
         self.assertEqual(expected, actual["from_items"])
+
+    def test_schema_of_json(self):
+        with self.assertRaises(PySparkException) as pe:
+            schema_of_json(1)
+
+        self.checkError(
+            exception=pe,
+            error_class="NOT_COLUMN_OR_STRING",
+            message_parameters={"arg_name": "json", "arg_type": "int"},
+        )
+
+    def test_schema_of_csv(self):
+        with self.assertRaises(PySparkException) as pe:
+            schema_of_csv(1)
+
+        self.checkError(
+            exception=pe,
+            error_class="NOT_COLUMN_OR_STRING",
+            message_parameters={"arg_name": "csv", "arg_type": "int"},
+        )
+
+    def test_from_csv(self):
+        df = self.spark.range(10)
+        with self.assertRaises(PySparkException) as pe:
+            from_csv(df.id, 1)
+
+        self.checkError(
+            exception=pe,
+            error_class="NOT_COLUMN_OR_STRING",
+            message_parameters={"arg_name": "schema", "arg_type": "int"},
+        )
+
+    def test_greatest(self):
+        df = self.spark.range(10)
+        with self.assertRaises(PySparkException) as pe:
+            greatest(df.id)
+
+        self.checkError(
+            exception=pe,
+            error_class="WRONG_NUM_COLUMNS",
+            message_parameters={"func_name": "greatest"},
+        )
+
+    def test_when(self):
+        with self.assertRaises(PySparkException) as pe:
+            when("id", 1)
+
+        self.checkError(
+            exception=pe,
+            error_class="NOT_A_COLUMN",
+            message_parameters={"arg_name": "condition", "arg_type": "str"},
+        )
+
+    def test_window(self):
+        with self.assertRaises(PySparkException) as pe:
+            window("date", 5)
+
+        self.checkError(
+            exception=pe,
+            error_class="NOT_A_STRING",
+            message_parameters={"arg_name": "windowDuration", "arg_type": "int"},
+        )
+
+    def test_session_window(self):
+        with self.assertRaises(PySparkException) as pe:
+            session_window("date", 5)
+
+        self.checkError(
+            exception=pe,
+            error_class="NOT_COLUMN_OR_STRING",
+            message_parameters={"arg_name": "gapDuration", "arg_type": "int"},
+        )
 
 
 if __name__ == "__main__":
