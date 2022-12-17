@@ -60,10 +60,10 @@ class LookupFunctionsSuite extends PlanTest {
               )
             )
           }
-
-          assert(cause.getMessage.contains("Undefined function: undefined_fn"))
-          // SPARK-21318: the error message should contains the current database name
-          assert(cause.getMessage.contains("db1"))
+          checkError(
+            exception = cause,
+            errorClass = "UNRESOLVED_ROUTINE",
+            parameters = Map("routineName" -> "`undefined_fn`", "searchPath" -> "[]"))
         } finally {
           catalog.reset()
         }
