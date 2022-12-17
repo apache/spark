@@ -357,8 +357,10 @@ class Hint(LogicalPlan):
             value.null = True
         elif isinstance(v, int):
             value.integer = v
-        else:
+        elif isinstance(v, str):
             value.string = v
+        else:
+            raise ValueError(f"Could not convert literal for type {type(v)}")
         return value
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:

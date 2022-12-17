@@ -903,7 +903,10 @@ class DataFrame(object):
         name: str
             the name of the hint, for example, "broadcast", "SHUFFLE_MERGE" and "shuffle_hash".
         params: tuple
-            the parameters of the hint
+            the parameters of the hint, theoretically a parameter can be any type, however, at
+            present, we only support int and str since only a limited number of hints are available,
+            for example, in `REPARTITION(3, c)` the "REPARTITION" is hint name and "3" is partition
+            number and "c" is partition expression.
 
         Returns
         -------
