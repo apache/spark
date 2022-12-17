@@ -303,7 +303,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
           dataDistribution = None,
           partitions = None
         )
-      ),
+      )
     )
     inputs.foreach { input =>
       val bytes = serializer.serialize(input)
@@ -335,16 +335,15 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       assert(result.info.partitions.isDefined == input.info.partitions.isDefined)
       if (result.info.partitions.isDefined && input.info.partitions.isDefined) {
         assert(result.info.partitions.get.length == input.info.partitions.get.length)
-        result.info.partitions.get.zip(input.info.partitions.get).foreach {
-          case (p1, p2) =>
-            assert(p1.blockName == p2.blockName)
-            assert(p1.storageLevel == p2.storageLevel)
-            assert(p1.memoryUsed == p2.memoryUsed)
-            assert(p1.diskUsed == p2.diskUsed)
-            assert(p1.executors.length == p2.executors.length)
-            p1.executors.zip(p2.executors).foreach { case (e1, e2) =>
-              e1 == e2
-            }
+        result.info.partitions.get.zip(input.info.partitions.get).foreach { case (p1, p2) =>
+          assert(p1.blockName == p2.blockName)
+          assert(p1.storageLevel == p2.storageLevel)
+          assert(p1.memoryUsed == p2.memoryUsed)
+          assert(p1.diskUsed == p2.diskUsed)
+          assert(p1.executors.length == p2.executors.length)
+          p1.executors.zip(p2.executors).foreach { case (e1, e2) =>
+            e1 == e2
+          }
         }
       }
     }
