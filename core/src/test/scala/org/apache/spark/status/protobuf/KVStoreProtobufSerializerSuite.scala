@@ -301,7 +301,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
           memoryUsed = 70,
           diskUsed = 256,
           dataDistribution = None,
-          partitions = None
+          partitions = Some(Seq.empty)
         )
       )
     )
