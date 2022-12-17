@@ -149,3 +149,7 @@ message ApplicationEnvironmentInfo {
 message ApplicationEnvironmentInfoWrapper {
   ApplicationEnvironmentInfo info = 1;
 }
+
+message ResourceProfileWrapper {
+  ResourceProfileInfo rpInfo = 1;
+}

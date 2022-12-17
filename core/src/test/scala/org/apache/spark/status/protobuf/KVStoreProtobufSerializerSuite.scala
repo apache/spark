@@ -21,7 +21,7 @@ import java.util.Date
 
 import org.apache.spark.{JobExecutionStatus, SparkFunSuite}
 import org.apache.spark.resource.{ExecutorResourceRequest, TaskResourceRequest}
-import org.apache.spark.status.{ApplicationEnvironmentInfoWrapper, JobDataWrapper, TaskDataWrapper}
+import org.apache.spark.status.{ApplicationEnvironmentInfoWrapper, JobDataWrapper, ResourceProfileWrapper, TaskDataWrapper}
 import org.apache.spark.status.api.v1.{AccumulableInfo, ApplicationEnvironmentInfo, JobData, ResourceProfileInfo, RuntimeInfo}
 
 class KVStoreProtobufSerializerSuite extends SparkFunSuite {
@@ -254,6 +254,48 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         assert(p2.taskResources.contains(k))
         assert(p1.taskResources(k) == p2.taskResources(k))
       }
+    }
+  }
+
+  test("Resource Profile") {
+    val input = new ResourceProfileWrapper(
+      rpInfo = new ResourceProfileInfo(
+        id = 0,
+        executorResources = Map(
+          "0" -> new ExecutorResourceRequest(
+            resourceName = "exec1",
+            amount = 1,
+            discoveryScript = "script0",
+            vendor = "apache"),
+          "1" -> new ExecutorResourceRequest(
+            resourceName = "exec2",
+            amount = 1,
+            discoveryScript = "script1",
+            vendor = "apache")
+        ),
+        taskResources = Map(
+          "0" -> new TaskResourceRequest(resourceName = "exec1", amount = 1),
+          "1" -> new TaskResourceRequest(resourceName = "exec2", amount = 1)
+        )
+      )
+    )
+
+    val bytes = serializer.serialize(input)
+    val result = serializer.deserialize(bytes, classOf[ResourceProfileWrapper])
+    assert(result.rpInfo.id == input.rpInfo.id)
+    assert(result.rpInfo.executorResources.size == input.rpInfo.executorResources.size)
+    assert(result.rpInfo.executorResources.keys.size == input.rpInfo.executorResources.keys.size)
+    result.rpInfo.executorResources.keysIterator.foreach { k =>
+      assert(result.rpInfo.executorResources.contains(k))
+      assert(input.rpInfo.executorResources.contains(k))
+      assert(result.rpInfo.executorResources(k) == input.rpInfo.executorResources(k))
+    }
+    assert(result.rpInfo.taskResources.size == input.rpInfo.taskResources.size)
+    assert(result.rpInfo.taskResources.keys.size == input.rpInfo.taskResources.keys.size)
+    result.rpInfo.taskResources.keysIterator.foreach { k =>
+      assert(result.rpInfo.taskResources.contains(k))
+      assert(input.rpInfo.taskResources.contains(k))
+      assert(result.rpInfo.taskResources(k) == input.rpInfo.taskResources(k))
     }
   }
 }
