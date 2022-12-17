@@ -21,8 +21,8 @@ import java.util.Date
 
 import org.apache.spark.{JobExecutionStatus, SparkFunSuite}
 import org.apache.spark.resource.{ExecutorResourceRequest, TaskResourceRequest}
-import org.apache.spark.status.{ApplicationEnvironmentInfoWrapper, JobDataWrapper, TaskDataWrapper}
-import org.apache.spark.status.api.v1.{AccumulableInfo, ApplicationEnvironmentInfo, JobData, ResourceProfileInfo, RuntimeInfo}
+import org.apache.spark.status.{ApplicationEnvironmentInfoWrapper, JobDataWrapper, SpeculationStageSummaryWrapper, TaskDataWrapper}
+import org.apache.spark.status.api.v1.{AccumulableInfo, ApplicationEnvironmentInfo, JobData, ResourceProfileInfo, RuntimeInfo, SpeculationStageSummary}
 
 class KVStoreProtobufSerializerSuite extends SparkFunSuite {
   private val serializer = new KVStoreProtobufSerializer()
@@ -255,5 +255,28 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         assert(p1.taskResources(k) == p2.taskResources(k))
       }
     }
+  }
+
+  test("Speculation Stage Summary") {
+    val input = new SpeculationStageSummaryWrapper(
+      stageId = 1,
+      stageAttemptId = 2,
+      info = new SpeculationStageSummary(
+        numTasks = 3,
+        numActiveTasks = 4,
+        numCompletedTasks = 5,
+        numFailedTasks = 6,
+        numKilledTasks = 7
+      )
+    )
+    val bytes = serializer.serialize(input)
+    val result = serializer.deserialize(bytes, classOf[SpeculationStageSummaryWrapper])
+    assert(result.stageId == input.stageId)
+    assert(result.stageAttemptId == input.stageAttemptId)
+    assert(result.info.numTasks == input.info.numTasks)
+    assert(result.info.numActiveTasks == input.info.numActiveTasks)
+    assert(result.info.numCompletedTasks == input.info.numCompletedTasks)
+    assert(result.info.numFailedTasks == input.info.numFailedTasks)
+    assert(result.info.numKilledTasks == input.info.numKilledTasks)
   }
 }
