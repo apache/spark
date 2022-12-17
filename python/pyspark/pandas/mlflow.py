@@ -113,7 +113,7 @@ def load_model(
     model_uri: str, predict_type: Union[str, type, Dtype] = "infer"
 ) -> PythonModelWrapper:
     """
-    Loads an MLflow model into an wrapper that can be used both for pandas and pandas-on-Spark
+    Loads an MLflow model into a wrapper that can be used both for pandas and pandas-on-Spark
     DataFrame.
 
     Parameters
@@ -122,7 +122,7 @@ def load_model(
         URI pointing to the model. See MLflow documentation for more details.
     predict_type : a python basic type, a numpy basic type, a Spark type or 'infer'.
        This is the return type that is expected when calling the predict function of the model.
-       If 'infer' is specified, the wrapper will attempt to determine automatically the return type
+       If 'infer' is specified, the wrapper will attempt to automatically determine the return type
        based on the model type.
 
     Returns
@@ -181,7 +181,7 @@ def load_model(
     Notes
     -----
     Currently, the model prediction can only be merged back with the existing dataframe.
-    Other columns have to be manually joined.
+    Other columns must be manually joined.
     For example, this code will not work:
 
     >>> df = ps.DataFrame({"x1": [2.0], "x2": [3.0], "z": [-1]})

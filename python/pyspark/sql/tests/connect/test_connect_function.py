@@ -1411,7 +1411,11 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
 
 
 if __name__ == "__main__":
+    import os
     from pyspark.sql.tests.connect.test_connect_function import *  # noqa: F401
+
+    # TODO(SPARK-41547): Enable ANSI mode in this file.
+    os.environ["SPARK_ANSI_SQL_MODE"] = "false"
 
     try:
         import xmlrunner  # type: ignore

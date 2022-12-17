@@ -20,8 +20,9 @@ package org.apache.spark.status.protobuf
 import java.util.Date
 
 import org.apache.spark.{JobExecutionStatus, SparkFunSuite}
-import org.apache.spark.status.{ApplicationInfoWrapper, JobDataWrapper, TaskDataWrapper}
-import org.apache.spark.status.api.v1.{AccumulableInfo, ApplicationAttemptInfo, ApplicationInfo, JobData}
+import org.apache.spark.resource.{ExecutorResourceRequest, TaskResourceRequest}
+import org.apache.spark.status.{ApplicationEnvironmentInfoWrapper, ApplicationInfoWrapper, JobDataWrapper, TaskDataWrapper}
+import org.apache.spark.status.api.v1.{AccumulableInfo, ApplicationAttemptInfo, ApplicationEnvironmentInfo, ApplicationInfo, JobData, ResourceProfileInfo, RuntimeInfo}
 
 class KVStoreProtobufSerializerSuite extends SparkFunSuite {
   private val serializer = new KVStoreProtobufSerializer()
@@ -177,6 +178,85 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     assert(result.stageAttemptId == input.stageAttemptId)
   }
 
+  test("Application Environment Info") {
+    val input = new ApplicationEnvironmentInfoWrapper(
+      new ApplicationEnvironmentInfo(
+        runtime = new RuntimeInfo(
+          javaVersion = "1.8",
+          javaHome = "/tmp/java",
+          scalaVersion = "2.13"),
+        sparkProperties = Seq(("spark.conf.1", "1"), ("spark.conf.2", "2")),
+        hadoopProperties = Seq(("hadoop.conf.conf1", "1"), ("hadoop.conf2", "val2")),
+        systemProperties = Seq(("sys.prop.1", "value1"), ("sys.prop.2", "value2")),
+        metricsProperties = Seq(("metric.1", "klass1"), ("metric2", "klass2")),
+        classpathEntries = Seq(("/jar1", "System"), ("/jar2", "User")),
+        resourceProfiles = Seq(new ResourceProfileInfo(
+          id = 0,
+          executorResources = Map(
+            "0" -> new ExecutorResourceRequest(
+              resourceName = "exec1",
+              amount = 1,
+              discoveryScript = "script0",
+              vendor = "apache"),
+            "1" -> new ExecutorResourceRequest(
+              resourceName = "exec2",
+              amount = 1,
+              discoveryScript = "script1",
+              vendor = "apache")
+          ),
+          taskResources = Map(
+            "0" -> new TaskResourceRequest(resourceName = "exec1", amount = 1),
+            "1" -> new TaskResourceRequest(resourceName = "exec2", amount = 1)
+          )
+        ))
+      )
+    )
+
+    val bytes = serializer.serialize(input)
+    val result = serializer.deserialize(bytes, classOf[ApplicationEnvironmentInfoWrapper])
+    assert(result.info.runtime.javaVersion == input.info.runtime.javaVersion)
+    assert(result.info.runtime.javaHome == input.info.runtime.javaHome)
+    assert(result.info.runtime.scalaVersion == input.info.runtime.scalaVersion)
+    assert(result.info.sparkProperties.length == input.info.sparkProperties.length)
+    result.info.sparkProperties.zip(input.info.sparkProperties).foreach { case (p1, p2) =>
+      assert(p1 == p2)
+    }
+    assert(result.info.hadoopProperties.length == input.info.hadoopProperties.length)
+    result.info.hadoopProperties.zip(input.info.hadoopProperties).foreach { case (p1, p2) =>
+      assert(p1 == p2)
+    }
+    assert(result.info.systemProperties.length == input.info.systemProperties.length)
+    result.info.systemProperties.zip(input.info.systemProperties).foreach { case (p1, p2) =>
+      assert(p1 == p2)
+    }
+    assert(result.info.metricsProperties.length == input.info.metricsProperties.length)
+    result.info.metricsProperties.zip(input.info.metricsProperties).foreach { case (p1, p2) =>
+      assert(p1 == p2)
+    }
+    assert(result.info.classpathEntries.length == input.info.classpathEntries.length)
+    result.info.classpathEntries.zip(input.info.classpathEntries).foreach { case (p1, p2) =>
+      assert(p1 == p2)
+    }
+    assert(result.info.resourceProfiles.length == input.info.resourceProfiles.length)
+    result.info.resourceProfiles.zip(input.info.resourceProfiles).foreach { case (p1, p2) =>
+      assert(p1.id == p2.id)
+      assert(p1.executorResources.size == p2.executorResources.size)
+      assert(p1.executorResources.keys.size == p2.executorResources.keys.size)
+      p1.executorResources.keysIterator.foreach { k =>
+        assert(p1.executorResources.contains(k))
+        assert(p2.executorResources.contains(k))
+        assert(p1.executorResources(k) == p2.executorResources(k))
+      }
+      assert(p1.taskResources.size == p2.taskResources.size)
+      assert(p1.taskResources.keys.size == p2.taskResources.keys.size)
+      p1.taskResources.keysIterator.foreach { k =>
+        assert(p1.taskResources.contains(k))
+        assert(p2.taskResources.contains(k))
+        assert(p1.taskResources(k) == p2.taskResources(k))
+      }
+    }
+  }
+
   test("Application Info") {
     val attempts: Seq[ApplicationAttemptInfo] = Seq(
       ApplicationAttemptInfo(
@@ -207,8 +287,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         maxCores = Some(2),
         coresPerExecutor = Some(3),
         memoryPerExecutorMB = Some(64),
-        attempts = attempts
-      )
+        attempts = attempts)
     )
 
     val bytes = serializer.serialize(input)
