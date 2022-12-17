@@ -149,3 +149,17 @@ message ApplicationEnvironmentInfo {
 message ApplicationEnvironmentInfoWrapper {
   ApplicationEnvironmentInfo info = 1;
 }
+
+message ProcessSummary {
+  string id = 1;
+  string host_port = 2;
+  bool is_active = 3;
+  int32 total_cores = 4;
+  int64 add_time = 5;
+  optional int64 remove_time = 6;
+  map<string, string> process_logs = 7;
+}
+
+message ProcessSummaryWrapper {
+  ProcessSummary info = 1;
+}
