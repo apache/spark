@@ -22,7 +22,6 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -118,21 +117,6 @@ class LegacyTimestampSource extends RelationProvider {
       override def buildScan(): RDD[Row] = {
         sqlContext.sparkContext.parallelize(
           Row(java.sql.Timestamp.valueOf("2022-03-08 12:13:14")) :: Nil)
-      }
-    }
-  }
-}
-
-class TestStatistics extends DataSourceTest with SharedSparkSession {
-  test("") {
-    withTempPath { file =>
-      sql(s"create table test(a string, b string) using parquet " +
-        s"partitioned by (b) location '${file.toString}'")
-      withTable("test") {
-        sql("insert into test partition(b) values(1,2),(2,2)")
-        val partition =
-          spark.sessionState.catalog.getPartition(TableIdentifier("test"), Map("b" -> "2"))
-        assert(partition.stats.nonEmpty)
       }
     }
   }
