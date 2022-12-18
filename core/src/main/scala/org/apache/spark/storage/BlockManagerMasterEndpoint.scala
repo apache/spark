@@ -32,7 +32,7 @@ import com.google.common.cache.CacheBuilder
 import org.apache.spark.{MapOutputTrackerMaster, SparkConf}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.{config, Logging}
-import org.apache.spark.network.shuffle.ExternalBlockStoreClient
+import org.apache.spark.network.shuffle.{ExternalBlockStoreClient, RemoteBlockPushResolver}
 import org.apache.spark.rpc.{IsolatedThreadSafeRpcEndpoint, RpcCallContext, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedClusterMessages, CoarseGrainedSchedulerBackend}
@@ -376,7 +376,8 @@ class BlockManagerMasterEndpoint(
       externalBlockStoreClient.map { shuffleClient =>
         mergerLocations.map { bmId =>
           Future[Boolean] {
-            shuffleClient.removeShuffleMerge(bmId.host, bmId.port, shuffleId, -1)
+            shuffleClient.removeShuffleMerge(bmId.host, bmId.port, shuffleId,
+              RemoteBlockPushResolver.DELETE_CURRENT_MERGED_SHUFFLE_ID)
           }
         }
       }.getOrElse(Seq.empty)
