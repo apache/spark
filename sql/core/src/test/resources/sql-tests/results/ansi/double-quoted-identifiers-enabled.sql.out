@@ -135,7 +135,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "routineName" : "`not_exist`",
-    "searchPath" : "[]"
+    "searchPath" : "[system.builtin, system.session, spark_catalog]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -158,7 +158,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "routineName" : "`not_exist`.`not_exist`",
-    "searchPath" : "[]"
+    "searchPath" : "[system.builtin, system.session, spark_catalog]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -306,7 +306,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "routineName" : "`not_exist`",
-    "searchPath" : "[]"
+    "searchPath" : "[system.builtin, system.session, spark_catalog]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -329,7 +329,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "routineName" : "`not_exist`.`not_exist`",
-    "searchPath" : "[]"
+    "searchPath" : "[system.builtin, system.session, spark_catalog]"
   },
   "queryContext" : [ {
     "objectType" : "",

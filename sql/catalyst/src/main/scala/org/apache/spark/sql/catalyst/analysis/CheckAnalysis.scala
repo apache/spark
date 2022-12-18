@@ -171,7 +171,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
       case u: UnresolvedFunc =>
         throw QueryCompilationErrors.unresolvedRoutineError(
-          u.multipartIdentifier, Seq.empty, u.origin)
+          u.multipartIdentifier,
+          Seq("system.builtin", "system.session"),
+          u.origin)
 
       case u: UnresolvedHint =>
         u.failAnalysis(

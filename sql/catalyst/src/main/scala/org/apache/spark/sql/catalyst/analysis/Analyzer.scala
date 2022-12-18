@@ -2185,7 +2185,10 @@ class Analyzer(override val catalogManager: CatalogManager)
               externalFunctionNameSet.add(fullName)
               f
             } else {
-              throw QueryCompilationErrors.unresolvedRoutineError(nameParts, Seq.empty, f.origin)
+              throw QueryCompilationErrors.unresolvedRoutineError(
+                nameParts,
+                Seq("system.builtin", "system.session", catalog.name()),
+                f.origin)
             }
           }
       }
@@ -2284,7 +2287,10 @@ class Analyzer(override val catalogManager: CatalogManager)
                   "class" -> other.getClass.getCanonicalName))
               // We don't support persistent high-order functions yet.
             }.getOrElse {
-              throw QueryCompilationErrors.unresolvedRoutineError(nameParts, Seq.empty, u.origin)
+              throw QueryCompilationErrors.unresolvedRoutineError(
+                nameParts,
+                Seq("system.builtin", "system.session"),
+                u.origin)
             }
           }
 

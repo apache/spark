@@ -1428,7 +1428,9 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       },
       errorClass = "UNRESOLVED_ROUTINE",
       sqlState = None,
-      parameters = Map("routineName" -> "`not_a_udf`", "searchPath" -> "[]"),
+      parameters = Map(
+        "routineName" -> "`not_a_udf`",
+        "searchPath" -> "[system.builtin, system.session, spark_catalog]"),
       context = ExpectedContext(
         fragment = "not_a_udf()",
         start = 0,
@@ -1443,7 +1445,9 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
           },
           errorClass = "UNRESOLVED_ROUTINE",
           sqlState = None,
-          parameters = Map("routineName" -> "`not_a_udf`", "searchPath" -> "[]"),
+          parameters = Map(
+            "routineName" -> "`not_a_udf`",
+            "searchPath" -> "[system.builtin, system.session, spark_catalog]"),
           context = ExpectedContext(
             fragment = "not_a_udf()",
             start = 0,

@@ -2084,9 +2084,13 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         sql("REFRESH FUNCTION default.md5")
       },
       errorClass = "UNRESOLVED_ROUTINE",
-      parameters = Map("routineName" -> "`default`.`md5`", "searchPath" -> "[]"),
+      parameters = Map(
+        "routineName" -> "`default`.`md5`",
+        "searchPath" -> "[system.builtin, system.session]"),
       context = ExpectedContext(
-        fragment = "REFRESH FUNCTION default.md5", start = 0, stop = 27))
+        fragment = "REFRESH FUNCTION default.md5",
+        start = 0,
+        stop = 27))
 
     withUserDefinedFunction("func1" -> true) {
       sql("CREATE TEMPORARY FUNCTION func1 AS 'test.org.apache.spark.sql.MyDoubleAvg'")
@@ -2114,7 +2118,9 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
           sql("REFRESH FUNCTION func2")
         },
         errorClass = "UNRESOLVED_ROUTINE",
-        parameters = Map("routineName" -> "`func2`", "searchPath" -> "[]"),
+        parameters = Map(
+          "routineName" -> "`func2`",
+          "searchPath" -> "[system.builtin, system.session]"),
         context = ExpectedContext(
           fragment = "REFRESH FUNCTION func2",
           start = 0,

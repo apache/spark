@@ -440,7 +440,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "routineName" : "`range`",
-    "searchPath" : "[]"
+    "searchPath" : "[system.builtin, system.session, spark_catalog]"
   },
   "queryContext" : [ {
     "objectType" : "",

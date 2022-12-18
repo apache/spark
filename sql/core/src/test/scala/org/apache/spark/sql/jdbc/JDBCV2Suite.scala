@@ -2554,7 +2554,9 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
           checkAnswer(sql("SELECT h2.test.my_avg2(id) FROM h2.test.people"), Seq.empty)
         },
         errorClass = "UNRESOLVED_ROUTINE",
-        parameters = Map("routineName" -> "`h2`.`test`.`my_avg2`", "searchPath" -> "[]"),
+        parameters = Map(
+          "routineName" -> "`h2`.`test`.`my_avg2`",
+          "searchPath" -> "[system.builtin, system.session, h2]"),
         context = ExpectedContext(
           fragment = "h2.test.my_avg2(id)",
           start = 7,
@@ -2564,7 +2566,9 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
           checkAnswer(sql("SELECT h2.my_avg2(id) FROM h2.test.people"), Seq.empty)
         },
         errorClass = "UNRESOLVED_ROUTINE",
-        parameters = Map("routineName" -> "`h2`.`my_avg2`", "searchPath" -> "[]"),
+        parameters = Map(
+          "routineName" -> "`h2`.`my_avg2`",
+          "searchPath" -> "[system.builtin, system.session, h2]"),
         context = ExpectedContext(
           fragment = "h2.my_avg2(id)",
           start = 7,

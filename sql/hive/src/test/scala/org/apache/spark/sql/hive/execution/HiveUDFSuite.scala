@@ -577,7 +577,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
             errorClass = "UNRESOLVED_ROUTINE",
             parameters = Map(
               "routineName" -> "`dAtABaSe1`.`unknownFunc`",
-              "searchPath" -> "[]"),
+              "searchPath" -> "[system.builtin, system.session, spark_catalog]"),
             context = ExpectedContext(
               fragment = "dAtABaSe1.unknownFunc(1)",
               start = 7,
