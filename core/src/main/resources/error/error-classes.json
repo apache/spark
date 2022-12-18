@@ -904,13 +904,6 @@
     ],
     "sqlState" : "42000"
   },
-  "NOT_ENOUGH_DATA_COLUMNS" : {
-    "message" : [
-      "Cannot write to <tableName>, not enough data columns:",
-      "Table columns: <tableCols>",
-      "Data columns: <dataCols>"
-    ]
-  },
   "NO_HANDLER_FOR_UDAF" : {
     "message" : [
       "No handler for UDAF '<functionName>'. Use sparkSession.udf.register(...) instead."
