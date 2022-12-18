@@ -657,7 +657,7 @@ class Frame(object, metaclass=ABCMeta):
         quotechar: str = '"',
         date_format: Optional[str] = None,
         escapechar: Optional[str] = None,
-        repartition: Optional[int] = None,
+        num_files: Optional[int] = None,
         mode: str = "w",
         partition_cols: Optional[Union[str, List[str]]] = None,
         index_col: Optional[Union[str, List[str]]] = None,
@@ -671,8 +671,8 @@ class Frame(object, metaclass=ABCMeta):
 
         .. note:: pandas-on-Spark writes CSV files into the directory, `path`, and writes
             multiple `part-...` files in the directory when `path` is specified.
-            This behavior was inherited from Apache Spark. The number of files can
-            be controlled by `repartition`.
+            This behavior was inherited from Apache Spark. The number of partitions can
+            be controlled by `num_files`. This is deprecated use `repartition`.
 
         Parameters
         ----------
@@ -694,8 +694,8 @@ class Frame(object, metaclass=ABCMeta):
         escapechar: str, default None
             String of length 1. Character used to escape `sep` and `quotechar`
             when appropriate.
-        repartition: the number of files to be written in `path` directory when
-            this is a path.
+        num_files: the number of partitions to be written in `path` directory when
+            this is a path. This is deprecated use `repartition`.
         mode: str
             Python write mode, default 'w'.
 
@@ -884,7 +884,7 @@ class Frame(object, metaclass=ABCMeta):
         self,
         path: Optional[str] = None,
         compression: str = "uncompressed",
-        repartition: Optional[int] = None,
+        num_files: Optional[int] = None,
         mode: str = "w",
         orient: str = "records",
         lines: bool = True,
@@ -900,8 +900,8 @@ class Frame(object, metaclass=ABCMeta):
 
         .. note:: pandas-on-Spark writes JSON files into the directory, `path`, and writes
             multiple `part-...` files in the directory when `path` is specified.
-            This behavior was inherited from Apache Spark. The number of files can
-            be controlled by `repartition`.
+            This behavior was inherited from Apache Spark. The number of partitions can
+            be controlled by `num_files`. This is deprecated use `repartition`.
 
         .. note:: output JSON format is different from pandas'. It always uses `orient='records'`
             for its output. This behavior might have to change soon.
@@ -927,8 +927,8 @@ class Frame(object, metaclass=ABCMeta):
             A string representing the compression to use in the output file,
             only used when the first argument is a filename. By default, the
             compression is inferred from the filename.
-        repartition: the number of files to be written in `path` directory when
-            this is a path.
+        num_files: the number of partitions to be written in `path` directory when
+            this is a path. This is deprecated use `repartition`.
         mode: str
             Python write mode, default 'w'.
 
@@ -973,7 +973,8 @@ class Frame(object, metaclass=ABCMeta):
         0     a     b
         1     c     d
 
-        >>> df['col 1'].to_json(path=r'%s/to_json/foo.json' % path, repartition=1, index_col="index")
+        >>> df['col 1'].to_json(path=r'%s/to_json/foo.json' % path, repartition=1,
+        ...     index_col="index")
         >>> ps.read_json(
         ...     path=r'%s/to_json/foo.json' % path, index_col="index"
         ... ).sort_values(by="col 1")  # doctest: +NORMALIZE_WHITESPACE
