@@ -245,8 +245,7 @@ case class StructsToCsv(
      options: Map[String, String],
      child: Expression,
      timeZoneId: Option[String] = None)
-  extends UnaryExpression with TimeZoneAwareExpression with ExpectsInputTypes
-    with NullIntolerant with Serializable {
+  extends UnaryExpression with TimeZoneAwareExpression with ExpectsInputTypes with NullIntolerant {
   override def nullable: Boolean = true
 
   def this(options: Map[String, String], child: Expression) = this(options, child, None)
