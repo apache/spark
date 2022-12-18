@@ -16,6 +16,7 @@
 #
 from pyspark.sql.connect.column import (
     Column,
+    CaseWhen,
     Expression,
     LiteralExpression,
     ColumnReference,
@@ -549,53 +550,53 @@ def spark_partition_id() -> Column:
     return _invoke_function("spark_partition_id")
 
 
-# TODO(SPARK-41319): Support case-when in Column
-# def when(condition: Column, value: Any) -> Column:
-#     """Evaluates a list of conditions and returns one of multiple possible result expressions.
-#     If :func:`pyspark.sql.Column.otherwise` is not invoked, None is returned for unmatched
-#     conditions.
-#
-#     .. versionadded:: 3.4.0
-#
-#     Parameters
-#     ----------
-#     condition : :class:`~pyspark.sql.Column`
-#         a boolean :class:`~pyspark.sql.Column` expression.
-#     value :
-#         a literal value, or a :class:`~pyspark.sql.Column` expression.
-#
-#     Returns
-#     -------
-#     :class:`~pyspark.sql.Column`
-#         column representing when expression.
-#
-#     Examples
-#     --------
-#     >>> df = spark.range(3)
-#     >>> df.select(when(df['id'] == 2, 3).otherwise(4).alias("age")).show()
-#     +---+
-#     |age|
-#     +---+
-#     |  4|
-#     |  4|
-#     |  3|
-#     +---+
-#
-#     >>> df.select(when(df.id == 2, df.id + 1).alias("age")).show()
-#     +----+
-#     | age|
-#     +----+
-#     |null|
-#     |null|
-#     |   3|
-#     +----+
-#     """
-#     # Explicitly not using ColumnOrName type here to make reading condition less opaque
-#     if not isinstance(condition, Column):
-#         raise TypeError("condition should be a Column")
-#     v = value._jc if isinstance(value, Column) else value
-#
-#     return _invoke_function("when", condition._jc, v)
+def when(condition: Column, value: Any) -> Column:
+    """Evaluates a list of conditions and returns one of multiple possible result expressions.
+    If :func:`pyspark.sql.Column.otherwise` is not invoked, None is returned for unmatched
+    conditions.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    condition : :class:`~pyspark.sql.Column`
+        a boolean :class:`~pyspark.sql.Column` expression.
+    value :
+        a literal value, or a :class:`~pyspark.sql.Column` expression.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        column representing when expression.
+
+    Examples
+    --------
+    >>> df = spark.range(3)
+    >>> df.select(when(df['id'] == 2, 3).otherwise(4).alias("age")).show()
+    +---+
+    |age|
+    +---+
+    |  4|
+    |  4|
+    |  3|
+    +---+
+
+    >>> df.select(when(df.id == 2, df.id + 1).alias("age")).show()
+    +----+
+    | age|
+    +----+
+    |null|
+    |null|
+    |   3|
+    +----+
+    """
+    # Explicitly not using ColumnOrName type here to make reading condition less opaque
+    if not isinstance(condition, Column):
+        raise TypeError("condition should be a Column")
+
+    value_col = value if isinstance(value, Column) else lit(value)
+
+    return Column(CaseWhen(branches=[(condition._expr, value_col._expr)], else_value=None))
 
 
 # Sort Functions
@@ -1067,7 +1068,7 @@ def atanh(col: "ColumnOrName") -> Column:
 def bin(col: "ColumnOrName") -> Column:
     """Returns the string representation of the binary value of the given column.
 
-    .. versionadded:: 1.5.0
+    .. versionadded:: 3.4.0
 
     Parameters
     ----------
@@ -5710,6 +5711,680 @@ def encode(col: "ColumnOrName", charset: str) -> Column:
     +----------------+
     """
     return _invoke_function("encode", _to_col(col), lit(charset))
+
+
+# TODO(SPARK-41473): Resolve the data type mismatch issue and enable the function
+# def format_number(col: "ColumnOrName", d: int) -> Column:
+#     """
+#     Formats the number X to a format like '#,--#,--#.--', rounded to d decimal places
+#     with HALF_EVEN round mode, and returns the result as a string.
+#
+#     .. versionadded:: 3.4.0
+#
+#     Parameters
+#     ----------
+#     col : :class:`~pyspark.sql.Column` or str
+#         the column name of the numeric value to be formatted
+#     d : int
+#         the N decimal places
+#
+#     Returns
+#     -------
+#     :class:`~pyspark.sql.Column`
+#         the column of formatted results.
+#
+#     >>> spark.createDataFrame([(5,)], ['a']).select(format_number('a', 4).alias('v')).collect()
+#     [Row(v='5.0000')]
+#     """
+#     return _invoke_function("format_number", _to_col(col), lit(d))
+
+
+def format_string(format: str, *cols: "ColumnOrName") -> Column:
+    """
+    Formats the arguments in printf-style and returns the result as a string column.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    format : str
+        string that can contain embedded format tags and used as result column's value
+    cols : :class:`~pyspark.sql.Column` or str
+        column names or :class:`~pyspark.sql.Column`\\s to be used in formatting
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column of formatted results.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(5, "hello")], ['a', 'b'])
+    >>> df.select(format_string('%d %s', df.a, df.b).alias('v')).collect()
+    [Row(v='5 hello')]
+    """
+    return _invoke_function("format_string", lit(format), *[_to_col(c) for c in cols])
+
+
+def instr(str: "ColumnOrName", substr: str) -> Column:
+    """
+    Locate the position of the first occurrence of substr column in the given string.
+    Returns null if either of the arguments are null.
+
+    .. versionadded:: 3.4.0
+
+    Notes
+    -----
+    The position is not zero based, but 1 based index. Returns 0 if substr
+    could not be found in str.
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+    substr : str
+        substring to look for.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        location of the first occurence of the substring as integer.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('abcd',)], ['s',])
+    >>> df.select(instr(df.s, 'b').alias('s')).collect()
+    [Row(s=2)]
+    """
+    return _invoke_function("instr", _to_col(str), lit(substr))
+
+
+def overlay(
+    src: "ColumnOrName",
+    replace: "ColumnOrName",
+    pos: Union["ColumnOrName", int],
+    len: Union["ColumnOrName", int] = -1,
+) -> Column:
+    """
+    Overlay the specified portion of `src` with `replace`,
+    starting from byte position `pos` of `src` and proceeding for `len` bytes.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    src : :class:`~pyspark.sql.Column` or str
+        column name or column containing the string that will be replaced
+    replace : :class:`~pyspark.sql.Column` or str
+        column name or column containing the substitution string
+    pos : :class:`~pyspark.sql.Column` or str or int
+        column name, column, or int containing the starting position in src
+    len : :class:`~pyspark.sql.Column` or str or int, optional
+        column name, column, or int containing the number of bytes to replace in src
+        string by 'replace' defaults to -1, which represents the length of the 'replace' string
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        string with replaced values.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("SPARK_SQL", "CORE")], ("x", "y"))
+    >>> df.select(overlay("x", "y", 7).alias("overlayed")).collect()
+    [Row(overlayed='SPARK_CORE')]
+    >>> df.select(overlay("x", "y", 7, 0).alias("overlayed")).collect()
+    [Row(overlayed='SPARK_CORESQL')]
+    >>> df.select(overlay("x", "y", 7, 2).alias("overlayed")).collect()
+    [Row(overlayed='SPARK_COREL')]
+    """
+    if not isinstance(pos, (int, str, Column)):
+        raise TypeError(
+            "pos should be an integer or a Column / column name, got {}".format(type(pos))
+        )
+    if len is not None and not isinstance(len, (int, str, Column)):
+        raise TypeError(
+            "len should be an integer or a Column / column name, got {}".format(type(len))
+        )
+
+    if isinstance(pos, int):
+        pos = lit(pos)
+    if isinstance(len, int):
+        len = lit(len)
+
+    return _invoke_function_over_columns("overlay", src, replace, pos, len)
+
+
+def sentences(
+    string: "ColumnOrName",
+    language: Optional["ColumnOrName"] = None,
+    country: Optional["ColumnOrName"] = None,
+) -> Column:
+    """
+    Splits a string into arrays of sentences, where each sentence is an array of words.
+    The 'language' and 'country' arguments are optional, and if omitted, the default locale is used.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    string : :class:`~pyspark.sql.Column` or str
+        a string to be split
+    language : :class:`~pyspark.sql.Column` or str, optional
+        a language of the locale
+    country : :class:`~pyspark.sql.Column` or str, optional
+        a country of the locale
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        arrays of split sentences.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([["This is an example sentence."]], ["string"])
+    >>> df.select(sentences(df.string, lit("en"), lit("US"))).show(truncate=False)
+    +-----------------------------------+
+    |sentences(string, en, US)          |
+    +-----------------------------------+
+    |[[This, is, an, example, sentence]]|
+    +-----------------------------------+
+    >>> df = spark.createDataFrame([["Hello world. How are you?"]], ["s"])
+    >>> df.select(sentences("s")).show(truncate=False)
+    +---------------------------------+
+    |sentences(s, , )                 |
+    +---------------------------------+
+    |[[Hello, world], [How, are, you]]|
+    +---------------------------------+
+    """
+    _language = lit("") if language is None else _to_col(language)
+    _country = lit("") if country is None else _to_col(country)
+
+    return _invoke_function("sentences", _to_col(string), _language, _country)
+
+
+def substring(str: "ColumnOrName", pos: int, len: int) -> Column:
+    """
+    Substring starts at `pos` and is of length `len` when str is String type or
+    returns the slice of byte array that starts at `pos` in byte and is of length `len`
+    when str is Binary type.
+
+    .. versionadded:: 3.4.0
+
+    Notes
+    -----
+    The position is not zero based, but 1 based index.
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+    pos : int
+        starting position in str.
+    len : int
+        length of chars.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        substring of given value.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('abcd',)], ['s',])
+    >>> df.select(substring(df.s, 1, 2).alias('s')).collect()
+    [Row(s='ab')]
+    """
+    return _invoke_function("substring", _to_col(str), lit(pos), lit(len))
+
+
+def substring_index(str: "ColumnOrName", delim: str, count: int) -> Column:
+    """
+    Returns the substring from string str before count occurrences of the delimiter delim.
+    If count is positive, everything the left of the final delimiter (counting from left) is
+    returned. If count is negative, every to the right of the final delimiter (counting from the
+    right) is returned. substring_index performs a case-sensitive match when searching for delim.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+    delim : str
+        delimiter of values.
+    count : int
+        number of occurences.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        substring of given value.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('a.b.c.d',)], ['s'])
+    >>> df.select(substring_index(df.s, '.', 2).alias('s')).collect()
+    [Row(s='a.b')]
+    >>> df.select(substring_index(df.s, '.', -3).alias('s')).collect()
+    [Row(s='b.c.d')]
+    """
+    return _invoke_function("substring_index", _to_col(str), lit(delim), lit(count))
+
+
+def levenshtein(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """Computes the Levenshtein distance of the two given strings.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or str
+        first column value.
+    right : :class:`~pyspark.sql.Column` or str
+        second column value.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Levenshtein distance as integer value.
+
+    Examples
+    --------
+    >>> df0 = spark.createDataFrame([('kitten', 'sitting',)], ['l', 'r'])
+    >>> df0.select(levenshtein('l', 'r').alias('d')).collect()
+    [Row(d=3)]
+    """
+    return _invoke_function_over_columns("levenshtein", left, right)
+
+
+def locate(substr: str, str: "ColumnOrName", pos: int = 1) -> Column:
+    """
+    Locate the position of the first occurrence of substr in a string column, after position pos.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    substr : str
+        a string
+    str : :class:`~pyspark.sql.Column` or str
+        a Column of :class:`pyspark.sql.types.StringType`
+    pos : int, optional
+        start position (zero based)
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        position of the substring.
+
+    Notes
+    -----
+    The position is not zero based, but 1 based index. Returns 0 if substr
+    could not be found in str.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('abcd',)], ['s',])
+    >>> df.select(locate('b', df.s, 1).alias('s')).collect()
+    [Row(s=2)]
+    """
+    return _invoke_function("locate", lit(substr), _to_col(str), lit(pos))
+
+
+def lpad(col: "ColumnOrName", len: int, pad: str) -> Column:
+    """
+    Left-pad the string column to width `len` with `pad`.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+    len : int
+        length of the final string.
+    pad : str
+        chars to prepend.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        left padded result.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('abcd',)], ['s',])
+    >>> df.select(lpad(df.s, 6, '#').alias('s')).collect()
+    [Row(s='##abcd')]
+    """
+    return _invoke_function("lpad", _to_col(col), lit(len), lit(pad))
+
+
+def rpad(col: "ColumnOrName", len: int, pad: str) -> Column:
+    """
+    Right-pad the string column to width `len` with `pad`.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+    len : int
+        length of the final string.
+    pad : str
+        chars to append.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        right padded result.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('abcd',)], ['s',])
+    >>> df.select(rpad(df.s, 6, '#').alias('s')).collect()
+    [Row(s='abcd##')]
+    """
+    return _invoke_function("rpad", _to_col(col), lit(len), lit(pad))
+
+
+def repeat(col: "ColumnOrName", n: int) -> Column:
+    """
+    Repeats a string column n times, and returns it as a new string column.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+    n : int
+        number of times to repeat value.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        string with repeated values.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('ab',)], ['s',])
+    >>> df.select(repeat(df.s, 3).alias('s')).collect()
+    [Row(s='ababab')]
+    """
+    return _invoke_function("repeat", _to_col(col), lit(n))
+
+
+def split(str: "ColumnOrName", pattern: str, limit: int = -1) -> Column:
+    """
+    Splits str around matches of the given pattern.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or str
+        a string expression to split
+    pattern : str
+        a string representing a regular expression. The regex string should be
+        a Java regular expression.
+    limit : int, optional
+        an integer which controls the number of times `pattern` is applied.
+
+        * ``limit > 0``: The resulting array's length will not be more than `limit`, and the
+                         resulting array's last entry will contain all input beyond the last
+                         matched pattern.
+        * ``limit <= 0``: `pattern` will be applied as many times as possible, and the resulting
+                          array can be of any size.
+
+        `split` now takes an optional `limit` field. If not provided, default limit value is -1.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        array of separated strings.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('oneAtwoBthreeC',)], ['s',])
+    >>> df.select(split(df.s, '[ABC]', 2).alias('s')).collect()
+    [Row(s=['one', 'twoBthreeC'])]
+    >>> df.select(split(df.s, '[ABC]', -1).alias('s')).collect()
+    [Row(s=['one', 'two', 'three', ''])]
+    """
+    return _invoke_function("split", _to_col(str), lit(pattern), lit(limit))
+
+
+def regexp_extract(str: "ColumnOrName", pattern: str, idx: int) -> Column:
+    r"""Extract a specific group matched by a Java regex, from the specified string column.
+    If the regex did not match, or the specified group did not match, an empty string is returned.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+    pattern : str
+        regex pattern to apply.
+    idx : int
+        matched group id.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        matched value specified by `idx` group id.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('100-200',)], ['str'])
+    >>> df.select(regexp_extract('str', r'(\d+)-(\d+)', 1).alias('d')).collect()
+    [Row(d='100')]
+    >>> df = spark.createDataFrame([('foo',)], ['str'])
+    >>> df.select(regexp_extract('str', r'(\d+)', 1).alias('d')).collect()
+    [Row(d='')]
+    >>> df = spark.createDataFrame([('aaaac',)], ['str'])
+    >>> df.select(regexp_extract('str', '(a+)(b)?(c)', 2).alias('d')).collect()
+    [Row(d='')]
+    """
+    return _invoke_function("regexp_extract", _to_col(str), lit(pattern), lit(idx))
+
+
+def regexp_replace(
+    string: "ColumnOrName", pattern: Union[str, Column], replacement: Union[str, Column]
+) -> Column:
+    r"""Replace all substrings of the specified string value that match regexp with replacement.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    string : :class:`~pyspark.sql.Column` or str
+        column name or column containing the string value
+    pattern : :class:`~pyspark.sql.Column` or str
+        column object or str containing the regexp pattern
+    replacement : :class:`~pyspark.sql.Column` or str
+        column object or str containing the replacement
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        string with all substrings replaced.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("100-200", r"(\d+)", "--")], ["str", "pattern", "replacement"])
+    >>> df.select(regexp_replace('str', r'(\d+)', '--').alias('d')).collect()
+    [Row(d='-----')]
+    >>> df.select(regexp_replace("str", col("pattern"), col("replacement")).alias('d')).collect()
+    [Row(d='-----')]
+    """
+    if isinstance(pattern, str):
+        pattern = lit(pattern)
+
+    if isinstance(replacement, str):
+        replacement = lit(replacement)
+
+    return _invoke_function("regexp_replace", _to_col(string), pattern, replacement)
+
+
+def initcap(col: "ColumnOrName") -> Column:
+    """Translate the first letter of each word to upper case in the sentence.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        string with all first letters are uppercase in each word.
+
+    Examples
+    --------
+    >>> spark.createDataFrame([('ab cd',)], ['a']).select(initcap("a").alias('v')).collect()
+    [Row(v='Ab Cd')]
+    """
+    return _invoke_function_over_columns("initcap", col)
+
+
+def soundex(col: "ColumnOrName") -> Column:
+    """
+    Returns the SoundEx encoding for a string
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        SoundEx encoded string.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("Peters",),("Uhrbach",)], ['name'])
+    >>> df.select(soundex(df.name).alias("soundex")).collect()
+    [Row(soundex='P362'), Row(soundex='U612')]
+    """
+    return _invoke_function_over_columns("soundex", col)
+
+
+def length(col: "ColumnOrName") -> Column:
+    """Computes the character length of string data or number of bytes of binary data.
+    The length of character data includes the trailing spaces. The length of binary data
+    includes binary zeros.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        length of the value.
+
+    Examples
+    --------
+    >>> spark.createDataFrame([('ABC ',)], ['a']).select(length('a').alias('length')).collect()
+    [Row(length=4)]
+    """
+    return _invoke_function_over_columns("length", col)
+
+
+def octet_length(col: "ColumnOrName") -> Column:
+    """
+    Calculates the byte length for the specified string column.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        Source column or strings
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Byte length of the col
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import octet_length
+    >>> spark.createDataFrame([('cat',), ( '\U0001F408',)], ['cat']) \\
+    ...      .select(octet_length('cat')).collect()
+        [Row(octet_length(cat)=3), Row(octet_length(cat)=4)]
+    """
+    return _invoke_function_over_columns("octet_length", col)
+
+
+def bit_length(col: "ColumnOrName") -> Column:
+    """
+    Calculates the bit length for the specified string column.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        Source column or strings
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Bit length of the col
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import bit_length
+    >>> spark.createDataFrame([('cat',), ( '\U0001F408',)], ['cat']) \\
+    ...      .select(bit_length('cat')).collect()
+        [Row(bit_length(cat)=24), Row(bit_length(cat)=32)]
+    """
+    return _invoke_function_over_columns("bit_length", col)
+
+
+def translate(srcCol: "ColumnOrName", matching: str, replace: str) -> Column:
+    """A function translate any character in the `srcCol` by a character in `matching`.
+    The characters in `replace` is corresponding to the characters in `matching`.
+    Translation will happen whenever any character in the string is matching with the character
+    in the `matching`.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    srcCol : :class:`~pyspark.sql.Column` or str
+        Source column or strings
+    matching : str
+        matching characters.
+    replace : str
+        characters for replacement. If this is shorter than `matching` string then
+        those chars that don't have replacement will be dropped.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        replaced value.
+
+    Examples
+    --------
+    >>> spark.createDataFrame([('translate',)], ['a']).select(translate('a', "rnlt", "123") \\
+    ...     .alias('r')).collect()
+    [Row(r='1a2s3ae')]
+    """
+    return _invoke_function("translate", _to_col(srcCol), lit(matching), lit(replace))
 
 
 # Date/Timestamp functions

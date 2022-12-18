@@ -1016,7 +1016,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       case s: ExposesMetadataColumns => s.withMetadataColumns()
       case p: Project =>
         val newProj = p.copy(
-          projectList = p.metadataOutput ++ p.projectList,
+          projectList = p.projectList ++ p.metadataOutput,
           child = addMetadataCol(p.child))
         newProj.copyTagsFrom(p)
         newProj

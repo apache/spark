@@ -33,10 +33,9 @@ for schema inference, and once for processing actual data with the schema.
 
 To avoid the consequences, pandas API on Spark has its own type hinting style to specify the schema to avoid
 schema inference. Pandas API on Spark understands the type hints specified in the return type and converts it
-as a Spark schema for pandas UDFs used internally. The way of type hinting has been evolved over
-the time.
+as a Spark schema for pandas UDFs used internally. The way of type hinting has evolved over time.
 
-In this chapter, it covers the recommended way and the supported ways in details.
+This chapter covers the recommended way and the supported ways in detail.
 
 .. note::
     The variadic generics support is experimental and unstable in pandas API on Spark.
@@ -94,7 +93,7 @@ Type Hinting with Names
 This approach is to overcome the limitations in the existing type
 hinting especially for DataFrame. When you use a DataFrame as the return type hint, for example,
 ``DataFrame[int, int]``, there is no way to specify the names of each Series. In the old way, pandas API on Spark just generates
-the column names as ``c#`` and this easily leads users to lose or forgot the Series mappings. See the example below:
+the column names as ``c#`` and this easily leads users to lose or forget the Series mappings. See the example below:
 
 .. code-block:: python
 
@@ -113,7 +112,7 @@ the column names as ``c#`` and this easily leads users to lose or forgot the Ser
     3   3   4
     4   4   5
 
-The new style of type hinting in pandas API on Spark is similar with the regular Python type hints in variables. The Series name
+The new style of type hinting in pandas API on Spark is similar to the regular Python type hints in variables. The Series name
 is specified as a string, and the type is specified after a colon. The following example shows a simple case with
 the Series names, ``id`` and ``A``, and ``int`` types respectively.
 
@@ -134,7 +133,7 @@ the Series names, ``id`` and ``A``, and ``int`` types respectively.
     3   3   4
     4   4   5
 
-In addition, pandas API on Spark also dynamically supports ``dtype`` instance and the column index in pandas so that users can
+In addition, pandas API on Spark also dynamically supports ``dtype`` instances and the column index in pandas so that users can
 programmatically generate the return type and schema.
 
 .. code-block:: python

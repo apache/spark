@@ -551,6 +551,20 @@ class SparkConnectPlanner(session: SparkSession) {
             .Product(transformExpression(fun.getArgumentsList.asScala.head))
             .toAggregateExpression())
 
+      case "when" =>
+        if (fun.getArgumentsCount == 0) {
+          throw InvalidPlanInput("CaseWhen requires at least one child expression")
+        }
+        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
+        Some(CaseWhen.createFromParser(children))
+
+      case "in" =>
+        if (fun.getArgumentsCount == 0) {
+          throw InvalidPlanInput("In requires at least one child expression")
+        }
+        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
+        Some(In(children.head, children.tail))
+
       case _ => None
     }
   }

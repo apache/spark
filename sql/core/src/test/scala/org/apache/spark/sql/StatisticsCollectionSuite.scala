@@ -76,6 +76,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       val viewName = "view"
       withView(viewName) {
         sql(s"CREATE VIEW $viewName AS SELECT * FROM $tableName")
+
         assertAnalyzeUnsupported(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
         assertAnalyzeUnsupported(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
       }
@@ -128,11 +129,11 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         exception = intercept[AnalysisException] {
           sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS data")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1235",
+        errorClass = "UNSUPPORTED_FEATURE.ANALYZE_UNSUPPORTED_COLUMN_TYPE",
         parameters = Map(
-          "name" -> "data",
-          "tableIdent" -> "`spark_catalog`.`default`.`column_stats_test1`",
-          "dataType" -> "ArrayType(IntegerType,true)"
+          "columnType" -> "\"ARRAY<INT>\"",
+          "columnName" -> "`data`",
+          "tableName" -> "`spark_catalog`.`default`.`column_stats_test1`"
         )
       )
 
