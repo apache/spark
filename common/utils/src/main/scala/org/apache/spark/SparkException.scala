@@ -126,10 +126,9 @@ private[spark] case class SparkUserAppException(exitCode: Int)
 /**
  * Exception thrown when the relative executor to access is dead.
  */
-private[spark] case class ExecutorDeadException(message: String)
+private[spark] case class ExecutorDeadException(message: String, isDecommissioned: Boolean = false)
   extends SparkException(errorClass = "INTERNAL_ERROR_NETWORK",
     messageParameters = Map("message" -> message), cause = null)
-
 /**
  * Exception thrown when Spark returns different result after upgrading to a new version.
  */

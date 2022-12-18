@@ -2025,6 +2025,31 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     assert(master.getPeers(store3.blockManagerId).map(_.executorId).toSet === Set(exec2))
   }
 
+  test("SPARK-41954: test isExecutorAlive return correct isDecommission") {
+    val exec1 = "exec1"
+    val exec2 = "exec2"
+    val store1 = makeBlockManager(1000, exec1)
+    val store2 = makeBlockManager(1000, exec2)
+    assert(master.driverEndpoint.askSync[(Boolean, Boolean)](IsExecutorAlive(exec1))
+      == (true, false))
+
+    master.decommissionBlockManagers(Seq(exec1))
+    assert(master.driverEndpoint.askSync[(Boolean, Boolean)](IsExecutorAlive(exec1))
+      == (true, true))
+    assert(master.driverEndpoint.askSync[(Boolean, Boolean)](IsExecutorAlive(exec2))
+      == (true, false))
+
+    master.removeExecutor(exec1)
+    assert(master.driverEndpoint.askSync[(Boolean, Boolean)](IsExecutorAlive(exec1))
+      == (false, true))
+    assert(master.driverEndpoint.askSync[(Boolean, Boolean)](IsExecutorAlive(exec2))
+      == (true, false))
+
+    master.removeExecutor(exec2)
+    assert(master.driverEndpoint.askSync[(Boolean, Boolean)](IsExecutorAlive(exec2))
+      == (false, false))
+  }
+
   test("test decommissionRddCacheBlocks should migrate all cached blocks") {
     val store1 = makeBlockManager(1000, "exec1")
     val store2 = makeBlockManager(1000, "exec2")

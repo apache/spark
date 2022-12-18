@@ -138,11 +138,15 @@ private[spark] class NettyBlockTransferService(
           } catch {
             case e: IOException =>
               Try {
-                driverEndPointRef.askSync[Boolean](IsExecutorAlive(execId))
+                // Return value is (isExecutorAlive, isExecutorDecommissioned)
+                driverEndPointRef.askSync[(Boolean, Boolean)](IsExecutorAlive(execId))
               } match {
-                case Success(v) if v == false =>
-                  throw ExecutorDeadException(s"The relative remote executor(Id: $execId)," +
-                    " which maintains the block data to fetch is dead.")
+                case Success((isAlive, isDecommissioned)) if !isAlive =>
+                  throw ExecutorDeadException(
+                    s"The relative remote executor(Id: $execId)," +
+                    s" which maintains the block data to fetch is " +
+                      s"${if (isDecommissioned) "decommissioned and" else ""} dead.",
+                    isDecommissioned)
                 case _ => throw e
               }
           }
