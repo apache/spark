@@ -220,7 +220,9 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     checkError(
       exception = intercept[AnalysisException](sql(sqlText)),
       errorClass = "UNRESOLVED_ROUTINE",
-      parameters = Map("routineName" -> "`abcadf`", "searchPath" -> "[]"),
+      parameters = Map(
+        "routineName" -> "`abcadf`",
+        "searchPath" -> "[system.builtin, system.session]"),
       context = ExpectedContext(
         fragment = sqlText,
         start = 0,
