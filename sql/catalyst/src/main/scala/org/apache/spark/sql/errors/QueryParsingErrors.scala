@@ -69,7 +69,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
     new ParseException(errorClass = "NON_LAST_NOT_MATCHED_BY_SOURCE_CLAUSE_OMIT_CONDITION", ctx)
   }
 
-  def emptyPartitionKeyError(key: String, ctx: PartitionSpecContext): Throwable = {
+  def emptyPartitionKeyError(key: String, ctx: PartitionListsContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX",
       messageParameters = Map(

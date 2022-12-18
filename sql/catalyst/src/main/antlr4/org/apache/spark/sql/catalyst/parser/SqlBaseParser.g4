@@ -204,7 +204,7 @@ statement
         multipartIdentifier partitionSpec?                             #loadData
     | TRUNCATE TABLE multipartIdentifier partitionSpec?                #truncateTable
     | MSCK REPAIR TABLE multipartIdentifier
-        (option=(ADD|DROP|SYNC) PARTITIONS)?                           #repairTable
+        (option=(ADD|DROP|SYNC) PARTITIONS partitionLists?)?           #repairTable
     | op=(ADD | LIST) identifier .*?                                   #manageResource
     | SET ROLE .*?                                                     #failNativeCommand
     | SET TIME ZONE interval                                           #setTimeZone
@@ -329,12 +329,16 @@ partitionSpecLocation
     ;
 
 partitionSpec
-    : PARTITION LEFT_PAREN partitionVal (COMMA partitionVal)* RIGHT_PAREN
+    : PARTITION partitionLists
     ;
 
 partitionVal
     : identifier (EQ constant)?
     | identifier EQ DEFAULT
+    ;
+
+partitionLists
+    : LEFT_PAREN partitionVal (COMMA partitionVal)* RIGHT_PAREN
     ;
 
 namespace

@@ -1076,7 +1076,8 @@ case class DropView(
 case class RepairTable(
     child: LogicalPlan,
     enableAddPartitions: Boolean,
-    enableDropPartitions: Boolean) extends UnaryCommand {
+    enableDropPartitions: Boolean,
+    partitionSpec: TablePartitionSpec) extends UnaryCommand {
   override protected def withNewChildInternal(newChild: LogicalPlan): RepairTable =
     copy(child = newChild)
 }

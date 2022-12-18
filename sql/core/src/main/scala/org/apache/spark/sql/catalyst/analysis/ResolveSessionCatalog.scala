@@ -281,8 +281,10 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case AnalyzeColumn(ResolvedV1TableOrViewIdentifier(ident), columnNames, allColumns) =>
       AnalyzeColumnCommand(ident, columnNames, allColumns)
 
-    case RepairTable(ResolvedV1TableIdentifier(ident), addPartitions, dropPartitions) =>
-      RepairTableCommand(ident, addPartitions, dropPartitions)
+    case RepairTable(
+        ResolvedV1TableIdentifier(ident),
+        addPartitions, dropPartitions, partitionSpec) =>
+      RepairTableCommand(ident, addPartitions, dropPartitions, partitionSpec)
 
     case LoadData(ResolvedV1TableIdentifier(ident), path, isLocal, isOverwrite, partition) =>
       LoadDataCommand(
@@ -337,6 +339,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         ident,
         enableAddPartitions = true,
         enableDropPartitions = false,
+        partitionSpec = Map.empty,
         "ALTER TABLE RECOVER PARTITIONS")
 
     case AddPartitions(ResolvedV1TableIdentifier(ident), partSpecsAndLocs, ifNotExists) =>

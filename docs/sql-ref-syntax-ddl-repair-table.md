@@ -28,7 +28,7 @@ If the table is cached, the command clears cached data of the table and all its 
 ### Syntax
 
 ```sql
-MSCK REPAIR TABLE table_identifier [{ADD|DROP|SYNC} PARTITIONS]
+MSCK REPAIR TABLE table_identifier [{ADD|DROP|SYNC} PARTITIONS [partition_spec]]
 ```
 
 ### Parameters
@@ -46,6 +46,12 @@ MSCK REPAIR TABLE table_identifier [{ADD|DROP|SYNC} PARTITIONS]
     * **ADD**, the command adds new partitions to the session catalog for all sub-folder in the base table folder that don't belong to any table partitions.
     * **DROP**, the command drops all partitions from the session catalog that have non-existing locations in the file system.
     * **SYNC** is the combination of **DROP** and **ADD**. 
+
+* **partition_spec**
+
+    An optional parameter that specifies a comma-seperated list of key and value pairs for partitions. Note that one can use a typed literal (e.g., date'2022-01-01') in the partition spec.
+
+    **Syntax:** ` ( partition_col_name = partition_col_val [ , ... ] )`
 
 ### Examples
 

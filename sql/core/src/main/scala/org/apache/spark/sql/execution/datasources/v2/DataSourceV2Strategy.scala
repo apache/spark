@@ -467,7 +467,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         table,
         pattern.map(_.asInstanceOf[ResolvedPartitionSpec])) :: Nil
 
-    case RepairTable(_: ResolvedTable, _, _) =>
+    case RepairTable(_: ResolvedTable, _, _, _) =>
       throw QueryCompilationErrors.repairTableNotSupportedForV2TablesError()
 
     case r: CacheTable =>

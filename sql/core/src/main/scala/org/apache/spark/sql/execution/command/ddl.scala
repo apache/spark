@@ -629,13 +629,14 @@ case class PartitionStatistics(numFiles: Int, totalSize: Long)
  * The syntax of this command is:
  * {{{
  *   ALTER TABLE table RECOVER PARTITIONS;
- *   MSCK REPAIR TABLE table [{ADD|DROP|SYNC} PARTITIONS];
+ *   MSCK REPAIR TABLE table [{ADD|DROP|SYNC} PARTITIONS [(partCol1=val1, partCol2=val2, ...)]];
  * }}}
  */
 case class RepairTableCommand(
     tableName: TableIdentifier,
     enableAddPartitions: Boolean,
     enableDropPartitions: Boolean,
+    partitionSpec: TablePartitionSpec = Map.empty,
     cmd: String = "MSCK REPAIR TABLE") extends LeafRunnableCommand {
 
   // These are list of statistics that can be collected quickly without requiring a scan of the data
@@ -677,8 +678,16 @@ case class RepairTableCommand(
     val hadoopConf = spark.sessionState.newHadoopConf()
     val fs = root.getFileSystem(hadoopConf)
 
+    val normalizedSpec = Option(partitionSpec).map { spec =>
+      PartitioningUtils.normalizePartitionSpec(
+        spec,
+        table.partitionSchema,
+        tableIdentWithDB,
+        spark.sessionState.conf.resolver)
+    }
+
     val droppedAmount = if (enableDropPartitions) {
-      dropPartitions(catalog, fs)
+      dropPartitions(catalog, fs, normalizedSpec)
     } else 0
     val addedAmount = if (enableAddPartitions) {
       val threshold = spark.sparkContext.conf.get(RDD_PARALLEL_LISTING_THRESHOLD)
@@ -687,8 +696,9 @@ case class RepairTableCommand(
       val evalPool = ThreadUtils.newForkJoinPool("RepairTableCommand", 8)
       val partitionSpecsAndLocs: Seq[(TablePartitionSpec, Path)] =
         try {
-          scanPartitions(spark, fs, pathFilter, root, Map(), table.partitionColumnNames, threshold,
-            spark.sessionState.conf.resolver, new ForkJoinTaskSupport(evalPool)).seq
+          scanPartitions(spark, fs, pathFilter, root, normalizedSpec.getOrElse(Map.empty), Map(),
+            table.partitionColumnNames, threshold, spark.sessionState.conf.resolver,
+            new ForkJoinTaskSupport(evalPool)).seq
         } finally {
           evalPool.shutdown()
         }
@@ -727,6 +737,7 @@ case class RepairTableCommand(
       fs: FileSystem,
       filter: PathFilter,
       path: Path,
+      staticPartitions: TablePartitionSpec,
       spec: TablePartitionSpec,
       partitionNames: Seq[String],
       threshold: Int,
@@ -754,8 +765,14 @@ case class RepairTableCommand(
         // TODO: Validate the value
         val value = ExternalCatalogUtils.unescapePathName(ps(1))
         if (resolver(columnName, partitionNames.head)) {
-          scanPartitions(spark, fs, filter, st.getPath, spec ++ Map(partitionNames.head -> value),
-            partitionNames.drop(1), threshold, resolver, evalTaskSupport)
+          if (staticPartitions.get(columnName).exists(!resolver(_, value))) {
+            logDebug(s"partition value $value does not match on column $columnName, ignoring it")
+            Seq.empty
+          } else {
+            scanPartitions(spark, fs, filter, st.getPath, staticPartitions,
+              spec ++ Map(partitionNames.head -> value), partitionNames.drop(1),
+              threshold, resolver, evalTaskSupport)
+          }
         } else {
           logWarning(
             s"expected partition column ${partitionNames.head}, but got ${ps(0)}, ignoring it")
@@ -839,9 +856,12 @@ case class RepairTableCommand(
   }
 
   // Drops the partitions that do not exist in the file system
-  private def dropPartitions(catalog: SessionCatalog, fs: FileSystem): Int = {
+  private def dropPartitions(
+      catalog: SessionCatalog,
+      fs: FileSystem,
+      partialSpec: Option[TablePartitionSpec]): Int = {
     val dropPartSpecs = ThreadUtils.parmap(
-      catalog.listPartitions(tableName),
+      catalog.listPartitions(tableName, partialSpec),
       "RepairTableCommand: non-existing partitions",
       maxThreads = 8) { partition =>
       partition.storage.locationUri.flatMap { uri =>

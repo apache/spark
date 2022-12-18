@@ -505,6 +505,11 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    */
   override def visitPartitionSpec(
       ctx: PartitionSpecContext): Map[String, Option[String]] = withOrigin(ctx) {
+    visitPartitionLists(ctx.partitionLists)
+  }
+
+  override def visitPartitionLists(
+      ctx: PartitionListsContext): Map[String, Option[String]] = withOrigin(ctx) {
     val legacyNullAsString =
       conf.getConf(SQLConf.LEGACY_PARSE_NULL_PARTITION_SPEC_AS_STRING_LITERAL)
     val parts = ctx.partitionVal.asScala.map { pVal =>
@@ -533,7 +538,12 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    */
   protected def visitNonOptionalPartitionSpec(
       ctx: PartitionSpecContext): Map[String, String] = withOrigin(ctx) {
-    visitPartitionSpec(ctx).map {
+    visitNonOptionalPartitionLists(ctx.partitionLists)
+  }
+
+  private def visitNonOptionalPartitionLists(
+      ctx: PartitionListsContext): Map[String, String] = withOrigin(ctx) {
+    visitPartitionLists(ctx).map {
       case (key, None) => throw QueryParsingErrors.emptyPartitionKeyError(key, ctx)
       case (key, Some(value)) => key -> value
     }
@@ -4366,7 +4376,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    *
    * For example:
    * {{{
-   *   MSCK REPAIR TABLE multi_part_name [{ADD|DROP|SYNC} PARTITIONS]
+   *   MSCK REPAIR TABLE multi_part_name
+   *   [{ADD|DROP|SYNC} PARTITIONS [(partcol1=val1, partcol2=val2, ...)]]
    * }}}
    */
   override def visitRepairTable(ctx: RepairTableContext): LogicalPlan = withOrigin(ctx) {
@@ -4380,10 +4391,14 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       } else {
         (true, false, "")
       }
+    val partitionSpec = Option(ctx.partitionLists).map(visitNonOptionalPartitionLists)
+    val partStr = partitionSpec.map(_.map(_.productIterator.mkString("=")).mkString(","))
+    val ps = partStr.map(str => s" ($str)").getOrElse("")
     RepairTable(
-      createUnresolvedTable(ctx.multipartIdentifier, s"MSCK REPAIR TABLE$option"),
+      createUnresolvedTable(ctx.multipartIdentifier, s"MSCK REPAIR TABLE$option$ps"),
       enableAddPartitions,
-      enableDropPartitions)
+      enableDropPartitions,
+      partitionSpec.getOrElse(Map.empty))
   }
 
   /**

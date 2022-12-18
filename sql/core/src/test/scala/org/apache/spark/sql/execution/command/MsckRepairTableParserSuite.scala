@@ -28,7 +28,8 @@ class MsckRepairTableParserSuite extends AnalysisTest {
       RepairTable(
         UnresolvedTable(Seq("a", "b", "c"), "MSCK REPAIR TABLE", None),
         enableAddPartitions = true,
-        enableDropPartitions = false))
+        enableDropPartitions = false,
+        partitionSpec = Map.empty))
   }
 
   test("add partitions") {
@@ -40,7 +41,8 @@ class MsckRepairTableParserSuite extends AnalysisTest {
           "MSCK REPAIR TABLE ... ADD PARTITIONS",
           None),
         enableAddPartitions = true,
-        enableDropPartitions = false))
+        enableDropPartitions = false,
+        partitionSpec = Map.empty))
   }
 
   test("drop partitions") {
@@ -52,7 +54,8 @@ class MsckRepairTableParserSuite extends AnalysisTest {
           "MSCK REPAIR TABLE ... DROP PARTITIONS",
           None),
         enableAddPartitions = false,
-        enableDropPartitions = true))
+        enableDropPartitions = true,
+        partitionSpec = Map.empty))
   }
 
   test("sync partitions") {
@@ -64,6 +67,22 @@ class MsckRepairTableParserSuite extends AnalysisTest {
           "MSCK REPAIR TABLE ... SYNC PARTITIONS",
           None),
         enableAddPartitions = true,
-        enableDropPartitions = true))
+        enableDropPartitions = true,
+        partitionSpec = Map.empty))
+  }
+
+  test("sync partitions with static partitions") {
+    comparePlans(
+      parsePlan("MSCK REPAIR TABLE spark_catalog.ns.tbl SYNC PARTITIONS (part0='str', part1=10)"),
+      RepairTable(
+        UnresolvedTable(
+          Seq("spark_catalog", "ns", "tbl"),
+          "MSCK REPAIR TABLE ... SYNC PARTITIONS (part0=str,part1=10)",
+          None),
+        enableAddPartitions = true,
+        enableDropPartitions = true,
+        Map("part0" -> "str", "part1" -> "10")
+      )
+    )
   }
 }

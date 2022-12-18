@@ -68,6 +68,24 @@ trait MsckRepairTableSuiteBase extends command.MsckRepairTableSuiteBase {
       checkAnswer(sql(s"SELECT col, part FROM $t"), Seq(Row(1, 1), Row(0, 2)))
     }
   }
+
+  test("sync partitions with static partitions") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (col INT, part INT) $defaultUsing PARTITIONED BY (part)")
+      sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
+      sql(s"INSERT INTO $t PARTITION (part=0) SELECT 1")
+      sql(s"INSERT INTO $t PARTITION (part=1) SELECT 2")
+
+      checkAnswer(sql(s"SELECT col, part FROM $t"), Seq(Row(0, 0), Row(1, 0), Row(2, 1)))
+      copyPartition(t, "part=0", "part=10")
+      deletePartitionDir(t, "part=0")
+      sql(s"MSCK REPAIR TABLE $t SYNC PARTITIONS (part=10)")
+      checkPartitions(t, Map("part" -> "0"), Map("part" -> "1"), Map("part" -> "10"))
+      sql(s"MSCK REPAIR TABLE $t SYNC PARTITIONS (part=0)")
+      checkPartitions(t, Map("part" -> "1"), Map("part" -> "10"))
+      checkAnswer(sql(s"SELECT col, part FROM $t"), Seq(Row(2, 1), Row(0, 10), Row(1, 10)))
+    }
+  }
 }
 
 /**
