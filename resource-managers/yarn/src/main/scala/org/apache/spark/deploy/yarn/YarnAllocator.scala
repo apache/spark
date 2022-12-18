@@ -199,6 +199,8 @@ private[yarn] class YarnAllocator(
     }
   }
 
+  @volatile private var shutdown = false
+
   // The default profile is always present so we need to initialize the datastructures keyed by
   // ResourceProfile id to ensure its present if things start running before a request for
   // executors could add it. This approach is easier then going and special casing everywhere.
@@ -214,6 +216,8 @@ private[yarn] class YarnAllocator(
   }
 
   initDefaultProfile()
+
+  def setShutdown(shutdown: Boolean): Unit = this.shutdown = shutdown
 
   def getNumExecutorsRunning: Int = synchronized {
     runningExecutorsPerResourceProfileId.values.map(_.size).sum
@@ -835,6 +839,8 @@ private[yarn] class YarnAllocator(
         // now I think its ok as none of the containers are expected to exit.
         val exitStatus = completedContainer.getExitStatus
         val (exitCausedByApp, containerExitReason) = exitStatus match {
+          case _ if shutdown =>
+            (false, s"Executor for container $containerId exited after Application shutdown.")
           case ContainerExitStatus.SUCCESS =>
             (false, s"Executor for container $containerId exited because of a YARN event (e.g., " +
               "preemption) and not because of an error in the running job.")

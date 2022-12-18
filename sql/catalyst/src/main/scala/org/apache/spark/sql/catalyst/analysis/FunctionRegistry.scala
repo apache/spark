@@ -802,6 +802,9 @@ object FunctionRegistry {
     castAlias("binary", BinaryType),
     castAlias("string", StringType),
 
+    // mask functions
+    expression[Mask]("mask"),
+
     // csv
     expression[CsvToStructs]("from_csv"),
     expression[SchemaOfCsv]("schema_of_csv"),
@@ -896,8 +899,9 @@ object FunctionRegistry {
       name: String,
       dataType: DataType): (String, (ExpressionInfo, FunctionBuilder)) = {
     val builder = (args: Seq[Expression]) => {
-      if (args.size != 1) {
-        throw QueryCompilationErrors.functionAcceptsOnlyOneArgumentError(name)
+      val argSize = args.size
+      if (argSize != 1) {
+        throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "1", argSize)
       }
       Cast(args.head, dataType)
     }
@@ -953,17 +957,7 @@ object TableFunctionRegistry {
   private def logicalPlan[T <: LogicalPlan : ClassTag](name: String)
       : (String, (ExpressionInfo, TableFunctionBuilder)) = {
     val (info, builder) = FunctionRegistryBase.build[T](name, since = None)
-    val newBuilder = (expressions: Seq[Expression]) => {
-      try {
-        builder(expressions)
-      } catch {
-        case e: AnalysisException =>
-          val argTypes = expressions.map(_.dataType.typeName).mkString(", ")
-          throw QueryCompilationErrors.cannotApplyTableValuedFunctionError(
-            name, argTypes, info.getUsage, e.getMessage)
-      }
-    }
-    (name, (info, newBuilder))
+    (name, (info, (expressions: Seq[Expression]) => builder(expressions)))
   }
 
   val logicalPlans: Map[String, (ExpressionInfo, TableFunctionBuilder)] = Map(

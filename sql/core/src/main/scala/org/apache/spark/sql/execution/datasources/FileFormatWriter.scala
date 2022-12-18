@@ -201,14 +201,14 @@ object FileFormatWriter extends Logging {
         rdd
       }
 
-      val jobIdInstant = new Date().getTime
+      val jobTrackerID = SparkHadoopWriterUtils.createJobTrackerID(new Date())
       val ret = new Array[WriteTaskResult](rddWithNonEmptyPartitions.partitions.length)
       sparkSession.sparkContext.runJob(
         rddWithNonEmptyPartitions,
         (taskContext: TaskContext, iter: Iterator[InternalRow]) => {
           executeTask(
             description = description,
-            jobIdInstant = jobIdInstant,
+            jobTrackerID = jobTrackerID,
             sparkStageId = taskContext.stageId(),
             sparkPartitionId = taskContext.partitionId(),
             sparkAttemptNumber = taskContext.taskAttemptId().toInt & Integer.MAX_VALUE,
@@ -244,7 +244,7 @@ object FileFormatWriter extends Logging {
   /** Writes data out in a single Spark task. */
   private def executeTask(
       description: WriteJobDescription,
-      jobIdInstant: Long,
+      jobTrackerID: String,
       sparkStageId: Int,
       sparkPartitionId: Int,
       sparkAttemptNumber: Int,
@@ -252,7 +252,7 @@ object FileFormatWriter extends Logging {
       iterator: Iterator[InternalRow],
       concurrentOutputWriterSpec: Option[ConcurrentOutputWriterSpec]): WriteTaskResult = {
 
-    val jobId = SparkHadoopWriterUtils.createJobID(new Date(jobIdInstant), sparkStageId)
+    val jobId = SparkHadoopWriterUtils.createJobID(jobTrackerID, sparkStageId)
     val taskId = new TaskID(jobId, TaskType.MAP, sparkPartitionId)
     val taskAttemptId = new TaskAttemptID(taskId, sparkAttemptNumber)
 

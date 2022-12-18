@@ -3393,14 +3393,25 @@ abstract class JsonSuite
         .repartition(1)
         .write.text(path.getAbsolutePath)
 
-      val df = spark.read
-        .schema("a struct<x: int, y: struct<x: int>>, b struct<x: int>")
-        .json(path.getAbsolutePath)
+      for (enablePartialResults <- Seq(true, false)) {
+        withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> s"$enablePartialResults") {
+          val df = spark.read
+            .schema("a struct<x: int, y: struct<x: int>>, b struct<x: int>")
+            .json(path.getAbsolutePath)
 
-      checkAnswer(
-        df,
-        Seq(Row(null, Row(1)), Row(Row(2, null), Row(2)))
-      )
+          if (enablePartialResults) {
+            checkAnswer(
+              df,
+              Seq(Row(null, Row(1)), Row(Row(2, null), Row(2)))
+            )
+          } else {
+            checkAnswer(
+              df,
+              Seq(Row(null, null), Row(Row(2, null), Row(2)))
+            )
+          }
+        }
+      }
     }
   }
 

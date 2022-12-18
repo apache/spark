@@ -123,7 +123,13 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.streaming.StreamingQueryException.this"),
 
     // [SPARK-41180][SQL] Reuse INVALID_SCHEMA instead of _LEGACY_ERROR_TEMP_1227
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.DataType.parseTypeWithFallback")
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.DataType.parseTypeWithFallback"),
+
+    // [SPARK-41360][CORE] Avoid BlockManager re-registration if the executor has been lost
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.storage.BlockManagerMessages#RegisterBlockManager.copy"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.storage.BlockManagerMessages#RegisterBlockManager.this"),
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.storage.BlockManagerMessages$RegisterBlockManager$"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.storage.BlockManagerMessages#RegisterBlockManager.apply")
   )
 
   // Defulat exclude rules

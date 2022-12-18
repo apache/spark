@@ -171,8 +171,8 @@ object CurDateExpressionBuilder extends ExpressionBuilder {
     if (expressions.isEmpty) {
       CurrentDate()
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
-        Seq.empty, funcName, expressions.length)
+      throw QueryCompilationErrors.invalidFunctionArgumentsError(
+        funcName, "0", expressions.length)
     }
   }
 }

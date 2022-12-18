@@ -242,7 +242,7 @@ class IncrementalExecution(
         j.copy(
           stateInfo = Some(nextStatefulOperationStateInfo),
           eventTimeWatermarkForLateEvents = Some(eventTimeWatermarkForLateEvents),
-          eventTimeWatermarkForEviction = Some(eventTimeWatermarkForLateEvents),
+          eventTimeWatermarkForEviction = Some(eventTimeWatermarkForEviction),
           stateWatermarkPredicates =
             StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
               j.left.output, j.right.output, j.leftKeys, j.rightKeys, j.condition.full,

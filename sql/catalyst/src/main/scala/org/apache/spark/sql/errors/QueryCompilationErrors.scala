@@ -640,7 +640,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def invalidFunctionArgumentsError(
       name: String, expectedNum: String, actualNum: Int): Throwable = {
     new AnalysisException(
-      errorClass = "WRONG_NUM_ARGS",
+      errorClass = "WRONG_NUM_ARGS.WITH_SUGGESTION",
       messageParameters = Map(
         "functionName" -> toSQLId(name),
         "expectedNum" -> expectedNum,
@@ -649,10 +649,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def invalidFunctionArgumentNumberError(
       validParametersCount: Seq[Int], name: String, actualNumber: Int): Throwable = {
-    if (validParametersCount.length == 0) {
+    if (validParametersCount.isEmpty) {
       new AnalysisException(
-        errorClass = "_LEGACY_ERROR_TEMP_1043",
-        messageParameters = Map("name" -> name))
+        errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+        messageParameters = Map("functionName" -> toSQLId(name)))
     } else {
       val expectedNumberOfParameters = if (validParametersCount.length == 1) {
         validParametersCount.head.toString
@@ -661,12 +661,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       }
       invalidFunctionArgumentsError(name, expectedNumberOfParameters, actualNumber)
     }
-  }
-
-  def functionAcceptsOnlyOneArgumentError(name: String): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1044",
-      messageParameters = Map("name" -> name))
   }
 
   def alterV2TableSetLocationWithPartitionNotSupportedError(): Throwable = {
@@ -799,12 +793,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map(
         "command" -> command,
         "column" -> quoted))
-  }
-
-  def columnDoesNotExistError(colName: String): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1061",
-      messageParameters = Map("colName" -> colName))
   }
 
   def renameTempViewToExistingViewError(newName: String): Throwable = {
@@ -1776,24 +1764,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map.empty)
   }
 
-  def cannotApplyTableValuedFunctionError(
-      name: String, arguments: String, usage: String, details: String = ""): Throwable = {
+  def unexpectedInputDataTypeError(
+      functionName: String,
+      paramIndex: Int,
+      dataType: DataType,
+      expression: Expression): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1179",
+      errorClass = "UNEXPECTED_INPUT_TYPE",
       messageParameters = Map(
-        "name" -> name,
-        "usage" -> usage,
-        "arguments" -> arguments,
-        "details" -> details))
-  }
-
-  def incompatibleRangeInputDataTypeError(
-      expression: Expression, dataType: DataType): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1180",
-      messageParameters = Map(
-        "expectedDataType" -> dataType.typeName,
-        "foundDataType" -> expression.dataType.typeName))
+        "paramIndex" -> paramIndex.toString,
+        "functionName" -> toSQLId(functionName),
+        "requiredType" -> toSQLType(dataType),
+        "inputSql" -> toSQLExpr(expression),
+        "inputType" -> toSQLType(expression.dataType)))
   }
 
   def streamJoinStreamWithoutEqualityPredicateUnsupportedError(plan: LogicalPlan): Throwable = {
@@ -2287,14 +2270,22 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("columnName" -> toSQLId(columnName)))
   }
 
+  def columnNotFoundError(colName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "COLUMN_NOT_FOUND",
+      messageParameters = Map(
+        "colName" -> toSQLId(colName),
+        "caseSensitiveConfig" -> toSQLConf(SQLConf.CASE_SENSITIVE.key)))
+  }
+
   def noSuchTableError(db: String, table: String): Throwable = {
     new NoSuchTableException(db = db, table = table)
   }
 
   def tempViewNotCachedForAnalyzingColumnsError(tableIdent: TableIdentifier): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1234",
-      messageParameters = Map("tableIdent" -> tableIdent.toString))
+      errorClass = "UNSUPPORTED_FEATURE.ANALYZE_UNCACHED_TEMP_VIEW",
+      messageParameters = Map("viewName" -> toSQLId(tableIdent.toString)))
   }
 
   def columnTypeNotSupportStatisticsCollectionError(
@@ -2302,11 +2293,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       tableIdent: TableIdentifier,
       dataType: DataType): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1235",
+      errorClass = "UNSUPPORTED_FEATURE.ANALYZE_UNSUPPORTED_COLUMN_TYPE",
       messageParameters = Map(
-        "name" -> name,
-        "tableIdent" -> tableIdent.toString,
-        "dataType" -> dataType.toString))
+        "columnType" -> toSQLType(dataType),
+        "columnName" -> toSQLId(name),
+        "tableName" -> toSQLId(tableIdent.toString)))
   }
 
   def analyzeTableNotSupportedOnViewsError(): Throwable = {
@@ -3402,5 +3393,24 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
           messageParameters = Map("funcName" -> toSQLId(funcName)),
           cause = Option(other))
     }
+  }
+
+  def ambiguousLateralColumnAlias(name: String, numOfMatches: Int): Throwable = {
+    new AnalysisException(
+      errorClass = "AMBIGUOUS_LATERAL_COLUMN_ALIAS",
+      messageParameters = Map(
+        "name" -> toSQLId(name),
+        "n" -> numOfMatches.toString
+      )
+    )
+  }
+  def ambiguousLateralColumnAlias(nameParts: Seq[String], numOfMatches: Int): Throwable = {
+    new AnalysisException(
+      errorClass = "AMBIGUOUS_LATERAL_COLUMN_ALIAS",
+      messageParameters = Map(
+        "name" -> toSQLId(nameParts),
+        "n" -> numOfMatches.toString
+      )
+    )
   }
 }

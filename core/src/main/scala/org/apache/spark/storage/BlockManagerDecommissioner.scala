@@ -109,6 +109,7 @@ private[storage] class BlockManagerDecommissioner(
               s"to $peer ($retryCount / $maxReplicationFailuresForDecommission)")
             // Migrate the components of the blocks.
             try {
+              val startTime = System.currentTimeMillis()
               if (fallbackStorage.isDefined && peer == FallbackStorage.FALLBACK_BLOCK_MANAGER_ID) {
                 fallbackStorage.foreach(_.copy(shuffleBlockInfo, bm))
               } else {
@@ -125,7 +126,9 @@ private[storage] class BlockManagerDecommissioner(
                   logDebug(s"Migrated sub-block $blockId")
                 }
               }
-              logInfo(s"Migrated $shuffleBlockInfo to $peer")
+              logInfo(s"Migrated $shuffleBlockInfo (" +
+                s"size: ${Utils.bytesToString(blocks.map(b => b._2.size()).sum)}) to $peer " +
+                s"in ${System.currentTimeMillis() - startTime} ms")
             } catch {
               case e @ ( _ : IOException | _ : SparkException) =>
                 // If a block got deleted before netty opened the file handle, then trying to

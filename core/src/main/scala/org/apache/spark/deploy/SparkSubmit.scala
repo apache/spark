@@ -20,6 +20,7 @@ package org.apache.spark.deploy
 import java.io._
 import java.lang.reflect.{InvocationTargetException, UndeclaredThrowableException}
 import java.net.{URI, URL}
+import java.nio.file.Files
 import java.security.PrivilegedExceptionAction
 import java.text.ParseException
 import java.util.{ServiceLoader, UUID}
@@ -383,43 +384,55 @@ private[spark] class SparkSubmit extends Logging {
       }.orNull
 
       if (isKubernetesClusterModeDriver) {
-        // Replace with the downloaded local jar path to avoid propagating hadoop compatible uris.
-        // Executors will get the jars from the Spark file server.
-        // Explicitly download the related files here
-        args.jars = localJars
-        val filesLocalFiles = Option(args.files).map {
-          downloadFileList(_, targetDir, sparkConf, hadoopConf)
-        }.orNull
-        val archiveLocalFiles = Option(args.archives).map { uris =>
+        // SPARK-33748: this mimics the behaviour of Yarn cluster mode. If the driver is running
+        // in cluster mode, the archives should be available in the driver's current working
+        // directory too.
+        // SPARK-33782 : This downloads all the files , jars , archiveFiles and pyfiles to current
+        // working directory
+        def downloadResourcesToCurrentDirectory(uris: String, isArchive: Boolean = false):
+        String = {
           val resolvedUris = Utils.stringToSeq(uris).map(Utils.resolveURI)
-          val localArchives = downloadFileList(
+          val localResources = downloadFileList(
             resolvedUris.map(
               UriBuilder.fromUri(_).fragment(null).build().toString).mkString(","),
             targetDir, sparkConf, hadoopConf)
-
-          // SPARK-33748: this mimics the behaviour of Yarn cluster mode. If the driver is running
-          // in cluster mode, the archives should be available in the driver's current working
-          // directory too.
-          Utils.stringToSeq(localArchives).map(Utils.resolveURI).zip(resolvedUris).map {
-            case (localArchive, resolvedUri) =>
-              val source = new File(localArchive.getPath)
+          Utils.stringToSeq(localResources).map(Utils.resolveURI).zip(resolvedUris).map {
+            case (localResources, resolvedUri) =>
+              val source = new File(localResources.getPath)
               val dest = new File(
                 ".",
                 if (resolvedUri.getFragment != null) resolvedUri.getFragment else source.getName)
               logInfo(
-                s"Unpacking an archive $resolvedUri " +
+                s"Files  $resolvedUri " +
                   s"from ${source.getAbsolutePath} to ${dest.getAbsolutePath}")
               Utils.deleteRecursively(dest)
-              Utils.unpack(source, dest)
-
+              if (isArchive) {
+                Utils.unpack(source, dest)
+              } else {
+                Files.copy(source.toPath, dest.toPath)
+              }
               // Keep the URIs of local files with the given fragments.
               UriBuilder.fromUri(
-                localArchive).fragment(resolvedUri.getFragment).build().toString
+                localResources).fragment(resolvedUri.getFragment).build().toString
           }.mkString(",")
+        }
+
+        val filesLocalFiles = Option(args.files).map {
+          downloadResourcesToCurrentDirectory(_)
+        }.orNull
+        val jarsLocalJars = Option(args.jars).map {
+          downloadResourcesToCurrentDirectory(_)
+        }.orNull
+        val archiveLocalFiles = Option(args.archives).map {
+          downloadResourcesToCurrentDirectory(_, true)
+        }.orNull
+        val pyLocalFiles = Option(args.pyFiles).map {
+          downloadResourcesToCurrentDirectory(_)
         }.orNull
         args.files = filesLocalFiles
         args.archives = archiveLocalFiles
-        args.pyFiles = localPyFiles
+        args.pyFiles = pyLocalFiles
+        args.jars = jarsLocalJars
       }
     }
 
