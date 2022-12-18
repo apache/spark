@@ -287,7 +287,9 @@ case class InsertIntoHiveTable(
             inheritTableSpecs = inheritTableSpecs,
             isSrcLocal = false)
           CommandUtils.updatePartitionedTableStats(
-            sparkSession, table, partitionStats, oldPart.toSeq, overwrite)
+            sparkSession, table,
+            partitionStats.map {case (_, stats) => partitionSpec -> stats},
+          oldPart.toSeq, overwrite)
         }
       }
     } else {

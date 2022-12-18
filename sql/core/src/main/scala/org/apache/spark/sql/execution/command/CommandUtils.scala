@@ -58,6 +58,9 @@ object CommandUtils extends Logging {
       table: CatalogTable,
       newWriteStats: Option[CatalogStatistics] = None,
       isOverwrite: Boolean): Unit = {
+    if (!sparkSession.sessionState.conf.autoPartitionStatsticsUpdateEnabled) {
+      return
+    }
     val catalog = sparkSession.sessionState.catalog
     val oldTableStats = table.stats
     val newTableStats = if (isOverwrite) {
@@ -82,6 +85,9 @@ object CommandUtils extends Logging {
       partitionStats: Map[TablePartitionSpec, CatalogStatistics] = Map.empty,
       oldPartitions: Seq[CatalogTablePartition] = Seq.empty,
       isOverwrite: Boolean): Unit = {
+    if (!sparkSession.sessionState.conf.autoPartitionStatsticsUpdateEnabled) {
+      return
+    }
     val catalog = sparkSession.sessionState.catalog
     val newPartRows = partitionStats.flatMap(_._2.rowCount).sum
     val newPartBytes = partitionStats.map(_._2.sizeInBytes).sum
@@ -129,10 +135,10 @@ object CommandUtils extends Logging {
   def updateTableStats(
       sparkSession: SparkSession,
       table: CatalogTable): Unit = {
-    val catalog = sparkSession.sessionState.catalog
     if (sparkSession.sessionState.conf.autoPartitionStatsticsUpdateEnabled) {
       return
     }
+    val catalog = sparkSession.sessionState.catalog
     if (sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
       val newTable = catalog.getTableMetadata(table.identifier)
       val (newSize, newPartitions) = CommandUtils.calculateTotalSize(sparkSession, newTable)
