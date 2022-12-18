@@ -46,7 +46,7 @@ object TableOutputResolver {
     } else {
       if (expected.size > query.output.size) {
         throw QueryCompilationErrors.insertMismatchedColumnNumberError(
-          expected.size, 0, query.output.size)
+          expected.size, 1, query.output.size)
       }
 
       query.output.zip(expected).flatMap {

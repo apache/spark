@@ -379,7 +379,7 @@ object PreprocessTableInsertion extends Rule[LogicalPlan] {
 
     if (expectedColumns.length != insert.query.schema.length) {
       throw QueryCompilationErrors.insertMismatchedColumnNumberError(
-        insert.table.output.size, 0, insert.query.schema.length + staticPartCols.size)
+        insert.table.output.size, 1, insert.query.schema.length + staticPartCols.size)
     }
 
     val partitionsTrackedByCatalog = catalogTable.isDefined &&

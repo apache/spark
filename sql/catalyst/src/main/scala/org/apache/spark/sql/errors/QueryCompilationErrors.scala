@@ -2025,7 +2025,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map(
         "operator" -> "INSERT INTO",
         "firstNumColumns" -> firstNumColumns.toString,
-        "invalidOrdinalNum" -> ordinalNumber(invalidOrdinalNum + 1),
+        "invalidOrdinalNum" -> ordinalNumber(invalidOrdinalNum),
         "invalidNumColumns" -> invalidNumColumns.toString
       )
     )
