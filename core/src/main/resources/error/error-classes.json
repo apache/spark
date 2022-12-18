@@ -2921,16 +2921,6 @@
       "CREATE-TABLE-AS-SELECT cannot create table with location to a non-empty directory <tablePath>. To allow overwriting the existing non-empty directory, set '<config>' to true."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1242" : {
-    "message" : [
-      "Undefined function: <rawName>. This function is neither a built-in/temporary function, nor a persistent function that is qualified as <fullName>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1243" : {
-    "message" : [
-      "Undefined function: <rawName>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1244" : {
     "message" : [
       "Attempted to unset non-existent property '<property>' in table '<table>'."
