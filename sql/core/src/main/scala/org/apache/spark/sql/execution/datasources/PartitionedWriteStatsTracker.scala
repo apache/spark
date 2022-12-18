@@ -190,7 +190,7 @@ class PartitionedWriteTaskStatsTracker(
         "or files being not immediately visible in the filesystem.")
     }
     taskCommitTimeMetric.foreach(_ += taskCommitTime)
-    PartitionedWriteTaskStats(partitionStats)
+    PartitionedWriteTaskStats(partitionStats.toSeq)
   }
 }
 
