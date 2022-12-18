@@ -367,7 +367,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       errorClass = "_LEGACY_ERROR_TEMP_2008",
       messageParameters = Map(
         "url" -> url.toString,
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)))
+        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+      cause = e)
   }
 
   def illegalUrlError(url: UTF8String): Throwable = {
@@ -443,7 +444,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def nullAsMapKeyNotAllowedError(): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2019",
+      errorClass = "NULL_MAP_KEY",
       messageParameters = Map.empty)
   }
 
@@ -714,12 +715,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def createStreamingSourceNotSpecifySchemaError(): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
       errorClass = "_LEGACY_ERROR_TEMP_2048",
-      messageParameters = Map.empty)
-  }
-
-  def inferDateWithLegacyTimeParserError(): Throwable = {
-    new SparkIllegalArgumentException(
-      errorClass = "CANNOT_INFER_DATE",
       messageParameters = Map.empty)
   }
 
@@ -1232,7 +1227,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       stats: String, e: NumberFormatException): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
       errorClass = "_LEGACY_ERROR_TEMP_2113",
-      messageParameters = Map("stats" -> stats))
+      messageParameters = Map("stats" -> stats),
+      cause = e)
   }
 
   def statisticNotRecognizedError(stats: String): SparkIllegalArgumentException = {
@@ -1253,13 +1249,20 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map("o" -> o.toString()))
   }
 
-  def unscaledValueTooLargeForPrecisionError(): SparkArithmeticException = {
+  def unscaledValueTooLargeForPrecisionError(
+      value: Decimal,
+      decimalPrecision: Int,
+      decimalScale: Int,
+      context: SQLQueryContext = null): ArithmeticException = {
     new SparkArithmeticException(
-      errorClass = "UNSCALED_VALUE_TOO_LARGE_FOR_PRECISION",
+      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE",
       messageParameters = Map(
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      context = Array.empty,
-      summary = "")
+        "value" -> value.toPlainString,
+        "precision" -> decimalPrecision.toString,
+        "scale" -> decimalScale.toString,
+        "config" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+      context = getQueryContext(context),
+      summary = getSummary(context))
   }
 
   def decimalPrecisionExceedsMaxPrecisionError(
@@ -1276,7 +1279,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def outOfDecimalTypeRangeError(str: UTF8String): SparkArithmeticException = {
     new SparkArithmeticException(
-      errorClass = "OUT_OF_DECIMAL_TYPE_RANGE",
+      errorClass = "NUMERIC_OUT_OF_SUPPORTED_RANGE",
       messageParameters = Map(
         "value" -> str.toString),
       context = Array.empty,
@@ -2770,7 +2773,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def multipleRowSubqueryError(context: SQLQueryContext): Throwable = {
     new SparkException(
-      errorClass = "MULTI_VALUE_SUBQUERY_ERROR",
+      errorClass = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
       messageParameters = Map.empty,
       cause = null,
       context = getQueryContext(context),
@@ -2803,10 +2806,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "size" -> elementSize.toString))
   }
 
-  def unsupportedEmptyLocationError(): SparkIllegalArgumentException = {
+  def invalidEmptyLocationError(location: String): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
-      errorClass = "UNSUPPORTED_EMPTY_LOCATION",
-      messageParameters = Map.empty)
+      errorClass = "INVALID_EMPTY_LOCATION",
+      messageParameters = Map("location" -> location))
   }
 
   def malformedProtobufMessageDetectedInMessageParsingError(e: Throwable): Throwable = {
@@ -2815,5 +2818,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map(
         "failFastMode" -> FailFastMode.name),
       cause = e)
+  }
+
+  def locationAlreadyExists(tableId: TableIdentifier, location: Path): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "LOCATION_ALREADY_EXISTS",
+      messageParameters = Map(
+        "location" -> toSQLValue(location.toString, StringType),
+        "identifier" -> toSQLId(tableId.nameParts)))
   }
 }

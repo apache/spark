@@ -398,7 +398,7 @@ object CommandUtils extends Logging {
         }
       }
     }
-    AttributeMap(attributePercentiles.toSeq)
+    AttributeMap(attributePercentiles)
   }
 
 

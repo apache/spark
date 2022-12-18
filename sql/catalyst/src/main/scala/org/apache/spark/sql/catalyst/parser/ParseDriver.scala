@@ -429,7 +429,10 @@ case class UnclosedCommentProcessor(
       val failedToken = tokenStream.get(tokenStream.size() - 2)
       assert(failedToken.getType() == SqlBaseParser.BRACKETED_COMMENT)
       val position = Origin(Option(failedToken.getLine), Option(failedToken.getCharPositionInLine))
-      throw QueryParsingErrors.unclosedBracketedCommentError(command, position)
+      throw QueryParsingErrors.unclosedBracketedCommentError(
+        command = command,
+        start = Origin(Option(failedToken.getStartIndex)),
+        stop = Origin(Option(failedToken.getStopIndex)))
     }
   }
 

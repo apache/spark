@@ -32,11 +32,12 @@ import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DayTimeIntervalType, IntegerType, StringType, StructField, StructType, TimestampType}
 
-class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Serializable {
+class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with ProtobufTestBase
+  with Serializable {
 
   import testImplicits._
 
-  val testFileDesc = testFile("functions_suite.desc").replace("file:/", "/")
+  val testFileDesc = testFile("functions_suite.desc", "protobuf/functions_suite.desc")
   private val javaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.SimpleMessageProtos$"
 
   /**
@@ -458,7 +459,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
   }
 
   test("Handle extra fields : oldProducer -> newConsumer") {
-    val testFileDesc = testFile("catalyst_types.desc").replace("file:/", "/")
+    val testFileDesc = testFile("catalyst_types.desc", "protobuf/catalyst_types.desc")
     val oldProducer = ProtobufUtils.buildDescriptor(testFileDesc, "oldProducer")
     val newConsumer = ProtobufUtils.buildDescriptor(testFileDesc, "newConsumer")
 
@@ -498,7 +499,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
   }
 
   test("Handle extra fields : newProducer -> oldConsumer") {
-    val testFileDesc = testFile("catalyst_types.desc").replace("file:/", "/")
+    val testFileDesc = testFile("catalyst_types.desc", "protobuf/catalyst_types.desc")
     val newProducer = ProtobufUtils.buildDescriptor(testFileDesc, "newProducer")
     val oldConsumer = ProtobufUtils.buildDescriptor(testFileDesc, "oldConsumer")
 
@@ -676,5 +677,20 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Seri
         assert(fromProtoDf.select("durationMsg.duration").take(1).toSeq(0).get(0)
           === inputDf.select("durationMsg.duration").take(1).toSeq(0).get(0))
     }
+  }
+
+  test("raise cannot construct protobuf descriptor error") {
+    val df = Seq(ByteString.empty().toByteArray).toDF("value")
+    val testFileDescriptor =
+      testFile("basicmessage_noimports.desc", "protobuf/basicmessage_noimports.desc")
+
+    val e = intercept[AnalysisException] {
+      df.select(functions.from_protobuf($"value", "BasicMessage", testFileDescriptor) as 'sample)
+        .where("sample.string_value == \"slam\"").show()
+    }
+    checkError(
+      exception = e,
+      errorClass = "CANNOT_CONSTRUCT_PROTOBUF_DESCRIPTOR",
+      parameters = Map("descFilePath" -> testFileDescriptor))
   }
 }

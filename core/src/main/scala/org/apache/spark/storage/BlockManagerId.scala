@@ -147,4 +147,6 @@ private[spark] object BlockManagerId {
   }
 
   private[spark] val SHUFFLE_MERGER_IDENTIFIER = "shuffle-push-merger"
+
+  private[spark] val INVALID_EXECUTOR_ID = "invalid"
 }

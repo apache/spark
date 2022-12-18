@@ -63,10 +63,10 @@ if TYPE_CHECKING:
 
 
 # Note to developers: all of PySpark functions here take string as column names whenever possible.
-# Namely, if columns are referred as arguments, they can be always both Column or string,
+# Namely, if columns are referred as arguments, they can always be both Column or string,
 # even though there might be few exceptions for legacy or inevitable reasons.
 # If you are fixing other language APIs together, also please note that Scala side is not the case
-# since it requires to make every single overridden definition.
+# since it requires making every single overridden definition.
 
 
 def _get_jvm_function(name: str, sc: SparkContext) -> Callable:
@@ -1145,7 +1145,7 @@ def floor(col: "ColumnOrName") -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        neares integer that is less than or equal to given value.
+        nearest integer that is less than or equal to given value.
 
     Examples
     --------
@@ -4737,7 +4737,7 @@ def to_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
         be in the format of either region-based zone IDs or zone offsets. Region IDs must
         have the form 'area/city', such as 'America/Los_Angeles'. Zone offsets must be in
         the format '(+|-)HH:mm', for example '-08:00' or '+01:00'. Also 'UTC' and 'Z' are
-        upported as aliases of '+00:00'. Other short names are not recommended to use
+        supported as aliases of '+00:00'. Other short names are not recommended to use
         because they can be ambiguous.
 
         .. versionchanged:: 2.4.0
@@ -5517,7 +5517,7 @@ def concat_ws(sep: str, *cols: "ColumnOrName") -> Column:
     Parameters
     ----------
     sep : str
-        words seperator.
+        words separator.
     cols : :class:`~pyspark.sql.Column` or str
         list of columns to work on.
 
@@ -5560,11 +5560,11 @@ def decode(col: "ColumnOrName", charset: str) -> Column:
     --------
     >>> df = spark.createDataFrame([('abcd',)], ['a'])
     >>> df.select(decode("a", "UTF-8")).show()
-    +----------------------+
-    |stringdecode(a, UTF-8)|
-    +----------------------+
-    |                  abcd|
-    +----------------------+
+    +----------------+
+    |decode(a, UTF-8)|
+    +----------------+
+    |            abcd|
+    +----------------+
     """
     return _invoke_function("decode", _to_java_column(col), charset)
 
@@ -7252,7 +7252,7 @@ def from_json(
     options : dict, optional
         options to control parsing. accepts the same options as the json datasource.
         See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option>`_
-        in the version you use.
+        for the version you use.
 
         .. # noqa
 
@@ -7309,7 +7309,7 @@ def to_json(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Co
     options : dict, optional
         options to control converting. accepts the same options as the JSON datasource.
         See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option>`_
-        in the version you use.
+        for the version you use.
         Additionally the function supports the `pretty` option which enables
         pretty JSON generation.
 
@@ -7362,7 +7362,7 @@ def schema_of_json(json: "ColumnOrName", options: Optional[Dict[str, str]] = Non
     options : dict, optional
         options to control parsing. accepts the same options as the JSON datasource.
         See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option>`_
-        in the version you use.
+        for the version you use.
 
         .. # noqa
 
@@ -7406,7 +7406,7 @@ def schema_of_csv(csv: "ColumnOrName", options: Optional[Dict[str, str]] = None)
     options : dict, optional
         options to control parsing. accepts the same options as the CSV datasource.
         See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option>`_
-        in the version you use.
+        for the version you use.
 
         .. # noqa
 
@@ -7447,7 +7447,7 @@ def to_csv(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Col
     options: dict, optional
         options to control converting. accepts the same options as the CSV datasource.
         See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option>`_
-        in the version you use.
+        for the version you use.
 
         .. # noqa
 
@@ -7829,7 +7829,7 @@ def map_entries(col: "ColumnOrName") -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        ar array of key value pairs as a struct type
+        an array of key value pairs as a struct type
 
     Examples
     --------
@@ -7916,7 +7916,7 @@ def arrays_zip(*cols: "ColumnOrName") -> Column:
     """
     Collection function: Returns a merged array of structs in which the N-th struct contains all
     N-th values of input arrays. If one of the arrays is shorter than others then
-    resulting struct type value will be a `null` for missing elemets.
+    resulting struct type value will be a `null` for missing elements.
 
     .. versionadded:: 2.4.0
 
@@ -8036,7 +8036,7 @@ def sequence(
 
 def from_csv(
     col: "ColumnOrName",
-    schema: Union[StructType, Column, str],
+    schema: Union[Column, str],
     options: Optional[Dict[str, str]] = None,
 ) -> Column:
     """
@@ -8054,7 +8054,7 @@ def from_csv(
     options : dict, optional
         options to control parsing. accepts the same options as the CSV datasource.
         See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option>`_
-        in the version you use.
+        for the version you use.
 
         .. # noqa
 

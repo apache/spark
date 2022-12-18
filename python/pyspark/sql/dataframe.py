@@ -139,7 +139,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             assert isinstance(sql_ctx, SQLContext)
             # We should remove this if-else branch in the future release, and rename
             # sql_ctx to session in the constructor. This is an internal code path but
-            # was kept with an warning because it's used intensively by third-party libraries.
+            # was kept with a warning because it's used intensively by third-party libraries.
             warnings.warn("DataFrame constructor is internal. Do not directly use it.")
             self._sql_ctx = sql_ctx
             session = sql_ctx.sparkSession
@@ -154,7 +154,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         self._schema: Optional[StructType] = None
         self._lazy_rdd: Optional[RDD[Row]] = None
         # Check whether _repr_html is supported or not, we use it to avoid calling _jdf twice
-        # by __repr__ and _repr_html_ while eager evaluation opened.
+        # by __repr__ and _repr_html_ while eager evaluation opens.
         self._support_repr_html = False
 
     @property
@@ -573,7 +573,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     def explain(
         self, extended: Optional[Union[bool, str]] = None, mode: Optional[str] = None
     ) -> None:
-        """Prints the (logical and physical) plans to the console for debugging purpose.
+        """Prints the (logical and physical) plans to the console for debugging purposes.
 
         .. versionadded:: 1.3.0
 
@@ -607,7 +607,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         == Physical Plan ==
         *(1) Scan ExistingRDD[age...,name...]
 
-        Print out all of parsed, analyzed, optimized and physical plans.
+        Print out all of the parsed, analyzed, optimized and physical plans.
 
         >>> df.explain(True)
         == Parsed Logical Plan ==
@@ -1176,7 +1176,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         num : int
             Number of records to return. Will return this number of records
-            or whataver number is available.
+            or all records if the DataFrame contains less than this number of records.
 
         Returns
         -------
@@ -1211,7 +1211,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         num : int
             Number of records to return. Will return this number of records
-            or whataver number is available.
+            or all records if the DataFrame contains less than this number of records..
 
         Returns
         -------
@@ -1243,7 +1243,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         num : int
             Number of records to return. Will return this number of records
-            or whataver number is available.
+            or all records if the DataFrame contains less than this number of records.
 
         Returns
         -------
@@ -2102,7 +2102,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | Bob|  5|
         +----+---+
 
-        Outer join for both DataFrames on 'name' column.
+        Outer join for both DataFrames on the 'name' column.
 
         >>> df.join(df2, df.name == df2.name, 'outer').select(
         ...     df.name, df2.height).sort(desc("name")).show()
@@ -2175,7 +2175,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         Perform an as-of join.
 
-        This is similar to a left-join except that we match on nearest
+        This is similar to a left-join except that we match on the nearest
         key rather than equal keys.
 
         Parameters
@@ -2295,7 +2295,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ascending : bool or list, optional, default True
             boolean or list of boolean.
             Sort ascending vs. descending. Specify list for multiple sort orders.
-            If a list is specified, length of the list must equal length of the `cols`.
+            If a list is specified, the length of the list must equal the length of the `cols`.
 
         Returns
         -------
@@ -2328,7 +2328,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ascending : bool or list, optional, default True
             boolean or list of boolean.
             Sort ascending vs. descending. Specify list for multiple sort orders.
-            If a list is specified, length of the list must equal length of the `cols`.
+            If a list is specified, the length of the list must equal the length of the `cols`.
 
         Returns
         -------
@@ -2375,7 +2375,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  2|Alice|
         +---+-----+
 
-        Specify miltiple columns
+        Specify multiple columns
 
         >>> df = spark.createDataFrame([
         ...     (2, "Alice"), (2, "Bob"), (5, "Bob")], schema=["age", "name"])
@@ -2388,7 +2388,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  2|  Bob|
         +---+-----+
 
-        Specify miltiple columns for sorting order at `ascending`.
+        Specify multiple columns for sorting order at `ascending`.
 
         >>> df.orderBy(["age", "name"], ascending=[False, False]).show()
         +---+-----+
@@ -2449,7 +2449,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 1.3.1
 
-        This include count, mean, stddev, min, and max. If no columns are
+        This includes count, mean, stddev, min, and max. If no columns are
         given, this function computes statistics for all numerical or string columns.
 
         Notes
@@ -2839,7 +2839,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         condition : :class:`Column` or str
             a :class:`Column` of :class:`types.BooleanType`
-            or a string of SQL expression.
+            or a string of SQL expressions.
 
         Returns
         -------
@@ -3182,7 +3182,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             or a list or tuple for multiple columns.
         values : str, Column, tuple, list, optional
             Column(s) to unpivot. Can be a single column or column name, or a list or tuple
-            for multiple columns. If not specified or empty, uses all columns that
+            for multiple columns. If not specified or empty, use all columns that
             are not set as `ids`.
         variableColumnName : str
             Name of the variable column.
@@ -3209,7 +3209,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Parameters
         ----------
         exprs : :class:`Column` or dict of key and value strings
-            Columns or expressions to aggreate DataFrame by.
+            Columns or expressions to aggregate DataFrame by.
 
         Returns
         -------
@@ -3286,7 +3286,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        When ``observation`` is :class:`Observation`, only batch queries works as below.
+        When ``observation`` is :class:`Observation`, only batch queries work as below.
 
         >>> from pyspark.sql.functions import col, count, lit, max
         >>> from pyspark.sql import Observation
@@ -3588,7 +3588,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         For a static batch :class:`DataFrame`, it just drops duplicate rows. For a streaming
         :class:`DataFrame`, it will keep all data across triggers as intermediate state to drop
         duplicates rows. You can use :func:`withWatermark` to limit how late the duplicate data can
-        be and system will accordingly limit the state. In addition, too late data older than
+        be and the system will accordingly limit the state. In addition, data older than
         watermark will be dropped to avoid any possibility of duplicates.
 
         :func:`drop_duplicates` is an alias for :func:`dropDuplicates`.
@@ -3733,7 +3733,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             an int, float, boolean, or string.
         subset : str, tuple or list, optional
             optional list of column names to consider.
-            Columns specified in subset that do not have matching data type are ignored.
+            Columns specified in subset that do not have matching data types are ignored.
             For example, if `value` is a string, and subset contains a non-string column,
             then the non-string column is simply ignored.
 
@@ -3878,7 +3878,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             used as a replacement for each item in `to_replace`.
         subset : list, optional
             optional list of column names to consider.
-            Columns specified in subset that do not have matching data type are ignored.
+            Columns specified in subset that do not have matching data types are ignored.
             For example, if `value` is a string, and subset contains a non-string column,
             then the non-string column is simply ignored.
 
@@ -4081,7 +4081,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             The relative target precision to achieve
             (>= 0). If set to zero, the exact quantiles are computed, which
             could be very expensive. Note that values greater than 1 are
-            accepted but give the same result as 1.
+            accepted but gives the same result as 1.
 
         Returns
         -------
@@ -4217,8 +4217,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     def crosstab(self, col1: str, col2: str) -> "DataFrame":
         """
         Computes a pair-wise frequency table of the given columns. Also known as a contingency
-        table. The number of distinct values for each column should be less than 1e4. At most 1e6
-        non-zero pair frequencies will be returned.
+        table.
         The first column of each row will be the distinct values of `col1` and the column names
         will be the distinct values of `col2`. The name of the first column will be `$col1_$col2`.
         Pairs that have no occurrences will have zero as their counts.
@@ -4313,7 +4312,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     def withColumns(self, *colsMap: Dict[str, Column]) -> "DataFrame":
         """
         Returns a new :class:`DataFrame` by adding multiple columns or replacing the
-        existing columns that has the same names.
+        existing columns that have the same names.
 
         The colsMap is a map of column name and column, the column must only refer to attributes
         supplied by this Dataset. It is an error to add columns that refer to some other Dataset.
@@ -4324,7 +4323,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Parameters
         ----------
         colsMap : dict
-            a dict of column name and :class:`Column`. Currently, only single map is supported.
+            a dict of column name and :class:`Column`. Currently, only a single map is supported.
 
         Returns
         -------
@@ -4384,7 +4383,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         This method introduces a projection internally. Therefore, calling it multiple
         times, for instance, via loops in order to add multiple columns can generate big
         plans which can cause performance issues and even `StackOverflowException`.
-        To avoid this, use :func:`select` with the multiple columns at once.
+        To avoid this, use :func:`select` with multiple columns at once.
 
         Examples
         --------
@@ -4403,7 +4402,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
     def withColumnRenamed(self, existing: str, new: str) -> "DataFrame":
         """Returns a new :class:`DataFrame` by renaming an existing column.
-        This is a no-op if schema doesn't contain the given column name.
+        This is a no-op if the schema doesn't contain the given column name.
 
         .. versionadded:: 1.3.0
 
@@ -4435,7 +4434,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     def withColumnsRenamed(self, colsMap: Dict[str, str]) -> "DataFrame":
         """
         Returns a new :class:`DataFrame` by renaming multiple columns.
-        This is a no-op if schema doesn't contain the given column names.
+        This is a no-op if the schema doesn't contain the given column names.
 
         .. versionadded:: 3.4.0
            Added support for multiple columns renaming
@@ -4444,7 +4443,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         colsMap : dict
             a dict of existing column names and corresponding desired column names.
-            Currently, only single map is supported.
+            Currently, only a single map is supported.
 
         Returns
         -------
@@ -4513,7 +4512,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
     def drop(self, *cols: "ColumnOrName") -> "DataFrame":  # type: ignore[misc]
         """Returns a new :class:`DataFrame` without specified columns.
-        This is a no-op if schema doesn't contain the given column name(s).
+        This is a no-op if the schema doesn't contain the given column name(s).
 
         .. versionadded:: 1.4.0
 
@@ -4576,13 +4575,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         return DataFrame(jdf, self.sparkSession)
 
-    def toDF(self, *cols: "ColumnOrName") -> "DataFrame":
+    def toDF(self, *cols: str) -> "DataFrame":
         """Returns a new :class:`DataFrame` that with new specified column names
 
         Parameters
         ----------
         *cols : tuple
-            a tuple of string new column name or :class:`Column`. The length of the
+            a tuple of string new column name. The length of the
             list needs to be the same as the number of columns in the initial
             :class:`DataFrame`
 
@@ -4666,7 +4665,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     def sameSemantics(self, other: "DataFrame") -> bool:
         """
         Returns `True` when the logical query plans inside both :class:`DataFrame`\\s are equal and
-        therefore return same results.
+        therefore return the same results.
 
         .. versionadded:: 3.1.0
 

@@ -414,7 +414,7 @@ import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.distributed.RowMatrix;
 
 JavaRDD<Vector> rows = ... // a JavaRDD of local vectors
-// Create a RowMatrix from an JavaRDD<Vector>.
+// Create a RowMatrix from a JavaRDD<Vector>.
 RowMatrix mat = new RowMatrix(rows.rdd());
 
 // Get its size.
@@ -491,7 +491,7 @@ val rowMat: RowMatrix = mat.toRowMatrix()
 
 An
 [`IndexedRowMatrix`](api/java/org/apache/spark/mllib/linalg/distributed/IndexedRowMatrix.html)
-can be created from an `JavaRDD<IndexedRow>` instance, where
+can be created from a `JavaRDD<IndexedRow>` instance, where
 [`IndexedRow`](api/java/org/apache/spark/mllib/linalg/distributed/IndexedRow.html) is a
 wrapper over `(long, Vector)`.  An `IndexedRowMatrix` can be converted to a `RowMatrix` by dropping
 its row indices.

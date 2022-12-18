@@ -21,7 +21,19 @@ select from_csv('1', 1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The expression '1' is not a valid schema string.; line 1 pos 7
+{
+  "errorClass" : "INVALID_SCHEMA.NON_STRING_LITERAL",
+  "messageParameters" : {
+    "inputSchema" : "\"1\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 23,
+    "fragment" : "from_csv('1', 1)"
+  } ]
+}
 
 
 -- !query
@@ -30,20 +42,43 @@ select from_csv('1', 'a InvalidType')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Cannot parse the data type: 
-[PARSE_SYNTAX_ERROR] Syntax error at or near 'InvalidType': extra input 'InvalidType'(line 1, pos 2)
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "error" : "'InvalidType'",
+    "hint" : ": extra input 'InvalidType'"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 37,
+    "fragment" : "from_csv('1', 'a InvalidType')"
+  } ]
+}
 
-== SQL ==
-a InvalidType
---^^^
 
-Failed fallback parsing: 
-DataType invalidtype is not supported.(line 1, pos 2)
-
-== SQL ==
-a InvalidType
---^^^
-; line 1 pos 7
+-- !query
+select from_csv('1', 'Array<int>')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_SCHEMA.NON_STRUCT_TYPE",
+  "messageParameters" : {
+    "dataType" : "\"ARRAY<INT>\"",
+    "inputSchema" : "\"Array<int>\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 34,
+    "fragment" : "from_csv('1', 'Array<int>')"
+  } ]
+}
 
 
 -- !query
@@ -52,7 +87,16 @@ select from_csv('1', 'a INT', named_struct('mode', 'PERMISSIVE'))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Must use a map() function for options.; line 1 pos 7
+{
+  "errorClass" : "INVALID_OPTIONS.NON_MAP_FUNCTION",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 65,
+    "fragment" : "from_csv('1', 'a INT', named_struct('mode', 'PERMISSIVE'))"
+  } ]
+}
 
 
 -- !query
@@ -61,7 +105,19 @@ select from_csv('1', 'a INT', map('mode', 1))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-A type of keys and values in map() must be string, but got map<string,int>.; line 1 pos 7
+{
+  "errorClass" : "INVALID_OPTIONS.NON_STRING_TYPE",
+  "messageParameters" : {
+    "mapType" : "\"MAP<STRING, INT>\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 45,
+    "fragment" : "from_csv('1', 'a INT', map('mode', 1))"
+  } ]
+}
 
 
 -- !query
@@ -71,11 +127,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1042",
+  "errorClass" : "WRONG_NUM_ARGS.WITH_SUGGESTION",
   "messageParameters" : {
-    "actualNumber" : "0",
-    "expectedInfo" : "one of 2 and 3",
-    "name" : "from_csv"
+    "actualNum" : "0",
+    "expectedNum" : "[2, 3]",
+    "functionName" : "`from_csv`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -187,7 +243,16 @@ select to_csv(named_struct('a', 1, 'b', 2), named_struct('mode', 'PERMISSIVE'))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Must use a map() function for options.; line 1 pos 7
+{
+  "errorClass" : "INVALID_OPTIONS.NON_MAP_FUNCTION",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 79,
+    "fragment" : "to_csv(named_struct('a', 1, 'b', 2), named_struct('mode', 'PERMISSIVE'))"
+  } ]
+}
 
 
 -- !query
@@ -196,4 +261,16 @@ select to_csv(named_struct('a', 1, 'b', 2), map('mode', 1))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-A type of keys and values in map() must be string, but got map<string,int>.; line 1 pos 7
+{
+  "errorClass" : "INVALID_OPTIONS.NON_STRING_TYPE",
+  "messageParameters" : {
+    "mapType" : "\"MAP<STRING, INT>\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 59,
+    "fragment" : "to_csv(named_struct('a', 1, 'b', 2), map('mode', 1))"
+  } ]
+}

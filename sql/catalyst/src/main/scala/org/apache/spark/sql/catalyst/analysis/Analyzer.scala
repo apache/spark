@@ -43,7 +43,7 @@ import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils, StringUtils}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.connector.catalog._
+import org.apache.spark.sql.connector.catalog.{View => _, _}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.{After, ColumnPosition}
 import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction => V2AggregateFunction, ScalarFunction, UnboundFunction}
@@ -113,9 +113,9 @@ object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog {
  * @param nestedViewDepth The nested depth in the view resolution, this enables us to limit the
  *                        depth of nested views.
  * @param maxNestedViewDepth The maximum allowed depth of nested view resolution.
- * @param relationCache A mapping from qualified table names to resolved relations. This can ensure
- *                      that the table is resolved only once if a table is used multiple times
- *                      in a query.
+ * @param relationCache A mapping from qualified table names and time travel spec to resolved
+ *                      relations. This can ensure that the table is resolved only once if a table
+ *                      is used multiple times in a query.
  * @param referredTempViewNames All the temp view names referred by the current view we are
  *                              resolving. It's used to make sure the relation resolution is
  *                              consistent between view creation and view resolution. For example,
@@ -129,7 +129,8 @@ case class AnalysisContext(
     catalogAndNamespace: Seq[String] = Nil,
     nestedViewDepth: Int = 0,
     maxNestedViewDepth: Int = -1,
-    relationCache: mutable.Map[Seq[String], LogicalPlan] = mutable.Map.empty,
+    relationCache: mutable.Map[(Seq[String], Option[TimeTravelSpec]), LogicalPlan] =
+      mutable.Map.empty,
     referredTempViewNames: Seq[Seq[String]] = Seq.empty,
     // 1. If we are resolving a view, this field will be restored from the view metadata,
     //    by calling `AnalysisContext.withAnalysisContext(viewDesc)`.
@@ -287,6 +288,8 @@ class Analyzer(override val catalogManager: CatalogManager)
       AddMetadataColumns ::
       DeduplicateRelations ::
       ResolveReferences ::
+      WrapLateralColumnAliasReference ::
+      ResolveLateralColumnAliasReference ::
       ResolveExpressionsWithNamePlaceholders ::
       ResolveDeserializer ::
       ResolveNewInstance ::
@@ -297,6 +300,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveOrdinalInOrderByAndGroupBy ::
       ResolveAggAliasInGroupBy ::
       ResolveMissingReferences ::
+      ResolveOuterReferences ::
       ExtractGenerator ::
       ResolveGenerate ::
       ResolveFunctions ::
@@ -341,8 +345,8 @@ class Analyzer(override val catalogManager: CatalogManager)
       UpdateOuterReferences),
     Batch("Cleanup", fixedPoint,
       CleanupAliases),
-    Batch("HandleAnalysisOnlyCommand", Once,
-      HandleAnalysisOnlyCommand)
+    Batch("HandleSpecialCommand", Once,
+      HandleSpecialCommand)
   )
 
   /**
@@ -966,6 +970,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsDownWithPruning(
       AlwaysProcess.fn, ruleId) {
+      case hint: UnresolvedHint => hint
       // Add metadata output to all node types
       case node if node.children.nonEmpty && node.resolved && hasMetadataCol(node) =>
         val inputAttrs = AttributeSet(node.children.flatMap(_.output))
@@ -1011,7 +1016,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       case s: ExposesMetadataColumns => s.withMetadataColumns()
       case p: Project =>
         val newProj = p.copy(
-          projectList = p.metadataOutput ++ p.projectList,
+          projectList = p.projectList ++ p.metadataOutput,
           child = addMetadataCol(p.child))
         newProj.copyTagsFrom(p)
         newProj
@@ -1238,7 +1243,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       resolveTempView(u.multipartIdentifier, u.isStreaming, timeTravelSpec.isDefined).orElse {
         expandIdentifier(u.multipartIdentifier) match {
           case CatalogAndIdentifier(catalog, ident) =>
-            val key = catalog.name +: ident.namespace :+ ident.name
+            val key = ((catalog.name +: ident.namespace :+ ident.name).toSeq, timeTravelSpec)
             AnalysisContext.get.relationCache.get(key).map(_.transform {
               case multi: MultiInstanceRelation =>
                 val newRelation = multi.newInstance()
@@ -1669,7 +1674,7 @@ class Analyzer(override val catalogManager: CatalogManager)
               // Only Project and Aggregate can host star expressions.
               case u @ (_: Project | _: Aggregate) =>
                 Try(s.expand(u.children.head, resolver)) match {
-                  case Success(expanded) => expanded.map(wrapOuterReference)
+                  case Success(expanded) => expanded.map(wrapOuterReference(_))
                   case Failure(_) => throw e
                 }
               // Do not use the outer plan to resolve the star expression
@@ -2108,6 +2113,51 @@ class Analyzer(override val catalogManager: CatalogManager)
   }
 
   /**
+   * Resolves `UnresolvedAttribute` to `OuterReference` if we are resolving subquery plans (when
+   * `AnalysisContext.get.outerPlan` is set).
+   */
+  object ResolveOuterReferences extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = {
+      // Only apply this rule if we are resolving subquery plans.
+      if (AnalysisContext.get.outerPlan.isEmpty) return plan
+
+      // We must run these 3 rules first, as they also resolve `UnresolvedAttribute` and have
+      // higher priority than outer reference resolution.
+      val prepared = ResolveAggregateFunctions(ResolveMissingReferences(ResolveReferences(plan)))
+      prepared.resolveOperatorsDownWithPruning(_.containsPattern(UNRESOLVED_ATTRIBUTE)) {
+        // Handle `Generate` specially here, because `Generate.generatorOutput` starts with
+        // `UnresolvedAttribute` but we should never resolve it to outer references. It's a bit
+        // hacky that `Generate` uses `UnresolvedAttribute` to store the generator column names,
+        // we should clean it up later.
+        case g: Generate if g.childrenResolved && !g.resolved =>
+          val newGenerator = g.generator.transformWithPruning(
+            _.containsPattern(UNRESOLVED_ATTRIBUTE))(resolveOuterReference)
+          val resolved = g.copy(generator = newGenerator.asInstanceOf[Generator])
+          resolved.copyTagsFrom(g)
+          resolved
+        case q: LogicalPlan if q.childrenResolved && !q.resolved =>
+          q.transformExpressionsWithPruning(
+            _.containsPattern(UNRESOLVED_ATTRIBUTE))(resolveOuterReference)
+      }
+    }
+
+    private val resolveOuterReference: PartialFunction[Expression, Expression] = {
+      case u @ UnresolvedAttribute(nameParts) => withPosition(u) {
+        try {
+          AnalysisContext.get.outerPlan.get.resolveChildren(nameParts, resolver) match {
+            case Some(resolved) => wrapOuterReference(resolved, Some(nameParts))
+            case None => u
+          }
+        } catch {
+          case ae: AnalysisException =>
+            logDebug(ae.getMessage)
+            u
+        }
+      }
+    }
+  }
+
+  /**
    * Checks whether a function identifier referenced by an [[UnresolvedFunction]] is defined in the
    * function registry. Note that this rule doesn't try to resolve the [[UnresolvedFunction]]. It
    * only performs simple existence check according to the function identifier to quickly identify
@@ -2480,65 +2530,27 @@ class Analyzer(override val catalogManager: CatalogManager)
    */
   object ResolveSubquery extends Rule[LogicalPlan] {
     /**
-     * Resolve the correlated expressions in a subquery, as if the expressions live in the outer
-     * plan. All resolved outer references are wrapped in an [[OuterReference]]
-     */
-    private def resolveOuterReferences(plan: LogicalPlan, outer: LogicalPlan): LogicalPlan = {
-      plan.resolveOperatorsDownWithPruning(_.containsPattern(UNRESOLVED_ATTRIBUTE)) {
-        case q: LogicalPlan if q.childrenResolved && !q.resolved =>
-          q.transformExpressionsWithPruning(_.containsPattern(UNRESOLVED_ATTRIBUTE)) {
-            case u @ UnresolvedAttribute(nameParts) =>
-              withPosition(u) {
-                try {
-                  outer.resolveChildren(nameParts, resolver) match {
-                    case Some(outerAttr) => wrapOuterReference(outerAttr)
-                    case None => u
-                  }
-                } catch {
-                  case ae: AnalysisException =>
-                    logDebug(ae.getMessage)
-                    u
-                }
-              }
-          }
-      }
-    }
-
-    /**
-     * Resolves the subquery plan that is referenced in a subquery expression. The normal
-     * attribute references are resolved using regular analyzer and the outer references are
-     * resolved from the outer plans using the resolveOuterReferences method.
+     * Resolves the subquery plan that is referenced in a subquery expression, by invoking the
+     * entire analyzer recursively. We set outer plan in `AnalysisContext`, so that the analyzer
+     * can resolve outer references.
      *
-     * Outer references from the correlated predicates are updated as children of
-     * Subquery expression.
+     * Outer references of the subquery are updated as children of Subquery expression.
      */
     private def resolveSubQuery(
         e: SubqueryExpression,
         outer: LogicalPlan)(
         f: (LogicalPlan, Seq[Expression]) => SubqueryExpression): SubqueryExpression = {
-      // Step 1: Resolve the outer expressions.
-      var previous: LogicalPlan = null
-      var current = e.plan
-      do {
-        // Try to resolve the subquery plan using the regular analyzer.
-        previous = current
-        current = AnalysisContext.withOuterPlan(outer) {
-          executeSameContext(current)
-        }
+      val newSubqueryPlan = AnalysisContext.withOuterPlan(outer) {
+        executeSameContext(e.plan)
+      }
 
-        // Use the outer references to resolve the subquery plan if it isn't resolved yet.
-        if (!current.resolved) {
-          current = resolveOuterReferences(current, outer)
-        }
-      } while (!current.resolved && !current.fastEquals(previous))
-
-      // Step 2: If the subquery plan is fully resolved, pull the outer references and record
+      // If the subquery plan is fully resolved, pull the outer references and record
       // them as children of SubqueryExpression.
-      if (current.resolved) {
+      if (newSubqueryPlan.resolved) {
         // Record the outer references as children of subquery expression.
-        f(current, SubExprUtils.getOuterReferences(current))
+        f(newSubqueryPlan, SubExprUtils.getOuterReferences(newSubqueryPlan))
       } else {
-        e.withNewPlan(current)
+        e.withNewPlan(newSubqueryPlan)
       }
     }
 
@@ -2553,17 +2565,17 @@ class Analyzer(override val catalogManager: CatalogManager)
      */
     private def resolveSubQueries(plan: LogicalPlan, outer: LogicalPlan): LogicalPlan = {
       plan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION), ruleId) {
-        case s @ ScalarSubquery(sub, _, exprId, _) if !sub.resolved =>
+        case s @ ScalarSubquery(sub, _, exprId, _, _) if !sub.resolved =>
           resolveSubQuery(s, outer)(ScalarSubquery(_, _, exprId))
-        case e @ Exists(sub, _, exprId, _) if !sub.resolved =>
+        case e @ Exists(sub, _, exprId, _, _) if !sub.resolved =>
           resolveSubQuery(e, outer)(Exists(_, _, exprId))
-        case InSubquery(values, l @ ListQuery(_, _, exprId, _, _))
+        case InSubquery(values, l @ ListQuery(_, _, exprId, _, _, _))
             if values.forall(_.resolved) && !l.resolved =>
           val expr = resolveSubQuery(l, outer)((plan, exprs) => {
             ListQuery(plan, exprs, exprId, plan.output)
           })
           InSubquery(values, expr.asInstanceOf[ListQuery])
-        case s @ LateralSubquery(sub, _, exprId, _) if !sub.resolved =>
+        case s @ LateralSubquery(sub, _, exprId, _, _) if !sub.resolved =>
           resolveSubQuery(s, outer)(LateralSubquery(_, _, exprId))
       }
     }
@@ -3503,8 +3515,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     private def resolveUserSpecifiedColumns(i: InsertIntoStatement): Seq[NamedExpression] = {
-      SchemaUtils.checkColumnNameDuplication(
-        i.userSpecifiedCols, "in the column list", resolver)
+      SchemaUtils.checkColumnNameDuplication(i.userSpecifiedCols, resolver)
 
       i.userSpecifiedCols.map { col =>
         i.table.resolve(Seq(col), resolver).getOrElse {
@@ -3894,15 +3905,17 @@ class Analyzer(override val catalogManager: CatalogManager)
   }
 
   /**
-   * A rule that marks a command as analyzed so that its children are removed to avoid
-   * being optimized. This rule should run after all other analysis rules are run.
+   * A rule to handle special commands that need to be notified when analysis is done. This rule
+   * should run after all other analysis rules are run.
    */
-  object HandleAnalysisOnlyCommand extends Rule[LogicalPlan] {
+  object HandleSpecialCommand extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       _.containsPattern(COMMAND)) {
       case c: AnalysisOnlyCommand if c.resolved =>
         checkAnalysis(c)
         c.markAsAnalyzed(AnalysisContext.get)
+      case c: KeepAnalyzedQuery if c.resolved =>
+        c.storeAnalyzedQuery()
     }
   }
 }

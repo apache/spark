@@ -35,18 +35,18 @@ object ExprUtils extends QueryErrorsBase {
         case s: UTF8String if s != null =>
           val dataType = DataType.fromDDL(s.toString)
           CharVarcharUtils.failIfHasCharVarchar(dataType)
-        case _ => throw QueryCompilationErrors.invalidSchemaStringError(exp)
+        case _ => throw QueryCompilationErrors.unexpectedSchemaTypeError(exp)
 
       }
     } else {
-      throw QueryCompilationErrors.schemaNotFoldableError(exp)
+      throw QueryCompilationErrors.unexpectedSchemaTypeError(exp)
     }
   }
 
   def evalSchemaExpr(exp: Expression): StructType = {
     val dataType = evalTypeExpr(exp)
     if (!dataType.isInstanceOf[StructType]) {
-      throw QueryCompilationErrors.schemaIsNotStructTypeError(dataType)
+      throw QueryCompilationErrors.schemaIsNotStructTypeError(exp, dataType)
     }
     dataType.asInstanceOf[StructType]
   }

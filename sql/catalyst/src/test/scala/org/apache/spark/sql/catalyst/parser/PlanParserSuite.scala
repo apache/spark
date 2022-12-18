@@ -193,7 +193,7 @@ class PlanParserSuite extends AnalysisTest {
                   |""".stripMargin
     checkError(
       exception = parseException(query),
-      errorClass = "_LEGACY_ERROR_TEMP_0055",
+      errorClass = "UNCLOSED_BRACKETED_COMMENT",
       parameters = Map.empty)
   }
 
@@ -211,7 +211,7 @@ class PlanParserSuite extends AnalysisTest {
                   |""".stripMargin
     checkError(
       exception = parseException(query),
-      errorClass = "_LEGACY_ERROR_TEMP_0055",
+      errorClass = "UNCLOSED_BRACKETED_COMMENT",
       parameters = Map.empty)
   }
 
@@ -703,6 +703,32 @@ class PlanParserSuite extends AnalysisTest {
         .join(table("t3"))
         .join(table("t2"), Inner, Option($"t1.col1" === $"t2.col2"))
         .select(star()))
+
+    assertEqual(
+      "select * from t1 JOIN t2, t3 join t2 on t1.col1 = t2.col2",
+      table("t1")
+        .join(table("t2"))
+        .join(table("t3"))
+        .join(table("t2"), Inner, Option($"t1.col1" === $"t2.col2"))
+        .select(star()))
+
+    // Implicit joins - ANSI mode
+    withSQLConf(
+      SQLConf.ANSI_ENABLED.key -> "true",
+      SQLConf.ANSI_RELATION_PRECEDENCE.key -> "true") {
+
+      assertEqual(
+        "select * from t1, t3 join t2 on t1.col1 = t2.col2",
+        table("t1").join(
+          table("t3").join(table("t2"), Inner, Option($"t1.col1" === $"t2.col2")))
+          .select(star()))
+
+      assertEqual(
+        "select * from t1 JOIN t2, t3 join t2 on t1.col1 = t2.col2",
+        table("t1").join(table("t2")).join(
+          table("t3").join(table("t2"), Inner, Option($"t1.col1" === $"t2.col2")))
+          .select(star()))
+    }
 
     // Test lateral join with join conditions
     assertEqual(
@@ -1541,5 +1567,31 @@ class PlanParserSuite extends AnalysisTest {
       PercentileDisc(UnresolvedAttribute("col"), Literal(Decimal(0.1), DecimalType(1, 1)))
         .toAggregateExpression(false, Some(GreaterThan(UnresolvedAttribute("id"), Literal(10))))
     )
+  }
+
+  test("SPARK-41271: parsing of named parameters") {
+    comparePlans(
+      parsePlan("SELECT :param_1"),
+      Project(UnresolvedAlias(Parameter("param_1"), None) :: Nil, OneRowRelation()))
+    comparePlans(
+      parsePlan("SELECT abs(:1Abc)"),
+      Project(UnresolvedAlias(
+        UnresolvedFunction(
+          "abs" :: Nil,
+          Parameter("1Abc") :: Nil,
+          isDistinct = false), None) :: Nil,
+        OneRowRelation()))
+    comparePlans(
+      parsePlan("SELECT * FROM a LIMIT :limitA"),
+      table("a").select(star()).limit(Parameter("limitA")))
+    // Invalid empty name and invalid symbol in a name
+    checkError(
+      exception = parseException(s"SELECT :-"),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'-'", "hint" -> ""))
+    checkError(
+      exception = parseException(s"SELECT :"),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "end of input", "hint" -> ""))
   }
 }

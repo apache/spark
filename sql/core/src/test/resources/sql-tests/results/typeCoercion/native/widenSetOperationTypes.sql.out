@@ -92,9 +92,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "binary",
     "dt2" : "tinyint",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 72,
+    "fragment" : "SELECT cast(1 as tinyint) FROM t UNION SELECT cast('2' as binary) FROM t"
+  } ]
 }
 
 
@@ -111,9 +118,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "boolean",
     "dt2" : "tinyint",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 71,
+    "fragment" : "SELECT cast(1 as tinyint) FROM t UNION SELECT cast(2 as boolean) FROM t"
+  } ]
 }
 
 
@@ -130,9 +144,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "timestamp",
     "dt2" : "tinyint",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 95,
+    "fragment" : "SELECT cast(1 as tinyint) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as timestamp) FROM t"
+  } ]
 }
 
 
@@ -149,9 +170,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "date",
     "dt2" : "tinyint",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 88,
+    "fragment" : "SELECT cast(1 as tinyint) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date) FROM t"
+  } ]
 }
 
 
@@ -240,9 +268,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "binary",
     "dt2" : "smallint",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 73,
+    "fragment" : "SELECT cast(1 as smallint) FROM t UNION SELECT cast('2' as binary) FROM t"
+  } ]
 }
 
 
@@ -259,9 +294,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "boolean",
     "dt2" : "smallint",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 72,
+    "fragment" : "SELECT cast(1 as smallint) FROM t UNION SELECT cast(2 as boolean) FROM t"
+  } ]
 }
 
 
@@ -278,9 +320,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "timestamp",
     "dt2" : "smallint",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 96,
+    "fragment" : "SELECT cast(1 as smallint) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as timestamp) FROM t"
+  } ]
 }
 
 
@@ -297,9 +346,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "date",
     "dt2" : "smallint",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 89,
+    "fragment" : "SELECT cast(1 as smallint) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date) FROM t"
+  } ]
 }
 
 
@@ -388,9 +444,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "binary",
     "dt2" : "int",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 68,
+    "fragment" : "SELECT cast(1 as int) FROM t UNION SELECT cast('2' as binary) FROM t"
+  } ]
 }
 
 
@@ -407,9 +470,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "boolean",
     "dt2" : "int",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 67,
+    "fragment" : "SELECT cast(1 as int) FROM t UNION SELECT cast(2 as boolean) FROM t"
+  } ]
 }
 
 
@@ -426,9 +496,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "timestamp",
     "dt2" : "int",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 91,
+    "fragment" : "SELECT cast(1 as int) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as timestamp) FROM t"
+  } ]
 }
 
 
@@ -445,9 +522,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "date",
     "dt2" : "int",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 84,
+    "fragment" : "SELECT cast(1 as int) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date) FROM t"
+  } ]
 }
 
 
@@ -536,9 +620,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "binary",
     "dt2" : "bigint",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 71,
+    "fragment" : "SELECT cast(1 as bigint) FROM t UNION SELECT cast('2' as binary) FROM t"
+  } ]
 }
 
 
@@ -555,9 +646,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "boolean",
     "dt2" : "bigint",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 70,
+    "fragment" : "SELECT cast(1 as bigint) FROM t UNION SELECT cast(2 as boolean) FROM t"
+  } ]
 }
 
 
@@ -574,9 +672,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "timestamp",
     "dt2" : "bigint",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 94,
+    "fragment" : "SELECT cast(1 as bigint) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as timestamp) FROM t"
+  } ]
 }
 
 
@@ -593,9 +698,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "date",
     "dt2" : "bigint",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 87,
+    "fragment" : "SELECT cast(1 as bigint) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date) FROM t"
+  } ]
 }
 
 
@@ -684,9 +796,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "binary",
     "dt2" : "float",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 70,
+    "fragment" : "SELECT cast(1 as float) FROM t UNION SELECT cast('2' as binary) FROM t"
+  } ]
 }
 
 
@@ -703,9 +822,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "boolean",
     "dt2" : "float",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 69,
+    "fragment" : "SELECT cast(1 as float) FROM t UNION SELECT cast(2 as boolean) FROM t"
+  } ]
 }
 
 
@@ -722,9 +848,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "timestamp",
     "dt2" : "float",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 93,
+    "fragment" : "SELECT cast(1 as float) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as timestamp) FROM t"
+  } ]
 }
 
 
@@ -741,9 +874,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "date",
     "dt2" : "float",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 86,
+    "fragment" : "SELECT cast(1 as float) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date) FROM t"
+  } ]
 }
 
 
@@ -832,9 +972,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "binary",
     "dt2" : "double",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 71,
+    "fragment" : "SELECT cast(1 as double) FROM t UNION SELECT cast('2' as binary) FROM t"
+  } ]
 }
 
 
@@ -851,9 +998,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "boolean",
     "dt2" : "double",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 70,
+    "fragment" : "SELECT cast(1 as double) FROM t UNION SELECT cast(2 as boolean) FROM t"
+  } ]
 }
 
 
@@ -870,9 +1024,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "timestamp",
     "dt2" : "double",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 94,
+    "fragment" : "SELECT cast(1 as double) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as timestamp) FROM t"
+  } ]
 }
 
 
@@ -889,9 +1050,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "date",
     "dt2" : "double",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 87,
+    "fragment" : "SELECT cast(1 as double) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date) FROM t"
+  } ]
 }
 
 
@@ -980,9 +1148,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "binary",
     "dt2" : "decimal(10,0)",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 79,
+    "fragment" : "SELECT cast(1 as decimal(10, 0)) FROM t UNION SELECT cast('2' as binary) FROM t"
+  } ]
 }
 
 
@@ -999,9 +1174,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "boolean",
     "dt2" : "decimal(10,0)",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 78,
+    "fragment" : "SELECT cast(1 as decimal(10, 0)) FROM t UNION SELECT cast(2 as boolean) FROM t"
+  } ]
 }
 
 
@@ -1018,9 +1200,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "timestamp",
     "dt2" : "decimal(10,0)",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 102,
+    "fragment" : "SELECT cast(1 as decimal(10, 0)) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as timestamp) FROM t"
+  } ]
 }
 
 
@@ -1037,9 +1226,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "date",
     "dt2" : "decimal(10,0)",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 95,
+    "fragment" : "SELECT cast(1 as decimal(10, 0)) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date) FROM t"
+  } ]
 }
 
 
@@ -1128,9 +1324,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "binary",
     "dt2" : "string",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 71,
+    "fragment" : "SELECT cast(1 as string) FROM t UNION SELECT cast('2' as binary) FROM t"
+  } ]
 }
 
 
@@ -1147,9 +1350,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "boolean",
     "dt2" : "string",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 70,
+    "fragment" : "SELECT cast(1 as string) FROM t UNION SELECT cast(2 as boolean) FROM t"
+  } ]
 }
 
 
@@ -1184,9 +1394,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "tinyint",
     "dt2" : "binary",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 72,
+    "fragment" : "SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as tinyint) FROM t"
+  } ]
 }
 
 
@@ -1203,9 +1420,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "smallint",
     "dt2" : "binary",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 73,
+    "fragment" : "SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as smallint) FROM t"
+  } ]
 }
 
 
@@ -1222,9 +1446,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "int",
     "dt2" : "binary",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 68,
+    "fragment" : "SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as int) FROM t"
+  } ]
 }
 
 
@@ -1241,9 +1472,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "bigint",
     "dt2" : "binary",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 71,
+    "fragment" : "SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as bigint) FROM t"
+  } ]
 }
 
 
@@ -1260,9 +1498,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "float",
     "dt2" : "binary",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 70,
+    "fragment" : "SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as float) FROM t"
+  } ]
 }
 
 
@@ -1279,9 +1524,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "double",
     "dt2" : "binary",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 71,
+    "fragment" : "SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as double) FROM t"
+  } ]
 }
 
 
@@ -1298,9 +1550,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "decimal(10,0)",
     "dt2" : "binary",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 79,
+    "fragment" : "SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as decimal(10, 0)) FROM t"
+  } ]
 }
 
 
@@ -1317,9 +1576,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "string",
     "dt2" : "binary",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 71,
+    "fragment" : "SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as string) FROM t"
+  } ]
 }
 
 
@@ -1345,9 +1611,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "boolean",
     "dt2" : "binary",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 72,
+    "fragment" : "SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as boolean) FROM t"
+  } ]
 }
 
 
@@ -1364,9 +1637,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "timestamp",
     "dt2" : "binary",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 96,
+    "fragment" : "SELECT cast('1' as binary) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as timestamp) FROM t"
+  } ]
 }
 
 
@@ -1383,9 +1663,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "date",
     "dt2" : "binary",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 89,
+    "fragment" : "SELECT cast('1' as binary) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date) FROM t"
+  } ]
 }
 
 
@@ -1402,9 +1689,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "tinyint",
     "dt2" : "boolean",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 71,
+    "fragment" : "SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as tinyint) FROM t"
+  } ]
 }
 
 
@@ -1421,9 +1715,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "smallint",
     "dt2" : "boolean",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 72,
+    "fragment" : "SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as smallint) FROM t"
+  } ]
 }
 
 
@@ -1440,9 +1741,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "int",
     "dt2" : "boolean",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 67,
+    "fragment" : "SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as int) FROM t"
+  } ]
 }
 
 
@@ -1459,9 +1767,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "bigint",
     "dt2" : "boolean",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 70,
+    "fragment" : "SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as bigint) FROM t"
+  } ]
 }
 
 
@@ -1478,9 +1793,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "float",
     "dt2" : "boolean",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 69,
+    "fragment" : "SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as float) FROM t"
+  } ]
 }
 
 
@@ -1497,9 +1819,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "double",
     "dt2" : "boolean",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 70,
+    "fragment" : "SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as double) FROM t"
+  } ]
 }
 
 
@@ -1516,9 +1845,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "decimal(10,0)",
     "dt2" : "boolean",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 78,
+    "fragment" : "SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as decimal(10, 0)) FROM t"
+  } ]
 }
 
 
@@ -1535,9 +1871,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "string",
     "dt2" : "boolean",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 70,
+    "fragment" : "SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as string) FROM t"
+  } ]
 }
 
 
@@ -1554,9 +1897,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "binary",
     "dt2" : "boolean",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 72,
+    "fragment" : "SELECT cast(1 as boolean) FROM t UNION SELECT cast('2' as binary) FROM t"
+  } ]
 }
 
 
@@ -1581,9 +1931,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "timestamp",
     "dt2" : "boolean",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 95,
+    "fragment" : "SELECT cast(1 as boolean) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as timestamp) FROM t"
+  } ]
 }
 
 
@@ -1600,9 +1957,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "date",
     "dt2" : "boolean",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 88,
+    "fragment" : "SELECT cast(1 as boolean) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date) FROM t"
+  } ]
 }
 
 
@@ -1619,9 +1983,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "tinyint",
     "dt2" : "timestamp",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 95,
+    "fragment" : "SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as tinyint) FROM t"
+  } ]
 }
 
 
@@ -1638,9 +2009,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "smallint",
     "dt2" : "timestamp",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 96,
+    "fragment" : "SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as smallint) FROM t"
+  } ]
 }
 
 
@@ -1657,9 +2035,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "int",
     "dt2" : "timestamp",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 91,
+    "fragment" : "SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as int) FROM t"
+  } ]
 }
 
 
@@ -1676,9 +2061,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "bigint",
     "dt2" : "timestamp",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 94,
+    "fragment" : "SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as bigint) FROM t"
+  } ]
 }
 
 
@@ -1695,9 +2087,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "float",
     "dt2" : "timestamp",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 93,
+    "fragment" : "SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as float) FROM t"
+  } ]
 }
 
 
@@ -1714,9 +2113,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "double",
     "dt2" : "timestamp",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 94,
+    "fragment" : "SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as double) FROM t"
+  } ]
 }
 
 
@@ -1733,9 +2139,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "decimal(10,0)",
     "dt2" : "timestamp",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 102,
+    "fragment" : "SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as decimal(10, 0)) FROM t"
+  } ]
 }
 
 
@@ -1761,9 +2174,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "binary",
     "dt2" : "timestamp",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 96,
+    "fragment" : "SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast('2' as binary) FROM t"
+  } ]
 }
 
 
@@ -1780,9 +2200,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "boolean",
     "dt2" : "timestamp",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 95,
+    "fragment" : "SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as boolean) FROM t"
+  } ]
 }
 
 
@@ -1817,9 +2244,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "tinyint",
     "dt2" : "date",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 88,
+    "fragment" : "SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as tinyint) FROM t"
+  } ]
 }
 
 
@@ -1836,9 +2270,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "smallint",
     "dt2" : "date",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 89,
+    "fragment" : "SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as smallint) FROM t"
+  } ]
 }
 
 
@@ -1855,9 +2296,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "int",
     "dt2" : "date",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 84,
+    "fragment" : "SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as int) FROM t"
+  } ]
 }
 
 
@@ -1874,9 +2322,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "bigint",
     "dt2" : "date",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 87,
+    "fragment" : "SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as bigint) FROM t"
+  } ]
 }
 
 
@@ -1893,9 +2348,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "float",
     "dt2" : "date",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 86,
+    "fragment" : "SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as float) FROM t"
+  } ]
 }
 
 
@@ -1912,9 +2374,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "double",
     "dt2" : "date",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 87,
+    "fragment" : "SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as double) FROM t"
+  } ]
 }
 
 
@@ -1931,9 +2400,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "decimal(10,0)",
     "dt2" : "date",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 95,
+    "fragment" : "SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as decimal(10, 0)) FROM t"
+  } ]
 }
 
 
@@ -1959,9 +2435,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "binary",
     "dt2" : "date",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 89,
+    "fragment" : "SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast('2' as binary) FROM t"
+  } ]
 }
 
 
@@ -1978,9 +2461,16 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "boolean",
     "dt2" : "date",
     "hint" : "",
-    "operator" : "Union",
+    "operator" : "UNION",
     "ti" : "second"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 88,
+    "fragment" : "SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as boolean) FROM t"
+  } ]
 }
 
 
