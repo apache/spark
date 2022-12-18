@@ -145,6 +145,7 @@ class PartitionedWriteTaskStatsTracker(
       currentPartitionStats = SinglePartitionWriteStats(InternalRow.empty, 0, 0L, 0L)
       partitionStats.append(currentPartitionStats)
       currentPartition = InternalRow.empty
+      partitions.append(currentPartition)
     }
     val partitionSubmittedFiles =
       submittedFiles.getOrElseUpdate(currentPartition, mutable.HashSet.empty[String])

@@ -23,13 +23,43 @@ import org.apache.spark.sql.sources.DataSourceTest
 import org.apache.spark.sql.test.SharedSparkSession
 
 class PartitionStatisticsAutoUpdateSuite extends DataSourceTest with SharedSparkSession {
-  test("Auto add Partition Statistics while writing with dynamicPartition") {
+  test("Auto update Partition Statistics while writing with dynamicPartition") {
     withSQLConf(SQLConf.AUTO_PARTITION_STATISTICS_UPDATE_ENABLED.key -> "true") {
       withTempPath { file =>
         sql(s"create table test(a string, b string) using parquet " +
           s"partitioned by (b) location '${file.toString}'")
         withTable("test") {
           sql("insert into test partition(b) values(1,2),(2,2)")
+          val partition =
+            spark.sessionState.catalog.getPartition(TableIdentifier("test"), Map("b" -> "2"))
+          assert(partition.stats.nonEmpty)
+        }
+      }
+    }
+  }
+
+  test("Auto update Partition Statistics while writing a non-partitioned table") {
+    withSQLConf(SQLConf.AUTO_PARTITION_STATISTICS_UPDATE_ENABLED.key -> "true") {
+      withTempPath { file =>
+        sql(s"create table test(a string, b string) using parquet " +
+          s"location '${file.toString}'")
+        withTable("test") {
+          sql("insert into test values(1,2),(2,2)")
+          val tableMetadata =
+            spark.sessionState.catalog.getTableMetadata(TableIdentifier("test"))
+          assert(tableMetadata.stats.nonEmpty)
+        }
+      }
+    }
+  }
+
+  test("Auto update Partition Statistics while writing with static partition") {
+    withSQLConf(SQLConf.AUTO_PARTITION_STATISTICS_UPDATE_ENABLED.key -> "true") {
+      withTempPath { file =>
+        sql(s"create table test(a string, b string) using parquet " +
+          s"partitioned by (b) location '${file.toString}'")
+        withTable("test") {
+          sql("insert into test partition(b = '2') values(1),(2)")
           val partition =
             spark.sessionState.catalog.getPartition(TableIdentifier("test"), Map("b" -> "2"))
           assert(partition.stats.nonEmpty)
