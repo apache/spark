@@ -404,7 +404,7 @@ jobs:
         export PATH=$PATH:$HOME/miniconda/bin
         ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST"
     - name: Upload coverage to Codecov
-      if: fromJSON(inputs.envs).PYSPARK_CODECOV == 'true'
+      if: fromJSON(inputs.envs).PYSPARK_CODECOV != 'false'
       uses: codecov/codecov-action@v2
       with:
         files: ./python/coverage.xml
