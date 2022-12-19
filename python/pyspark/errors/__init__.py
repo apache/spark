@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from typing import Dict, Optional
+from typing import Dict, Optional, Union, Any, Type
 from pyspark.errors.error_classes import ERROR_CLASSES
 
 
@@ -33,79 +33,108 @@ class PySparkException(Exception):
         self._verify_message_parameters(message_parameters)
         self._message_parameters = message_parameters
 
-    def _verify_error_class(self, error_class):
+    def _verify_error_class(self, error_class: str) -> None:
         assert (
             error_class in ERROR_CLASSES
         ), f"{error_class} is not in the list of error classes: {list(ERROR_CLASSES.keys())}"
 
-    def _verify_message_parameters(self, message_parameters):
-        message_parameters = set() if message_parameters is None else message_parameters
+    def _verify_message_parameters(
+        self, message_parameters: Optional[Dict[str, str]] = None
+    ) -> None:
         required = set(self._error_message_format.__code__.co_varnames)
-        given = set(message_parameters.keys())
+        given = set() if message_parameters is None else set(message_parameters.keys())
         assert given == required, f"Given message parameters: {given} , but {required} required"
 
-    def getErrorClass(self):
+    def getErrorClass(self) -> str:
         return self._error_class
 
-    def getMessageParameters(self):
+    def getMessageParameters(self) -> Optional[Dict[str, str]]:
         return self._message_parameters
 
-    def getErrorMessage(self):
+    def getErrorMessage(self) -> str:
         if self._message_parameters is None:
-            message = self._error_message_format()
+            message = self._error_message_format()  # type: ignore[operator]
         else:
-            message = self._error_message_format(*self._message_parameters.values())
+            message = self._error_message_format(
+                *self._message_parameters.values()
+            )  # type: ignore[operator]
 
         return message
 
-    def __str__(self):
+    def __str__(self) -> str:
         # The user-facing error message is contains error class and error message
         # e.g. "[WRONG_NUM_COLUMNS] 'greatest' should take at least two columns"
         return f"[{self.getErrorClass()}] {self.getErrorMessage()}"
 
 
-def notColumnOrStringError(arg_name, arg_type):
+def notColumnOrStringError(arg_name: str, arg_type: Type[Any]) -> "PySparkException":
     return PySparkException(
         error_class="NOT_COLUMN_OR_STRING",
         message_parameters={"arg_name": arg_name, "arg_type": arg_type.__name__},
     )
 
 
-def notColumnOrIntegerOrStringError(arg_name, arg_type):
+def notColumnOrIntegerError(arg_name: str, arg_type: Type[Any]) -> "PySparkException":
+    return PySparkException(
+        error_class="NOT_COLUMN_OR_INTEGER",
+        message_parameters={"arg_name": arg_name, "arg_type": arg_type.__name__},
+    )
+
+
+def notColumnOrIntegerOrStringError(arg_name: str, arg_type: Type[Any]) -> "PySparkException":
     return PySparkException(
         error_class="NOT_COLUMN_OR_INTEGER_OR_STRING",
         message_parameters={"arg_name": arg_name, "arg_type": arg_type.__name__},
     )
 
 
-def columnInListError(func_name):
+def columnInListError(func_name: str) -> "PySparkException":
     return PySparkException(
         error_class="COLUMN_IN_LIST", message_parameters={"func_name": func_name}
     )
 
 
-def invalidNumberOfColumnsError(func_name):
+def invalidNumberOfColumnsError(func_name: str) -> "PySparkException":
     return PySparkException(
         error_class="WRONG_NUM_COLUMNS", message_parameters={"func_name": func_name}
     )
 
 
-def notColumnError(arg_name, arg_type):
+def notColumnError(arg_name: str, arg_type: Type[Any]) -> "PySparkException":
     return PySparkException(
         error_class="NOT_A_COLUMN",
         message_parameters={"arg_name": arg_name, "arg_type": arg_type.__name__},
     )
 
 
-def notStringError(arg_name, arg_type):
+def notStringError(arg_name: str, arg_type: Type[Any]) -> "PySparkException":
     return PySparkException(
         error_class="NOT_A_STRING",
         message_parameters={"arg_name": arg_name, "arg_type": arg_type.__name__},
     )
 
 
-def invalidHigherOrderFunctionArgumentNumberError(func_name, num_args):
+def invalidHigherOrderFunctionArgumentNumberError(
+    func_name: str, num_args: Union[str, int]
+) -> "PySparkException":
+    num_args = str(num_args) if isinstance(num_args, int) else num_args
     return PySparkException(
-        error_class="WRONG_NUM_ARGUMENTS",
+        error_class="WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION",
         message_parameters={"func_name": func_name, "num_args": num_args},
+    )
+
+
+def HigherOrderFunctionShouldReturnColumnError(
+    func_name: str, return_type: Type[Any]
+) -> "PySparkException":
+    return PySparkException(
+        error_class="HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN",
+        message_parameters={"func_name": func_name, "return_type": return_type.__name__},
+    )
+
+
+def invalidParameterTypeForHigherOrderFunctionError(func_name: str) -> "PySparkException":
+    return PySparkException(
+        error_class="UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION",
+        message_parameters={"func_name": func_name},
     )

@@ -17,13 +17,14 @@
 
 
 ERROR_CLASSES = {
+    "COLUMN_IN_LIST": lambda func_name: f"{func_name} does not allow a column in a list",
     "NOT_COLUMN_OR_STRING": lambda arg_name, arg_type: f"Argument '{arg_name}' should be a column or string, got '{arg_type}'.",
-    "NOT_COLUMN_OR_INTEGER_OR_STRING": lambda arg_name, arg_type: f"Argument '{arg_name}' should be a column or integer, got '{arg_type}'.",
+    "NOT_COLUMN_OR_INTEGER": lambda arg_name, arg_type: f"Argument '{arg_name}' should be a column or integer, got '{arg_type}'.",
+    "NOT_COLUMN_OR_INTEGER_OR_STRING": lambda arg_name, arg_type: f"Argument '{arg_name}' should be a column or integer or string, got '{arg_type}'.",
     "NOT_A_COLUMN": lambda arg_name, arg_type: f"Argument '{arg_name}' should be a column, got '{arg_type}'.",
     "NOT_A_STRING": lambda arg_name, arg_type: f"Argument '{arg_name}' should be a string, got '{arg_type}'.",
-    "COLUMN_IN_LIST": lambda func_name: f"{func_name} does not allow a column in a list",
     "WRONG_NUM_COLUMNS": lambda func_name: f"'{func_name}' should take at least two columns",
-    "WRONG_NUM_ARGUMENTS": lambda func_name: f"'{func_name}' should take at least two columns",
     "WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION": lambda func_name, num_args: f"Function '{func_name}' should take between 1 and 3 arguments, but provided function takes {num_args}",
-    "UNSUPPORTED_PARAMETER_FOR_HIGHER_ORDER_FUNCTION": lambda func_name: f"Function '{func_name}' should use only POSITIONAL or POSITIONAL OR KEYWORD arguments",
+    "UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION": lambda func_name: f"Function '{func_name}' should use only POSITIONAL or POSITIONAL OR KEYWORD arguments",
+    "HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN": lambda func_name, return_type: f"Function '{func_name}' should return Column, got {return_type}",
 }

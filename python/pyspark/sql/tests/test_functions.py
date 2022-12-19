@@ -74,6 +74,8 @@ from pyspark.sql.functions import (
     when,
     window,
     session_window,
+    bucket,
+    transform,
 )
 from pyspark.sql import functions
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
@@ -1072,8 +1074,12 @@ class FunctionsTests(ReusedSQLTestCase):
             self.assertEqual(actual, expected)
 
         df = self.spark.range(10)
-        with self.assertRaisesRegex(ValueError, "lit does not allow a column in a list"):
+        with self.assertRaises(PySparkException) as pe:
             lit([df.id, df.id])
+
+        self.checkError(
+            exception=pe, error_class="COLUMN_IN_LIST", message_parameters={"func_name": "lit"}
+        )
 
     # Test added for SPARK-39832; change Python API to accept both col & str as input
     def test_regexp_replace(self):
@@ -1261,6 +1267,53 @@ class FunctionsTests(ReusedSQLTestCase):
             exception=pe,
             error_class="NOT_COLUMN_OR_STRING",
             message_parameters={"arg_name": "gapDuration", "arg_type": "int"},
+        )
+
+    def test_bucket(self):
+        with self.assertRaises(PySparkException) as pe:
+            bucket("5", "id")
+
+        self.checkError(
+            exception=pe,
+            error_class="NOT_COLUMN_OR_INTEGER",
+            message_parameters={"arg_name": "numBuckets", "arg_type": "str"},
+        )
+
+    def test_transform(self):
+        def alternate1(x):
+            return 10
+
+        with self.assertRaises(PySparkException) as pe:
+            transform("values", alternate1)
+
+        self.checkError(
+            exception=pe,
+            error_class="HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN",
+            message_parameters={"func_name": "alternate1", "return_type": "int"},
+        )
+
+        def alternate2(*args):
+            return args[0]
+
+        with self.assertRaises(PySparkException) as pe:
+            transform("values", alternate2)
+
+        self.checkError(
+            exception=pe,
+            error_class="UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION",
+            message_parameters={"func_name": "alternate2"},
+        )
+
+        def alternate3(a, b, c, d):
+            return a + b + c + d
+
+        with self.assertRaises(PySparkException) as pe:
+            transform("values", alternate3)
+
+        self.checkError(
+            exception=pe,
+            error_class="WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION",
+            message_parameters={"func_name": "alternate3", "num_args": "4"},
         )
 
 

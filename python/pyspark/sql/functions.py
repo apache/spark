@@ -46,6 +46,9 @@ from pyspark.errors import (
     notColumnOrIntegerOrStringError,
     notStringError,
     invalidHigherOrderFunctionArgumentNumberError,
+    notColumnOrIntegerError,
+    HigherOrderFunctionShouldReturnColumnError,
+    invalidParameterTypeForHigherOrderFunctionError,
 )
 from pyspark.rdd import PythonEvalType
 from pyspark.sql.column import Column, _to_java_column, _to_seq, _create_column_from_literal
@@ -8133,7 +8136,7 @@ def _get_lambda_parameters(f: Callable) -> ValuesView[inspect.Parameter]:
 
     # and all arguments can be used as positional
     if not all(p.kind in supported_parameter_types for p in parameters):
-        raise ValueError("f should use only POSITIONAL or POSITIONAL OR KEYWORD arguments")
+        raise invalidParameterTypeForHigherOrderFunctionError(func_name=f.__name__)
 
     return parameters
 
@@ -8165,7 +8168,9 @@ def _create_lambda(f: Callable) -> Callable:
     result = f(*args)
 
     if not isinstance(result, Column):
-        raise ValueError("f should return Column, got {}".format(type(result)))
+        raise HigherOrderFunctionShouldReturnColumnError(
+            func_name=f.__name__, return_type=type(result)
+        )
 
     jexpr = result._jc.expr()
     jargs = _to_seq(sc, [arg._jc.expr() for arg in args])
@@ -8853,7 +8858,7 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
 
     """
     if not isinstance(numBuckets, (int, Column)):
-        raise TypeError("numBuckets should be a Column or an int, got {}".format(type(numBuckets)))
+        raise notColumnOrIntegerError(arg_name="numBuckets", arg_type=type(numBuckets))
 
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
