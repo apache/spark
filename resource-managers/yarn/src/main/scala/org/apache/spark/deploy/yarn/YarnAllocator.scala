@@ -167,6 +167,8 @@ private[yarn] class YarnAllocator(
 
   private val memoryOverheadFactor = sparkConf.get(EXECUTOR_MEMORY_OVERHEAD_FACTOR)
 
+  private val excludeNodes = sparkConf.get(YARN_EXCLUDE_NODES).toSet
+
   private val launcherPool = ThreadUtils.newDaemonCachedThreadPool(
     "ContainerLauncher", sparkConf.get(CONTAINER_LAUNCH_MAX_THREADS))
 
@@ -563,6 +565,7 @@ private[yarn] class YarnAllocator(
           }
         }
 
+        allocatorNodeHealthTracker.setSchedulerExcludedNodes(excludeNodes)
         newLocalityRequests.foreach { request =>
           amClient.addContainerRequest(request)
         }
