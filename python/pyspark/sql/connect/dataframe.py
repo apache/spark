@@ -813,9 +813,6 @@ class DataFrame:
         ----------
         observation : :class:`Observation` or str
             `str` to specify the name, or an :class:`Observation` instance to obtain the metric.
-
-            .. versionchanged:: 3.4.0
-               Added support for `str` in this parameter.
         exprs : :class:`Column`
             column expressions (:class:`Column`).
 
