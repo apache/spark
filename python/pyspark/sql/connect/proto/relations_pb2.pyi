@@ -953,89 +953,29 @@ class Sort(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    class _SortDirection:
-        ValueType = typing.NewType("ValueType", builtins.int)
-        V: typing_extensions.TypeAlias = ValueType
-
-    class _SortDirectionEnumTypeWrapper(
-        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[Sort._SortDirection.ValueType],
-        builtins.type,
-    ):  # noqa: F821
-        DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
-        SORT_DIRECTION_UNSPECIFIED: Sort._SortDirection.ValueType  # 0
-        SORT_DIRECTION_ASCENDING: Sort._SortDirection.ValueType  # 1
-        SORT_DIRECTION_DESCENDING: Sort._SortDirection.ValueType  # 2
-
-    class SortDirection(_SortDirection, metaclass=_SortDirectionEnumTypeWrapper): ...
-    SORT_DIRECTION_UNSPECIFIED: Sort.SortDirection.ValueType  # 0
-    SORT_DIRECTION_ASCENDING: Sort.SortDirection.ValueType  # 1
-    SORT_DIRECTION_DESCENDING: Sort.SortDirection.ValueType  # 2
-
-    class _SortNulls:
-        ValueType = typing.NewType("ValueType", builtins.int)
-        V: typing_extensions.TypeAlias = ValueType
-
-    class _SortNullsEnumTypeWrapper(
-        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[Sort._SortNulls.ValueType],
-        builtins.type,
-    ):  # noqa: F821
-        DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
-        SORT_NULLS_UNSPECIFIED: Sort._SortNulls.ValueType  # 0
-        SORT_NULLS_FIRST: Sort._SortNulls.ValueType  # 1
-        SORT_NULLS_LAST: Sort._SortNulls.ValueType  # 2
-
-    class SortNulls(_SortNulls, metaclass=_SortNullsEnumTypeWrapper): ...
-    SORT_NULLS_UNSPECIFIED: Sort.SortNulls.ValueType  # 0
-    SORT_NULLS_FIRST: Sort.SortNulls.ValueType  # 1
-    SORT_NULLS_LAST: Sort.SortNulls.ValueType  # 2
-
-    class SortField(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        EXPRESSION_FIELD_NUMBER: builtins.int
-        DIRECTION_FIELD_NUMBER: builtins.int
-        NULLS_FIELD_NUMBER: builtins.int
-        @property
-        def expression(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression: ...
-        direction: global___Sort.SortDirection.ValueType
-        nulls: global___Sort.SortNulls.ValueType
-        def __init__(
-            self,
-            *,
-            expression: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
-            direction: global___Sort.SortDirection.ValueType = ...,
-            nulls: global___Sort.SortNulls.ValueType = ...,
-        ) -> None: ...
-        def HasField(
-            self, field_name: typing_extensions.Literal["expression", b"expression"]
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "direction", b"direction", "expression", b"expression", "nulls", b"nulls"
-            ],
-        ) -> None: ...
-
     INPUT_FIELD_NUMBER: builtins.int
-    SORT_FIELDS_FIELD_NUMBER: builtins.int
+    ORDER_FIELD_NUMBER: builtins.int
     IS_GLOBAL_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
         """(Required) Input relation for a Sort."""
     @property
-    def sort_fields(
+    def order(
         self,
     ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-        global___Sort.SortField
+        pyspark.sql.connect.proto.expressions_pb2.Expression.SortOrder
     ]:
-        """(Required) Sort fields."""
+        """(Required) The ordering expressions"""
     is_global: builtins.bool
     """(Optional) if this is a global sort."""
     def __init__(
         self,
         *,
         input: global___Relation | None = ...,
-        sort_fields: collections.abc.Iterable[global___Sort.SortField] | None = ...,
+        order: collections.abc.Iterable[
+            pyspark.sql.connect.proto.expressions_pb2.Expression.SortOrder
+        ]
+        | None = ...,
         is_global: builtins.bool | None = ...,
     ) -> None: ...
     def HasField(
@@ -1053,8 +993,8 @@ class Sort(google.protobuf.message.Message):
             b"input",
             "is_global",
             b"is_global",
-            "sort_fields",
-            b"sort_fields",
+            "order",
+            b"order",
         ],
     ) -> None: ...
     def WhichOneof(

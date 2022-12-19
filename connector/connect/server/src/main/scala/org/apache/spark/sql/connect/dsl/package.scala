@@ -535,12 +535,12 @@ package object dsl {
           .build()
       }
 
-      def createDefaultSortField(col: String): Sort.SortField = {
-        Sort.SortField
+      def createDefaultSortField(col: String): Expression.SortOrder = {
+        Expression.SortOrder
           .newBuilder()
-          .setNulls(Sort.SortNulls.SORT_NULLS_FIRST)
-          .setDirection(Sort.SortDirection.SORT_DIRECTION_ASCENDING)
-          .setExpression(
+          .setNullOrdering(Expression.SortOrder.NullOrdering.SORT_NULLS_FIRST)
+          .setDirection(Expression.SortOrder.SortDirection.SORT_DIRECTION_ASCENDING)
+          .setChild(
             Expression.newBuilder
               .setUnresolvedAttribute(
                 Expression.UnresolvedAttribute.newBuilder.setUnparsedIdentifier(col).build())
@@ -555,7 +555,7 @@ package object dsl {
             Sort
               .newBuilder()
               .setInput(logicalPlan)
-              .addAllSortFields(columns.map(createDefaultSortField).asJava)
+              .addAllOrder(columns.map(createDefaultSortField).asJava)
               .setIsGlobal(true)
               .build())
           .build()
@@ -568,7 +568,7 @@ package object dsl {
             Sort
               .newBuilder()
               .setInput(logicalPlan)
-              .addAllSortFields(columns.map(createDefaultSortField).asJava)
+              .addAllOrder(columns.map(createDefaultSortField).asJava)
               .setIsGlobal(false)
               .build())
           .build()

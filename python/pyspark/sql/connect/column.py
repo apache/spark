@@ -22,7 +22,6 @@ from typing import (
     Any,
     Union,
     overload,
-    cast,
     Sequence,
     Tuple,
     Optional,
@@ -410,12 +409,6 @@ class ColumnReference(Expression):
         expr.unresolved_attribute.unparsed_identifier = self._unparsed_identifier
         return expr
 
-    def desc(self) -> "SortOrder":
-        return SortOrder(self, ascending=False, nullsLast=True)
-
-    def asc(self) -> "SortOrder":
-        return SortOrder(self, ascending=True, nullsLast=False)
-
     def __repr__(self) -> str:
         return f"ColumnReference({self._unparsed_identifier})"
 
@@ -437,35 +430,38 @@ class SQLExpression(Expression):
 
 
 class SortOrder(Expression):
-    def __init__(self, child: Expression, ascending: bool = True, nullsLast: bool = False) -> None:
+    def __init__(self, child: Expression, ascending: bool = True, nullsFirst: bool = True) -> None:
         super().__init__()
         self._child = child
         self._ascending = ascending
-        self._nullsLast = nullsLast
+        self._nullsFirst = nullsFirst
 
     def __repr__(self) -> str:
         return (
             str(self._child)
             + (" ASC" if self._ascending else " DESC")
-            + (" NULLS LAST" if self._nullsLast else " NULLS FIRST")
+            + (" NULLS FIRST" if self._nullsFirst else " NULLS LAST")
         )
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
-        # TODO(SPARK-41334): move SortField from relations.proto to expressions.proto
-        sort = proto.Sort.SortField()
-        sort.expression.CopyFrom(self._child.to_plan(session))
+        sort = proto.Expression()
+        sort.sort_order.child.CopyFrom(self._child.to_plan(session))
 
         if self._ascending:
-            sort.direction = proto.Sort.SortDirection.SORT_DIRECTION_ASCENDING
+            sort.sort_order.direction = (
+                proto.Expression.SortOrder.SortDirection.SORT_DIRECTION_ASCENDING
+            )
         else:
-            sort.direction = proto.Sort.SortDirection.SORT_DIRECTION_DESCENDING
+            sort.sort_order.direction = (
+                proto.Expression.SortOrder.SortDirection.SORT_DIRECTION_DESCENDING
+            )
 
-        if self._nullsLast:
-            sort.nulls = proto.Sort.SortNulls.SORT_NULLS_LAST
+        if self._nullsFirst:
+            sort.sort_order.null_ordering = proto.Expression.SortOrder.NullOrdering.SORT_NULLS_FIRST
         else:
-            sort.nulls = proto.Sort.SortNulls.SORT_NULLS_FIRST
+            sort.sort_order.null_ordering = proto.Expression.SortOrder.NullOrdering.SORT_NULLS_LAST
 
-        return cast(proto.Expression, sort)
+        return sort
 
 
 class UnresolvedFunction(Expression):
@@ -1016,19 +1012,19 @@ class Column:
         return self.asc_nulls_first()
 
     def asc_nulls_first(self) -> "Column":
-        return Column(SortOrder(self._expr, ascending=True, nullsLast=False))
+        return Column(SortOrder(self._expr, ascending=True, nullsFirst=True))
 
     def asc_nulls_last(self) -> "Column":
-        return Column(SortOrder(self._expr, ascending=True, nullsLast=True))
+        return Column(SortOrder(self._expr, ascending=True, nullsFirst=False))
 
     def desc(self) -> "Column":
         return self.desc_nulls_last()
 
     def desc_nulls_first(self) -> "Column":
-        return Column(SortOrder(self._expr, ascending=False, nullsLast=False))
+        return Column(SortOrder(self._expr, ascending=False, nullsFirst=True))
 
     def desc_nulls_last(self) -> "Column":
-        return Column(SortOrder(self._expr, ascending=False, nullsLast=True))
+        return Column(SortOrder(self._expr, ascending=False, nullsFirst=False))
 
     def name(self) -> str:
         return self._expr.name()
