@@ -214,8 +214,8 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       AddData(inputData, 50),
       StartStream(Trigger.Once),
       awaitTermination(),
-      assertEventStats(min = 50, max = 50, avg = 50, wtrmark = 15),
       CheckNewAnswer((10, 3)),   // watermark = 15 is used to generate this
+      assertEventStats(min = 50, max = 50, avg = 50, wtrmark = 15),
       // watermark should be updated to 50 - 10 = 40
 
       AddData(inputData, 50),

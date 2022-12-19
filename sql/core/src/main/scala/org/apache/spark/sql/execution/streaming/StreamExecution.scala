@@ -143,10 +143,7 @@ abstract class StreamExecution(
 
   /** Metadata associated with the offset seq of a batch in the query. */
   protected var offsetSeqMetadata = OffsetSeqMetadata(
-    batchWatermarkMs = 0, batchTimestampMs = 0,
-    operatorWatermarksForLateEvents = Map.empty[Long, Long],
-    operatorWatermarksForEviction = Map.empty[Long, Long],
-    sparkSession.conf)
+    batchWatermarkMs = 0, batchTimestampMs = 0, sparkSession.conf)
 
   /**
    * A map of current watermarks, keyed by the position of the watermark operator in the
@@ -301,10 +298,7 @@ abstract class StreamExecution(
         logicalPlan
 
         offsetSeqMetadata = OffsetSeqMetadata(
-          batchWatermarkMs = 0, batchTimestampMs = 0,
-          operatorWatermarksForLateEvents = Map.empty[Long, Long],
-          operatorWatermarksForEviction = Map.empty[Long, Long],
-          sparkSessionForStream.conf)
+          batchWatermarkMs = 0, batchTimestampMs = 0, sparkSessionForStream.conf)
 
         if (state.compareAndSet(INITIALIZING, ACTIVE)) {
           // Unblock `awaitInitialization`

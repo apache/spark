@@ -104,7 +104,7 @@ case class StreamingGlobalLimitExec(
 
   // This operator will evict based on min input watermark and ensure it will be minimum of
   // the event time value for the output so far (including output from eviction).
-  override def produceWatermark(minInputWatermarkMs: Long): Long = minInputWatermarkMs
+  override def produceOutputWatermark(minInputWatermarkMs: Long): Long = minInputWatermarkMs
 }
 
 

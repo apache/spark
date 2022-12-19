@@ -89,7 +89,6 @@ class EventTimeStatsAccum(protected var currentStats: EventTimeStats = EventTime
 case class EventTimeWatermarkExec(
     eventTime: Attribute,
     delay: CalendarInterval,
-    stateInfo: Option[StatefulOperatorStateInfo],
     child: SparkPlan) extends UnaryExecNode {
 
   val eventTimeStats = new EventTimeStatsAccum()

@@ -43,37 +43,23 @@ class OffsetSeqLogSuite extends SharedSparkSession {
       OffsetSeqMetadata("""{"batchWatermarkMs":1}"""))
     assert(new OffsetSeqMetadata(0, 2, Map.empty) ===
       OffsetSeqMetadata("""{"batchTimestampMs":2}"""))
-    assert(OffsetSeqMetadata(0, 0, Map.empty[Long, Long], Map.empty[Long, Long],
-      getConfWith(shufflePartitions = 2)) ===
+    assert(OffsetSeqMetadata(0, 0, getConfWith(shufflePartitions = 2)) ===
       OffsetSeqMetadata(s"""{"conf": {"$key":2}}"""))
 
     // Two set
     assert(new OffsetSeqMetadata(1, 2, Map.empty) ===
       OffsetSeqMetadata("""{"batchWatermarkMs":1,"batchTimestampMs":2}"""))
-    assert(OffsetSeqMetadata(1, 0, Map.empty[Long, Long], Map.empty[Long, Long],
-      getConfWith(shufflePartitions = 3)) ===
+    assert(OffsetSeqMetadata(1, 0, getConfWith(shufflePartitions = 3)) ===
       OffsetSeqMetadata(s"""{"batchWatermarkMs":1,"conf": {"$key":3}}"""))
-    assert(OffsetSeqMetadata(0, 2, Map.empty[Long, Long], Map.empty[Long, Long],
-      getConfWith(shufflePartitions = 3)) ===
+    assert(OffsetSeqMetadata(0, 2, getConfWith(shufflePartitions = 3)) ===
       OffsetSeqMetadata(s"""{"batchTimestampMs":2,"conf": {"$key":3}}"""))
 
-    // Three set
-    assert(OffsetSeqMetadata(1, 2, Map.empty[Long, Long], Map.empty[Long, Long],
-      getConfWith(shufflePartitions = 3)) ===
+    // All set
+    assert(OffsetSeqMetadata(1, 2, getConfWith(shufflePartitions = 3)) ===
       OffsetSeqMetadata(s"""{"batchWatermarkMs":1,"batchTimestampMs":2,"conf": {"$key":3}}"""))
 
-    // All set
-    assert(OffsetSeqMetadata(1, 2,
-      Map(-1L -> 1L, 1L -> 1L), Map(-1L -> 1L, 1L -> 2L), getConfWith(shufflePartitions = 3)) ===
-      OffsetSeqMetadata(
-        s"""{"batchWatermarkMs":1,"batchTimestampMs":2,
-           |"operatorWatermarksForLateEvents": {"-1":1,"1":1},
-           |"operatorWatermarksForEviction": {"-1":1,"1":2},
-           |"conf": {"$key":3}}""".stripMargin))
-
     // Drop unknown fields
-    assert(OffsetSeqMetadata(1, 2, Map.empty[Long, Long], Map.empty[Long, Long],
-      getConfWith(shufflePartitions = 3)) ===
+    assert(OffsetSeqMetadata(1, 2, getConfWith(shufflePartitions = 3)) ===
       OffsetSeqMetadata(
         s"""{"batchWatermarkMs":1,"batchTimestampMs":2,"conf": {"$key":3}},"unknown":1"""))
   }
