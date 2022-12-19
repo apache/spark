@@ -19,16 +19,24 @@ package org.apache.spark.sql.connector
 
 import java.io.{File, FilenameFilter}
 
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
-import org.apache.spark.sql.connector.catalog.{MetadataColumn, SupportsMetadataColumns, Table, TableCapability}
+import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryCatalog, InMemoryTable, MetadataColumn, Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.functions.struct
-import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
-import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType, StructField, StructType}
 
 class MetadataColumnSuite extends DatasourceV2SQLBase {
   import testImplicits._
+
+  override protected def beforeEach(): Unit = {
+    super.beforeEach()
+    spark.conf.set("spark.sql.catalog.testCatalog", classOf[MetadataTestCatalog].getName)
+    spark.conf.set("spark.sql.catalog.typeMismatch", classOf[MetadataTypeMismatchCatalog].getName)
+    spark.conf.set(
+      "spark.sql.catalog.nameMismatch", classOf[MetadataAttrNameMismatchCatalog].getName)
+    spark.conf.set(
+      "spark.sql.catalog.fieldNameMismatch", classOf[MetadataFieldNameMismatchCatalog].getName)
+  }
 
   private val tbl = "testcat.t"
 
@@ -284,15 +292,55 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
       }
     }
   }
+
+  test("SPARK-41498: Metadata column is not propagated when children of Union " +
+    "have a type mismatch in a metadata column") {
+    val tbl = "testCatalog.t"
+    val typeMismatchTbl = "typeMismatch.t"
+    withTable(tbl, typeMismatchTbl) {
+      spark.range(10).write.saveAsTable(tbl)
+      val df = spark.table(tbl)
+      spark.range(10).write.saveAsTable(typeMismatchTbl)
+      val typeMismatchDf = spark.table(typeMismatchTbl)
+      assert(df.union(typeMismatchDf).queryExecution.analyzed.metadataOutput.isEmpty)
+    }
+  }
+
+  test("SPARK-41498: Metadata column is not propagated when children of Union " +
+    "have an attribute name mismatch in a metadata column") {
+    val tbl = "testCatalog.t"
+    val nameMismatchTbl = "nameMismatch.t"
+    withTable(tbl, nameMismatchTbl) {
+      spark.range(10).write.saveAsTable(tbl)
+      val df = spark.table(tbl)
+      spark.range(10).write.saveAsTable(nameMismatchTbl)
+      val nameMismatchDf = spark.table(nameMismatchTbl)
+      assert(df.union(nameMismatchDf).queryExecution.analyzed.metadataOutput.isEmpty)
+    }
+  }
+
+  test("SPARK-41498: Metadata column is not propagated when children of Union " +
+    "have a field name mismatch in a metadata column") {
+    val tbl = "testCatalog.t"
+    val fieldNameMismatchTbl = "fieldNameMismatch.t"
+    withTable(tbl, fieldNameMismatchTbl) {
+      spark.range(10).write.saveAsTable(tbl)
+      val df = spark.table(tbl)
+      spark.range(10).write.saveAsTable(fieldNameMismatchTbl)
+      val fieldNameMismatchDf = spark.table(fieldNameMismatchTbl)
+      assert(df.union(fieldNameMismatchDf).queryExecution.analyzed.metadataOutput.isEmpty)
+    }
+  }
 }
 
-class MetadataTestTable extends Table with SupportsMetadataColumns {
+class MetadataTestTable(
+    name: String,
+    schema: StructType,
+    partitioning: Array[Transform],
+    properties: java.util.Map[String, String])
+  extends InMemoryTable(name, schema, partitioning, properties) {
 
-  override def name(): String = "fake"
-  override def schema(): StructType = StructType(Nil)
-  override def capabilities(): java.util.Set[TableCapability] =
-    java.util.EnumSet.of(TableCapability.BATCH_READ)
-  override def metadataColumns(): Array[MetadataColumn] =
+  override val metadataColumns: Array[MetadataColumn] =
     Array(
       new MetadataColumn {
         override def name: String = "_metadata"
@@ -302,9 +350,14 @@ class MetadataTestTable extends Table with SupportsMetadataColumns {
     )
 }
 
-class TypeMismatchTable extends MetadataTestTable {
+class TypeMismatchTable(
+    name: String,
+    schema: StructType,
+    partitioning: Array[Transform],
+    properties: java.util.Map[String, String])
+  extends InMemoryTable(name, schema, partitioning, properties) {
 
-  override def metadataColumns(): Array[MetadataColumn] =
+  override val metadataColumns: Array[MetadataColumn] =
     Array(
       new MetadataColumn {
         override def name: String = "_metadata"
@@ -315,8 +368,13 @@ class TypeMismatchTable extends MetadataTestTable {
     )
 }
 
-class AttrNameMismatchTable extends MetadataTestTable {
-  override def metadataColumns(): Array[MetadataColumn] =
+class AttrNameMismatchTable(
+    name: String,
+    schema: StructType,
+    partitioning: Array[Transform],
+    properties: java.util.Map[String, String])
+  extends InMemoryTable(name, schema, partitioning, properties) {
+  override val metadataColumns: Array[MetadataColumn] =
     Array(
       new MetadataColumn {
         override def name: String = "wrongName"
@@ -326,8 +384,13 @@ class AttrNameMismatchTable extends MetadataTestTable {
       })
 }
 
-class FieldNameMismatchTable extends MetadataTestTable {
-  override def metadataColumns(): Array[MetadataColumn] =
+class FieldNameMismatchTable(
+    name: String,
+    schema: StructType,
+    partitioning: Array[Transform],
+    properties: java.util.Map[String, String])
+  extends InMemoryTable(name, schema, partitioning, properties) {
+  override val metadataColumns: Array[MetadataColumn] =
     Array(
       new MetadataColumn {
         override def name: String = "_metadata"
@@ -338,92 +401,66 @@ class FieldNameMismatchTable extends MetadataTestTable {
       })
 }
 
-class MetadataTestCatalog extends TestV2SessionCatalogBase[MetadataTestTable] {
-  override protected def newTable(
-    name: String,
-    schema: StructType,
-    partitions: Array[Transform],
-    properties: java.util.Map[String, String]): MetadataTestTable = {
-    new MetadataTestTable
+class MetadataTestCatalog extends InMemoryCatalog {
+  override def createTable(
+      ident: Identifier,
+      schema: StructType,
+      partitions: Array[Transform],
+      properties: java.util.Map[String, String]): Table = {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
+    val tableName = s"$name.${ident.quoted}"
+    val tbl = new MetadataTestTable(tableName, schema, partitions, properties)
+    tables.put(ident, tbl)
+    namespaces.putIfAbsent(ident.namespace.toList, Map())
+    tbl
   }
 }
 
-class MetadataTypeMismatchCatalog extends TestV2SessionCatalogBase[TypeMismatchTable] {
-  override protected def newTable(
-    name: String,
-    schema: StructType,
-    partitions: Array[Transform],
-    properties: java.util.Map[String, String]): TypeMismatchTable = {
-    new TypeMismatchTable
+class MetadataTypeMismatchCatalog extends InMemoryCatalog {
+  override def createTable(
+      ident: Identifier,
+      schema: StructType,
+      partitions: Array[Transform],
+      properties: java.util.Map[String, String]): Table = {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
+    val tableName = s"$name.${ident.quoted}"
+    val tbl = new TypeMismatchTable(tableName, schema, partitions, properties)
+    tables.put(ident, tbl)
+    namespaces.putIfAbsent(ident.namespace.toList, Map())
+    tbl
   }
 }
 
-class MetadataAttrNameMismatchCatalog extends TestV2SessionCatalogBase[AttrNameMismatchTable] {
-  override protected def newTable(
-    name: String,
-    schema: StructType,
-    partitions: Array[Transform],
-    properties: java.util.Map[String, String]): AttrNameMismatchTable = {
-    new AttrNameMismatchTable
+class MetadataAttrNameMismatchCatalog extends InMemoryCatalog {
+  override def createTable(
+      ident: Identifier,
+      schema: StructType,
+      partitions: Array[Transform],
+      properties: java.util.Map[String, String]): Table = {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
+    val tableName = s"$name.${ident.quoted}"
+    val tbl = new AttrNameMismatchTable(tableName, schema, partitions, properties)
+    tables.put(ident, tbl)
+    namespaces.putIfAbsent(ident.namespace.toList, Map())
+    tbl
   }
 }
 
-class MetadataFieldNameMismatchCatalog extends TestV2SessionCatalogBase[FieldNameMismatchTable] {
-  override protected def newTable(
-    name: String,
-    schema: StructType,
-    partitions: Array[Transform],
-    properties: java.util.Map[String, String]): FieldNameMismatchTable = {
-    new FieldNameMismatchTable
-  }
-}
+class MetadataFieldNameMismatchCatalog extends InMemoryCatalog {
+  override def createTable(
+      ident: Identifier,
+      schema: StructType,
+      partitions: Array[Transform],
+      properties: java.util.Map[String, String]): Table = {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
-class MetadataColumnMismatchSuite extends QueryTest with SharedSparkSession {
-
-  override protected def afterEach(): Unit = {
-    super.afterEach()
-    spark.sessionState.catalogManager.reset()
-  }
-
-  private def getDfWithCatalog(tblName: String, catalogName: String): DataFrame = {
-    // Reset the catalog manager to set a new V2 session catalog, as once loaded
-    // it doesn't check the config value anymore
-    spark.sessionState.catalogManager.reset()
-    var df: DataFrame = null
-    withSQLConf(V2_SESSION_CATALOG_IMPLEMENTATION.key -> catalogName) {
-      spark.range(10).write.saveAsTable(tblName)
-      df = spark.table(tblName)
-    }
-    df
-  }
-
-  test("SPARK-41498: Metadata column is not propagated when children of Union " +
-    "have a type mismatch in a metadata column") {
-    withTable("tbl", "typeMismatchTbl") {
-      val df = getDfWithCatalog("tbl", classOf[MetadataTestCatalog].getName)
-      val typeMismatchDf =
-        getDfWithCatalog("typeMismatchTbl", classOf[MetadataTypeMismatchCatalog].getName)
-      assert(df.union(typeMismatchDf).queryExecution.analyzed.metadataOutput.isEmpty)
-    }
-  }
-
-  test("SPARK-41498: Metadata column is not propagated when children of Union " +
-    "have an attribute name mismatch in a metadata column") {
-    withTable("tbl", "nameMismatchTbl") {
-      val df = getDfWithCatalog("tbl", classOf[MetadataTestCatalog].getName)
-      val nameMismatchDf =
-        getDfWithCatalog("nameMismatchTbl", classOf[MetadataAttrNameMismatchCatalog].getName)
-      assert(df.union(nameMismatchDf).queryExecution.analyzed.metadataOutput.isEmpty)
-    }
-  }
-
-  test("SPARK-41498: Metadata column is not propagated when children of Union " +
-    "have a field name mismatch in a metadata column") {
-    withTable("tbl", "nameMismatchTbl") {
-      val df = getDfWithCatalog("tbl", classOf[MetadataTestCatalog].getName)
-      val nameMismatchDf =
-        getDfWithCatalog("nameMismatchTbl", classOf[MetadataFieldNameMismatchCatalog].getName)
-      assert(df.union(nameMismatchDf).queryExecution.analyzed.metadataOutput.isEmpty)
-    }
+    val tableName = s"$name.${ident.quoted}"
+    val tbl = new FieldNameMismatchTable(tableName, schema, partitions, properties)
+    tables.put(ident, tbl)
+    namespaces.putIfAbsent(ident.namespace.toList, Map())
+    tbl
   }
 }
