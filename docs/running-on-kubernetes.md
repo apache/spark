@@ -563,7 +563,7 @@ There are several Spark on Kubernetes features that are currently being worked o
 
 Some of these include:
 
-* Dynamic Resource Allocation and External Shuffle Service
+* External Shuffle Service
 * Job Queues and Resource Management
 
 # Configuration

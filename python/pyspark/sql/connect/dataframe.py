@@ -40,6 +40,7 @@ from pyspark.sql.connect.column import (
     Column,
     scalar_function,
     sql_expression,
+    UnresolvedRegex,
 )
 from pyspark.sql.connect.functions import col, lit
 from pyspark.sql.types import (
@@ -270,8 +271,23 @@ class DataFrame(object):
     def approxQuantile(self, col: Column, probabilities: Any, relativeError: Any) -> "DataFrame":
         ...
 
-    def colRegex(self, regex: str) -> "DataFrame":
-        ...
+    def colRegex(self, colName: str) -> Column:
+        """
+        Selects column based on the column name specified as a regex and returns it
+        as :class:`Column`.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        colName : str
+            string, column name specified as a regex.
+
+        Returns
+        -------
+        :class:`Column`
+        """
+        return Column(UnresolvedRegex(colName))
 
     @property
     def dtypes(self) -> List[Tuple[str, str]]:
@@ -985,6 +1001,31 @@ class DataFrame(object):
             plan.SetOperation(
                 self._plan, other._plan, "union", is_all=True, by_name=allowMissingColumns
             ),
+            session=self._session,
+        )
+
+    def subtract(self, other: "DataFrame") -> "DataFrame":
+        """Return a new :class:`DataFrame` containing rows in this :class:`DataFrame`
+        but not in another :class:`DataFrame`.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            Another :class:`DataFrame` that needs to be subtracted.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Subtracted DataFrame.
+
+        Notes
+        -----
+        This is equivalent to `EXCEPT DISTINCT` in SQL.
+        """
+        return DataFrame.withPlan(
+            plan.SetOperation(self._plan, other._plan, "except", is_all=False),
             session=self._session,
         )
 

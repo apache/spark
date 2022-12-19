@@ -152,14 +152,14 @@ See the examples below.
 Default Index type
 ------------------
 
-In pandas API on Spark, the default index is used in several cases, for instance,
+In the pandas API on Spark, the default index is used in several cases, for instance,
 when Spark DataFrame is converted into pandas-on-Spark DataFrame. In this case, internally pandas API on Spark attaches a
 default index into pandas-on-Spark DataFrame.
 
 There are several types of the default index that can be configured by `compute.default_index_type` as below:
 
 **sequence**: It implements a sequence that increases one by one, by PySpark's Window function without
-specifying partition. Therefore, it can end up with whole partition in single node.
+specifying a partition. Therefore, it can end up with a whole partition in a single node.
 This index type should be avoided when the data is large. See the example below:
 
 .. code-block:: python
@@ -210,7 +210,7 @@ This is conceptually equivalent to the PySpark example as below:
 PySpark's `monotonically_increasing_id` function in a fully distributed manner. The
 values are indeterministic. If the index does not have to be a sequence that increases
 one by one, this index should be used. Performance-wise, this index almost does not
-have any penalty comparing to other index types. See the example below:
+have any penalty compared to other index types. See the example below:
 
 .. code-block:: python
 

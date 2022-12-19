@@ -20,7 +20,7 @@ import tempfile
 
 from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.sql import SparkSession, Row
-from pyspark.sql.types import StructType, StructField, LongType, StringType
+from pyspark.sql.types import StructType, StructField, LongType, StringType, IntegerType
 import pyspark.sql.functions
 from pyspark.testing.utils import ReusedPySparkTestCase
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
@@ -57,6 +57,7 @@ class SparkConnectSQLTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLT
 
         cls.tbl_name = "test_connect_basic_table_1"
         cls.tbl_name2 = "test_connect_basic_table_2"
+        cls.tbl_name3 = "test_connect_basic_table_3"
         cls.tbl_name_empty = "test_connect_basic_table_empty"
 
         # Cleanup test data
@@ -79,6 +80,8 @@ class SparkConnectSQLTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLT
         df.write.saveAsTable(cls.tbl_name)
         df2 = cls.spark.createDataFrame([(x, f"{x}") for x in range(100)], ["col1", "col2"])
         df2.write.saveAsTable(cls.tbl_name2)
+        df3 = cls.spark.createDataFrame([(x, f"{x}") for x in range(100)], ["id", "test\n_column"])
+        df3.write.saveAsTable(cls.tbl_name3)
         empty_table_schema = StructType(
             [
                 StructField("firstname", StringType(), True),
@@ -216,8 +219,15 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertEqual(sdf.schema, cdf.schema)
         self.assert_eq(sdf.toPandas(), cdf.toPandas())
 
-        # TODO: add cases for StructType after 'pyspark_types_to_proto_types' support StructType
         for schema in [
+            StructType(
+                [
+                    StructField("col1", IntegerType(), True),
+                    StructField("col2", IntegerType(), True),
+                    StructField("col3", IntegerType(), True),
+                    StructField("col4", IntegerType(), True),
+                ]
+            ),
             "struct<col1 int, col2 int, col3 int, col4 int>",
             "col1 int, col2 int, col3 int, col4 int",
             "col1 int, col2 long, col3 string, col4 long",
@@ -942,11 +952,33 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             self.connect.range(1, 10).select(col("id").alias("this", "is", "not")).collect()
         self.assertIn("(this, is, not)", str(exc.exception))
 
+    def test_column_regexp(self) -> None:
+        # SPARK-41438: test dataframe.colRegex()
+        ndf = self.connect.read.table(self.tbl_name3)
+        df = self.spark.read.table(self.tbl_name3)
+
+        self.assert_eq(
+            ndf.select(ndf.colRegex("`tes.*\n.*mn`")).toPandas(),
+            df.select(df.colRegex("`tes.*\n.*mn`")).toPandas(),
+        )
+
     def test_agg_with_two_agg_exprs(self) -> None:
         # SPARK-41230: test dataframe.agg()
         self.assert_eq(
             self.connect.read.table(self.tbl_name).agg({"name": "min", "id": "max"}).toPandas(),
             self.spark.read.table(self.tbl_name).agg({"name": "min", "id": "max"}).toPandas(),
+        )
+
+    def test_subtract(self):
+        # SPARK-41453: test dataframe.subtract()
+        ndf1 = self.connect.read.table(self.tbl_name)
+        ndf2 = ndf1.filter("id > 3")
+        df1 = self.spark.read.table(self.tbl_name)
+        df2 = df1.filter("id > 3")
+
+        self.assert_eq(
+            ndf1.subtract(ndf2).toPandas(),
+            df1.subtract(df2).toPandas(),
         )
 
     def test_write_operations(self):

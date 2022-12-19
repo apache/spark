@@ -535,11 +535,21 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             }
           } catch {
             case _: NoSuchElementException =>
-              // If the file is currently not being tracked by the SHS, add an entry for it and try
-              // to parse it. This will allow the cleaner code to detect the file as stale later on
-              // if it was not possible to parse it.
+              // If the file is currently not being tracked by the SHS, check whether the log file
+              // has expired, if expired, delete it from log dir, if not, add an entry for it and
+              // try to parse it. This will allow the cleaner code to detect the file as stale
+              // later on if it was not possible to parse it.
               try {
-                if (count < conf.get(UPDATE_BATCHSIZE)) {
+                if (conf.get(CLEANER_ENABLED) && reader.modificationTime <
+                    clock.getTimeMillis() - conf.get(MAX_LOG_AGE_S) * 1000) {
+                  logInfo(s"Deleting expired event log ${reader.rootPath.toString}")
+                  deleteLog(fs, reader.rootPath)
+                  // If the LogInfo read had succeeded, but the ApplicationInafoWrapper
+                  // read failure and throw the exception, we should also cleanup the log
+                  // info from listing db.
+                  listing.delete(classOf[LogInfo], reader.rootPath.toString)
+                  false
+                } else if (count < conf.get(UPDATE_BATCHSIZE)) {
                   listing.write(LogInfo(reader.rootPath.toString(), newLastScanTime,
                     LogType.EventLogs, None, None, reader.fileSizeForLastIndex, reader.lastIndex,
                     None, reader.completed))
@@ -550,6 +560,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
                 }
               } catch {
                 case _: FileNotFoundException => false
+                case _: NoSuchElementException => false
                 case NonFatal(e) =>
                   logWarning(s"Error while reading new log ${reader.rootPath}", e)
                   false

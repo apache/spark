@@ -506,9 +506,9 @@ class Sort(LogicalPlan):
         self.columns = columns
         self.is_global = is_global
 
-    def col_to_sort_field(
+    def _convert_col(
         self, col: "ColumnOrName", session: "SparkConnectClient"
-    ) -> proto.Sort.SortField:
+    ) -> proto.Expression.SortOrder:
         sort: Optional[SortOrder] = None
         if isinstance(col, Column):
             if isinstance(col._expr, SortOrder):
@@ -519,13 +519,13 @@ class Sort(LogicalPlan):
             sort = SortOrder(ColumnReference(name=col))
         assert sort is not None
 
-        return cast(proto.Sort.SortField, sort.to_plan(session))
+        return sort.to_plan(session).sort_order
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
         plan = proto.Relation()
         plan.sort.input.CopyFrom(self._child.plan(session))
-        plan.sort.sort_fields.extend([self.col_to_sort_field(x, session) for x in self.columns])
+        plan.sort.order.extend([self._convert_col(c, session) for c in self.columns])
         plan.sort.is_global = self.is_global
         return plan
 

@@ -149,17 +149,17 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
   test("Simple Sort") {
     val sort = proto.Sort.newBuilder
-      .addAllSortFields(Seq(proto.Sort.SortField.newBuilder().build()).asJava)
+      .addAllOrder(Seq(proto.Expression.SortOrder.newBuilder().build()).asJava)
       .build()
     intercept[IndexOutOfBoundsException](
       transform(proto.Relation.newBuilder().setSort(sort).build()),
       "No Input set.")
 
-    val f = proto.Sort.SortField
+    val f = proto.Expression.SortOrder
       .newBuilder()
-      .setNulls(proto.Sort.SortNulls.SORT_NULLS_LAST)
-      .setDirection(proto.Sort.SortDirection.SORT_DIRECTION_DESCENDING)
-      .setExpression(
+      .setNullOrdering(proto.Expression.SortOrder.NullOrdering.SORT_NULLS_LAST)
+      .setDirection(proto.Expression.SortOrder.SortDirection.SORT_DIRECTION_DESCENDING)
+      .setChild(
         proto.Expression.newBuilder
           .setUnresolvedAttribute(
             proto.Expression.UnresolvedAttribute.newBuilder.setUnparsedIdentifier("col").build())
@@ -170,7 +170,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       proto.Relation.newBuilder
         .setSort(
           proto.Sort.newBuilder
-            .addAllSortFields(Seq(f).asJava)
+            .addAllOrder(Seq(f).asJava)
             .setInput(readRel)
             .setIsGlobal(true))
         .build())
@@ -181,7 +181,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       proto.Relation.newBuilder
         .setSort(
           proto.Sort.newBuilder
-            .addAllSortFields(Seq(f).asJava)
+            .addAllOrder(Seq(f).asJava)
             .setInput(readRel)
             .setIsGlobal(false))
         .build())

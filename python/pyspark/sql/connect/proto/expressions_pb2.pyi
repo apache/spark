@@ -37,12 +37,13 @@ import builtins
 import collections.abc
 import google.protobuf.descriptor
 import google.protobuf.internal.containers
+import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
 import pyspark.sql.connect.proto.types_pb2
 import sys
 import typing
 
-if sys.version_info >= (3, 8):
+if sys.version_info >= (3, 10):
     import typing as typing_extensions
 else:
     import typing_extensions
@@ -55,6 +56,76 @@ class Expression(google.protobuf.message.Message):
     """
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class SortOrder(google.protobuf.message.Message):
+        """SortOrder is used to specify the  data ordering, it is normally used in Sort and Window.
+        It is an unevaluable expression and cannot be evaluated, so can not be used in Projection.
+        """
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        class _SortDirection:
+            ValueType = typing.NewType("ValueType", builtins.int)
+            V: typing_extensions.TypeAlias = ValueType
+
+        class _SortDirectionEnumTypeWrapper(
+            google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+                Expression.SortOrder._SortDirection.ValueType
+            ],
+            builtins.type,
+        ):  # noqa: F821
+            DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+            SORT_DIRECTION_ASCENDING: Expression.SortOrder._SortDirection.ValueType  # 0
+            SORT_DIRECTION_DESCENDING: Expression.SortOrder._SortDirection.ValueType  # 1
+
+        class SortDirection(_SortDirection, metaclass=_SortDirectionEnumTypeWrapper): ...
+        SORT_DIRECTION_ASCENDING: Expression.SortOrder.SortDirection.ValueType  # 0
+        SORT_DIRECTION_DESCENDING: Expression.SortOrder.SortDirection.ValueType  # 1
+
+        class _NullOrdering:
+            ValueType = typing.NewType("ValueType", builtins.int)
+            V: typing_extensions.TypeAlias = ValueType
+
+        class _NullOrderingEnumTypeWrapper(
+            google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+                Expression.SortOrder._NullOrdering.ValueType
+            ],
+            builtins.type,
+        ):  # noqa: F821
+            DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+            SORT_NULLS_FIRST: Expression.SortOrder._NullOrdering.ValueType  # 0
+            SORT_NULLS_LAST: Expression.SortOrder._NullOrdering.ValueType  # 1
+
+        class NullOrdering(_NullOrdering, metaclass=_NullOrderingEnumTypeWrapper): ...
+        SORT_NULLS_FIRST: Expression.SortOrder.NullOrdering.ValueType  # 0
+        SORT_NULLS_LAST: Expression.SortOrder.NullOrdering.ValueType  # 1
+
+        CHILD_FIELD_NUMBER: builtins.int
+        DIRECTION_FIELD_NUMBER: builtins.int
+        NULL_ORDERING_FIELD_NUMBER: builtins.int
+        @property
+        def child(self) -> global___Expression:
+            """(Required) The expression to be sorted."""
+        direction: global___Expression.SortOrder.SortDirection.ValueType
+        """(Required) The sort direction, should be ASCENDING or DESCENDING."""
+        null_ordering: global___Expression.SortOrder.NullOrdering.ValueType
+        """(Required) How to deal with NULLs, should be NULLS_FIRST or NULLS_LAST."""
+        def __init__(
+            self,
+            *,
+            child: global___Expression | None = ...,
+            direction: global___Expression.SortOrder.SortDirection.ValueType = ...,
+            null_ordering: global___Expression.SortOrder.NullOrdering.ValueType = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["child", b"child"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "child", b"child", "direction", b"direction", "null_ordering", b"null_ordering"
+            ],
+        ) -> None: ...
 
     class Cast(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -492,6 +563,25 @@ class Expression(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["target", b"target"]
         ) -> None: ...
 
+    class UnresolvedRegex(google.protobuf.message.Message):
+        """Represents all of the input attributes to a given relational operator, for example in
+        "SELECT `(id)?+.+` FROM ...".
+        """
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        COL_NAME_FIELD_NUMBER: builtins.int
+        col_name: builtins.str
+        """(Required) The column name used to extract column with regex."""
+        def __init__(
+            self,
+            *,
+            col_name: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["col_name", b"col_name"]
+        ) -> None: ...
+
     class Alias(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -541,6 +631,8 @@ class Expression(google.protobuf.message.Message):
     UNRESOLVED_STAR_FIELD_NUMBER: builtins.int
     ALIAS_FIELD_NUMBER: builtins.int
     CAST_FIELD_NUMBER: builtins.int
+    UNRESOLVED_REGEX_FIELD_NUMBER: builtins.int
+    SORT_ORDER_FIELD_NUMBER: builtins.int
     @property
     def literal(self) -> global___Expression.Literal: ...
     @property
@@ -555,6 +647,10 @@ class Expression(google.protobuf.message.Message):
     def alias(self) -> global___Expression.Alias: ...
     @property
     def cast(self) -> global___Expression.Cast: ...
+    @property
+    def unresolved_regex(self) -> global___Expression.UnresolvedRegex: ...
+    @property
+    def sort_order(self) -> global___Expression.SortOrder: ...
     def __init__(
         self,
         *,
@@ -565,6 +661,8 @@ class Expression(google.protobuf.message.Message):
         unresolved_star: global___Expression.UnresolvedStar | None = ...,
         alias: global___Expression.Alias | None = ...,
         cast: global___Expression.Cast | None = ...,
+        unresolved_regex: global___Expression.UnresolvedRegex | None = ...,
+        sort_order: global___Expression.SortOrder | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -579,10 +677,14 @@ class Expression(google.protobuf.message.Message):
             b"expression_string",
             "literal",
             b"literal",
+            "sort_order",
+            b"sort_order",
             "unresolved_attribute",
             b"unresolved_attribute",
             "unresolved_function",
             b"unresolved_function",
+            "unresolved_regex",
+            b"unresolved_regex",
             "unresolved_star",
             b"unresolved_star",
         ],
@@ -600,10 +702,14 @@ class Expression(google.protobuf.message.Message):
             b"expression_string",
             "literal",
             b"literal",
+            "sort_order",
+            b"sort_order",
             "unresolved_attribute",
             b"unresolved_attribute",
             "unresolved_function",
             b"unresolved_function",
+            "unresolved_regex",
+            b"unresolved_regex",
             "unresolved_star",
             b"unresolved_star",
         ],
@@ -618,6 +724,8 @@ class Expression(google.protobuf.message.Message):
         "unresolved_star",
         "alias",
         "cast",
+        "unresolved_regex",
+        "sort_order",
     ] | None: ...
 
 global___Expression = Expression

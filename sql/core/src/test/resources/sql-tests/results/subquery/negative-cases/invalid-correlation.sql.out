@@ -44,17 +44,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2422",
-  "messageParameters" : {
-    "aggExprs" : "(avg(t2.t2b) AS avg)",
-    "sqlExpr" : "t2.t2b"
-  },
+  "errorClass" : "MISSING_GROUP_BY",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 109,
-    "stopIndex" : 111,
-    "fragment" : "t2b"
+    "startIndex" : 100,
+    "stopIndex" : 203,
+    "fragment" : "SELECT   t2b, avg(t2b) avg\n                      FROM     t2\n                      WHERE    t2a = t1.t1b"
   } ]
 }
 

@@ -55,3 +55,97 @@ message JobDataWrapper {
   repeated int32 skipped_stages = 2;
   optional int64 sql_execution_id = 3;
 }
+
+message AccumulableInfo {
+  int64 id = 1;
+  string name = 2;
+  optional string update = 3;
+  string value = 4;
+}
+
+message TaskDataWrapper {
+  int64 task_id = 1;
+  int32 index = 2;
+  int32 attempt = 3;
+  int32 partition_id = 4;
+  int64 launch_time = 5;
+  int64 result_fetch_start = 6;
+  int64 duration = 7;
+  string executor_id = 8;
+  string host = 9;
+  string status = 10;
+  string task_locality = 11;
+  bool speculative = 12;
+  repeated AccumulableInfo accumulator_updates = 13;
+  optional string error_message = 14;
+  bool has_metrics = 15;
+  int64 executor_deserialize_time = 16;
+  int64 executor_deserialize_cpu_time = 17;
+  int64 executor_run_time = 18;
+  int64 executor_cpu_time = 19;
+  int64 result_size = 20;
+  int64 jvm_gc_time = 21;
+  int64 result_serialization_time = 22;
+  int64 memory_bytes_spilled = 23;
+  int64 disk_bytes_spilled = 24;
+  int64 peak_execution_memory = 25;
+  int64 input_bytes_read = 26;
+  int64 input_records_read = 27;
+  int64 output_bytes_written = 28;
+  int64 output_records_written = 29;
+  int64 shuffle_remote_blocks_fetched = 30;
+  int64 shuffle_local_blocks_fetched = 31;
+  int64 shuffle_fetch_wait_time = 32;
+  int64 shuffle_remote_bytes_read = 33;
+  int64 shuffle_remote_bytes_read_to_disk = 34;
+  int64 shuffle_local_bytes_read = 35;
+  int64 shuffle_records_read = 36;
+  int64 shuffle_bytes_written = 37;
+  int64 shuffle_write_time = 38;
+  int64 shuffle_records_written = 39;
+  int64 stage_id = 40;
+  int32 stage_attempt_id = 41;
+}
+
+message ExecutorResourceRequest {
+  string resource_name = 1;
+  int64 amount = 2;
+  string discoveryScript = 3;
+  string vendor = 4;
+}
+
+message TaskResourceRequest {
+  string resource_name = 1;
+  double amount = 2;
+}
+
+message ResourceProfileInfo {
+  int32 id = 1;
+  map<string, ExecutorResourceRequest> executor_resources = 2;
+  map<string, TaskResourceRequest> task_resources = 3;
+}
+
+message RuntimeInfo {
+  string java_version = 1;
+  string java_home = 2;
+  string scala_version = 3;
+}
+
+message PairStrings {
+  string value1 = 1;
+  string value2 = 2;
+}
+
+message ApplicationEnvironmentInfo {
+  RuntimeInfo runtime = 1;
+  repeated PairStrings spark_properties = 2;
+  repeated PairStrings hadoop_properties = 3;
+  repeated PairStrings system_properties = 4;
+  repeated PairStrings metrics_properties = 5;
+  repeated PairStrings classpath_entries = 6;
+  repeated ResourceProfileInfo resource_profiles = 7;
+}
+
+message ApplicationEnvironmentInfoWrapper {
+  ApplicationEnvironmentInfo info = 1;
+}
