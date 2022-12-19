@@ -124,7 +124,7 @@ def invalidHigherOrderFunctionArgumentNumberError(
     )
 
 
-def HigherOrderFunctionShouldReturnColumnError(
+def higherOrderFunctionShouldReturnColumnError(
     func_name: str, return_type: Type[Any]
 ) -> "PySparkException":
     return PySparkException(

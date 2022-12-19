@@ -47,7 +47,7 @@ from pyspark.errors import (
     notStringError,
     invalidHigherOrderFunctionArgumentNumberError,
     notColumnOrIntegerError,
-    HigherOrderFunctionShouldReturnColumnError,
+    higherOrderFunctionShouldReturnColumnError,
     invalidParameterTypeForHigherOrderFunctionError,
 )
 from pyspark.rdd import PythonEvalType
@@ -8168,7 +8168,7 @@ def _create_lambda(f: Callable) -> Callable:
     result = f(*args)
 
     if not isinstance(result, Column):
-        raise HigherOrderFunctionShouldReturnColumnError(
+        raise higherOrderFunctionShouldReturnColumnError(
             func_name=f.__name__, return_type=type(result)
         )
 
