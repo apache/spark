@@ -176,6 +176,7 @@
       See: SPARK-36547, SPARK-38394.
        -->
     <scala-maven-plugin.version>4.8.0</scala-maven-plugin.version>
+    <versions-maven-plugin.version>2.14.1</versions-maven-plugin.version>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
@@ -3187,6 +3188,11 @@
             </execution>
           </executions>
         </plugin>
+        <plugin>
+          <groupId>org.codehaus.mojo</groupId>
+          <artifactId>versions-maven-plugin</artifactId>
+          <version>${versions-maven-plugin.version}</version>
+        </plugin>
       </plugins>
     </pluginManagement>
 
@@ -3421,6 +3427,10 @@
         <artifactId>maven-bundle-plugin</artifactId>
         <version>4.2.0</version>
         <extensions>true</extensions>
+      </plugin>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>versions-maven-plugin</artifactId>
       </plugin>
     </plugins>
   </build>
