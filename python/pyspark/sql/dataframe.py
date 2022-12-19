@@ -4576,7 +4576,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return DataFrame(jdf, self.sparkSession)
 
     def toDF(self, *cols: str) -> "DataFrame":
-        """Returns a new :class:`DataFrame` that with new specified column names
+        """Returns a new :class:`DataFrame` with new specified column names
 
         Parameters
         ----------
