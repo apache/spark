@@ -471,7 +471,7 @@ case class Union(
     val childrenMetadataOutput = children.map(_.metadataOutput)
     // This follows similar code in `CheckAnalysis` to check if the output of a Union is correct,
     // but just silently doesn't return an output instead of throwing an error. It also ensures
-    // that the attribute names are the same.
+    // that the attribute and data type names are the same.
     val refDataTypes = childrenMetadataOutput.head.map(_.dataType)
     val refAttrNames = childrenMetadataOutput.head.map(_.name)
     childrenMetadataOutput.tail.foreach { childMetadataOutput =>
