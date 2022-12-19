@@ -1493,9 +1493,9 @@ object CopyDependencies {
             !SbtPomKeys.profiles.value.contains("noshade-connect")) {
             Files.copy(fid.toPath, destJar.toPath)
           } else if (jar.getName.contains("connect-client") &&
-            !SbtPomKeys.profiles.value.contains("noshade-protobuf")) {
+            !SbtPomKeys.profiles.value.contains("noshade-connect-client")) {
             Files.copy(fidClient.toPath, destJar.toPath)
-          }  else if (jar.getName.contains("spark-protobuf") &&
+          } else if (jar.getName.contains("spark-protobuf") &&
             !SbtPomKeys.profiles.value.contains("noshade-protobuf")) {
             Files.copy(fidProtobuf.toPath, destJar.toPath)
           } else {
