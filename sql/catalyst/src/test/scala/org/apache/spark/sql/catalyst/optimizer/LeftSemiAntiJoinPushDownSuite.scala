@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 
-class LeftSemiPushdownSuite extends PlanTest {
+class LeftSemiAntiJoinPushDownSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
