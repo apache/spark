@@ -30,11 +30,11 @@ import org.apache.spark.util.{Clock, SystemClock}
  * Used to write entries to the offset log asynchronously
  */
 class AsyncOffsetSeqLog(
-  sparkSession: SparkSession,
-  path: String,
-  executorService: ThreadPoolExecutor,
-  offsetCommitIntervalMs: Long,
-  clock: Clock = new SystemClock())
+    sparkSession: SparkSession,
+    path: String,
+    executorService: ThreadPoolExecutor,
+    offsetCommitIntervalMs: Long,
+    clock: Clock = new SystemClock())
   extends OffsetSeqLog(sparkSession, path) {
 
   // the cache needs to be enabled because we may not be persisting every entry to durable storage

@@ -25,36 +25,16 @@ import org.apache.spark.sql.catalyst.streaming.WriteToStream
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.util.{Clock, ThreadUtils}
 
-object AsyncProgressTrackingMicroBatchExecution {
-  val ASYNC_PROGRESS_TRACKING_ENABLED = "asyncProgressTrackingEnabled"
-  val ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS =
-    "asyncProgressTrackingCheckpointIntervalMs"
-
-  // for testing purposes
-  val ASYNC_PROGRESS_TRACKING_OVERRIDE_SINK_SUPPORT_CHECK =
-    "_asyncProgressTrackingOverrideSinkSupportCheck"
-
-  private def getAsyncProgressTrackingCheckpointingIntervalMs(
-      extraOptions: Map[String, String]): Long = {
-    extraOptions
-      .getOrElse(
-        ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS,
-        "1000"
-      )
-      .toLong
-  }
-}
-
 /**
  * Class to execute micro-batches when async progress tracking is enabled
  */
 class AsyncProgressTrackingMicroBatchExecution(
-  sparkSession: SparkSession,
-  trigger: Trigger,
-  triggerClock: Clock,
-  extraOptions: Map[String, String],
-  plan: WriteToStream)
-    extends MicroBatchExecution(sparkSession, trigger, triggerClock, extraOptions, plan) {
+    sparkSession: SparkSession,
+    trigger: Trigger,
+    triggerClock: Clock,
+    extraOptions: Map[String, String],
+    plan: WriteToStream)
+  extends MicroBatchExecution(sparkSession, trigger, triggerClock, extraOptions, plan) {
 
   import AsyncProgressTrackingMicroBatchExecution._
 
@@ -114,7 +94,7 @@ class AsyncProgressTrackingMicroBatchExecution(
     new AsyncCommitLog(sparkSession, checkpointFile("commits"), asyncWritesExecutorService)
 
   override def markMicroBatchExecutionStart(): Unit = {
-    // check if streamign query is stateful
+    // check if streaming query is stateful
     checkNotStatefulStreamingQuery
   }
 
@@ -151,7 +131,8 @@ class AsyncProgressTrackingMicroBatchExecution(
             } else {
               throw new IllegalStateException(
                 s"Failed to commit processed data in the source because batch " +
-                  s"${lastBatchPersistedToDurableStorage.get()} doesn't exist in the offset log")
+                  s"${lastBatchPersistedToDurableStorage.get()} doesn't exist in the offset log." +
+                  s"  This should not happen.")
             }
           }
           lastBatchPersistedToDurableStorage.set(batchId)
@@ -281,5 +262,25 @@ class AsyncProgressTrackingMicroBatchExecution(
       }
       isFirstBatch = false
     }
+  }
+}
+
+object AsyncProgressTrackingMicroBatchExecution {
+  val ASYNC_PROGRESS_TRACKING_ENABLED = "asyncProgressTrackingEnabled"
+  val ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS =
+    "asyncProgressTrackingCheckpointIntervalMs"
+
+  // for testing purposes
+  val ASYNC_PROGRESS_TRACKING_OVERRIDE_SINK_SUPPORT_CHECK =
+    "_asyncProgressTrackingOverrideSinkSupportCheck"
+
+  private def getAsyncProgressTrackingCheckpointingIntervalMs(
+                                                               extraOptions: Map[String, String]): Long = {
+    extraOptions
+      .getOrElse(
+        ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS,
+        "1000"
+      )
+      .toLong
   }
 }

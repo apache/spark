@@ -29,7 +29,12 @@ import org.scalatest.time.{Seconds, Span}
 import org.apache.spark.TestUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.connector.read.streaming
-import org.apache.spark.sql.execution.streaming.AsyncProgressTrackingMicroBatchExecution.{ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS, ASYNC_PROGRESS_TRACKING_ENABLED, ASYNC_PROGRESS_TRACKING_OVERRIDE_SINK_SUPPORT_CHECK}
+import org.apache.spark.sql.execution.streaming.AsyncProgressTrackingMicroBatchExecution.{
+  ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS,
+  ASYNC_PROGRESS_TRACKING_ENABLED,
+  ASYNC_PROGRESS_TRACKING_OVERRIDE_SINK_SUPPORT_CHECK}
+import org.apache.spark.sql.execution.streaming.MicroBatchExecutionSuite.{
+  getBatchIdsSortedFromLog, getListOfFiles, MemoryStreamCapture}
 import org.apache.spark.sql.functions.{column, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{StreamingQuery, StreamingQueryException, StreamTest, Trigger}
@@ -37,23 +42,12 @@ import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.util.Utils
 
 class AsyncProgressTrackingMicroBatchExecutionSuite
-  extends StreamTest
-    with BeforeAndAfter
-    with Matchers {
+  extends StreamTest with BeforeAndAfter with Matchers {
 
   import testImplicits._
 
   after {
     sqlContext.streams.active.foreach(_.stop())
-  }
-
-  def getListOfFiles(dir: String): List[File] = {
-    val d = new File(dir)
-    if (d.exists && d.isDirectory) {
-      d.listFiles.filter(_.isFile).toList
-    } else {
-      List[File]()
-    }
   }
 
   def waitPendingOffsetWrites(streamExecution: StreamExecution): Unit = {
@@ -78,7 +72,9 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
   test("async WAL commits happy path") {
     val checkpointLocation = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
 
-    val inputData = new MemoryStream[Int](id = 0, sqlContext = sqlContext)
+//    val inputData = new MemoryStream[Int](id = 0, sqlContext = sqlContext)
+    val inputData = MemoryStream[Int]
+
     val ds = inputData.toDF()
 
     val tableName = "test"
@@ -140,7 +136,9 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     var query = startQuery()
 
     for (i <- 0 until 10) {
-      sem.acquire()
+      failAfter(Span(60, Seconds)) {
+        sem.acquire()
+      }
       inputData.addData({ i })
     }
 
@@ -151,7 +149,7 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     }
 
     assert(index == 10)
-    data should equal(Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9))
+    data should equal((0 to 9).toArray)
 
     countDownLatch = new CountDownLatch(10)
 
@@ -161,7 +159,9 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     query = startQuery()
 
     for (i <- 10 until 20) {
-      sem.acquire()
+      failAfter(Span(60, Seconds)) {
+        sem.acquire()
+      }
       inputData.addData({ i })
     }
 
@@ -172,9 +172,7 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     }
 
     // convert data to set to deduplicate results
-    data.toSet should equal(
-      Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19).toSet
-    )
+    data.toSet should equal((0 to 19).toSet)
   }
 
   test("async WAL commits turn on and off") {
@@ -206,15 +204,9 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     )
 
     // offsets should be logged
-    getListOfFiles(checkpointLocation + "/offsets")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0, 1, 2))
+    getBatchIdsSortedFromLog(checkpointLocation + "/offsets") should equal(Array(0, 1, 2))
 
-    getListOfFiles(checkpointLocation + "/commits")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0, 1, 2))
+    getBatchIdsSortedFromLog(checkpointLocation + "/commits") should equal(Array(0, 1, 2))
 
     /**
      * Starting stream second time with async progress tracking turned off
@@ -230,15 +222,9 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     )
 
     // offsets should be logged
-    getListOfFiles(checkpointLocation + "/offsets")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0, 1, 2, 3, 4))
+    getBatchIdsSortedFromLog(checkpointLocation + "/offsets") should equal(Array(0, 1, 2, 3, 4))
     // commits for batch 2, 3, 4 should be logged
-    getListOfFiles(checkpointLocation + "/commits")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0, 1, 2, 3, 4))
+    getBatchIdsSortedFromLog(checkpointLocation + "/commits") should equal(Array(0, 1, 2, 3, 4))
 
     /**
      * Starting stream third time with async progress tracking turned back on
@@ -266,15 +252,11 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     )
 
     // offsets should be logged
-    getListOfFiles(checkpointLocation + "/offsets")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0, 1, 2, 3, 4, 5, 6))
+    getBatchIdsSortedFromLog(checkpointLocation + "/offsets") should
+      equal(Array(0, 1, 2, 3, 4, 5, 6))
     // no new commits should be logged since async offset commits are enabled
-    getListOfFiles(checkpointLocation + "/commits")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0, 1, 2, 3, 4, 5, 6))
+    getBatchIdsSortedFromLog(checkpointLocation + "/commits") should
+      equal(Array(0, 1, 2, 3, 4, 5, 6))
 
     /**
      * Starting stream fourth time with async progress tracking turned off
@@ -290,15 +272,11 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     )
 
     // offsets should be logged
-    getListOfFiles(checkpointLocation + "/offsets")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0, 1, 2, 3, 4, 5, 6, 7, 8))
+    getBatchIdsSortedFromLog(checkpointLocation + "/offsets") should
+      equal(Array(0, 1, 2, 3, 4, 5, 6, 7, 8))
     // commits for batch 2, 3, 4, 6, 7, 8 should be logged
-    getListOfFiles(checkpointLocation + "/commits")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0, 1, 2, 3, 4, 5, 6, 7, 8))
+    getBatchIdsSortedFromLog(checkpointLocation + "/commits") should
+      equal(Array(0, 1, 2, 3, 4, 5, 6, 7, 8))
   }
 
   test("Fail with once trigger") {
@@ -374,11 +352,7 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     try {
       countDownLatch.await(streamingTimeout.toMillis, TimeUnit.MILLISECONDS)
       eventually(timeout(Span(5, Seconds))) {
-        val files = getListOfFiles(checkpointLocation + "/commits")
-          .filter(file => !file.isHidden)
-          .map(file => file.getName.toInt)
-          .sorted
-
+        val files = getBatchIdsSortedFromLog(checkpointLocation + "/commits")
         files.last should be(9)
       }
     } finally {
@@ -389,14 +363,10 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     data should equal(Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9))
 
     // offsets should be logged
-    getListOfFiles(checkpointLocation + "/offsets")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9))
-    getListOfFiles(checkpointLocation + "/commits")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9))
+    getBatchIdsSortedFromLog(checkpointLocation + "/offsets") should
+      equal(Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9))
+    getBatchIdsSortedFromLog(checkpointLocation + "/commits") should
+      equal(Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9))
 
     /*
      Turn off async offset commit and use trigger once
@@ -413,27 +383,19 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
       countDownLatch.await(streamingTimeout.toMillis, TimeUnit.MILLISECONDS)
       // make sure the batch 10 in the commit log writes to durable storage
       eventually(timeout(Span(5, Seconds))) {
-        val files = getListOfFiles(checkpointLocation + "/commits")
-          .filter(file => !file.isHidden)
-          .map(file => file.getName.toInt)
-          .sorted
-
+        val files = getBatchIdsSortedFromLog(checkpointLocation + "/commits")
         files.last should be(10)
       }
     } finally {
       query.stop()
     }
 
-    data should equal(Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19))
+    data should equal((0 to 19).toArray)
 
-    getListOfFiles(checkpointLocation + "/offsets")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10))
-    getListOfFiles(checkpointLocation + "/commits")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10))
+    getBatchIdsSortedFromLog(checkpointLocation + "/offsets") should
+      equal(Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10))
+    getBatchIdsSortedFromLog(checkpointLocation + "/commits") should
+      equal(Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10))
 
     /*
      Turn on async offset commit again
@@ -450,11 +412,7 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     try {
       countDownLatch.await(streamingTimeout.toMillis, TimeUnit.MILLISECONDS)
       eventually(timeout(Span(5, Seconds))) {
-        val files = getListOfFiles(checkpointLocation + "/commits")
-          .filter(file => !file.isHidden)
-          .map(file => file.getName.toInt)
-          .sorted
-
+        val files = getBatchIdsSortedFromLog(checkpointLocation + "/commits")
         files.last should be(20)
       }
     } finally {
@@ -462,22 +420,15 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     }
 
     data should equal(
-      Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
-        24, 25, 26, 27, 28, 29)
+      (0 to 29).toArray
     )
 
     // 10 more batches should logged
-    getListOfFiles(checkpointLocation + "/offsets")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(
-      Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20)
+    getBatchIdsSortedFromLog(checkpointLocation + "/offsets") should equal(
+      (0 to 20).toArray
     )
-    getListOfFiles(checkpointLocation + "/commits")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(
-      Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20)
+    getBatchIdsSortedFromLog(checkpointLocation + "/commits") should equal(
+      (0 to 20).toArray
     )
 
     /*
@@ -495,10 +446,7 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
       countDownLatch.await(streamingTimeout.toMillis, TimeUnit.MILLISECONDS)
       // make sure the batch 21 in the commit log writes to durable storage
       eventually(timeout(Span(5, Seconds))) {
-        val files = getListOfFiles(checkpointLocation + "/commits")
-          .filter(file => !file.isHidden)
-          .map(file => file.getName.toInt)
-          .sorted
+        val files = getBatchIdsSortedFromLog(checkpointLocation + "/commits")
 
         files.last should be(21)
       }
@@ -508,22 +456,15 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
 
     // convert data to set to deduplicate results
     data should equal(
-      Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
-        24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39)
+      (0 to 39).toArray
     )
 
     // batch 21 should be processed
-    getListOfFiles(checkpointLocation + "/offsets")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(
-      Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21)
+    getBatchIdsSortedFromLog(checkpointLocation + "/offsets") should equal(
+      (0 to 21).toArray
     )
-    getListOfFiles(checkpointLocation + "/commits")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(
-      Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21)
+    getBatchIdsSortedFromLog(checkpointLocation + "/commits") should equal(
+      (0 to 21).toArray
     )
 
   }
@@ -585,14 +526,10 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     index should equal(10)
     data should equal(Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9))
 
-    getListOfFiles(checkpointLocation + "/offsets")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9))
-    getListOfFiles(checkpointLocation + "/commits")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9))
+    getBatchIdsSortedFromLog(checkpointLocation + "/offsets") should
+      equal(Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9))
+    getBatchIdsSortedFromLog(checkpointLocation + "/commits") should
+      equal(Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9))
 
     /*
      Turn off async offset commit and use trigger available now
@@ -622,14 +559,10 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     data should equal(Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19))
 
     // since using trigger available now, the new data, i.e. batch 10, should also be processed
-    getListOfFiles(checkpointLocation + "/offsets")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10))
-    getListOfFiles(checkpointLocation + "/commits")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10))
+    getBatchIdsSortedFromLog(checkpointLocation + "/offsets") should
+      equal(Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10))
+    getBatchIdsSortedFromLog(checkpointLocation + "/commits") should
+      equal(Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10))
 
     /*
      Turn on async offset commit again
@@ -663,17 +596,11 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     )
 
     // 10 more batches should logged
-    getListOfFiles(checkpointLocation + "/offsets")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(
+    getBatchIdsSortedFromLog(checkpointLocation + "/offsets") should equal(
       Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20)
     )
     // no additional commit log entries should be logged since async offset commit is on
-    getListOfFiles(checkpointLocation + "/commits")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(
+    getBatchIdsSortedFromLog(checkpointLocation + "/commits") should equal(
       Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20)
     )
 
@@ -704,17 +631,11 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     }
 
     // just reprocessing batch 20 should not more offset log entries should added
-    getListOfFiles(checkpointLocation + "/offsets")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(
+    getBatchIdsSortedFromLog(checkpointLocation + "/offsets") should equal(
       Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21)
     )
     // batch 20 should be added to the commit log
-    getListOfFiles(checkpointLocation + "/commits")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(
+    getBatchIdsSortedFromLog(checkpointLocation + "/commits") should equal(
       Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21)
     )
   }
@@ -820,22 +741,6 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     testAsyncWriteErrorsPermissionsIssue("/commits")
   }
 
-  class MemoryStreamCapture[A: Encoder](
-      id: Int,
-      sqlContext: SQLContext,
-      numPartitions: Option[Int] = None)
-    extends MemoryStream[A](id, sqlContext, numPartitions = numPartitions) {
-
-    val commits = new ListBuffer[streaming.Offset]()
-    val commitThreads = new ListBuffer[Thread]()
-
-    override def commit(end: streaming.Offset): Unit = {
-      super.commit(end)
-      commits += end
-      commitThreads += Thread.currentThread()
-    }
-  }
-
   test("commit intervals happy path") {
 
     val checkpointLocation = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
@@ -887,15 +792,9 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
 
     data should equal(expected)
 
-    val commitLogFiles = getListOfFiles(checkpointLocation + "/commits")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted
+    val commitLogFiles = getBatchIdsSortedFromLog(checkpointLocation + "/commits")
 
-    val offsetLogFiles = getListOfFiles(checkpointLocation + "/offsets")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted
+    val offsetLogFiles = getBatchIdsSortedFromLog(checkpointLocation + "/offsets")
 
     logInfo(s"offsetLogFiles: ${offsetLogFiles}")
     logInfo(s"commitLogFiles: ${commitLogFiles}")
@@ -959,15 +858,9 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     )
 
     // batches 0 and 3 should be logged
-    getListOfFiles(checkpointLocation + "/offsets")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0, 3))
+    getBatchIdsSortedFromLog(checkpointLocation + "/offsets") should equal(Array(0, 3))
 
-    getListOfFiles(checkpointLocation + "/commits")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0, 3))
+    getBatchIdsSortedFromLog(checkpointLocation + "/commits") should equal(Array(0, 3))
 
     /**
      * restart stream
@@ -1003,14 +896,8 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
       StopStream
     )
 
-    getListOfFiles(checkpointLocation + "/offsets")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0, 3, 4, 7))
-    getListOfFiles(checkpointLocation + "/commits")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0, 3, 4, 7))
+    getBatchIdsSortedFromLog(checkpointLocation + "/offsets") should equal(Array(0, 3, 4, 7))
+    getBatchIdsSortedFromLog(checkpointLocation + "/commits") should equal(Array(0, 3, 4, 7))
   }
 
   test("recovery when first offset is not zero and not commit log entries") {
@@ -1035,14 +922,8 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
       StopStream
     )
 
-    getListOfFiles(checkpointLocation + "/offsets")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(2))
-    getListOfFiles(checkpointLocation + "/commits")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array())
+    getBatchIdsSortedFromLog(checkpointLocation + "/offsets") should equal(Array(2))
+    getBatchIdsSortedFromLog(checkpointLocation + "/commits") should equal(Array())
 
     /**
      * start new stream
@@ -1066,160 +947,8 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
       StopStream
     )
 
-    getListOfFiles(checkpointLocation + "/offsets")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(2, 3, 4, 5))
-    getListOfFiles(checkpointLocation + "/commits")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(2, 3, 4, 5))
-  }
-
-  test("test multiple gaps in offset and commit logs") {
-    val inputData = new MemoryStreamCapture[Int](id = 0, sqlContext = sqlContext)
-    val ds = inputData.toDS()
-
-    val checkpointLocation = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
-
-    // create a scenario in which the offset log only
-    // contains batch 0, 2, 5 and commit log only contain 0, 2
-    testStream(ds)(
-      StartStream(checkpointLocation = checkpointLocation),
-      AddData(inputData, 0),
-      CheckNewAnswer(0),
-      AddData(inputData, 1),
-      CheckNewAnswer(1),
-      AddData(inputData, 2),
-      CheckNewAnswer(2),
-      AddData(inputData, 3),
-      CheckNewAnswer(3),
-      AddData(inputData, 4),
-      CheckNewAnswer(4),
-      AddData(inputData, 5),
-      CheckNewAnswer(5),
-
-      StopStream
-    )
-
-    new File(checkpointLocation + "/offsets/1").delete()
-    new File(checkpointLocation + "/offsets/.1.crc").delete()
-    new File(checkpointLocation + "/offsets/3").delete()
-    new File(checkpointLocation + "/offsets/.3.crc").delete()
-    new File(checkpointLocation + "/offsets/4").delete()
-    new File(checkpointLocation + "/offsets/.4.crc").delete()
-    new File(checkpointLocation + "/commits/1").delete()
-    new File(checkpointLocation + "/commits/.1.crc").delete()
-    new File(checkpointLocation + "/commits/.3.crc").delete()
-    new File(checkpointLocation + "/commits/3").delete()
-    new File(checkpointLocation + "/commits/.4.crc").delete()
-    new File(checkpointLocation + "/commits/4").delete()
-    new File(checkpointLocation + "/commits/.5.crc").delete()
-    new File(checkpointLocation + "/commits/5").delete()
-
-    getListOfFiles(checkpointLocation + "/offsets")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0, 2, 5))
-    getListOfFiles(checkpointLocation + "/commits")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0, 2))
-
-    /**
-     * start new stream
-     */
-    val inputData2 = new MemoryStreamCapture[Int](id = 0, sqlContext = sqlContext)
-    val ds2 = inputData2.toDS()
-    testStream(ds2)(
-      // add back old data
-      AddData(inputData2, 0),
-      AddData(inputData2, 1),
-      AddData(inputData2, 2),
-      AddData(inputData2, 3),
-      AddData(inputData2, 4),
-      AddData(inputData2, 5),
-      StartStream(checkpointLocation = checkpointLocation),
-      // since
-      CheckNewAnswer(3, 4, 5),
-      StopStream
-    )
-
-    getListOfFiles(checkpointLocation + "/offsets")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0, 2, 5))
-    getListOfFiles(checkpointLocation + "/commits")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0, 2, 5))
-  }
-
-  test("recovery when gaps in in offset and commit log") {
-    val inputData = new MemoryStreamCapture[Int](id = 0, sqlContext = sqlContext)
-    val ds = inputData.toDS()
-
-    val checkpointLocation = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
-
-    // create a scenario in which the offset log only
-    // contains batch 0, 2 and commit log only contains 9
-    testStream(ds)(
-      StartStream(checkpointLocation = checkpointLocation),
-      AddData(inputData, 0),
-      CheckNewAnswer(0),
-      AddData(inputData, 1),
-      CheckNewAnswer(1),
-      AddData(inputData, 2),
-      CheckNewAnswer(2),
-      StopStream
-    )
-
-    new File(checkpointLocation + "/offsets/1").delete()
-    new File(checkpointLocation + "/offsets/.1.crc").delete()
-    new File(checkpointLocation + "/commits/2").delete()
-    new File(checkpointLocation + "/commits/.2.crc").delete()
-    new File(checkpointLocation + "/commits/1").delete()
-    new File(checkpointLocation + "/commits/.1.crc").delete()
-
-    getListOfFiles(checkpointLocation + "/offsets")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0, 2))
-    getListOfFiles(checkpointLocation + "/commits")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0))
-
-    /**
-     * start new stream
-     */
-    val inputData2 = new MemoryStreamCapture[Int](id = 0, sqlContext = sqlContext)
-    val ds2 = inputData2.toDS()
-    testStream(ds2)(
-      // add back old data
-      AddData(inputData2, 0),
-      AddData(inputData2, 1),
-      AddData(inputData2, 2),
-      StartStream(checkpointLocation = checkpointLocation),
-      // should replay from batch 1
-      CheckNewAnswer(1, 2),
-      AddData(inputData2, 3),
-      CheckNewAnswer(3),
-      AddData(inputData2, 4),
-      CheckNewAnswer(4),
-      AddData(inputData2, 5),
-      CheckNewAnswer(5),
-      StopStream
-    )
-
-    getListOfFiles(checkpointLocation + "/offsets")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0, 2, 3, 4, 5))
-    getListOfFiles(checkpointLocation + "/commits")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0, 2, 3, 4, 5))
+    getBatchIdsSortedFromLog(checkpointLocation + "/offsets") should equal(Array(2, 3, 4, 5))
+    getBatchIdsSortedFromLog(checkpointLocation + "/commits") should equal(Array(2, 3, 4, 5))
   }
 
   test("recovery non-contiguous log") {
@@ -1264,15 +993,9 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     // delete batch 3 from commit log
     new File(checkpointLocation + "/commits/3").delete()
     new File(checkpointLocation + "/commits/.3.crc").delete()
-    getListOfFiles(checkpointLocation + "/offsets")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0, 3))
+    getBatchIdsSortedFromLog(checkpointLocation + "/offsets") should equal(Array(0, 3))
 
-    getListOfFiles(checkpointLocation + "/commits")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0))
+    getBatchIdsSortedFromLog(checkpointLocation + "/commits") should equal(Array(0))
 
     /**
      * Turn async progress tracking off and test recovery
@@ -1285,16 +1008,10 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
       CheckNewAnswer(5),
       StopStream
     )
-    // batches 0 and 3 should be logged
-    getListOfFiles(checkpointLocation + "/offsets")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0, 3, 4, 5))
+    // batches 0, 3, 4, 5 should be logged
+    getBatchIdsSortedFromLog(checkpointLocation + "/offsets") should equal(Array(0, 3, 4, 5))
 
-    getListOfFiles(checkpointLocation + "/commits")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0, 3, 4, 5))
+    getBatchIdsSortedFromLog(checkpointLocation + "/commits") should equal(Array(0, 3, 4, 5))
 
   }
 
@@ -1339,15 +1056,9 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     )
 
     // batches 0 and 3 should be logged
-    getListOfFiles(checkpointLocation + "/offsets")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0, 3))
+    getBatchIdsSortedFromLog(checkpointLocation + "/offsets") should equal(Array(0, 3))
 
-    getListOfFiles(checkpointLocation + "/commits")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0, 3))
+    getBatchIdsSortedFromLog(checkpointLocation + "/commits") should equal(Array(0, 3))
 
     inputData.commits.length should be(0)
 
@@ -1373,15 +1084,9 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
       StopStream
     )
     // batches 0 and 3 should be logged
-    getListOfFiles(checkpointLocation + "/offsets")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0, 3, 4, 5))
+    getBatchIdsSortedFromLog(checkpointLocation + "/offsets") should equal(Array(0, 3, 4, 5))
 
-    getListOfFiles(checkpointLocation + "/commits")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0, 3, 4, 5))
+    getBatchIdsSortedFromLog(checkpointLocation + "/commits") should equal(Array(0, 3, 4, 5))
 
     /**
      * Turn async progress tracking on
@@ -1427,15 +1132,9 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
       StopStream
     )
 
-    getListOfFiles(checkpointLocation + "/offsets")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0, 3, 4, 5, 6, 9))
+    getBatchIdsSortedFromLog(checkpointLocation + "/offsets") should equal(Array(0, 3, 4, 5, 6, 9))
 
-    getListOfFiles(checkpointLocation + "/commits")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0, 3, 4, 5, 6, 9))
+    getBatchIdsSortedFromLog(checkpointLocation + "/commits") should equal(Array(0, 3, 4, 5, 6, 9))
 
     // simulate batch 9 doesn't have a commit log
     new File(checkpointLocation + "/commits/9").delete()
@@ -1462,15 +1161,11 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
       },
       StopStream
     )
-    getListOfFiles(checkpointLocation + "/offsets")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0, 3, 4, 5, 6, 9, 10, 11))
+    getBatchIdsSortedFromLog(checkpointLocation + "/offsets") should
+      equal(Array(0, 3, 4, 5, 6, 9, 10, 11))
 
-    getListOfFiles(checkpointLocation + "/commits")
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted should equal(Array(0, 3, 4, 5, 6, 9, 10, 11))
+    getBatchIdsSortedFromLog(checkpointLocation + "/commits") should
+      equal(Array(0, 3, 4, 5, 6, 9, 10, 11))
   }
 
   test("Fail on stateful pipelines") {

@@ -118,7 +118,7 @@ class AsyncCommitLog(sparkSession: SparkSession, path: String, executorService: 
                 fn
               )
               logDebug(
-                s"Completion commit for batch${batchId} took" +
+                s"Completion commit for batch ${batchId} took" +
                   s" ${System.currentTimeMillis() - start} ms to be persisted to durable storage"
               )
               writtenToDurableStorage.add(batchId)
