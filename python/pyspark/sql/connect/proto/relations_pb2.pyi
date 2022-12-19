@@ -2037,50 +2037,27 @@ class ToSchema(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
-    DATATYPE_FIELD_NUMBER: builtins.int
-    DATATYPE_STR_FIELD_NUMBER: builtins.int
+    SCHEMA_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
         """(Required) The input relation."""
     @property
-    def datatype(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
-    datatype_str: builtins.str
-    """Server will use Catalyst parser to parse this string to DataType."""
+    def schema(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+        """(Required) The user provided schema.
+
+        The Sever side will update the dataframe with this schema.
+        """
     def __init__(
         self,
         *,
         input: global___Relation | None = ...,
-        datatype: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
-        datatype_str: builtins.str = ...,
+        schema: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
     ) -> None: ...
     def HasField(
-        self,
-        field_name: typing_extensions.Literal[
-            "datatype",
-            b"datatype",
-            "datatype_str",
-            b"datatype_str",
-            "input",
-            b"input",
-            "schema",
-            b"schema",
-        ],
+        self, field_name: typing_extensions.Literal["input", b"input", "schema", b"schema"]
     ) -> builtins.bool: ...
     def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "datatype",
-            b"datatype",
-            "datatype_str",
-            b"datatype_str",
-            "input",
-            b"input",
-            "schema",
-            b"schema",
-        ],
+        self, field_name: typing_extensions.Literal["input", b"input", "schema", b"schema"]
     ) -> None: ...
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["schema", b"schema"]
-    ) -> typing_extensions.Literal["datatype", "datatype_str"] | None: ...
 
 global___ToSchema = ToSchema

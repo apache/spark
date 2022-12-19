@@ -691,7 +691,7 @@ package object dsl {
             ToSchema
               .newBuilder()
               .setInput(logicalPlan)
-              .setDatatype(DataTypeProtoConverter.toConnectProtoType(schema))
+              .setSchema(DataTypeProtoConverter.toConnectProtoType(schema))
               .build())
           .build()
 

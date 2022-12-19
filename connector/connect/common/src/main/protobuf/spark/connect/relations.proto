@@ -596,11 +596,5 @@ message ToSchema {
   // (Required) The user provided schema.
   //
   // The Sever side will update the dataframe with this schema.
-  oneof schema {
-
-    DataType datatype = 2;
-
-    // Server will use Catalyst parser to parse this string to DataType.
-    string datatype_str = 3;
-  }
+  DataType schema = 2;
 }

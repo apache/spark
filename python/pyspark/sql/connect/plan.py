@@ -1018,7 +1018,7 @@ class Range(LogicalPlan):
 
 
 class ToSchema(LogicalPlan):
-    def __init__(self, child: Optional["LogicalPlan"], schema: Union[DataType, str]) -> None:
+    def __init__(self, child: Optional["LogicalPlan"], schema: DataType) -> None:
         super().__init__(child)
         self._schema = schema
 
@@ -1027,10 +1027,7 @@ class ToSchema(LogicalPlan):
 
         plan = proto.Relation()
         plan.to_schema.input.CopyFrom(self._child.plan(session))
-        if isinstance(self._schema, DataType):
-            plan.to_schema.datatype.CopyFrom(pyspark_types_to_proto_types(self._schema))
-        elif isinstance(self._schema, str):
-            plan.to_schema.datatype_str = self._schema
+        plan.to_schema.schema.CopyFrom(pyspark_types_to_proto_types(self._schema))
         return plan
 
     def print(self, indent: int = 0) -> str:

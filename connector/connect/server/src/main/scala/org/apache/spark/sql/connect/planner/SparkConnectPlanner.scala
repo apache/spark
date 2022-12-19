@@ -292,20 +292,12 @@ class SparkConnectPlanner(session: SparkSession) {
   }
 
   private def transformToSchema(rel: proto.ToSchema): LogicalPlan = {
-    val schemaType = if (rel.hasDatatype) {
-      DataTypeProtoConverter.toCatalystType(rel.getDatatype)
-    } else {
-      parseDatatypeString(rel.getDatatypeStr)
-    }
-
-    val schemaStruct = schemaType match {
-      case s: StructType => s
-      case d => StructType(Seq(StructField("value", d)))
-    }
+    val schema = DataTypeProtoConverter.toCatalystType(rel.getSchema)
+    assert(schema.isInstanceOf[StructType])
 
     Dataset
       .ofRows(session, transformRelation(rel.getInput))
-      .to(schemaStruct)
+      .to(schema.asInstanceOf[StructType])
       .logicalPlan
   }
 

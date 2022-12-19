@@ -1741,7 +1741,7 @@ class DataFrame(object):
         query = self._plan.to_proto(self._session.client)
         return self._session.client._analyze(query).input_files
 
-    def to(self, schema: Union[DataType, str]) -> "DataFrame":
+    def to(self, schema: DataType) -> "DataFrame":
         """
         Returns a new :class:`DataFrame` where each row is reconciled to match the specified
         schema.
