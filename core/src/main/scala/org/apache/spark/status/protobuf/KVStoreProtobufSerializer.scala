@@ -17,7 +17,7 @@
 
 package org.apache.spark.status.protobuf
 
-import org.apache.spark.status.{ApplicationEnvironmentInfoWrapper, JobDataWrapper, ResourceProfileWrapper, TaskDataWrapper}
+import org.apache.spark.status._
 import org.apache.spark.status.KVUtils.KVStoreScalaSerializer
 
 private[spark] class KVStoreProtobufSerializer extends KVStoreScalaSerializer {

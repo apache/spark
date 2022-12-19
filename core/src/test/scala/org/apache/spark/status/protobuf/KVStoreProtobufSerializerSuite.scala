@@ -21,8 +21,8 @@ import java.util.Date
 
 import org.apache.spark.{JobExecutionStatus, SparkFunSuite}
 import org.apache.spark.resource.{ExecutorResourceRequest, TaskResourceRequest}
-import org.apache.spark.status.{ApplicationEnvironmentInfoWrapper, JobDataWrapper, ResourceProfileWrapper, TaskDataWrapper}
-import org.apache.spark.status.api.v1.{AccumulableInfo, ApplicationEnvironmentInfo, JobData, ResourceProfileInfo, RuntimeInfo}
+import org.apache.spark.status._
+import org.apache.spark.status.api.v1._
 
 class KVStoreProtobufSerializerSuite extends SparkFunSuite {
   private val serializer = new KVStoreProtobufSerializer()
