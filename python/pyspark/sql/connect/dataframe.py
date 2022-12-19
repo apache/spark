@@ -807,7 +807,7 @@ class DataFrame:
         Scala/Java's ``org.apache.spark.sql.streaming.StreamingQueryListener`` or Scala/Java's
         ``org.apache.spark.sql.util.QueryExecutionListener`` to the spark session.
 
-        .. versionadded:: 3.3.0
+        .. versionadded:: 3.4.0
 
         Parameters
         ----------
