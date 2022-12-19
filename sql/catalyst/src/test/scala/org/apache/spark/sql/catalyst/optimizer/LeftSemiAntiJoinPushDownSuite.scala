@@ -59,7 +59,7 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Project: LeftSemi join no pushdown because of non-deterministic proj exprs") {
+  test("Project: LeftSemi join no pushdown - non-deterministic proj exprs") {
     val originalQuery = testRelation
       .select(Rand(1), $"b", $"c")
       .join(testRelation1, joinType = LeftSemi, condition = Some($"b" === $"d"))
@@ -68,7 +68,7 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
     comparePlans(optimized, originalQuery.analyze)
   }
 
-  test("Project: LeftSemi join non correlated scalar subq") {
+  test("Project: LeftSemi join pushdown - non-correlated scalar subq") {
     val subq = ScalarSubquery(testRelation.groupBy($"b")(sum($"c").as("sum")).analyze)
     val originalQuery = testRelation
       .select(subq.as("sum"))
@@ -109,7 +109,7 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Aggregate: LeftSemi join no pushdown due to non-deterministic aggr expressions") {
+  test("Aggregate: LeftSemi join no pushdown - non-deterministic aggr expressions") {
     val originalQuery = testRelation
       .groupBy($"b")($"b", Rand(10).as("c"))
       .join(testRelation1, joinType = LeftSemi, condition = Some($"b" === $"d"))
@@ -142,7 +142,7 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
     comparePlans(optimized, originalQuery.analyze)
   }
 
-  test("LeftSemi join over aggregate - no pushdown") {
+  test("Aggregate: LeftSemi join no pushdown") {
     val originalQuery = testRelation
       .groupBy($"b")($"b", sum($"c").as("sum"))
       .join(testRelation1, joinType = LeftSemi, condition = Some($"b" === $"d" && $"sum" === $"d"))
@@ -151,7 +151,7 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
     comparePlans(optimized, originalQuery.analyze)
   }
 
-  test("Aggregate: LeftSemi join non-correlated scalar subq aggr exprs") {
+  test("Aggregate: LeftSemi join pushdown - non-correlated scalar subq aggr exprs") {
     val subq = ScalarSubquery(testRelation.groupBy($"b")(sum($"c").as("sum")).analyze)
     val originalQuery = testRelation
       .groupBy($"a") ($"a", subq.as("sum"))
@@ -166,7 +166,7 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("LeftSemi join over Window") {
+  test("Window: LeftSemi join pushdown") {
     val winExpr = windowExpr(count($"b"),
       windowSpec($"a" :: Nil, $"b".asc :: Nil, UnspecifiedFrame))
 
@@ -185,7 +185,7 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Window: LeftSemi partial pushdown") {
+  test("Window: LeftSemi join partial pushdown") {
     // Attributes from join condition which does not refer to the window partition spec
     // are kept up in the plan as a Filter operator above Window.
     val winExpr = windowExpr(count($"b"),
@@ -292,7 +292,7 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Unary: LeftSemi join pushdown - partial pushdown") {
+  test("Unary: LeftSemi join partial pushdown") {
     val testRelationWithArrayType = LocalRelation($"a".int, $"b".int, $"c_arr".array(IntegerType))
     val originalQuery = testRelationWithArrayType
       .generate(Explode($"c_arr"), alias = Some("arr"), outputNames = Seq("out_col"))
@@ -309,7 +309,7 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Unary: LeftAnti join pushdown - no pushdown") {
+  test("Unary: LeftAnti join no pushdown") {
     val testRelationWithArrayType = LocalRelation($"a".int, $"b".int, $"c_arr".array(IntegerType))
     val originalQuery = testRelationWithArrayType
       .generate(Explode($"c_arr"), alias = Some("arr"), outputNames = Seq("out_col"))
@@ -320,7 +320,7 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
     comparePlans(optimized, originalQuery.analyze)
   }
 
-  test("Unary: LeftSemi join pushdown - no pushdown") {
+  test("Unary: LeftSemi join - no pushdown") {
     val testRelationWithArrayType = LocalRelation($"a".int, $"b".int, $"c_arr".array(IntegerType))
     val originalQuery = testRelationWithArrayType
       .generate(Explode($"c_arr"), alias = Some("arr"), outputNames = Seq("out_col"))
@@ -331,7 +331,7 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
     comparePlans(optimized, originalQuery.analyze)
   }
 
-  test("Unary: LeftSemi join push down through Expand") {
+  test("Unary: LeftSemi join pushdown through Expand") {
     val expand = Expand(Seq(Seq($"a", $"b", "null"), Seq($"a", "null", $"c")),
       Seq($"a", $"b", $"c"), testRelation)
     val originalQuery = expand
