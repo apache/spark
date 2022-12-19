@@ -120,9 +120,10 @@ object UnsafeRowUtils {
    * Fields of type DecimalType (with precision
    * greater than Decimal.MAX_LONG_DIGITS) and CalendarIntervalType use
    * pointers into the variable length region, and those pointers should
-   * never get zeroed out (setNullAt will zero out those pointers).
+   * never get zeroed out (setNullAt will zero out those pointers) because UnsafeRow
+   * may do in-place update for these 2 types even though they are not primitive.
    *
-   * When avoidSetNullAt returns false, callers should not use
+   * When avoidSetNullAt returns true, callers should not use
    * UnsafeRow#setNullAt for fields of that data type, but instead pass
    * a null value to the appropriate set method, e.g.:
    *
