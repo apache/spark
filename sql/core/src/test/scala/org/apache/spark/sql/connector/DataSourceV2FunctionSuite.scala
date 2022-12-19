@@ -148,7 +148,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
       errorClass = "UNRESOLVED_ROUTINE",
       parameters = Map(
         "routineName" -> "`testcat`.`non_exist`",
-        "searchPath" -> "[system.builtin, system.session, testcat]"),
+        "searchPath" -> "[`system`.`builtin`, `system`.`session`, `testcat`]"),
       context = ExpectedContext(
         fragment = "testcat.non_exist('abc')",
         start = 7,

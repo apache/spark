@@ -636,7 +636,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       errorClass = "UNRESOLVED_ROUTINE",
       messageParameters = Map(
         "routineName" -> toSQLId(name.funcName),
-        "searchPath" -> searchPath.mkString("[", ", ", "]")))
+        "searchPath" -> searchPath.map(toSQLId).mkString("[", ", ", "]")))
   }
 
   def unresolvedRoutineError(
@@ -647,7 +647,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       errorClass = "UNRESOLVED_ROUTINE",
       messageParameters = Map(
         "routineName" -> toSQLId(nameParts),
-        "searchPath" -> searchPath.mkString("[", ", ", "]")
+        "searchPath" -> searchPath.map(toSQLId).mkString("[", ", ", "]")
       ),
       origin = context)
   }

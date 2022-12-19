@@ -147,7 +147,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       errorClass = "UNRESOLVED_ROUTINE",
       parameters = Map(
         "routineName" -> "`a_function_that_does_not_exist`",
-        "searchPath" -> "[system.builtin, system.session, spark_catalog]"),
+        "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
       context = ExpectedContext(
         fragment = sqlText,
         start = 0,

@@ -101,7 +101,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       errorClass = "UNRESOLVED_ROUTINE",
       parameters = Map(
         "routineName" -> "`abcadf`",
-        "searchPath" -> "[system.builtin, system.session]"),
+        "searchPath" -> "[`system`.`builtin`, `system`.`session`]"),
       context = ExpectedContext(
         fragment = sqlText,
         start = 0,

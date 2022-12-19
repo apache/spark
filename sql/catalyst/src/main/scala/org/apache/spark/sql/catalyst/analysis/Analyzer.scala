@@ -2185,9 +2185,10 @@ class Analyzer(override val catalogManager: CatalogManager)
               externalFunctionNameSet.add(fullName)
               f
             } else {
+              val catalogPath = (catalog.name() +: catalog.defaultNamespace()).mkString(".")
               throw QueryCompilationErrors.unresolvedRoutineError(
                 nameParts,
-                Seq("system.builtin", "system.session", catalog.name()),
+                Seq("system.builtin", "system.session", catalogPath),
                 f.origin)
             }
           }

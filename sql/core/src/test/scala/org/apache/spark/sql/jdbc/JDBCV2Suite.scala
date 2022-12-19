@@ -2556,7 +2556,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         errorClass = "UNRESOLVED_ROUTINE",
         parameters = Map(
           "routineName" -> "`h2`.`test`.`my_avg2`",
-          "searchPath" -> "[system.builtin, system.session, h2]"),
+          "searchPath" -> "[`system`.`builtin`, `system`.`session`, `h2`]"),
         context = ExpectedContext(
           fragment = "h2.test.my_avg2(id)",
           start = 7,
@@ -2568,7 +2568,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         errorClass = "UNRESOLVED_ROUTINE",
         parameters = Map(
           "routineName" -> "`h2`.`my_avg2`",
-          "searchPath" -> "[system.builtin, system.session, h2]"),
+          "searchPath" -> "[`system`.`builtin`, `system`.`session`, `h2`]"),
         context = ExpectedContext(
           fragment = "h2.my_avg2(id)",
           start = 7,

@@ -2086,7 +2086,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       errorClass = "UNRESOLVED_ROUTINE",
       parameters = Map(
         "routineName" -> "`default`.`md5`",
-        "searchPath" -> "[system.builtin, system.session]"),
+        "searchPath" -> "[`system`.`builtin`, `system`.`session`]"),
       context = ExpectedContext(
         fragment = "REFRESH FUNCTION default.md5",
         start = 0,
@@ -2120,7 +2120,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         errorClass = "UNRESOLVED_ROUTINE",
         parameters = Map(
           "routineName" -> "`func2`",
-          "searchPath" -> "[system.builtin, system.session]"),
+          "searchPath" -> "[`system`.`builtin`, `system`.`session`]"),
         context = ExpectedContext(
           fragment = "REFRESH FUNCTION func2",
           start = 0,
