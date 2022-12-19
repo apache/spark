@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connector
 
+import java.io.{File, FilenameFilter}
+
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.connector.catalog.{MetadataColumn, SupportsMetadataColumns, Table, TableCapability}
 import org.apache.spark.sql.connector.expressions.Transform
@@ -245,6 +247,22 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
       val dfQuery = df.union(df).select("id", "data", "index", "_partition")
       val expectedAnswer = Seq(Row(1, "a", 0, "3/1"), Row(2, "b", 0, "0/2"), Row(3, "c", 0, "1/3"))
       checkAnswer(dfQuery, expectedAnswer ++ expectedAnswer)
+    }
+  }
+
+  test("SPARK-41498: Nested metadata column is propagated through union") {
+    withTempDir { dir =>
+      spark.range(start = 0, end = 10, step = 1, numPartitions = 1)
+        .write.mode("overwrite").save(dir.getAbsolutePath)
+      val df = spark.read.load(dir.getAbsolutePath)
+      val dfQuery = df.union(df).select("_metadata.file_path")
+
+      val filePath = dir.listFiles(new FilenameFilter {
+        override def accept(dir: File, name: String): Boolean = name.endsWith(".parquet")
+      }).map(_.getAbsolutePath)
+      assert(filePath.length == 1)
+      val expectedAnswer = (1 to 20).map(_ => Row("file:" ++ filePath.head))
+      checkAnswer(dfQuery, expectedAnswer)
     }
   }
 
