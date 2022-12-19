@@ -2302,7 +2302,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def analyzeTableNotSupportedOnViewsError(): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1236",
+      errorClass = "UNSUPPORTED_FEATURE.ANALYZE_VIEW",
       messageParameters = Map.empty)
   }
 

@@ -1309,6 +1309,11 @@
           "The ANALYZE TABLE FOR COLUMNS command does not support the type <columnType> of the column <columnName> in the table <tableName>."
         ]
       },
+      "ANALYZE_VIEW" : {
+        "message" : [
+          "The ANALYZE TABLE command does not supported on views."
+        ]
+      },
       "CATALOG_OPERATION" : {
         "message" : [
           "Catalog <catalogName> does not support <operation>."
@@ -2898,11 +2903,6 @@
   "_LEGACY_ERROR_TEMP_1232" : {
     "message" : [
       "Partition spec is invalid. The spec (<specKeys>) must match the partition spec (<partitionColumnNames>) defined in table '<tableName>'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1236" : {
-    "message" : [
-      "ANALYZE TABLE is not supported on views."
     ]
   },
   "_LEGACY_ERROR_TEMP_1237" : {
