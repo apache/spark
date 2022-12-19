@@ -2286,10 +2286,10 @@ class Analyzer(override val catalogManager: CatalogManager)
                 errorClass = "_LEGACY_ERROR_TEMP_2306",
                 messageParameters = Map(
                   "class" -> other.getClass.getCanonicalName))
-              // We don't support persistent high-order functions yet.
             }.getOrElse {
               throw QueryCompilationErrors.unresolvedRoutineError(
                 nameParts,
+                // We don't support persistent high-order functions yet.
                 Seq("system.builtin", "system.session"),
                 u.origin)
             }
