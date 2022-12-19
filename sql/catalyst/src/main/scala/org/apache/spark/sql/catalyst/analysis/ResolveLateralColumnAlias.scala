@@ -324,10 +324,6 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
                 newAggExprs += ne
                 ne.toAttribute
               case e if groupingExpressions.exists(_.semanticEquals(e)) =>
-                // TODO one concern here, is condition here be able to match all grouping
-                //  expressions? For example, Agg [age + 10] [1 + age + 10], when transforming down,
-                //  is it possible that (1 + age) + 10, so that it won't be able to match (age + 10)
-                //  add a test.
                 val ne = expressionMap.getOrElseUpdate(e.canonicalized, assignAlias(e))
                 newAggExprs += ne
                 ne.toAttribute
@@ -345,7 +341,6 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
               child = agg.copy(aggregateExpressions = newAggExprs.toSeq)
             )
           }
-        // TODO withOrigin?
       }
     }
   }
