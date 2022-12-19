@@ -22,8 +22,8 @@ import java.util.Date
 import org.apache.spark.{JobExecutionStatus, SparkFunSuite}
 import org.apache.spark.rdd.DeterministicLevel
 import org.apache.spark.resource.{ExecutorResourceRequest, TaskResourceRequest}
-import org.apache.spark.status.{ApplicationEnvironmentInfoWrapper, JobDataWrapper, RDDOperationClusterWrapper, RDDOperationGraphWrapper, TaskDataWrapper}
-import org.apache.spark.status.api.v1.{AccumulableInfo, ApplicationEnvironmentInfo, JobData, ResourceProfileInfo, RuntimeInfo}
+import org.apache.spark.status._
+import org.apache.spark.status.api.v1._
 import org.apache.spark.ui.scope.{RDDOperationEdge, RDDOperationNode}
 
 class KVStoreProtobufSerializerSuite extends SparkFunSuite {
