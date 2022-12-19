@@ -58,6 +58,10 @@ class Expression(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     class SortOrder(google.protobuf.message.Message):
+        """SortOrder is used to specify the  data ordering, it is normally used in Sort and Window.
+        It is an unevaluable expression and cannot be evaluated, so can not be used in Projection.
+        """
+
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         class _SortDirection:
@@ -100,9 +104,12 @@ class Expression(google.protobuf.message.Message):
         DIRECTION_FIELD_NUMBER: builtins.int
         NULL_ORDERING_FIELD_NUMBER: builtins.int
         @property
-        def child(self) -> global___Expression: ...
+        def child(self) -> global___Expression:
+            """(Required) The expression to be sorted."""
         direction: global___Expression.SortOrder.SortDirection.ValueType
+        """(Required) The sort direction, should be ASCENDING or DESCENDING."""
         null_ordering: global___Expression.SortOrder.NullOrdering.ValueType
+        """(Required) How to deal with NULLs, should be NULLS_FIRST or NULLS_LAST."""
         def __init__(
             self,
             *,
