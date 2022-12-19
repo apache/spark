@@ -164,7 +164,6 @@ class DataFrameReader(OptionUtils):
         return self._df(plan)
 
     def _df(self, plan: LogicalPlan) -> "DataFrame":
-        # The import is needed here to avoid circular import issues.
         from pyspark.sql.connect.dataframe import DataFrame
 
         return DataFrame.withPlan(plan, self._client)

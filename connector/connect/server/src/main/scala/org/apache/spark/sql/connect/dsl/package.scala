@@ -49,6 +49,15 @@ package object dsl {
               .newBuilder()
               .setUnparsedIdentifier(s))
           .build()
+
+      def colRegex: Expression =
+        Expression
+          .newBuilder()
+          .setUnresolvedRegex(
+            Expression.UnresolvedRegex
+              .newBuilder()
+              .setColName(s))
+          .build()
     }
 
     implicit class DslExpression(val expr: Expression) {
@@ -526,12 +535,12 @@ package object dsl {
           .build()
       }
 
-      def createDefaultSortField(col: String): Sort.SortField = {
-        Sort.SortField
+      def createDefaultSortField(col: String): Expression.SortOrder = {
+        Expression.SortOrder
           .newBuilder()
-          .setNulls(Sort.SortNulls.SORT_NULLS_FIRST)
-          .setDirection(Sort.SortDirection.SORT_DIRECTION_ASCENDING)
-          .setExpression(
+          .setNullOrdering(Expression.SortOrder.NullOrdering.SORT_NULLS_FIRST)
+          .setDirection(Expression.SortOrder.SortDirection.SORT_DIRECTION_ASCENDING)
+          .setChild(
             Expression.newBuilder
               .setUnresolvedAttribute(
                 Expression.UnresolvedAttribute.newBuilder.setUnparsedIdentifier(col).build())
@@ -546,7 +555,7 @@ package object dsl {
             Sort
               .newBuilder()
               .setInput(logicalPlan)
-              .addAllSortFields(columns.map(createDefaultSortField).asJava)
+              .addAllOrder(columns.map(createDefaultSortField).asJava)
               .setIsGlobal(true)
               .build())
           .build()
@@ -559,7 +568,7 @@ package object dsl {
             Sort
               .newBuilder()
               .setInput(logicalPlan)
-              .addAllSortFields(columns.map(createDefaultSortField).asJava)
+              .addAllOrder(columns.map(createDefaultSortField).asJava)
               .setIsGlobal(false)
               .build())
           .build()
@@ -718,6 +727,53 @@ package object dsl {
               .addAllParameters(parameters.map(toConnectProtoValue).asJava))
           .build()
       }
+
+      def unpivot(
+          ids: Seq[Expression],
+          values: Seq[Expression],
+          variableColumnName: String,
+          valueColumnName: String): Relation = {
+        Relation
+          .newBuilder()
+          .setUnpivot(
+            Unpivot
+              .newBuilder()
+              .setInput(logicalPlan)
+              .addAllIds(ids.asJava)
+              .addAllValues(values.asJava)
+              .setVariableColumnName(variableColumnName)
+              .setValueColumnName(valueColumnName))
+          .build()
+      }
+
+      def unpivot(
+          ids: Seq[Expression],
+          variableColumnName: String,
+          valueColumnName: String): Relation = {
+        Relation
+          .newBuilder()
+          .setUnpivot(
+            Unpivot
+              .newBuilder()
+              .setInput(logicalPlan)
+              .addAllIds(ids.asJava)
+              .setVariableColumnName(variableColumnName)
+              .setValueColumnName(valueColumnName))
+          .build()
+      }
+
+      def melt(
+          ids: Seq[Expression],
+          values: Seq[Expression],
+          variableColumnName: String,
+          valueColumnName: String): Relation =
+        unpivot(ids, values, variableColumnName, valueColumnName)
+
+      def melt(
+          ids: Seq[Expression],
+          variableColumnName: String,
+          valueColumnName: String): Relation =
+        unpivot(ids, variableColumnName, valueColumnName)
 
       private def createSetOperation(
           left: Relation,

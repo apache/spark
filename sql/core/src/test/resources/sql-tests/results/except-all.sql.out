@@ -145,7 +145,7 @@ org.apache.spark.sql.AnalysisException
     "dt1" : "array<int>",
     "dt2" : "int",
     "hint" : "",
-    "operator" : "ExceptAll",
+    "operator" : "EXCEPT ALL",
     "ti" : "second"
   },
   "queryContext" : [ {
@@ -230,10 +230,10 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "NUM_COLUMNS_MISMATCH",
   "messageParameters" : {
+    "firstNumColumns" : "1",
     "invalidNumColumns" : "2",
     "invalidOrdinalNum" : "second",
-    "operator" : "EXCEPTALL",
-    "refNumColumns" : "1"
+    "operator" : "EXCEPT ALL"
   },
   "queryContext" : [ {
     "objectType" : "",

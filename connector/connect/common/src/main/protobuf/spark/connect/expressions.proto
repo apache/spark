@@ -36,6 +36,31 @@ message Expression {
     UnresolvedStar unresolved_star = 5;
     Alias alias = 6;
     Cast cast = 7;
+    UnresolvedRegex unresolved_regex = 8;
+    SortOrder sort_order = 9;
+  }
+
+  // SortOrder is used to specify the  data ordering, it is normally used in Sort and Window.
+  // It is an unevaluable expression and cannot be evaluated, so can not be used in Projection.
+  message SortOrder {
+    // (Required) The expression to be sorted.
+    Expression child = 1;
+
+    // (Required) The sort direction, should be ASCENDING or DESCENDING.
+    SortDirection direction = 2;
+
+    // (Required) How to deal with NULLs, should be NULLS_FIRST or NULLS_LAST.
+    NullOrdering null_ordering = 3;
+
+    enum SortDirection {
+      SORT_DIRECTION_ASCENDING = 0;
+      SORT_DIRECTION_DESCENDING = 1;
+    }
+
+    enum NullOrdering {
+      SORT_NULLS_FIRST = 0;
+      SORT_NULLS_LAST = 1;
+    }
   }
 
   message Cast {
@@ -77,9 +102,7 @@ message Expression {
       int32 year_month_interval = 20;
       int64 day_time_interval = 21;
 
-      Array array = 22;
-      Struct struct = 23;
-      Map map = 24;
+      DataType typed_null = 22;
     }
 
     // whether the literal type should be treated as a nullable type. Applies to
@@ -106,25 +129,6 @@ message Expression {
       int32 months = 1;
       int32 days = 2;
       int64 microseconds = 3;
-    }
-
-    message Struct {
-      // A possibly heterogeneously typed list of literals
-      repeated Literal fields = 1;
-    }
-
-    message Array {
-      // A homogeneously typed list of literals
-      repeated Literal values = 1;
-    }
-
-    message Map {
-      repeated Pair pairs = 1;
-
-      message Pair {
-        Literal key = 1;
-        Literal value = 2;
-      }
     }
   }
 
@@ -166,6 +170,13 @@ message Expression {
     // (Optional) The target of the expansion, either be a table name or struct name, this
     // is a list of identifiers that is the path of the expansion.
     repeated string target = 1;
+  }
+
+  // Represents all of the input attributes to a given relational operator, for example in
+  // "SELECT `(id)?+.+` FROM ...".
+  message UnresolvedRegex {
+    // (Required) The column name used to extract column with regex.
+    string col_name = 1;
   }
 
   message Alias {

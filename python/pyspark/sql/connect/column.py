@@ -15,25 +15,57 @@
 # limitations under the License.
 #
 
-from typing import get_args, TYPE_CHECKING, Callable, Any, Union, overload, cast, Sequence
+from typing import (
+    get_args,
+    TYPE_CHECKING,
+    Callable,
+    Any,
+    Union,
+    overload,
+    Sequence,
+    Tuple,
+    Optional,
+)
 
 import json
 import decimal
 import datetime
 
-from pyspark.sql.types import TimestampType, DayTimeIntervalType, DataType, DateType
+from pyspark.sql.types import (
+    DateType,
+    NullType,
+    BooleanType,
+    BinaryType,
+    ByteType,
+    ShortType,
+    IntegerType,
+    LongType,
+    FloatType,
+    DoubleType,
+    DecimalType,
+    StringType,
+    DataType,
+    TimestampType,
+    TimestampNTZType,
+    DayTimeIntervalType,
+)
 
 import pyspark.sql.connect.proto as proto
 from pyspark.sql.connect.types import pyspark_types_to_proto_types
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import ColumnOrName
+    from pyspark.sql.connect._typing import ColumnOrName, PrimitiveType
     from pyspark.sql.connect.client import SparkConnectClient
     import pyspark.sql.connect.proto as proto
 
-# TODO(SPARK-41329): solve the circular import between _typing and this class
-# if we want to reuse _type.PrimitiveType
-PrimitiveType = Union[bool, float, int, str]
+JVM_BYTE_MIN = -(1 << 7)
+JVM_BYTE_MAX = (1 << 7) - 1
+JVM_SHORT_MIN = -(1 << 15)
+JVM_SHORT_MAX = (1 << 15) - 1
+JVM_INT_MIN = -(1 << 31)
+JVM_INT_MAX = (1 << 31) - 1
+JVM_LONG_MIN = -(1 << 63)
+JVM_LONG_MAX = (1 << 63) - 1
 
 
 def _func_op(name: str, doc: str = "") -> Callable[["Column"], "Column"]:
@@ -130,6 +162,44 @@ class Expression:
         ...
 
 
+class CaseWhen(Expression):
+    def __init__(
+        self, branches: Sequence[Tuple[Expression, Expression]], else_value: Optional[Expression]
+    ):
+
+        assert isinstance(branches, list)
+        for branch in branches:
+            assert (
+                isinstance(branch, tuple)
+                and len(branch) == 2
+                and all(isinstance(expr, Expression) for expr in branch)
+            )
+        self._branches = branches
+
+        if else_value is not None:
+            assert isinstance(else_value, Expression)
+
+        self._else_value = else_value
+
+    def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
+        args = []
+        for condition, value in self._branches:
+            args.append(condition)
+            args.append(value)
+
+        if self._else_value is not None:
+            args.append(self._else_value)
+
+        unresolved_function = UnresolvedFunction(name="when", args=args)
+
+        return unresolved_function.to_plan(session)
+
+    def __repr__(self) -> str:
+        _cases = "".join([f" WHEN {c} THEN {v}" for c, v in self._branches])
+        _else = f" ELSE {self._else_value}" if self._else_value is not None else ""
+        return "CASE" + _cases + _else + " END"
+
+
 class ColumnAlias(Expression):
     def __init__(self, parent: Expression, alias: list[str], metadata: Any):
 
@@ -164,73 +234,147 @@ class LiteralExpression(Expression):
     The Python types are converted best effort into the relevant proto types. On the Spark Connect
     server side, the proto types are converted to the Catalyst equivalents."""
 
-    def __init__(self, value: Any) -> None:
+    def __init__(self, value: Any, dataType: DataType) -> None:
         super().__init__()
+
+        assert isinstance(
+            dataType,
+            (
+                NullType,
+                BinaryType,
+                BooleanType,
+                ByteType,
+                ShortType,
+                IntegerType,
+                LongType,
+                FloatType,
+                DoubleType,
+                DecimalType,
+                StringType,
+                DateType,
+                TimestampType,
+                TimestampNTZType,
+                DayTimeIntervalType,
+            ),
+        )
+
+        if isinstance(dataType, NullType):
+            assert value is None
+
+        if value is not None:
+            if isinstance(dataType, BinaryType):
+                assert isinstance(value, (bytes, bytearray))
+            elif isinstance(dataType, BooleanType):
+                assert isinstance(value, bool)
+            elif isinstance(dataType, ByteType):
+                assert isinstance(value, int) and JVM_BYTE_MIN <= int(value) <= JVM_BYTE_MAX
+            elif isinstance(dataType, ShortType):
+                assert isinstance(value, int) and JVM_SHORT_MIN <= int(value) <= JVM_SHORT_MAX
+            elif isinstance(dataType, IntegerType):
+                assert isinstance(value, int) and JVM_INT_MIN <= int(value) <= JVM_INT_MAX
+            elif isinstance(dataType, LongType):
+                assert isinstance(value, int) and JVM_LONG_MIN <= int(value) <= JVM_LONG_MAX
+            elif isinstance(dataType, FloatType):
+                assert isinstance(value, float)
+            elif isinstance(dataType, DoubleType):
+                assert isinstance(value, float)
+            elif isinstance(dataType, DecimalType):
+                assert isinstance(value, decimal.Decimal)
+            elif isinstance(dataType, StringType):
+                assert isinstance(value, str)
+            elif isinstance(dataType, DateType):
+                assert isinstance(value, (datetime.date, datetime.datetime))
+                if isinstance(value, datetime.date):
+                    value = DateType().toInternal(value)
+                else:
+                    value = DateType().toInternal(value.date())
+            elif isinstance(dataType, TimestampType):
+                assert isinstance(value, datetime.datetime)
+                value = TimestampType().toInternal(value)
+            elif isinstance(dataType, TimestampNTZType):
+                assert isinstance(value, datetime.datetime)
+                value = TimestampNTZType().toInternal(value)
+            elif isinstance(dataType, DayTimeIntervalType):
+                assert isinstance(value, datetime.timedelta)
+                value = DayTimeIntervalType().toInternal(value)
+                assert value is not None
+            else:
+                raise ValueError(f"Unsupported Data Type {dataType}")
+
         self._value = value
+        self._dataType = dataType
+
+    @classmethod
+    def _infer_type(cls, value: Any) -> DataType:
+        if value is None:
+            return NullType()
+        elif isinstance(value, (bytes, bytearray)):
+            return BinaryType()
+        elif isinstance(value, bool):
+            return BooleanType()
+        elif isinstance(value, int):
+            if JVM_INT_MIN <= value <= JVM_INT_MAX:
+                return IntegerType()
+            elif JVM_LONG_MIN <= value <= JVM_LONG_MAX:
+                return LongType()
+            else:
+                raise ValueError(f"integer {value} out of bounds")
+        elif isinstance(value, float):
+            return DoubleType()
+        elif isinstance(value, str):
+            return StringType()
+        elif isinstance(value, decimal.Decimal):
+            return DecimalType()
+        elif isinstance(value, datetime.datetime):
+            return TimestampType()
+        elif isinstance(value, datetime.date):
+            return DateType()
+        elif isinstance(value, datetime.timedelta):
+            return DayTimeIntervalType()
+        else:
+            raise ValueError(f"Unsupported Data Type {type(value).__name__}")
 
     def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
-        """Converts the literal expression to the literal in proto.
-
-        TODO(SPARK-40533) This method always assumes the largest type and can thus
-             create weird interpretations of the literal."""
-
-        from pyspark.sql.connect.functions import lit
+        """Converts the literal expression to the literal in proto."""
 
         expr = proto.Expression()
-        if self._value is None:
+
+        if isinstance(self._dataType, NullType):
             expr.literal.null = True
-        elif isinstance(self._value, (bytes, bytearray)):
+        elif self._value is None:
+            expr.literal.typed_null.CopyFrom(pyspark_types_to_proto_types(self._dataType))
+        elif isinstance(self._dataType, BinaryType):
             expr.literal.binary = bytes(self._value)
-        elif isinstance(self._value, bool):
+        elif isinstance(self._dataType, BooleanType):
             expr.literal.boolean = bool(self._value)
-        elif isinstance(self._value, int):
+        elif isinstance(self._dataType, ByteType):
+            expr.literal.byte = int(self._value)
+        elif isinstance(self._dataType, ShortType):
+            expr.literal.short = int(self._value)
+        elif isinstance(self._dataType, IntegerType):
+            expr.literal.integer = int(self._value)
+        elif isinstance(self._dataType, LongType):
             expr.literal.long = int(self._value)
-        elif isinstance(self._value, float):
+        elif isinstance(self._dataType, FloatType):
+            expr.literal.float = float(self._value)
+        elif isinstance(self._dataType, DoubleType):
             expr.literal.double = float(self._value)
-        elif isinstance(self._value, str):
-            expr.literal.string = str(self._value)
-        elif isinstance(self._value, decimal.Decimal):
+        elif isinstance(self._dataType, DecimalType):
             expr.literal.decimal.value = str(self._value)
-            expr.literal.decimal.precision = int(decimal.getcontext().prec)
-        elif isinstance(self._value, datetime.datetime):
-            expr.literal.timestamp = TimestampType().toInternal(self._value)
-        elif isinstance(self._value, datetime.date):
-            expr.literal.date = DateType().toInternal(self._value)
-        elif isinstance(self._value, datetime.timedelta):
-            interval = DayTimeIntervalType().toInternal(self._value)
-            assert interval is not None
-            expr.literal.day_time_interval = int(interval)
-        elif isinstance(self._value, list):
-            expr.literal.array.SetInParent()
-            for item in list(self._value):
-                if isinstance(item, Column):
-                    expr.literal.array.values.append(item.to_plan(session).literal)
-                else:
-                    expr.literal.array.values.append(lit(item).to_plan(session).literal)
-        elif isinstance(self._value, tuple):
-            expr.literal.struct.SetInParent()
-            for item in list(self._value):
-                if isinstance(item, Column):
-                    expr.literal.struct.fields.append(item.to_plan(session).literal)
-                else:
-                    expr.literal.struct.fields.append(lit(item).to_plan(session).literal)
-        elif isinstance(self._value, dict):
-            expr.literal.map.SetInParent()
-            for key, value in dict(self._value).items():
-                pair = proto.Expression.Literal.Map.Pair()
-                if isinstance(key, Column):
-                    pair.key.CopyFrom(key.to_plan(session).literal)
-                else:
-                    pair.key.CopyFrom(lit(key).to_plan(session).literal)
-                if isinstance(value, Column):
-                    pair.value.CopyFrom(value.to_plan(session).literal)
-                else:
-                    pair.value.CopyFrom(lit(value).to_plan(session).literal)
-                expr.literal.map.pairs.append(pair)
-        elif isinstance(self._value, Column):
-            expr.CopyFrom(self._value.to_plan(session))
+            expr.literal.decimal.precision = self._dataType.precision
+            expr.literal.decimal.scale = self._dataType.scale
+        elif isinstance(self._dataType, StringType):
+            expr.literal.string = str(self._value)
+        elif isinstance(self._dataType, DateType):
+            expr.literal.date = int(self._value)
+        elif isinstance(self._dataType, TimestampType):
+            expr.literal.timestamp = int(self._value)
+        elif isinstance(self._dataType, TimestampNTZType):
+            expr.literal.timestamp_ntz = int(self._value)
+        elif isinstance(self._dataType, DayTimeIntervalType):
+            expr.literal.day_time_interval = int(self._value)
         else:
-            raise ValueError(f"Could not convert literal for type {type(self._value)}")
+            raise ValueError(f"Unsupported Data Type {self._dataType}")
 
         return expr
 
@@ -265,12 +409,6 @@ class ColumnReference(Expression):
         expr.unresolved_attribute.unparsed_identifier = self._unparsed_identifier
         return expr
 
-    def desc(self) -> "SortOrder":
-        return SortOrder(self, ascending=False, nullsLast=True)
-
-    def asc(self) -> "SortOrder":
-        return SortOrder(self, ascending=True, nullsLast=False)
-
     def __repr__(self) -> str:
         return f"ColumnReference({self._unparsed_identifier})"
 
@@ -292,35 +430,38 @@ class SQLExpression(Expression):
 
 
 class SortOrder(Expression):
-    def __init__(self, child: Expression, ascending: bool = True, nullsLast: bool = False) -> None:
+    def __init__(self, child: Expression, ascending: bool = True, nullsFirst: bool = True) -> None:
         super().__init__()
         self._child = child
         self._ascending = ascending
-        self._nullsLast = nullsLast
+        self._nullsFirst = nullsFirst
 
     def __repr__(self) -> str:
         return (
             str(self._child)
             + (" ASC" if self._ascending else " DESC")
-            + (" NULLS LAST" if self._nullsLast else " NULLS FIRST")
+            + (" NULLS FIRST" if self._nullsFirst else " NULLS LAST")
         )
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
-        # TODO(SPARK-41334): move SortField from relations.proto to expressions.proto
-        sort = proto.Sort.SortField()
-        sort.expression.CopyFrom(self._child.to_plan(session))
+        sort = proto.Expression()
+        sort.sort_order.child.CopyFrom(self._child.to_plan(session))
 
         if self._ascending:
-            sort.direction = proto.Sort.SortDirection.SORT_DIRECTION_ASCENDING
+            sort.sort_order.direction = (
+                proto.Expression.SortOrder.SortDirection.SORT_DIRECTION_ASCENDING
+            )
         else:
-            sort.direction = proto.Sort.SortDirection.SORT_DIRECTION_DESCENDING
+            sort.sort_order.direction = (
+                proto.Expression.SortOrder.SortDirection.SORT_DIRECTION_DESCENDING
+            )
 
-        if self._nullsLast:
-            sort.nulls = proto.Sort.SortNulls.SORT_NULLS_LAST
+        if self._nullsFirst:
+            sort.sort_order.null_ordering = proto.Expression.SortOrder.NullOrdering.SORT_NULLS_FIRST
         else:
-            sort.nulls = proto.Sort.SortNulls.SORT_NULLS_FIRST
+            sort.sort_order.null_ordering = proto.Expression.SortOrder.NullOrdering.SORT_NULLS_LAST
 
-        return cast(proto.Expression, sort)
+        return sort
 
 
 class UnresolvedFunction(Expression):
@@ -354,6 +495,25 @@ class UnresolvedFunction(Expression):
             return f"{self._name}(distinct {', '.join([str(arg) for arg in self._args])})"
         else:
             return f"{self._name}({', '.join([str(arg) for arg in self._args])})"
+
+
+class UnresolvedRegex(Expression):
+    def __init__(
+        self,
+        col_name: str,
+    ) -> None:
+        super().__init__()
+
+        assert isinstance(col_name, str)
+        self.col_name = col_name
+
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
+        expr = proto.Expression()
+        expr.unresolved_regex.col_name = self.col_name
+        return expr
+
+    def __repr__(self) -> str:
+        return f"UnresolvedRegex({self.col_name})"
 
 
 class CastExpression(Expression):
@@ -554,7 +714,7 @@ class Column:
         return _func_op("not")(_bin_op("==")(self, other))
 
     # string methods
-    def contains(self, other: Union[PrimitiveType, "Column"]) -> "Column":
+    def contains(self, other: Union["PrimitiveType", "Column"]) -> "Column":
         """
         Contains the other element. Returns a boolean :class:`Column` based on a string match.
 
@@ -590,6 +750,113 @@ class Column:
     """
     startswith = _bin_op("startsWith", _startswith_doc)
     endswith = _bin_op("endsWith", _endswith_doc)
+
+    def when(self, condition: "Column", value: Any) -> "Column":
+        """
+        Evaluates a list of conditions and returns one of multiple possible result expressions.
+        If :func:`Column.otherwise` is not invoked, None is returned for unmatched conditions.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        condition : :class:`Column`
+            a boolean :class:`Column` expression.
+        value
+            a literal value, or a :class:`Column` expression.
+
+        Returns
+        -------
+        :class:`Column`
+            Column representing whether each element of Column is in conditions.
+
+        Examples
+        --------
+        >>> from pyspark.sql import functions as F
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
+        >>> df.select(df.name, F.when(df.age > 4, 1).when(df.age < 3, -1).otherwise(0)).show()
+        +-----+------------------------------------------------------------+
+        | name|CASE WHEN (age > 4) THEN 1 WHEN (age < 3) THEN -1 ELSE 0 END|
+        +-----+------------------------------------------------------------+
+        |Alice|                                                          -1|
+        |  Bob|                                                           1|
+        +-----+------------------------------------------------------------+
+
+        See Also
+        --------
+        pyspark.sql.functions.when
+        """
+        if not isinstance(condition, Column):
+            raise TypeError("condition should be a Column")
+
+        if not isinstance(self._expr, CaseWhen):
+            raise TypeError(
+                "when() can only be applied on a Column previously generated by when() function"
+            )
+
+        if self._expr._else_value is not None:
+            raise TypeError("when() cannot be applied once otherwise() is applied")
+
+        if isinstance(value, Column):
+            _value = value._expr
+        else:
+            _value = LiteralExpression(value, LiteralExpression._infer_type(value))
+
+        _branches = self._expr._branches + [(condition._expr, _value)]
+
+        return Column(CaseWhen(branches=_branches, else_value=None))
+
+    def otherwise(self, value: Any) -> "Column":
+        """
+        Evaluates a list of conditions and returns one of multiple possible result expressions.
+        If :func:`Column.otherwise` is not invoked, None is returned for unmatched conditions.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        value
+            a literal value, or a :class:`Column` expression.
+
+        Returns
+        -------
+        :class:`Column`
+            Column representing whether each element of Column is unmatched conditions.
+
+        Examples
+        --------
+        >>> from pyspark.sql import functions as F
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
+        >>> df.select(df.name, F.when(df.age > 3, 1).otherwise(0)).show()
+        +-----+-------------------------------------+
+        | name|CASE WHEN (age > 3) THEN 1 ELSE 0 END|
+        +-----+-------------------------------------+
+        |Alice|                                    0|
+        |  Bob|                                    1|
+        +-----+-------------------------------------+
+
+        See Also
+        --------
+        pyspark.sql.functions.when
+        """
+        if not isinstance(self._expr, CaseWhen):
+            raise TypeError(
+                "otherwise() can only be applied on a Column previously generated by when()"
+            )
+
+        if self._expr._else_value is not None:
+            raise TypeError(
+                "otherwise() can only be applied once on a Column previously generated by when()"
+            )
+
+        if isinstance(value, Column):
+            _value = value._expr
+        else:
+            _value = LiteralExpression(value, LiteralExpression._infer_type(value))
+
+        return Column(CaseWhen(branches=self._expr._branches, else_value=_value))
 
     def like(self: "Column", other: str) -> "Column":
         """
@@ -698,6 +965,9 @@ class Column:
         >>> df.select(df.name.substr(1, 3).alias("col")).collect()
         [Row(col='Ali'), Row(col='Bob')]
         """
+        from pyspark.sql.connect.function_builder import functions as F
+        from pyspark.sql.connect.functions import lit
+
         if type(startPos) != type(length):
             raise TypeError(
                 "startPos and length must be the same type. "
@@ -706,17 +976,16 @@ class Column:
                     length_t=type(length),
                 )
             )
-        from pyspark.sql.connect.function_builder import functions as F
 
         if isinstance(length, int):
-            length_exp = self._lit(length)
+            length_exp = lit(length)
         elif isinstance(length, Column):
             length_exp = length
         else:
             raise TypeError("Unsupported type for substr().")
 
         if isinstance(startPos, int):
-            start_exp = self._lit(startPos)
+            start_exp = lit(startPos)
         else:
             start_exp = startPos
 
@@ -726,8 +995,11 @@ class Column:
         """Returns a binary expression with the current column as the left
         side and the other expression as the right side.
         """
+        from pyspark.sql.connect._typing import PrimitiveType
+        from pyspark.sql.connect.functions import lit
+
         if isinstance(other, get_args(PrimitiveType)):
-            other = self._lit(other)
+            other = lit(other)
         return scalar_function("==", self, other)
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
@@ -740,19 +1012,19 @@ class Column:
         return self.asc_nulls_first()
 
     def asc_nulls_first(self) -> "Column":
-        return Column(SortOrder(self._expr, ascending=True, nullsLast=False))
+        return Column(SortOrder(self._expr, ascending=True, nullsFirst=True))
 
     def asc_nulls_last(self) -> "Column":
-        return Column(SortOrder(self._expr, ascending=True, nullsLast=True))
+        return Column(SortOrder(self._expr, ascending=True, nullsFirst=False))
 
     def desc(self) -> "Column":
         return self.desc_nulls_last()
 
     def desc_nulls_first(self) -> "Column":
-        return Column(SortOrder(self._expr, ascending=False, nullsLast=False))
+        return Column(SortOrder(self._expr, ascending=False, nullsFirst=True))
 
     def desc_nulls_last(self) -> "Column":
-        return Column(SortOrder(self._expr, ascending=False, nullsLast=True))
+        return Column(SortOrder(self._expr, ascending=False, nullsFirst=False))
 
     def name(self) -> str:
         return self._expr.name()
@@ -779,10 +1051,67 @@ class Column:
         else:
             raise TypeError("unexpected type: %s" % type(dataType))
 
-    # TODO(SPARK-41329): solve the circular import between functions.py and
-    # this class if we want to reuse functions.lit
-    def _lit(self, x: Any) -> "Column":
-        return Column(LiteralExpression(x))
-
     def __repr__(self) -> str:
         return "Column<'%s'>" % self._expr.__repr__()
+
+    def over(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("over() is not yet implemented.")
+
+    def isin(self, *cols: Any) -> "Column":
+        """
+        A boolean expression that is evaluated to true if the value of this
+        expression is contained by the evaluated values of the arguments.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        cols
+            The result will only be true at a location if any value matches in the Column.
+
+        Returns
+        -------
+        :class:`Column`
+            Column of booleans showing whether each element in the Column is contained in cols.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
+        >>> df[df.name.isin("Bob", "Mike")].collect()
+        [Row(age=5, name='Bob')]
+        >>> df[df.age.isin([1, 2, 3])].collect()
+        [Row(age=2, name='Alice')]
+        """
+        from pyspark.sql.connect.functions import lit
+
+        if len(cols) == 1 and isinstance(cols[0], (list, set)):
+            _cols = list(cols[0])
+        else:
+            _cols = list(cols)
+
+        return Column(UnresolvedFunction("in", [self._expr] + [lit(c)._expr for c in _cols]))
+
+    def getItem(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("getItem() is not yet implemented.")
+
+    def astype(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("astype() is not yet implemented.")
+
+    def between(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("between() is not yet implemented.")
+
+    def getField(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("getField() is not yet implemented.")
+
+    def withField(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("withField() is not yet implemented.")
+
+    def dropFields(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("dropFields() is not yet implemented.")
+
+    def __getitem__(self, k: Any) -> None:
+        raise NotImplementedError("apply() - __getitem__ is not yet implemented.")
+
+    def __iter__(self) -> None:
+        raise TypeError("Column is not iterable")

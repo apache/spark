@@ -36,7 +36,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.scheduler.SchedulingMode._
 import org.apache.spark.util.{AccumulatorV2, Clock, LongAccumulator, SystemClock, Utils}
-import org.apache.spark.util.collection.MedianHeap
+import org.apache.spark.util.collection.PercentileHeap
 
 /**
  * Schedules the tasks within a single TaskSet in the TaskSchedulerImpl. This class keeps track of
@@ -197,7 +197,7 @@ private[spark] class TaskSetManager(
   // Use a MedianHeap to record durations of successful tasks so we know when to launch
   // speculative tasks. This is only used when speculation is enabled, to avoid the overhead
   // of inserting into the heap when the heap won't be used.
-  val successfulTaskDurations = new MedianHeap()
+  val successfulTaskDurations = new PercentileHeap()
 
   // How frequently to reprint duplicate exceptions in full, in milliseconds
   val EXCEPTION_PRINT_INTERVAL =
@@ -1129,7 +1129,7 @@ private[spark] class TaskSetManager(
               // config executorDecommissionKillInterval. If the task is going to finish after
               // decommissioning, then we will eagerly speculate the task.
               val taskEndTimeBasedOnMedianDuration =
-                info.launchTime + successfulTaskDurations.median
+                info.launchTime + successfulTaskDurations.percentile
               val executorDecomTime = decomState.startTime + executorDecommissionKillInterval.get
               executorDecomTime < taskEndTimeBasedOnMedianDuration
             }
@@ -1172,7 +1172,7 @@ private[spark] class TaskSetManager(
     val numSuccessfulTasks = successfulTaskDurations.size()
     val timeMs = clock.getTimeMillis()
     if (numSuccessfulTasks >= minFinishedForSpeculation) {
-      val medianDuration = successfulTaskDurations.median
+      val medianDuration = successfulTaskDurations.percentile
       val threshold = max(speculationMultiplier * medianDuration, minTimeToSpeculation)
       // TODO: Threshold should also look at standard deviation of task durations and have a lower
       // bound based on that.

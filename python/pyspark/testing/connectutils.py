@@ -14,52 +14,66 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import typing
 import os
-from typing import Any, Dict, Optional
 import functools
 import unittest
 
-from pyspark.testing.sqlutils import have_pandas
+from pyspark.testing.sqlutils import (
+    have_pandas,
+    have_pyarrow,
+    pandas_requirement_message,
+    pyarrow_requirement_message,
+)
 
-if have_pandas:
+
+grpc_requirement_message = None
+try:
+    import grpc
+except ImportError as e:
+    grpc_requirement_message = str(e)
+have_grpc = grpc_requirement_message is None
+
+connect_not_compiled_message = None
+if have_pandas and have_pyarrow and have_grpc:
     from pyspark.sql.connect import DataFrame
     from pyspark.sql.connect.plan import Read, Range, SQL
     from pyspark.testing.utils import search_jar
-    from pyspark.sql.connect.plan import LogicalPlan
     from pyspark.sql.connect.session import SparkSession
 
     connect_jar = search_jar("connector/connect/server", "spark-connect-assembly-", "spark-connect")
-else:
-    connect_jar = None
-
-
-if connect_jar is None:
-    connect_requirement_message = (
-        "Skipping all Spark Connect Python tests as the optional Spark Connect project was "
-        "not compiled into a JAR. To run these tests, you need to build Spark with "
-        "'build/sbt package' or 'build/mvn package' before running this test."
-    )
-else:
     existing_args = os.environ.get("PYSPARK_SUBMIT_ARGS", "pyspark-shell")
     jars_args = "--jars %s" % connect_jar
     plugin_args = "--conf spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin"
     os.environ["PYSPARK_SUBMIT_ARGS"] = " ".join([jars_args, plugin_args, existing_args])
-    connect_requirement_message = None  # type: ignore
+else:
+    connect_not_compiled_message = (
+        "Skipping all Spark Connect Python tests as the optional Spark Connect project was "
+        "not compiled into a JAR. To run these tests, you need to build Spark with "
+        "'build/sbt package' or 'build/mvn package' before running this test."
+    )
 
-should_test_connect = connect_requirement_message is None and have_pandas
+
+connect_requirement_message = (
+    pandas_requirement_message
+    or pyarrow_requirement_message
+    or grpc_requirement_message
+    or connect_not_compiled_message
+)
+should_test_connect: str = typing.cast(str, connect_requirement_message is None)
 
 
 class MockRemoteSession:
-    def __init__(self) -> None:
-        self.hooks: Dict[str, Any] = {}
+    def __init__(self):
+        self.hooks = {}
 
-    def set_hook(self, name: str, hook: Any) -> None:
+    def set_hook(self, name, hook):
         self.hooks[name] = hook
 
-    def drop_hook(self, name: str) -> None:
+    def drop_hook(self, name):
         self.hooks.pop(name)
 
-    def __getattr__(self, item: str) -> Any:
+    def __getattr__(self, item):
         if item not in self.hooks:
             raise LookupError(f"{item} is not defined as a method hook in MockRemoteSession")
         return functools.partial(self.hooks[item])
@@ -67,43 +81,36 @@ class MockRemoteSession:
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
 class PlanOnlyTestFixture(unittest.TestCase):
-
-    connect: "MockRemoteSession"
-    if have_pandas:
-        session: SparkSession
+    @classmethod
+    def _read_table(cls, table_name):
+        return DataFrame.withPlan(Read(table_name), cls.connect)
 
     @classmethod
-    def _read_table(cls, table_name: str) -> "DataFrame":
-        return DataFrame.withPlan(Read(table_name), cls.connect)  # type: ignore
-
-    @classmethod
-    def _udf_mock(cls, *args, **kwargs) -> str:
+    def _udf_mock(cls, *args, **kwargs):
         return "internal_name"
 
     @classmethod
     def _session_range(
         cls,
-        start: int,
-        end: int,
-        step: int = 1,
-        num_partitions: Optional[int] = None,
-    ) -> "DataFrame":
-        return DataFrame.withPlan(
-            Range(start, end, step, num_partitions), cls.connect  # type: ignore
-        )
+        start,
+        end,
+        step=1,
+        num_partitions=None,
+    ):
+        return DataFrame.withPlan(Range(start, end, step, num_partitions), cls.connect)
 
     @classmethod
-    def _session_sql(cls, query: str) -> "DataFrame":
-        return DataFrame.withPlan(SQL(query), cls.connect)  # type: ignore
+    def _session_sql(cls, query):
+        return DataFrame.withPlan(SQL(query), cls.connect)
 
     if have_pandas:
 
         @classmethod
-        def _with_plan(cls, plan: LogicalPlan) -> "DataFrame":
-            return DataFrame.withPlan(plan, cls.connect)  # type: ignore
+        def _with_plan(cls, plan):
+            return DataFrame.withPlan(plan, cls.connect)
 
     @classmethod
-    def setUpClass(cls: Any) -> None:
+    def setUpClass(cls):
         cls.connect = MockRemoteSession()
         cls.session = SparkSession.builder.remote().getOrCreate()
         cls.tbl_name = "test_connect_plan_only_table_1"
@@ -115,7 +122,7 @@ class PlanOnlyTestFixture(unittest.TestCase):
         cls.connect.set_hook("with_plan", cls._with_plan)
 
     @classmethod
-    def tearDownClass(cls: Any) -> None:
+    def tearDownClass(cls):
         cls.connect.drop_hook("register_udf")
         cls.connect.drop_hook("readTable")
         cls.connect.drop_hook("range")

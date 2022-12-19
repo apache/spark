@@ -28,12 +28,12 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.WriteOperation
 import org.apache.spark.sql.{Column, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
-import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.{logical, Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
-import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, SubqueryAlias, Union, UnresolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, SubqueryAlias, Union, Unpivot, UnresolvedHint}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.{toCatalystExpression, toCatalystValue}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -95,6 +95,7 @@ class SparkConnectPlanner(session: SparkSession) {
         transformRenameColumnsByNameToNameMap(rel.getRenameColumnsByNameToNameMap)
       case proto.Relation.RelTypeCase.WITH_COLUMNS => transformWithColumns(rel.getWithColumns)
       case proto.Relation.RelTypeCase.HINT => transformHint(rel.getHint)
+      case proto.Relation.RelTypeCase.UNPIVOT => transformUnpivot(rel.getUnpivot)
       case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
         throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
       case _ => throw InvalidPlanInput(s"${rel.getUnknown} not supported.")
@@ -309,6 +310,34 @@ class SparkConnectPlanner(session: SparkSession) {
     UnresolvedHint(rel.getName, params, transformRelation(rel.getInput))
   }
 
+  private def transformUnpivot(rel: proto.Unpivot): LogicalPlan = {
+    val ids = rel.getIdsList.asScala.toArray.map { expr =>
+      Column(transformExpression(expr))
+    }
+
+    if (rel.getValuesList.isEmpty) {
+      Unpivot(
+        Some(ids.map(_.named)),
+        None,
+        None,
+        rel.getVariableColumnName,
+        Seq(rel.getValueColumnName),
+        transformRelation(rel.getInput))
+    } else {
+      val values = rel.getValuesList.asScala.toArray.map { expr =>
+        Column(transformExpression(expr))
+      }
+
+      Unpivot(
+        Some(ids.map(_.named)),
+        Some(values.map(v => Seq(v.named))),
+        None,
+        rel.getVariableColumnName,
+        Seq(rel.getValueColumnName),
+        transformRelation(rel.getInput))
+    }
+  }
+
   private def transformDeduplicate(rel: proto.Deduplicate): LogicalPlan = {
     if (!rel.hasInput) {
       throw InvalidPlanInput("Deduplicate needs a plan input")
@@ -340,6 +369,21 @@ class SparkConnectPlanner(session: SparkSession) {
     }
   }
 
+  private def parseDatatypeString(sqlText: String): DataType = {
+    val parser = session.sessionState.sqlParser
+    try {
+      parser.parseTableSchema(sqlText)
+    } catch {
+      case _: ParseException =>
+        try {
+          parser.parseDataType(sqlText)
+        } catch {
+          case _: ParseException =>
+            parser.parseDataType(s"struct<${sqlText.trim}>")
+        }
+    }
+  }
+
   private def transformLocalRelation(rel: proto.LocalRelation): LogicalPlan = {
     val (rows, structType) = ArrowConverters.fromBatchWithSchemaIterator(
       Iterator(rel.getData.toByteArray),
@@ -349,7 +393,28 @@ class SparkConnectPlanner(session: SparkSession) {
     }
     val attributes = structType.toAttributes
     val proj = UnsafeProjection.create(attributes, attributes)
-    new logical.LocalRelation(attributes, rows.map(r => proj(r).copy()).toSeq)
+    val relation = logical.LocalRelation(attributes, rows.map(r => proj(r).copy()).toSeq)
+
+    if (!rel.hasDatatype && !rel.hasDatatypeStr) {
+      return relation
+    }
+
+    val schemaType = if (rel.hasDatatype) {
+      DataTypeProtoConverter.toCatalystType(rel.getDatatype)
+    } else {
+      parseDatatypeString(rel.getDatatypeStr)
+    }
+
+    val schemaStruct = schemaType match {
+      case s: StructType => s
+      case d => StructType(Seq(StructField("value", d)))
+    }
+
+    Dataset
+      .ofRows(session, logicalPlan = relation)
+      .toDF(schemaStruct.names: _*)
+      .to(schemaStruct)
+      .logicalPlan
   }
 
   private def transformReadRel(rel: proto.Read): LogicalPlan = {
@@ -410,6 +475,8 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Expression.ExprTypeCase.UNRESOLVED_STAR =>
         transformUnresolvedStar(exp.getUnresolvedStar)
       case proto.Expression.ExprTypeCase.CAST => transformCast(exp.getCast)
+      case proto.Expression.ExprTypeCase.UNRESOLVED_REGEX =>
+        transformUnresolvedRegex(exp.getUnresolvedRegex)
       case _ =>
         throw InvalidPlanInput(
           s"Expression with ID: ${exp.getExprTypeCase.getNumber} is not supported")
@@ -484,6 +551,20 @@ class SparkConnectPlanner(session: SparkSession) {
             .Product(transformExpression(fun.getArgumentsList.asScala.head))
             .toAggregateExpression())
 
+      case "when" =>
+        if (fun.getArgumentsCount == 0) {
+          throw InvalidPlanInput("CaseWhen requires at least one child expression")
+        }
+        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
+        Some(CaseWhen.createFromParser(children))
+
+      case "in" =>
+        if (fun.getArgumentsCount == 0) {
+          throw InvalidPlanInput("In requires at least one child expression")
+        }
+        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
+        Some(In(children.head, children.tail))
+
       case _ => None
     }
   }
@@ -527,6 +608,18 @@ class SparkConnectPlanner(session: SparkSession) {
         Cast(
           transformExpression(cast.getExpr),
           session.sessionState.sqlParser.parseDataType(cast.getTypeStr))
+    }
+  }
+
+  private def transformUnresolvedRegex(regex: proto.Expression.UnresolvedRegex): Expression = {
+    val caseSensitive = session.sessionState.conf.caseSensitiveAnalysis
+    regex.getColName match {
+      case ParserUtils.escapedIdentifier(columnNameRegex) =>
+        UnresolvedRegex(columnNameRegex, None, caseSensitive)
+      case ParserUtils.qualifiedEscapedIdentifier(nameParts, columnNameRegex) =>
+        UnresolvedRegex(columnNameRegex, Some(nameParts), caseSensitive)
+      case _ =>
+        UnresolvedAttribute.quotedString(regex.getColName)
     }
   }
 
@@ -598,24 +691,26 @@ class SparkConnectPlanner(session: SparkSession) {
     }
   }
 
-  private def transformSort(rel: proto.Sort): LogicalPlan = {
-    assert(rel.getSortFieldsCount > 0, "'sort_fields' must be present and contain elements.")
+  private def transformSort(sort: proto.Sort): LogicalPlan = {
+    assert(sort.getOrderCount > 0, "'order' must be present and contain elements.")
     logical.Sort(
-      child = transformRelation(rel.getInput),
-      global = rel.getIsGlobal,
-      order = rel.getSortFieldsList.asScala.map(transformSortOrderExpression).toSeq)
+      child = transformRelation(sort.getInput),
+      global = sort.getIsGlobal,
+      order = sort.getOrderList.asScala.toSeq.map(transformSortOrderExpression))
   }
 
-  private def transformSortOrderExpression(so: proto.Sort.SortField): expressions.SortOrder = {
+  private def transformSortOrderExpression(order: proto.Expression.SortOrder) = {
     expressions.SortOrder(
-      child = transformUnresolvedExpression(so.getExpression),
-      direction = so.getDirection match {
-        case proto.Sort.SortDirection.SORT_DIRECTION_DESCENDING => expressions.Descending
-        case _ => expressions.Ascending
+      child = transformExpression(order.getChild),
+      direction = order.getDirection match {
+        case proto.Expression.SortOrder.SortDirection.SORT_DIRECTION_ASCENDING =>
+          expressions.Ascending
+        case _ => expressions.Descending
       },
-      nullOrdering = so.getNulls match {
-        case proto.Sort.SortNulls.SORT_NULLS_LAST => expressions.NullsLast
-        case _ => expressions.NullsFirst
+      nullOrdering = order.getNullOrdering match {
+        case proto.Expression.SortOrder.NullOrdering.SORT_NULLS_FIRST =>
+          expressions.NullsFirst
+        case _ => expressions.NullsLast
       },
       sameOrderExpressions = Seq.empty)
   }

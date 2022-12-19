@@ -16,11 +16,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2422",
-  "messageParameters" : {
-    "aggExprs" : "(CAST(udf(cast(count(b) as string)) AS BIGINT) AS `udf(count(b))`)",
-    "sqlExpr" : "testdata.a"
-  },
+  "errorClass" : "MISSING_GROUP_BY",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -332,17 +328,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2422",
-  "messageParameters" : {
-    "aggExprs" : "()",
-    "sqlExpr" : "id"
-  },
+  "errorClass" : "MISSING_GROUP_BY",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 21,
-    "stopIndex" : 29,
-    "fragment" : "range(10)"
+    "startIndex" : 1,
+    "stopIndex" : 43,
+    "fragment" : "SELECT udf(id) FROM range(10) HAVING id > 0"
   } ]
 }
 

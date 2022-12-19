@@ -194,7 +194,7 @@ html_theme = 'pydata_sphinx_theme'
 # of the sidebar.
 html_logo = "../../../docs/img/spark-logo-reverse.png"
 
-# The name of an image file (within the static path) to use as favicon of the
+# The name of an image file (within the static path) to use as a favicon of the
 # docs.  This file should be a Windows icon file (.ico) being 16x16 or 32x32
 # pixels large.
 #html_favicon = None
@@ -224,7 +224,7 @@ html_css_files = [
 # Custom sidebar templates, maps document names to template names.
 #html_sidebars = {}
 
-# Additional templates that should be rendered to pages, maps page names to
+# Additional templates that should be rendered to pages; maps page names to
 # template names.
 #html_additional_pages = {}
 
@@ -361,7 +361,7 @@ epub_copyright = '2014, Author'
 # The scheme of the identifier. Typical schemes are ISBN or URL.
 #epub_scheme = ''
 
-# The unique identifier of the text. This can be a ISBN number
+# The unique identifier of the text. This can be an ISBN number
 # or the project homepage.
 #epub_identifier = ''
 
@@ -378,7 +378,7 @@ epub_copyright = '2014, Author'
 # The format is a list of tuples containing the path and title.
 #epub_pre_files = []
 
-# HTML files shat should be inserted after the pages created by sphinx.
+# HTML files that should be inserted after the pages created by sphinx.
 # The format is a list of tuples containing the path and title.
 #epub_post_files = []
 

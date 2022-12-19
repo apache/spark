@@ -40,6 +40,7 @@ from pyspark.sql.connect.column import (
     Column,
     scalar_function,
     sql_expression,
+    UnresolvedRegex,
 )
 from pyspark.sql.connect.functions import col, lit
 from pyspark.sql.types import (
@@ -270,8 +271,23 @@ class DataFrame(object):
     def approxQuantile(self, col: Column, probabilities: Any, relativeError: Any) -> "DataFrame":
         ...
 
-    def colRegex(self, regex: str) -> "DataFrame":
-        ...
+    def colRegex(self, colName: str) -> Column:
+        """
+        Selects column based on the column name specified as a regex and returns it
+        as :class:`Column`.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        colName : str
+            string, column name specified as a regex.
+
+        Returns
+        -------
+        :class:`Column`
+        """
+        return Column(UnresolvedRegex(colName))
 
     @property
     def dtypes(self) -> List[Tuple[str, str]]:
@@ -824,6 +840,57 @@ class DataFrame(object):
             session=self._session,
         )
 
+    def unpivot(
+        self,
+        ids: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]],
+        values: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]],
+        variableColumnName: str,
+        valueColumnName: str,
+    ) -> "DataFrame":
+        """
+        Returns a new :class:`DataFrame` by unpivot a DataFrame from wide format to long format,
+        optionally leaving identifier columns set.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        ids : list
+            Id columns.
+        values : list, optional
+            Value columns to unpivot.
+        variableColumnName : str
+            Name of the variable column.
+        valueColumnName : str
+            Name of the value column.
+
+        Returns
+        -------
+        :class:`DataFrame`
+        """
+
+        def to_jcols(
+            cols: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]]
+        ) -> List["ColumnOrName"]:
+            if cols is None:
+                lst = []
+            elif isinstance(cols, tuple):
+                lst = list(cols)
+            elif isinstance(cols, list):
+                lst = cols
+            else:
+                lst = [cols]
+            return lst
+
+        return DataFrame.withPlan(
+            plan.Unpivot(
+                self._plan, to_jcols(ids), to_jcols(values), variableColumnName, valueColumnName
+            ),
+            self._session,
+        )
+
+    melt = unpivot
+
     def show(self, n: int = 20, truncate: Union[bool, int] = True, vertical: bool = False) -> None:
         """
         Prints the first ``n`` rows to the console.
@@ -934,6 +1001,31 @@ class DataFrame(object):
             plan.SetOperation(
                 self._plan, other._plan, "union", is_all=True, by_name=allowMissingColumns
             ),
+            session=self._session,
+        )
+
+    def subtract(self, other: "DataFrame") -> "DataFrame":
+        """Return a new :class:`DataFrame` containing rows in this :class:`DataFrame`
+        but not in another :class:`DataFrame`.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            Another :class:`DataFrame` that needs to be subtracted.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Subtracted DataFrame.
+
+        Notes
+        -----
+        This is equivalent to `EXCEPT DISTINCT` in SQL.
+        """
+        return DataFrame.withPlan(
+            plan.SetOperation(self._plan, other._plan, "except", is_all=False),
             session=self._session,
         )
 

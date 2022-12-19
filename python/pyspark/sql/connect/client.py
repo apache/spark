@@ -20,7 +20,7 @@ import urllib.parse
 import uuid
 from typing import Iterable, Optional, Any, Union, List, Tuple, Dict
 
-import grpc  # type: ignore
+import grpc
 import pandas
 import pyarrow as pa
 

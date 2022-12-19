@@ -353,7 +353,7 @@ class Catalog:
         Table(name='tbl1', catalog='spark_catalog', namespace=['default'], ...
         >>> _ = spark.sql("DROP TABLE tbl1")
 
-        Throw an analysis exception when the table does not exists.
+        Throw an analysis exception when the table does not exist.
 
         >>> spark.catalog.getTable("tbl1")
         Traceback (most recent call last):
@@ -599,8 +599,8 @@ class Catalog:
         tableName : str
             name of the table to check existence.
             If no database is specified, first try to treat ``tableName`` as a
-            multi-layer-namespace identifier, then try to ``tableName`` as a normal table
-            name in current database if necessary.
+            multi-layer-namespace identifier, then try ``tableName`` as a normal table
+            name in the current database if necessary.
 
             .. versionchanged:: 3.4.0
                Allow ``tableName`` to be qualified with catalog name when ``dbName`` is None.
@@ -894,7 +894,7 @@ class Catalog:
         >>> spark.catalog.isCached("tbl1")
         True
 
-        Throw an analysis exception when the table does not exists.
+        Throw an analysis exception when the table does not exist.
 
         >>> spark.catalog.isCached("not_existing_table")
         Traceback (most recent call last):
@@ -1047,7 +1047,7 @@ class Catalog:
         self._jcatalog.refreshTable(tableName)
 
     def recoverPartitions(self, tableName: str) -> None:
-        """Recovers all the partitions of the given table and update the catalog.
+        """Recovers all the partitions of the given table and updates the catalog.
 
         .. versionadded:: 2.1.1
 

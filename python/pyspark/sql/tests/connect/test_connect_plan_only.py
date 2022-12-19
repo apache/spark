@@ -14,13 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import cast
 import unittest
 
-from pyspark.testing.connectutils import PlanOnlyTestFixture
-from pyspark.testing.sqlutils import have_pandas, pandas_requirement_message
+from pyspark.testing.connectutils import (
+    PlanOnlyTestFixture,
+    should_test_connect,
+    connect_requirement_message,
+)
 
-if have_pandas:
+if should_test_connect:
     import pyspark.sql.connect.proto as proto
     from pyspark.sql.connect.column import Column
     from pyspark.sql.connect.plan import WriteOperation
@@ -29,7 +31,7 @@ if have_pandas:
     from pyspark.sql.types import StringType
 
 
-@unittest.skipIf(not have_pandas, cast(str, pandas_requirement_message))
+@unittest.skipIf(not should_test_connect, connect_requirement_message)
 class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
     """These test cases exercise the interface to the proto plan
     generation but do not call Spark."""
@@ -168,6 +170,64 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertEqual(plan.root.replace.replacements[1].old_value.string, "Bob")
         self.assertEqual(plan.root.replace.replacements[1].new_value.string, "B")
 
+    def test_unpivot(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+
+        plan = (
+            df.filter(df.col_name > 3)
+            .unpivot(["id"], ["name"], "variable", "value")
+            ._plan.to_proto(self.connect)
+        )
+        self.assertTrue(all(isinstance(c, proto.Expression) for c in plan.root.unpivot.ids))
+        self.assertEqual(plan.root.unpivot.ids[0].unresolved_attribute.unparsed_identifier, "id")
+        self.assertTrue(all(isinstance(c, proto.Expression) for c in plan.root.unpivot.values))
+        self.assertEqual(
+            plan.root.unpivot.values[0].unresolved_attribute.unparsed_identifier, "name"
+        )
+        self.assertEqual(plan.root.unpivot.variable_column_name, "variable")
+        self.assertEqual(plan.root.unpivot.value_column_name, "value")
+
+        plan = (
+            df.filter(df.col_name > 3)
+            .unpivot(["id"], None, "variable", "value")
+            ._plan.to_proto(self.connect)
+        )
+        self.assertTrue(len(plan.root.unpivot.ids) == 1)
+        self.assertTrue(all(isinstance(c, proto.Expression) for c in plan.root.unpivot.ids))
+        self.assertEqual(plan.root.unpivot.ids[0].unresolved_attribute.unparsed_identifier, "id")
+        self.assertTrue(len(plan.root.unpivot.values) == 0)
+        self.assertEqual(plan.root.unpivot.variable_column_name, "variable")
+        self.assertEqual(plan.root.unpivot.value_column_name, "value")
+
+    def test_melt(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+
+        plan = (
+            df.filter(df.col_name > 3)
+            .melt(["id"], ["name"], "variable", "value")
+            ._plan.to_proto(self.connect)
+        )
+        self.assertTrue(all(isinstance(c, proto.Expression) for c in plan.root.unpivot.ids))
+        self.assertEqual(plan.root.unpivot.ids[0].unresolved_attribute.unparsed_identifier, "id")
+        self.assertTrue(all(isinstance(c, proto.Expression) for c in plan.root.unpivot.values))
+        self.assertEqual(
+            plan.root.unpivot.values[0].unresolved_attribute.unparsed_identifier, "name"
+        )
+        self.assertEqual(plan.root.unpivot.variable_column_name, "variable")
+        self.assertEqual(plan.root.unpivot.value_column_name, "value")
+
+        plan = (
+            df.filter(df.col_name > 3)
+            .melt(["id"], [], "variable", "value")
+            ._plan.to_proto(self.connect)
+        )
+        self.assertTrue(len(plan.root.unpivot.ids) == 1)
+        self.assertTrue(all(isinstance(c, proto.Expression) for c in plan.root.unpivot.ids))
+        self.assertEqual(plan.root.unpivot.ids[0].unresolved_attribute.unparsed_identifier, "id")
+        self.assertTrue(len(plan.root.unpivot.values) == 0)
+        self.assertEqual(plan.root.unpivot.variable_column_name, "variable")
+        self.assertEqual(plan.root.unpivot.value_column_name, "value")
+
     def test_summary(self):
         df = self.connect.readTable(table_name=self.tbl_name)
         plan = df.filter(df.col_name > 3).summary()._plan.to_proto(self.connect)
@@ -236,36 +296,30 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         df = self.connect.readTable(table_name=self.tbl_name)
         plan = df.filter(df.col_name > 3).sort("col_a", "col_b")._plan.to_proto(self.connect)
         self.assertEqual(
-            [
-                f.expression.unresolved_attribute.unparsed_identifier
-                for f in plan.root.sort.sort_fields
-            ],
+            [f.child.unresolved_attribute.unparsed_identifier for f in plan.root.sort.order],
             ["col_a", "col_b"],
         )
         self.assertEqual(plan.root.sort.is_global, True)
         self.assertEqual(
-            plan.root.sort.sort_fields[0].direction,
-            proto.Sort.SortDirection.SORT_DIRECTION_ASCENDING,
+            plan.root.sort.order[0].direction,
+            proto.Expression.SortOrder.SortDirection.SORT_DIRECTION_ASCENDING,
         )
         self.assertEqual(
-            plan.root.sort.sort_fields[0].direction,
-            proto.Sort.SortNulls.SORT_NULLS_FIRST,
+            plan.root.sort.order[0].direction,
+            proto.Expression.SortOrder.NullOrdering.SORT_NULLS_FIRST,
         )
         self.assertEqual(
-            plan.root.sort.sort_fields[1].direction,
-            proto.Sort.SortDirection.SORT_DIRECTION_ASCENDING,
+            plan.root.sort.order[1].direction,
+            proto.Expression.SortOrder.SortDirection.SORT_DIRECTION_ASCENDING,
         )
         self.assertEqual(
-            plan.root.sort.sort_fields[1].direction,
-            proto.Sort.SortNulls.SORT_NULLS_FIRST,
+            plan.root.sort.order[1].direction,
+            proto.Expression.SortOrder.NullOrdering.SORT_NULLS_FIRST,
         )
 
         plan = df.filter(df.col_name > 3).orderBy("col_a", "col_b")._plan.to_proto(self.connect)
         self.assertEqual(
-            [
-                f.expression.unresolved_attribute.unparsed_identifier
-                for f in plan.root.sort.sort_fields
-            ],
+            [f.child.unresolved_attribute.unparsed_identifier for f in plan.root.sort.order],
             ["col_a", "col_b"],
         )
         self.assertEqual(plan.root.sort.is_global, True)
@@ -276,28 +330,25 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
             ._plan.to_proto(self.connect)
         )
         self.assertEqual(
-            [
-                f.expression.unresolved_attribute.unparsed_identifier
-                for f in plan.root.sort.sort_fields
-            ],
+            [f.child.unresolved_attribute.unparsed_identifier for f in plan.root.sort.order],
             ["col_a", "col_b"],
         )
         self.assertEqual(plan.root.sort.is_global, False)
         self.assertEqual(
-            plan.root.sort.sort_fields[0].direction,
-            proto.Sort.SortDirection.SORT_DIRECTION_DESCENDING,
+            plan.root.sort.order[0].direction,
+            proto.Expression.SortOrder.SortDirection.SORT_DIRECTION_DESCENDING,
         )
         self.assertEqual(
-            plan.root.sort.sort_fields[0].direction,
-            proto.Sort.SortNulls.SORT_NULLS_LAST,
+            plan.root.sort.order[0].direction,
+            proto.Expression.SortOrder.NullOrdering.SORT_NULLS_LAST,
         )
         self.assertEqual(
-            plan.root.sort.sort_fields[1].direction,
-            proto.Sort.SortDirection.SORT_DIRECTION_ASCENDING,
+            plan.root.sort.order[1].direction,
+            proto.Expression.SortOrder.SortDirection.SORT_DIRECTION_ASCENDING,
         )
         self.assertEqual(
-            plan.root.sort.sort_fields[1].direction,
-            proto.Sort.SortNulls.SORT_NULLS_FIRST,
+            plan.root.sort.order[1].direction,
+            proto.Expression.SortOrder.NullOrdering.SORT_NULLS_FIRST,
         )
 
     def test_drop(self):
@@ -379,7 +430,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertIsNotNone(u)
         expr = u("ThisCol", "ThatCol", "OtherCol")
         self.assertTrue(isinstance(expr, Column))
-        self.assertTrue(isinstance(cast(Column, expr)._expr, UserDefinedFunction))
+        self.assertTrue(isinstance(expr._expr, UserDefinedFunction))
         u_plan = expr.to_plan(self.connect)
         self.assertIsNotNone(u_plan)
 
@@ -402,6 +453,14 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         plan3 = df1.unionByName(df2, True)._plan.to_proto(self.connect)
         self.assertTrue(plan3.root.set_op.by_name)
         self.assertEqual(proto.SetOperation.SET_OP_TYPE_UNION, plan3.root.set_op.set_op_type)
+
+    def test_subtract(self):
+        # SPARK-41453: test `subtract` API for Python client.
+        df1 = self.connect.readTable(table_name=self.tbl_name)
+        df2 = self.connect.readTable(table_name=self.tbl_name)
+        plan1 = df1.subtract(df2)._plan.to_proto(self.connect)
+        self.assertTrue(not plan1.root.set_op.is_all)
+        self.assertEqual(proto.SetOperation.SET_OP_TYPE_EXCEPT, plan1.root.set_op.set_op_type)
 
     def test_except(self):
         # SPARK-41010: test `except` API for Python client.
@@ -494,6 +553,17 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         wo.mode = "unknown"
         with self.assertRaises(ValueError):
             wo.command(None)
+
+    def test_column_regexp(self):
+        # SPARK-41438: test colRegex
+        df = self.connect.readTable(table_name=self.tbl_name)
+        col = df.colRegex("col_name")
+        self.assertIsInstance(col, Column)
+        self.assertEqual("Column<'UnresolvedRegex(col_name)'>", str(col))
+
+        col_plan = col.to_plan(self.session.client)
+        self.assertIsNotNone(col_plan)
+        self.assertEqual(col_plan.unresolved_regex.col_name, "col_name")
 
 
 if __name__ == "__main__":

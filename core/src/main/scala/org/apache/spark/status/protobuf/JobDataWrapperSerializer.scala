@@ -23,6 +23,7 @@ import java.util.Date
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.status.JobDataWrapper
 import org.apache.spark.status.api.v1.JobData
+import org.apache.spark.status.protobuf.Utils.getOptional
 
 object JobDataWrapperSerializer {
   def serialize(j: JobDataWrapper): Array[Byte] = {
@@ -42,12 +43,6 @@ object JobDataWrapperSerializer {
       wrapper.getSkippedStagesList.asScala.map(_.toInt).toSet,
       sqlExecutionId
     )
-  }
-
-  private def getOptional[T](condition: Boolean, result: () => T): Option[T] = if (condition) {
-    Some(result())
-  } else {
-    None
   }
 
   private def serializeJobData(jobData: JobData): StoreTypes.JobData = {
