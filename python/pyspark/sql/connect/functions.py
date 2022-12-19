@@ -88,16 +88,14 @@ def _get_lambda_parameters(f: Callable) -> ValuesView[inspect.Parameter]:
     signature = inspect.signature(f)
     parameters = signature.parameters.values()
 
-    # We should exclude functions that use
-    # variable args and keyword argnames
-    # as well as keyword only args
+    # We should exclude functions that use, variable args and keyword argument
+    # names, as well as keyword only args.
     supported_parameter_types = {
         inspect.Parameter.POSITIONAL_OR_KEYWORD,
         inspect.Parameter.POSITIONAL_ONLY,
     }
 
-    # Validate that
-    # function arity is between 1 and 3
+    # Validate that the function arity is between 1 and 3.
     if not (1 <= len(parameters) <= 3):
         raise ValueError(
             "f should take between 1 and 3 arguments, but provided function takes {}".format(
@@ -105,7 +103,7 @@ def _get_lambda_parameters(f: Callable) -> ValuesView[inspect.Parameter]:
             )
         )
 
-    # and all arguments can be used as positional
+    # Verify that all arguments can be used as positional arguments.
     if not all(p.kind in supported_parameter_types for p in parameters):
         raise ValueError("f should use only POSITIONAL or POSITIONAL OR KEYWORD arguments")
 
