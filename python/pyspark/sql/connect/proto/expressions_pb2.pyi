@@ -635,18 +635,13 @@ class Expression(google.protobuf.message.Message):
         @property
         def arguments(
             self,
-        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-            global___Expression
-        ]:
-            """(Required) Function arguments. Must not be empty.
-
-            All arguments must be UnresolvedAttributes.
-            """
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+            """(Required) Function variable names. Must not be empty."""
         def __init__(
             self,
             *,
             function: global___Expression | None = ...,
-            arguments: collections.abc.Iterable[global___Expression] | None = ...,
+            arguments: collections.abc.Iterable[builtins.str] | None = ...,
         ) -> None: ...
         def HasField(
             self, field_name: typing_extensions.Literal["function", b"function"]

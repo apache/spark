@@ -543,7 +543,7 @@ class LambdaFunction(Expression):
     def __init__(
         self,
         function: Expression,
-        arguments: Sequence[Expression],
+        arguments: Sequence[str],
     ) -> None:
         super().__init__()
 
@@ -552,7 +552,7 @@ class LambdaFunction(Expression):
         assert (
             isinstance(arguments, list)
             and len(arguments) > 0
-            and all(isinstance(arg, ColumnReference) for arg in arguments)
+            and all(isinstance(arg, str) for arg in arguments)
         )
 
         self._function = function
@@ -561,14 +561,11 @@ class LambdaFunction(Expression):
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
         fun = proto.Expression()
         fun.lambda_function.function.CopyFrom(self._function.to_plan(session))
-        fun.lambda_function.arguments.extend([arg.to_plan(session) for arg in self._arguments])
+        fun.lambda_function.arguments.extend(self._arguments)
         return fun
 
     def __repr__(self) -> str:
-        return (
-            f"(LambdaFunction({str(self._function)}, "
-            + f"{', '.join([str(arg) for arg in self._arguments])})"
-        )
+        return f"(LambdaFunction({str(self._function)}, {', '.join(self._arguments)})"
 
 
 class Column:

@@ -551,15 +551,6 @@ class SparkConnectPlanner(session: SparkSession) {
     }
 
     val variableNames = lambda.getArgumentsList.asScala.toSeq
-      .map(transformExpression)
-      .map {
-        case variable: UnresolvedAttribute if variable.nameParts.length == 1 =>
-          variable.nameParts.head
-        case other =>
-          throw InvalidPlanInput(
-            "LambdaFunction requires all arguments to be UnresolvedAttribute with " +
-              s"single name part, but got $other")
-      }
 
     // generate unique variable names: Map(x -> x_0, y -> y_1)
     val newVariables = variableNames.map { name =>

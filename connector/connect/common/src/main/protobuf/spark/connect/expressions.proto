@@ -197,9 +197,7 @@ message Expression {
     // (Required) The lambda function.
     Expression function = 1;
 
-    // (Required) Function arguments. Must not be empty.
-    //
-    // All arguments must be UnresolvedAttributes.
-    repeated Expression arguments = 2;
+    // (Required) Function variable names. Must not be empty.
+    repeated string arguments = 2;
   }
 }

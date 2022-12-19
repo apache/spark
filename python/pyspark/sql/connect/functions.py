@@ -122,15 +122,15 @@ def _create_lambda(f: Callable) -> LambdaFunction:
     """
     parameters = _get_lambda_parameters(f)
 
-    arg_names = ["x", "y", "z"]
-    arg_cols = [column(arg) for arg in arg_names[: len(parameters)]]
+    arg_names = ["x", "y", "z"][: len(parameters)]
+    arg_cols = [column(arg) for arg in arg_names]
 
     result = f(*arg_cols)
 
     if not isinstance(result, Column):
         raise ValueError(f"Callable {f} should return Column, got {type(result)}")
 
-    return LambdaFunction(result._expr, [arg_col._expr for arg_col in arg_cols])
+    return LambdaFunction(result._expr, arg_names)
 
 
 def _invoke_higher_order_function(
