@@ -670,6 +670,7 @@ class ExpressionParserSuite extends AnalysisTest {
     checkError(
       exception = parseException("x'A1OC'"),
       errorClass = "INVALID_TYPED_LITERAL",
+      sqlState = "42000",
       parameters = Map(
         "valueType" -> "\"X\"",
         "value" -> "'A1OC'"
