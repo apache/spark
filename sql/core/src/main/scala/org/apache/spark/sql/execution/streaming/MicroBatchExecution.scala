@@ -392,6 +392,9 @@ class MicroBatchExecution(
               committedOffsets ++= availableOffsets
               watermarkTracker.setWatermark(
                 math.max(watermarkTracker.currentWatermark, commitMetadata.nextBatchWatermarkMs))
+              watermarkTracker.setOperatorWatermarks(
+                commitMetadata.operatorWatermarksForLateEvents,
+                commitMetadata.operatorWatermarksForEviction)
             } else if (latestCommittedBatchId == latestBatchId - 1) {
               availableOffsets.foreach {
                 case (source: Source, end: Offset) =>
