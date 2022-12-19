@@ -75,7 +75,6 @@ from pyspark.sql.functions import (
     window,
     session_window,
     bucket,
-    transform,
 )
 from pyspark.sql import functions
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
