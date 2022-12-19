@@ -823,8 +823,7 @@ class DataFrame:
 
         Notes
         -----
-        When ``observation`` is :class:`Observation`, this method only supports batch queries.
-        When ``observation`` is a string, this method works for both batch and streaming queries.
+        This method only supports batch queries.
         Continuous execution is currently not supported yet.
         """
         from pyspark.sql import Observation
