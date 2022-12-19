@@ -37,6 +37,30 @@ message Expression {
     Alias alias = 6;
     Cast cast = 7;
     UnresolvedRegex unresolved_regex = 8;
+    SortOrder sort_order = 9;
+  }
+
+  // SortOrder is used to specify the  data ordering, it is normally used in Sort and Window.
+  // It is an unevaluable expression and cannot be evaluated, so can not be used in Projection.
+  message SortOrder {
+    // (Required) The expression to be sorted.
+    Expression child = 1;
+
+    // (Required) The sort direction, should be ASCENDING or DESCENDING.
+    SortDirection direction = 2;
+
+    // (Required) How to deal with NULLs, should be NULLS_FIRST or NULLS_LAST.
+    NullOrdering null_ordering = 3;
+
+    enum SortDirection {
+      SORT_DIRECTION_ASCENDING = 0;
+      SORT_DIRECTION_DESCENDING = 1;
+    }
+
+    enum NullOrdering {
+      SORT_NULLS_FIRST = 0;
+      SORT_NULLS_LAST = 1;
+    }
   }
 
   message Cast {
