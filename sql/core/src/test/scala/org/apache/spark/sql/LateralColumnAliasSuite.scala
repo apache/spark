@@ -327,6 +327,30 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
       Row(53000, 58900) :: Nil
     )
 
+    // grouping expression are correctly recognized and pushed down
+    checkAnswer(
+      sql(
+        s"""
+           |SELECT dept AS a, dept + 10 AS b, avg(salary) + dept, avg(salary) AS c,
+           |       c + dept, avg(salary + dept), count(dept)
+           |FROM $testTable GROUP BY dept ORDER BY dept
+           |""".stripMargin),
+      Row(1, 11, 9501, 9500, 9501, 9501, 2) ::
+        Row(2, 12, 11002, 11000, 11002, 11002, 2) ::
+        Row(6, 16, 12006, 12000, 12006, 12006, 1) :: Nil)
+
+    // two grouping expressions
+    checkAnswer(
+      sql(
+        s"""
+           |SELECT dept + salary, avg(salary) + dept, avg(bonus) AS c, c + salary + dept,
+           |       avg(bonus) + salary
+           |FROM $testTable GROUP BY dept, salary  HAVING dept = 2 ORDER BY dept, salary
+           |""".stripMargin
+      ),
+      Row(10002, 10002, 1300, 11302, 11300) :: Row(12002, 12002, 1200, 13202, 13200) :: Nil
+    )
+
     // LCA and conflicted table column mixed
     checkAnswerWhenOnAndExceptionWhenOff(
       s"""
@@ -688,5 +712,39 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
           "The pushed-down aggregateExpressions in Aggregate should have no duplicates " +
             s"after extracted from Alias. Current aggregateExpressions: $aggregateExpressions")
     }
+  }
+
+  test("Non-aggregating expressions not in group by still throws the same error") {
+    // query without lateral alias
+    assert(
+      intercept[AnalysisException] {
+        sql(s"SELECT dept AS a, salary FROM $testTable GROUP BY dept")
+      }.getErrorClass == "MISSING_AGGREGATION")
+
+    assert(
+      intercept[AnalysisException] {
+        sql(s"SELECT avg(salary), avg(avg(salary)) FROM $testTable GROUP BY dept")
+      }.getErrorClass == "NESTED_AGGREGATE_FUNCTION")
+
+    // query with lateral alias throws the same error
+    assert(
+      intercept[AnalysisException] {
+        sql(s"SELECT dept AS a, a, salary FROM $testTable GROUP BY dept")
+      }.getErrorClass == "MISSING_AGGREGATION")
+    // no longer throws NESTED_AGGREGATE_FUNCTION but UNSUPPORTED_FEATURE
+    assert(
+      intercept[AnalysisException] {
+        sql(s"SELECT avg(salary) AS a, avg(a) FROM $testTable GROUP BY dept")
+      }.getErrorClass == "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_AGGREGATE_FUNC")
+
+    // checkAnalysis doesn't canonicalize expressions when performing check of non-aggregation
+    // expression in group by. With LCA, it doesn't change and throw same exception
+    val e1 = intercept[AnalysisException] {
+      sql(s"SELECT avg(salary) AS a, avg(salary) + dept + 10 FROM $testTable GROUP BY dept + 10")
+    }
+    val e2 = intercept[AnalysisException] {
+      sql(s"SELECT avg(salary) AS a, a + dept + 10 FROM $testTable GROUP BY dept + 10")
+    }
+    assert(e1.getErrorClass == e2.getErrorClass)
   }
 }

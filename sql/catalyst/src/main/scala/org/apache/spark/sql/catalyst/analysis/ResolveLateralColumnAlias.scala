@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeMap, Expression, LateralColumnAliasReference, NamedExpression, OuterReference}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, Expression, LateralColumnAliasReference, NamedExpression, OuterReference, ScalarSubquery}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -336,6 +336,10 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
           if (newAggExprs.isEmpty) {
             agg
           } else {
+            // perform an early check on current Aggregate before any lift-up / push-down to throw
+            // the same exception such as non-aggregate expressions not in group by, which becomes
+            // missing input after transformation
+            earlyCheckAggregate(agg)
             Project(
               projectList = projectExprs,
               child = agg.copy(aggregateExpressions = newAggExprs.toSeq)
@@ -344,5 +348,27 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
         // TODO withOrigin?
       }
     }
+  }
+
+  private def earlyCheckAggregate(plan: Aggregate): Unit = {
+    val Aggregate(groupingExprs, aggregateExprs, _) = plan
+    def checkValidAggregateExpression(expr: Expression): Unit = expr match {
+      case expr: Expression if AggregateExpression.isAggregate(expr) =>
+        // doesn't perform any check on aggregation functions
+      case _: Attribute if groupingExprs.isEmpty =>
+        plan.failAnalysis(
+          errorClass = "MISSING_GROUP_BY",
+          messageParameters = Map.empty)
+      case e: Attribute if !groupingExprs.exists(_.semanticEquals(e)) =>
+        throw QueryCompilationErrors.columnNotInGroupByClauseError(e)
+      case s: ScalarSubquery
+        if s.children.nonEmpty && !groupingExprs.exists(_.semanticEquals(s)) =>
+        s.failAnalysis(
+          errorClass = "_LEGACY_ERROR_TEMP_2423",
+          messageParameters = Map("sqlExpr" -> s.sql))
+      case e if groupingExprs.exists(_.semanticEquals(e)) => // OK
+      case e => e.children.foreach(checkValidAggregateExpression)
+    }
+    aggregateExprs.foreach(checkValidAggregateExpression)
   }
 }
