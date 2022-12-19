@@ -795,24 +795,54 @@ class FunctionsTests(ReusedSQLTestCase):
         from pyspark.sql.functions import col, transform
 
         # Should fail with varargs
-        with self.assertRaises(ValueError):
+        with self.assertRaises(PySparkException) as pe:
             transform(col("foo"), lambda *x: lit(1))
 
+        self.checkError(
+            exception=pe,
+            error_class="UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION",
+            message_parameters={"func_name": "<lambda>"},
+        )
+
         # Should fail with kwargs
-        with self.assertRaises(ValueError):
+        with self.assertRaises(PySparkException) as pe:
             transform(col("foo"), lambda **x: lit(1))
 
+        self.checkError(
+            exception=pe,
+            error_class="UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION",
+            message_parameters={"func_name": "<lambda>"},
+        )
+
         # Should fail with nullary function
-        with self.assertRaises(ValueError):
+        with self.assertRaises(PySparkException) as pe:
             transform(col("foo"), lambda: lit(1))
 
+        self.checkError(
+            exception=pe,
+            error_class="WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION",
+            message_parameters={"func_name": "<lambda>", "num_args": "0"},
+        )
+
         # Should fail with quaternary function
-        with self.assertRaises(ValueError):
+        with self.assertRaises(PySparkException) as pe:
             transform(col("foo"), lambda x1, x2, x3, x4: lit(1))
 
+        self.checkError(
+            exception=pe,
+            error_class="WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION",
+            message_parameters={"func_name": "<lambda>", "num_args": "4"},
+        )
+
         # Should fail if function doesn't return Column
-        with self.assertRaises(ValueError):
+        with self.assertRaises(PySparkException) as pe:
             transform(col("foo"), lambda x: 1)
+
+        self.checkError(
+            exception=pe,
+            error_class="HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN",
+            message_parameters={"func_name": "<lambda>", "return_type": "int"},
+        )
 
     def test_nested_higher_order_function(self):
         # SPARK-35382: lambda vars must be resolved properly in nested higher order functions
@@ -1277,43 +1307,6 @@ class FunctionsTests(ReusedSQLTestCase):
             exception=pe,
             error_class="NOT_COLUMN_OR_INTEGER",
             message_parameters={"arg_name": "numBuckets", "arg_type": "str"},
-        )
-
-    def test_transform(self):
-        def alternate1(x):
-            return 10
-
-        with self.assertRaises(PySparkException) as pe:
-            transform("values", alternate1)
-
-        self.checkError(
-            exception=pe,
-            error_class="HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN",
-            message_parameters={"func_name": "alternate1", "return_type": "int"},
-        )
-
-        def alternate2(*args):
-            return args[0]
-
-        with self.assertRaises(PySparkException) as pe:
-            transform("values", alternate2)
-
-        self.checkError(
-            exception=pe,
-            error_class="UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION",
-            message_parameters={"func_name": "alternate2"},
-        )
-
-        def alternate3(a, b, c, d):
-            return a + b + c + d
-
-        with self.assertRaises(PySparkException) as pe:
-            transform("values", alternate3)
-
-        self.checkError(
-            exception=pe,
-            error_class="WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION",
-            message_parameters={"func_name": "alternate3", "num_args": "4"},
         )
 
 
