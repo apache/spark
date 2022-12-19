@@ -559,11 +559,10 @@ class LambdaFunction(Expression):
         self._arguments = arguments
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
-        unresolved_function = UnresolvedFunction(
-            name="___lambda_function___", args=[self._function] + list(self._arguments)
-        )
-
-        return unresolved_function.to_plan(session)
+        fun = proto.Expression()
+        fun.lambda_function.function.CopyFrom(self._function.to_plan(session))
+        fun.lambda_function.arguments.extend([arg.to_plan(session) for arg in self._arguments])
+        return fun
 
     def __repr__(self) -> str:
         return (

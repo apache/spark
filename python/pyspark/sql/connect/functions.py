@@ -105,7 +105,7 @@ def _get_lambda_parameters(f: Callable) -> ValuesView[inspect.Parameter]:
 
     # Verify that all arguments can be used as positional arguments.
     if not all(p.kind in supported_parameter_types for p in parameters):
-        raise ValueError("f should use only POSITIONAL or POSITIONAL OR KEYWORD arguments")
+        raise ValueError("All arguments of f must be usable as POSITIONAL arguments")
 
     return parameters
 

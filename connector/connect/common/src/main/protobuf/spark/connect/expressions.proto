@@ -39,7 +39,6 @@ message Expression {
     UnresolvedRegex unresolved_regex = 8;
     SortOrder sort_order = 9;
     LambdaFunction lambda_function = 10;
-    UnresolvedNamedLambdaVariable unresolved_named_lambda_variable = 11;
   }
 
   // SortOrder is used to specify the  data ordering, it is normally used in Sort and Window.
@@ -192,5 +191,15 @@ message Expression {
 
     // (Optional) Alias metadata expressed as a JSON map.
     optional string metadata = 3;
+  }
+
+  message LambdaFunction {
+    // (Required) The lambda function.
+    Expression function = 1;
+
+    // (Required) Function arguments. Must not be empty.
+    //
+    // All arguments must be UnresolvedAttributes.
+    repeated Expression arguments = 2;
   }
 }
