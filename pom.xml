@@ -3428,10 +3428,6 @@
         <version>4.2.0</version>
         <extensions>true</extensions>
       </plugin>
-      <plugin>
-        <groupId>org.codehaus.mojo</groupId>
-        <artifactId>versions-maven-plugin</artifactId>
-      </plugin>
     </plugins>
   </build>
 
