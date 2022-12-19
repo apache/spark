@@ -43,7 +43,7 @@ from pyspark.ml import (
     linalg,
     param,
 )
-from pyspark.ml.torch.distributor import TorchDistributor
+from pyspark.ml.torch.distributor import PyTorchDistributor
 
 __all__ = [
     "Transformer",
@@ -67,5 +67,5 @@ __all__ = [
     "util",
     "linalg",
     "param",
-    "TorchDistributor",
+    "PyTorchDistributor",
 ]

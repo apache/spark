@@ -349,7 +349,7 @@ Distributor
     :template: autosummary/class_with_docs.rst
     :toctree: api/
 
-    TorchDistributor
+    Distributor
 
 
 Utilities
