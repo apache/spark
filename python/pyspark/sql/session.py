@@ -415,14 +415,6 @@ class SparkSession(SparkConversionMixin):
 
             opts = dict(self._options)
             if "SPARK_REMOTE" in os.environ or "spark.remote" in opts:
-                from pyspark.sql.pandas.utils import (
-                    require_minimum_pandas_version,
-                    require_minimum_pyarrow_version,
-                )
-
-                require_minimum_pandas_version()
-                require_minimum_pyarrow_version()
-
                 with SparkContext._lock:
                     from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
 
