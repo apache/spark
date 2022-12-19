@@ -409,12 +409,6 @@ class ColumnReference(Expression):
         expr.unresolved_attribute.unparsed_identifier = self._unparsed_identifier
         return expr
 
-    def desc(self) -> "SortOrder":
-        return SortOrder(self, ascending=False, nullsLast=True)
-
-    def asc(self) -> "SortOrder":
-        return SortOrder(self, ascending=True, nullsLast=False)
-
     def __repr__(self) -> str:
         return f"ColumnReference({self._unparsed_identifier})"
 
