@@ -20,7 +20,7 @@ import tempfile
 
 from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.sql import SparkSession, Row
-from pyspark.sql.types import DataType, StructType, StructField, LongType, StringType, IntegerType
+from pyspark.sql.types import StructType, StructField, LongType, StringType, IntegerType
 import pyspark.sql.functions
 from pyspark.testing.utils import ReusedPySparkTestCase
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
