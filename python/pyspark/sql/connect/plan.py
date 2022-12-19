@@ -369,9 +369,7 @@ class Hint(LogicalPlan):
         plan.hint.input.CopyFrom(self._child.plan(session))
         plan.hint.name = self.name
         for v in self.params:
-            param = proto.Expression.Literal()
-            param.CopyFrom(self._convert_value(v))
-            plan.hint.parameters.append(param)
+            plan.hint.parameters.append(self._convert_value(v))
         return plan
 
     def print(self, indent: int = 0) -> str:
