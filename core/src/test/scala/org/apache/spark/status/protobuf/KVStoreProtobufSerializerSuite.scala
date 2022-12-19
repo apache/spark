@@ -312,4 +312,58 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       }
     }
   }
+
+  test("Application Info") {
+    val attempts: Seq[ApplicationAttemptInfo] = Seq(
+      ApplicationAttemptInfo(
+        attemptId = Some("001"),
+        startTime = new Date(1),
+        endTime = new Date(10),
+        lastUpdated = new Date(11),
+        duration = 100,
+        sparkUser = "user",
+        completed = false,
+        appSparkVersion = "3.4.0"
+      ),
+      ApplicationAttemptInfo(
+        attemptId = Some("002"),
+        startTime = new Date(12L),
+        endTime = new Date(17L),
+        lastUpdated = new Date(18L),
+        duration = 100,
+        sparkUser = "user",
+        completed = true,
+        appSparkVersion = "3.4.0"
+      ))
+    val input = new ApplicationInfoWrapper(
+      ApplicationInfo(
+        id = "2",
+        name = "app_2",
+        coresGranted = Some(1),
+        maxCores = Some(2),
+        coresPerExecutor = Some(3),
+        memoryPerExecutorMB = Some(64),
+        attempts = attempts)
+    )
+
+    val bytes = serializer.serialize(input)
+    val result = serializer.deserialize(bytes, classOf[ApplicationInfoWrapper])
+    assert(result.info.id == input.info.id)
+    assert(result.info.name == input.info.name)
+    assert(result.info.coresGranted == input.info.coresGranted)
+    assert(result.info.maxCores == input.info.maxCores)
+    assert(result.info.coresPerExecutor == input.info.coresPerExecutor)
+    assert(result.info.memoryPerExecutorMB == input.info.memoryPerExecutorMB)
+    assert(result.info.attempts.length == input.info.attempts.length)
+    result.info.attempts.zip(input.info.attempts).foreach { case (a1, a2) =>
+      assert(a1.attemptId == a2.attemptId)
+      assert(a1.startTime == a2.startTime)
+      assert(a1.endTime == a2.endTime)
+      assert(a1.lastUpdated == a2.lastUpdated)
+      assert(a1.duration == a2.duration)
+      assert(a1.sparkUser == a2.sparkUser)
+      assert(a1.completed == a2.completed)
+      assert(a1.appSparkVersion == a2.appSparkVersion)
+    }
+  }
 }

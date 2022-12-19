@@ -115,7 +115,7 @@
     <maven.version>3.8.6</maven.version>
     <exec-maven-plugin.version>1.6.0</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
-    <slf4j.version>2.0.5</slf4j.version>
+    <slf4j.version>2.0.6</slf4j.version>
     <log4j.version>2.19.0</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
     <hadoop.version>3.3.4</hadoop.version>
@@ -198,7 +198,7 @@
     <guava.version>14.0.1</guava.version>
     <janino.version>3.1.9</janino.version>
     <jersey.version>2.36</jersey.version>
-    <joda.version>2.12.1</joda.version>
+    <joda.version>2.12.2</joda.version>
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
     <libthrift.version>0.12.0</libthrift.version>

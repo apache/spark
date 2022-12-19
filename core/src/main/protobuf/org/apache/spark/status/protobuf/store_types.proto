@@ -180,3 +180,28 @@ message ApplicationEnvironmentInfo {
 message ApplicationEnvironmentInfoWrapper {
   ApplicationEnvironmentInfo info = 1;
 }
+
+message ApplicationAttemptInfo {
+  optional string attempt_id = 1;
+  int64 start_time = 2;
+  int64 end_time = 3;
+  int64 last_updated = 4;
+  int64 duration = 5;
+  string spark_user = 6;
+  bool completed = 7;
+  string app_spark_version = 8;
+}
+
+message ApplicationInfo {
+  string id = 1;
+  string name = 2;
+  optional int32 cores_granted = 3;
+  optional int32 max_cores = 4;
+  optional int32 cores_per_executor = 5;
+  optional int32 memory_per_executor_mb = 6;
+  repeated ApplicationAttemptInfo attempts = 7;
+}
+
+message ApplicationInfoWrapper {
+  ApplicationInfo info = 1;
+}
