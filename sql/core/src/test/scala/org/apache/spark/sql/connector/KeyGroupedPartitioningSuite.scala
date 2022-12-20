@@ -416,21 +416,22 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     assert(shuffles.isEmpty, "should not add shuffle when partition keys mismatch")
   }
 
-  test("partitioned join: partition values from one side are subset of those from the other side") {
+  test("SPARK-41413: partitioned join: partition values from one side are subset of those from " +
+      "the other side") {
     val items_partitions = Array(bucket(4, "id"))
     createTable(items, items_schema, items_partitions)
 
     sql(s"INSERT INTO testcat.ns.$items VALUES " +
-        s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
-        s"(3, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
-        s"(4, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+        "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        "(3, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        "(4, 'cc', 15.5, cast('2020-02-01' as timestamp))")
 
     val purchases_partitions = Array(bucket(4, "item_id"))
     createTable(purchases, purchases_schema, purchases_partitions)
 
     sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
-        s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
-        s"(3, 19.5, cast('2020-02-01' as timestamp))")
+        "(1, 42.0, cast('2020-01-01' as timestamp)), " +
+        "(3, 19.5, cast('2020-02-01' as timestamp))")
 
     val df = sql("SELECT id, name, i.price as purchase_price, p.price as sale_price " +
         s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p " +
@@ -447,21 +448,21 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     checkAnswer(df, Seq(Row(1, "aa", 40.0, 42.0), Row(3, "bb", 10.0, 19.5)))
   }
 
-  test("partitioned join: partition values from both sides overlaps") {
+  test("SPARK-41413: partitioned join: partition values from both sides overlaps") {
     val items_partitions = Array(identity("id"))
     createTable(items, items_schema, items_partitions)
 
     sql(s"INSERT INTO testcat.ns.$items VALUES " +
-        s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
-        s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
-        s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+        "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        "(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        "(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
 
     val purchases_partitions = Array(identity("item_id"))
     createTable(purchases, purchases_schema, purchases_partitions)
     sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
-        s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
-        s"(2, 19.5, cast('2020-02-01' as timestamp)), " +
-        s"(4, 30.0, cast('2020-02-01' as timestamp))")
+        "(1, 42.0, cast('2020-01-01' as timestamp)), " +
+        "(2, 19.5, cast('2020-02-01' as timestamp)), " +
+        "(4, 30.0, cast('2020-02-01' as timestamp))")
 
     val df = sql("SELECT id, name, i.price as purchase_price, p.price as sale_price " +
         s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p " +
@@ -478,20 +479,20 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     checkAnswer(df, Seq(Row(1, "aa", 40.0, 42.0), Row(2, "bb", 10.0, 19.5)))
   }
 
-  test("partitioned join: non-overlapping partition values from both sides") {
+  test("SPARK-41413: partitioned join: non-overlapping partition values from both sides") {
     val items_partitions = Array(identity("id"))
     createTable(items, items_schema, items_partitions)
     sql(s"INSERT INTO testcat.ns.$items VALUES " +
-        s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
-        s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
-        s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+        "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        "(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        "(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
 
     val purchases_partitions = Array(identity("item_id"))
     createTable(purchases, purchases_schema, purchases_partitions)
     sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
-        s"(4, 42.0, cast('2020-01-01' as timestamp)), " +
-        s"(5, 19.5, cast('2020-02-01' as timestamp)), " +
-        s"(6, 30.0, cast('2020-02-01' as timestamp))")
+        "(4, 42.0, cast('2020-01-01' as timestamp)), " +
+        "(5, 19.5, cast('2020-02-01' as timestamp)), " +
+        "(6, 30.0, cast('2020-02-01' as timestamp))")
 
     val df = sql("SELECT id, name, i.price as purchase_price, p.price as sale_price " +
         s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p " +

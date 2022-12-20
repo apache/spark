@@ -145,8 +145,9 @@ case class EnsureRequirements(
         Some(finalCandidateSpecs.values.maxBy(_.numPartitions))
       }
 
-      def getKeyGroupedSpec(idx: Int): ShuffleSpec = specs(idx) match {
-        case ShuffleSpecCollection(specs) => specs.head
+      // Retrieve the non-collection spec from the input
+      def getRootSpec(spec: ShuffleSpec): ShuffleSpec = spec match {
+        case ShuffleSpecCollection(specs) => getRootSpec(specs.head)
         case spec => spec
       }
 
@@ -175,8 +176,16 @@ case class EnsureRequirements(
           //      data sources, which can then adjust their respective output partitioning by
           //      filling missing partition keys with empty partitions. As result, Spark can still
           //      avoid shuffle.
+          //
+          // For instance, if two sides of a join have partition expressions `day(a)` and `day(b)`
+          // respectively (the join query could be `SELECT ... FROM t1 JOIN t2 on t1.a = t2.b`),
+          // but with different partition values:
+          //   `day(a)`: [0, 1]
+          //   `day(b)`: [1, 2, 3]
+          // Following the case 2 above, we don't have to shuffle both sides, but instead can just
+          // push the common set of partition values: `[0, 1, 2, 3]` down to the two data sources.
           if (!isCompatible && conf.v2BucketingPushPartKeysEnabled) {
-            (getKeyGroupedSpec(left), getKeyGroupedSpec(right)) match {
+            (getRootSpec(specs(left)), getRootSpec(specs(right))) match {
               case (leftSpec: KeyGroupedShuffleSpec, rightSpec: KeyGroupedShuffleSpec) =>
                 // Check if the two children are partition expression compatible. If so, find the
                 // common set of partition keys, and adjust the plan accordingly.
