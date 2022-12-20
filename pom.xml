@@ -898,6 +898,10 @@
             <artifactId>netty-transport-udt</artifactId>
           </exclusion>
           <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-handler-ssl-ocsp</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>org.jctools</groupId>
             <artifactId>jctools-core</artifactId>
           </exclusion>
