@@ -173,7 +173,7 @@ class AsyncProgressTrackingMicroBatchExecution(
     reportTimeTaken("commitOffsets") {
       // check if current batch there is a async write for the offset log is issued for this batch
       // if so, we should do the same for commit log.  However, if this is the first batch executed
-      // in this run we should always persis to the commit log.  There can be situations in which
+      // in this run we should always persist to the commit log.  There can be situations in which
       // the offset log has more entries than the commit log and on restart we need to make sure
       // we write the missing entries to the commit log.  For example if the offset log is 0, 2, 5
       // and the commit log is 0, 2.  On restart we will re-process the data from batch 3 -> 5.
@@ -298,7 +298,7 @@ object AsyncProgressTrackingMicroBatchExecution {
     "_asyncProgressTrackingOverrideSinkSupportCheck"
 
   private def getAsyncProgressTrackingCheckpointingIntervalMs(
-    extraOptions: Map[String, String]): Long = {
+      extraOptions: Map[String, String]): Long = {
     extraOptions
       .getOrElse(
         ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS,

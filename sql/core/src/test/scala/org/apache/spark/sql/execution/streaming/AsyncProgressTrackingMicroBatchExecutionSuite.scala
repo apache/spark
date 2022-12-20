@@ -65,9 +65,9 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
   }
 
   class MemoryStreamCapture[A: Encoder](
-                                         id: Int,
-                                         sqlContext: SQLContext,
-                                         numPartitions: Option[Int] = None)
+      id: Int,
+      sqlContext: SQLContext,
+      numPartitions: Option[Int] = None)
     extends MemoryStream[A](id, sqlContext, numPartitions = numPartitions) {
 
     val commits = new ListBuffer[streaming.Offset]()
@@ -1460,7 +1460,7 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     val checkpointLocation = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
 
     // create a scenario in which the offset log only
-    // contains batch 0, 2 and commit log only contains 9
+    // contains batch 0, 2 and commit log only contains 0
     testStream(ds, extraOptions = Map(
       ASYNC_PROGRESS_TRACKING_ENABLED -> "true",
       ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS -> "0"
