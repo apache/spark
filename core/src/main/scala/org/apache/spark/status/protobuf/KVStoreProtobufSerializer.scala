@@ -61,7 +61,7 @@ object KVStoreProtobufSerializer {
   private lazy val uiDataSerializer: ExtendedSerializer = {
     val klass = SUtils
       .classForName("org.apache.spark.status.protobuf.sql.SQLExecutionUIDataSerializer")
-    klass.getDeclaredConstructor().newInstance().asInstanceOf[ExtendedSerializer]
+    klass.newInstance().asInstanceOf[ExtendedSerializer]
   }
   private def isSQLExecutionUIData(klassName: String): Boolean =
     klassName.equals("org.apache.spark.sql.execution.ui.SQLExecutionUIData")
