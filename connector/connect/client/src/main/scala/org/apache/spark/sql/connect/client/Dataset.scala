@@ -23,7 +23,6 @@ class Dataset(val session: SparkSession, private[client] val plan: proto.Plan) {
 
   /**
    * Placeholder method.
-   * @return An empty Array of [[Row]]s.
    */
   def collect(): Array[Row] = throw new UnsupportedOperationException()
 }
