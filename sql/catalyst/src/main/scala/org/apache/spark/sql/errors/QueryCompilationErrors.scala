@@ -3404,7 +3404,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       )
     )
   }
-
   def ambiguousLateralColumnAliasError(nameParts: Seq[String], numOfMatches: Int): Throwable = {
     new AnalysisException(
       errorClass = "AMBIGUOUS_LATERAL_COLUMN_ALIAS",
