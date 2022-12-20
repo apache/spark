@@ -449,7 +449,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           writeAppAttemptShuffleMergeInfoToDB(appAttemptShuffleMergeId);
         });
       }
-      return mergePartitionsInfo;
+      return new AppShuffleMergePartitionsInfo(msg.shuffleMergeId, true);
     });
   }
 
