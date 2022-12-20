@@ -20,9 +20,11 @@ package org.apache.spark.status.protobuf
 import java.util.Date
 
 import org.apache.spark.{JobExecutionStatus, SparkFunSuite}
+import org.apache.spark.executor.ExecutorMetrics
+import org.apache.spark.metrics.ExecutorMetricType
 import org.apache.spark.resource.{ExecutorResourceRequest, TaskResourceRequest}
-import org.apache.spark.status.{ApplicationEnvironmentInfoWrapper, JobDataWrapper, TaskDataWrapper}
-import org.apache.spark.status.api.v1.{AccumulableInfo, ApplicationEnvironmentInfo, JobData, ResourceProfileInfo, RuntimeInfo}
+import org.apache.spark.status._
+import org.apache.spark.status.api.v1._
 
 class KVStoreProtobufSerializerSuite extends SparkFunSuite {
   private val serializer = new KVStoreProtobufSerializer()
@@ -178,6 +180,60 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     assert(result.stageAttemptId == input.stageAttemptId)
   }
 
+  test("Executor Stage Summary") {
+    val peakMemoryMetrics =
+      Some(new ExecutorMetrics(Array(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L, 1024L)))
+    val info = new ExecutorStageSummary(
+      taskTime = 1L,
+      failedTasks = 2,
+      succeededTasks = 3,
+      killedTasks = 4,
+      inputBytes = 5L,
+      inputRecords = 6L,
+      outputBytes = 7L,
+      outputRecords = 8L,
+      shuffleRead = 9L,
+      shuffleReadRecords = 10L,
+      shuffleWrite = 11L,
+      shuffleWriteRecords = 12L,
+      memoryBytesSpilled = 13L,
+      diskBytesSpilled = 14L,
+      isBlacklistedForStage = true,
+      peakMemoryMetrics = peakMemoryMetrics,
+      isExcludedForStage = false)
+    val input = new ExecutorStageSummaryWrapper(
+      stageId = 1,
+      stageAttemptId = 2,
+      executorId = "executor_id_1",
+      info = info)
+    val bytes = serializer.serialize(input)
+    val result = serializer.deserialize(bytes, classOf[ExecutorStageSummaryWrapper])
+    assert(result.stageId == input.stageId)
+    assert(result.stageAttemptId == input.stageAttemptId)
+    assert(result.executorId == input.executorId)
+    assert(result.info.taskTime == input.info.taskTime)
+    assert(result.info.failedTasks == input.info.failedTasks)
+    assert(result.info.succeededTasks == input.info.succeededTasks)
+    assert(result.info.killedTasks == input.info.killedTasks)
+    assert(result.info.inputBytes == input.info.inputBytes)
+    assert(result.info.inputRecords == input.info.inputRecords)
+    assert(result.info.outputBytes == input.info.outputBytes)
+    assert(result.info.outputRecords == input.info.outputRecords)
+    assert(result.info.shuffleRead == input.info.shuffleRead)
+    assert(result.info.shuffleReadRecords == input.info.shuffleReadRecords)
+    assert(result.info.shuffleWrite == input.info.shuffleWrite)
+    assert(result.info.shuffleWriteRecords == input.info.shuffleWriteRecords)
+    assert(result.info.memoryBytesSpilled == input.info.memoryBytesSpilled)
+    assert(result.info.diskBytesSpilled == input.info.diskBytesSpilled)
+    assert(result.info.isBlacklistedForStage == input.info.isBlacklistedForStage)
+    assert(result.info.isExcludedForStage == input.info.isExcludedForStage)
+    assert(result.info.peakMemoryMetrics.isDefined)
+    ExecutorMetricType.metricToOffset.foreach { case (name, index) =>
+      result.info.peakMemoryMetrics.get.getMetricValue(name) ==
+        input.info.peakMemoryMetrics.get.getMetricValue(name)
+    }
+  }
+
   test("Application Environment Info") {
     val input = new ApplicationEnvironmentInfoWrapper(
       new ApplicationEnvironmentInfo(
@@ -253,6 +309,152 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         assert(p1.taskResources.contains(k))
         assert(p2.taskResources.contains(k))
         assert(p1.taskResources(k) == p2.taskResources(k))
+      }
+    }
+  }
+
+  test("Application Info") {
+    val attempts: Seq[ApplicationAttemptInfo] = Seq(
+      ApplicationAttemptInfo(
+        attemptId = Some("001"),
+        startTime = new Date(1),
+        endTime = new Date(10),
+        lastUpdated = new Date(11),
+        duration = 100,
+        sparkUser = "user",
+        completed = false,
+        appSparkVersion = "3.4.0"
+      ),
+      ApplicationAttemptInfo(
+        attemptId = Some("002"),
+        startTime = new Date(12L),
+        endTime = new Date(17L),
+        lastUpdated = new Date(18L),
+        duration = 100,
+        sparkUser = "user",
+        completed = true,
+        appSparkVersion = "3.4.0"
+      ))
+    val input = new ApplicationInfoWrapper(
+      ApplicationInfo(
+        id = "2",
+        name = "app_2",
+        coresGranted = Some(1),
+        maxCores = Some(2),
+        coresPerExecutor = Some(3),
+        memoryPerExecutorMB = Some(64),
+        attempts = attempts)
+    )
+
+    val bytes = serializer.serialize(input)
+    val result = serializer.deserialize(bytes, classOf[ApplicationInfoWrapper])
+    assert(result.info.id == input.info.id)
+    assert(result.info.name == input.info.name)
+    assert(result.info.coresGranted == input.info.coresGranted)
+    assert(result.info.maxCores == input.info.maxCores)
+    assert(result.info.coresPerExecutor == input.info.coresPerExecutor)
+    assert(result.info.memoryPerExecutorMB == input.info.memoryPerExecutorMB)
+    assert(result.info.attempts.length == input.info.attempts.length)
+    result.info.attempts.zip(input.info.attempts).foreach { case (a1, a2) =>
+      assert(a1.attemptId == a2.attemptId)
+      assert(a1.startTime == a2.startTime)
+      assert(a1.endTime == a2.endTime)
+      assert(a1.lastUpdated == a2.lastUpdated)
+      assert(a1.duration == a2.duration)
+      assert(a1.sparkUser == a2.sparkUser)
+      assert(a1.completed == a2.completed)
+      assert(a1.appSparkVersion == a2.appSparkVersion)
+    }
+  }
+
+  test("RDD Storage Info") {
+    val rddDataDistribution = Seq(
+      new RDDDataDistribution(
+        address = "add1",
+        memoryUsed = 6,
+        memoryRemaining = 8,
+        diskUsed = 100,
+        onHeapMemoryUsed = Some(101),
+        offHeapMemoryUsed = Some(102),
+        onHeapMemoryRemaining = Some(103),
+        offHeapMemoryRemaining = Some(104))
+    )
+    val rddPartitionInfo = Seq(
+      new RDDPartitionInfo(
+        blockName = "block_1",
+        storageLevel = "IN_MEM",
+        memoryUsed = 105,
+        diskUsed = 106,
+        executors = Seq("exec_0", "exec_1"))
+    )
+    val inputs = Seq(
+      new RDDStorageInfoWrapper(
+        info = new RDDStorageInfo(
+          id = 1,
+          name = "rdd_1",
+          numPartitions = 2,
+          numCachedPartitions = 3,
+          storageLevel = "ON_DISK",
+          memoryUsed = 64,
+          diskUsed = 128,
+          dataDistribution = Some(rddDataDistribution),
+          partitions = Some(rddPartitionInfo)
+        )
+      ),
+      new RDDStorageInfoWrapper(
+        info = new RDDStorageInfo(
+          id = 2,
+          name = "rdd_2",
+          numPartitions = 7,
+          numCachedPartitions = 4,
+          storageLevel = "IN_MEMORY",
+          memoryUsed = 70,
+          diskUsed = 256,
+          dataDistribution = None,
+          partitions = Some(Seq.empty)
+        )
+      )
+    )
+    inputs.foreach { input =>
+      val bytes = serializer.serialize(input)
+      val result = serializer.deserialize(bytes, classOf[RDDStorageInfoWrapper])
+      assert(result.info.id == input.info.id)
+      assert(result.info.name == input.info.name)
+      assert(result.info.numPartitions == input.info.numPartitions)
+      assert(result.info.numCachedPartitions == input.info.numCachedPartitions)
+      assert(result.info.storageLevel == input.info.storageLevel)
+      assert(result.info.memoryUsed == input.info.memoryUsed)
+      assert(result.info.diskUsed == input.info.diskUsed)
+
+      assert(result.info.dataDistribution.isDefined == input.info.dataDistribution.isDefined)
+      if (result.info.dataDistribution.isDefined && input.info.dataDistribution.isDefined) {
+        assert(result.info.dataDistribution.get.length == input.info.dataDistribution.get.length)
+        result.info.dataDistribution.get.zip(input.info.dataDistribution.get).foreach {
+          case (d1, d2) =>
+            assert(d1.address == d2.address)
+            assert(d1.memoryUsed == d2.memoryUsed)
+            assert(d1.memoryRemaining == d2.memoryRemaining)
+            assert(d1.diskUsed == d2.diskUsed)
+            assert(d1.onHeapMemoryUsed == d2.onHeapMemoryUsed)
+            assert(d1.offHeapMemoryUsed == d2.offHeapMemoryUsed)
+            assert(d1.onHeapMemoryRemaining == d2.onHeapMemoryRemaining)
+            assert(d1.offHeapMemoryRemaining == d2.offHeapMemoryRemaining)
+        }
+      }
+
+      assert(result.info.partitions.isDefined == input.info.partitions.isDefined)
+      if (result.info.partitions.isDefined && input.info.partitions.isDefined) {
+        assert(result.info.partitions.get.length == input.info.partitions.get.length)
+        result.info.partitions.get.zip(input.info.partitions.get).foreach { case (p1, p2) =>
+          assert(p1.blockName == p2.blockName)
+          assert(p1.storageLevel == p2.storageLevel)
+          assert(p1.memoryUsed == p2.memoryUsed)
+          assert(p1.diskUsed == p2.diskUsed)
+          assert(p1.executors.length == p2.executors.length)
+          p1.executors.zip(p2.executors).foreach { case (e1, e2) =>
+            e1 == e2
+          }
+        }
       }
     }
   }

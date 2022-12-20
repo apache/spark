@@ -107,6 +107,37 @@ message TaskDataWrapper {
   int32 stage_attempt_id = 41;
 }
 
+message ExecutorMetrics {
+  map<string, int64> metrics = 1;
+}
+
+message ExecutorStageSummary {
+  int64 task_time = 1;
+  int32 failed_tasks = 2;
+  int32 succeeded_tasks = 3;
+  int32 killed_tasks = 4;
+  int64 input_bytes = 5;
+  int64 input_records = 6;
+  int64 output_bytes = 7;
+  int64 output_records = 8;
+  int64 shuffle_read = 9;
+  int64 shuffle_read_records = 10;
+  int64 shuffle_write = 11;
+  int64 shuffle_write_records = 12;
+  int64 memory_bytes_spilled = 13;
+  int64 disk_bytes_spilled = 14;
+  bool is_blacklisted_for_stage = 15;
+  optional ExecutorMetrics peak_memory_metrics = 16;
+  bool is_excluded_for_stage = 17;
+}
+
+message ExecutorStageSummaryWrapper {
+  int64 stage_id = 1;
+  int32 stage_attempt_id = 2;
+  string executor_id = 3;
+  ExecutorStageSummary info = 4;
+}
+
 message ExecutorResourceRequest {
   string resource_name = 1;
   int64 amount = 2;
@@ -148,4 +179,64 @@ message ApplicationEnvironmentInfo {
 
 message ApplicationEnvironmentInfoWrapper {
   ApplicationEnvironmentInfo info = 1;
+}
+
+message ApplicationAttemptInfo {
+  optional string attempt_id = 1;
+  int64 start_time = 2;
+  int64 end_time = 3;
+  int64 last_updated = 4;
+  int64 duration = 5;
+  string spark_user = 6;
+  bool completed = 7;
+  string app_spark_version = 8;
+}
+
+message ApplicationInfo {
+  string id = 1;
+  string name = 2;
+  optional int32 cores_granted = 3;
+  optional int32 max_cores = 4;
+  optional int32 cores_per_executor = 5;
+  optional int32 memory_per_executor_mb = 6;
+  repeated ApplicationAttemptInfo attempts = 7;
+}
+
+message ApplicationInfoWrapper {
+  ApplicationInfo info = 1;
+}
+
+message RDDDataDistribution {
+  string address = 1;
+  int64 memory_used = 2;
+  int64 memory_remaining = 3;
+  int64 disk_used = 4;
+  optional int64 on_heap_memory_used = 5;
+  optional int64 off_heap_memory_used = 6;
+  optional int64 on_heap_memory_remaining = 7;
+  optional int64 off_heap_memory_remaining = 8;
+}
+
+message RDDPartitionInfo {
+  string block_name = 1;
+  string storage_level = 2;
+  int64 memory_used = 3;
+  int64 disk_used = 4;
+  repeated string executors = 5;
+}
+
+message RDDStorageInfo {
+  int32 id = 1;
+  string name = 2;
+  int32 num_partitions = 3;
+  int32 num_cached_partitions = 4;
+  string storage_level = 5;
+  int64 memory_used = 6;
+  int64 disk_used = 7;
+  repeated RDDDataDistribution data_distribution = 8;
+  repeated RDDPartitionInfo partitions = 9;
+}
+
+message RDDStorageInfoWrapper {
+  RDDStorageInfo info = 1;
 }

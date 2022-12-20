@@ -52,14 +52,14 @@ class MicroBatchExecution(
 
   @volatile protected var sources: Seq[SparkDataStream] = Seq.empty
 
-  private val triggerExecutor = trigger match {
+  protected val triggerExecutor: TriggerExecutor = trigger match {
     case t: ProcessingTimeTrigger => ProcessingTimeExecutor(t, triggerClock)
     case OneTimeTrigger => SingleBatchExecutor()
     case AvailableNowTrigger => MultiBatchExecutor()
     case _ => throw new IllegalStateException(s"Unknown type of trigger: $trigger")
   }
 
-  private var watermarkTracker: WatermarkTracker = _
+  protected var watermarkTracker: WatermarkTracker = _
 
   override lazy val logicalPlan: LogicalPlan = {
     assert(queryExecutionThread eq Thread.currentThread,
@@ -311,6 +311,28 @@ class MicroBatchExecution(
   }
 
   /**
+   * Conduct sanity checks on the offset log to make sure it is correct and expected.
+   * Also return the previous offset written to the offset log
+   * @param latestBatchId the batch id of the current micro batch
+   * @return A option that contains the offset of the previously written batch
+   */
+  def validateOffsetLogAndGetPrevOffset(latestBatchId: Long): Option[OffsetSeq] = {
+    if (latestBatchId != 0) {
+      Some(offsetLog.get(latestBatchId - 1).getOrElse {
+        logError(s"The offset log for batch ${latestBatchId - 1} doesn't exist, " +
+          s"which is required to restart the query from the latest batch $latestBatchId " +
+          "from the offset log. Please ensure there are two subsequent offset logs " +
+          "available for the latest batch via manually deleting the offset file(s). " +
+          "Please also ensure the latest batch for commit log is equal or one batch " +
+          "earlier than the latest batch for offset log.")
+        throw new IllegalStateException(s"batch ${latestBatchId - 1} doesn't exist")
+      })
+    } else {
+      None
+    }
+  }
+
+  /**
    * Populate the start offsets to start the execution at the current offsets stored in the sink
    * (i.e. avoid reprocessing data that we have already processed). This function must be called
    * before any processing occurs and will populate the following fields:
@@ -341,20 +363,10 @@ class MicroBatchExecution(
         currentBatchId = latestBatchId
         isCurrentBatchConstructed = true
         availableOffsets = nextOffsets.toStreamProgress(sources)
-        /* Initialize committed offsets to a committed batch, which at this
-         * is the second latest batch id in the offset log. */
-        if (latestBatchId != 0) {
-          val secondLatestOffsets = offsetLog.get(latestBatchId - 1).getOrElse {
-            logError(s"The offset log for batch ${latestBatchId - 1} doesn't exist, " +
-              s"which is required to restart the query from the latest batch $latestBatchId " +
-              "from the offset log. Please ensure there are two subsequent offset logs " +
-              "available for the latest batch via manually deleting the offset file(s). " +
-              "Please also ensure the latest batch for commit log is equal or one batch " +
-              "earlier than the latest batch for offset log.")
-            throw new IllegalStateException(s"batch ${latestBatchId - 1} doesn't exist")
-          }
-          committedOffsets = secondLatestOffsets.toStreamProgress(sources)
-        }
+
+        // validate the integrity of offset log and get the previous offset from the offset log
+        val secondLatestOffsets = validateOffsetLogAndGetPrevOffset(latestBatchId)
+        secondLatestOffsets.foreach(offset => committedOffsets = offset.toStreamProgress(sources))
 
         // update offset metadata
         nextOffsets.metadata.foreach { metadata =>
@@ -519,11 +531,7 @@ class MicroBatchExecution(
       // Commit the next batch offset range to the offset log
       updateStatusMessage("Writing offsets to log")
       reportTimeTaken("walCommit") {
-        assert(offsetLog.add(currentBatchId,
-          availableOffsets.toOffsetSeq(sources, offsetSeqMetadata)),
-          s"Concurrent update to the log. Multiple streaming jobs detected for $currentBatchId")
-        logInfo(s"Committed offsets for batch $currentBatchId. " +
-          s"Metadata ${offsetSeqMetadata.toString}")
+        markMicroBatchStart()
 
         // NOTE: The following code is correct because runStream() processes exactly one
         // batch at a time. If we add pipeline parallelism (multiple batches in flight at
@@ -531,21 +539,7 @@ class MicroBatchExecution(
 
         // Now that we've updated the scheduler's persistent checkpoint, it is safe for the
         // sources to discard data from the previous batch.
-        if (currentBatchId != 0) {
-          val prevBatchOff = offsetLog.get(currentBatchId - 1)
-          if (prevBatchOff.isDefined) {
-            prevBatchOff.get.toStreamProgress(sources).foreach {
-              case (src: Source, off: Offset) => src.commit(off)
-              case (stream: MicroBatchStream, off) =>
-                stream.commit(stream.deserializeOffset(off.json))
-              case (src, _) =>
-                throw new IllegalArgumentException(
-                  s"Unknown source is found at constructNextBatch: $src")
-            }
-          } else {
-            throw new IllegalStateException(s"batch ${currentBatchId - 1} doesn't exist")
-          }
-        }
+        cleanUpLastExecutedMicroBatch()
 
         // It is now safe to discard the metadata beyond the minimum number to retain.
         // Note that purge is exclusive, i.e. it purges everything before the target ID.
@@ -563,6 +557,17 @@ class MicroBatchExecution(
       awaitProgressLockCondition.signalAll()
     }
     shouldConstructNextBatch
+  }
+
+  protected def commitSources(offsetSeq: OffsetSeq): Unit = {
+    offsetSeq.toStreamProgress(sources).foreach {
+      case (src: Source, off: Offset) => src.commit(off)
+      case (stream: MicroBatchStream, off) =>
+        stream.commit(stream.deserializeOffset(off.json))
+      case (src, _) =>
+        throw new IllegalArgumentException(
+          s"Unknown source is found at constructNextBatch: $src")
+    }
   }
 
   /**
@@ -712,6 +717,8 @@ class MicroBatchExecution(
       lastExecution.executedPlan // Force the lazy generation of execution plan
     }
 
+    markMicroBatchExecutionStart()
+
     val nextBatch =
       new Dataset(lastExecution, RowEncoder(lastExecution.analyzed.schema))
 
@@ -739,15 +746,53 @@ class MicroBatchExecution(
 
     withProgressLocked {
       sinkCommitProgress = batchSinkProgress
-      watermarkTracker.updateWatermark(lastExecution.executedPlan)
-      reportTimeTaken("commitOffsets") {
-        assert(commitLog.add(currentBatchId, CommitMetadata(watermarkTracker.currentWatermark)),
-          "Concurrent update to the commit log. Multiple streaming jobs detected for " +
-            s"$currentBatchId")
-      }
-      committedOffsets ++= availableOffsets
+      markMicroBatchEnd()
     }
     logDebug(s"Completed batch ${currentBatchId}")
+  }
+
+
+  /**
+   * Called at the start of the micro batch with given offsets. It takes care of offset
+   * checkpointing to offset log and any microbatch startup tasks.
+   */
+  protected def markMicroBatchStart(): Unit = {
+    assert(offsetLog.add(currentBatchId,
+      availableOffsets.toOffsetSeq(sources, offsetSeqMetadata)),
+      s"Concurrent update to the log. Multiple streaming jobs detected for $currentBatchId")
+    logInfo(s"Committed offsets for batch $currentBatchId. " +
+      s"Metadata ${offsetSeqMetadata.toString}")
+  }
+
+  /**
+   * Method called once after the planning is done and before the start of the microbatch execution.
+   * It can be used to perform any pre-execution tasks.
+   */
+  protected def markMicroBatchExecutionStart(): Unit = {}
+
+  /**
+   * Called after the microbatch has completed execution. It takes care of committing the offset
+   * to commit log and other bookkeeping.
+   */
+  protected def markMicroBatchEnd(): Unit = {
+    watermarkTracker.updateWatermark(lastExecution.executedPlan)
+    reportTimeTaken("commitOffsets") {
+      assert(commitLog.add(currentBatchId, CommitMetadata(watermarkTracker.currentWatermark)),
+        "Concurrent update to the commit log. Multiple streaming jobs detected for " +
+          s"$currentBatchId")
+    }
+    committedOffsets ++= availableOffsets
+  }
+
+  protected def cleanUpLastExecutedMicroBatch(): Unit = {
+    if (currentBatchId != 0) {
+      val prevBatchOff = offsetLog.get(currentBatchId - 1)
+      if (prevBatchOff.isDefined) {
+        commitSources(prevBatchOff.get)
+      } else {
+        throw new IllegalStateException(s"batch ${currentBatchId - 1} doesn't exist")
+      }
+    }
   }
 
   /** Execute a function while locking the stream from making an progress */

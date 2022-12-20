@@ -4298,7 +4298,7 @@
   },
   "_LEGACY_ERROR_TEMP_2175" : {
     "message" : [
-      "Rule id not found for <ruleName>"
+      "Rule id not found for <ruleName>. Please modify RuleIdCollection.scala if you are adding a new rule."
     ]
   },
   "_LEGACY_ERROR_TEMP_2176" : {

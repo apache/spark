@@ -839,6 +839,31 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             .toPandas(),
         )
 
+    def test_hint(self):
+        # SPARK-41349: Test hint
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name).hint("COALESCE", 3000).toPandas(),
+            self.spark.read.table(self.tbl_name).hint("COALESCE", 3000).toPandas(),
+        )
+
+        # Hint with unsupported name will be ignored
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name).hint("illegal").toPandas(),
+            self.spark.read.table(self.tbl_name).hint("illegal").toPandas(),
+        )
+
+        # Hint with unsupported parameter values
+        with self.assertRaises(grpc.RpcError):
+            self.connect.read.table(self.tbl_name).hint("REPARTITION", "id+1").toPandas()
+
+        # Hint with unsupported parameter types
+        with self.assertRaises(ValueError):
+            self.connect.read.table(self.tbl_name).hint("REPARTITION", 1.1).toPandas()
+
+        # Hint with wrong combination
+        with self.assertRaises(grpc.RpcError):
+            self.connect.read.table(self.tbl_name).hint("REPARTITION", "id", 3).toPandas()
+
     def test_empty_dataset(self):
         # SPARK-41005: Test arrow based collection with empty dataset.
         self.assertTrue(
