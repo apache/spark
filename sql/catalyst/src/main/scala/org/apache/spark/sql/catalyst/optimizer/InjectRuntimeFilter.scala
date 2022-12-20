@@ -99,8 +99,10 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       filterCreationSideExp: Expression,
       filterCreationSidePlan: LogicalPlan): LogicalPlan = {
     require(filterApplicationSideExp.dataType == filterCreationSideExp.dataType)
-    val alias = Alias(filterCreationSideExp, filterCreationSideExp.toString)()
-    val aggregate = ColumnPruning(Aggregate(Seq(alias), Seq(alias), filterCreationSidePlan))
+    val actualFilterKeyExpr = mayWrapWithHash(filterCreationSideExp)
+    val alias = Alias(actualFilterKeyExpr, actualFilterKeyExpr.toString)()
+    val aggregate =
+      ColumnPruning(Aggregate(Seq(filterCreationSideExp), Seq(alias), filterCreationSidePlan))
     if (!canBroadcastBySize(aggregate, conf)) {
       // Skip the InSubquery filter if the size of `aggregate` is beyond broadcast join threshold,
       // i.e., the semi-join will be a shuffled join, which is not worthwhile.
