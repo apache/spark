@@ -39,12 +39,21 @@ select con, powerup from
   (select country as con, sum(power) + 10 as powerup from data group by *);
 
 -- having
-select country, count(*) as cnt from data group by * having cnt > 1;
+select country, count(id) as cnt from data group by * having cnt > 1;
 
 -- no grouping column
-select count(*) from data group by *;
+select count(id) from data group by *;
+
+-- a more complex no grouping column case
+select count(id + power / 2) * 3 from data group by *;
 
 -- no grouping column on an empty relation
 -- this should still return one row because we rewrite this to a global aggregate, as opposed to
 -- returning zero row (grouping by a constant).
 select count(*) from (select * from data where country = "DNS") group by *;
+
+-- complex cases that we choose not to infer; fail with a useful error message
+select id + count(*) from data group by *;
+
+-- an even more complex case that we choose not to infer; fail with a useful error message
+select (id + id) / 2 + count(*) * 2 from data group by *;

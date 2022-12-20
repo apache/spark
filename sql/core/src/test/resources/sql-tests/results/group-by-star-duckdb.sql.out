@@ -57,7 +57,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "MISSING_GROUP_BY",
+  "errorClass" : "UNRESOLVED_STAR_IN_GROUP_BY",
+  "sqlState" : "42000",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",

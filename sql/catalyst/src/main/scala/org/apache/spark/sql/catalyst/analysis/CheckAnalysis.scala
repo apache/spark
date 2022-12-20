@@ -233,6 +233,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             failUnresolvedAttribute(operator, key, "UNRESOLVED_MAP_KEY")
         }
 
+        // Fail if we still have an unresolved star in group by. This needs to run before the
+        // general star check below because otherwise we will throw a more generic star exception.
+        ResolveGroupByStar.checkAnalysis(operator)
+
         getAllExpressions(operator).foreach(_.foreachUp {
           case a: Attribute if !a.resolved =>
             failUnresolvedAttribute(operator, a, "UNRESOLVED_COLUMN")

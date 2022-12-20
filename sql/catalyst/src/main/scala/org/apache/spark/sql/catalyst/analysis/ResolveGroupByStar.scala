@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE, AGGREGATE_EXPRESSION, UNRESOLVED_STAR}
@@ -38,9 +40,54 @@ object ResolveGroupByStar extends Rule[LogicalPlan] {
       if (a.aggregateExpressions.forall(_.resolved)) {
         val groupingExprs =
           a.aggregateExpressions.filter(!_.containsPattern(AGGREGATE_EXPRESSION))
-        a.copy(groupingExpressions = groupingExprs)
+
+        // If the grouping exprs are empty, this could either be (1) a valid global aggregate, or
+        // (2) we simply fail to infer the grouping columns. As an example, in "i + sum(j)", we will
+        // not automatically infer the grouping column to be "i".
+        if (groupingExprs.isEmpty && a.aggregateExpressions.exists(containsAttribute)) {
+          // Case (2): don't replace the star. We will eventually tell the user in checkAnalysis
+          // that we cannot resolve the star in group by.
+          a
+        } else {
+          // Case (1): this is a valid global aggregate.
+          a.copy(groupingExpressions = groupingExprs)
+        }
       } else {
         a
       }
+  }
+
+  /**
+   * Returns true if the expression includes an Attribute outside the aggregate expression part.
+   * For example:
+   *  "i" -> true
+   *  "i + 2" -> true
+   *  "i + sum(j)" -> true
+   *  "sum(j)" -> false
+   *  "sum(j) / 2" -> false
+   */
+  private def containsAttribute(expr: Expression): Boolean = expr match {
+    case _ if AggregateExpression.isAggregate(expr) =>
+      // Don't recurse into AggregateExpressions
+      false
+    case _: Attribute =>
+      true
+      // TODO: do we need to worry about ScalarSubquery here?
+    case e =>
+      e.children.exists(containsAttribute)
+  }
+
+  /**
+   * A check to be used in [[CheckAnalysis]] to see if we have any unresolved group by at the
+   * end of analysis, so we can tell users that we fail to infer the grouping columns.
+   */
+  def checkAnalysis(operator: LogicalPlan): Unit = operator match {
+    case a: Aggregate if a.groupingExpressions == UnresolvedStar(None) :: Nil =>
+      if (a.aggregateExpressions.exists(_.exists(_.isInstanceOf[Attribute]))) {
+        operator.failAnalysis(
+          errorClass = "UNRESOLVED_STAR_IN_GROUP_BY",
+          messageParameters = Map.empty)
+      }
+    case _ =>
   }
 }

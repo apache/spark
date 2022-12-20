@@ -112,7 +112,7 @@ USA	46.0
 
 
 -- !query
-select country, count(*) as cnt from data group by * having cnt > 1
+select country, count(id) as cnt from data group by * having cnt > 1
 -- !query schema
 struct<country:string,cnt:bigint>
 -- !query output
@@ -121,11 +121,19 @@ USA	3
 
 
 -- !query
-select count(*) from data group by *
+select count(id) from data group by *
 -- !query schema
-struct<count(1):bigint>
+struct<count(id):bigint>
 -- !query output
 6
+
+
+-- !query
+select count(id + power / 2) * 3 from data group by *
+-- !query schema
+struct<(count((id + (power / 2))) * 3):bigint>
+-- !query output
+18
 
 
 -- !query
@@ -134,3 +142,41 @@ select count(*) from (select * from data where country = "DNS") group by *
 struct<count(1):bigint>
 -- !query output
 0
+
+
+-- !query
+select id + count(*) from data group by *
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNRESOLVED_STAR_IN_GROUP_BY",
+  "sqlState" : "42000",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 32,
+    "stopIndex" : 41,
+    "fragment" : "group by *"
+  } ]
+}
+
+
+-- !query
+select (id + id) / 2 + count(*) * 2 from data group by *
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNRESOLVED_STAR_IN_GROUP_BY",
+  "sqlState" : "42000",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 47,
+    "stopIndex" : 56,
+    "fragment" : "group by *"
+  } ]
+}

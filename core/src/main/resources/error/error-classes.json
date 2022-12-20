@@ -1266,6 +1266,12 @@
     },
     "sqlState" : "42000"
   },
+  "UNRESOLVED_STAR_IN_GROUP_BY" : {
+    "message" : [
+      "Cannot infer grouping columns for group by * based on the select clause. Please explicitly specify the grouping columns."
+    ],
+    "sqlState" : "42000"
+  },
   "UNSUPPORTED_DATATYPE" : {
     "message" : [
       "Unsupported data type <typeName>"
