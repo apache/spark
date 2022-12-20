@@ -17,10 +17,11 @@
 
 package org.apache.spark.status.protobuf
 
-import org.apache.spark.resource.ResourceInformation
-
 import java.util.Date
+
 import collection.JavaConverters._
+
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.status.ExecutorSummaryWrapper
 import org.apache.spark.status.api.v1.{ExecutorSummary, MemoryMetrics}
 import org.apache.spark.status.protobuf.Utils.getOptional
