@@ -68,6 +68,7 @@ case class PythonUDF(
 
   override def toString: String = s"$name(${children.mkString(", ")})#${resultId.id}$typeSuffix"
 
+  // SPARK-41633: We should check whether to update the node patterns when adding a new eval type.
   private def nodePatternsOfPythonFunction: Seq[TreePattern] = {
     if (PythonUDF.isGroupedAggPandasUDFEvalType(evalType)) {
       Seq(AGGREGATE_EXPRESSION)
