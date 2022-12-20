@@ -545,9 +545,11 @@ class SparkConnectPlanner(session: SparkSession) {
   /**
    * Translates a LambdaFunction from proto to the Catalyst expression.
    */
-  private def transformLamdaFunction(lambda: proto.Expression.LambdaFunction): Expression = {
-    if (lambda.getArgumentsCount == 0) {
-      throw InvalidPlanInput("LambdaFunction requires at least 1 argument!")
+  private def transformLamdaFunction(lambda: proto.Expression.LambdaFunction): LambdaFunction = {
+    if (lambda.getArgumentsCount == 0 || lambda.getArgumentsCount > 3) {
+      throw InvalidPlanInput(
+        "LambdaFunction requires [1, 3] arguments, " +
+          s"but got ${lambda.getArgumentsCount} ones!")
     }
 
     val variableNames = lambda.getArgumentsList.asScala.toSeq
