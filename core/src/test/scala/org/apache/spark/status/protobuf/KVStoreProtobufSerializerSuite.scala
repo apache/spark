@@ -20,9 +20,11 @@ package org.apache.spark.status.protobuf
 import java.util.Date
 
 import org.apache.spark.{JobExecutionStatus, SparkFunSuite}
+import org.apache.spark.executor.ExecutorMetrics
+import org.apache.spark.metrics.ExecutorMetricType
 import org.apache.spark.resource.{ExecutorResourceRequest, TaskResourceRequest}
-import org.apache.spark.status.{ApplicationEnvironmentInfoWrapper, ApplicationInfoWrapper, JobDataWrapper, TaskDataWrapper}
-import org.apache.spark.status.api.v1.{AccumulableInfo, ApplicationAttemptInfo, ApplicationEnvironmentInfo, ApplicationInfo, JobData, ResourceProfileInfo, RuntimeInfo}
+import org.apache.spark.status._
+import org.apache.spark.status.api.v1._
 
 class KVStoreProtobufSerializerSuite extends SparkFunSuite {
   private val serializer = new KVStoreProtobufSerializer()
@@ -176,6 +178,60 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     assert(result.shuffleRecordsWritten == input.shuffleRecordsWritten)
     assert(result.stageId == input.stageId)
     assert(result.stageAttemptId == input.stageAttemptId)
+  }
+
+  test("Executor Stage Summary") {
+    val peakMemoryMetrics =
+      Some(new ExecutorMetrics(Array(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L, 1024L)))
+    val info = new ExecutorStageSummary(
+      taskTime = 1L,
+      failedTasks = 2,
+      succeededTasks = 3,
+      killedTasks = 4,
+      inputBytes = 5L,
+      inputRecords = 6L,
+      outputBytes = 7L,
+      outputRecords = 8L,
+      shuffleRead = 9L,
+      shuffleReadRecords = 10L,
+      shuffleWrite = 11L,
+      shuffleWriteRecords = 12L,
+      memoryBytesSpilled = 13L,
+      diskBytesSpilled = 14L,
+      isBlacklistedForStage = true,
+      peakMemoryMetrics = peakMemoryMetrics,
+      isExcludedForStage = false)
+    val input = new ExecutorStageSummaryWrapper(
+      stageId = 1,
+      stageAttemptId = 2,
+      executorId = "executor_id_1",
+      info = info)
+    val bytes = serializer.serialize(input)
+    val result = serializer.deserialize(bytes, classOf[ExecutorStageSummaryWrapper])
+    assert(result.stageId == input.stageId)
+    assert(result.stageAttemptId == input.stageAttemptId)
+    assert(result.executorId == input.executorId)
+    assert(result.info.taskTime == input.info.taskTime)
+    assert(result.info.failedTasks == input.info.failedTasks)
+    assert(result.info.succeededTasks == input.info.succeededTasks)
+    assert(result.info.killedTasks == input.info.killedTasks)
+    assert(result.info.inputBytes == input.info.inputBytes)
+    assert(result.info.inputRecords == input.info.inputRecords)
+    assert(result.info.outputBytes == input.info.outputBytes)
+    assert(result.info.outputRecords == input.info.outputRecords)
+    assert(result.info.shuffleRead == input.info.shuffleRead)
+    assert(result.info.shuffleReadRecords == input.info.shuffleReadRecords)
+    assert(result.info.shuffleWrite == input.info.shuffleWrite)
+    assert(result.info.shuffleWriteRecords == input.info.shuffleWriteRecords)
+    assert(result.info.memoryBytesSpilled == input.info.memoryBytesSpilled)
+    assert(result.info.diskBytesSpilled == input.info.diskBytesSpilled)
+    assert(result.info.isBlacklistedForStage == input.info.isBlacklistedForStage)
+    assert(result.info.isExcludedForStage == input.info.isExcludedForStage)
+    assert(result.info.peakMemoryMetrics.isDefined)
+    ExecutorMetricType.metricToOffset.foreach { case (name, index) =>
+      result.info.peakMemoryMetrics.get.getMetricValue(name) ==
+        input.info.peakMemoryMetrics.get.getMetricValue(name)
+    }
   }
 
   test("Application Environment Info") {

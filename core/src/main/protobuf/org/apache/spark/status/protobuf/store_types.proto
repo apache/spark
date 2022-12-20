@@ -107,6 +107,37 @@ message TaskDataWrapper {
   int32 stage_attempt_id = 41;
 }
 
+message ExecutorMetrics {
+  map<string, int64> metrics = 1;
+}
+
+message ExecutorStageSummary {
+  int64 task_time = 1;
+  int32 failed_tasks = 2;
+  int32 succeeded_tasks = 3;
+  int32 killed_tasks = 4;
+  int64 input_bytes = 5;
+  int64 input_records = 6;
+  int64 output_bytes = 7;
+  int64 output_records = 8;
+  int64 shuffle_read = 9;
+  int64 shuffle_read_records = 10;
+  int64 shuffle_write = 11;
+  int64 shuffle_write_records = 12;
+  int64 memory_bytes_spilled = 13;
+  int64 disk_bytes_spilled = 14;
+  bool is_blacklisted_for_stage = 15;
+  optional ExecutorMetrics peak_memory_metrics = 16;
+  bool is_excluded_for_stage = 17;
+}
+
+message ExecutorStageSummaryWrapper {
+  int64 stage_id = 1;
+  int32 stage_attempt_id = 2;
+  string executor_id = 3;
+  ExecutorStageSummary info = 4;
+}
+
 message ExecutorResourceRequest {
   string resource_name = 1;
   int64 amount = 2;
