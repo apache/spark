@@ -64,16 +64,16 @@ case class PythonUDF(
 
   override def toString: String = s"$name(${children.mkString(", ")})#${resultId.id}$typeSuffix"
 
-  private def nodePatternsOfPythonFunction: Option[TreePattern] = {
+  private def nodePatternsOfPythonFunction: Seq[TreePattern] = {
     if (evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF) {
-      Some(AGGREGATE_EXPRESSION)
+      Seq(AGGREGATE_EXPRESSION)
     } else {
-      None
+      Seq.empty
     }
   }
 
   final override val nodePatterns: Seq[TreePattern] =
-    Seq(PYTHON_UDF) ++ nodePatternsOfPythonFunction.toSeq
+    Seq(PYTHON_UDF) ++ nodePatternsOfPythonFunction
 
   lazy val resultAttribute: Attribute = AttributeReference(toPrettySQL(this), dataType, nullable)(
     exprId = resultId)
