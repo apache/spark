@@ -19,8 +19,10 @@ package org.apache.spark.status.protobuf
 
 import org.apache.spark.status._
 import org.apache.spark.status.KVUtils.KVStoreScalaSerializer
+import org.apache.spark.util.{ Utils => SUtils}
 
 private[spark] class KVStoreProtobufSerializer extends KVStoreScalaSerializer {
+
   override def serialize(o: Object): Array[Byte] = o match {
     case j: JobDataWrapper => JobDataWrapperSerializer.
       serialize(j)
@@ -31,6 +33,8 @@ private[spark] class KVStoreProtobufSerializer extends KVStoreScalaSerializer {
     case a: ApplicationInfoWrapper => ApplicationInfoWrapperSerializer.serialize(a)
     case r: RDDStorageInfoWrapper =>
       RDDStorageInfoWrapperSerializer.serialize(r)
+    case other if KVStoreProtobufSerializer.isSQLExecutionUIData(other.getClass.getName) =>
+      KVStoreProtobufSerializer.uiDataSerializer.serialize(other)
     case other => super.serialize(other)
   }
 
@@ -47,6 +51,23 @@ private[spark] class KVStoreProtobufSerializer extends KVStoreScalaSerializer {
       ApplicationInfoWrapperSerializer.deserialize(data).asInstanceOf[T]
     case _ if classOf[RDDStorageInfoWrapper].isAssignableFrom(klass) =>
       RDDStorageInfoWrapperSerializer.deserialize(data).asInstanceOf[T]
+    case other if KVStoreProtobufSerializer.isSQLExecutionUIData(other.getName) =>
+      KVStoreProtobufSerializer.uiDataSerializer.deserialize(data).asInstanceOf[T]
     case other => super.deserialize(data, klass)
   }
+}
+
+object KVStoreProtobufSerializer {
+  private lazy val uiDataSerializer: ExtendedSerializer = {
+    val klass = SUtils
+      .classForName("org.apache.spark.status.protobuf.sql.SQLExecutionUIDataSerializer")
+    klass.getDeclaredConstructor().newInstance().asInstanceOf[ExtendedSerializer]
+  }
+  private def isSQLExecutionUIData(klassName: String): Boolean =
+    klassName.equals("org.apache.spark.sql.execution.ui.SQLExecutionUIData")
+}
+
+trait ExtendedSerializer {
+  def serialize(ui: Any): Array[Byte]
+  def deserialize(bytes: Array[Byte]): Any
 }
