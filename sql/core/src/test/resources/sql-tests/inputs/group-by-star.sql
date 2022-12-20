@@ -31,9 +31,6 @@ select upper(country), count(*) as powerup from data group by *;
 -- scalar expression in aggregate column
 select country, sum(power) + 10 as powerup from data group by *;
 
--- group by all without group by column
-select count(*) from data group by *;
-
 -- group by all without aggregate, which should just become a distinct
 select country, city from data group by *;
 
@@ -43,3 +40,11 @@ select con, powerup from
 
 -- having
 select country, count(*) as cnt from data group by * having cnt > 1;
+
+-- no grouping column
+select count(*) from data group by *;
+
+-- no grouping column on an empty relation
+-- this should still return one row because we rewrite this to a global aggregate, as opposed to
+-- returning zero row (grouping by a constant).
+select count(*) from (select * from data where country = "DNS") group by *;
