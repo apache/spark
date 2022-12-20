@@ -446,7 +446,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             self.connect.read.table(self.tbl_name).to(schema).toPandas()
             self.assertIn(
                 """Column or field `name` is of type "STRING" while it's required to be "INT".""",
-                 str(context.exception)
+                str(context.exception),
             )
 
     def test_toDF(self):
