@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_STAR
+import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE, AGGREGATE_EXPRESSION, UNRESOLVED_STAR}
 
 /**
  * Resolve the star in the group by statement in the following SQL pattern:
@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_STAR
  */
 object ResolveGroupByStar extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-    _.containsPattern(UNRESOLVED_STAR), ruleId) {
+    _.containsAllPatterns(UNRESOLVED_STAR, AGGREGATE), ruleId) {
     // Match a group by with a single unresolved star
     case a: Aggregate if a.groupingExpressions == UnresolvedStar(None) :: Nil =>
       // Only makes sense to do the rewrite once all the aggregate expressions have been resolved.
@@ -38,7 +38,7 @@ object ResolveGroupByStar extends Rule[LogicalPlan] {
       // expression list (because we don't know they would be aggregate expressions until resolved).
       if (a.aggregateExpressions.forall(_.resolved)) {
         val groupingExprs =
-          a.aggregateExpressions.filter(!_.exists(_.isInstanceOf[AggregateExpression]))
+          a.aggregateExpressions.filter(!_.containsPattern(AGGREGATE_EXPRESSION))
         a.copy(groupingExpressions = groupingExprs)
       } else {
         a
