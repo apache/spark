@@ -17,9 +17,13 @@
 
 package org.apache.spark.sql.execution.python
 
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.{IntegratedUDFTestUtils, QueryTest}
+import org.apache.spark.sql.catalyst.expressions.{Literal, PythonUDF}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE_EXPRESSION, PYTHON_UDF}
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.IntegerType
 
 class PythonUDFSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -83,6 +87,17 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
     val expected = df.agg(pandasTestUDF(df("a")), pandasTestUDF(df("b")))
 
     checkAnswer(actual, expected)
+  }
+
+  test("SPARK-41633: identify aggregation expression in the nodePatterns") {
+    val aggUDF = PythonUDF("agg", null, IntegerType, Seq(Literal(1)),
+      PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF, true)
+    assert(aggUDF.containsAllPatterns(PYTHON_UDF, AGGREGATE_EXPRESSION))
+
+    val batchedUDF = PythonUDF("agg", null, IntegerType, Seq(Literal(1)),
+      PythonEvalType.SQL_BATCHED_UDF, true)
+    assert(batchedUDF.containsAllPatterns(PYTHON_UDF))
+    assert(!batchedUDF.containsAllPatterns(AGGREGATE_EXPRESSION))
   }
 
   test("SPARK-34265: Instrument Python UDF execution using SQL Metrics") {

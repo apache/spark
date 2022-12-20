@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{PYTHON_UDF, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE_EXPRESSION, PYTHON_UDF, TreePattern}
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.types.DataType
 
@@ -64,7 +64,16 @@ case class PythonUDF(
 
   override def toString: String = s"$name(${children.mkString(", ")})#${resultId.id}$typeSuffix"
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(PYTHON_UDF)
+  private def nodePatternsOfPythonFunction: Option[TreePattern] = {
+    if (evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF) {
+      Some(AGGREGATE_EXPRESSION)
+    } else {
+      None
+    }
+  }
+
+  final override val nodePatterns: Seq[TreePattern] =
+    Seq(PYTHON_UDF) ++ nodePatternsOfPythonFunction.toSeq
 
   lazy val resultAttribute: Attribute = AttributeReference(toPrettySQL(this), dataType, nullable)(
     exprId = resultId)
