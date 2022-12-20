@@ -1311,7 +1311,7 @@
       },
       "ANALYZE_VIEW" : {
         "message" : [
-          "The ANALYZE TABLE command does not supported on views."
+          "The ANALYZE TABLE command does not support views."
         ]
       },
       "CATALOG_OPERATION" : {
