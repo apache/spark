@@ -175,7 +175,7 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
           // in group by, once transformed, will throw a different exception: missing input.
           def eligibleToLiftUp(exp: Expression): Boolean = {
             exp match {
-              case e: AggregateExpression if AggregateExpression.isAggregate(e) => true
+              case e if AggregateExpression.isAggregate(e) => true
               case e if groupingExpressions.exists(_.semanticEquals(e)) => true
               case _: Literal | _: LateralColumnAliasReference => true
               case s: ScalarSubquery if s.children.nonEmpty
