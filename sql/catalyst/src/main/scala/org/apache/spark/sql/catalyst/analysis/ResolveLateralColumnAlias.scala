@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, Expression, LateralColumnAliasReference, NamedExpression, OuterReference, ScalarSubquery}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeMap, Expression, LateralColumnAliasReference, LeafExpression, Literal, NamedExpression, OuterReference, ScalarSubquery}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -307,6 +307,27 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
         case agg @ Aggregate(groupingExpressions, aggregateExpressions, _) if agg.resolved
             && aggregateExpressions.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
 
+          // Check if current Aggregate is eligible to lift up with Project: the aggregate
+          // expression only contains: 1) aggregate functions, 2) grouping expressions, 3) lateral
+          // column alias reference or 4) literals.
+          // This check is to prevent unnecessary transformation on invalid plan, to guarantee it
+          // throws the same exception. For example, cases like non-aggregate expressions not
+          // in group by, once transformed, will throw a different exception: missing input.
+          def eligibleToLiftUp(exp: Expression): Boolean = {
+            exp match {
+              case e: AggregateExpression if AggregateExpression.isAggregate(e) => true
+              case e if groupingExpressions.exists(_.semanticEquals(e)) => true
+              case _: Literal | _: LateralColumnAliasReference => true
+              case s: ScalarSubquery if s.children.nonEmpty
+                  && !groupingExpressions.exists(_.semanticEquals(s)) => false
+              case _: LeafExpression => false
+              case e => e.children.forall(eligibleToLiftUp)
+            }
+          }
+          if (!aggregateExpressions.forall(eligibleToLiftUp)) {
+            return agg
+          }
+
           val newAggExprs = collection.mutable.Set.empty[NamedExpression]
           val expressionMap = collection.mutable.LinkedHashMap.empty[Expression, NamedExpression]
           val projectExprs = aggregateExpressions.map { exp =>
@@ -332,10 +353,6 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
           if (newAggExprs.isEmpty) {
             agg
           } else {
-            // perform an early check on current Aggregate before any lift-up / push-down to throw
-            // the same exception such as non-aggregate expressions not in group by, which becomes
-            // missing input after transformation
-            earlyCheckAggregate(agg)
             Project(
               projectList = projectExprs,
               child = agg.copy(aggregateExpressions = newAggExprs.toSeq)
@@ -343,27 +360,5 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
           }
       }
     }
-  }
-
-  private def earlyCheckAggregate(plan: Aggregate): Unit = {
-    val Aggregate(groupingExprs, aggregateExprs, _) = plan
-    def checkValidAggregateExpression(expr: Expression): Unit = expr match {
-      case expr: Expression if AggregateExpression.isAggregate(expr) =>
-        // doesn't perform any check on aggregation functions
-      case _: Attribute if groupingExprs.isEmpty =>
-        plan.failAnalysis(
-          errorClass = "MISSING_GROUP_BY",
-          messageParameters = Map.empty)
-      case e: Attribute if !groupingExprs.exists(_.semanticEquals(e)) =>
-        throw QueryCompilationErrors.columnNotInGroupByClauseError(e)
-      case s: ScalarSubquery
-        if s.children.nonEmpty && !groupingExprs.exists(_.semanticEquals(s)) =>
-        s.failAnalysis(
-          errorClass = "_LEGACY_ERROR_TEMP_2423",
-          messageParameters = Map("sqlExpr" -> s.sql))
-      case e if groupingExprs.exists(_.semanticEquals(e)) => // OK
-      case e => e.children.foreach(checkValidAggregateExpression)
-    }
-    aggregateExprs.foreach(checkValidAggregateExpression)
   }
 }

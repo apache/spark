@@ -714,37 +714,57 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
     }
   }
 
-  test("Non-aggregating expressions not in group by still throws the same error") {
-    // query without lateral alias
-    assert(
-      intercept[AnalysisException] {
-        sql(s"SELECT dept AS a, salary FROM $testTable GROUP BY dept")
-      }.getErrorClass == "MISSING_AGGREGATION")
+  test("Aggregate expressions not eligible to lift up, throws same error as inline") {
+    def checkSameMissingAggregationError(q1: String, q2: String, expressionParam: String): Unit = {
+      Seq(q1, q2).foreach { query =>
+        val e = intercept[AnalysisException] { sql(query) }
+        assert(e.getErrorClass == "MISSING_AGGREGATION")
+        assert(e.messageParameters.get("expression").exists(_ == expressionParam))
+      }
+    }
 
-    assert(
-      intercept[AnalysisException] {
-        sql(s"SELECT avg(salary), avg(avg(salary)) FROM $testTable GROUP BY dept")
-      }.getErrorClass == "NESTED_AGGREGATE_FUNCTION")
+    val suffix = s"FROM $testTable GROUP BY dept"
+    checkSameMissingAggregationError(
+      s"SELECT dept AS a, dept, salary $suffix",
+      s"SELECT dept AS a, a,    salary $suffix",
+      "\"salary\"")
+    checkSameMissingAggregationError(
+      s"SELECT dept AS a, dept + salary $suffix",
+      s"SELECT dept AS a, a    + salary $suffix",
+      "\"salary\"")
+    checkSameMissingAggregationError(
+      s"SELECT avg(salary) AS a, avg(salary) + bonus $suffix",
+      s"SELECT avg(salary) AS a, a           + bonus $suffix",
+      "\"bonus\"")
+    checkSameMissingAggregationError(
+      s"SELECT dept AS a, dept, avg(salary) + bonus + 10 $suffix",
+      s"SELECT dept AS a, a,    avg(salary) + bonus + 10 $suffix",
+      "\"bonus\"")
+    checkSameMissingAggregationError(
+      s"SELECT avg(salary) AS a, avg(salary), dept FROM $testTable GROUP BY dept + 10",
+      s"SELECT avg(salary) AS a, a,           dept FROM $testTable GROUP BY dept + 10",
+      "\"dept\"")
+    checkSameMissingAggregationError(
+      s"SELECT avg(salary) AS a, avg(salary) + dept + 10 FROM $testTable GROUP BY dept + 10",
+      s"SELECT avg(salary) AS a, a           + dept + 10 FROM $testTable GROUP BY dept + 10",
+      "\"dept\"")
+    Seq(
+      s"SELECT dept AS a, dept, " +
+        s"(SELECT count(col) FROM VALUES (1), (2) AS data(col) WHERE col = dept) $suffix",
+      s"SELECT dept AS a, a, " +
+        s"(SELECT count(col) FROM VALUES (1), (2) AS data(col) WHERE col = dept) $suffix"
+    ).foreach { query =>
+      val e = intercept[AnalysisException] { sql(query) }
+      assert(e.getErrorClass == "_LEGACY_ERROR_TEMP_2423") }
 
-    // query with lateral alias throws the same error
-    assert(
-      intercept[AnalysisException] {
-        sql(s"SELECT dept AS a, a, salary FROM $testTable GROUP BY dept")
-      }.getErrorClass == "MISSING_AGGREGATION")
-    // no longer throws NESTED_AGGREGATE_FUNCTION but UNSUPPORTED_FEATURE
-    assert(
-      intercept[AnalysisException] {
+    // one exception: no longer throws NESTED_AGGREGATE_FUNCTION but UNSUPPORTED_FEATURE
+    checkError(
+      exception = intercept[AnalysisException] {
         sql(s"SELECT avg(salary) AS a, avg(a) FROM $testTable GROUP BY dept")
-      }.getErrorClass == "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_AGGREGATE_FUNC")
-
-    // checkAnalysis doesn't canonicalize expressions when performing check of non-aggregation
-    // expression in group by. With LCA, it doesn't change and throw same exception
-    val e1 = intercept[AnalysisException] {
-      sql(s"SELECT avg(salary) AS a, avg(salary) + dept + 10 FROM $testTable GROUP BY dept + 10")
-    }
-    val e2 = intercept[AnalysisException] {
-      sql(s"SELECT avg(salary) AS a, a + dept + 10 FROM $testTable GROUP BY dept + 10")
-    }
-    assert(e1.getErrorClass == e2.getErrorClass)
+      },
+      errorClass = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_AGGREGATE_FUNC",
+      sqlState = "0A000",
+      parameters = Map("lca" -> "`a`", "aggFunc" -> "\"avg(lateralAliasReference(a))\"")
+    )
   }
 }
