@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, BloomFilterMightContain
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, BloomFilterAggregate}
 import org.apache.spark.sql.catalyst.optimizer.{ColumnPruning, MergeScalarSubqueries}
 import org.apache.spark.sql.catalyst.plans.LeftSemi
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan}
 import org.apache.spark.sql.execution.{ReusedSubqueryExec, SubqueryExec}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEPropagateEmptyRelation}
 import org.apache.spark.sql.internal.SQLConf
@@ -258,7 +258,7 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
         ensureLeftSemiJoinExists(planEnabled)
         assert(normalizedEnabled != normalizedDisabled)
         val agg = planEnabled.collect {
-          case Join(_, Project(_, agg: Aggregate), LeftSemi, _, _) => agg
+          case Join(_, agg: Aggregate, LeftSemi, _, _) => agg
         }
         assert(agg.size == 1)
         assert(agg.head.fastEquals(ColumnPruning(agg.head)))
