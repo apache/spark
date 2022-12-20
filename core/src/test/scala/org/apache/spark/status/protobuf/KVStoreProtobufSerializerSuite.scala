@@ -466,14 +466,14 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         executorResources = Map(
           "0" -> new ExecutorResourceRequest(
             resourceName = "exec1",
-            amount = 1,
+            amount = 64,
             discoveryScript = "script0",
-            vendor = "apache"),
+            vendor = "apache_2"),
           "1" -> new ExecutorResourceRequest(
             resourceName = "exec2",
-            amount = 1,
+            amount = 65,
             discoveryScript = "script1",
-            vendor = "apache")
+            vendor = "apache_1")
         ),
         taskResources = Map(
           "0" -> new TaskResourceRequest(resourceName = "exec1", amount = 1),
