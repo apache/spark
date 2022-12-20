@@ -1091,14 +1091,14 @@
           "Function '<funcName>' should use only POSITIONAL or POSITIONAL OR KEYWORD arguments"
         ]
       },
-      "WRONG_NUM_COLUMNS" : {
-        "message" : [
-          "Function '<funcName>' should take at least two columns"
-        ]
-      },
       "WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION" : {
         "message" : [
           "Function '<funcName>' should take between 1 and 3 arguments, but provided function takes <numArgs>"
+        ]
+      },
+      "WRONG_NUM_COLUMNS" : {
+        "message" : [
+          "Function '<funcName>' should take at least two columns"
         ]
       }
     }
