@@ -11,49 +11,52 @@ create temporary view data as select * from values
   as data(country, city, name, id, power);
 
 -- basic
-select country, count(*) from data group by *;
+select country, count(*) from data group by ALL;
+
+-- different case
+select country, count(*) from data group by aLl;
 
 -- two grouping columns and two aggregates
-select country, city, count(*), sum(power) from data group by *;
+select country, city, count(*), sum(power) from data group by all;
 
 -- different ordering
-select count(*), country, city, sum(power) from data group by *;
+select count(*), country, city, sum(power) from data group by all;
 
 -- alias in grouping column
-select country as con, count(*) from data group by *;
+select country as con, count(*) from data group by all;
 
 -- alias in aggregate column
-select country, count(*) as cnt from data group by *;
+select country, count(*) as cnt from data group by all;
 
 -- scalar expression in grouping column
-select upper(country), count(*) as powerup from data group by *;
+select upper(country), count(*) as powerup from data group by all;
 
 -- scalar expression in aggregate column
-select country, sum(power) + 10 as powerup from data group by *;
+select country, sum(power) + 10 as powerup from data group by all;
 
 -- group by all without aggregate, which should just become a distinct
-select country, city from data group by *;
+select country, city from data group by all;
 
 -- make sure aliases are propagated through correctly
 select con, powerup from
-  (select country as con, sum(power) + 10 as powerup from data group by *);
+  (select country as con, sum(power) + 10 as powerup from data group by all);
 
 -- having
-select country, count(id) as cnt from data group by * having cnt > 1;
+select country, count(id) as cnt from data group by all having cnt > 1;
 
 -- no grouping column
-select count(id) from data group by *;
+select count(id) from data group by all;
 
 -- a more complex no grouping column case
-select count(id + power / 2) * 3 from data group by *;
+select count(id + power / 2) * 3 from data group by all;
 
 -- no grouping column on an empty relation
 -- this should still return one row because we rewrite this to a global aggregate, as opposed to
 -- returning zero row (grouping by a constant).
-select count(*) from (select * from data where country = "DNS") group by *;
+select count(*) from (select * from data where country = "DNS") group by all;
 
 -- complex cases that we choose not to infer; fail with a useful error message
-select id + count(*) from data group by *;
+select id + count(*) from data group by all;
 
 -- an even more complex case that we choose not to infer; fail with a useful error message
-select (id + id) / 2 + count(*) * 2 from data group by *;
+select (id + id) / 2 + count(*) * 2 from data group by all;

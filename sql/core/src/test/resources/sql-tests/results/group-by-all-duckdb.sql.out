@@ -13,7 +13,7 @@ struct<>
 
 
 -- !query
-SELECT g, SUM(i) FROM integers GROUP BY * ORDER BY 1
+SELECT g, SUM(i) FROM integers GROUP BY ALL ORDER BY 1
 -- !query schema
 struct<g:int,sum(i):bigint>
 -- !query output
@@ -22,7 +22,7 @@ struct<g:int,sum(i):bigint>
 
 
 -- !query
-SELECT g, SUM(i), COUNT(*), COUNT(i), SUM(g) FROM integers GROUP BY * ORDER BY 1
+SELECT g, SUM(i), COUNT(*), COUNT(i), SUM(g) FROM integers GROUP BY ALL ORDER BY 1
 -- !query schema
 struct<g:int,sum(i):bigint,count(1):bigint,count(i):bigint,sum(g):bigint>
 -- !query output
@@ -31,7 +31,7 @@ struct<g:int,sum(i):bigint,count(1):bigint,count(i):bigint,sum(g):bigint>
 
 
 -- !query
-SELECT i%2, SUM(i), SUM(g) FROM integers GROUP BY * ORDER BY 1
+SELECT i%2, SUM(i), SUM(g) FROM integers GROUP BY ALL ORDER BY 1
 -- !query schema
 struct<(i % 2):int,sum(i):bigint,sum(g):bigint>
 -- !query output
@@ -41,7 +41,7 @@ NULL	NULL	1
 
 
 -- !query
-SELECT (g+i)%2, SUM(i), SUM(g) FROM integers GROUP BY * ORDER BY 1
+SELECT (g+i)%2, SUM(i), SUM(g) FROM integers GROUP BY ALL ORDER BY 1
 -- !query schema
 struct<((g + i) % 2):int,sum(i):bigint,sum(g):bigint>
 -- !query output
@@ -51,26 +51,26 @@ NULL	NULL	1
 
 
 -- !query
-SELECT (g+i)%2 + SUM(i), SUM(i), SUM(g) FROM integers GROUP BY * ORDER BY 1
+SELECT (g+i)%2 + SUM(i), SUM(i), SUM(g) FROM integers GROUP BY ALL ORDER BY 1
 -- !query schema
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_STAR_IN_GROUP_BY",
+  "errorClass" : "UNRESOLVED_ALL_IN_GROUP_BY",
   "sqlState" : "42000",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 55,
-    "stopIndex" : 64,
-    "fragment" : "GROUP BY *"
+    "stopIndex" : 66,
+    "fragment" : "GROUP BY ALL"
   } ]
 }
 
 
 -- !query
-SELECT g, i, g%2, SUM(i), SUM(g) FROM integers GROUP BY * ORDER BY 1, 2, 3, 4
+SELECT g, i, g%2, SUM(i), SUM(g) FROM integers GROUP BY ALL ORDER BY 1, 2, 3, 4
 -- !query schema
 struct<g:int,i:int,(g % 2):int,sum(i):bigint,sum(g):bigint>
 -- !query output
@@ -81,7 +81,7 @@ struct<g:int,i:int,(g % 2):int,sum(i):bigint,sum(g):bigint>
 
 
 -- !query
-SELECT c0 FROM (SELECT 1 c0) t0 GROUP BY * HAVING c0>0
+SELECT c0 FROM (SELECT 1 c0) t0 GROUP BY ALL HAVING c0>0
 -- !query schema
 struct<c0:int>
 -- !query output
@@ -89,7 +89,7 @@ struct<c0:int>
 
 
 -- !query
-SELECT c0 FROM (SELECT 1 c0, 1 c1 UNION ALL SELECT 1, 2) t0 GROUP BY * ORDER BY c0
+SELECT c0 FROM (SELECT 1 c0, 1 c1 UNION ALL SELECT 1, 2) t0 GROUP BY ALL ORDER BY c0
 -- !query schema
 struct<c0:int>
 -- !query output
@@ -97,7 +97,7 @@ struct<c0:int>
 
 
 -- !query
-SELECT c0 FROM (SELECT 1 c0, 1 c1 UNION ALL SELECT 1, 2) t0 GROUP BY * HAVING c1>0 ORDER BY c0
+SELECT c0 FROM (SELECT 1 c0, 1 c1 UNION ALL SELECT 1, 2) t0 GROUP BY ALL HAVING c1>0 ORDER BY c0
 -- !query schema
 struct<>
 -- !query output
@@ -112,8 +112,8 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 79,
-    "stopIndex" : 80,
+    "startIndex" : 81,
+    "stopIndex" : 82,
     "fragment" : "c1"
   } ]
 }

@@ -297,9 +297,10 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveGroupingAnalytics ::
       ResolvePivot ::
       ResolveUnpivot ::
-      ResolveGroupByStar ::
+      ResolveGroupByAll ::
       ResolveOrdinalInOrderByAndGroupBy ::
       ResolveAggAliasInGroupBy ::
+
       ResolveMissingReferences ::
       ResolveOuterReferences ::
       ExtractGenerator ::

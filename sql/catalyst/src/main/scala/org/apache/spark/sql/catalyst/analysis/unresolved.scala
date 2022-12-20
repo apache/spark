@@ -404,8 +404,6 @@ case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevalu
   }
 
   override def toString: String = target.map(_ + ".").getOrElse("") + "*"
-
-  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_STAR)
 }
 
 /**

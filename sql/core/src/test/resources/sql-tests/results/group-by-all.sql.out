@@ -15,7 +15,7 @@ struct<>
 
 
 -- !query
-select country, count(*) from data group by *
+select country, count(*) from data group by ALL
 -- !query schema
 struct<country:string,count(1):bigint>
 -- !query output
@@ -25,7 +25,17 @@ USA	3
 
 
 -- !query
-select country, city, count(*), sum(power) from data group by *
+select country, count(*) from data group by aLl
+-- !query schema
+struct<country:string,count(1):bigint>
+-- !query output
+China	2
+Korea	1
+USA	3
+
+
+-- !query
+select country, city, count(*), sum(power) from data group by all
 -- !query schema
 struct<country:string,city:string,count(1):bigint,sum(power):decimal(13,1)>
 -- !query output
@@ -37,7 +47,7 @@ USA	San Francisco	2	23.0
 
 
 -- !query
-select count(*), country, city, sum(power) from data group by *
+select count(*), country, city, sum(power) from data group by all
 -- !query schema
 struct<count(1):bigint,country:string,city:string,sum(power):decimal(13,1)>
 -- !query output
@@ -49,7 +59,7 @@ struct<count(1):bigint,country:string,city:string,sum(power):decimal(13,1)>
 
 
 -- !query
-select country as con, count(*) from data group by *
+select country as con, count(*) from data group by all
 -- !query schema
 struct<con:string,count(1):bigint>
 -- !query output
@@ -59,7 +69,7 @@ USA	3
 
 
 -- !query
-select country, count(*) as cnt from data group by *
+select country, count(*) as cnt from data group by all
 -- !query schema
 struct<country:string,cnt:bigint>
 -- !query output
@@ -69,7 +79,7 @@ USA	3
 
 
 -- !query
-select upper(country), count(*) as powerup from data group by *
+select upper(country), count(*) as powerup from data group by all
 -- !query schema
 struct<upper(country):string,powerup:bigint>
 -- !query output
@@ -79,7 +89,7 @@ USA	3
 
 
 -- !query
-select country, sum(power) + 10 as powerup from data group by *
+select country, sum(power) + 10 as powerup from data group by all
 -- !query schema
 struct<country:string,powerup:decimal(14,1)>
 -- !query output
@@ -89,7 +99,7 @@ USA	46.0
 
 
 -- !query
-select country, city from data group by *
+select country, city from data group by all
 -- !query schema
 struct<country:string,city:string>
 -- !query output
@@ -102,7 +112,7 @@ USA	San Francisco
 
 -- !query
 select con, powerup from
-  (select country as con, sum(power) + 10 as powerup from data group by *)
+  (select country as con, sum(power) + 10 as powerup from data group by all)
 -- !query schema
 struct<con:string,powerup:decimal(14,1)>
 -- !query output
@@ -112,7 +122,7 @@ USA	46.0
 
 
 -- !query
-select country, count(id) as cnt from data group by * having cnt > 1
+select country, count(id) as cnt from data group by all having cnt > 1
 -- !query schema
 struct<country:string,cnt:bigint>
 -- !query output
@@ -121,7 +131,7 @@ USA	3
 
 
 -- !query
-select count(id) from data group by *
+select count(id) from data group by all
 -- !query schema
 struct<count(id):bigint>
 -- !query output
@@ -129,7 +139,7 @@ struct<count(id):bigint>
 
 
 -- !query
-select count(id + power / 2) * 3 from data group by *
+select count(id + power / 2) * 3 from data group by all
 -- !query schema
 struct<(count((id + (power / 2))) * 3):bigint>
 -- !query output
@@ -137,7 +147,7 @@ struct<(count((id + (power / 2))) * 3):bigint>
 
 
 -- !query
-select count(*) from (select * from data where country = "DNS") group by *
+select count(*) from (select * from data where country = "DNS") group by all
 -- !query schema
 struct<count(1):bigint>
 -- !query output
@@ -145,38 +155,38 @@ struct<count(1):bigint>
 
 
 -- !query
-select id + count(*) from data group by *
+select id + count(*) from data group by all
 -- !query schema
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_STAR_IN_GROUP_BY",
+  "errorClass" : "UNRESOLVED_ALL_IN_GROUP_BY",
   "sqlState" : "42000",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 32,
-    "stopIndex" : 41,
-    "fragment" : "group by *"
+    "stopIndex" : 43,
+    "fragment" : "group by all"
   } ]
 }
 
 
 -- !query
-select (id + id) / 2 + count(*) * 2 from data group by *
+select (id + id) / 2 + count(*) * 2 from data group by all
 -- !query schema
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_STAR_IN_GROUP_BY",
+  "errorClass" : "UNRESOLVED_ALL_IN_GROUP_BY",
   "sqlState" : "42000",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 47,
-    "stopIndex" : 56,
-    "fragment" : "group by *"
+    "stopIndex" : 58,
+    "fragment" : "group by all"
   } ]
 }

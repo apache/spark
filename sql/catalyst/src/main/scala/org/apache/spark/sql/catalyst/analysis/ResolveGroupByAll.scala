@@ -21,19 +21,36 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE, AGGREGATE_EXPRESSION, UNRESOLVED_STAR}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE, AGGREGATE_EXPRESSION, UNRESOLVED_ATTRIBUTE}
 
 /**
- * Resolve the star in the group by statement in the following SQL pattern:
- *  `select col1, col2, agg_expr(...) from table group by *`.
+ * Resolve "group by all" in the following SQL pattern:
+ *  `select col1, col2, agg_expr(...) from table group by all`.
  *
- * The star is expanded to include all non-aggregate columns in the select clause.
+ * The all is expanded to include all non-aggregate columns in the select clause.
  */
-object ResolveGroupByStar extends Rule[LogicalPlan] {
+object ResolveGroupByAll extends Rule[LogicalPlan] {
+
+  val ALL = "ALL"
+
+  /**
+   * Returns true iff this is a GROUP BY ALL aggregate. i.e. an Aggregate expression that has
+   * a single unresolved all grouping expression.
+   */
+  private def matchToken(a: Aggregate): Boolean = {
+    if (a.groupingExpressions.size != 1) {
+      return false
+    }
+    a.groupingExpressions.head match {
+      case a: UnresolvedAttribute => a.name.toUpperCase() == ALL
+      case _ => false
+    }
+  }
+
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-    _.containsAllPatterns(UNRESOLVED_STAR, AGGREGATE), ruleId) {
+    _.containsAllPatterns(UNRESOLVED_ATTRIBUTE, AGGREGATE), ruleId) {
     // Match a group by with a single unresolved star
-    case a: Aggregate if a.groupingExpressions == UnresolvedStar(None) :: Nil =>
+    case a: Aggregate if matchToken(a) =>
       // Only makes sense to do the rewrite once all the aggregate expressions have been resolved.
       // Otherwise, we might incorrectly pull an actual aggregate expression over to the grouping
       // expression list (because we don't know they would be aggregate expressions until resolved).
@@ -45,8 +62,8 @@ object ResolveGroupByStar extends Rule[LogicalPlan] {
         // (2) we simply fail to infer the grouping columns. As an example, in "i + sum(j)", we will
         // not automatically infer the grouping column to be "i".
         if (groupingExprs.isEmpty && a.aggregateExpressions.exists(containsAttribute)) {
-          // Case (2): don't replace the star. We will eventually tell the user in checkAnalysis
-          // that we cannot resolve the star in group by.
+          // Case (2): don't replace the ALL. We will eventually tell the user in checkAnalysis
+          // that we cannot resolve the all in group by.
           a
         } else {
           // Case (1): this is a valid global aggregate.
@@ -82,10 +99,10 @@ object ResolveGroupByStar extends Rule[LogicalPlan] {
    * end of analysis, so we can tell users that we fail to infer the grouping columns.
    */
   def checkAnalysis(operator: LogicalPlan): Unit = operator match {
-    case a: Aggregate if a.groupingExpressions == UnresolvedStar(None) :: Nil =>
+    case a: Aggregate if matchToken(a) =>
       if (a.aggregateExpressions.exists(_.exists(_.isInstanceOf[Attribute]))) {
         operator.failAnalysis(
-          errorClass = "UNRESOLVED_STAR_IN_GROUP_BY",
+          errorClass = "UNRESOLVED_ALL_IN_GROUP_BY",
           messageParameters = Map.empty)
       }
     case _ =>
