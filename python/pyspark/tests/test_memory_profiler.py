@@ -32,6 +32,9 @@ from pyspark.testing.sqlutils import have_pandas, pandas_requirement_message
 from pyspark.testing.utils import PySparkTestCase
 
 
+@unittest.skipIf(
+    "COVERAGE_PROCESS_START" in os.environ, "Flaky with coverage enabled, skipping for now."
+)
 @unittest.skipIf(not has_memory_profiler, "Must have memory-profiler installed.")
 @unittest.skipIf(not have_pandas, pandas_requirement_message)
 class MemoryProfilerTests(PySparkTestCase):

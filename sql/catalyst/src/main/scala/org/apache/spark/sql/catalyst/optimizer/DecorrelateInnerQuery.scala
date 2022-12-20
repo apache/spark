@@ -667,6 +667,18 @@ object DecorrelateInnerQuery extends PredicateHelper {
             val newJoin = j.copy(left = newLeft, right = newRight, condition = newCondition)
             (newJoin, newJoinCond, newOuterReferenceMap)
 
+          case g: Generate if g.requiredChildOutput.isEmpty =>
+            // Generate with non-empty required child output cannot host
+            // outer reference. It is blocked by CheckAnalysis.
+            val outerReferences = collectOuterReferences(g.expressions)
+            val newOuterReferences = parentOuterReferences ++ outerReferences
+            val (newChild, joinCond, outerReferenceMap) =
+              decorrelate(g.child, newOuterReferences, aggregated)
+            // Replace all outer references in the original generator expression.
+            val newGenerator = replaceOuterReference(g.generator, outerReferenceMap)
+            val newGenerate = g.copy(generator = newGenerator, child = newChild)
+            (newGenerate, joinCond, outerReferenceMap)
+
           case u: UnaryNode =>
             val outerReferences = collectOuterReferences(u.expressions)
             assert(outerReferences.isEmpty, s"Correlated column is not allowed in $u")
