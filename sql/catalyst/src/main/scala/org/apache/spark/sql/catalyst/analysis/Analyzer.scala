@@ -278,7 +278,6 @@ class Analyzer(override val catalogManager: CatalogManager)
       LookupFunctions),
     Batch("Keep Legacy Outputs", Once,
       KeepLegacyOutputs),
-
     Batch("Resolution", fixedPoint,
       new ResolveCatalogs(catalogManager) ::
       ResolveUserSpecifiedColumns ::
