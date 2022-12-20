@@ -52,15 +52,12 @@ class PathFilterIgnoreNonData(stagingDir: String) extends PathFilter with Serial
 }
 
 object CommandUtils extends Logging {
-  /** Change statistics after changing data by commands. */
+  /** Change table statistics after changing data by write metrics. */
   def updateTableStats(
       sparkSession: SparkSession,
       table: CatalogTable,
       newWriteStats: Option[CatalogStatistics] = None,
       isOverwrite: Boolean): Unit = {
-    if (!sparkSession.sessionState.conf.autoPartitionStatsticsUpdateEnabled) {
-      return
-    }
     val catalog = sparkSession.sessionState.catalog
     val oldTableStats = table.stats
     val newTableStats = if (isOverwrite) {
@@ -78,16 +75,13 @@ object CommandUtils extends Logging {
     catalog.alterTableStats(table.identifier, newTableStats)
   }
 
-  /** Change statistics after changing data by commands. */
+  /** Change partition statistics after changing data by write metrics. */
   def updatePartitionedTableStats(
       sparkSession: SparkSession,
       table: CatalogTable,
       partitionStats: Map[TablePartitionSpec, CatalogStatistics] = Map.empty,
       oldPartitions: Seq[CatalogTablePartition] = Seq.empty,
       isOverwrite: Boolean): Unit = {
-    if (!sparkSession.sessionState.conf.autoPartitionStatsticsUpdateEnabled) {
-      return
-    }
     val catalog = sparkSession.sessionState.catalog
     val newPartRows = partitionStats.flatMap(_._2.rowCount).sum
     val newPartBytes = partitionStats.map(_._2.sizeInBytes).sum
@@ -135,9 +129,6 @@ object CommandUtils extends Logging {
   def updateTableStats(
       sparkSession: SparkSession,
       table: CatalogTable): Unit = {
-    if (sparkSession.sessionState.conf.autoPartitionStatsticsUpdateEnabled) {
-      return
-    }
     val catalog = sparkSession.sessionState.catalog
     if (sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
       val newTable = catalog.getTableMetadata(table.identifier)
