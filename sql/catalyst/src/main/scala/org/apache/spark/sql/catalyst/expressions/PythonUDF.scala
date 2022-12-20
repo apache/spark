@@ -36,9 +36,13 @@ object PythonUDF {
     e.isInstanceOf[PythonUDF] && SCALAR_TYPES.contains(e.asInstanceOf[PythonUDF].evalType)
   }
 
+  def isGroupedAggPandasUDFEvalType(evalType: Int): Boolean = {
+    evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
+  }
+
   def isGroupedAggPandasUDF(e: Expression): Boolean = {
     e.isInstanceOf[PythonUDF] &&
-      e.asInstanceOf[PythonUDF].evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
+      isGroupedAggPandasUDFEvalType(e.asInstanceOf[PythonUDF].evalType)
   }
 
   // This is currently same as GroupedAggPandasUDF, but we might support new types in the future,
@@ -65,7 +69,7 @@ case class PythonUDF(
   override def toString: String = s"$name(${children.mkString(", ")})#${resultId.id}$typeSuffix"
 
   private def nodePatternsOfPythonFunction: Seq[TreePattern] = {
-    if (evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF) {
+    if (PythonUDF.isGroupedAggPandasUDFEvalType(evalType)) {
       Seq(AGGREGATE_EXPRESSION)
     } else {
       Seq.empty
