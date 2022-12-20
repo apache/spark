@@ -22,6 +22,7 @@ import java.util.concurrent.{CountDownLatch, Semaphore, TimeUnit}
 
 import scala.collection.mutable.ListBuffer
 
+import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfter
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Seconds, Span}
@@ -29,12 +30,7 @@ import org.scalatest.time.{Seconds, Span}
 import org.apache.spark.TestUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.connector.read.streaming
-import org.apache.spark.sql.execution.streaming.AsyncProgressTrackingMicroBatchExecution.{
-  ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS,
-  ASYNC_PROGRESS_TRACKING_ENABLED,
-  ASYNC_PROGRESS_TRACKING_OVERRIDE_SINK_SUPPORT_CHECK}
-import org.apache.spark.sql.execution.streaming.MicroBatchExecutionSuite.{
-  getBatchIdsSortedFromLog, getListOfFiles, MemoryStreamCapture}
+import org.apache.spark.sql.execution.streaming.AsyncProgressTrackingMicroBatchExecution.{ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS, ASYNC_PROGRESS_TRACKING_ENABLED, ASYNC_PROGRESS_TRACKING_OVERRIDE_SINK_SUPPORT_CHECK}
 import org.apache.spark.sql.functions.{column, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{StreamingQuery, StreamingQueryException, StreamTest, Trigger}
@@ -68,11 +64,42 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     }
   }
 
+  class MemoryStreamCapture[A: Encoder](
+                                         id: Int,
+                                         sqlContext: SQLContext,
+                                         numPartitions: Option[Int] = None)
+    extends MemoryStream[A](id, sqlContext, numPartitions = numPartitions) {
+
+    val commits = new ListBuffer[streaming.Offset]()
+    val commitThreads = new ListBuffer[Thread]()
+
+    override def commit(end: streaming.Offset): Unit = {
+      super.commit(end)
+      commits += end
+      commitThreads += Thread.currentThread()
+    }
+  }
+
+  def getListOfFiles(dir: String): List[File] = {
+    val d = new File(dir)
+    if (d.exists && d.isDirectory) {
+      d.listFiles.filter(_.isFile).toList
+    } else {
+      List[File]()
+    }
+  }
+
+  def getBatchIdsSortedFromLog(logPath: String): List[Int] = {
+    getListOfFiles(logPath)
+      .filter(file => !file.isHidden)
+      .map(file => file.getName.toInt)
+      .sorted
+  }
+
   // test the basic functionality i.e. happy path
   test("async WAL commits happy path") {
     val checkpointLocation = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
 
-//    val inputData = new MemoryStream[Int](id = 0, sqlContext = sqlContext)
     val inputData = MemoryStream[Int]
 
     val ds = inputData.toDF()
@@ -930,7 +957,10 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
      */
     val inputData2 = new MemoryStreamCapture[Int](id = 0, sqlContext = sqlContext)
     val ds2 = inputData2.toDS()
-    testStream(ds2)(
+    testStream(ds2, extraOptions = Map(
+      ASYNC_PROGRESS_TRACKING_ENABLED -> "true",
+      ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS -> "0"
+    ))(
       // add back old data
       AddData(inputData2, 0),
       AddData(inputData2, 1),
@@ -944,6 +974,13 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
       CheckNewAnswer(4),
       AddData(inputData2, 5),
       CheckNewAnswer(5),
+      Execute { q =>
+        waitPendingOffsetWrites(q)
+        eventually(timeout(Span(5, Seconds))) {
+          getBatchIdsSortedFromLog(checkpointLocation + "/offsets") should equal(Array(2, 3, 4, 5))
+          getBatchIdsSortedFromLog(checkpointLocation + "/commits") should equal(Array(2, 3, 4, 5))
+        }
+      },
       StopStream
     )
 
@@ -998,9 +1035,12 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     getBatchIdsSortedFromLog(checkpointLocation + "/commits") should equal(Array(0))
 
     /**
-     * Turn async progress tracking off and test recovery
+     * restart stream
      */
-    testStream(ds)(
+    testStream(ds, extraOptions = Map(
+      ASYNC_PROGRESS_TRACKING_ENABLED -> "true",
+      ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS -> "0"
+    ))(
       StartStream(checkpointLocation = checkpointLocation),
       AddData(inputData, 4),
       CheckNewAnswer(1, 2, 3, 4),
@@ -1013,159 +1053,6 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
 
     getBatchIdsSortedFromLog(checkpointLocation + "/commits") should equal(Array(0, 3, 4, 5))
 
-  }
-
-  test("switching async progress tracking with interval commits on and off") {
-
-    val inputData = new MemoryStreamCapture[Int](id = 0, sqlContext = sqlContext)
-    val ds = inputData.toDS()
-
-    val checkpointLocation = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
-
-    var clock = new StreamManualClock
-
-    testStream(
-      ds,
-      extraOptions = Map(
-        ASYNC_PROGRESS_TRACKING_ENABLED -> "true",
-        ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS -> "1000"
-      )
-    )(
-      // need to to set processing time to something so manual clock will work
-      StartStream(
-        Trigger.ProcessingTime("1 millisecond"),
-        checkpointLocation = checkpointLocation,
-        triggerClock = clock
-      ),
-      AddData(inputData, 0),
-      AdvanceManualClock(100),
-      CheckNewAnswer(0),
-      AddData(inputData, 1),
-      AdvanceManualClock(100),
-      CheckNewAnswer(1),
-      AddData(inputData, 2),
-      AdvanceManualClock(100),
-      CheckNewAnswer(2),
-      AddData(inputData, 3),
-      AdvanceManualClock(800), // should trigger offset commit write to durable storage
-      CheckNewAnswer(3),
-      Execute { q =>
-        waitPendingOffsetWrites(q)
-      },
-      StopStream
-    )
-
-    // batches 0 and 3 should be logged
-    getBatchIdsSortedFromLog(checkpointLocation + "/offsets") should equal(Array(0, 3))
-
-    getBatchIdsSortedFromLog(checkpointLocation + "/commits") should equal(Array(0, 3))
-
-    inputData.commits.length should be(0)
-
-    /**
-     * Turn async progress tracking off
-     */
-    testStream(ds)(
-      StartStream(checkpointLocation = checkpointLocation),
-      AddData(inputData, 4),
-      CheckNewAnswer(4),
-      Execute { q =>
-        inputData.commits.length should equal(1)
-        inputData.commits(0).json should equal(LongOffset(3).json)
-        inputData.commits.clear()
-      },
-      AddData(inputData, 5),
-      CheckNewAnswer(5),
-      Execute { q =>
-        inputData.commits.length should equal(1)
-        inputData.commits(0).json should equal(LongOffset(4).json)
-        inputData.commits.clear()
-      },
-      StopStream
-    )
-    // batches 0 and 3 should be logged
-    getBatchIdsSortedFromLog(checkpointLocation + "/offsets") should equal(Array(0, 3, 4, 5))
-
-    getBatchIdsSortedFromLog(checkpointLocation + "/commits") should equal(Array(0, 3, 4, 5))
-
-    /**
-     * Turn async progress tracking on
-     */
-    clock = new StreamManualClock
-
-    testStream(
-      ds,
-      extraOptions = Map(
-        ASYNC_PROGRESS_TRACKING_ENABLED -> "true",
-        ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS -> "1000"
-      )
-    )(
-      // need to to set processing time to something so manual clock will work
-      StartStream(
-        Trigger.ProcessingTime("1 millisecond"),
-        checkpointLocation = checkpointLocation,
-        triggerClock = clock
-      ),
-      AddData(inputData, 6), // will get persisted since first batch on restart
-      AdvanceManualClock(100),
-      CheckNewAnswer(6),
-      Execute { q =>
-        waitPendingOffsetWrites(q)
-      },
-      AddData(inputData, 7),
-      AdvanceManualClock(100),
-      CheckNewAnswer(7),
-      Execute { q =>
-        inputData.commits.length should equal(1)
-        inputData.commits(0).json should equal(LongOffset(5).json)
-        inputData.commits.clear()
-      },
-      AddData(inputData, 8),
-      AdvanceManualClock(100),
-      CheckNewAnswer(8),
-      AddData(inputData, 9),
-      AdvanceManualClock(800), //  persist offset
-      CheckNewAnswer(9),
-      Execute { q =>
-        waitPendingOffsetWrites(q)
-      },
-      StopStream
-    )
-
-    getBatchIdsSortedFromLog(checkpointLocation + "/offsets") should equal(Array(0, 3, 4, 5, 6, 9))
-
-    getBatchIdsSortedFromLog(checkpointLocation + "/commits") should equal(Array(0, 3, 4, 5, 6, 9))
-
-    // simulate batch 9 doesn't have a commit log
-    new File(checkpointLocation + "/commits/9").delete()
-    new File(checkpointLocation + "/commits/.9.crc").delete()
-
-    /**
-     * Turn async progress tracking off
-     */
-    testStream(ds)(
-      StartStream(checkpointLocation = checkpointLocation),
-      AddData(inputData, 10),
-      CheckNewAnswer(7, 8, 9, 10),
-      Execute { q =>
-        inputData.commits.length should equal(1)
-        inputData.commits(0).json should equal(LongOffset(9).json)
-        inputData.commits.clear()
-      },
-      AddData(inputData, 11),
-      CheckNewAnswer(11),
-      Execute { q =>
-        inputData.commits.length should equal(1)
-        inputData.commits(0).json should equal(LongOffset(10).json)
-        inputData.commits.clear()
-      },
-      StopStream
-    )
-    getBatchIdsSortedFromLog(checkpointLocation + "/offsets") should
-      equal(Array(0, 3, 4, 5, 6, 9, 10, 11))
-
-    getBatchIdsSortedFromLog(checkpointLocation + "/commits") should
-      equal(Array(0, 3, 4, 5, 6, 9, 10, 11))
   }
 
   test("Fail on stateful pipelines") {
@@ -1456,5 +1343,174 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
         )
       }
     }
+  }
+
+  test("test gaps in offset log") {
+    val inputData = MemoryStream[Int]
+    val streamEvent = inputData.toDF().select("value")
+
+    val resourceUri = this.getClass.getResource(
+      "/structured-streaming/checkpoint-test-offsetId-commitId-inconsistent/").toURI
+    val checkpointDir = Utils.createTempDir().getCanonicalFile
+    // Copy the checkpoint to a temp dir to prevent changes to the original.
+    // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
+    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+
+    // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
+    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+
+    testStream(streamEvent, extraOptions = Map(
+      ASYNC_PROGRESS_TRACKING_ENABLED -> "true",
+      ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS -> "0"
+    ))(
+      AddData(inputData, 0),
+      AddData(inputData, 1),
+      AddData(inputData, 2),
+      AddData(inputData, 3),
+      AddData(inputData, 4),
+      StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+      CheckAnswer(3, 4)
+    )
+
+  }
+
+  test("test multiple gaps in offset and commit logs") {
+    val inputData = new MemoryStreamCapture[Int](id = 0, sqlContext = sqlContext)
+    val ds = inputData.toDS()
+
+    val checkpointLocation = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
+
+    // create a scenario in which the offset log only
+    // contains batch 0, 2, 5 and commit log only contain 0, 2
+    testStream(ds, extraOptions = Map(
+      ASYNC_PROGRESS_TRACKING_ENABLED -> "true",
+      ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS -> "0"
+    ))(
+      StartStream(checkpointLocation = checkpointLocation),
+      AddData(inputData, 0),
+      CheckNewAnswer(0),
+      AddData(inputData, 1),
+      CheckNewAnswer(1),
+      AddData(inputData, 2),
+      CheckNewAnswer(2),
+      AddData(inputData, 3),
+      CheckNewAnswer(3),
+      AddData(inputData, 4),
+      CheckNewAnswer(4),
+      AddData(inputData, 5),
+      CheckNewAnswer(5),
+
+      StopStream
+    )
+
+    // delete all offset files except for batch 0, 2, 5
+    getListOfFiles(checkpointLocation + "/offsets")
+      .filterNot(f => f.getName.startsWith("0")
+        || f.getName.startsWith("2")
+        || f.getName.startsWith("5"))
+      .foreach(_.delete())
+
+    // delete all commit log files except for batch 0, 2
+    getListOfFiles(checkpointLocation + "/commits")
+      .filterNot(f => f.getName.startsWith("0") || f.getName.startsWith("2"))
+      .foreach(_.delete())
+
+    getBatchIdsSortedFromLog(checkpointLocation + "/offsets") should equal(Array(0, 2, 5))
+    getBatchIdsSortedFromLog(checkpointLocation + "/commits") should equal(Array(0, 2))
+
+    /**
+     * start new stream
+     */
+    val inputData2 = new MemoryStreamCapture[Int](id = 0, sqlContext = sqlContext)
+    val ds2 = inputData2.toDS()
+    testStream(ds2, extraOptions = Map(
+      ASYNC_PROGRESS_TRACKING_ENABLED -> "true",
+      ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS -> "0"
+    ))(
+      // add back old data
+      AddData(inputData2, 0),
+      AddData(inputData2, 1),
+      AddData(inputData2, 2),
+      AddData(inputData2, 3),
+      AddData(inputData2, 4),
+      AddData(inputData2, 5),
+      StartStream(checkpointLocation = checkpointLocation),
+      // since the offset log contains batches 0, 2, 5 and the commit log contains
+      // batches 0, 2.  This indicates that batch we have successfully processed up to batch 2.
+      // Thus the data we need to process / re-process is batches 3, 4, 5
+      CheckNewAnswer(3, 4, 5),
+      Execute { q =>
+        waitPendingOffsetWrites(q)
+        eventually(timeout(Span(5, Seconds))) {
+          getBatchIdsSortedFromLog(checkpointLocation + "/offsets") should equal(Array(0, 2, 5))
+          getBatchIdsSortedFromLog(checkpointLocation + "/commits") should equal(Array(0, 2, 5))
+        }
+      },
+      StopStream
+    )
+
+    getBatchIdsSortedFromLog(checkpointLocation + "/offsets") should equal(Array(0, 2, 5))
+    getBatchIdsSortedFromLog(checkpointLocation + "/commits") should equal(Array(0, 2, 5))
+  }
+
+  test("recovery when gaps exist in offset and commit log") {
+    val inputData = new MemoryStreamCapture[Int](id = 0, sqlContext = sqlContext)
+    val ds = inputData.toDS()
+
+    val checkpointLocation = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
+
+    // create a scenario in which the offset log only
+    // contains batch 0, 2 and commit log only contains 9
+    testStream(ds, extraOptions = Map(
+      ASYNC_PROGRESS_TRACKING_ENABLED -> "true",
+      ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS -> "0"
+    ))(
+      StartStream(checkpointLocation = checkpointLocation),
+      AddData(inputData, 0),
+      CheckNewAnswer(0),
+      AddData(inputData, 1),
+      CheckNewAnswer(1),
+      AddData(inputData, 2),
+      CheckNewAnswer(2),
+      StopStream
+    )
+
+    new File(checkpointLocation + "/offsets/1").delete()
+    new File(checkpointLocation + "/offsets/.1.crc").delete()
+    new File(checkpointLocation + "/commits/2").delete()
+    new File(checkpointLocation + "/commits/.2.crc").delete()
+    new File(checkpointLocation + "/commits/1").delete()
+    new File(checkpointLocation + "/commits/.1.crc").delete()
+
+    getBatchIdsSortedFromLog(checkpointLocation + "/offsets") should equal(Array(0, 2))
+    getBatchIdsSortedFromLog(checkpointLocation + "/commits") should equal(Array(0))
+
+    /**
+     * start new stream
+     */
+    val inputData2 = new MemoryStreamCapture[Int](id = 0, sqlContext = sqlContext)
+    val ds2 = inputData2.toDS()
+    testStream(ds2, extraOptions = Map(
+      ASYNC_PROGRESS_TRACKING_ENABLED -> "true",
+      ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS -> "0"
+    ))(
+      // add back old data
+      AddData(inputData2, 0),
+      AddData(inputData2, 1),
+      AddData(inputData2, 2),
+      StartStream(checkpointLocation = checkpointLocation),
+      // should replay from batch 1
+      CheckNewAnswer(1, 2),
+      AddData(inputData2, 3),
+      CheckNewAnswer(3),
+      AddData(inputData2, 4),
+      CheckNewAnswer(4),
+      AddData(inputData2, 5),
+      CheckNewAnswer(5),
+      StopStream
+    )
+
+    getBatchIdsSortedFromLog(checkpointLocation + "/offsets") should equal(Array(0, 2, 3, 4, 5))
+    getBatchIdsSortedFromLog(checkpointLocation + "/commits") should equal(Array(0, 2, 3, 4, 5))
   }
 }

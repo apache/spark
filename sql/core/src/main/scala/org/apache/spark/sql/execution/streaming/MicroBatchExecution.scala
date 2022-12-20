@@ -311,6 +311,28 @@ class MicroBatchExecution(
   }
 
   /**
+   * Conduct sanity checks on the offset log to make sure it is correct and expected.
+   * Also return the previous offset written to the offset log
+   * @param latestBatchId the batch id of the current micro batch
+   * @return A option that contains the offset of the previously written batch
+   */
+  def validateOffsetLogAndGetPrevOffset(latestBatchId: Long): Option[OffsetSeq] = {
+    if (latestBatchId != 0) {
+      Some(offsetLog.get(latestBatchId - 1).getOrElse {
+        logError(s"The offset log for batch ${latestBatchId - 1} doesn't exist, " +
+          s"which is required to restart the query from the latest batch $latestBatchId " +
+          "from the offset log. Please ensure there are two subsequent offset logs " +
+          "available for the latest batch via manually deleting the offset file(s). " +
+          "Please also ensure the latest batch for commit log is equal or one batch " +
+          "earlier than the latest batch for offset log.")
+        throw new IllegalStateException(s"batch ${latestBatchId - 1} doesn't exist")
+      })
+    } else {
+      None
+    }
+  }
+
+  /**
    * Populate the start offsets to start the execution at the current offsets stored in the sink
    * (i.e. avoid reprocessing data that we have already processed). This function must be called
    * before any processing occurs and will populate the following fields:
@@ -341,17 +363,10 @@ class MicroBatchExecution(
         currentBatchId = latestBatchId
         isCurrentBatchConstructed = true
         availableOffsets = nextOffsets.toStreamProgress(sources)
-        /* Initialize committed offsets to a committed batch, which at this
-         * is the second latest batch id in the offset log.
-         * The offset log may not be contiguous */
-        val prevBatchId = offsetLog.getPrevBatchFromStorage(latestBatchId)
-        if (latestBatchId != 0 && prevBatchId.isDefined) {
-          val secondLatestOffsets = offsetLog.get(prevBatchId.get).getOrElse({
-            throw new IllegalStateException(s"Offset metadata for batch ${prevBatchId}" +
-              s" cannot be found.  This should not happen.")
-          })
-          committedOffsets = secondLatestOffsets.toStreamProgress(sources)
-        }
+
+        // validate the integrity of offset log and get the previous offset from the offset log
+        val secondLatestOffsets = validateOffsetLogAndGetPrevOffset(latestBatchId)
+        secondLatestOffsets.foreach(offset => committedOffsets = offset.toStreamProgress(sources))
 
         // update offset metadata
         nextOffsets.metadata.foreach { metadata =>

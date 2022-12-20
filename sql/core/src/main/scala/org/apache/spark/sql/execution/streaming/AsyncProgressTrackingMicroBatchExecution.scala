@@ -93,6 +93,21 @@ class AsyncProgressTrackingMicroBatchExecution(
   override val commitLog =
     new AsyncCommitLog(sparkSession, checkpointFile("commits"), asyncWritesExecutorService)
 
+  override def validateOffsetLogAndGetPrevOffset(latestBatchId: Long): Option[OffsetSeq] = {
+    /* Initialize committed offsets to a committed batch, which at this
+     * is the second latest batch id in the offset log.
+     * The offset log may not be contiguous */
+    val prevBatchId = offsetLog.getPrevBatchFromStorage(latestBatchId)
+    if (latestBatchId != 0 && prevBatchId.isDefined) {
+      Some(offsetLog.get(prevBatchId.get).getOrElse({
+        throw new IllegalStateException(s"Offset metadata for batch ${prevBatchId}" +
+          s" cannot be found.  This should not happen.")
+      }))
+    } else {
+      None
+    }
+  }
+
   override def markMicroBatchExecutionStart(): Unit = {
     // check if streaming query is stateful
     checkNotStatefulStreamingQuery
@@ -157,8 +172,17 @@ class AsyncProgressTrackingMicroBatchExecution(
     watermarkTracker.updateWatermark(lastExecution.executedPlan)
     reportTimeTaken("commitOffsets") {
       // check if current batch there is a async write for the offset log is issued for this batch
-      // if so, we should do the same for commit log
-      if (offsetLog.getAsyncOffsetWrite(currentBatchId).nonEmpty) {
+      // if so, we should do the same for commit log.  However, if this is the first batch executed
+      // in this run we should always persis to the commit log.  There can be situations in which
+      // the offset log has more entries than the commit log and on restart we need to make sure
+      // we write the missing entries to the commit log.  For example if the offset log is 0, 2, 5
+      // and the commit log is 0, 2.  On restart we will re-process the data from batch 3 -> 5.
+      // Batch 5 is already part of the offset log but we still need to write the entry to
+      // the commit log
+      if (offsetLog.getAsyncOffsetWrite(currentBatchId).nonEmpty
+        || isFirstBatch) {
+        isFirstBatch = false
+
         commitLog
           .addAsync(currentBatchId, CommitMetadata(watermarkTracker.currentWatermark))
           .exceptionally((th: Throwable) => {
@@ -260,7 +284,6 @@ class AsyncProgressTrackingMicroBatchExecution(
             "Stateful streaming queries does not support async progress tracking at this moment."
           )
       }
-      isFirstBatch = false
     }
   }
 }
@@ -275,7 +298,7 @@ object AsyncProgressTrackingMicroBatchExecution {
     "_asyncProgressTrackingOverrideSinkSupportCheck"
 
   private def getAsyncProgressTrackingCheckpointingIntervalMs(
-                                                               extraOptions: Map[String, String]): Long = {
+    extraOptions: Map[String, String]): Long = {
     extraOptions
       .getOrElse(
         ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS,

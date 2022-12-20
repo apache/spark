@@ -19,18 +19,15 @@ package org.apache.spark.sql.execution.streaming
 
 import java.io.File
 
-import scala.collection.mutable.ListBuffer
-
 import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfter
 import org.scalatest.matchers.should._
 import org.scalatest.time.{Seconds, Span}
 
-import org.apache.spark.sql.{DataFrame, Dataset, Encoder, SparkSession, SQLContext}
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.connector.read.streaming
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
-import org.apache.spark.sql.execution.streaming.MicroBatchExecutionSuite.{getBatchIdsSortedFromLog, MemoryStreamCapture}
 import org.apache.spark.sql.functions.{count, timestamp_seconds, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{StreamingQueryException, StreamTest, Trigger}
@@ -162,7 +159,7 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Match
     )
   }
 
-  test("test gaps in offset log") {
+  test("SPARK-38033: SS cannot be started because the commitId and offsetId are inconsistent") {
     val inputData = MemoryStream[Int]
     val streamEvent = inputData.toDF().select("value")
 
@@ -174,136 +171,13 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Match
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
     FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
 
-    testStream(streamEvent)(
-      AddData(inputData, 0),
-      AddData(inputData, 1),
-      AddData(inputData, 2),
-      AddData(inputData, 3),
-      AddData(inputData, 4),
+    testStream(streamEvent) (
+      AddData(inputData, 1, 2, 3, 4, 5, 6),
       StartStream(Trigger.AvailableNow(), checkpointLocation = checkpointDir.getAbsolutePath),
-      CheckAnswer(3, 4)
+      ExpectFailure[IllegalStateException] { e =>
+        assert(e.getMessage.contains("batch 3 doesn't exist"))
+      }
     )
-  }
-
-  test("test multiple gaps in offset and commit logs") {
-    val inputData = new MemoryStreamCapture[Int](id = 0, sqlContext = sqlContext)
-    val ds = inputData.toDS()
-
-    val checkpointLocation = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
-
-    // create a scenario in which the offset log only
-    // contains batch 0, 2, 5 and commit log only contain 0, 2
-    testStream(ds)(
-      StartStream(checkpointLocation = checkpointLocation),
-      AddData(inputData, 0),
-      CheckNewAnswer(0),
-      AddData(inputData, 1),
-      CheckNewAnswer(1),
-      AddData(inputData, 2),
-      CheckNewAnswer(2),
-      AddData(inputData, 3),
-      CheckNewAnswer(3),
-      AddData(inputData, 4),
-      CheckNewAnswer(4),
-      AddData(inputData, 5),
-      CheckNewAnswer(5),
-
-      StopStream
-    )
-
-    // delete all offset files except for batch 0, 2, 5
-    getListOfFiles(checkpointLocation + "/offsets")
-      .filterNot(f => f.getName.startsWith("0")
-        || f.getName.startsWith("2")
-        || f.getName.startsWith("5"))
-      .foreach(_.delete())
-
-    // delete all commit log files except for batch 0, 2
-    getListOfFiles(checkpointLocation + "/commits")
-      .filterNot(f => f.getName.startsWith("0") || f.getName.startsWith("2"))
-      .foreach(_.delete())
-
-    getBatchIdsSortedFromLog(checkpointLocation + "/offsets") should equal(Array(0, 2, 5))
-    getBatchIdsSortedFromLog(checkpointLocation + "/commits") should equal(Array(0, 2))
-
-    /**
-     * start new stream
-     */
-    val inputData2 = new MemoryStreamCapture[Int](id = 0, sqlContext = sqlContext)
-    val ds2 = inputData2.toDS()
-    testStream(ds2)(
-      // add back old data
-      AddData(inputData2, 0),
-      AddData(inputData2, 1),
-      AddData(inputData2, 2),
-      AddData(inputData2, 3),
-      AddData(inputData2, 4),
-      AddData(inputData2, 5),
-      StartStream(checkpointLocation = checkpointLocation),
-      // since the offset log contains batches 0, 2, 5 and the commit log contains
-      // batches 0, 2.  This indicates that batch we have successfully processed up to batch 2.
-      // Thus the data we need to process / re-process is batches 3, 4, 5
-      CheckNewAnswer(3, 4, 5),
-      StopStream
-    )
-
-    getBatchIdsSortedFromLog(checkpointLocation + "/offsets") should equal(Array(0, 2, 5))
-    getBatchIdsSortedFromLog(checkpointLocation + "/commits") should equal(Array(0, 2, 5))
-  }
-
-  test("recovery when gaps in in offset and commit log") {
-    val inputData = new MemoryStreamCapture[Int](id = 0, sqlContext = sqlContext)
-    val ds = inputData.toDS()
-
-    val checkpointLocation = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
-
-    // create a scenario in which the offset log only
-    // contains batch 0, 2 and commit log only contains 9
-    testStream(ds)(
-      StartStream(checkpointLocation = checkpointLocation),
-      AddData(inputData, 0),
-      CheckNewAnswer(0),
-      AddData(inputData, 1),
-      CheckNewAnswer(1),
-      AddData(inputData, 2),
-      CheckNewAnswer(2),
-      StopStream
-    )
-
-    new File(checkpointLocation + "/offsets/1").delete()
-    new File(checkpointLocation + "/offsets/.1.crc").delete()
-    new File(checkpointLocation + "/commits/2").delete()
-    new File(checkpointLocation + "/commits/.2.crc").delete()
-    new File(checkpointLocation + "/commits/1").delete()
-    new File(checkpointLocation + "/commits/.1.crc").delete()
-
-    getBatchIdsSortedFromLog(checkpointLocation + "/offsets") should equal(Array(0, 2))
-    getBatchIdsSortedFromLog(checkpointLocation + "/commits") should equal(Array(0))
-
-    /**
-     * start new stream
-     */
-    val inputData2 = new MemoryStreamCapture[Int](id = 0, sqlContext = sqlContext)
-    val ds2 = inputData2.toDS()
-    testStream(ds2)(
-      // add back old data
-      AddData(inputData2, 0),
-      AddData(inputData2, 1),
-      AddData(inputData2, 2),
-      StartStream(checkpointLocation = checkpointLocation),
-      // should replay from batch 1
-      CheckNewAnswer(1, 2),
-      AddData(inputData2, 3),
-      CheckNewAnswer(3),
-      AddData(inputData2, 4),
-      CheckNewAnswer(4),
-      AddData(inputData2, 5),
-      CheckNewAnswer(5),
-      StopStream
-    )
-
-    getBatchIdsSortedFromLog(checkpointLocation + "/offsets") should equal(Array(0, 2, 3, 4, 5))
-    getBatchIdsSortedFromLog(checkpointLocation + "/commits") should equal(Array(0, 2, 3, 4, 5))
   }
 
   test("no-data-batch re-executed after restart should call V1 source.getBatch()") {
@@ -420,39 +294,5 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Match
         case _ => throw new IllegalArgumentException("incorrect offset type: " + offset)
       }
     }
-  }
-}
-
-object MicroBatchExecutionSuite {
-  class MemoryStreamCapture[A: Encoder](
-                                         id: Int,
-                                         sqlContext: SQLContext,
-                                         numPartitions: Option[Int] = None)
-    extends MemoryStream[A](id, sqlContext, numPartitions = numPartitions) {
-
-    val commits = new ListBuffer[streaming.Offset]()
-    val commitThreads = new ListBuffer[Thread]()
-
-    override def commit(end: streaming.Offset): Unit = {
-      super.commit(end)
-      commits += end
-      commitThreads += Thread.currentThread()
-    }
-  }
-
-  def getListOfFiles(dir: String): List[File] = {
-    val d = new File(dir)
-    if (d.exists && d.isDirectory) {
-      d.listFiles.filter(_.isFile).toList
-    } else {
-      List[File]()
-    }
-  }
-
-  def getBatchIdsSortedFromLog(logPath: String): List[Int] = {
-    getListOfFiles(logPath)
-      .filter(file => !file.isHidden)
-      .map(file => file.getName.toInt)
-      .sorted
   }
 }
