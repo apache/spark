@@ -40,7 +40,7 @@ case class BatchScanExec(
     keyGroupedPartitioning: Option[Seq[Expression]] = None,
     ordering: Option[Seq[SortOrder]] = None,
     @transient table: Table,
-    commonPartitionKeys: Option[Seq[InternalRow]] = None) extends DataSourceV2ScanExecBase {
+    commonPartitionValues: Option[Seq[InternalRow]] = None) extends DataSourceV2ScanExecBase {
 
   @transient lazy val batch = scan.toBatch
 
@@ -48,7 +48,7 @@ case class BatchScanExec(
   override def equals(other: Any): Boolean = other match {
     case other: BatchScanExec =>
       this.batch == other.batch && this.runtimeFilters == other.runtimeFilters &&
-          this.commonPartitionKeys == other.commonPartitionKeys
+          this.commonPartitionValues == other.commonPartitionValues
     case _ =>
       false
   }
@@ -114,9 +114,9 @@ case class BatchScanExec(
 
   override def outputPartitioning: Partitioning = {
     super.outputPartitioning match {
-      case k: KeyGroupedPartitioning if commonPartitionKeys.isDefined =>
-        val keys = commonPartitionKeys.get
-        k.copy(numPartitions = keys.length, partitionValuesOpt = Some(keys))
+      case k: KeyGroupedPartitioning if commonPartitionValues.isDefined =>
+        val values = commonPartitionValues.get
+        k.copy(numPartitions = values.length, partitionValuesOpt = Some(values))
       case p => p
     }
   }
@@ -135,7 +135,7 @@ case class BatchScanExec(
           val partitionMapping = finalPartitions.map(s =>
             s.head.asInstanceOf[HasPartitionKey].partitionKey() -> s).toMap
           finalPartitions = p.partitionValuesOpt.get.map { partKey =>
-            // Use empty partition for those partition keys that are not present
+            // Use empty partition for those partition values that are not present
             partitionMapping.getOrElse(partKey, Seq.empty)
           }
         case _ =>

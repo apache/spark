@@ -695,7 +695,7 @@ case class KeyGroupedShuffleSpec(
     //  4. the partition values, if present on both sides, are following the same order.
     case otherSpec @ KeyGroupedShuffleSpec(otherPartitioning, otherDistribution) =>
       distribution.clustering.length == otherDistribution.clustering.length &&
-        numPartitions == other.numPartitions && isExpressionsCompatible(otherSpec) &&
+        numPartitions == other.numPartitions && areKeysCompatible(otherSpec) &&
           partitioning.partitionValuesOpt.zip(otherPartitioning.partitionValuesOpt).forall {
             case (left, right) => left.zip(right).forall { case (l, r) =>
               ordering.compare(l, r) == 0
@@ -706,7 +706,9 @@ case class KeyGroupedShuffleSpec(
     case _ => false
   }
 
-  def isExpressionsCompatible(other: KeyGroupedShuffleSpec): Boolean = {
+  // Whether the partition keys (i.e., partition expressions) are compatible between this and the
+  // `other` spec.
+  def areKeysCompatible(other: KeyGroupedShuffleSpec): Boolean = {
     val expressions = partitioning.expressions
     val otherExpressions = other.partitioning.expressions
 

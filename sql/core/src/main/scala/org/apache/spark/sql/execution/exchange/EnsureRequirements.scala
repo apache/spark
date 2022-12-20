@@ -151,12 +151,13 @@ case class EnsureRequirements(
         case spec => spec
       }
 
-      def populatePartitionKeys(plan: SparkPlan, keys: Seq[InternalRow]): SparkPlan =
+      // Populate the common partition values down to the scan nodes
+      def populatePartitionValues(plan: SparkPlan, values: Seq[InternalRow]): SparkPlan =
         plan match {
           case scan: BatchScanExec =>
-            scan.copy(commonPartitionKeys = Some(keys))
+            scan.copy(commonPartitionValues = Some(values))
           case node =>
-            node.mapChildren(child => populatePartitionKeys(child, keys))
+            node.mapChildren(child => populatePartitionValues(child, values))
         }
 
       // Check if 1) all children are of `KeyGroupedPartitioning` and 2) they are all compatible
@@ -170,11 +171,11 @@ case class EnsureRequirements(
           isCompatible = specs(left).isCompatibleWith(specs(right))
 
           // If `isCompatible` is false, it could mean:
-          //   1. Partition expressions are not compatible: we have to shuffle in this case.
-          //   2. Partition expressions are compatible, but partition keys are not: in this case we
-          //      can compute a superset of partition keys and push-down to respective
+          //   1. Partition keys (expressions) are not compatible: we have to shuffle in this case.
+          //   2. Partition keys (expressions) are compatible, but partition values are not: in this
+          //      case we can compute a superset of partition values and push-down to respective
           //      data sources, which can then adjust their respective output partitioning by
-          //      filling missing partition keys with empty partitions. As result, Spark can still
+          //      filling missing partition values with empty partitions. As result, Spark can still
           //      avoid shuffle.
           //
           // For instance, if two sides of a join have partition expressions `day(a)` and `day(b)`
@@ -187,28 +188,30 @@ case class EnsureRequirements(
           if (!isCompatible && conf.v2BucketingPushPartKeysEnabled) {
             (getRootSpec(specs(left)), getRootSpec(specs(right))) match {
               case (leftSpec: KeyGroupedShuffleSpec, rightSpec: KeyGroupedShuffleSpec) =>
-                // Check if the two children are partition expression compatible. If so, find the
-                // common set of partition keys, and adjust the plan accordingly.
-                if (leftSpec.isExpressionsCompatible(rightSpec)) {
+                // Check if the two children are partition keys compatible. If so, find the
+                // common set of partition values, and adjust the plan accordingly.
+                if (leftSpec.areKeysCompatible(rightSpec)) {
                   assert(leftSpec.partitioning.partitionValuesOpt.isDefined)
                   assert(rightSpec.partitioning.partitionValuesOpt.isDefined)
 
-                  val leftPartKeys = leftSpec.partitioning.partitionValuesOpt.get
-                  val rightPartKeys = rightSpec.partitioning.partitionValuesOpt.get
+                  val leftPartValues = leftSpec.partitioning.partitionValuesOpt.get
+                  val rightPartValues = rightSpec.partitioning.partitionValuesOpt.get
 
-                  val mergedPartKeys = Utils.mergeOrdered(
-                    Seq(leftPartKeys, rightPartKeys))(leftSpec.ordering).toSeq.distinct
+                  val mergedPartValues = Utils.mergeOrdered(
+                    Seq(leftPartValues, rightPartValues))(leftSpec.ordering).toSeq.distinct
 
                   // Now we need to push-down the common partition key to the scan in each child
                   children = children.zipWithIndex.map {
                     case (child, idx) if childrenIndexes.contains(idx) =>
-                      populatePartitionKeys(child, mergedPartKeys)
+                      populatePartitionValues(child, mergedPartValues)
                     case (child, _) => child
                   }
 
                   isCompatible = true
                 }
-              case _ => // This case shouldn't happen
+              case _ =>
+                // This case shouldn't happen since `checkKeyGroupedSpec` should've made
+                // sure that we only have `KeyGroupedShuffleSpec`
             }
           }
         }
