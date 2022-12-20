@@ -2471,7 +2471,7 @@ class Analyzer(override val catalogManager: CatalogManager)
                 messageParameters = Map("name" -> u.name.quoted))
           }
           // If alias names assigned, add `Project` with the aliases
-          if (u.outputNames.nonEmpty) {
+          if (resolvedFunc.resolved && u.outputNames.nonEmpty) {
             val outputAttrs = resolvedFunc.output
             // Checks if the number of the aliases is equal to expected one
             if (u.outputNames.size != outputAttrs.size) {
@@ -3184,6 +3184,8 @@ class Analyzer(override val catalogManager: CatalogManager)
         g.copy(generator = generator, outer = true)
 
       case g: Generate => g
+
+      case u: UnresolvedTableValuedFunction => u
 
       case p if p.expressions.exists(hasGenerator) =>
         throw QueryCompilationErrors.generatorOutsideSelectError(p)
