@@ -23,9 +23,9 @@ class Dataset(val session: SparkSession, private[client] val plan: proto.Plan) {
 
   /**
    * Placeholder method.
-   * @return
+   * @return An empty Array of [[Row]]s.
    */
   def collect(): Array[Row] = {
-    new Array[Row](1)
+    new Array[Row](0)
   }
 }

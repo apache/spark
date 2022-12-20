@@ -17,20 +17,13 @@
 
 package org.apache.spark.sql.connect.client
 
-import scala.language.existentials
-
-import io.grpc.{ManagedChannel, ManagedChannelBuilder}
 import org.apache.arrow.memory.RootAllocator
 
 import org.apache.spark.SPARK_VERSION
 import org.apache.spark.connect.proto
 
 
-class SparkSession(
-    private val userContext: proto.UserContext,
-    private val channel: ManagedChannel)
-  extends AutoCloseable {
-  private[this] val stub = proto.SparkConnectServiceGrpc.newBlockingStub(channel)
+class SparkSession(private val userContext: proto.UserContext) extends AutoCloseable {
 
   private[this] val allocator = new RootAllocator()
 
@@ -54,7 +47,7 @@ class SparkSession(
    * in a range from `start` to `end` (exclusive) with a step value, with partition number
    * specified.
    *
-   * @since 2.0.0
+   * @since 3.4.0
    */
   def range(start: Long, end: Long, step: Long, numPartitions: Int): Dataset = {
     range(start, end, step, Option(numPartitions))
@@ -74,7 +67,7 @@ class SparkSession(
    * Executes a SQL query using Spark, returning the result as a `DataFrame`.
    * This API eagerly runs DDL/DML commands, but not for SELECT queries.
    *
-   * @since 2.0.0
+   * @since 3.4.0
    */
   def sql(query: String): Dataset = newDataset { builder =>
     builder.setSql(proto.SQL.newBuilder().setQuery(query))
@@ -87,16 +80,10 @@ class SparkSession(
     new Dataset(this, plan)
   }
 
-  private[client] def analyze(plan: proto.Plan): proto.AnalyzePlanResponse = {
-    val request = proto.AnalyzePlanRequest.newBuilder()
-      .setPlan(plan)
-      .setUserContext(userContext)
-      .build()
-    stub.analyzePlan(request)
-  }
+  private[client] def analyze(plan: proto.Plan): proto.AnalyzePlanResponse =
+    throw  new UnsupportedOperationException()
 
   override def close(): Unit = {
-    channel.shutdownNow()
     allocator.close()
   }
 }
@@ -106,19 +93,6 @@ object SparkSession {
 
   class Builder() {
     private val userContextBuilder = proto.UserContext.newBuilder()
-    private var _host: String = "localhost"
-    private var _port: Int = 15002
-
-    def host(host: String): Builder = {
-      require(host != null)
-      _host = host
-      this
-    }
-
-    def port(port: Int): Builder = {
-      _port = port
-      this
-    }
 
     def userId(id: String): Builder = {
       userContextBuilder.setUserId(id)
@@ -126,8 +100,7 @@ object SparkSession {
     }
 
     def build(): SparkSession = {
-      val channelBuilder = ManagedChannelBuilder.forAddress(_host, _port).usePlaintext()
-      new SparkSession(userContextBuilder.build(), channelBuilder.build())
+      new SparkSession(userContextBuilder.build())
     }
   }
 }
