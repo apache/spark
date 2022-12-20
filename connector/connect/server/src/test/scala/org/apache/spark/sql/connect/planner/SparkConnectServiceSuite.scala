@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.connect.planner
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import io.grpc.StatusRuntimeException
@@ -26,6 +27,7 @@ import org.apache.arrow.vector.ipc.ArrowStreamReader
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.dsl.MockRemoteSession
+import org.apache.spark.sql.connect.dsl.expressions._
 import org.apache.spark.sql.connect.dsl.plans._
 import org.apache.spark.sql.connect.service.{SparkConnectAnalyzeHandler, SparkConnectService}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -291,6 +293,73 @@ class SparkConnectServiceSuite extends SharedSparkSession {
       assert(response.getExplain.getExplainString.contains("Analyzed Logical Plan"))
       assert(response.getExplain.getExplainString.contains("Optimized Logical Plan"))
       assert(response.getExplain.getExplainString.contains("Physical Plan"))
+    }
+  }
+
+  test("Test observe response") {
+    withTable("test") {
+      spark.sql("""
+                  | CREATE TABLE test (col1 INT, col2 STRING)
+                  | USING parquet
+                  |""".stripMargin)
+
+      val instance = new SparkConnectService(false)
+
+      val connect = new MockRemoteSession()
+      val context = proto.UserContext
+        .newBuilder()
+        .setUserId("c1")
+        .build()
+      val collectMetrics = proto.Relation
+        .newBuilder()
+        .setCollectMetrics(
+          proto.CollectMetrics
+            .newBuilder()
+            .setInput(connect.sql("select id, exp(id) as eid from range(0, 100, 1, 4)"))
+            .setName("my_metric")
+            .setIsObservation(true)
+            .addAllMetrics(Seq(proto_min("id".protoAttr).as("min_val")).asJava))
+        .build()
+      val plan = proto.Plan
+        .newBuilder()
+        .setRoot(collectMetrics)
+        .build()
+      val request = proto.ExecutePlanRequest
+        .newBuilder()
+        .setPlan(plan)
+        .setUserContext(context)
+        .build()
+
+      // Execute plan.
+      @volatile var done = false
+      val responses = mutable.Buffer.empty[proto.ExecutePlanResponse]
+      instance.executePlan(
+        request,
+        new StreamObserver[proto.ExecutePlanResponse] {
+          override def onNext(v: proto.ExecutePlanResponse): Unit = responses += v
+
+          override def onError(throwable: Throwable): Unit = throw throwable
+
+          override def onCompleted(): Unit = done = true
+        })
+
+      // The current implementation is expected to be blocking. This is here to make sure it is.
+      assert(done)
+
+      assert(responses.size == 6)
+
+      // Make sure the last response is observed metrics only
+      val last = responses.last
+      assert(last.hasObservedMetrics && !last.hasArrowBatch)
+
+      val observedMetrics = last.getObservedMetrics
+      assert(observedMetrics.getMetricsObjectsCount == 1)
+      val metricsObjectsList = observedMetrics.getMetricsObjectsList.asScala
+      val metricsObject = metricsObjectsList.head
+      assert(metricsObject.getName == "my_metric")
+      assert(metricsObject.getValuesCount == 1)
+      val valuesList = metricsObject.getValuesList.asScala
+      assert(valuesList.head == "0")
     }
   }
 }

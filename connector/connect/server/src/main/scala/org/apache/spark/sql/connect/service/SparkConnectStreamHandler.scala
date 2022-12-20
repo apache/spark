@@ -22,11 +22,12 @@ import scala.collection.JavaConverters._
 import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanRequest, ExecutePlanResponse}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.serializer.JavaSerializer
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
@@ -39,6 +40,8 @@ import org.apache.spark.util.ThreadUtils
 
 class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResponse])
     extends Logging {
+
+  val serializer = new JavaSerializer(new SparkConf()).newInstance
 
   def handle(v: ExecutePlanRequest): Unit = {
     val session =
@@ -206,7 +209,30 @@ object SparkConnectStreamHandler {
       .setMetrics(MetricGenerator.buildMetrics(rows.queryExecution.executedPlan))
       .build()
   }
-}
+
+  private def sendObservedMetricsToResponse(
+      clientId: String,
+      observedMetrics: Map[String, Row]): ExecutePlanResponse = {
+    val metricsObjects = observedMetrics.map { case (name, row) =>
+      val cols = (0 until row.length).map(row(_).toString)
+      ExecutePlanResponse.ObservedMetrics.ObservedMetricsObject
+        .newBuilder()
+        .setName(name)
+        .addAllValues(cols.asJava)
+        .build()
+    }
+    // Send the observed metrics
+    ExecutePlanResponse
+      .newBuilder()
+      .setClientId(clientId)
+      .setObservedMetrics(
+        ExecutePlanResponse.ObservedMetrics
+          .newBuilder()
+          .addAllMetricsObjects(metricsObjects.asJava)
+          .build()
+      )
+      .build()
+  }
 
 object MetricGenerator extends AdaptiveSparkPlanHelper {
   def buildMetrics(p: SparkPlan): ExecutePlanResponse.Metrics = {

@@ -1648,16 +1648,27 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             .toPandas(),
         )
 
-        self.assert_eq(
+        observation_name = "my_metric"
+        observation = Observation(observation_name)
+        cdf = (
             self.connect.read.table(self.tbl_name)
             .filter("id > 3")
-            .observe(Observation("my_metric"), CF.min("id"), CF.max("id"), CF.sum("id"))
-            .toPandas(),
+            .observe(observation, CF.min("id"), CF.max("id"), CF.sum("id"))
+            .toPandas()
+        )
+        df = (
             self.spark.read.table(self.tbl_name)
             .filter("id > 3")
-            .observe(Observation("my_metric"), SF.min("id"), SF.max("id"), SF.sum("id"))
-            .toPandas(),
+            .observe(observation, SF.min("id"), SF.max("id"), SF.sum("id"))
+            .toPandas()
         )
+
+        self.assert_eq(cdf, df)
+
+        observed_metrics = cdf.attrs["observed_metrics"]
+        first_metrics = observed_metrics[0]
+        self.assert_eq(first_metrics.name, observation_name)
+        self.assert_eq(first_metrics.metrics, [["4", "99", "4944"]])
 
     def test_with_columns(self):
         # SPARK-41256: test withColumn(s).

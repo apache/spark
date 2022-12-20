@@ -236,6 +236,9 @@ message ExecutePlanResponse {
   // batch of results and then represent the overall state of the query execution.
   Metrics metrics = 4;
 
+  // The metrics observed during the execution of the query plan.
+  ObservedMetrics observed_metrics = 5;
+
   // A SQL command returns an opaque Relation that can be directly used as input for the next
   // call.
   message SqlCommandResult {
@@ -263,6 +266,16 @@ message ExecutePlanResponse {
       string name = 1;
       int64 value = 2;
       string metric_type = 3;
+    }
+  }
+
+  message ObservedMetrics {
+
+    repeated ObservedMetricsObject metrics_objects = 1;
+
+    message ObservedMetricsObject {
+      string name = 1;
+      repeated string values = 2;
     }
   }
 }

@@ -373,6 +373,23 @@ class PlanMetrics:
         return self._metrics
 
 
+class PlanObservedMetrics:
+    def __init__(self, name: str, metrics: List[str]):
+        self._name = name
+        self._metrics = metrics
+
+    def __repr__(self) -> str:
+        return f"Plan observed({self._name})={self._metrics}"
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def metrics(self) -> List[str]:
+        return self._metrics
+
+
 class AnalyzeResult:
     def __init__(
         self,
@@ -559,6 +576,17 @@ class SparkConnectClient(object):
                 [MetricValue(k, v.value, v.metric_type) for k, v in x.execution_metrics.items()],
             )
             for x in metrics.metrics
+        ]
+
+    def _build_observed_metrics(
+        self, metrics: "pb2.ExecutePlanResponse.ObservedMetrics"
+    ) -> List[PlanObservedMetrics]:
+        return [
+            PlanObservedMetrics(
+                x.name,
+                [x.values],
+            )
+            for x in metrics.metrics_objects
         ]
 
     def to_table(self, plan: pb2.Plan) -> "pa.Table":
@@ -785,6 +813,7 @@ class SparkConnectClient(object):
         logger.info("ExecuteAndFetch")
 
         m: Optional[pb2.ExecutePlanResponse.Metrics] = None
+        om: Optional[pb2.ExecutePlanResponse.ObservedMetrics] = None
         batches: List[pa.RecordBatch] = []
         properties = {}
         try:
@@ -802,6 +831,9 @@ class SparkConnectClient(object):
                         if b.metrics is not None:
                             logger.debug("Received metric batch.")
                             m = b.metrics
+                        if b.observed_metrics is not None:
+                            logger.debug("Received observed metric batch.")
+                            om = b.observed_metrics
                         if b.HasField("sql_command_result"):
                             properties["sql_command_result"] = b.sql_command_result.relation
                         if b.HasField("arrow_batch"):
@@ -817,6 +849,7 @@ class SparkConnectClient(object):
         except grpc.RpcError as rpc_error:
             self._handle_error(rpc_error)
         metrics: List[PlanMetrics] = self._build_metrics(m) if m is not None else []
+        observed_metrics: List[PlanObservedMetrics] = self._build_observed_metrics(om) if om is not None else []
 
         if len(batches) > 0:
             table = pa.Table.from_batches(batches=batches)
