@@ -16,14 +16,20 @@
  */
 package org.apache.spark.sql.connect.client
 
+import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 import org.apache.spark.connect.proto
-import org.apache.spark.sql.Row
 
-class Dataset(val session: SparkSession, private[client] val plan: proto.Plan) {
+class SparkConnectClientSuite extends AnyFunSuite { // scalastyle:ignore funsuite
 
-  /**
-   * Placeholder method.
-   * @return An empty Array of [[Row]]s.
-   */
-  def collect(): Array[Row] = throw new UnsupportedOperationException()
+  private def getSparkSession = {
+    new SparkSession(proto.UserContext.newBuilder().build())
+  }
+
+  test("Placeholder test: Create SparkSession and Dataset") {
+    val sparkSession = getSparkSession
+    val dataset = sparkSession.range(0, 2, 1, 1)
+    assertThrows[UnsupportedOperationException] {
+      dataset.collect()
+    }
+  }
 }
