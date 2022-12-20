@@ -681,7 +681,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     assert(
       executedPlan.find {
         case WholeStageCodegenExec(
-          HashAggregateExec(_, _, _, _, _, _, _: LocalTableScanExec)) => true
+          HashAggregateExec(_, _, _, _, _, _, _, _, _: LocalTableScanExec)) => true
         case _ => false
       }.isDefined,
       "LocalTableScanExec should be within a WholeStageCodegen domain.")

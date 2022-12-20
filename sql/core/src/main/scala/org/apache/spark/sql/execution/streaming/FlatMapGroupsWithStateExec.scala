@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, SortOrder, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution}
+import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper._
 import org.apache.spark.sql.execution.streaming.state._
@@ -93,8 +93,10 @@ case class FlatMapGroupsWithStateExec(
    * to have the same grouping so that the data are co-lacated on the same task.
    */
   override def requiredChildDistribution: Seq[Distribution] = {
-    ClusteredDistribution(groupingAttributes, stateInfo.map(_.numPartitions)) ::
-    ClusteredDistribution(initialStateGroupAttrs, stateInfo.map(_.numPartitions)) ::
+    StatefulOperatorPartitioning.getCompatibleDistribution(
+      groupingAttributes, getStateInfo, conf) ::
+    StatefulOperatorPartitioning.getCompatibleDistribution(
+      initialStateGroupAttrs, getStateInfo, conf) ::
       Nil
   }
 
@@ -167,12 +169,20 @@ case class FlatMapGroupsWithStateExec(
           timeoutProcessingStartTimeNs = System.nanoTime
         })
 
-    val timeoutProcessorIter =
-      CompletionIterator[InternalRow, Iterator[InternalRow]](processor.processTimedOutState(), {
-        // Note: `timeoutLatencyMs` also includes the time the parent operator took for
-        // processing output returned through iterator.
-        timeoutLatencyMs += NANOSECONDS.toMillis(System.nanoTime - timeoutProcessingStartTimeNs)
-      })
+    // SPARK-38320: Late-bind the timeout processing iterator so it is created *after* the input is
+    // processed (the input iterator is exhausted) and the state updates are written into the
+    // state store. Otherwise the iterator may not see the updates (e.g. with RocksDB state store).
+    val timeoutProcessorIter = new Iterator[InternalRow] {
+      private lazy val itr = getIterator()
+      override def hasNext = itr.hasNext
+      override def next() = itr.next()
+      private def getIterator(): Iterator[InternalRow] =
+        CompletionIterator[InternalRow, Iterator[InternalRow]](processor.processTimedOutState(), {
+          // Note: `timeoutLatencyMs` also includes the time the parent operator took for
+          // processing output returned through iterator.
+          timeoutLatencyMs += NANOSECONDS.toMillis(System.nanoTime - timeoutProcessingStartTimeNs)
+        })
+    }
 
     // Generate a iterator that returns the rows grouped by the grouping function
     // Note that this code ensures that the filtering for timeout occurs only after

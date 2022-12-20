@@ -112,7 +112,7 @@ class HealthTrackerIntegrationSuite extends SchedulerIntegrationSuite[MultiExecu
       backend.taskFailed(taskDescription, new RuntimeException("test task failure"))
     }
     withBackend(runBackend _) {
-      val jobFuture = submit(new MockRDD(sc, 10, Nil), (0 until 10).toArray)
+      val jobFuture = submit(new MockRDD(sc, 10, Nil, Nil), (0 until 10).toArray)
       awaitJobTermination(jobFuture, duration)
       val pattern = (
         s"""|Aborting TaskSet 0.0 because task .*
@@ -150,7 +150,7 @@ class MockRDDWithLocalityPrefs(
     sc: SparkContext,
     numPartitions: Int,
     shuffleDeps: Seq[ShuffleDependency[Int, Int, Nothing]],
-    val preferredLoc: String) extends MockRDD(sc, numPartitions, shuffleDeps) {
+    val preferredLoc: String) extends MockRDD(sc, numPartitions, shuffleDeps, Nil) {
   override def getPreferredLocations(split: Partition): Seq[String] = {
     Seq(preferredLoc)
   }

@@ -562,6 +562,8 @@ private[kafka010] object KafkaSourceProvider extends Logging {
     "startingoffsetsbytimestampstrategy"
   private val GROUP_ID_PREFIX = "groupidprefix"
   private[kafka010] val INCLUDE_HEADERS = "includeheaders"
+  // This is only for internal testing and should not be used otherwise.
+  private[kafka010] val MOCK_SYSTEM_TIME = "_mockSystemTime"
 
   private[kafka010] object StrategyOnNoMatchStartingOffset extends Enumeration {
     val ERROR, LATEST = Value

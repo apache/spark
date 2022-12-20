@@ -268,7 +268,7 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
     val gm1 = new GaussianMixture().setK(k).setMaxIter(20).setSeed(seed)
     val gm2 = new GaussianMixture().setK(k).setMaxIter(20).setSeed(seed).setWeightCol("weight")
 
-    Seq(1.0, 10.0, 100.0).foreach { w =>
+    Seq(1.0, 10.0, 90.0).foreach { w =>
       val gmm1 = gm1.fit(dataset)
       val ds2 = dataset.select(col("features"), lit(w).as("weight"))
       val gmm2 = gm2.fit(ds2)

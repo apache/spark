@@ -23,7 +23,7 @@ import java.util.Properties
 
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.types.{BooleanType, ByteType, ShortType, StructType}
 import org.apache.spark.tags.DockerTest
@@ -197,5 +197,24 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
          |OPTIONS (url '$jdbcUrl', query '$query')
        """.stripMargin.replaceAll("\n", " "))
     assert(sql("select x, y from queryOption").collect.toSet == expectedResult)
+  }
+
+  test("SPARK-30062") {
+    val expectedResult = Set(
+      (42, "fred"),
+      (17, "dave")
+    ).map { case (x, y) =>
+      Row(Integer.valueOf(x), String.valueOf(y))
+    }
+    val df = sqlContext.read.jdbc(jdbcUrl, "tbl", new Properties)
+    for (_ <- 0 to 2) {
+      df.write.mode(SaveMode.Append).jdbc(jdbcUrl, "tblcopy", new Properties)
+    }
+    assert(sqlContext.read.jdbc(jdbcUrl, "tblcopy", new Properties).count === 6)
+    df.write.mode(SaveMode.Overwrite).option("truncate", true)
+      .jdbc(jdbcUrl, "tblcopy", new Properties)
+    val actual = sqlContext.read.jdbc(jdbcUrl, "tblcopy", new Properties).collect
+    assert(actual.length === 2)
+    assert(actual.toSet === expectedResult)
   }
 }

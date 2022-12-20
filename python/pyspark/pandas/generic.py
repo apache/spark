@@ -573,7 +573,7 @@ class Frame(object, metaclass=ABCMeta):
         >>> ps.Series(['a', 'b', 'a']).to_numpy()
         array(['a', 'b', 'a'], dtype=object)
         """
-        return self.to_pandas().values
+        return cast(np.ndarray, self.to_pandas().values)
 
     @property
     def values(self) -> np.ndarray:
@@ -952,7 +952,7 @@ class Frame(object, metaclass=ABCMeta):
             This parameter only works when `path` is specified.
 
         Returns
-        --------
+        -------
         str or None
 
         Examples
@@ -1459,7 +1459,16 @@ class Frame(object, metaclass=ABCMeta):
                         spark_type_to_pandas_dtype(spark_type), spark_type.simpleString()
                     )
                 )
-            return F.skewness(spark_column)
+
+            count_scol = F.count(F.when(~spark_column.isNull(), 1).otherwise(None))
+            # refer to the Pandas implementation 'nanskew'
+            # https://github.com/pandas-dev/pandas/blob/main/pandas/core/nanops.py#L1152
+            return F.when(
+                count_scol > 2,
+                F.skewness(spark_column)
+                * F.sqrt(1 - 1 / count_scol)
+                * (count_scol / (count_scol - 2)),
+            ).otherwise(None)
 
         return self._reduce_for_stat_function(
             skew, name="skew", axis=axis, numeric_only=numeric_only
@@ -2307,7 +2316,7 @@ class Frame(object, metaclass=ABCMeta):
         the object does not have exactly 1 element, or that element is not boolean
 
         Returns
-        --------
+        -------
         bool
 
         Examples

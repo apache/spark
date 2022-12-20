@@ -113,3 +113,7 @@ drop table char_tbl1;
 drop table char_tbl2;
 drop table char_tbl3;
 drop table char_tbl4;
+
+-- ascii value for Latin-1 Supplement characters
+select ascii('§'), ascii('÷'), ascii('×10');
+select chr(167), chr(247), chr(215);

@@ -357,7 +357,7 @@ Security options for the Spark History Server are covered more detail in the
   </tr>
   <tr>
     <td>spark.history.custom.executor.log.url.applyIncompleteApplication</td>
-    <td>false</td>
+    <td>true</td>
     <td>
         Specifies whether to apply custom spark executor log URL to incomplete applications as well.
         If executor logs for running applications should be provided as origin log URLs, set this to `false`.

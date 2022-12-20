@@ -22,9 +22,10 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
+import org.apache.spark.sql.catalyst.optimizer.{BooleanSimplification, DecorrelateInnerQuery, InlineCTE}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_WINDOW_EXPRESSION
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsPartitionManagement}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -90,8 +91,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
   def checkAnalysis(plan: LogicalPlan): Unit = {
     // We transform up and order the rules so as to catch the first possible failure instead
-    // of the result of cascading resolution failures.
-    plan.foreachUp {
+    // of the result of cascading resolution failures. Inline all CTEs in the plan to help check
+    // query plan structures in subqueries.
+    val inlineCTE = InlineCTE(alwaysInline = true)
+    inlineCTE(plan).foreachUp {
 
       case p if p.analyzed => // Skip already analyzed sub-plans
 
@@ -200,7 +203,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             failAnalysis("grouping_id() can only be used with GroupingSets/Cube/Rollup")
 
           case e: Expression if e.children.exists(_.isInstanceOf[WindowFunction]) &&
-              !e.isInstanceOf[WindowExpression] =>
+              !e.isInstanceOf[WindowExpression] && e.resolved =>
             val w = e.children.find(_.isInstanceOf[WindowFunction]).get
             failAnalysis(s"Window function $w requires an OVER clause.")
 
@@ -474,6 +477,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             failAnalysis(
               s"""Only a single table generating function is allowed in a SELECT clause, found:
                  | ${exprs.map(_.sql).mkString(",")}""".stripMargin)
+
+          case p @ Project(projectList, _) =>
+            projectList.foreach(_.transformDownWithPruning(
+              _.containsPattern(UNRESOLVED_WINDOW_EXPRESSION)) {
+              case UnresolvedWindowExpression(_, windowSpec) =>
+                throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowSpec.name)
+            })
 
           case j: Join if !j.duplicateResolved =>
             val conflictingAttributes = j.left.outputSet.intersect(j.right.outputSet)
@@ -805,31 +815,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       }
     }
 
-    def containsAttribute(e: Expression): Boolean = {
-      e.find(_.isInstanceOf[Attribute]).isDefined
-    }
-
-    // Given a correlated predicate, check if it is either a non-equality predicate or
-    // equality predicate that does not guarantee one-on-one mapping between inner and
-    // outer attributes. When the correlated predicate does not contain any attribute
-    // (i.e. only has outer references), it is supported and should return false. E.G.:
-    //   (a = outer(c)) -> false
-    //   (outer(c) = outer(d)) -> false
-    //   (a > outer(c)) -> true
-    //   (a + b = outer(c)) -> true
-    // The last one is true because there can be multiple combinations of (a, b) that
-    // satisfy the equality condition. For example, if outer(c) = 0, then both (0, 0)
-    // and (-1, 1) can make the predicate evaluate to true.
-    def isUnsupportedPredicate(condition: Expression): Boolean = condition match {
-      // Only allow equality condition with one side being an attribute and another
-      // side being an expression without attributes from the inner query. Note
-      // OuterReference is a leaf node and will not be found here.
-      case Equality(_: Attribute, b) => containsAttribute(b)
-      case Equality(a, _: Attribute) => containsAttribute(a)
-      case e @ Equality(_, _) => containsAttribute(e)
-      case _ => true
-    }
-
     val unsupportedPredicates = mutable.ArrayBuffer.empty[Expression]
 
     // Simplify the predicates before validating any unsupported correlation patterns in the plan.
@@ -876,7 +861,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       // The other operator is Join. Filter can be anywhere in a correlated subquery.
       case f: Filter =>
         val (correlated, _) = splitConjunctivePredicates(f.condition).partition(containsOuter)
-        unsupportedPredicates ++= correlated.filter(isUnsupportedPredicate)
+        unsupportedPredicates ++= correlated.filterNot(DecorrelateInnerQuery.canPullUpOverAgg)
         failOnInvalidOuterReference(f)
 
       // Aggregate cannot host any correlated expressions

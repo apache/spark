@@ -600,7 +600,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
         } else if (insideBracketedComment && line.charAt(index - 1) == '*' ) {
           // Decrements `bracketedCommentLevel` at the beginning of the next loop
           leavingBracketedComment = true
-        } else if (hasNext && !insideBracketedComment && line.charAt(index + 1) == '*') {
+        } else if (hasNext && line.charAt(index + 1) == '*') {
           bracketedCommentLevel += 1
         }
       }

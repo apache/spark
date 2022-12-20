@@ -26,7 +26,7 @@ import java.util.zip.ZipOutputStream
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.io.Source
+import scala.io.{Codec, Source}
 import scala.util.control.NonFatal
 import scala.xml.Node
 
@@ -583,11 +583,13 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       //
       // Only entries with valid applications are cleaned up here. Cleaning up invalid log
       // files is done by the periodic cleaner task.
-      val stale = listing.view(classOf[LogInfo])
-        .index("lastProcessed")
-        .last(newLastScanTime - 1)
-        .asScala
-        .toList
+      val stale = listing.synchronized {
+        listing.view(classOf[LogInfo])
+          .index("lastProcessed")
+          .last(newLastScanTime - 1)
+          .asScala
+          .toList
+      }
       stale.filterNot(isProcessing)
         .filterNot(info => notStale.contains(info.logPath))
         .foreach { log =>
@@ -627,37 +629,38 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private def cleanAppData(appId: String, attemptId: Option[String], logPath: String): Unit = {
     try {
-      val app = load(appId)
-      val (attempt, others) = app.attempts.partition(_.info.attemptId == attemptId)
+      var isStale = false
+      listing.synchronized {
+        val app = load(appId)
+        val (attempt, others) = app.attempts.partition(_.info.attemptId == attemptId)
 
-      assert(attempt.isEmpty || attempt.size == 1)
-      val isStale = attempt.headOption.exists { a =>
-        if (a.logPath != new Path(logPath).getName()) {
-          // If the log file name does not match, then probably the old log file was from an
-          // in progress application. Just return that the app should be left alone.
-          false
-        } else {
-          val maybeUI = synchronized {
-            activeUIs.remove(appId -> attemptId)
+        assert(attempt.isEmpty || attempt.size == 1)
+        isStale = attempt.headOption.exists { a =>
+          if (a.logPath != new Path(logPath).getName()) {
+            // If the log file name does not match, then probably the old log file was from an
+            // in progress application. Just return that the app should be left alone.
+            false
+          } else {
+            if (others.nonEmpty) {
+              val newAppInfo = new ApplicationInfoWrapper(app.info, others)
+              listing.write(newAppInfo)
+            } else {
+              listing.delete(classOf[ApplicationInfoWrapper], appId)
+            }
+            true
           }
-
-          maybeUI.foreach { ui =>
-            ui.invalidate()
-            ui.ui.store.close()
-          }
-
-          diskManager.foreach(_.release(appId, attemptId, delete = true))
-          true
         }
       }
 
       if (isStale) {
-        if (others.nonEmpty) {
-          val newAppInfo = new ApplicationInfoWrapper(app.info, others)
-          listing.write(newAppInfo)
-        } else {
-          listing.delete(classOf[ApplicationInfoWrapper], appId)
+        val maybeUI = synchronized {
+          activeUIs.remove(appId -> attemptId)
         }
+        maybeUI.foreach { ui =>
+          ui.invalidate()
+          ui.ui.store.close()
+        }
+        diskManager.foreach(_.release(appId, attemptId, delete = true))
       }
     } catch {
       case _: NoSuchElementException =>
@@ -720,7 +723,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         markInaccessible(rootPath)
         // SPARK-28157 We should remove this inaccessible entry from the KVStore
         // to handle permission-only changes with the same file sizes later.
-        listing.delete(classOf[LogInfo], rootPath.toString)
+        listing.synchronized {
+          listing.delete(classOf[LogInfo], rootPath.toString)
+        }
       case e: Exception =>
         logError("Exception while merging application listings", e)
     } finally {
@@ -799,7 +804,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           }
         }
 
-        val source = Source.fromInputStream(in).getLines()
+        val source = Source.fromInputStream(in)(Codec.UTF8).getLines()
 
         // Because skipping may leave the stream in the middle of a line, read the next line
         // before replaying.
@@ -833,7 +838,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             // Fetch the entry first to avoid an RPC when it's already removed.
             listing.read(classOf[LogInfo], inProgressLog)
             if (!fs.isFile(new Path(inProgressLog))) {
-              listing.delete(classOf[LogInfo], inProgressLog)
+              listing.synchronized {
+                listing.delete(classOf[LogInfo], inProgressLog)
+              }
             }
           } catch {
             case _: NoSuchElementException =>

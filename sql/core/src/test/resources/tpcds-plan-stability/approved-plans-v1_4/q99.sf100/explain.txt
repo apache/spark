@@ -67,7 +67,7 @@ Input [2]: [d_date_sk#6, d_month_seq#7]
 
 (8) BroadcastExchange
 Input [1]: [d_date_sk#6]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#8]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=1]
 
 (9) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [cs_ship_date_sk#1]
@@ -79,105 +79,105 @@ Output [5]: [cs_ship_date_sk#1, cs_call_center_sk#2, cs_ship_mode_sk#3, cs_wareh
 Input [6]: [cs_ship_date_sk#1, cs_call_center_sk#2, cs_ship_mode_sk#3, cs_warehouse_sk#4, cs_sold_date_sk#5, d_date_sk#6]
 
 (11) Scan parquet default.ship_mode
-Output [2]: [sm_ship_mode_sk#9, sm_type#10]
+Output [2]: [sm_ship_mode_sk#8, sm_type#9]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/ship_mode]
 PushedFilters: [IsNotNull(sm_ship_mode_sk)]
 ReadSchema: struct<sm_ship_mode_sk:int,sm_type:string>
 
 (12) ColumnarToRow [codegen id : 2]
-Input [2]: [sm_ship_mode_sk#9, sm_type#10]
+Input [2]: [sm_ship_mode_sk#8, sm_type#9]
 
 (13) Filter [codegen id : 2]
-Input [2]: [sm_ship_mode_sk#9, sm_type#10]
-Condition : isnotnull(sm_ship_mode_sk#9)
+Input [2]: [sm_ship_mode_sk#8, sm_type#9]
+Condition : isnotnull(sm_ship_mode_sk#8)
 
 (14) BroadcastExchange
-Input [2]: [sm_ship_mode_sk#9, sm_type#10]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#11]
+Input [2]: [sm_ship_mode_sk#8, sm_type#9]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=2]
 
 (15) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [cs_ship_mode_sk#3]
-Right keys [1]: [sm_ship_mode_sk#9]
+Right keys [1]: [sm_ship_mode_sk#8]
 Join condition: None
 
 (16) Project [codegen id : 5]
-Output [5]: [cs_ship_date_sk#1, cs_call_center_sk#2, cs_warehouse_sk#4, cs_sold_date_sk#5, sm_type#10]
-Input [7]: [cs_ship_date_sk#1, cs_call_center_sk#2, cs_ship_mode_sk#3, cs_warehouse_sk#4, cs_sold_date_sk#5, sm_ship_mode_sk#9, sm_type#10]
+Output [5]: [cs_ship_date_sk#1, cs_call_center_sk#2, cs_warehouse_sk#4, cs_sold_date_sk#5, sm_type#9]
+Input [7]: [cs_ship_date_sk#1, cs_call_center_sk#2, cs_ship_mode_sk#3, cs_warehouse_sk#4, cs_sold_date_sk#5, sm_ship_mode_sk#8, sm_type#9]
 
 (17) Scan parquet default.call_center
-Output [2]: [cc_call_center_sk#12, cc_name#13]
+Output [2]: [cc_call_center_sk#10, cc_name#11]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/call_center]
 PushedFilters: [IsNotNull(cc_call_center_sk)]
 ReadSchema: struct<cc_call_center_sk:int,cc_name:string>
 
 (18) ColumnarToRow [codegen id : 3]
-Input [2]: [cc_call_center_sk#12, cc_name#13]
+Input [2]: [cc_call_center_sk#10, cc_name#11]
 
 (19) Filter [codegen id : 3]
-Input [2]: [cc_call_center_sk#12, cc_name#13]
-Condition : isnotnull(cc_call_center_sk#12)
+Input [2]: [cc_call_center_sk#10, cc_name#11]
+Condition : isnotnull(cc_call_center_sk#10)
 
 (20) BroadcastExchange
-Input [2]: [cc_call_center_sk#12, cc_name#13]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#14]
+Input [2]: [cc_call_center_sk#10, cc_name#11]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=3]
 
 (21) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [cs_call_center_sk#2]
-Right keys [1]: [cc_call_center_sk#12]
+Right keys [1]: [cc_call_center_sk#10]
 Join condition: None
 
 (22) Project [codegen id : 5]
-Output [5]: [cs_ship_date_sk#1, cs_warehouse_sk#4, cs_sold_date_sk#5, sm_type#10, cc_name#13]
-Input [7]: [cs_ship_date_sk#1, cs_call_center_sk#2, cs_warehouse_sk#4, cs_sold_date_sk#5, sm_type#10, cc_call_center_sk#12, cc_name#13]
+Output [5]: [cs_ship_date_sk#1, cs_warehouse_sk#4, cs_sold_date_sk#5, sm_type#9, cc_name#11]
+Input [7]: [cs_ship_date_sk#1, cs_call_center_sk#2, cs_warehouse_sk#4, cs_sold_date_sk#5, sm_type#9, cc_call_center_sk#10, cc_name#11]
 
 (23) Scan parquet default.warehouse
-Output [2]: [w_warehouse_sk#15, w_warehouse_name#16]
+Output [2]: [w_warehouse_sk#12, w_warehouse_name#13]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/warehouse]
 PushedFilters: [IsNotNull(w_warehouse_sk)]
 ReadSchema: struct<w_warehouse_sk:int,w_warehouse_name:string>
 
 (24) ColumnarToRow [codegen id : 4]
-Input [2]: [w_warehouse_sk#15, w_warehouse_name#16]
+Input [2]: [w_warehouse_sk#12, w_warehouse_name#13]
 
 (25) Filter [codegen id : 4]
-Input [2]: [w_warehouse_sk#15, w_warehouse_name#16]
-Condition : isnotnull(w_warehouse_sk#15)
+Input [2]: [w_warehouse_sk#12, w_warehouse_name#13]
+Condition : isnotnull(w_warehouse_sk#12)
 
 (26) BroadcastExchange
-Input [2]: [w_warehouse_sk#15, w_warehouse_name#16]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#17]
+Input [2]: [w_warehouse_sk#12, w_warehouse_name#13]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=4]
 
 (27) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [cs_warehouse_sk#4]
-Right keys [1]: [w_warehouse_sk#15]
+Right keys [1]: [w_warehouse_sk#12]
 Join condition: None
 
 (28) Project [codegen id : 5]
-Output [5]: [cs_ship_date_sk#1, cs_sold_date_sk#5, sm_type#10, cc_name#13, substr(w_warehouse_name#16, 1, 20) AS _groupingexpression#18]
-Input [7]: [cs_ship_date_sk#1, cs_warehouse_sk#4, cs_sold_date_sk#5, sm_type#10, cc_name#13, w_warehouse_sk#15, w_warehouse_name#16]
+Output [5]: [cs_ship_date_sk#1, cs_sold_date_sk#5, sm_type#9, cc_name#11, substr(w_warehouse_name#13, 1, 20) AS _groupingexpression#14]
+Input [7]: [cs_ship_date_sk#1, cs_warehouse_sk#4, cs_sold_date_sk#5, sm_type#9, cc_name#11, w_warehouse_sk#12, w_warehouse_name#13]
 
 (29) HashAggregate [codegen id : 5]
-Input [5]: [cs_ship_date_sk#1, cs_sold_date_sk#5, sm_type#10, cc_name#13, _groupingexpression#18]
-Keys [3]: [_groupingexpression#18, sm_type#10, cc_name#13]
+Input [5]: [cs_ship_date_sk#1, cs_sold_date_sk#5, sm_type#9, cc_name#11, _groupingexpression#14]
+Keys [3]: [_groupingexpression#14, sm_type#9, cc_name#11]
 Functions [5]: [partial_sum(CASE WHEN ((cs_ship_date_sk#1 - cs_sold_date_sk#5) <= 30) THEN 1 ELSE 0 END), partial_sum(CASE WHEN (((cs_ship_date_sk#1 - cs_sold_date_sk#5) > 30) AND ((cs_ship_date_sk#1 - cs_sold_date_sk#5) <= 60)) THEN 1 ELSE 0 END), partial_sum(CASE WHEN (((cs_ship_date_sk#1 - cs_sold_date_sk#5) > 60) AND ((cs_ship_date_sk#1 - cs_sold_date_sk#5) <= 90)) THEN 1 ELSE 0 END), partial_sum(CASE WHEN (((cs_ship_date_sk#1 - cs_sold_date_sk#5) > 90) AND ((cs_ship_date_sk#1 - cs_sold_date_sk#5) <= 120)) THEN 1 ELSE 0 END), partial_sum(CASE WHEN ((cs_ship_date_sk#1 - cs_sold_date_sk#5) > 120) THEN 1 ELSE 0 END)]
-Aggregate Attributes [5]: [sum#19, sum#20, sum#21, sum#22, sum#23]
-Results [8]: [_groupingexpression#18, sm_type#10, cc_name#13, sum#24, sum#25, sum#26, sum#27, sum#28]
+Aggregate Attributes [5]: [sum#15, sum#16, sum#17, sum#18, sum#19]
+Results [8]: [_groupingexpression#14, sm_type#9, cc_name#11, sum#20, sum#21, sum#22, sum#23, sum#24]
 
 (30) Exchange
-Input [8]: [_groupingexpression#18, sm_type#10, cc_name#13, sum#24, sum#25, sum#26, sum#27, sum#28]
-Arguments: hashpartitioning(_groupingexpression#18, sm_type#10, cc_name#13, 5), ENSURE_REQUIREMENTS, [id=#29]
+Input [8]: [_groupingexpression#14, sm_type#9, cc_name#11, sum#20, sum#21, sum#22, sum#23, sum#24]
+Arguments: hashpartitioning(_groupingexpression#14, sm_type#9, cc_name#11, 5), ENSURE_REQUIREMENTS, [plan_id=5]
 
 (31) HashAggregate [codegen id : 6]
-Input [8]: [_groupingexpression#18, sm_type#10, cc_name#13, sum#24, sum#25, sum#26, sum#27, sum#28]
-Keys [3]: [_groupingexpression#18, sm_type#10, cc_name#13]
+Input [8]: [_groupingexpression#14, sm_type#9, cc_name#11, sum#20, sum#21, sum#22, sum#23, sum#24]
+Keys [3]: [_groupingexpression#14, sm_type#9, cc_name#11]
 Functions [5]: [sum(CASE WHEN ((cs_ship_date_sk#1 - cs_sold_date_sk#5) <= 30) THEN 1 ELSE 0 END), sum(CASE WHEN (((cs_ship_date_sk#1 - cs_sold_date_sk#5) > 30) AND ((cs_ship_date_sk#1 - cs_sold_date_sk#5) <= 60)) THEN 1 ELSE 0 END), sum(CASE WHEN (((cs_ship_date_sk#1 - cs_sold_date_sk#5) > 60) AND ((cs_ship_date_sk#1 - cs_sold_date_sk#5) <= 90)) THEN 1 ELSE 0 END), sum(CASE WHEN (((cs_ship_date_sk#1 - cs_sold_date_sk#5) > 90) AND ((cs_ship_date_sk#1 - cs_sold_date_sk#5) <= 120)) THEN 1 ELSE 0 END), sum(CASE WHEN ((cs_ship_date_sk#1 - cs_sold_date_sk#5) > 120) THEN 1 ELSE 0 END)]
-Aggregate Attributes [5]: [sum(CASE WHEN ((cs_ship_date_sk#1 - cs_sold_date_sk#5) <= 30) THEN 1 ELSE 0 END)#30, sum(CASE WHEN (((cs_ship_date_sk#1 - cs_sold_date_sk#5) > 30) AND ((cs_ship_date_sk#1 - cs_sold_date_sk#5) <= 60)) THEN 1 ELSE 0 END)#31, sum(CASE WHEN (((cs_ship_date_sk#1 - cs_sold_date_sk#5) > 60) AND ((cs_ship_date_sk#1 - cs_sold_date_sk#5) <= 90)) THEN 1 ELSE 0 END)#32, sum(CASE WHEN (((cs_ship_date_sk#1 - cs_sold_date_sk#5) > 90) AND ((cs_ship_date_sk#1 - cs_sold_date_sk#5) <= 120)) THEN 1 ELSE 0 END)#33, sum(CASE WHEN ((cs_ship_date_sk#1 - cs_sold_date_sk#5) > 120) THEN 1 ELSE 0 END)#34]
-Results [8]: [_groupingexpression#18 AS substr(w_warehouse_name, 1, 20)#35, sm_type#10, cc_name#13, sum(CASE WHEN ((cs_ship_date_sk#1 - cs_sold_date_sk#5) <= 30) THEN 1 ELSE 0 END)#30 AS 30 days #36, sum(CASE WHEN (((cs_ship_date_sk#1 - cs_sold_date_sk#5) > 30) AND ((cs_ship_date_sk#1 - cs_sold_date_sk#5) <= 60)) THEN 1 ELSE 0 END)#31 AS 31 - 60 days #37, sum(CASE WHEN (((cs_ship_date_sk#1 - cs_sold_date_sk#5) > 60) AND ((cs_ship_date_sk#1 - cs_sold_date_sk#5) <= 90)) THEN 1 ELSE 0 END)#32 AS 61 - 90 days #38, sum(CASE WHEN (((cs_ship_date_sk#1 - cs_sold_date_sk#5) > 90) AND ((cs_ship_date_sk#1 - cs_sold_date_sk#5) <= 120)) THEN 1 ELSE 0 END)#33 AS 91 - 120 days #39, sum(CASE WHEN ((cs_ship_date_sk#1 - cs_sold_date_sk#5) > 120) THEN 1 ELSE 0 END)#34 AS >120 days #40]
+Aggregate Attributes [5]: [sum(CASE WHEN ((cs_ship_date_sk#1 - cs_sold_date_sk#5) <= 30) THEN 1 ELSE 0 END)#25, sum(CASE WHEN (((cs_ship_date_sk#1 - cs_sold_date_sk#5) > 30) AND ((cs_ship_date_sk#1 - cs_sold_date_sk#5) <= 60)) THEN 1 ELSE 0 END)#26, sum(CASE WHEN (((cs_ship_date_sk#1 - cs_sold_date_sk#5) > 60) AND ((cs_ship_date_sk#1 - cs_sold_date_sk#5) <= 90)) THEN 1 ELSE 0 END)#27, sum(CASE WHEN (((cs_ship_date_sk#1 - cs_sold_date_sk#5) > 90) AND ((cs_ship_date_sk#1 - cs_sold_date_sk#5) <= 120)) THEN 1 ELSE 0 END)#28, sum(CASE WHEN ((cs_ship_date_sk#1 - cs_sold_date_sk#5) > 120) THEN 1 ELSE 0 END)#29]
+Results [8]: [_groupingexpression#14 AS substr(w_warehouse_name, 1, 20)#30, sm_type#9, cc_name#11, sum(CASE WHEN ((cs_ship_date_sk#1 - cs_sold_date_sk#5) <= 30) THEN 1 ELSE 0 END)#25 AS 30 days #31, sum(CASE WHEN (((cs_ship_date_sk#1 - cs_sold_date_sk#5) > 30) AND ((cs_ship_date_sk#1 - cs_sold_date_sk#5) <= 60)) THEN 1 ELSE 0 END)#26 AS 31 - 60 days #32, sum(CASE WHEN (((cs_ship_date_sk#1 - cs_sold_date_sk#5) > 60) AND ((cs_ship_date_sk#1 - cs_sold_date_sk#5) <= 90)) THEN 1 ELSE 0 END)#27 AS 61 - 90 days #33, sum(CASE WHEN (((cs_ship_date_sk#1 - cs_sold_date_sk#5) > 90) AND ((cs_ship_date_sk#1 - cs_sold_date_sk#5) <= 120)) THEN 1 ELSE 0 END)#28 AS 91 - 120 days #34, sum(CASE WHEN ((cs_ship_date_sk#1 - cs_sold_date_sk#5) > 120) THEN 1 ELSE 0 END)#29 AS >120 days #35]
 
 (32) TakeOrderedAndProject
-Input [8]: [substr(w_warehouse_name, 1, 20)#35, sm_type#10, cc_name#13, 30 days #36, 31 - 60 days #37, 61 - 90 days #38, 91 - 120 days #39, >120 days #40]
-Arguments: 100, [substr(w_warehouse_name, 1, 20)#35 ASC NULLS FIRST, sm_type#10 ASC NULLS FIRST, cc_name#13 ASC NULLS FIRST], [substr(w_warehouse_name, 1, 20)#35, sm_type#10, cc_name#13, 30 days #36, 31 - 60 days #37, 61 - 90 days #38, 91 - 120 days #39, >120 days #40]
+Input [8]: [substr(w_warehouse_name, 1, 20)#30, sm_type#9, cc_name#11, 30 days #31, 31 - 60 days #32, 61 - 90 days #33, 91 - 120 days #34, >120 days #35]
+Arguments: 100, [substr(w_warehouse_name, 1, 20)#30 ASC NULLS FIRST, sm_type#9 ASC NULLS FIRST, cc_name#11 ASC NULLS FIRST], [substr(w_warehouse_name, 1, 20)#30, sm_type#9, cc_name#11, 30 days #31, 31 - 60 days #32, 61 - 90 days #33, 91 - 120 days #34, >120 days #35]
 

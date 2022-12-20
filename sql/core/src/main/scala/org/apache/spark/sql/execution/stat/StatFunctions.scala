@@ -22,7 +22,7 @@ import java.util.Locale
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, Expression, GenericInternalRow, GetArrayItem, Literal}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, Expression, GenericInternalRow, GetArrayItem, Literal, TryCast}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.{GenericArrayData, QuantileSummaries}
@@ -246,6 +246,11 @@ object StatFunctions extends Logging {
     }
     require(percentiles.forall(p => p >= 0 && p <= 1), "Percentiles must be in the range [0, 1]")
 
+    def castAsDoubleIfNecessary(e: Expression): Expression = if (e.dataType == StringType) {
+      TryCast(e, DoubleType)
+    } else {
+      e
+    }
     var percentileIndex = 0
     val statisticFns = selectedStatistics.map { stats =>
       if (stats.endsWith("%")) {
@@ -253,7 +258,7 @@ object StatFunctions extends Logging {
         percentileIndex += 1
         (child: Expression) =>
           GetArrayItem(
-            new ApproximatePercentile(child,
+            new ApproximatePercentile(castAsDoubleIfNecessary(child),
               Literal(new GenericArrayData(percentiles), ArrayType(DoubleType, false)))
               .toAggregateExpression(),
             Literal(index))
@@ -264,8 +269,10 @@ object StatFunctions extends Logging {
             Count(child).toAggregateExpression(isDistinct = true)
           case "approx_count_distinct" => (child: Expression) =>
             HyperLogLogPlusPlus(child).toAggregateExpression()
-          case "mean" => (child: Expression) => Average(child).toAggregateExpression()
-          case "stddev" => (child: Expression) => StddevSamp(child).toAggregateExpression()
+          case "mean" => (child: Expression) =>
+            Average(castAsDoubleIfNecessary(child)).toAggregateExpression()
+          case "stddev" => (child: Expression) =>
+            StddevSamp(castAsDoubleIfNecessary(child)).toAggregateExpression()
           case "min" => (child: Expression) => Min(child).toAggregateExpression()
           case "max" => (child: Expression) => Max(child).toAggregateExpression()
           case _ => throw QueryExecutionErrors.statisticNotRecognizedError(stats)

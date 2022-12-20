@@ -124,8 +124,10 @@ private[sql] object PruneFileSourcePartitions
       val (partitionKeyFilters, dataFilters) =
         getPartitionKeyFiltersAndDataFilters(scan.sparkSession, v2Relation,
           scan.readPartitionSchema, filters, output)
-      // The dataFilters are pushed down only once
-      if (partitionKeyFilters.nonEmpty || (dataFilters.nonEmpty && scan.dataFilters.isEmpty)) {
+      // if there are only partition filters, or the data filters have not been pushed yet,
+      // trigger push down
+      if ((partitionKeyFilters.nonEmpty && dataFilters.isEmpty)
+        || (dataFilters.nonEmpty && scan.dataFilters.isEmpty)) {
         val prunedV2Relation =
           v2Relation.copy(scan = scan.withFilters(partitionKeyFilters.toSeq, dataFilters))
         // The pushed down partition filters don't need to be reevaluated.

@@ -16,6 +16,7 @@
 # limitations under the License.
 #
 import os
+import sys
 import tempfile
 import threading
 import time
@@ -29,7 +30,7 @@ except ImportError:
 from py4j.protocol import Py4JJavaError
 
 from pyspark import SparkConf, SparkContext
-from pyspark.testing.utils import ReusedPySparkTestCase, PySparkTestCase, QuietTest
+from pyspark.testing.utils import ReusedPySparkTestCase, PySparkTestCase, QuietTest, eventually
 
 
 class WorkerTests(ReusedPySparkTestCase):
@@ -180,17 +181,21 @@ class WorkerTests(ReusedPySparkTestCase):
 class WorkerReuseTest(PySparkTestCase):
 
     def test_reuse_worker_of_parallelize_range(self):
-        rdd = self.sc.parallelize(range(20), 8)
-        previous_pids = rdd.map(lambda x: os.getpid()).collect()
-        current_pids = rdd.map(lambda x: os.getpid()).collect()
-        for pid in current_pids:
-            self.assertTrue(pid in previous_pids)
+        def check_reuse_worker_of_parallelize_range():
+            rdd = self.sc.parallelize(range(20), 8)
+            previous_pids = rdd.map(lambda x: os.getpid()).collect()
+            current_pids = rdd.map(lambda x: os.getpid()).collect()
+            for pid in current_pids:
+                self.assertTrue(pid in previous_pids)
+            return True
+
+        eventually(check_reuse_worker_of_parallelize_range, catch_assertions=True)
 
 
 @unittest.skipIf(
-    not has_resource_module,
+    not has_resource_module or sys.platform != 'linux',
     "Memory limit feature in Python worker is dependent on "
-    "Python's 'resource' module; however, not found.")
+    "Python's 'resource' module on Linux; however, not found or not on Linux.")
 class WorkerMemoryTest(unittest.TestCase):
 
     def setUp(self):

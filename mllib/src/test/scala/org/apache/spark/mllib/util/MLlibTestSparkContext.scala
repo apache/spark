@@ -40,6 +40,8 @@ trait MLlibTestSparkContext extends TempDirectory { self: Suite =>
       .appName("MLlibUnitTest")
       .getOrCreate()
     sc = spark.sparkContext
+    // initialize SessionCatalog here so it has a clean hadoopConf
+    spark.sessionState.catalog
 
     checkpointDir = Utils.createDirectory(tempDir.getCanonicalPath, "checkpoints").toString
     sc.setCheckpointDir(checkpointDir)

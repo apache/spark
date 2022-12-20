@@ -1422,6 +1422,26 @@ class DataFrameAggregateSuite extends QueryTest
     val res = df.select($"d".cast("decimal(12, 2)").as("d")).agg(avg($"d").cast("string"))
     checkAnswer(res, Row("9999999999.990000"))
   }
+
+  test("SPARK-38185: Fix data incorrect if aggregate function is empty") {
+    val emptyAgg = Map.empty[String, String]
+    assert(spark.range(2).where("id > 2").agg(emptyAgg).limit(1).count == 1)
+  }
+
+  test("SPARK-38221: group by stream of complex expressions should not fail") {
+    val df = Seq(1).toDF("id").groupBy(Stream($"id" + 1, $"id" + 2): _*).sum("id")
+    checkAnswer(df, Row(2, 3, 1))
+  }
+
+  test("SPARK-41035: Reuse of literal in distinct aggregations should work") {
+    val res = sql(
+      """select a, count(distinct 100), count(distinct b, 100)
+        |from values (1, 2), (4, 5), (4, 6) as data(a, b)
+        |group by a;
+        |""".stripMargin
+    )
+    checkAnswer(res, Row(1, 1, 1) :: Row(4, 1, 2) :: Nil)
+  }
 }
 
 case class B(c: Option[Double])

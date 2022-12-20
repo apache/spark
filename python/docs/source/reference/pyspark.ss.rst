@@ -52,6 +52,7 @@ Input and Output
     DataStreamReader.orc
     DataStreamReader.parquet
     DataStreamReader.schema
+    DataStreamReader.table
     DataStreamReader.text
     DataStreamWriter.foreach
     DataStreamWriter.foreachBatch
@@ -62,6 +63,7 @@ Input and Output
     DataStreamWriter.partitionBy
     DataStreamWriter.queryName
     DataStreamWriter.start
+    DataStreamWriter.toTable
     DataStreamWriter.trigger
 
 Query Management

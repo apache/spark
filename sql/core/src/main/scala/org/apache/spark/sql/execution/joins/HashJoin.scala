@@ -705,6 +705,13 @@ trait HashJoin extends JoinCodegenSupport {
 }
 
 object HashJoin extends CastSupport with SQLConfHelper {
+
+  private def canRewriteAsLongType(keys: Seq[Expression]): Boolean = {
+    // TODO: support BooleanType, DateType and TimestampType
+    keys.forall(_.dataType.isInstanceOf[IntegralType]) &&
+      keys.map(_.dataType.defaultSize).sum <= 8
+  }
+
   /**
    * Try to rewrite the key as LongType so we can use getLong(), if they key can fit with a long.
    *
@@ -712,9 +719,7 @@ object HashJoin extends CastSupport with SQLConfHelper {
    */
   def rewriteKeyExpr(keys: Seq[Expression]): Seq[Expression] = {
     assert(keys.nonEmpty)
-    // TODO: support BooleanType, DateType and TimestampType
-    if (keys.exists(!_.dataType.isInstanceOf[IntegralType])
-      || keys.map(_.dataType.defaultSize).sum > 8) {
+    if (!canRewriteAsLongType(keys)) {
       return keys
     }
 
@@ -736,18 +741,28 @@ object HashJoin extends CastSupport with SQLConfHelper {
    * determine the number of bits to shift
    */
   def extractKeyExprAt(keys: Seq[Expression], index: Int): Expression = {
+    assert(canRewriteAsLongType(keys))
     // jump over keys that have a higher index value than the required key
     if (keys.size == 1) {
       assert(index == 0)
-      cast(BoundReference(0, LongType, nullable = false), keys(index).dataType)
+      Cast(
+        child = BoundReference(0, LongType, nullable = false),
+        dataType = keys(index).dataType,
+        timeZoneId = Option(conf.sessionLocalTimeZone),
+        ansiEnabled = false)
     } else {
       val shiftedBits =
         keys.slice(index + 1, keys.size).map(_.dataType.defaultSize * 8).sum
       val mask = (1L << (keys(index).dataType.defaultSize * 8)) - 1
       // build the schema for unpacking the required key
-      cast(BitwiseAnd(
+      val castChild = BitwiseAnd(
         ShiftRightUnsigned(BoundReference(0, LongType, nullable = false), Literal(shiftedBits)),
-        Literal(mask)), keys(index).dataType)
+        Literal(mask))
+      Cast(
+        child = castChild,
+        dataType = keys(index).dataType,
+        timeZoneId = Option(conf.sessionLocalTimeZone),
+        ansiEnabled = false)
     }
   }
 }

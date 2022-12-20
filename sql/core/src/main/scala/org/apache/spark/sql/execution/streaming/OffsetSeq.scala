@@ -98,7 +98,7 @@ object OffsetSeqMetadata extends Logging {
     SHUFFLE_PARTITIONS, STATE_STORE_PROVIDER_CLASS, STREAMING_MULTIPLE_WATERMARK_POLICY,
     FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION, STREAMING_AGGREGATION_STATE_FORMAT_VERSION,
     STREAMING_JOIN_STATE_FORMAT_VERSION, STATE_STORE_COMPRESSION_CODEC,
-    STATE_STORE_ROCKSDB_FORMAT_VERSION)
+    STATE_STORE_ROCKSDB_FORMAT_VERSION, STATEFUL_OPERATOR_USE_STRICT_DISTRIBUTION)
 
   /**
    * Default values of relevant configurations that are used for backward compatibility.
@@ -118,7 +118,8 @@ object OffsetSeqMetadata extends Logging {
       StreamingAggregationStateManager.legacyVersion.toString,
     STREAMING_JOIN_STATE_FORMAT_VERSION.key ->
       SymmetricHashJoinStateManager.legacyVersion.toString,
-    STATE_STORE_COMPRESSION_CODEC.key -> "lz4"
+    STATE_STORE_COMPRESSION_CODEC.key -> "lz4",
+    STATEFUL_OPERATOR_USE_STRICT_DISTRIBUTION.key -> "false"
   )
 
   def apply(json: String): OffsetSeqMetadata = Serialization.read[OffsetSeqMetadata](json)

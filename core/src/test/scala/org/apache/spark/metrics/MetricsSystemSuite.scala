@@ -17,6 +17,8 @@
 
 package org.apache.spark.metrics
 
+import java.util.Properties
+
 import scala.collection.mutable.ArrayBuffer
 
 import com.codahale.metrics.MetricRegistry
@@ -269,4 +271,23 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
     assert(metricName === source.sourceName)
   }
 
+  test("SPARK-37078: Support old 3-parameter Sink constructors") {
+    conf.set(
+      "spark.metrics.conf.*.sink.jmx.class",
+      "org.apache.spark.metrics.ThreeParameterConstructorSink")
+    val metricsSystem = MetricsSystem.createMetricsSystem("legacy", conf)
+    metricsSystem.start()
+    val sinks = PrivateMethod[ArrayBuffer[Sink]](Symbol("sinks"))
+
+    assert(metricsSystem.invokePrivate(sinks()).length === 1)
+  }
+}
+
+class ThreeParameterConstructorSink(
+    val property: Properties,
+    val registry: MetricRegistry,
+    securityMgr: SecurityManager) extends Sink {
+  override def start(): Unit = {}
+  override def stop(): Unit = {}
+  override def report(): Unit = {}
 }

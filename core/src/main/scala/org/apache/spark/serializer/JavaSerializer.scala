@@ -87,8 +87,8 @@ private object JavaDeserializationStream {
     "long" -> classOf[Long],
     "float" -> classOf[Float],
     "double" -> classOf[Double],
-    "void" -> classOf[Void]
-  )
+    "void" -> classOf[Unit])
+
 }
 
 private[spark] class JavaSerializerInstance(

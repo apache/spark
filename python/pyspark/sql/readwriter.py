@@ -1115,6 +1115,7 @@ class DataFrameWriterV2(object):
         """
         col = _to_java_column(col)
         cols = _to_seq(self._spark._sc, [_to_java_column(c) for c in cols])
+        self._jwriter.partitionedBy(col, cols)
         return self
 
     @since(3.1)
@@ -1162,6 +1163,7 @@ class DataFrameWriterV2(object):
         Overwrite rows matching the given filter condition with the contents of the data frame in
         the output table.
         """
+        condition = _to_java_column(condition)
         self._jwriter.overwrite(condition)
 
     @since(3.1)

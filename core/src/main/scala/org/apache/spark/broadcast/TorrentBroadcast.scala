@@ -73,6 +73,10 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
   /** Size of each block. Default value is 4MB.  This value is only read by the broadcaster. */
   @transient private var blockSize: Int = _
 
+
+  /** Whether to generate checksum for blocks or not. */
+  private var checksumEnabled: Boolean = false
+
   private def setConf(conf: SparkConf): Unit = {
     compressionCodec = if (conf.get(config.BROADCAST_COMPRESS)) {
       Some(CompressionCodec.createCodec(conf))
@@ -90,8 +94,6 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
   /** Total number of blocks this broadcast variable contains. */
   private val numBlocks: Int = writeBlocks(obj)
 
-  /** Whether to generate checksum for blocks or not. */
-  private var checksumEnabled: Boolean = false
   /** The checksum for all the blocks. */
   private var checksums: Array[Int] = _
 

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Locale
-import java.util.regex.{Matcher, MatchResult, Pattern}
+import java.util.regex.{Matcher, MatchResult, Pattern, PatternSyntaxException}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -83,16 +83,12 @@ abstract class StringRegexExpression extends BinaryExpression
     Arguments:
       * str - a string expression
       * pattern - a string expression. The pattern is a string which is matched literally, with
-          exception to the following special symbols:
-
-          _ matches any one character in the input (similar to . in posix regular expressions)
-
+          exception to the following special symbols:<br><br>
+          _ matches any one character in the input (similar to . in posix regular expressions)\
           % matches zero or more characters in the input (similar to .* in posix regular
-          expressions)
-
+          expressions)<br><br>
           Since Spark 2.0, string literals are unescaped in our SQL parser. For example, in order
-          to match "\abc", the pattern should be "\\abc".
-
+          to match "\abc", the pattern should be "\\abc".<br><br>
           When SQL config 'spark.sql.parser.escapedStringLiterals' is enabled, it falls back
           to Spark 1.6 behavior regarding string literal parsing. For example, if the config is
           enabled, the pattern to match "\abc" should be "\abc".
@@ -352,12 +348,10 @@ case class NotLikeAny(child: Expression, patterns: Seq[UTF8String]) extends Like
   arguments = """
     Arguments:
       * str - a string expression
-      * regexp - a string expression. The regex string should be a Java regular expression.
-
+      * regexp - a string expression. The regex string should be a Java regular expression.<br><br>
           Since Spark 2.0, string literals (including regex patterns) are unescaped in our SQL
           parser. For example, to match "\abc", a regular expression for `regexp` can be
-          "^\\abc$".
-
+          "^\\abc$".<br><br>
           There is a SQL config 'spark.sql.parser.escapedStringLiterals' that can be used to
           fallback to the Spark 1.6 behavior regarding string literal parsing. For example,
           if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".
@@ -505,12 +499,10 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
     Arguments:
       * str - a string expression to search for a regular expression pattern match.
       * regexp - a string representing a regular expression. The regex string should be a
-          Java regular expression.
-
+          Java regular expression.<br><br>
           Since Spark 2.0, string literals (including regex patterns) are unescaped in our SQL
           parser. For example, to match "\abc", a regular expression for `regexp` can be
-          "^\\abc$".
-
+          "^\\abc$".<br><br>
           There is a SQL config 'spark.sql.parser.escapedStringLiterals' that can be used to
           fallback to the Spark 1.6 behavior regarding string literal parsing. For example,
           if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".
@@ -568,7 +560,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
     }
     val source = s.toString()
     val position = i.asInstanceOf[Int] - 1
-    if (position < source.length) {
+    if (position == 0 || position < source.length) {
       val m = pattern.matcher(source)
       m.region(position, source.length)
       result.delete(0, result.length())
@@ -622,7 +614,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
       }
       String $source = $subject.toString();
       int $position = $pos - 1;
-      if ($position < $source.length()) {
+      if ($position == 0 || $position < $source.length()) {
         $classNameStringBuffer $termResult = new $classNameStringBuffer();
         java.util.regex.Matcher $matcher = $termPattern.matcher($source);
         $matcher.region($position, $source.length());
@@ -686,10 +678,41 @@ abstract class RegExpExtractBase
   protected def getLastMatcher(s: Any, p: Any): Matcher = {
     if (p != lastRegex) {
       // regex value changed
-      lastRegex = p.asInstanceOf[UTF8String].clone()
-      pattern = Pattern.compile(lastRegex.toString)
+      try {
+        val r = p.asInstanceOf[UTF8String].clone()
+        pattern = Pattern.compile(r.toString)
+        lastRegex = r
+      } catch {
+        case e: PatternSyntaxException =>
+          throw QueryExecutionErrors.invalidPatternError(prettyName, e.getPattern)
+
+      }
     }
     pattern.matcher(s.toString)
+  }
+
+  protected def initLastMatcherCode(
+      ctx: CodegenContext,
+      subject: String,
+      regexp: String,
+      matcher: String): String = {
+    val classNamePattern = classOf[Pattern].getCanonicalName
+    val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex")
+    val termPattern = ctx.addMutableState(classNamePattern, "pattern")
+
+    s"""
+      |if (!$regexp.equals($termLastRegex)) {
+      |  // regex value changed
+      |  try {
+      |    UTF8String r = $regexp.clone();
+      |    $termPattern = $classNamePattern.compile(r.toString());
+      |    $termLastRegex = r;
+      |  } catch (java.util.regex.PatternSyntaxException e) {
+      |    throw QueryExecutionErrors.invalidPatternError("$prettyName", e.getPattern());
+      |  }
+      |}
+      |java.util.regex.Matcher $matcher = $termPattern.matcher($subject.toString());
+      |""".stripMargin
   }
 }
 
@@ -707,12 +730,10 @@ abstract class RegExpExtractBase
     Arguments:
       * str - a string expression.
       * regexp - a string representing a regular expression. The regex string should be a
-          Java regular expression.
-
+          Java regular expression.<br><br>
           Since Spark 2.0, string literals (including regex patterns) are unescaped in our SQL
           parser. For example, to match "\abc", a regular expression for `regexp` can be
-          "^\\abc$".
-
+          "^\\abc$".<br><br>
           There is a SQL config 'spark.sql.parser.escapedStringLiterals' that can be used to
           fallback to the Spark 1.6 behavior regarding string literal parsing. For example,
           if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".
@@ -754,14 +775,9 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
   override def prettyName: String = "regexp_extract"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val classNamePattern = classOf[Pattern].getCanonicalName
     val classNameRegExpExtractBase = classOf[RegExpExtractBase].getCanonicalName
     val matcher = ctx.freshName("matcher")
     val matchResult = ctx.freshName("matchResult")
-
-    val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex")
-    val termPattern = ctx.addMutableState(classNamePattern, "pattern")
-
     val setEvNotNull = if (nullable) {
       s"${ev.isNull} = false;"
     } else {
@@ -770,13 +786,7 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
 
     nullSafeCodeGen(ctx, ev, (subject, regexp, idx) => {
       s"""
-      if (!$regexp.equals($termLastRegex)) {
-        // regex value changed
-        $termLastRegex = $regexp.clone();
-        $termPattern = $classNamePattern.compile($termLastRegex.toString());
-      }
-      java.util.regex.Matcher $matcher =
-        $termPattern.matcher($subject.toString());
+      ${initLastMatcherCode(ctx, subject, regexp, matcher)}
       if ($matcher.find()) {
         java.util.regex.MatchResult $matchResult = $matcher.toMatchResult();
         $classNameRegExpExtractBase.checkGroupIndex($matchResult.groupCount(), $idx);
@@ -812,12 +822,10 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
     Arguments:
       * str - a string expression.
       * regexp - a string representing a regular expression. The regex string should be a
-          Java regular expression.
-
+          Java regular expression.<br><br>
           Since Spark 2.0, string literals (including regex patterns) are unescaped in our SQL
           parser. For example, to match "\abc", a regular expression for `regexp` can be
-          "^\\abc$".
-
+          "^\\abc$".<br><br>
           There is a SQL config 'spark.sql.parser.escapedStringLiterals' that can be used to
           fallback to the Spark 1.6 behavior regarding string literal parsing. For example,
           if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".
@@ -860,16 +868,11 @@ case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expres
   override def prettyName: String = "regexp_extract_all"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val classNamePattern = classOf[Pattern].getCanonicalName
     val classNameRegExpExtractBase = classOf[RegExpExtractBase].getCanonicalName
     val arrayClass = classOf[GenericArrayData].getName
     val matcher = ctx.freshName("matcher")
     val matchResult = ctx.freshName("matchResult")
     val matchResults = ctx.freshName("matchResults")
-
-    val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex")
-    val termPattern = ctx.addMutableState(classNamePattern, "pattern")
-
     val setEvNotNull = if (nullable) {
       s"${ev.isNull} = false;"
     } else {
@@ -877,12 +880,7 @@ case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expres
     }
     nullSafeCodeGen(ctx, ev, (subject, regexp, idx) => {
       s"""
-         | if (!$regexp.equals($termLastRegex)) {
-         |   // regex value changed
-         |   $termLastRegex = $regexp.clone();
-         |   $termPattern = $classNamePattern.compile($termLastRegex.toString());
-         | }
-         | java.util.regex.Matcher $matcher = $termPattern.matcher($subject.toString());
+         | ${initLastMatcherCode(ctx, subject, regexp, matcher)}
          | java.util.ArrayList $matchResults = new java.util.ArrayList<UTF8String>();
          | while ($matcher.find()) {
          |   java.util.regex.MatchResult $matchResult = $matcher.toMatchResult();

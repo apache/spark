@@ -72,7 +72,7 @@ AdaptiveSparkPlan isFinalPlan=false
       :        +- HashAggregate(keys=[], functions=[max(csales#xL)], output=[tpcds_cmax#xL])
       :           +- HashAggregate(keys=[], functions=[partial_max(csales#xL)], output=[max#xL])
       :              +- HashAggregate(keys=[], functions=[sum(b#x)], output=[csales#xL])
-      :                 +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [id=#x]
+      :                 +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=x]
       :                    +- HashAggregate(keys=[], functions=[partial_sum(b#x)], output=[sum#xL])
       :                       +- Project [b#x]
       :                          +- Filter (isnotnull(a#x) AND (a#x < 100))

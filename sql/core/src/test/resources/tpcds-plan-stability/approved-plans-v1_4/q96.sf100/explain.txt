@@ -67,7 +67,7 @@ Input [3]: [t_time_sk#5, t_hour#6, t_minute#7]
 
 (9) BroadcastExchange
 Input [1]: [t_time_sk#5]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#8]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=1]
 
 (10) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_sold_time_sk#1]
@@ -79,82 +79,82 @@ Output [2]: [ss_hdemo_sk#2, ss_store_sk#3]
 Input [4]: [ss_sold_time_sk#1, ss_hdemo_sk#2, ss_store_sk#3, t_time_sk#5]
 
 (12) Scan parquet default.store
-Output [2]: [s_store_sk#9, s_store_name#10]
+Output [2]: [s_store_sk#8, s_store_name#9]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
 PushedFilters: [IsNotNull(s_store_name), EqualTo(s_store_name,ese), IsNotNull(s_store_sk)]
 ReadSchema: struct<s_store_sk:int,s_store_name:string>
 
 (13) ColumnarToRow [codegen id : 2]
-Input [2]: [s_store_sk#9, s_store_name#10]
+Input [2]: [s_store_sk#8, s_store_name#9]
 
 (14) Filter [codegen id : 2]
-Input [2]: [s_store_sk#9, s_store_name#10]
-Condition : ((isnotnull(s_store_name#10) AND (s_store_name#10 = ese)) AND isnotnull(s_store_sk#9))
+Input [2]: [s_store_sk#8, s_store_name#9]
+Condition : ((isnotnull(s_store_name#9) AND (s_store_name#9 = ese)) AND isnotnull(s_store_sk#8))
 
 (15) Project [codegen id : 2]
-Output [1]: [s_store_sk#9]
-Input [2]: [s_store_sk#9, s_store_name#10]
+Output [1]: [s_store_sk#8]
+Input [2]: [s_store_sk#8, s_store_name#9]
 
 (16) BroadcastExchange
-Input [1]: [s_store_sk#9]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#11]
+Input [1]: [s_store_sk#8]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=2]
 
 (17) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_store_sk#3]
-Right keys [1]: [s_store_sk#9]
+Right keys [1]: [s_store_sk#8]
 Join condition: None
 
 (18) Project [codegen id : 4]
 Output [1]: [ss_hdemo_sk#2]
-Input [3]: [ss_hdemo_sk#2, ss_store_sk#3, s_store_sk#9]
+Input [3]: [ss_hdemo_sk#2, ss_store_sk#3, s_store_sk#8]
 
 (19) Scan parquet default.household_demographics
-Output [2]: [hd_demo_sk#12, hd_dep_count#13]
+Output [2]: [hd_demo_sk#10, hd_dep_count#11]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/household_demographics]
 PushedFilters: [IsNotNull(hd_dep_count), EqualTo(hd_dep_count,7), IsNotNull(hd_demo_sk)]
 ReadSchema: struct<hd_demo_sk:int,hd_dep_count:int>
 
 (20) ColumnarToRow [codegen id : 3]
-Input [2]: [hd_demo_sk#12, hd_dep_count#13]
+Input [2]: [hd_demo_sk#10, hd_dep_count#11]
 
 (21) Filter [codegen id : 3]
-Input [2]: [hd_demo_sk#12, hd_dep_count#13]
-Condition : ((isnotnull(hd_dep_count#13) AND (hd_dep_count#13 = 7)) AND isnotnull(hd_demo_sk#12))
+Input [2]: [hd_demo_sk#10, hd_dep_count#11]
+Condition : ((isnotnull(hd_dep_count#11) AND (hd_dep_count#11 = 7)) AND isnotnull(hd_demo_sk#10))
 
 (22) Project [codegen id : 3]
-Output [1]: [hd_demo_sk#12]
-Input [2]: [hd_demo_sk#12, hd_dep_count#13]
+Output [1]: [hd_demo_sk#10]
+Input [2]: [hd_demo_sk#10, hd_dep_count#11]
 
 (23) BroadcastExchange
-Input [1]: [hd_demo_sk#12]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#14]
+Input [1]: [hd_demo_sk#10]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=3]
 
 (24) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_hdemo_sk#2]
-Right keys [1]: [hd_demo_sk#12]
+Right keys [1]: [hd_demo_sk#10]
 Join condition: None
 
 (25) Project [codegen id : 4]
 Output: []
-Input [2]: [ss_hdemo_sk#2, hd_demo_sk#12]
+Input [2]: [ss_hdemo_sk#2, hd_demo_sk#10]
 
 (26) HashAggregate [codegen id : 4]
 Input: []
 Keys: []
 Functions [1]: [partial_count(1)]
-Aggregate Attributes [1]: [count#15]
-Results [1]: [count#16]
+Aggregate Attributes [1]: [count#12]
+Results [1]: [count#13]
 
 (27) Exchange
-Input [1]: [count#16]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#17]
+Input [1]: [count#13]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=4]
 
 (28) HashAggregate [codegen id : 5]
-Input [1]: [count#16]
+Input [1]: [count#13]
 Keys: []
 Functions [1]: [count(1)]
-Aggregate Attributes [1]: [count(1)#18]
-Results [1]: [count(1)#18 AS count(1)#19]
+Aggregate Attributes [1]: [count(1)#14]
+Results [1]: [count(1)#14 AS count(1)#15]
 

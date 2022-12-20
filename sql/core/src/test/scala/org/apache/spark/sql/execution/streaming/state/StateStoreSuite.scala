@@ -1017,6 +1017,64 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     }
   }
 
+  // This test illustrates state store iterator behavior differences leading to SPARK-38320.
+  testWithAllCodec("SPARK-38320 - state store iterator behavior differences") {
+    val ROCKSDB_STATE_STORE = "RocksDBStateStore"
+    val dir = newDir()
+    val storeId = StateStoreId(dir, 0L, 1)
+    var version = 0L
+
+    tryWithProviderResource(newStoreProvider(storeId)) { provider =>
+      val store = provider.getStore(version)
+      logInfo(s"Running SPARK-38320 test with state store ${store.getClass.getName}")
+
+      val itr1 = store.iterator()  // itr1 is created before any writes to the store.
+      put(store, "1", 11, 100)
+      put(store, "2", 22, 200)
+      val itr2 = store.iterator()  // itr2 is created in the middle of the writes.
+      put(store, "1", 11, 101)  // Overwrite row (1, 11)
+      put(store, "3", 33, 300)
+      val itr3 = store.iterator()  // itr3 is created after all writes.
+
+      val expected = Set(("1", 11) -> 101, ("2", 22) -> 200, ("3", 33) -> 300)  // The final state.
+      // Itr1 does not see any updates - original state of the store (SPARK-38320)
+      assert(rowPairsToDataSet(itr1) === Set.empty[Set[((String, Int), Int)]])
+      assert(rowPairsToDataSet(itr2) === expected)
+      assert(rowPairsToDataSet(itr3) === expected)
+
+      version = store.commit()
+    }
+
+    // Reload the store from the commited version and repeat the above test.
+    tryWithProviderResource(newStoreProvider(storeId)) { provider =>
+      assert(version > 0)
+      val store = provider.getStore(version)
+
+      val itr1 = store.iterator()  // itr1 is created before any writes to the store.
+      put(store, "3", 33, 301)  // Overwrite row (3, 33)
+      put(store, "4", 44, 400)
+      val itr2 = store.iterator()  // itr2 is created in the middle of the writes.
+      put(store, "4", 44, 401)  // Overwrite row (4, 44)
+      put(store, "5", 55, 500)
+      val itr3 = store.iterator()  // itr3 is created after all writes.
+
+      // The final state.
+      val expected = Set(
+        ("1", 11) -> 101, ("2", 22) -> 200, ("3", 33) -> 301, ("4", 44) -> 401, ("5", 55) -> 500)
+      if (store.getClass.getName contains ROCKSDB_STATE_STORE) {
+        // RocksDB itr1 does not see any updates - original state of the store (SPARK-38320)
+        assert(rowPairsToDataSet(itr1) === Set(
+          ("1", 11) -> 101, ("2", 22) -> 200, ("3", 33) -> 300))
+      } else {
+        assert(rowPairsToDataSet(itr1) === expected)
+      }
+      assert(rowPairsToDataSet(itr2) === expected)
+      assert(rowPairsToDataSet(itr3) === expected)
+
+      version = store.commit()
+    }
+  }
+
   test("StateStore.get") {
     quietly {
       val dir = newDir()

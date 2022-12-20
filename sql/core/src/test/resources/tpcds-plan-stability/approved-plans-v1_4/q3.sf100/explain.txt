@@ -53,7 +53,7 @@ Input [4]: [i_item_sk#5, i_brand_id#6, i_brand#7, i_manufact_id#8]
 
 (8) BroadcastExchange
 Input [3]: [i_item_sk#5, i_brand_id#6, i_brand#7]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#9]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=1]
 
 (9) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ss_item_sk#1]
@@ -65,38 +65,38 @@ Output [4]: [ss_ext_sales_price#2, ss_sold_date_sk#3, i_brand_id#6, i_brand#7]
 Input [6]: [ss_item_sk#1, ss_ext_sales_price#2, ss_sold_date_sk#3, i_item_sk#5, i_brand_id#6, i_brand#7]
 
 (11) ReusedExchange [Reuses operator id: 22]
-Output [2]: [d_date_sk#10, d_year#11]
+Output [2]: [d_date_sk#9, d_year#10]
 
 (12) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ss_sold_date_sk#3]
-Right keys [1]: [d_date_sk#10]
+Right keys [1]: [d_date_sk#9]
 Join condition: None
 
 (13) Project [codegen id : 3]
-Output [4]: [d_year#11, ss_ext_sales_price#2, i_brand_id#6, i_brand#7]
-Input [6]: [ss_ext_sales_price#2, ss_sold_date_sk#3, i_brand_id#6, i_brand#7, d_date_sk#10, d_year#11]
+Output [4]: [d_year#10, ss_ext_sales_price#2, i_brand_id#6, i_brand#7]
+Input [6]: [ss_ext_sales_price#2, ss_sold_date_sk#3, i_brand_id#6, i_brand#7, d_date_sk#9, d_year#10]
 
 (14) HashAggregate [codegen id : 3]
-Input [4]: [d_year#11, ss_ext_sales_price#2, i_brand_id#6, i_brand#7]
-Keys [3]: [d_year#11, i_brand#7, i_brand_id#6]
+Input [4]: [d_year#10, ss_ext_sales_price#2, i_brand_id#6, i_brand#7]
+Keys [3]: [d_year#10, i_brand#7, i_brand_id#6]
 Functions [1]: [partial_sum(UnscaledValue(ss_ext_sales_price#2))]
-Aggregate Attributes [1]: [sum#12]
-Results [4]: [d_year#11, i_brand#7, i_brand_id#6, sum#13]
+Aggregate Attributes [1]: [sum#11]
+Results [4]: [d_year#10, i_brand#7, i_brand_id#6, sum#12]
 
 (15) Exchange
-Input [4]: [d_year#11, i_brand#7, i_brand_id#6, sum#13]
-Arguments: hashpartitioning(d_year#11, i_brand#7, i_brand_id#6, 5), ENSURE_REQUIREMENTS, [id=#14]
+Input [4]: [d_year#10, i_brand#7, i_brand_id#6, sum#12]
+Arguments: hashpartitioning(d_year#10, i_brand#7, i_brand_id#6, 5), ENSURE_REQUIREMENTS, [plan_id=2]
 
 (16) HashAggregate [codegen id : 4]
-Input [4]: [d_year#11, i_brand#7, i_brand_id#6, sum#13]
-Keys [3]: [d_year#11, i_brand#7, i_brand_id#6]
+Input [4]: [d_year#10, i_brand#7, i_brand_id#6, sum#12]
+Keys [3]: [d_year#10, i_brand#7, i_brand_id#6]
 Functions [1]: [sum(UnscaledValue(ss_ext_sales_price#2))]
-Aggregate Attributes [1]: [sum(UnscaledValue(ss_ext_sales_price#2))#15]
-Results [4]: [d_year#11, i_brand_id#6 AS brand_id#16, i_brand#7 AS brand#17, MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#2))#15,17,2) AS sum_agg#18]
+Aggregate Attributes [1]: [sum(UnscaledValue(ss_ext_sales_price#2))#13]
+Results [4]: [d_year#10, i_brand_id#6 AS brand_id#14, i_brand#7 AS brand#15, MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#2))#13,17,2) AS sum_agg#16]
 
 (17) TakeOrderedAndProject
-Input [4]: [d_year#11, brand_id#16, brand#17, sum_agg#18]
-Arguments: 100, [d_year#11 ASC NULLS FIRST, sum_agg#18 DESC NULLS LAST, brand_id#16 ASC NULLS FIRST], [d_year#11, brand_id#16, brand#17, sum_agg#18]
+Input [4]: [d_year#10, brand_id#14, brand#15, sum_agg#16]
+Arguments: 100, [d_year#10 ASC NULLS FIRST, sum_agg#16 DESC NULLS LAST, brand_id#14 ASC NULLS FIRST], [d_year#10, brand_id#14, brand#15, sum_agg#16]
 
 ===== Subqueries =====
 
@@ -109,25 +109,25 @@ BroadcastExchange (22)
 
 
 (18) Scan parquet default.date_dim
-Output [3]: [d_date_sk#10, d_year#11, d_moy#19]
+Output [3]: [d_date_sk#9, d_year#10, d_moy#17]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_moy), EqualTo(d_moy,11), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
 (19) ColumnarToRow [codegen id : 1]
-Input [3]: [d_date_sk#10, d_year#11, d_moy#19]
+Input [3]: [d_date_sk#9, d_year#10, d_moy#17]
 
 (20) Filter [codegen id : 1]
-Input [3]: [d_date_sk#10, d_year#11, d_moy#19]
-Condition : ((isnotnull(d_moy#19) AND (d_moy#19 = 11)) AND isnotnull(d_date_sk#10))
+Input [3]: [d_date_sk#9, d_year#10, d_moy#17]
+Condition : ((isnotnull(d_moy#17) AND (d_moy#17 = 11)) AND isnotnull(d_date_sk#9))
 
 (21) Project [codegen id : 1]
-Output [2]: [d_date_sk#10, d_year#11]
-Input [3]: [d_date_sk#10, d_year#11, d_moy#19]
+Output [2]: [d_date_sk#9, d_year#10]
+Input [3]: [d_date_sk#9, d_year#10, d_moy#17]
 
 (22) BroadcastExchange
-Input [2]: [d_date_sk#10, d_year#11]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#20]
+Input [2]: [d_date_sk#9, d_year#10]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=3]
 
 

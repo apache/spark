@@ -17,11 +17,16 @@
 
 package org.apache.spark.sql.streaming
 
+import java.io.File
+
+import org.apache.commons.io.FileUtils
+
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.Utils
 
 class StreamingDeduplicationSuite extends StateStoreMetricsTest {
 
@@ -411,6 +416,71 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
       AddData(dedupeWithWMInputData, 26, 26),
       CheckNewAnswer(26),
       assertStateOperatorCustomMetric("numDroppedDuplicateRows", expected = 1)
+    )
+  }
+
+  test("SPARK-39650: duplicate with specific keys should allow input to change schema") {
+    withTempDir { checkpoint =>
+      val dedupeInputData = MemoryStream[(String, Int)]
+      val dedupe = dedupeInputData.toDS().dropDuplicates("_1")
+
+      testStream(dedupe, Append)(
+        StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+
+        AddData(dedupeInputData, "a" -> 1),
+        CheckLastBatch("a" -> 1),
+
+        AddData(dedupeInputData, "a" -> 2, "b" -> 3),
+        CheckLastBatch("b" -> 3)
+      )
+
+      val dedupeInputData2 = MemoryStream[(String, Int, String)]
+      val dedupe2 = dedupeInputData2.toDS().dropDuplicates("_1")
+
+      // initialize new memory stream with previously executed batches
+      dedupeInputData2.addData(("a", 1, "dummy"))
+      dedupeInputData2.addData(Seq(("a", 2, "dummy"), ("b", 3, "dummy")))
+
+      testStream(dedupe2, Append)(
+        StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+
+        AddData(dedupeInputData2, ("a", 5, "a"), ("b", 2, "b"), ("c", 9, "c")),
+        CheckLastBatch(("c", 9, "c"))
+      )
+    }
+  }
+
+  test("SPARK-39650: recovery from checkpoint having all columns as value schema") {
+    // NOTE: We are also changing the schema of input compared to the checkpoint. In the checkpoint
+    // we define the input schema as (String, Int).
+    val inputData = MemoryStream[(String, Int, String)]
+    val dedupe = inputData.toDS().dropDuplicates("_1")
+
+    // The fix will land after Spark 3.3.0, hence we can check backward compatibility with
+    // checkpoint being built from Spark 3.3.0.
+    val resourceUri = this.getClass.getResource(
+      "/structured-streaming/checkpoint-version-3.3.0-streaming-deduplication/").toURI
+
+    val checkpointDir = Utils.createTempDir().getCanonicalFile
+    // Copy the checkpoint to a temp dir to prevent changes to the original.
+    // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
+    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+
+    inputData.addData(("a", 1, "dummy"))
+    inputData.addData(("a", 2, "dummy"), ("b", 3, "dummy"))
+
+    testStream(dedupe, Append)(
+      StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+      /*
+        Note: The checkpoint was generated using the following input in Spark version 3.3.0
+        AddData(inputData, ("a", 1)),
+        CheckLastBatch(("a", 1)),
+        AddData(inputData, ("a", 2), ("b", 3)),
+        CheckLastBatch(("b", 3))
+       */
+
+      AddData(inputData, ("a", 5, "a"), ("b", 2, "b"), ("c", 9, "c")),
+      CheckLastBatch(("c", 9, "c"))
     )
   }
 }

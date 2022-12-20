@@ -30,4 +30,9 @@ class ExampleJdbcConnectionProvider extends JdbcConnectionProvider with Logging 
   override def canHandle(driver: Driver, options: Map[String, String]): Boolean = false
 
   override def getConnection(driver: Driver, options: Map[String, String]): Connection = null
+
+  override def modifiesSecurityContext(
+    driver: Driver,
+    options: Map[String, String]
+  ): Boolean = false
 }

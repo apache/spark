@@ -23,7 +23,7 @@ import unittest
 
 from pyspark import SparkContext
 from pyspark.sql import SparkSession, Column, Row
-from pyspark.sql.functions import udf
+from pyspark.sql.functions import udf, rand
 from pyspark.sql.udf import UserDefinedFunction
 from pyspark.sql.types import StringType, IntegerType, BooleanType, DoubleType, LongType, \
     ArrayType, StructType, StructField
@@ -684,6 +684,32 @@ class UDFTests(ReusedSQLTestCase):
                            udf(f, IntegerType())("c2").alias('c4'))
         self.assertEqual(result.collect(),
                          [Row(c1=Row(_1=1.0, _2=1.0), c2=Row(_1=1, _2=1), c3=1.0, c4=1)])
+
+    # SPARK-33277
+    def test_udf_with_column_vector(self):
+        path = tempfile.mkdtemp()
+        shutil.rmtree(path)
+
+        try:
+            self.spark.range(0, 100000, 1, 1).write.parquet(path)
+
+            def f(x):
+                return 0
+
+            fUdf = udf(f, LongType())
+
+            for offheap in ["true", "false"]:
+                with self.sql_conf({"spark.sql.columnVector.offheap.enabled": offheap}):
+                    self.assertEquals(
+                        self.spark.read.parquet(path).select(fUdf('id')).head(), Row(0))
+        finally:
+            shutil.rmtree(path)
+
+    def test_udf_with_rand(self):
+        # SPARK-40121: rand() with Python UDF.
+        self.assertEqual(
+            len(self.spark.range(10).select(udf(lambda x: x, DoubleType())(rand())).collect()), 10
+        )
 
 
 class UDFInitializationTests(unittest.TestCase):

@@ -866,29 +866,33 @@ class DataFrameSuite extends QueryTest
 
     def getSchemaAsSeq(df: DataFrame): Seq[String] = df.schema.map(_.name)
 
-    val describeAllCols = person2.describe()
-    assert(getSchemaAsSeq(describeAllCols) === Seq("summary", "name", "age", "height"))
-    checkAnswer(describeAllCols, describeResult)
-    // All aggregate value should have been cast to string
-    describeAllCols.collect().foreach { row =>
-      row.toSeq.foreach { value =>
-        if (value != null) {
-          assert(value.isInstanceOf[String], "expected string but found " + value.getClass)
+    Seq("true", "false").foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled) {
+        val describeAllCols = person2.describe()
+        assert(getSchemaAsSeq(describeAllCols) === Seq("summary", "name", "age", "height"))
+        checkAnswer(describeAllCols, describeResult)
+        // All aggregate value should have been cast to string
+        describeAllCols.collect().foreach { row =>
+          row.toSeq.foreach { value =>
+            if (value != null) {
+              assert(value.isInstanceOf[String], "expected string but found " + value.getClass)
+            }
+          }
         }
+
+        val describeOneCol = person2.describe("age")
+        assert(getSchemaAsSeq(describeOneCol) === Seq("summary", "age"))
+        checkAnswer(describeOneCol, describeResult.map { case Row(s, _, d, _) => Row(s, d) })
+
+        val describeNoCol = person2.select().describe()
+        assert(getSchemaAsSeq(describeNoCol) === Seq("summary"))
+        checkAnswer(describeNoCol, describeResult.map { case Row(s, _, _, _) => Row(s) })
+
+        val emptyDescription = person2.limit(0).describe()
+        assert(getSchemaAsSeq(emptyDescription) === Seq("summary", "name", "age", "height"))
+        checkAnswer(emptyDescription, emptyDescribeResult)
       }
     }
-
-    val describeOneCol = person2.describe("age")
-    assert(getSchemaAsSeq(describeOneCol) === Seq("summary", "age"))
-    checkAnswer(describeOneCol, describeResult.map { case Row(s, _, d, _) => Row(s, d)} )
-
-    val describeNoCol = person2.select().describe()
-    assert(getSchemaAsSeq(describeNoCol) === Seq("summary"))
-    checkAnswer(describeNoCol, describeResult.map { case Row(s, _, _, _) => Row(s)} )
-
-    val emptyDescription = person2.limit(0).describe()
-    assert(getSchemaAsSeq(emptyDescription) === Seq("summary", "name", "age", "height"))
-    checkAnswer(emptyDescription, emptyDescribeResult)
   }
 
   test("summary") {
@@ -914,30 +918,34 @@ class DataFrameSuite extends QueryTest
 
     def getSchemaAsSeq(df: DataFrame): Seq[String] = df.schema.map(_.name)
 
-    val summaryAllCols = person2.summary()
+    Seq("true", "false").foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled) {
+        val summaryAllCols = person2.summary()
 
-    assert(getSchemaAsSeq(summaryAllCols) === Seq("summary", "name", "age", "height"))
-    checkAnswer(summaryAllCols, summaryResult)
-    // All aggregate value should have been cast to string
-    summaryAllCols.collect().foreach { row =>
-      row.toSeq.foreach { value =>
-        if (value != null) {
-          assert(value.isInstanceOf[String], "expected string but found " + value.getClass)
+        assert(getSchemaAsSeq(summaryAllCols) === Seq("summary", "name", "age", "height"))
+        checkAnswer(summaryAllCols, summaryResult)
+        // All aggregate value should have been cast to string
+        summaryAllCols.collect().foreach { row =>
+          row.toSeq.foreach { value =>
+            if (value != null) {
+              assert(value.isInstanceOf[String], "expected string but found " + value.getClass)
+            }
+          }
         }
+
+        val summaryOneCol = person2.select("age").summary()
+        assert(getSchemaAsSeq(summaryOneCol) === Seq("summary", "age"))
+        checkAnswer(summaryOneCol, summaryResult.map { case Row(s, _, d, _) => Row(s, d) })
+
+        val summaryNoCol = person2.select().summary()
+        assert(getSchemaAsSeq(summaryNoCol) === Seq("summary"))
+        checkAnswer(summaryNoCol, summaryResult.map { case Row(s, _, _, _) => Row(s) })
+
+        val emptyDescription = person2.limit(0).summary()
+        assert(getSchemaAsSeq(emptyDescription) === Seq("summary", "name", "age", "height"))
+        checkAnswer(emptyDescription, emptySummaryResult)
       }
     }
-
-    val summaryOneCol = person2.select("age").summary()
-    assert(getSchemaAsSeq(summaryOneCol) === Seq("summary", "age"))
-    checkAnswer(summaryOneCol, summaryResult.map { case Row(s, _, d, _) => Row(s, d)} )
-
-    val summaryNoCol = person2.select().summary()
-    assert(getSchemaAsSeq(summaryNoCol) === Seq("summary"))
-    checkAnswer(summaryNoCol, summaryResult.map { case Row(s, _, _, _) => Row(s)} )
-
-    val emptyDescription = person2.limit(0).summary()
-    assert(getSchemaAsSeq(emptyDescription) === Seq("summary", "name", "age", "height"))
-    checkAnswer(emptyDescription, emptySummaryResult)
   }
 
   test("SPARK-34165: Add count_distinct to summary") {
@@ -2844,6 +2852,25 @@ class DataFrameSuite extends QueryTest
     checkAnswer(test10, Row(Array(Row("cbaihg"), Row("fedlkj"))) :: Nil)
   }
 
+  test("SPARK-39293: The accumulator of ArrayAggregate to handle complex types properly") {
+    val reverse = udf((s: String) => s.reverse)
+
+    val df = Seq(Array("abc", "def")).toDF("array")
+    val testArray = df.select(
+      aggregate(
+        col("array"),
+        array().cast("array<string>"),
+        (acc, s) => concat(acc, array(reverse(s)))))
+    checkAnswer(testArray, Row(Array("cba", "fed")) :: Nil)
+
+    val testMap = df.select(
+      aggregate(
+        col("array"),
+        map().cast("map<string, string>"),
+        (acc, s) => map_concat(acc, map(s, reverse(s)))))
+    checkAnswer(testMap, Row(Map("abc" -> "cba", "def" -> "fed")) :: Nil)
+  }
+
   test("SPARK-34882: Aggregate with multiple distinct null sensitive aggregators") {
     withUserDefinedFunction(("countNulls", true)) {
       spark.udf.register("countNulls", udaf(new Aggregator[JLong, JLong, JLong] {
@@ -2942,6 +2969,204 @@ class DataFrameSuite extends QueryTest
     val ids = spark.range(10).repartition(5)
       .withSequenceColumn("default_index").collect().map(_.getLong(0))
     assert(ids.toSet === Range(0, 10).toSet)
+  }
+
+  test("SPARK-37855: IllegalStateException when transforming an array inside a nested struct") {
+    def makeInput(): DataFrame = {
+      val innerElement1 = Row(3, 3.12)
+      val innerElement2 = Row(4, 2.1)
+      val innerElement3 = Row(1, 985.2)
+      val innerElement4 = Row(10, 757548.0)
+      val innerElement5 = Row(1223, 0.665)
+
+      val outerElement1 = Row(1, Row(List(innerElement1, innerElement2)))
+      val outerElement2 = Row(2, Row(List(innerElement3)))
+      val outerElement3 = Row(3, Row(List(innerElement4, innerElement5)))
+
+      val data = Seq(
+        Row("row1", List(outerElement1)),
+        Row("row2", List(outerElement2, outerElement3))
+      )
+
+      val schema = new StructType()
+        .add("name", StringType)
+        .add("outer_array", ArrayType(new StructType()
+          .add("id", IntegerType)
+          .add("inner_array_struct", new StructType()
+            .add("inner_array", ArrayType(new StructType()
+              .add("id", IntegerType)
+              .add("value", DoubleType)
+            ))
+          )
+        ))
+
+      spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+    }
+
+    val df = makeInput().limit(2)
+
+    val res = df.withColumn("extracted", transform(
+      col("outer_array"),
+      c1 => {
+        struct(
+          c1.getField("id").alias("outer_id"),
+          transform(
+            c1.getField("inner_array_struct").getField("inner_array"),
+            c2 => {
+              struct(
+                c2.getField("value").alias("inner_value")
+              )
+            }
+          )
+        )
+      }
+    ))
+
+    assert(res.collect.length == 2)
+  }
+
+  test("SPARK-38285: Fix ClassCastException: GenericArrayData cannot be cast to InternalRow") {
+    withTempView("v1") {
+      val sqlText =
+        """
+          |CREATE OR REPLACE TEMP VIEW v1 AS
+          |SELECT * FROM VALUES
+          |(array(
+          |  named_struct('s', 'string1', 'b', array(named_struct('e', 'string2'))),
+          |  named_struct('s', 'string4', 'b', array(named_struct('e', 'string5')))
+          |  )
+          |)
+          |v1(o);
+          |""".stripMargin
+      sql(sqlText)
+
+      val df = sql("SELECT eo.b.e FROM (SELECT explode(o) AS eo FROM v1)")
+      checkAnswer(df, Row(Seq("string2")) :: Row(Seq("string5")) :: Nil)
+    }
+  }
+
+  test("SPARK-37865: Do not deduplicate union output columns") {
+    val df1 = Seq((1, 1), (1, 2)).toDF("a", "b")
+    val df2 = Seq((2, 2), (2, 3)).toDF("c", "d")
+
+    def sqlQuery(cols1: Seq[String], cols2: Seq[String], distinct: Boolean): String = {
+      val union = if (distinct) {
+        "UNION"
+      } else {
+        "UNION ALL"
+      }
+      s"""
+         |SELECT ${cols1.mkString(",")} FROM VALUES (1, 1), (1, 2) AS t1(a, b)
+         |$union SELECT ${cols2.mkString(",")} FROM VALUES (2, 2), (2, 3) AS t2(c, d)
+         |""".stripMargin
+    }
+
+    Seq(
+      (Seq("a", "a"), Seq("c", "d"), Seq(Row(1, 1), Row(1, 1), Row(2, 2), Row(2, 3))),
+      (Seq("a", "b"), Seq("c", "d"), Seq(Row(1, 1), Row(1, 2), Row(2, 2), Row(2, 3))),
+      (Seq("a", "b"), Seq("c", "c"), Seq(Row(1, 1), Row(1, 2), Row(2, 2), Row(2, 2)))
+    ).foreach { case (cols1, cols2, rows) =>
+      // UNION ALL (non-distinct)
+      val df3 = df1.selectExpr(cols1: _*).union(df2.selectExpr(cols2: _*))
+      checkAnswer(df3, rows)
+
+      val t3 = sqlQuery(cols1, cols2, false)
+      checkAnswer(sql(t3), rows)
+
+      // Avoid breaking change
+      var correctAnswer = rows.map(r => Row(r(0)))
+      checkAnswer(df3.select(df1.col("a")), correctAnswer)
+      checkAnswer(sql(s"select a from ($t3) t3"), correctAnswer)
+
+      // This has always been broken
+      intercept[AnalysisException] {
+        df3.select(df2.col("d")).collect()
+      }
+      intercept[AnalysisException] {
+        sql(s"select d from ($t3) t3")
+      }
+
+      // UNION (distinct)
+      val df4 = df3.distinct
+      checkAnswer(df4, rows.distinct)
+
+      val t4 = sqlQuery(cols1, cols2, true)
+      checkAnswer(sql(t4), rows.distinct)
+
+      // Avoid breaking change
+      correctAnswer = rows.distinct.map(r => Row(r(0)))
+      checkAnswer(df4.select(df1.col("a")), correctAnswer)
+      checkAnswer(sql(s"select a from ($t4) t4"), correctAnswer)
+
+      // This has always been broken
+      intercept[AnalysisException] {
+        df4.select(df2.col("d")).collect()
+      }
+      intercept[AnalysisException] {
+        sql(s"select d from ($t4) t4")
+      }
+    }
+  }
+
+  test("SPARK-39887: RemoveRedundantAliases should keep attributes of a Union's first child") {
+    val df = sql(
+      """
+        |SELECT a, b AS a FROM (
+        |  SELECT a, a AS b FROM (SELECT a FROM VALUES (1) AS t(a))
+        |  UNION ALL
+        |  SELECT a, b FROM (SELECT a, b FROM VALUES (1, 2) AS t(a, b))
+        |)
+        |""".stripMargin)
+    val stringCols = df.logicalPlan.output.map(Column(_).cast(StringType))
+    val castedDf = df.select(stringCols: _*)
+    checkAnswer(castedDf, Row("1", "1") :: Row("1", "2") :: Nil)
+  }
+
+  test("SPARK-39887: RemoveRedundantAliases should keep attributes of a Union's first child 2") {
+    val df = sql(
+      """
+        |SELECT
+        |  to_date(a) a,
+        |  to_date(b) b
+        |FROM
+        |  (
+        |    SELECT
+        |      a,
+        |      a AS b
+        |    FROM
+        |      (
+        |        SELECT
+        |          to_date(a) a
+        |        FROM
+        |        VALUES
+        |          ('2020-02-01') AS t1(a)
+        |        GROUP BY
+        |          to_date(a)
+        |      ) t3
+        |    UNION ALL
+        |    SELECT
+        |      a,
+        |      b
+        |    FROM
+        |      (
+        |        SELECT
+        |          to_date(a) a,
+        |          to_date(b) b
+        |        FROM
+        |        VALUES
+        |          ('2020-01-01', '2020-01-02') AS t1(a, b)
+        |        GROUP BY
+        |          to_date(a),
+        |          to_date(b)
+        |      ) t4
+        |  ) t5
+        |GROUP BY
+        |  to_date(a),
+        |  to_date(b);
+        |""".stripMargin)
+    checkAnswer(df,
+      Row(java.sql.Date.valueOf("2020-02-01"), java.sql.Date.valueOf("2020-02-01")) ::
+        Row(java.sql.Date.valueOf("2020-01-01"), java.sql.Date.valueOf("2020-01-02")) :: Nil)
   }
 }
 

@@ -120,7 +120,7 @@ class DatetimeIndexTest(PandasOnSparkTestCase, TestUtils):
 
     def test_month_name(self):
         for psidx, pidx in self.idx_pairs:
-            self.assert_eq(psidx.day_name(), pidx.day_name())
+            self.assert_eq(psidx.month_name(), pidx.month_name())
 
     def test_normalize(self):
         for psidx, pidx in self.idx_pairs:

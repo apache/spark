@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.joins
 import scala.reflect.ClassTag
 
 import org.apache.spark.AccumulatorSuite
+import org.apache.spark.internal.config.EXECUTOR_MEMORY
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BitwiseAnd, BitwiseOr, Cast, Expression, Literal, ShiftLeft}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
@@ -56,7 +57,8 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
   override def beforeAll(): Unit = {
     super.beforeAll()
     spark = SparkSession.builder()
-      .master("local-cluster[2,1,1024]")
+      .master("local-cluster[2,1,512]")
+      .config(EXECUTOR_MEMORY.key, "512m")
       .appName("testing")
       .getOrCreate()
   }
@@ -633,6 +635,32 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
           left = DummySparkPlan(outputPartitioning = HashPartitioning(Seq(l1, l2), 1)),
           right = DummySparkPlan())
         assert(bhj.outputPartitioning === PartitioningCollection(expected.take(limit)))
+      }
+    }
+  }
+
+  test("SPARK-37742: join planning shouldn't read invalid InMemoryRelation stats") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10") {
+      try {
+        val df1 = Seq(1).toDF("key")
+        val df2 = Seq((1, "1"), (2, "2")).toDF("key", "value")
+        df2.persist()
+        df2.queryExecution.toRdd
+
+        val df3 = df1.join(df2, Seq("key"), "inner")
+        val numCachedPlan = collect(df3.queryExecution.executedPlan) {
+          case i: InMemoryTableScanExec => i
+        }.size
+        // df2 should be cached.
+        assert(numCachedPlan === 1)
+
+        val numBroadCastHashJoin = collect(df3.queryExecution.executedPlan) {
+          case b: BroadcastHashJoinExec => b
+        }.size
+        // df2 should not be broadcasted.
+        assert(numBroadCastHashJoin === 0)
+      } finally {
+        spark.catalog.clearCache()
       }
     }
   }

@@ -100,6 +100,19 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("char type values should not be padded when charVarcharAsString is true") {
+    withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+      withTable("t") {
+        sql(s"CREATE TABLE t(a STRING, b CHAR(5), c CHAR(5)) USING $format partitioned by (c)")
+        sql("INSERT INTO t VALUES ('abc', 'abc', 'abc')")
+        checkAnswer(sql("SELECT b FROM t WHERE b='abc'"), Row("abc"))
+        checkAnswer(sql("SELECT b FROM t WHERE b in ('abc')"), Row("abc"))
+        checkAnswer(sql("SELECT c FROM t WHERE c='abc'"), Row("abc"))
+        checkAnswer(sql("SELECT c FROM t WHERE c in ('abc')"), Row("abc"))
+      }
+    }
+  }
+
   test("varchar type values length check and trim: partitioned columns") {
     (0 to 5).foreach { n =>
       // SPARK-34192: we need to create a a new table for each round of test because of

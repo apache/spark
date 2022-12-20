@@ -46,7 +46,7 @@ import org.apache.spark.sql.types._
  * As commands are executed eagerly, this also includes errors thrown during the execution of
  * commands, which users can see immediately.
  */
-object QueryCompilationErrors {
+private[sql] object QueryCompilationErrors {
 
   def groupingIDMismatchError(groupingID: GroupingID, groupByExprs: Seq[Expression]): Throwable = {
     new AnalysisException(
@@ -519,10 +519,6 @@ object QueryCompilationErrors {
       "SHOW VIEWS, only SessionCatalog supports this command.")
   }
 
-  def unsupportedFunctionNameError(quoted: String): Throwable = {
-    new AnalysisException(s"Unsupported function name '$quoted'")
-  }
-
   def sqlOnlySupportedWithV1TablesError(sql: String): Throwable = {
     new AnalysisException(s"$sql is only supported with v1 tables.")
   }
@@ -850,9 +846,9 @@ object QueryCompilationErrors {
     new TableAlreadyExistsException(ident)
   }
 
-  def requiresSinglePartNamespaceError(ident: Identifier): Throwable = {
-    new NoSuchTableException(
-      s"V2 session catalog requires a single-part namespace: ${ident.quoted}")
+  def requiresSinglePartNamespaceError(ns: Seq[String]): Throwable = {
+    new AnalysisException(CatalogManager.SESSION_CATALOG_NAME +
+      " requires a single-part namespace, but got " + ns.mkString("[", ", ", "]"))
   }
 
   def namespaceAlreadyExistsError(namespace: Array[String]): Throwable = {
@@ -1977,7 +1973,8 @@ object QueryCompilationErrors {
     new AnalysisException("Failed to execute SHOW CREATE TABLE against table " +
         s"${table.identifier}, which is created by Hive and uses the " +
         "following unsupported serde configuration\n" +
-        builder.toString()
+        builder.toString() + "\n" +
+        s"Please use `SHOW CREATE TABLE ${table.identifier} AS SERDE` to show Hive DDL instead."
     )
   }
 

@@ -469,7 +469,8 @@ def run_scala_tests(build_tool, extra_profiles, test_modules, excluded_tags, inc
     `determine_test_suites` function"""
     set_title_and_block("Running Spark unit tests", "BLOCK_SPARK_UNIT_TESTS")
 
-    test_modules = set(test_modules)
+    # Remove duplicates while keeping the test module order
+    test_modules = list(dict.fromkeys(test_modules))
 
     test_profiles = extra_profiles + \
         list(set(itertools.chain.from_iterable(m.build_profile_flags for m in test_modules)))
@@ -759,13 +760,13 @@ def main():
     run_scala_tests(build_tool, extra_profiles, test_modules, excluded_tags, included_tags)
 
     modules_with_python_tests = [m for m in test_modules if m.python_test_goals]
-    if modules_with_python_tests:
+    if modules_with_python_tests and not os.environ.get("SKIP_PYTHON"):
         run_python_tests(
             modules_with_python_tests,
             opts.parallelism,
             with_coverage=os.environ.get("PYSPARK_CODECOV", "false") == "true")
         run_python_packaging_tests()
-    if any(m.should_run_r_tests for m in test_modules):
+    if any(m.should_run_r_tests for m in test_modules) and not os.environ.get("SKIP_R"):
         run_sparkr_tests()
 
 

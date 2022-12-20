@@ -22,16 +22,27 @@ import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.{KubernetesClient, Watcher, WatcherException}
 import io.fabric8.kubernetes.client.Watcher.Action
 
+import org.apache.spark.annotation.{DeveloperApi, Since, Stable}
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
-private[spark] class ExecutorPodsWatchSnapshotSource(
+/**
+ * :: DeveloperApi ::
+ *
+ * A class used for watching K8s executor pods by ExternalClusterManagers.
+ *
+ * @since 3.1.3
+ */
+@Stable
+@DeveloperApi
+class ExecutorPodsWatchSnapshotSource(
     snapshotsStore: ExecutorPodsSnapshotsStore,
     kubernetesClient: KubernetesClient) extends Logging {
 
   private var watchConnection: Closeable = _
 
+  @Since("3.1.3")
   def start(applicationId: String): Unit = {
     require(watchConnection == null, "Cannot start the watcher twice.")
     logDebug(s"Starting watch for pods with labels $SPARK_APP_ID_LABEL=$applicationId," +
@@ -42,6 +53,7 @@ private[spark] class ExecutorPodsWatchSnapshotSource(
       .watch(new ExecutorPodsWatcher())
   }
 
+  @Since("3.1.3")
   def stop(): Unit = {
     if (watchConnection != null) {
       Utils.tryLogNonFatalError {

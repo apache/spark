@@ -37,7 +37,6 @@ import org.scalatest.time.{Minutes, Seconds, Span}
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.deploy.k8s.integrationtest.TestConstants._
 import org.apache.spark.deploy.k8s.integrationtest.backend.{IntegrationTestBackend, IntegrationTestBackendFactory}
-import org.apache.spark.deploy.k8s.integrationtest.backend.minikube.Minikube
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 
@@ -76,7 +75,7 @@ class KubernetesSuite extends SparkFunSuite
   protected override def logForFailedTest(): Unit = {
     logInfo("\n\n===== EXTRA LOGS FOR THE FAILED TEST\n")
     logInfo("BEGIN DESCRIBE PODS for application\n" +
-      Minikube.describePods(s"spark-app-locator=$appLocator").mkString("\n"))
+      testBackend.describePods(s"spark-app-locator=$appLocator").mkString("\n"))
     logInfo("END DESCRIBE PODS for the application")
     val driverPodOption = kubernetesTestComponents.kubernetesClient
       .pods()
@@ -178,7 +177,8 @@ class KubernetesSuite extends SparkFunSuite
 
   before {
     appLocator = UUID.randomUUID().toString.replaceAll("-", "")
-    driverPodName = "spark-test-app-" + UUID.randomUUID().toString.replaceAll("-", "")
+    driverPodName = "spark-test-app-" +
+      UUID.randomUUID().toString.replaceAll("-", "") + "-driver"
     sparkAppConf = kubernetesTestComponents.newSparkAppConf()
       .set("spark.kubernetes.container.image", image)
       .set("spark.kubernetes.driver.pod.name", driverPodName)
@@ -567,6 +567,8 @@ class KubernetesSuite extends SparkFunSuite
 private[spark] object KubernetesSuite {
   val k8sTestTag = Tag("k8s")
   val pvTestTag = Tag("persistentVolume")
+  val localTestTag = Tag("local")
+  val schedulingTestTag = Tag("schedule")
   val rTestTag = Tag("r")
   val MinikubeTag = Tag("minikube")
   val SPARK_PI_MAIN_CLASS: String = "org.apache.spark.examples.SparkPi"

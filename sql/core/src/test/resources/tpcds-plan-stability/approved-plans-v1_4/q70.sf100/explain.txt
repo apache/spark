@@ -128,7 +128,7 @@ Condition : isnotnull(s_store_sk#13)
 
 (19) BroadcastExchange
 Input [2]: [s_store_sk#13, s_state#14]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#15]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=1]
 
 (20) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_store_sk#9]
@@ -143,52 +143,52 @@ Input [4]: [ss_store_sk#9, ss_net_profit#10, s_store_sk#13, s_state#14]
 Input [2]: [ss_net_profit#10, s_state#14]
 Keys [1]: [s_state#14]
 Functions [1]: [partial_sum(UnscaledValue(ss_net_profit#10))]
-Aggregate Attributes [1]: [sum#16]
-Results [2]: [s_state#14, sum#17]
+Aggregate Attributes [1]: [sum#15]
+Results [2]: [s_state#14, sum#16]
 
 (23) Exchange
-Input [2]: [s_state#14, sum#17]
-Arguments: hashpartitioning(s_state#14, 5), ENSURE_REQUIREMENTS, [id=#18]
+Input [2]: [s_state#14, sum#16]
+Arguments: hashpartitioning(s_state#14, 5), ENSURE_REQUIREMENTS, [plan_id=2]
 
 (24) HashAggregate [codegen id : 5]
-Input [2]: [s_state#14, sum#17]
+Input [2]: [s_state#14, sum#16]
 Keys [1]: [s_state#14]
 Functions [1]: [sum(UnscaledValue(ss_net_profit#10))]
-Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_profit#10))#19]
-Results [3]: [s_state#14 AS s_state#20, s_state#14, MakeDecimal(sum(UnscaledValue(ss_net_profit#10))#19,17,2) AS _w2#21]
+Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_profit#10))#17]
+Results [3]: [s_state#14 AS s_state#18, s_state#14, MakeDecimal(sum(UnscaledValue(ss_net_profit#10))#17,17,2) AS _w2#19]
 
 (25) Exchange
-Input [3]: [s_state#20, s_state#14, _w2#21]
-Arguments: hashpartitioning(s_state#14, 5), ENSURE_REQUIREMENTS, [id=#22]
+Input [3]: [s_state#18, s_state#14, _w2#19]
+Arguments: hashpartitioning(s_state#14, 5), ENSURE_REQUIREMENTS, [plan_id=3]
 
 (26) Sort [codegen id : 6]
-Input [3]: [s_state#20, s_state#14, _w2#21]
-Arguments: [s_state#14 ASC NULLS FIRST, _w2#21 DESC NULLS LAST], false, 0
+Input [3]: [s_state#18, s_state#14, _w2#19]
+Arguments: [s_state#14 ASC NULLS FIRST, _w2#19 DESC NULLS LAST], false, 0
 
 (27) Window
-Input [3]: [s_state#20, s_state#14, _w2#21]
-Arguments: [rank(_w2#21) windowspecdefinition(s_state#14, _w2#21 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS ranking#23], [s_state#14], [_w2#21 DESC NULLS LAST]
+Input [3]: [s_state#18, s_state#14, _w2#19]
+Arguments: [rank(_w2#19) windowspecdefinition(s_state#14, _w2#19 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS ranking#20], [s_state#14], [_w2#19 DESC NULLS LAST]
 
 (28) Filter [codegen id : 7]
-Input [4]: [s_state#20, s_state#14, _w2#21, ranking#23]
-Condition : (ranking#23 <= 5)
+Input [4]: [s_state#18, s_state#14, _w2#19, ranking#20]
+Condition : (ranking#20 <= 5)
 
 (29) Project [codegen id : 7]
-Output [1]: [s_state#20]
-Input [4]: [s_state#20, s_state#14, _w2#21, ranking#23]
+Output [1]: [s_state#18]
+Input [4]: [s_state#18, s_state#14, _w2#19, ranking#20]
 
 (30) BroadcastExchange
-Input [1]: [s_state#20]
-Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [id=#24]
+Input [1]: [s_state#18]
+Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [plan_id=4]
 
 (31) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [s_state#8]
-Right keys [1]: [s_state#20]
+Right keys [1]: [s_state#18]
 Join condition: None
 
 (32) BroadcastExchange
 Input [3]: [s_store_sk#6, s_county#7, s_state#8]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#25]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=5]
 
 (33) BroadcastHashJoin [codegen id : 9]
 Left keys [1]: [ss_store_sk#1]
@@ -201,45 +201,45 @@ Input [5]: [ss_store_sk#1, ss_net_profit#2, s_store_sk#6, s_county#7, s_state#8]
 
 (35) Expand [codegen id : 9]
 Input [3]: [ss_net_profit#2, s_state#8, s_county#7]
-Arguments: [[ss_net_profit#2, s_state#8, s_county#7, 0], [ss_net_profit#2, s_state#8, null, 1], [ss_net_profit#2, null, null, 3]], [ss_net_profit#2, s_state#26, s_county#27, spark_grouping_id#28]
+Arguments: [[ss_net_profit#2, s_state#8, s_county#7, 0], [ss_net_profit#2, s_state#8, null, 1], [ss_net_profit#2, null, null, 3]], [ss_net_profit#2, s_state#21, s_county#22, spark_grouping_id#23]
 
 (36) HashAggregate [codegen id : 9]
-Input [4]: [ss_net_profit#2, s_state#26, s_county#27, spark_grouping_id#28]
-Keys [3]: [s_state#26, s_county#27, spark_grouping_id#28]
+Input [4]: [ss_net_profit#2, s_state#21, s_county#22, spark_grouping_id#23]
+Keys [3]: [s_state#21, s_county#22, spark_grouping_id#23]
 Functions [1]: [partial_sum(UnscaledValue(ss_net_profit#2))]
-Aggregate Attributes [1]: [sum#29]
-Results [4]: [s_state#26, s_county#27, spark_grouping_id#28, sum#30]
+Aggregate Attributes [1]: [sum#24]
+Results [4]: [s_state#21, s_county#22, spark_grouping_id#23, sum#25]
 
 (37) Exchange
-Input [4]: [s_state#26, s_county#27, spark_grouping_id#28, sum#30]
-Arguments: hashpartitioning(s_state#26, s_county#27, spark_grouping_id#28, 5), ENSURE_REQUIREMENTS, [id=#31]
+Input [4]: [s_state#21, s_county#22, spark_grouping_id#23, sum#25]
+Arguments: hashpartitioning(s_state#21, s_county#22, spark_grouping_id#23, 5), ENSURE_REQUIREMENTS, [plan_id=6]
 
 (38) HashAggregate [codegen id : 10]
-Input [4]: [s_state#26, s_county#27, spark_grouping_id#28, sum#30]
-Keys [3]: [s_state#26, s_county#27, spark_grouping_id#28]
+Input [4]: [s_state#21, s_county#22, spark_grouping_id#23, sum#25]
+Keys [3]: [s_state#21, s_county#22, spark_grouping_id#23]
 Functions [1]: [sum(UnscaledValue(ss_net_profit#2))]
-Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_profit#2))#32]
-Results [7]: [MakeDecimal(sum(UnscaledValue(ss_net_profit#2))#32,17,2) AS total_sum#33, s_state#26, s_county#27, (cast((shiftright(spark_grouping_id#28, 1) & 1) as tinyint) + cast((shiftright(spark_grouping_id#28, 0) & 1) as tinyint)) AS lochierarchy#34, (cast((shiftright(spark_grouping_id#28, 1) & 1) as tinyint) + cast((shiftright(spark_grouping_id#28, 0) & 1) as tinyint)) AS _w1#35, CASE WHEN (cast((shiftright(spark_grouping_id#28, 0) & 1) as tinyint) = 0) THEN s_state#26 END AS _w2#36, MakeDecimal(sum(UnscaledValue(ss_net_profit#2))#32,17,2) AS _w3#37]
+Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_profit#2))#26]
+Results [7]: [MakeDecimal(sum(UnscaledValue(ss_net_profit#2))#26,17,2) AS total_sum#27, s_state#21, s_county#22, (cast((shiftright(spark_grouping_id#23, 1) & 1) as tinyint) + cast((shiftright(spark_grouping_id#23, 0) & 1) as tinyint)) AS lochierarchy#28, (cast((shiftright(spark_grouping_id#23, 1) & 1) as tinyint) + cast((shiftright(spark_grouping_id#23, 0) & 1) as tinyint)) AS _w1#29, CASE WHEN (cast((shiftright(spark_grouping_id#23, 0) & 1) as tinyint) = 0) THEN s_state#21 END AS _w2#30, MakeDecimal(sum(UnscaledValue(ss_net_profit#2))#26,17,2) AS _w3#31]
 
 (39) Exchange
-Input [7]: [total_sum#33, s_state#26, s_county#27, lochierarchy#34, _w1#35, _w2#36, _w3#37]
-Arguments: hashpartitioning(_w1#35, _w2#36, 5), ENSURE_REQUIREMENTS, [id=#38]
+Input [7]: [total_sum#27, s_state#21, s_county#22, lochierarchy#28, _w1#29, _w2#30, _w3#31]
+Arguments: hashpartitioning(_w1#29, _w2#30, 5), ENSURE_REQUIREMENTS, [plan_id=7]
 
 (40) Sort [codegen id : 11]
-Input [7]: [total_sum#33, s_state#26, s_county#27, lochierarchy#34, _w1#35, _w2#36, _w3#37]
-Arguments: [_w1#35 ASC NULLS FIRST, _w2#36 ASC NULLS FIRST, _w3#37 DESC NULLS LAST], false, 0
+Input [7]: [total_sum#27, s_state#21, s_county#22, lochierarchy#28, _w1#29, _w2#30, _w3#31]
+Arguments: [_w1#29 ASC NULLS FIRST, _w2#30 ASC NULLS FIRST, _w3#31 DESC NULLS LAST], false, 0
 
 (41) Window
-Input [7]: [total_sum#33, s_state#26, s_county#27, lochierarchy#34, _w1#35, _w2#36, _w3#37]
-Arguments: [rank(_w3#37) windowspecdefinition(_w1#35, _w2#36, _w3#37 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rank_within_parent#39], [_w1#35, _w2#36], [_w3#37 DESC NULLS LAST]
+Input [7]: [total_sum#27, s_state#21, s_county#22, lochierarchy#28, _w1#29, _w2#30, _w3#31]
+Arguments: [rank(_w3#31) windowspecdefinition(_w1#29, _w2#30, _w3#31 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rank_within_parent#32], [_w1#29, _w2#30], [_w3#31 DESC NULLS LAST]
 
 (42) Project [codegen id : 12]
-Output [5]: [total_sum#33, s_state#26, s_county#27, lochierarchy#34, rank_within_parent#39]
-Input [8]: [total_sum#33, s_state#26, s_county#27, lochierarchy#34, _w1#35, _w2#36, _w3#37, rank_within_parent#39]
+Output [5]: [total_sum#27, s_state#21, s_county#22, lochierarchy#28, rank_within_parent#32]
+Input [8]: [total_sum#27, s_state#21, s_county#22, lochierarchy#28, _w1#29, _w2#30, _w3#31, rank_within_parent#32]
 
 (43) TakeOrderedAndProject
-Input [5]: [total_sum#33, s_state#26, s_county#27, lochierarchy#34, rank_within_parent#39]
-Arguments: 100, [lochierarchy#34 DESC NULLS LAST, CASE WHEN (lochierarchy#34 = 0) THEN s_state#26 END ASC NULLS FIRST, rank_within_parent#39 ASC NULLS FIRST], [total_sum#33, s_state#26, s_county#27, lochierarchy#34, rank_within_parent#39]
+Input [5]: [total_sum#27, s_state#21, s_county#22, lochierarchy#28, rank_within_parent#32]
+Arguments: 100, [lochierarchy#28 DESC NULLS LAST, CASE WHEN (lochierarchy#28 = 0) THEN s_state#21 END ASC NULLS FIRST, rank_within_parent#32 ASC NULLS FIRST], [total_sum#27, s_state#21, s_county#22, lochierarchy#28, rank_within_parent#32]
 
 ===== Subqueries =====
 
@@ -252,26 +252,26 @@ BroadcastExchange (48)
 
 
 (44) Scan parquet default.date_dim
-Output [2]: [d_date_sk#5, d_month_seq#40]
+Output [2]: [d_date_sk#5, d_month_seq#33]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_month_seq), GreaterThanOrEqual(d_month_seq,1200), LessThanOrEqual(d_month_seq,1211), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_month_seq:int>
 
 (45) ColumnarToRow [codegen id : 1]
-Input [2]: [d_date_sk#5, d_month_seq#40]
+Input [2]: [d_date_sk#5, d_month_seq#33]
 
 (46) Filter [codegen id : 1]
-Input [2]: [d_date_sk#5, d_month_seq#40]
-Condition : (((isnotnull(d_month_seq#40) AND (d_month_seq#40 >= 1200)) AND (d_month_seq#40 <= 1211)) AND isnotnull(d_date_sk#5))
+Input [2]: [d_date_sk#5, d_month_seq#33]
+Condition : (((isnotnull(d_month_seq#33) AND (d_month_seq#33 >= 1200)) AND (d_month_seq#33 <= 1211)) AND isnotnull(d_date_sk#5))
 
 (47) Project [codegen id : 1]
 Output [1]: [d_date_sk#5]
-Input [2]: [d_date_sk#5, d_month_seq#40]
+Input [2]: [d_date_sk#5, d_month_seq#33]
 
 (48) BroadcastExchange
 Input [1]: [d_date_sk#5]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#41]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=8]
 
 Subquery:2 Hosting operator id = 10 Hosting Expression = ss_sold_date_sk#11 IN dynamicpruning#4
 

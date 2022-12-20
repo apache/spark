@@ -157,6 +157,9 @@ abstract class OffsetWindowFunctionFrameBase(
 
   /** find the offset row whose input is not null */
   protected def findNextRowWithNonNullInput(): Unit = {
+    // In order to find the offset row whose input is not-null,
+    // offset < = input.length must be guaranteed.
+    assert(offset <= input.length)
     while (skippedNonNullCount < offset && inputIndex < input.length) {
       val r = WindowFunctionFrame.getNextOrNull(inputIterator)
       if (!nullCheck(r)) {
@@ -164,6 +167,11 @@ abstract class OffsetWindowFunctionFrameBase(
         skippedNonNullCount += 1
       }
       inputIndex += 1
+    }
+    if (skippedNonNullCount < offset && inputIndex == input.length) {
+      // The size of non-null input is less than offset, cannot find the offset row whose input
+      // is not null. Therefore, reset `nextSelectedRow` with empty row.
+      nextSelectedRow = EmptyRow
     }
   }
 
@@ -362,14 +370,18 @@ class UnboundedPrecedingOffsetWindowFunctionFrame(
   assert(offset > 0)
 
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
-    resetStates(rows)
-    if (ignoreNulls) {
-      findNextRowWithNonNullInput()
+    if (offset > rows.length) {
+      fillDefaultValue(EmptyRow)
     } else {
-      // drain the first few rows if offset is larger than one
-      while (inputIndex < offset) {
-        nextSelectedRow = WindowFunctionFrame.getNextOrNull(inputIterator)
-        inputIndex += 1
+      resetStates(rows)
+      if (ignoreNulls) {
+        findNextRowWithNonNullInput()
+      } else {
+        // drain the first few rows if offset is larger than one
+        while (inputIndex < offset) {
+          nextSelectedRow = WindowFunctionFrame.getNextOrNull(inputIterator)
+          inputIndex += 1
+        }
       }
     }
   }

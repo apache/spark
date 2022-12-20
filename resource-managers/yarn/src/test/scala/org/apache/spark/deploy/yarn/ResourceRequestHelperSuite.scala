@@ -60,8 +60,8 @@ class ResourceRequestHelperSuite extends SparkFunSuite with Matchers {
 
   test("get yarn resources from configs") {
     val sparkConf = new SparkConf()
-    val resources = Map(YARN_GPU_RESOURCE_CONFIG -> "2G",
-      YARN_FPGA_RESOURCE_CONFIG -> "3G", "custom" -> "4")
+    val resources = Map(sparkConf.get(YARN_GPU_DEVICE) -> "2G",
+      sparkConf.get(YARN_GPU_DEVICE) -> "3G", "custom" -> "4")
     resources.foreach { case (name, value) =>
       sparkConf.set(s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${name}.${AMOUNT}", value)
       sparkConf.set(s"${YARN_DRIVER_RESOURCE_TYPES_PREFIX}${name}.${AMOUNT}", value)

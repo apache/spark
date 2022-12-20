@@ -103,7 +103,8 @@ def lit(col):
 @since(1.3)
 def col(col):
     """
-    Returns a :class:`~pyspark.sql.Column` based on the given column name.'
+    Returns a :class:`~pyspark.sql.Column` based on the given column name.
+
     Examples
     --------
     >>> col('x')
@@ -1505,6 +1506,8 @@ def when(condition, value):
     value :
         a literal value, or a :class:`~pyspark.sql.Column` expression.
 
+    Examples
+    --------
     >>> df.select(when(df['age'] == 2, 3).otherwise(4).alias("age")).collect()
     [Row(age=3), Row(age=4)]
 

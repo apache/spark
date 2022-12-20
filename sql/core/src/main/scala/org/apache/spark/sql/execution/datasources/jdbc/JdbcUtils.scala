@@ -660,6 +660,11 @@ object JdbcUtils extends Logging {
       dialect: JdbcDialect,
       isolationLevel: Int,
       options: JDBCOptions): Unit = {
+
+    if (iterator.isEmpty) {
+      return
+    }
+
     val outMetrics = TaskContext.get().taskMetrics().outputMetrics
 
     val conn = getConnection()

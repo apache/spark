@@ -507,9 +507,27 @@ private[spark] class BlockManager(
       ret
     }
 
+    // Register Executors' configuration with the local shuffle service, if one should exist.
+    // Registration with the ESS should happen before registering the block manager with the
+    // BlockManagerMaster. In push-based shuffle, the registered BM is selected by the driver
+    // as a merger. However, for the ESS on this host to be able to merge blocks successfully,
+    // it needs the merge directories metadata which is provided by the local executor during
+    // the registration with the ESS. Therefore, this registration should be prior to
+    // the BlockManager registration. See SPARK-39647.
+    if (externalShuffleServiceEnabled) {
+      logInfo(s"external shuffle service port = $externalShuffleServicePort")
+      shuffleServerId = BlockManagerId(executorId, blockTransferService.hostName,
+        externalShuffleServicePort)
+      if (!isDriver) {
+        registerWithExternalShuffleServer()
+      }
+    }
+
     val id =
       BlockManagerId(executorId, blockTransferService.hostName, blockTransferService.port, None)
 
+    // The idFromMaster has just additional topology information. Otherwise, it has the same
+    // executor id/host/port of idWithoutTopologyInfo which is not expected to be changed.
     val idFromMaster = master.registerBlockManager(
       id,
       diskBlockManager.localDirsString,
@@ -519,16 +537,8 @@ private[spark] class BlockManager(
 
     blockManagerId = if (idFromMaster != null) idFromMaster else id
 
-    shuffleServerId = if (externalShuffleServiceEnabled) {
-      logInfo(s"external shuffle service port = $externalShuffleServicePort")
-      BlockManagerId(executorId, blockTransferService.hostName, externalShuffleServicePort)
-    } else {
-      blockManagerId
-    }
-
-    // Register Executors' configuration with the local shuffle service, if one should exist.
-    if (externalShuffleServiceEnabled && !blockManagerId.isDriver) {
-      registerWithExternalShuffleServer()
+    if (!externalShuffleServiceEnabled) {
+      shuffleServerId = blockManagerId
     }
 
     hostLocalDirManager = {
@@ -622,9 +632,14 @@ private[spark] class BlockManager(
   def reregister(): Unit = {
     // TODO: We might need to rate limit re-registering.
     logInfo(s"BlockManager $blockManagerId re-registering with master")
-    master.registerBlockManager(blockManagerId, diskBlockManager.localDirsString, maxOnHeapMemory,
-      maxOffHeapMemory, storageEndpoint)
-    reportAllBlocks()
+    val id = master.registerBlockManager(blockManagerId, diskBlockManager.localDirsString,
+      maxOnHeapMemory, maxOffHeapMemory, storageEndpoint, isReRegister = true)
+    if (id.executorId != BlockManagerId.INVALID_EXECUTOR_ID) {
+      reportAllBlocks()
+    } else {
+      logError("Exiting executor due to block manager re-registration failure")
+      System.exit(-1)
+    }
   }
 
   /**
@@ -1175,7 +1190,7 @@ private[spark] class BlockManager(
       blockId: BlockId,
       localDirs: Array[String],
       blockSize: Long): Option[ManagedBuffer] = {
-    val file = ExecutorDiskUtils.getFile(localDirs, subDirsPerLocalDir, blockId.name)
+    val file = new File(ExecutorDiskUtils.getFilePath(localDirs, subDirsPerLocalDir, blockId.name))
     if (file.exists()) {
       val managedBuffer = securityManager.getIOEncryptionKey() match {
         case Some(key) =>
@@ -1942,23 +1957,32 @@ private[spark] class BlockManager(
    * lock on the block.
    */
   private def removeBlockInternal(blockId: BlockId, tellMaster: Boolean): Unit = {
-    val blockStatus = if (tellMaster) {
-      val blockInfo = blockInfoManager.assertBlockIsLockedForWriting(blockId)
-      Some(getCurrentBlockStatus(blockId, blockInfo))
-    } else None
+    var hasRemoveBlock = false
+    try {
+      val blockStatus = if (tellMaster) {
+        val blockInfo = blockInfoManager.assertBlockIsLockedForWriting(blockId)
+        Some(getCurrentBlockStatus(blockId, blockInfo))
+      } else None
 
-    // Removals are idempotent in disk store and memory store. At worst, we get a warning.
-    val removedFromMemory = memoryStore.remove(blockId)
-    val removedFromDisk = diskStore.remove(blockId)
-    if (!removedFromMemory && !removedFromDisk) {
-      logWarning(s"Block $blockId could not be removed as it was not found on disk or in memory")
-    }
+      // Removals are idempotent in disk store and memory store. At worst, we get a warning.
+      val removedFromMemory = memoryStore.remove(blockId)
+      val removedFromDisk = diskStore.remove(blockId)
+      if (!removedFromMemory && !removedFromDisk) {
+        logWarning(s"Block $blockId could not be removed as it was not found on disk or in memory")
+      }
 
-    blockInfoManager.removeBlock(blockId)
-    if (tellMaster) {
-      // Only update storage level from the captured block status before deleting, so that
-      // memory size and disk size are being kept for calculating delta.
-      reportBlockStatus(blockId, blockStatus.get.copy(storageLevel = StorageLevel.NONE))
+      blockInfoManager.removeBlock(blockId)
+      hasRemoveBlock = true
+      if (tellMaster) {
+        // Only update storage level from the captured block status before deleting, so that
+        // memory size and disk size are being kept for calculating delta.
+        reportBlockStatus(blockId, blockStatus.get.copy(storageLevel = StorageLevel.NONE))
+      }
+    } finally {
+      if (!hasRemoveBlock) {
+        logWarning(s"Block $blockId was not removed normally.")
+        blockInfoManager.removeBlock(blockId)
+      }
     }
   }
 

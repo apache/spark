@@ -31,6 +31,8 @@ case class ApplyFunctionExpression(
   override def name: String = function.name()
   override def dataType: DataType = function.resultType()
   override def inputTypes: Seq[AbstractDataType] = function.inputTypes().toSeq
+  override lazy val deterministic: Boolean = function.isDeterministic &&
+      children.forall(_.deterministic)
 
   private lazy val reusedRow = new SpecificInternalRow(function.inputTypes())
 

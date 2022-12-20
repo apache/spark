@@ -44,11 +44,11 @@ Uses the local `minikube` cluster, this requires that `minikube` 1.7.3 or greate
 at least 4 CPUs and 6GB memory (some users have reported success with as few as 3 CPUs and 4GB memory).  The tests will 
 check if `minikube` is started and abort early if it isn't currently running.
 
-### `docker-for-desktop`
+### `docker-desktop`
 
 Since July 2018 Docker for Desktop provide an optional Kubernetes cluster that can be enabled as described in this 
 [blog post](https://blog.docker.com/2018/07/kubernetes-is-now-available-in-docker-desktop-stable-channel/).  Assuming 
-this is enabled using this backend will auto-configure itself from the `docker-for-desktop` context that Docker creates 
+this is enabled using this backend will auto-configure itself from the `docker-desktop` context that Docker creates
 in your `~/.kube/config` file. If your config file is in a different location you should set the `KUBECONFIG` 
 environment variable appropriately.
 
@@ -132,7 +132,7 @@ properties to Maven.  For example:
                             -Dspark.kubernetes.test.imageTag=sometag \
                             -Dspark.kubernetes.test.imageRepo=docker.io/somerepo \
                             -Dspark.kubernetes.test.namespace=spark-int-tests \
-                            -Dspark.kubernetes.test.deployMode=docker-for-desktop \
+                            -Dspark.kubernetes.test.deployMode=docker-desktop \
                             -Dtest.include.tags=k8s
                             
                             
@@ -165,7 +165,7 @@ to the wrapper scripts and using the wrapper scripts will simply set these appro
     <td><code>spark.kubernetes.test.deployMode</code></td>
     <td>
       The integration test backend to use.  Acceptable values are <code>minikube</code>, 
-      <code>docker-for-desktop</code> and <code>cloud</code>.
+      <code>docker-desktop</code> and <code>cloud</code>.
     <td><code>minikube</code></td>
   </tr>
   <tr>
@@ -180,7 +180,7 @@ to the wrapper scripts and using the wrapper scripts will simply set these appro
   <tr>
     <td><code>spark.kubernetes.test.master</code></td>
     <td>
-      When using the <code>cloud-url</code> backend must be specified to indicate the K8S master URL to communicate 
+      When using the <code>cloud</code> backend must be specified to indicate the K8S master URL to communicate
       with.
     </td>
     <td></td>
@@ -255,3 +255,28 @@ to the wrapper scripts and using the wrapper scripts will simply set these appro
     <td></td>
   </tr>
 </table>
+
+# Running the Kubernetes Integration Tests with SBT
+
+You can use SBT in the same way to build image and run all K8s integration tests except Minikube-only ones.
+
+    build/sbt -Psparkr -Pkubernetes -Pkubernetes-integration-tests \
+        -Dtest.exclude.tags=minikube \
+        -Dspark.kubernetes.test.deployMode=docker-desktop \
+        -Dspark.kubernetes.test.imageTag=2022-03-06 \
+        'kubernetes-integration-tests/test'
+
+The following is an example to rerun tests with the pre-built image.
+
+    build/sbt -Psparkr -Pkubernetes -Pkubernetes-integration-tests \
+        -Dtest.exclude.tags=minikube \
+        -Dspark.kubernetes.test.deployMode=docker-desktop \
+        -Dspark.kubernetes.test.imageTag=2022-03-06 \
+        'kubernetes-integration-tests/runIts'
+
+In addition, you can run a single test selectively.
+
+    build/sbt -Psparkr -Pkubernetes -Pkubernetes-integration-tests \
+        -Dspark.kubernetes.test.deployMode=docker-desktop \
+        -Dspark.kubernetes.test.imageTag=2022-03-06 \
+        'kubernetes-integration-tests/testOnly -- -z "Run SparkPi with a very long application name"'

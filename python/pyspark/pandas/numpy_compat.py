@@ -157,7 +157,7 @@ def maybe_dispatch_ufunc_to_dunder_op(
         "true_divide": "truediv",
         "power": "pow",
         "remainder": "mod",
-        "divide": "div",
+        "divide": "truediv",
         "equal": "eq",
         "not_equal": "ne",
         "less": "lt",

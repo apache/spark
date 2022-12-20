@@ -976,7 +976,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
               s"""
                  |ALTER TABLE $table ADD
                  |PARTITION (ds='2008-04-09', hr='11') LOCATION '${partDir1.toURI.toString}'
-                 |PARTITION (ds='2008-04-09', hr='12') LOCATION '${partDir1.toURI.toString}'
+                 |PARTITION (ds='2008-04-09', hr='12') LOCATION '${partDir2.toURI.toString}'
             """.stripMargin)
             if (autoUpdate) {
               val fetched2 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = None)
@@ -999,6 +999,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
             sql(s"ALTER TABLE $table DROP PARTITION (ds='2008-04-08'), PARTITION (hr='12')")
             assert(spark.sessionState.catalog.listPartitions(TableIdentifier(table))
               .map(_.spec).toSet == Set(Map("ds" -> "2008-04-09", "hr" -> "11")))
+            assert(partDir1.exists())
             // only one partition left
             if (autoUpdate) {
               val fetched4 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = None)

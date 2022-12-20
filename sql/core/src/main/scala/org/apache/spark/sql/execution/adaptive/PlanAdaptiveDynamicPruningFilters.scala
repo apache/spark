@@ -71,13 +71,10 @@ case class PlanAdaptiveDynamicPruningFilters(
           val aggregate = Aggregate(Seq(alias), Seq(alias), buildPlan)
 
           val session = adaptivePlan.context.session
-          val planner = session.sessionState.planner
-          // Here we can't call the QueryExecution.prepareExecutedPlan() method to
-          // get the sparkPlan as Non-AQE use case, which will cause the physical
-          // plan optimization rules be inserted twice, once in AQE framework and
-          // another in prepareExecutedPlan() method.
-          val sparkPlan = QueryExecution.createSparkPlan(session, planner, aggregate)
-          val newAdaptivePlan = adaptivePlan.copy(inputPlan = sparkPlan)
+          val sparkPlan = QueryExecution.prepareExecutedPlan(
+            session, aggregate, adaptivePlan.context)
+          assert(sparkPlan.isInstanceOf[AdaptiveSparkPlanExec])
+          val newAdaptivePlan = sparkPlan.asInstanceOf[AdaptiveSparkPlanExec]
           val values = SubqueryExec(name, newAdaptivePlan)
           DynamicPruningExpression(InSubqueryExec(value, values, exprId))
         }

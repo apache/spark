@@ -97,7 +97,7 @@ class RemoveRedundantAliasAndProjectSuite extends PlanTest with PredicateHelper 
     val r2 = LocalRelation('b.int)
     val query = r1.select('a as 'a).union(r2.select('b as 'b)).select('a).analyze
     val optimized = Optimize.execute(query)
-    val expected = r1.union(r2)
+    val expected = r1.select($"a" as "a").union(r2).analyze
     comparePlans(optimized, expected)
   }
 

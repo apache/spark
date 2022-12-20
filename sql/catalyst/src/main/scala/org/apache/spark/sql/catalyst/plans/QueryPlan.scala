@@ -347,7 +347,13 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   private def updateAttr(a: Attribute, attrMap: AttributeMap[Attribute]): Attribute = {
     attrMap.get(a) match {
       case Some(b) =>
-        AttributeReference(a.name, b.dataType, b.nullable, a.metadata)(b.exprId, a.qualifier)
+        // The new Attribute has to
+        // - use a.nullable, because nullability cannot be propagated bottom-up without considering
+        //   enclosed operators, e.g., operators such as Filters and Outer Joins can change
+        //   nullability;
+        // - use b.dataType because transformUpWithNewOutput is used in the Analyzer for resolution,
+        //   e.g., WidenSetOperationTypes uses it to propagate types bottom-up.
+        AttributeReference(a.name, b.dataType, a.nullable, a.metadata)(b.exprId, a.qualifier)
       case None => a
     }
   }
@@ -436,6 +442,14 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   }
 
   /**
+   * This method is similar to the transform method, but also applies the given partial function
+   * also to all the plans in the subqueries of a node. This method is useful when we want
+   * to rewrite the whole plan, include its subqueries, in one go.
+   */
+  def transformWithSubqueries(f: PartialFunction[PlanType, PlanType]): PlanType =
+    transformDownWithSubqueries(f)
+
+  /**
    * Returns a copy of this node where the given partial function has been recursively applied
    * first to the subqueries in this node's children, then this node's children, and finally
    * this node itself (post-order). When the partial function does not apply to a given node,
@@ -450,6 +464,42 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
       }
       f.applyOrElse[PlanType, PlanType](transformed, identity)
     }
+  }
+
+  /**
+   * This method is the top-down (pre-order) counterpart of transformUpWithSubqueries.
+   * Returns a copy of this node where the given partial function has been recursively applied
+   * first to this node, then this node's subqueries and finally this node's children.
+   * When the partial function does not apply to a given node, it is left unchanged.
+   */
+  def transformDownWithSubqueries(f: PartialFunction[PlanType, PlanType]): PlanType = {
+    transformDownWithSubqueriesAndPruning(AlwaysProcess.fn, UnknownRuleId)(f)
+  }
+
+  /**
+   * This method is the top-down (pre-order) counterpart of transformUpWithSubqueries.
+   * Returns a copy of this node where the given partial function has been recursively applied
+   * first to this node, then this node's subqueries and finally this node's children.
+   * When the partial function does not apply to a given node, it is left unchanged.
+   */
+  def transformDownWithSubqueriesAndPruning(
+      cond: TreePatternBits => Boolean,
+      ruleId: RuleId = UnknownRuleId)
+      (f: PartialFunction[PlanType, PlanType]): PlanType = {
+    val g: PartialFunction[PlanType, PlanType] = new PartialFunction[PlanType, PlanType] {
+      override def isDefinedAt(x: PlanType): Boolean = true
+
+      override def apply(plan: PlanType): PlanType = {
+        val transformed = f.applyOrElse[PlanType, PlanType](plan, identity)
+        transformed transformExpressionsDown {
+          case planExpression: PlanExpression[PlanType] =>
+            val newPlan = planExpression.plan.transformDownWithSubqueriesAndPruning(cond, ruleId)(f)
+            planExpression.withNewPlan(newPlan)
+        }
+      }
+    }
+
+    transformDownWithPruning(cond, ruleId)(g)
   }
 
   /**

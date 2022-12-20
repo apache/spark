@@ -1,1 +1,2 @@
 openjdk-8-jre
+git

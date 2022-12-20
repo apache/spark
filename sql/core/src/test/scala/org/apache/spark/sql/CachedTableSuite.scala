@@ -1643,4 +1643,14 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       }
     }
   }
+
+  test("SPARK-37702: cache table with temporary function ") {
+    withUserDefinedFunction("udf" -> true) {
+      spark.udf.register("udf", (id: Int) => id + 1)
+      withTempView("cached_t") {
+        sql("CACHE TABLE cached_t as SELECT udf(id) FROM VALUES (1), (2) t(id)")
+        checkAnswer(sql("SELECT * FROM cached_t"), Row(2) :: Row(3) :: Nil)
+      }
+    }
+  }
 }

@@ -32,6 +32,7 @@ import org.apache.parquet.schema.Type.Repetition
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
@@ -56,8 +57,8 @@ import org.apache.spark.sql.types._
 class ParquetReadSupport(
     val convertTz: Option[ZoneId],
     enableVectorizedReader: Boolean,
-    datetimeRebaseMode: LegacyBehaviorPolicy.Value,
-    int96RebaseMode: LegacyBehaviorPolicy.Value)
+    datetimeRebaseSpec: RebaseSpec,
+    int96RebaseSpec: RebaseSpec)
   extends ReadSupport[InternalRow] with Logging {
   private var catalystRequestedSchema: StructType = _
 
@@ -68,8 +69,8 @@ class ParquetReadSupport(
     this(
       None,
       enableVectorizedReader = true,
-      datetimeRebaseMode = LegacyBehaviorPolicy.CORRECTED,
-      int96RebaseMode = LegacyBehaviorPolicy.LEGACY)
+      datetimeRebaseSpec = RebaseSpec(LegacyBehaviorPolicy.CORRECTED),
+      int96RebaseSpec = RebaseSpec(LegacyBehaviorPolicy.LEGACY))
   }
 
   /**
@@ -138,8 +139,8 @@ class ParquetReadSupport(
       ParquetReadSupport.expandUDT(catalystRequestedSchema),
       new ParquetToSparkSchemaConverter(conf),
       convertTz,
-      datetimeRebaseMode,
-      int96RebaseMode)
+      datetimeRebaseSpec,
+      int96RebaseSpec)
   }
 }
 

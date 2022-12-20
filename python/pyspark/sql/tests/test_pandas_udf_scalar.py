@@ -1152,6 +1152,25 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         finally:
             shutil.rmtree(path)
 
+    # SPARK-33277
+    def test_pandas_udf_with_column_vector(self):
+        path = tempfile.mkdtemp()
+        shutil.rmtree(path)
+
+        try:
+            self.spark.range(0, 200000, 1, 1).write.parquet(path)
+
+            @pandas_udf(LongType())
+            def udf(x):
+                return pd.Series([0] * len(x))
+
+            for offheap in ["true", "false"]:
+                with self.sql_conf({"spark.sql.columnVector.offheap.enabled": offheap}):
+                    self.assertEquals(
+                        self.spark.read.parquet(path).select(udf('id')).head(), Row(0))
+        finally:
+            shutil.rmtree(path)
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.test_pandas_udf_scalar import *  # noqa: F401

@@ -1622,7 +1622,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // the shuffle map output is still available from stage 0); make sure we've still got internal
     // accumulators setup
     assert(scheduler.stageIdToStage(2).latestInfo.taskMetrics != null)
-    completeShuffleMapStageSuccessfully(2, 0, 2)
+    completeShuffleMapStageSuccessfully(2, 1, 2)
     completeNextResultStageWithSuccess(3, 1, idx => idx + 1234)
     assert(results === Map(0 -> 1234, 1 -> 1235))
 
@@ -3514,7 +3514,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
     // Check if same merger locs is reused for the new stage with shared shuffle dependency
     assert(mergerLocs.zip(newMergerLocs).forall(x => x._1.host == x._2.host))
-    completeShuffleMapStageSuccessfully(2, 0, 2)
+    completeShuffleMapStageSuccessfully(2, 1, 2)
     completeNextResultStageWithSuccess(3, 1, idx => idx + 1234)
     assert(results === Map(0 -> 1234, 1 -> 1235))
 
@@ -3650,7 +3650,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // the scheduler now creates a new task set to regenerate the missing map output, but this time
     // using a different stage, the "skipped" one
     assert(scheduler.stageIdToStage(2).latestInfo.taskMetrics != null)
-    completeShuffleMapStageSuccessfully(2, 0, 2)
+    completeShuffleMapStageSuccessfully(2, 1, 2)
     completeNextResultStageWithSuccess(3, 1, idx => idx + 1234)
 
     val expected = (0 until parts).map(idx => (idx, idx + 1234))

@@ -23,6 +23,7 @@ import unittest
 from pyspark import SparkConf, SparkContext
 from pyspark.java_gateway import launch_gateway
 from pyspark.serializers import ChunkedStream
+from pyspark.sql import SparkSession, Row
 
 
 class BroadcastTest(unittest.TestCase):
@@ -99,6 +100,19 @@ class BroadcastTest(unittest.TestCase):
             self.assertEqual([100], res)
         finally:
             b.destroy()
+
+    def test_broadcast_in_udfs_with_encryption(self):
+        conf = SparkConf()
+        conf.set("spark.io.encryption.enabled", "true")
+        conf.setMaster("local-cluster[2,1,1024]")
+        self.sc = SparkContext(conf=conf)
+        bar = {"a": "aa", "b": "bb"}
+        foo = self.sc.broadcast(bar)
+        spark = SparkSession(self.sc)
+        spark.udf.register("MYUDF", lambda x: foo.value[x] if x else "")
+        sel = spark.sql("SELECT MYUDF('a') AS a, MYUDF('b') AS b")
+        self.assertEqual(sel.collect(), [Row(a="aa", b="bb")])
+        spark.stop()
 
 
 class BroadcastFrameProtocolTest(unittest.TestCase):

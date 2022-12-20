@@ -481,6 +481,29 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     assert(catalog.listPartitions("db2", "tbl1", Some(part2.spec)).map(_.spec) == Seq(part2.spec))
   }
 
+  test("SPARK-38120: list partitions with special chars and mixed case column name") {
+    val catalog = newBasicCatalog()
+    val table = CatalogTable(
+      identifier = TableIdentifier("tbl", Some("db1")),
+      tableType = CatalogTableType.EXTERNAL,
+      storage = storageFormat.copy(locationUri = Some(Utils.createTempDir().toURI)),
+      schema = new StructType()
+        .add("col1", "int")
+        .add("col2", "string")
+        .add("partCol1", "int")
+        .add("partCol2", "string"),
+      provider = Some(defaultProvider),
+      partitionColumnNames = Seq("partCol1", "partCol2"))
+    catalog.createTable(table, ignoreIfExists = false)
+
+    val part1 = CatalogTablePartition(Map("partCol1" -> "1", "partCol2" -> "i+j"), storageFormat)
+    val part2 = CatalogTablePartition(Map("partCol1" -> "1", "partCol2" -> "i.j"), storageFormat)
+    catalog.createPartitions("db1", "tbl", Seq(part1, part2), ignoreIfExists = false)
+
+    assert(catalog.listPartitions("db1", "tbl", Some(part1.spec)).map(_.spec) == Seq(part1.spec))
+    assert(catalog.listPartitions("db1", "tbl", Some(part2.spec)).map(_.spec) == Seq(part2.spec))
+  }
+
   test("list partitions by filter") {
     val tz = TimeZone.getDefault.getID
     val catalog = newBasicCatalog()

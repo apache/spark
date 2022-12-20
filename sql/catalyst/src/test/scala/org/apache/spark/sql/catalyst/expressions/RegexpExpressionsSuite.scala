@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
@@ -293,6 +293,7 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val row4 = create_row(null, "(\\d+)", "###")
     val row5 = create_row("100-200", null, "###")
     val row6 = create_row("100-200", "(-)", null)
+    val row7 = create_row("", "^$", "<empty string>")
 
     val s = 's.string.at(0)
     val p = 'p.string.at(1)
@@ -305,6 +306,7 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(expr, null, row4)
     checkEvaluation(expr, null, row5)
     checkEvaluation(expr, null, row6)
+    checkEvaluation(expr, "<empty string>", row7)
     // test position
     val exprWithPos = RegExpReplace(s, p, r, 4)
     checkEvaluation(exprWithPos, "100-num", row1)
@@ -313,6 +315,7 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(exprWithPos, null, row4)
     checkEvaluation(exprWithPos, null, row5)
     checkEvaluation(exprWithPos, null, row6)
+    checkEvaluation(exprWithPos, "", row7)
     val exprWithLargePos = RegExpReplace(s, p, r, 7)
     checkEvaluation(exprWithLargePos, "100-20num", row1)
     checkEvaluation(exprWithLargePos, "100-20###", row2)
@@ -479,5 +482,20 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(Literal.create("foo", StringType)
         .likeAll("%foo%", Literal.create(null, StringType)), null)
     }
+  }
+
+  test("SPARK-39758: invalid regexp pattern") {
+    val s = $"s".string.at(0)
+    val p = $"p".string.at(1)
+    val r = $"r".int.at(2)
+    val prefix = "The value of parameter(s) 'regexp' in"
+    checkExceptionInExpression[SparkRuntimeException](
+      RegExpExtract(s, p, r),
+      create_row("1a 2b 14m", "(?l)", 0),
+      s"$prefix `regexp_extract` is invalid: '(?l)'")
+    checkExceptionInExpression[SparkRuntimeException](
+      RegExpExtractAll(s, p, r),
+      create_row("abc", "] [", 0),
+      s"$prefix `regexp_extract_all` is invalid: '] ['")
   }
 }

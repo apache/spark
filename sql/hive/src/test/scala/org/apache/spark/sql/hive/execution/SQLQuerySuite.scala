@@ -1319,7 +1319,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
         sql(
           s"""FROM(
             |  FROM test SELECT TRANSFORM(a, b)
-            |  USING 'python $scriptFilePath/scripts/test_transform.py "\t"'
+            |  USING 'python3 $scriptFilePath/scripts/test_transform.py "\t"'
             |  AS (c STRING, d STRING)
             |) t
             |SELECT c
@@ -1341,7 +1341,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
           |SELECT TRANSFORM(a, b)
           |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
           |WITH SERDEPROPERTIES('field.delim' = '|')
-          |USING 'python $scriptFilePath/scripts/test_transform.py "|"'
+          |USING 'python3 $scriptFilePath/scripts/test_transform.py "|"'
           |AS (c STRING, d STRING)
           |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
           |WITH SERDEPROPERTIES('field.delim' = '|')
@@ -2440,6 +2440,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
 
   test("SPARK-25158: " +
     "Executor accidentally exit because ScriptTransformationWriterThread throw Exception") {
+    assume(TestUtils.testCommandAvailable("python3"))
     withTempView("test") {
       val defaultUncaughtExceptionHandler = Thread.getDefaultUncaughtExceptionHandler
       try {
@@ -2459,7 +2460,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
         val e = intercept[SparkException] {
           sql(
             s"""FROM test SELECT TRANSFORM(a)
-               |USING 'python $scriptFilePath/scripts/test_transform.py "\t"'
+               |USING 'python3 $scriptFilePath/scripts/test_transform.py "\t"'
              """.stripMargin).collect()
         }
         assert(e.getMessage.contains("Failed to produce data."))
@@ -2629,6 +2630,61 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
         hiveClient.runSqlHive(s"alter table t1 add partition (pid=2) location '$t2Loc/pid=2'")
         hiveClient.runSqlHive("alter table t1 partition(pid=2) SET FILEFORMAT textfile")
         checkAnswer(sql("select pid, id from t1 order by pid"), Seq(Row(1, 2), Row(2, 2)))
+      }
+    }
+  }
+
+  test("SPARK-36905: read hive views without without explicit column names") {
+    withTable("t1") {
+      withView("test_view") {
+        hiveClient.runSqlHive("create table t1 stored as avro as select 2 as id")
+        hiveClient.runSqlHive("create view test_view as select 1, id + 1 from t1")
+        checkAnswer(sql("select * from test_view"), Seq(Row(1, 3)))
+      }
+    }
+  }
+
+  test("SPARK-37196: HiveDecimal Precision Scale match failed should return null") {
+    withTempDir { dir =>
+      withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
+        withTable("test_precision") {
+          val df = sql(s"SELECT 'dummy' AS name, ${"1" * 20}.${"2" * 18} AS value")
+          df.write.mode("Overwrite").parquet(dir.getAbsolutePath)
+          sql(
+            s"""
+               |CREATE EXTERNAL TABLE test_precision(name STRING, value DECIMAL(18,6))
+               |STORED AS PARQUET LOCATION '${dir.getAbsolutePath}'
+               |""".stripMargin)
+          checkAnswer(sql("SELECT * FROM test_precision"), Row("dummy", null))
+        }
+      }
+    }
+  }
+
+  test("SPARK-37217: Dynamic partitions should fail quickly " +
+    "when writing to external tables to prevent data deletion") {
+    withTable("test") {
+      withTempDir { f =>
+        sql("CREATE EXTERNAL TABLE test(id int) PARTITIONED BY (p1 string, p2 string) " +
+          s"STORED AS PARQUET LOCATION '${f.getAbsolutePath}'")
+
+        withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false",
+          "hive.exec.dynamic.partition.mode" -> "nonstrict") {
+          val insertSQL = """
+              |INSERT OVERWRITE TABLE test PARTITION(p1='n1', p2)
+              |SELECT * FROM VALUES (1, 'n2'), (2, 'n3'), (3, 'n4') AS t(id, p2)
+              """.stripMargin
+          withSQLConf("hive.exec.max.dynamic.partitions" -> "2") {
+            val e = intercept[SparkException] {
+              sql(insertSQL)
+            }
+            assert(e.getMessage.contains("Number of dynamic partitions created"))
+          }
+
+          withSQLConf("hive.exec.max.dynamic.partitions" -> "3") {
+            sql(insertSQL)
+          }
+        }
       }
     }
   }

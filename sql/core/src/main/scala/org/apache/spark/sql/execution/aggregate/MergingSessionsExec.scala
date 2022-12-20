@@ -21,7 +21,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, MutableProjection, NamedExpression, SortOrder, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
@@ -41,7 +40,8 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
  */
 case class MergingSessionsExec(
     requiredChildDistributionExpressions: Option[Seq[Expression]],
-    requiredChildDistributionOption: Option[Seq[Distribution]],
+    isStreaming: Boolean,
+    numShufflePartitions: Option[Int],
     groupingExpressions: Seq[NamedExpression],
     sessionExpression: NamedExpression,
     aggregateExpressions: Seq[AggregateExpression],
@@ -58,17 +58,6 @@ case class MergingSessionsExec(
   override def output: Seq[Attribute] = child.output
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
-
-  override def requiredChildDistribution: List[Distribution] = {
-    requiredChildDistributionExpressions match {
-      case Some(exprs) if exprs.isEmpty => AllTuples :: Nil
-      case Some(exprs) => ClusteredDistribution(exprs) :: Nil
-      case None => requiredChildDistributionOption match {
-        case Some(distributions) => distributions.toList
-        case None => UnspecifiedDistribution :: Nil
-      }
-    }
-  }
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] = {
     Seq((keyWithoutSessionExpressions ++ Seq(sessionExpression)).map(SortOrder(_, Ascending)))

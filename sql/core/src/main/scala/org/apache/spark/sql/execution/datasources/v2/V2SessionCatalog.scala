@@ -188,8 +188,8 @@ class V2SessionCatalog(catalog: SessionCatalog)
       ident.namespace match {
         case Array(db) =>
           TableIdentifier(ident.name, Some(db))
-        case _ =>
-          throw QueryCompilationErrors.requiresSinglePartNamespaceError(ident)
+        case other =>
+          throw QueryCompilationErrors.requiresSinglePartNamespaceError(other)
       }
     }
   }

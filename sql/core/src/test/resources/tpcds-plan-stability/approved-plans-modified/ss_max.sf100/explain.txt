@@ -27,7 +27,7 @@ Results [12]: [ss_sold_date_sk#9, count#21, count#22, max#23, max#24, max#25, ma
 
 (4) Exchange
 Input [12]: [ss_sold_date_sk#9, count#21, count#22, max#23, max#24, max#25, max#26, max#27, max#28, max#29, max#30, max#31]
-Arguments: hashpartitioning(ss_sold_date_sk#9, 5), ENSURE_REQUIREMENTS, [id=#32]
+Arguments: hashpartitioning(ss_sold_date_sk#9, 5), ENSURE_REQUIREMENTS, [plan_id=1]
 
 (5) HashAggregate [codegen id : 2]
 Input [12]: [ss_sold_date_sk#9, count#21, count#22, max#23, max#24, max#25, max#26, max#27, max#28, max#29, max#30, max#31]
@@ -40,17 +40,17 @@ Results [12]: [ss_sold_date_sk#9, count#21, count#22, max#23, max#24, max#25, ma
 Input [12]: [ss_sold_date_sk#9, count#21, count#22, max#23, max#24, max#25, max#26, max#27, max#28, max#29, max#30, max#31]
 Keys: []
 Functions [12]: [merge_count(1), merge_count(ss_sold_date_sk#9), merge_max(ss_sold_date_sk#9), merge_max(ss_sold_time_sk#1), merge_max(ss_item_sk#2), merge_max(ss_customer_sk#3), merge_max(ss_cdemo_sk#4), merge_max(ss_hdemo_sk#5), merge_max(ss_addr_sk#6), merge_max(ss_store_sk#7), merge_max(ss_promo_sk#8), partial_count(distinct ss_sold_date_sk#9)]
-Aggregate Attributes [12]: [count(1)#10, count(ss_sold_date_sk#9)#11, max(ss_sold_date_sk#9)#12, max(ss_sold_time_sk#1)#13, max(ss_item_sk#2)#14, max(ss_customer_sk#3)#15, max(ss_cdemo_sk#4)#16, max(ss_hdemo_sk#5)#17, max(ss_addr_sk#6)#18, max(ss_store_sk#7)#19, max(ss_promo_sk#8)#20, count(ss_sold_date_sk#9)#33]
-Results [12]: [count#21, count#22, max#23, max#24, max#25, max#26, max#27, max#28, max#29, max#30, max#31, count#34]
+Aggregate Attributes [12]: [count(1)#10, count(ss_sold_date_sk#9)#11, max(ss_sold_date_sk#9)#12, max(ss_sold_time_sk#1)#13, max(ss_item_sk#2)#14, max(ss_customer_sk#3)#15, max(ss_cdemo_sk#4)#16, max(ss_hdemo_sk#5)#17, max(ss_addr_sk#6)#18, max(ss_store_sk#7)#19, max(ss_promo_sk#8)#20, count(ss_sold_date_sk#9)#32]
+Results [12]: [count#21, count#22, max#23, max#24, max#25, max#26, max#27, max#28, max#29, max#30, max#31, count#33]
 
 (7) Exchange
-Input [12]: [count#21, count#22, max#23, max#24, max#25, max#26, max#27, max#28, max#29, max#30, max#31, count#34]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#35]
+Input [12]: [count#21, count#22, max#23, max#24, max#25, max#26, max#27, max#28, max#29, max#30, max#31, count#33]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=2]
 
 (8) HashAggregate [codegen id : 3]
-Input [12]: [count#21, count#22, max#23, max#24, max#25, max#26, max#27, max#28, max#29, max#30, max#31, count#34]
+Input [12]: [count#21, count#22, max#23, max#24, max#25, max#26, max#27, max#28, max#29, max#30, max#31, count#33]
 Keys: []
 Functions [12]: [count(1), count(ss_sold_date_sk#9), max(ss_sold_date_sk#9), max(ss_sold_time_sk#1), max(ss_item_sk#2), max(ss_customer_sk#3), max(ss_cdemo_sk#4), max(ss_hdemo_sk#5), max(ss_addr_sk#6), max(ss_store_sk#7), max(ss_promo_sk#8), count(distinct ss_sold_date_sk#9)]
-Aggregate Attributes [12]: [count(1)#10, count(ss_sold_date_sk#9)#11, max(ss_sold_date_sk#9)#12, max(ss_sold_time_sk#1)#13, max(ss_item_sk#2)#14, max(ss_customer_sk#3)#15, max(ss_cdemo_sk#4)#16, max(ss_hdemo_sk#5)#17, max(ss_addr_sk#6)#18, max(ss_store_sk#7)#19, max(ss_promo_sk#8)#20, count(ss_sold_date_sk#9)#33]
-Results [12]: [count(1)#10 AS total#36, count(ss_sold_date_sk#9)#11 AS not_null_total#37, count(ss_sold_date_sk#9)#33 AS unique_days#38, max(ss_sold_date_sk#9)#12 AS max_ss_sold_date_sk#39, max(ss_sold_time_sk#1)#13 AS max_ss_sold_time_sk#40, max(ss_item_sk#2)#14 AS max_ss_item_sk#41, max(ss_customer_sk#3)#15 AS max_ss_customer_sk#42, max(ss_cdemo_sk#4)#16 AS max_ss_cdemo_sk#43, max(ss_hdemo_sk#5)#17 AS max_ss_hdemo_sk#44, max(ss_addr_sk#6)#18 AS max_ss_addr_sk#45, max(ss_store_sk#7)#19 AS max_ss_store_sk#46, max(ss_promo_sk#8)#20 AS max_ss_promo_sk#47]
+Aggregate Attributes [12]: [count(1)#10, count(ss_sold_date_sk#9)#11, max(ss_sold_date_sk#9)#12, max(ss_sold_time_sk#1)#13, max(ss_item_sk#2)#14, max(ss_customer_sk#3)#15, max(ss_cdemo_sk#4)#16, max(ss_hdemo_sk#5)#17, max(ss_addr_sk#6)#18, max(ss_store_sk#7)#19, max(ss_promo_sk#8)#20, count(ss_sold_date_sk#9)#32]
+Results [12]: [count(1)#10 AS total#34, count(ss_sold_date_sk#9)#11 AS not_null_total#35, count(ss_sold_date_sk#9)#32 AS unique_days#36, max(ss_sold_date_sk#9)#12 AS max_ss_sold_date_sk#37, max(ss_sold_time_sk#1)#13 AS max_ss_sold_time_sk#38, max(ss_item_sk#2)#14 AS max_ss_item_sk#39, max(ss_customer_sk#3)#15 AS max_ss_customer_sk#40, max(ss_cdemo_sk#4)#16 AS max_ss_cdemo_sk#41, max(ss_hdemo_sk#5)#17 AS max_ss_hdemo_sk#42, max(ss_addr_sk#6)#18 AS max_ss_addr_sk#43, max(ss_store_sk#7)#19 AS max_ss_store_sk#44, max(ss_promo_sk#8)#20 AS max_ss_promo_sk#45]
 

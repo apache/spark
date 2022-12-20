@@ -75,7 +75,7 @@ private[sql] class StreamingQueryStatusListener(
     store.write(new StreamingQueryData(
       event.name,
       event.id,
-      event.runId,
+      event.runId.toString,
       isActive = true,
       None,
       startTimestamp
@@ -100,7 +100,7 @@ private[sql] class StreamingQueryStatusListener(
 
   override def onQueryTerminated(
       event: StreamingQueryListener.QueryTerminatedEvent): Unit = {
-    val querySummary = store.read(classOf[StreamingQueryData], event.runId)
+    val querySummary = store.read(classOf[StreamingQueryData], event.runId.toString)
     val curTime = System.currentTimeMillis()
     store.write(new StreamingQueryData(
       querySummary.name,
@@ -118,7 +118,7 @@ private[sql] class StreamingQueryStatusListener(
 private[sql] class StreamingQueryData(
     val name: String,
     val id: UUID,
-    @KVIndexParam val runId: UUID,
+    @KVIndexParam val runId: String,
     @KVIndexParam("active") val isActive: Boolean,
     val exception: Option[String],
     @KVIndexParam("startTimestamp") val startTimestamp: Long,

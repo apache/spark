@@ -1074,7 +1074,7 @@ abstract class ParquetPartitionDiscoverySuite
       val input = spark.read.parquet(path.getAbsolutePath).select("id",
         "date_month", "date_hour", "data")
 
-      assert(input.schema.sameType(input.schema))
+      assert(data.schema.sameType(input.schema))
       checkAnswer(input, data)
     }
   }

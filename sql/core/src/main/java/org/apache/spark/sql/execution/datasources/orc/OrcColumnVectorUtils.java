@@ -53,15 +53,13 @@ class OrcColumnVectorUtils {
       ListColumnVector listVector = (ListColumnVector) vector;
       OrcColumnVector dataVector = toOrcColumnVector(
         ((ArrayType) type).elementType(), listVector.child);
-      return new OrcArrayColumnVector(
-        type, vector, dataVector, listVector.offsets, listVector.lengths);
+      return new OrcArrayColumnVector(type, vector, dataVector);
     } else if (vector instanceof MapColumnVector) {
       MapColumnVector mapVector = (MapColumnVector) vector;
       MapType mapType = (MapType) type;
       OrcColumnVector keysVector = toOrcColumnVector(mapType.keyType(), mapVector.keys);
       OrcColumnVector valuesVector = toOrcColumnVector(mapType.valueType(), mapVector.values);
-      return new OrcMapColumnVector(
-        type, vector, keysVector, valuesVector, mapVector.offsets, mapVector.lengths);
+      return new OrcMapColumnVector(type, vector, keysVector, valuesVector);
     } else {
       throw new IllegalArgumentException(
         String.format("OrcColumnVectorUtils.toOrcColumnVector should not take %s as type " +

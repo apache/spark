@@ -44,7 +44,6 @@ class SparkPlanner(val session: SparkSession, val experimentalMethods: Experimen
       JoinSelection ::
       InMemoryScans ::
       SparkScripts ::
-      WithCTEStrategy ::
       BasicOperators :: Nil)
 
   /**

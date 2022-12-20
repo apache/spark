@@ -16,7 +16,9 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest
 
+import java.io.File
 import java.net.URL
+import java.nio.file.Files
 
 import scala.collection.JavaConverters._
 
@@ -223,14 +225,18 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
     val pySparkFiles = Utils.getTestFileAbsolutePath("pyfiles.py", sparkHomeDir)
     val inDepsFile = Utils.getTestFileAbsolutePath("py_container_checks.py", sparkHomeDir)
     val outDepsFile = s"${inDepsFile.substring(0, inDepsFile.lastIndexOf("."))}.zip"
-    Utils.createZipFile(inDepsFile, outDepsFile)
-    testPython(
-      pySparkFiles,
-      Seq(
-        "Python runtime version check is: True",
-        "Python environment version check is: True",
-        "Python runtime version check for executor is: True"),
-      Some(outDepsFile))
+    try {
+      Utils.createZipFile(inDepsFile, outDepsFile)
+      testPython(
+        pySparkFiles,
+        Seq(
+          "Python runtime version check is: True",
+          "Python environment version check is: True",
+          "Python runtime version check for executor is: True"),
+        Some(outDepsFile))
+    } finally {
+      Files.delete(new File(outDepsFile).toPath)
+    }
   }
 
   private def testPython(

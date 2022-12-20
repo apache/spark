@@ -62,14 +62,14 @@ Results [1]: [count#40]
 
 (10) Exchange
 Input [1]: [count#40]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#41]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=1]
 
 (11) HashAggregate [codegen id : 2]
 Input [1]: [count#40]
 Keys: []
 Functions [1]: [count(1)]
-Aggregate Attributes [1]: [count(1)#42]
-Results [1]: [count(1)#42 AS count(1)#43]
+Aggregate Attributes [1]: [count(1)#41]
+Results [1]: [count(1)#41 AS count(1)#42]
 
 Subquery:2 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquery#4, [id=#5]
 * HashAggregate (18)
@@ -82,40 +82,40 @@ Subquery:2 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquery
 
 
 (12) Scan parquet default.store_sales
-Output [3]: [ss_quantity#44, ss_ext_discount_amt#45, ss_sold_date_sk#46]
+Output [3]: [ss_quantity#43, ss_ext_discount_amt#44, ss_sold_date_sk#45]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,1), LessThanOrEqual(ss_quantity,20)]
 ReadSchema: struct<ss_quantity:int,ss_ext_discount_amt:decimal(7,2)>
 
 (13) ColumnarToRow [codegen id : 1]
-Input [3]: [ss_quantity#44, ss_ext_discount_amt#45, ss_sold_date_sk#46]
+Input [3]: [ss_quantity#43, ss_ext_discount_amt#44, ss_sold_date_sk#45]
 
 (14) Filter [codegen id : 1]
-Input [3]: [ss_quantity#44, ss_ext_discount_amt#45, ss_sold_date_sk#46]
-Condition : ((isnotnull(ss_quantity#44) AND (ss_quantity#44 >= 1)) AND (ss_quantity#44 <= 20))
+Input [3]: [ss_quantity#43, ss_ext_discount_amt#44, ss_sold_date_sk#45]
+Condition : ((isnotnull(ss_quantity#43) AND (ss_quantity#43 >= 1)) AND (ss_quantity#43 <= 20))
 
 (15) Project [codegen id : 1]
-Output [1]: [ss_ext_discount_amt#45]
-Input [3]: [ss_quantity#44, ss_ext_discount_amt#45, ss_sold_date_sk#46]
+Output [1]: [ss_ext_discount_amt#44]
+Input [3]: [ss_quantity#43, ss_ext_discount_amt#44, ss_sold_date_sk#45]
 
 (16) HashAggregate [codegen id : 1]
-Input [1]: [ss_ext_discount_amt#45]
+Input [1]: [ss_ext_discount_amt#44]
 Keys: []
-Functions [1]: [partial_avg(UnscaledValue(ss_ext_discount_amt#45))]
-Aggregate Attributes [2]: [sum#47, count#48]
-Results [2]: [sum#49, count#50]
+Functions [1]: [partial_avg(UnscaledValue(ss_ext_discount_amt#44))]
+Aggregate Attributes [2]: [sum#46, count#47]
+Results [2]: [sum#48, count#49]
 
 (17) Exchange
-Input [2]: [sum#49, count#50]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#51]
+Input [2]: [sum#48, count#49]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=2]
 
 (18) HashAggregate [codegen id : 2]
-Input [2]: [sum#49, count#50]
+Input [2]: [sum#48, count#49]
 Keys: []
-Functions [1]: [avg(UnscaledValue(ss_ext_discount_amt#45))]
-Aggregate Attributes [1]: [avg(UnscaledValue(ss_ext_discount_amt#45))#52]
-Results [1]: [cast((avg(UnscaledValue(ss_ext_discount_amt#45))#52 / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#53]
+Functions [1]: [avg(UnscaledValue(ss_ext_discount_amt#44))]
+Aggregate Attributes [1]: [avg(UnscaledValue(ss_ext_discount_amt#44))#50]
+Results [1]: [cast((avg(UnscaledValue(ss_ext_discount_amt#44))#50 / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#51]
 
 Subquery:3 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquery#6, [id=#7]
 * HashAggregate (25)
@@ -128,40 +128,40 @@ Subquery:3 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquery
 
 
 (19) Scan parquet default.store_sales
-Output [3]: [ss_quantity#54, ss_net_paid#55, ss_sold_date_sk#56]
+Output [3]: [ss_quantity#52, ss_net_paid#53, ss_sold_date_sk#54]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,1), LessThanOrEqual(ss_quantity,20)]
 ReadSchema: struct<ss_quantity:int,ss_net_paid:decimal(7,2)>
 
 (20) ColumnarToRow [codegen id : 1]
-Input [3]: [ss_quantity#54, ss_net_paid#55, ss_sold_date_sk#56]
+Input [3]: [ss_quantity#52, ss_net_paid#53, ss_sold_date_sk#54]
 
 (21) Filter [codegen id : 1]
-Input [3]: [ss_quantity#54, ss_net_paid#55, ss_sold_date_sk#56]
-Condition : ((isnotnull(ss_quantity#54) AND (ss_quantity#54 >= 1)) AND (ss_quantity#54 <= 20))
+Input [3]: [ss_quantity#52, ss_net_paid#53, ss_sold_date_sk#54]
+Condition : ((isnotnull(ss_quantity#52) AND (ss_quantity#52 >= 1)) AND (ss_quantity#52 <= 20))
 
 (22) Project [codegen id : 1]
-Output [1]: [ss_net_paid#55]
-Input [3]: [ss_quantity#54, ss_net_paid#55, ss_sold_date_sk#56]
+Output [1]: [ss_net_paid#53]
+Input [3]: [ss_quantity#52, ss_net_paid#53, ss_sold_date_sk#54]
 
 (23) HashAggregate [codegen id : 1]
-Input [1]: [ss_net_paid#55]
+Input [1]: [ss_net_paid#53]
 Keys: []
-Functions [1]: [partial_avg(UnscaledValue(ss_net_paid#55))]
-Aggregate Attributes [2]: [sum#57, count#58]
-Results [2]: [sum#59, count#60]
+Functions [1]: [partial_avg(UnscaledValue(ss_net_paid#53))]
+Aggregate Attributes [2]: [sum#55, count#56]
+Results [2]: [sum#57, count#58]
 
 (24) Exchange
-Input [2]: [sum#59, count#60]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#61]
+Input [2]: [sum#57, count#58]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=3]
 
 (25) HashAggregate [codegen id : 2]
-Input [2]: [sum#59, count#60]
+Input [2]: [sum#57, count#58]
 Keys: []
-Functions [1]: [avg(UnscaledValue(ss_net_paid#55))]
-Aggregate Attributes [1]: [avg(UnscaledValue(ss_net_paid#55))#62]
-Results [1]: [cast((avg(UnscaledValue(ss_net_paid#55))#62 / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#63]
+Functions [1]: [avg(UnscaledValue(ss_net_paid#53))]
+Aggregate Attributes [1]: [avg(UnscaledValue(ss_net_paid#53))#59]
+Results [1]: [cast((avg(UnscaledValue(ss_net_paid#53))#59 / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#60]
 
 Subquery:4 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquery#9, [id=#10]
 * HashAggregate (32)
@@ -174,40 +174,40 @@ Subquery:4 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquery
 
 
 (26) Scan parquet default.store_sales
-Output [2]: [ss_quantity#64, ss_sold_date_sk#65]
+Output [2]: [ss_quantity#61, ss_sold_date_sk#62]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,21), LessThanOrEqual(ss_quantity,40)]
 ReadSchema: struct<ss_quantity:int>
 
 (27) ColumnarToRow [codegen id : 1]
-Input [2]: [ss_quantity#64, ss_sold_date_sk#65]
+Input [2]: [ss_quantity#61, ss_sold_date_sk#62]
 
 (28) Filter [codegen id : 1]
-Input [2]: [ss_quantity#64, ss_sold_date_sk#65]
-Condition : ((isnotnull(ss_quantity#64) AND (ss_quantity#64 >= 21)) AND (ss_quantity#64 <= 40))
+Input [2]: [ss_quantity#61, ss_sold_date_sk#62]
+Condition : ((isnotnull(ss_quantity#61) AND (ss_quantity#61 >= 21)) AND (ss_quantity#61 <= 40))
 
 (29) Project [codegen id : 1]
 Output: []
-Input [2]: [ss_quantity#64, ss_sold_date_sk#65]
+Input [2]: [ss_quantity#61, ss_sold_date_sk#62]
 
 (30) HashAggregate [codegen id : 1]
 Input: []
 Keys: []
 Functions [1]: [partial_count(1)]
-Aggregate Attributes [1]: [count#66]
-Results [1]: [count#67]
+Aggregate Attributes [1]: [count#63]
+Results [1]: [count#64]
 
 (31) Exchange
-Input [1]: [count#67]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#68]
+Input [1]: [count#64]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=4]
 
 (32) HashAggregate [codegen id : 2]
-Input [1]: [count#67]
+Input [1]: [count#64]
 Keys: []
 Functions [1]: [count(1)]
-Aggregate Attributes [1]: [count(1)#69]
-Results [1]: [count(1)#69 AS count(1)#70]
+Aggregate Attributes [1]: [count(1)#65]
+Results [1]: [count(1)#65 AS count(1)#66]
 
 Subquery:5 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquery#11, [id=#12]
 * HashAggregate (39)
@@ -220,40 +220,40 @@ Subquery:5 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquery
 
 
 (33) Scan parquet default.store_sales
-Output [3]: [ss_quantity#71, ss_ext_discount_amt#72, ss_sold_date_sk#73]
+Output [3]: [ss_quantity#67, ss_ext_discount_amt#68, ss_sold_date_sk#69]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,21), LessThanOrEqual(ss_quantity,40)]
 ReadSchema: struct<ss_quantity:int,ss_ext_discount_amt:decimal(7,2)>
 
 (34) ColumnarToRow [codegen id : 1]
-Input [3]: [ss_quantity#71, ss_ext_discount_amt#72, ss_sold_date_sk#73]
+Input [3]: [ss_quantity#67, ss_ext_discount_amt#68, ss_sold_date_sk#69]
 
 (35) Filter [codegen id : 1]
-Input [3]: [ss_quantity#71, ss_ext_discount_amt#72, ss_sold_date_sk#73]
-Condition : ((isnotnull(ss_quantity#71) AND (ss_quantity#71 >= 21)) AND (ss_quantity#71 <= 40))
+Input [3]: [ss_quantity#67, ss_ext_discount_amt#68, ss_sold_date_sk#69]
+Condition : ((isnotnull(ss_quantity#67) AND (ss_quantity#67 >= 21)) AND (ss_quantity#67 <= 40))
 
 (36) Project [codegen id : 1]
-Output [1]: [ss_ext_discount_amt#72]
-Input [3]: [ss_quantity#71, ss_ext_discount_amt#72, ss_sold_date_sk#73]
+Output [1]: [ss_ext_discount_amt#68]
+Input [3]: [ss_quantity#67, ss_ext_discount_amt#68, ss_sold_date_sk#69]
 
 (37) HashAggregate [codegen id : 1]
-Input [1]: [ss_ext_discount_amt#72]
+Input [1]: [ss_ext_discount_amt#68]
 Keys: []
-Functions [1]: [partial_avg(UnscaledValue(ss_ext_discount_amt#72))]
-Aggregate Attributes [2]: [sum#74, count#75]
-Results [2]: [sum#76, count#77]
+Functions [1]: [partial_avg(UnscaledValue(ss_ext_discount_amt#68))]
+Aggregate Attributes [2]: [sum#70, count#71]
+Results [2]: [sum#72, count#73]
 
 (38) Exchange
-Input [2]: [sum#76, count#77]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#78]
+Input [2]: [sum#72, count#73]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=5]
 
 (39) HashAggregate [codegen id : 2]
-Input [2]: [sum#76, count#77]
+Input [2]: [sum#72, count#73]
 Keys: []
-Functions [1]: [avg(UnscaledValue(ss_ext_discount_amt#72))]
-Aggregate Attributes [1]: [avg(UnscaledValue(ss_ext_discount_amt#72))#79]
-Results [1]: [cast((avg(UnscaledValue(ss_ext_discount_amt#72))#79 / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#80]
+Functions [1]: [avg(UnscaledValue(ss_ext_discount_amt#68))]
+Aggregate Attributes [1]: [avg(UnscaledValue(ss_ext_discount_amt#68))#74]
+Results [1]: [cast((avg(UnscaledValue(ss_ext_discount_amt#68))#74 / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#75]
 
 Subquery:6 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquery#13, [id=#14]
 * HashAggregate (46)
@@ -266,40 +266,40 @@ Subquery:6 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquery
 
 
 (40) Scan parquet default.store_sales
-Output [3]: [ss_quantity#81, ss_net_paid#82, ss_sold_date_sk#83]
+Output [3]: [ss_quantity#76, ss_net_paid#77, ss_sold_date_sk#78]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,21), LessThanOrEqual(ss_quantity,40)]
 ReadSchema: struct<ss_quantity:int,ss_net_paid:decimal(7,2)>
 
 (41) ColumnarToRow [codegen id : 1]
-Input [3]: [ss_quantity#81, ss_net_paid#82, ss_sold_date_sk#83]
+Input [3]: [ss_quantity#76, ss_net_paid#77, ss_sold_date_sk#78]
 
 (42) Filter [codegen id : 1]
-Input [3]: [ss_quantity#81, ss_net_paid#82, ss_sold_date_sk#83]
-Condition : ((isnotnull(ss_quantity#81) AND (ss_quantity#81 >= 21)) AND (ss_quantity#81 <= 40))
+Input [3]: [ss_quantity#76, ss_net_paid#77, ss_sold_date_sk#78]
+Condition : ((isnotnull(ss_quantity#76) AND (ss_quantity#76 >= 21)) AND (ss_quantity#76 <= 40))
 
 (43) Project [codegen id : 1]
-Output [1]: [ss_net_paid#82]
-Input [3]: [ss_quantity#81, ss_net_paid#82, ss_sold_date_sk#83]
+Output [1]: [ss_net_paid#77]
+Input [3]: [ss_quantity#76, ss_net_paid#77, ss_sold_date_sk#78]
 
 (44) HashAggregate [codegen id : 1]
-Input [1]: [ss_net_paid#82]
+Input [1]: [ss_net_paid#77]
 Keys: []
-Functions [1]: [partial_avg(UnscaledValue(ss_net_paid#82))]
-Aggregate Attributes [2]: [sum#84, count#85]
-Results [2]: [sum#86, count#87]
+Functions [1]: [partial_avg(UnscaledValue(ss_net_paid#77))]
+Aggregate Attributes [2]: [sum#79, count#80]
+Results [2]: [sum#81, count#82]
 
 (45) Exchange
-Input [2]: [sum#86, count#87]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#88]
+Input [2]: [sum#81, count#82]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=6]
 
 (46) HashAggregate [codegen id : 2]
-Input [2]: [sum#86, count#87]
+Input [2]: [sum#81, count#82]
 Keys: []
-Functions [1]: [avg(UnscaledValue(ss_net_paid#82))]
-Aggregate Attributes [1]: [avg(UnscaledValue(ss_net_paid#82))#89]
-Results [1]: [cast((avg(UnscaledValue(ss_net_paid#82))#89 / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#90]
+Functions [1]: [avg(UnscaledValue(ss_net_paid#77))]
+Aggregate Attributes [1]: [avg(UnscaledValue(ss_net_paid#77))#83]
+Results [1]: [cast((avg(UnscaledValue(ss_net_paid#77))#83 / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#84]
 
 Subquery:7 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquery#16, [id=#17]
 * HashAggregate (53)
@@ -312,40 +312,40 @@ Subquery:7 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquery
 
 
 (47) Scan parquet default.store_sales
-Output [2]: [ss_quantity#91, ss_sold_date_sk#92]
+Output [2]: [ss_quantity#85, ss_sold_date_sk#86]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,41), LessThanOrEqual(ss_quantity,60)]
 ReadSchema: struct<ss_quantity:int>
 
 (48) ColumnarToRow [codegen id : 1]
-Input [2]: [ss_quantity#91, ss_sold_date_sk#92]
+Input [2]: [ss_quantity#85, ss_sold_date_sk#86]
 
 (49) Filter [codegen id : 1]
-Input [2]: [ss_quantity#91, ss_sold_date_sk#92]
-Condition : ((isnotnull(ss_quantity#91) AND (ss_quantity#91 >= 41)) AND (ss_quantity#91 <= 60))
+Input [2]: [ss_quantity#85, ss_sold_date_sk#86]
+Condition : ((isnotnull(ss_quantity#85) AND (ss_quantity#85 >= 41)) AND (ss_quantity#85 <= 60))
 
 (50) Project [codegen id : 1]
 Output: []
-Input [2]: [ss_quantity#91, ss_sold_date_sk#92]
+Input [2]: [ss_quantity#85, ss_sold_date_sk#86]
 
 (51) HashAggregate [codegen id : 1]
 Input: []
 Keys: []
 Functions [1]: [partial_count(1)]
-Aggregate Attributes [1]: [count#93]
-Results [1]: [count#94]
+Aggregate Attributes [1]: [count#87]
+Results [1]: [count#88]
 
 (52) Exchange
-Input [1]: [count#94]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#95]
+Input [1]: [count#88]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=7]
 
 (53) HashAggregate [codegen id : 2]
-Input [1]: [count#94]
+Input [1]: [count#88]
 Keys: []
 Functions [1]: [count(1)]
-Aggregate Attributes [1]: [count(1)#96]
-Results [1]: [count(1)#96 AS count(1)#97]
+Aggregate Attributes [1]: [count(1)#89]
+Results [1]: [count(1)#89 AS count(1)#90]
 
 Subquery:8 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquery#18, [id=#19]
 * HashAggregate (60)
@@ -358,40 +358,40 @@ Subquery:8 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquery
 
 
 (54) Scan parquet default.store_sales
-Output [3]: [ss_quantity#98, ss_ext_discount_amt#99, ss_sold_date_sk#100]
+Output [3]: [ss_quantity#91, ss_ext_discount_amt#92, ss_sold_date_sk#93]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,41), LessThanOrEqual(ss_quantity,60)]
 ReadSchema: struct<ss_quantity:int,ss_ext_discount_amt:decimal(7,2)>
 
 (55) ColumnarToRow [codegen id : 1]
-Input [3]: [ss_quantity#98, ss_ext_discount_amt#99, ss_sold_date_sk#100]
+Input [3]: [ss_quantity#91, ss_ext_discount_amt#92, ss_sold_date_sk#93]
 
 (56) Filter [codegen id : 1]
-Input [3]: [ss_quantity#98, ss_ext_discount_amt#99, ss_sold_date_sk#100]
-Condition : ((isnotnull(ss_quantity#98) AND (ss_quantity#98 >= 41)) AND (ss_quantity#98 <= 60))
+Input [3]: [ss_quantity#91, ss_ext_discount_amt#92, ss_sold_date_sk#93]
+Condition : ((isnotnull(ss_quantity#91) AND (ss_quantity#91 >= 41)) AND (ss_quantity#91 <= 60))
 
 (57) Project [codegen id : 1]
-Output [1]: [ss_ext_discount_amt#99]
-Input [3]: [ss_quantity#98, ss_ext_discount_amt#99, ss_sold_date_sk#100]
+Output [1]: [ss_ext_discount_amt#92]
+Input [3]: [ss_quantity#91, ss_ext_discount_amt#92, ss_sold_date_sk#93]
 
 (58) HashAggregate [codegen id : 1]
-Input [1]: [ss_ext_discount_amt#99]
+Input [1]: [ss_ext_discount_amt#92]
 Keys: []
-Functions [1]: [partial_avg(UnscaledValue(ss_ext_discount_amt#99))]
-Aggregate Attributes [2]: [sum#101, count#102]
-Results [2]: [sum#103, count#104]
+Functions [1]: [partial_avg(UnscaledValue(ss_ext_discount_amt#92))]
+Aggregate Attributes [2]: [sum#94, count#95]
+Results [2]: [sum#96, count#97]
 
 (59) Exchange
-Input [2]: [sum#103, count#104]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#105]
+Input [2]: [sum#96, count#97]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=8]
 
 (60) HashAggregate [codegen id : 2]
-Input [2]: [sum#103, count#104]
+Input [2]: [sum#96, count#97]
 Keys: []
-Functions [1]: [avg(UnscaledValue(ss_ext_discount_amt#99))]
-Aggregate Attributes [1]: [avg(UnscaledValue(ss_ext_discount_amt#99))#106]
-Results [1]: [cast((avg(UnscaledValue(ss_ext_discount_amt#99))#106 / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#107]
+Functions [1]: [avg(UnscaledValue(ss_ext_discount_amt#92))]
+Aggregate Attributes [1]: [avg(UnscaledValue(ss_ext_discount_amt#92))#98]
+Results [1]: [cast((avg(UnscaledValue(ss_ext_discount_amt#92))#98 / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#99]
 
 Subquery:9 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquery#20, [id=#21]
 * HashAggregate (67)
@@ -404,40 +404,40 @@ Subquery:9 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquery
 
 
 (61) Scan parquet default.store_sales
-Output [3]: [ss_quantity#108, ss_net_paid#109, ss_sold_date_sk#110]
+Output [3]: [ss_quantity#100, ss_net_paid#101, ss_sold_date_sk#102]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,41), LessThanOrEqual(ss_quantity,60)]
 ReadSchema: struct<ss_quantity:int,ss_net_paid:decimal(7,2)>
 
 (62) ColumnarToRow [codegen id : 1]
-Input [3]: [ss_quantity#108, ss_net_paid#109, ss_sold_date_sk#110]
+Input [3]: [ss_quantity#100, ss_net_paid#101, ss_sold_date_sk#102]
 
 (63) Filter [codegen id : 1]
-Input [3]: [ss_quantity#108, ss_net_paid#109, ss_sold_date_sk#110]
-Condition : ((isnotnull(ss_quantity#108) AND (ss_quantity#108 >= 41)) AND (ss_quantity#108 <= 60))
+Input [3]: [ss_quantity#100, ss_net_paid#101, ss_sold_date_sk#102]
+Condition : ((isnotnull(ss_quantity#100) AND (ss_quantity#100 >= 41)) AND (ss_quantity#100 <= 60))
 
 (64) Project [codegen id : 1]
-Output [1]: [ss_net_paid#109]
-Input [3]: [ss_quantity#108, ss_net_paid#109, ss_sold_date_sk#110]
+Output [1]: [ss_net_paid#101]
+Input [3]: [ss_quantity#100, ss_net_paid#101, ss_sold_date_sk#102]
 
 (65) HashAggregate [codegen id : 1]
-Input [1]: [ss_net_paid#109]
+Input [1]: [ss_net_paid#101]
 Keys: []
-Functions [1]: [partial_avg(UnscaledValue(ss_net_paid#109))]
-Aggregate Attributes [2]: [sum#111, count#112]
-Results [2]: [sum#113, count#114]
+Functions [1]: [partial_avg(UnscaledValue(ss_net_paid#101))]
+Aggregate Attributes [2]: [sum#103, count#104]
+Results [2]: [sum#105, count#106]
 
 (66) Exchange
-Input [2]: [sum#113, count#114]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#115]
+Input [2]: [sum#105, count#106]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=9]
 
 (67) HashAggregate [codegen id : 2]
-Input [2]: [sum#113, count#114]
+Input [2]: [sum#105, count#106]
 Keys: []
-Functions [1]: [avg(UnscaledValue(ss_net_paid#109))]
-Aggregate Attributes [1]: [avg(UnscaledValue(ss_net_paid#109))#116]
-Results [1]: [cast((avg(UnscaledValue(ss_net_paid#109))#116 / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#117]
+Functions [1]: [avg(UnscaledValue(ss_net_paid#101))]
+Aggregate Attributes [1]: [avg(UnscaledValue(ss_net_paid#101))#107]
+Results [1]: [cast((avg(UnscaledValue(ss_net_paid#101))#107 / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#108]
 
 Subquery:10 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquery#23, [id=#24]
 * HashAggregate (74)
@@ -450,40 +450,40 @@ Subquery:10 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquer
 
 
 (68) Scan parquet default.store_sales
-Output [2]: [ss_quantity#118, ss_sold_date_sk#119]
+Output [2]: [ss_quantity#109, ss_sold_date_sk#110]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,61), LessThanOrEqual(ss_quantity,80)]
 ReadSchema: struct<ss_quantity:int>
 
 (69) ColumnarToRow [codegen id : 1]
-Input [2]: [ss_quantity#118, ss_sold_date_sk#119]
+Input [2]: [ss_quantity#109, ss_sold_date_sk#110]
 
 (70) Filter [codegen id : 1]
-Input [2]: [ss_quantity#118, ss_sold_date_sk#119]
-Condition : ((isnotnull(ss_quantity#118) AND (ss_quantity#118 >= 61)) AND (ss_quantity#118 <= 80))
+Input [2]: [ss_quantity#109, ss_sold_date_sk#110]
+Condition : ((isnotnull(ss_quantity#109) AND (ss_quantity#109 >= 61)) AND (ss_quantity#109 <= 80))
 
 (71) Project [codegen id : 1]
 Output: []
-Input [2]: [ss_quantity#118, ss_sold_date_sk#119]
+Input [2]: [ss_quantity#109, ss_sold_date_sk#110]
 
 (72) HashAggregate [codegen id : 1]
 Input: []
 Keys: []
 Functions [1]: [partial_count(1)]
-Aggregate Attributes [1]: [count#120]
-Results [1]: [count#121]
+Aggregate Attributes [1]: [count#111]
+Results [1]: [count#112]
 
 (73) Exchange
-Input [1]: [count#121]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#122]
+Input [1]: [count#112]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=10]
 
 (74) HashAggregate [codegen id : 2]
-Input [1]: [count#121]
+Input [1]: [count#112]
 Keys: []
 Functions [1]: [count(1)]
-Aggregate Attributes [1]: [count(1)#123]
-Results [1]: [count(1)#123 AS count(1)#124]
+Aggregate Attributes [1]: [count(1)#113]
+Results [1]: [count(1)#113 AS count(1)#114]
 
 Subquery:11 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquery#25, [id=#26]
 * HashAggregate (81)
@@ -496,40 +496,40 @@ Subquery:11 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquer
 
 
 (75) Scan parquet default.store_sales
-Output [3]: [ss_quantity#125, ss_ext_discount_amt#126, ss_sold_date_sk#127]
+Output [3]: [ss_quantity#115, ss_ext_discount_amt#116, ss_sold_date_sk#117]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,61), LessThanOrEqual(ss_quantity,80)]
 ReadSchema: struct<ss_quantity:int,ss_ext_discount_amt:decimal(7,2)>
 
 (76) ColumnarToRow [codegen id : 1]
-Input [3]: [ss_quantity#125, ss_ext_discount_amt#126, ss_sold_date_sk#127]
+Input [3]: [ss_quantity#115, ss_ext_discount_amt#116, ss_sold_date_sk#117]
 
 (77) Filter [codegen id : 1]
-Input [3]: [ss_quantity#125, ss_ext_discount_amt#126, ss_sold_date_sk#127]
-Condition : ((isnotnull(ss_quantity#125) AND (ss_quantity#125 >= 61)) AND (ss_quantity#125 <= 80))
+Input [3]: [ss_quantity#115, ss_ext_discount_amt#116, ss_sold_date_sk#117]
+Condition : ((isnotnull(ss_quantity#115) AND (ss_quantity#115 >= 61)) AND (ss_quantity#115 <= 80))
 
 (78) Project [codegen id : 1]
-Output [1]: [ss_ext_discount_amt#126]
-Input [3]: [ss_quantity#125, ss_ext_discount_amt#126, ss_sold_date_sk#127]
+Output [1]: [ss_ext_discount_amt#116]
+Input [3]: [ss_quantity#115, ss_ext_discount_amt#116, ss_sold_date_sk#117]
 
 (79) HashAggregate [codegen id : 1]
-Input [1]: [ss_ext_discount_amt#126]
+Input [1]: [ss_ext_discount_amt#116]
 Keys: []
-Functions [1]: [partial_avg(UnscaledValue(ss_ext_discount_amt#126))]
-Aggregate Attributes [2]: [sum#128, count#129]
-Results [2]: [sum#130, count#131]
+Functions [1]: [partial_avg(UnscaledValue(ss_ext_discount_amt#116))]
+Aggregate Attributes [2]: [sum#118, count#119]
+Results [2]: [sum#120, count#121]
 
 (80) Exchange
-Input [2]: [sum#130, count#131]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#132]
+Input [2]: [sum#120, count#121]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=11]
 
 (81) HashAggregate [codegen id : 2]
-Input [2]: [sum#130, count#131]
+Input [2]: [sum#120, count#121]
 Keys: []
-Functions [1]: [avg(UnscaledValue(ss_ext_discount_amt#126))]
-Aggregate Attributes [1]: [avg(UnscaledValue(ss_ext_discount_amt#126))#133]
-Results [1]: [cast((avg(UnscaledValue(ss_ext_discount_amt#126))#133 / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#134]
+Functions [1]: [avg(UnscaledValue(ss_ext_discount_amt#116))]
+Aggregate Attributes [1]: [avg(UnscaledValue(ss_ext_discount_amt#116))#122]
+Results [1]: [cast((avg(UnscaledValue(ss_ext_discount_amt#116))#122 / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#123]
 
 Subquery:12 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquery#27, [id=#28]
 * HashAggregate (88)
@@ -542,40 +542,40 @@ Subquery:12 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquer
 
 
 (82) Scan parquet default.store_sales
-Output [3]: [ss_quantity#135, ss_net_paid#136, ss_sold_date_sk#137]
+Output [3]: [ss_quantity#124, ss_net_paid#125, ss_sold_date_sk#126]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,61), LessThanOrEqual(ss_quantity,80)]
 ReadSchema: struct<ss_quantity:int,ss_net_paid:decimal(7,2)>
 
 (83) ColumnarToRow [codegen id : 1]
-Input [3]: [ss_quantity#135, ss_net_paid#136, ss_sold_date_sk#137]
+Input [3]: [ss_quantity#124, ss_net_paid#125, ss_sold_date_sk#126]
 
 (84) Filter [codegen id : 1]
-Input [3]: [ss_quantity#135, ss_net_paid#136, ss_sold_date_sk#137]
-Condition : ((isnotnull(ss_quantity#135) AND (ss_quantity#135 >= 61)) AND (ss_quantity#135 <= 80))
+Input [3]: [ss_quantity#124, ss_net_paid#125, ss_sold_date_sk#126]
+Condition : ((isnotnull(ss_quantity#124) AND (ss_quantity#124 >= 61)) AND (ss_quantity#124 <= 80))
 
 (85) Project [codegen id : 1]
-Output [1]: [ss_net_paid#136]
-Input [3]: [ss_quantity#135, ss_net_paid#136, ss_sold_date_sk#137]
+Output [1]: [ss_net_paid#125]
+Input [3]: [ss_quantity#124, ss_net_paid#125, ss_sold_date_sk#126]
 
 (86) HashAggregate [codegen id : 1]
-Input [1]: [ss_net_paid#136]
+Input [1]: [ss_net_paid#125]
 Keys: []
-Functions [1]: [partial_avg(UnscaledValue(ss_net_paid#136))]
-Aggregate Attributes [2]: [sum#138, count#139]
-Results [2]: [sum#140, count#141]
+Functions [1]: [partial_avg(UnscaledValue(ss_net_paid#125))]
+Aggregate Attributes [2]: [sum#127, count#128]
+Results [2]: [sum#129, count#130]
 
 (87) Exchange
-Input [2]: [sum#140, count#141]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#142]
+Input [2]: [sum#129, count#130]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=12]
 
 (88) HashAggregate [codegen id : 2]
-Input [2]: [sum#140, count#141]
+Input [2]: [sum#129, count#130]
 Keys: []
-Functions [1]: [avg(UnscaledValue(ss_net_paid#136))]
-Aggregate Attributes [1]: [avg(UnscaledValue(ss_net_paid#136))#143]
-Results [1]: [cast((avg(UnscaledValue(ss_net_paid#136))#143 / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#144]
+Functions [1]: [avg(UnscaledValue(ss_net_paid#125))]
+Aggregate Attributes [1]: [avg(UnscaledValue(ss_net_paid#125))#131]
+Results [1]: [cast((avg(UnscaledValue(ss_net_paid#125))#131 / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#132]
 
 Subquery:13 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquery#30, [id=#31]
 * HashAggregate (95)
@@ -588,40 +588,40 @@ Subquery:13 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquer
 
 
 (89) Scan parquet default.store_sales
-Output [2]: [ss_quantity#145, ss_sold_date_sk#146]
+Output [2]: [ss_quantity#133, ss_sold_date_sk#134]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,81), LessThanOrEqual(ss_quantity,100)]
 ReadSchema: struct<ss_quantity:int>
 
 (90) ColumnarToRow [codegen id : 1]
-Input [2]: [ss_quantity#145, ss_sold_date_sk#146]
+Input [2]: [ss_quantity#133, ss_sold_date_sk#134]
 
 (91) Filter [codegen id : 1]
-Input [2]: [ss_quantity#145, ss_sold_date_sk#146]
-Condition : ((isnotnull(ss_quantity#145) AND (ss_quantity#145 >= 81)) AND (ss_quantity#145 <= 100))
+Input [2]: [ss_quantity#133, ss_sold_date_sk#134]
+Condition : ((isnotnull(ss_quantity#133) AND (ss_quantity#133 >= 81)) AND (ss_quantity#133 <= 100))
 
 (92) Project [codegen id : 1]
 Output: []
-Input [2]: [ss_quantity#145, ss_sold_date_sk#146]
+Input [2]: [ss_quantity#133, ss_sold_date_sk#134]
 
 (93) HashAggregate [codegen id : 1]
 Input: []
 Keys: []
 Functions [1]: [partial_count(1)]
-Aggregate Attributes [1]: [count#147]
-Results [1]: [count#148]
+Aggregate Attributes [1]: [count#135]
+Results [1]: [count#136]
 
 (94) Exchange
-Input [1]: [count#148]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#149]
+Input [1]: [count#136]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=13]
 
 (95) HashAggregate [codegen id : 2]
-Input [1]: [count#148]
+Input [1]: [count#136]
 Keys: []
 Functions [1]: [count(1)]
-Aggregate Attributes [1]: [count(1)#150]
-Results [1]: [count(1)#150 AS count(1)#151]
+Aggregate Attributes [1]: [count(1)#137]
+Results [1]: [count(1)#137 AS count(1)#138]
 
 Subquery:14 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquery#32, [id=#33]
 * HashAggregate (102)
@@ -634,40 +634,40 @@ Subquery:14 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquer
 
 
 (96) Scan parquet default.store_sales
-Output [3]: [ss_quantity#152, ss_ext_discount_amt#153, ss_sold_date_sk#154]
+Output [3]: [ss_quantity#139, ss_ext_discount_amt#140, ss_sold_date_sk#141]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,81), LessThanOrEqual(ss_quantity,100)]
 ReadSchema: struct<ss_quantity:int,ss_ext_discount_amt:decimal(7,2)>
 
 (97) ColumnarToRow [codegen id : 1]
-Input [3]: [ss_quantity#152, ss_ext_discount_amt#153, ss_sold_date_sk#154]
+Input [3]: [ss_quantity#139, ss_ext_discount_amt#140, ss_sold_date_sk#141]
 
 (98) Filter [codegen id : 1]
-Input [3]: [ss_quantity#152, ss_ext_discount_amt#153, ss_sold_date_sk#154]
-Condition : ((isnotnull(ss_quantity#152) AND (ss_quantity#152 >= 81)) AND (ss_quantity#152 <= 100))
+Input [3]: [ss_quantity#139, ss_ext_discount_amt#140, ss_sold_date_sk#141]
+Condition : ((isnotnull(ss_quantity#139) AND (ss_quantity#139 >= 81)) AND (ss_quantity#139 <= 100))
 
 (99) Project [codegen id : 1]
-Output [1]: [ss_ext_discount_amt#153]
-Input [3]: [ss_quantity#152, ss_ext_discount_amt#153, ss_sold_date_sk#154]
+Output [1]: [ss_ext_discount_amt#140]
+Input [3]: [ss_quantity#139, ss_ext_discount_amt#140, ss_sold_date_sk#141]
 
 (100) HashAggregate [codegen id : 1]
-Input [1]: [ss_ext_discount_amt#153]
+Input [1]: [ss_ext_discount_amt#140]
 Keys: []
-Functions [1]: [partial_avg(UnscaledValue(ss_ext_discount_amt#153))]
-Aggregate Attributes [2]: [sum#155, count#156]
-Results [2]: [sum#157, count#158]
+Functions [1]: [partial_avg(UnscaledValue(ss_ext_discount_amt#140))]
+Aggregate Attributes [2]: [sum#142, count#143]
+Results [2]: [sum#144, count#145]
 
 (101) Exchange
-Input [2]: [sum#157, count#158]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#159]
+Input [2]: [sum#144, count#145]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=14]
 
 (102) HashAggregate [codegen id : 2]
-Input [2]: [sum#157, count#158]
+Input [2]: [sum#144, count#145]
 Keys: []
-Functions [1]: [avg(UnscaledValue(ss_ext_discount_amt#153))]
-Aggregate Attributes [1]: [avg(UnscaledValue(ss_ext_discount_amt#153))#160]
-Results [1]: [cast((avg(UnscaledValue(ss_ext_discount_amt#153))#160 / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#161]
+Functions [1]: [avg(UnscaledValue(ss_ext_discount_amt#140))]
+Aggregate Attributes [1]: [avg(UnscaledValue(ss_ext_discount_amt#140))#146]
+Results [1]: [cast((avg(UnscaledValue(ss_ext_discount_amt#140))#146 / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#147]
 
 Subquery:15 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquery#34, [id=#35]
 * HashAggregate (109)
@@ -680,39 +680,39 @@ Subquery:15 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquer
 
 
 (103) Scan parquet default.store_sales
-Output [3]: [ss_quantity#162, ss_net_paid#163, ss_sold_date_sk#164]
+Output [3]: [ss_quantity#148, ss_net_paid#149, ss_sold_date_sk#150]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,81), LessThanOrEqual(ss_quantity,100)]
 ReadSchema: struct<ss_quantity:int,ss_net_paid:decimal(7,2)>
 
 (104) ColumnarToRow [codegen id : 1]
-Input [3]: [ss_quantity#162, ss_net_paid#163, ss_sold_date_sk#164]
+Input [3]: [ss_quantity#148, ss_net_paid#149, ss_sold_date_sk#150]
 
 (105) Filter [codegen id : 1]
-Input [3]: [ss_quantity#162, ss_net_paid#163, ss_sold_date_sk#164]
-Condition : ((isnotnull(ss_quantity#162) AND (ss_quantity#162 >= 81)) AND (ss_quantity#162 <= 100))
+Input [3]: [ss_quantity#148, ss_net_paid#149, ss_sold_date_sk#150]
+Condition : ((isnotnull(ss_quantity#148) AND (ss_quantity#148 >= 81)) AND (ss_quantity#148 <= 100))
 
 (106) Project [codegen id : 1]
-Output [1]: [ss_net_paid#163]
-Input [3]: [ss_quantity#162, ss_net_paid#163, ss_sold_date_sk#164]
+Output [1]: [ss_net_paid#149]
+Input [3]: [ss_quantity#148, ss_net_paid#149, ss_sold_date_sk#150]
 
 (107) HashAggregate [codegen id : 1]
-Input [1]: [ss_net_paid#163]
+Input [1]: [ss_net_paid#149]
 Keys: []
-Functions [1]: [partial_avg(UnscaledValue(ss_net_paid#163))]
-Aggregate Attributes [2]: [sum#165, count#166]
-Results [2]: [sum#167, count#168]
+Functions [1]: [partial_avg(UnscaledValue(ss_net_paid#149))]
+Aggregate Attributes [2]: [sum#151, count#152]
+Results [2]: [sum#153, count#154]
 
 (108) Exchange
-Input [2]: [sum#167, count#168]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#169]
+Input [2]: [sum#153, count#154]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=15]
 
 (109) HashAggregate [codegen id : 2]
-Input [2]: [sum#167, count#168]
+Input [2]: [sum#153, count#154]
 Keys: []
-Functions [1]: [avg(UnscaledValue(ss_net_paid#163))]
-Aggregate Attributes [1]: [avg(UnscaledValue(ss_net_paid#163))#170]
-Results [1]: [cast((avg(UnscaledValue(ss_net_paid#163))#170 / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#171]
+Functions [1]: [avg(UnscaledValue(ss_net_paid#149))]
+Aggregate Attributes [1]: [avg(UnscaledValue(ss_net_paid#149))#155]
+Results [1]: [cast((avg(UnscaledValue(ss_net_paid#149))#155 / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#156]
 
 

@@ -47,6 +47,7 @@ import org.apache.spark.sql.execution.{ColumnarRule, SparkPlan}
  * <li>(External) Catalog listeners.</li>
  * <li>Columnar Rules.</li>
  * <li>Adaptive Query Stage Preparation Rules.</li>
+ * <li>Adaptive Query Execution Runtime Optimizer Rules.</li>
  * </ul>
  *
  * The extensions can be used by calling `withExtensions` on the [[SparkSession.Builder]], for
@@ -113,6 +114,7 @@ class SparkSessionExtensions {
 
   private[this] val columnarRuleBuilders = mutable.Buffer.empty[ColumnarRuleBuilder]
   private[this] val queryStagePrepRuleBuilders = mutable.Buffer.empty[QueryStagePrepRuleBuilder]
+  private[this] val runtimeOptimizerRules = mutable.Buffer.empty[RuleBuilder]
 
   /**
    * Build the override rules for columnar execution.
@@ -129,6 +131,13 @@ class SparkSessionExtensions {
   }
 
   /**
+   * Build the override rules for the optimizer of adaptive query execution.
+   */
+  private[sql] def buildRuntimeOptimizerRules(session: SparkSession): Seq[Rule[LogicalPlan]] = {
+    runtimeOptimizerRules.map(_.apply(session)).toSeq
+  }
+
+  /**
    * Inject a rule that can override the columnar execution of an executor.
    */
   def injectColumnar(builder: ColumnarRuleBuilder): Unit = {
@@ -141,6 +150,19 @@ class SparkSessionExtensions {
    */
   def injectQueryStagePrepRule(builder: QueryStagePrepRuleBuilder): Unit = {
     queryStagePrepRuleBuilders += builder
+  }
+
+  /**
+   * Inject a runtime `Rule` builder into the [[SparkSession]].
+   * The injected rules will be executed after built-in
+   * [[org.apache.spark.sql.execution.adaptive.AQEOptimizer]] rules are applied.
+   * A runtime optimizer rule is used to improve the quality of a logical plan during execution
+   * which can leverage accurate statistics from shuffle.
+   *
+   * Note that, it does not work if adaptive query execution is disabled.
+   */
+  def injectRuntimeOptimizerRule(builder: RuleBuilder): Unit = {
+    runtimeOptimizerRules += builder
   }
 
   private[this] val resolutionRuleBuilders = mutable.Buffer.empty[RuleBuilder]

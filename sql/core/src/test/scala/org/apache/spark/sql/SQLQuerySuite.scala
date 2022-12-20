@@ -579,6 +579,21 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         |select * from q1 union all select * from q2""".stripMargin),
       Row(5, "5") :: Row(4, "4") :: Nil)
 
+    // inner CTE relation refers to outer CTE relation.
+    withSQLConf(SQLConf.LEGACY_CTE_PRECEDENCE_POLICY.key -> "CORRECTED") {
+      checkAnswer(
+        sql(
+          """
+            |with temp1 as (select 1 col),
+            |temp2 as (
+            |  with temp1 as (select col + 1 AS col from temp1),
+            |  temp3 as (select col + 1 from temp1)
+            |  select * from temp3
+            |)
+            |select * from temp2
+            |""".stripMargin),
+        Row(3))
+      }
   }
 
   test("Allow only a single WITH clause per query") {
@@ -4213,6 +4228,36 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             Row("CAL_DT=2021-06-29") :: Row("CAL_DT=2021-06-30") :: Nil)
       }
     }
+  }
+
+  test("SPARK-36979: Add RewriteLateralSubquery rule into nonExcludableRules") {
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+      "org.apache.spark.sql.catalyst.optimizer.RewriteLateralSubquery") {
+      sql("SELECT * FROM testData, LATERAL (SELECT * FROM testData)").collect()
+    }
+  }
+
+  test("SPARK-39548: CreateView will make queries go into inline CTE code path thus" +
+    "trigger a mis-clarified `window definition not found` issue") {
+    sql(
+      """
+        |create or replace temporary view test_temp_view as
+        |with step_1 as (
+        |select * , min(a) over w2 as min_a_over_w2 from
+        |(select 1 as a, 2 as b, 3 as c) window w2 as (partition by b order by c)) , step_2 as
+        |(
+        |select *, max(e) over w1 as max_a_over_w1
+        |from (select 1 as e, 2 as f, 3 as g)
+        |join step_1 on true
+        |window w1 as (partition by f order by g)
+        |)
+        |select *
+        |from step_2
+        |""".stripMargin)
+
+    checkAnswer(
+      sql("select * from test_temp_view"),
+      Row(1, 2, 3, 1, 2, 3, 1, 1))
   }
 }
 

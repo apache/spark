@@ -23,12 +23,15 @@ import scala.collection.JavaConverters._
 
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic}
+import org.apache.spark.sql.connector.InMemoryV1Provider
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable, InMemoryTableCatalog, TableCatalog}
 import org.apache.spark.sql.connector.expressions.{BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, YearsTransform}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.FakeSourceOne
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
@@ -529,6 +532,23 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     assert(table.schema === new StructType().add("id", LongType).add("data", StringType))
     assert(table.partitioning === Seq(IdentityTransform(FieldReference("id"))))
     assert(table.properties === (Map("provider" -> "foo") ++ defaultOwnership).asJava)
+  }
+
+  test("SPARK-39543 writeOption should be passed to storage properties when fallback to v1") {
+    val provider = classOf[InMemoryV1Provider].getName
+
+    withSQLConf((SQLConf.USE_V1_SOURCE_LIST.key, provider)) {
+      spark.range(10)
+        .writeTo("table_name")
+        .option("compression", "zstd").option("name", "table_name")
+        .using(provider)
+        .create()
+      val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("table_name"))
+
+      assert(table.identifier === TableIdentifier("table_name", Some("default")))
+      assert(table.storage.properties.contains("compression"))
+      assert(table.storage.properties.getOrElse("compression", "foo") == "zstd")
+    }
   }
 
   test("Replace: basic behavior") {
