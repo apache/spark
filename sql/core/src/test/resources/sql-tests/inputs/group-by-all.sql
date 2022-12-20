@@ -21,10 +21,9 @@ select country, count(*) from data group by aLl;
 select all, city, count(*) from (select country as all, city, id from data) group by all, city;
 
 -- a column named "all" should take precedence over the normal group by all expansion
--- if the "group by all" is expanded to refer to the substr, then we'd have only 3 rows in output,
--- because "USA" and "UK" both start with "U". if the "group by all" is referring to the all
--- column, the output would have 4 rows.
-select substr(all, 0, 1), count(*) from (select country as all, id from data) group by all;
+-- if all refers to the column, then the following should return 3 rows.
+-- if all refers to the global aggregate, then 1 row.
+SELECT count(1) FROM VALUES(1), (2), (3) AS T(all) GROUP BY all;
 
 -- two grouping columns and two aggregates
 select country, city, count(*), sum(power) from data group by all;

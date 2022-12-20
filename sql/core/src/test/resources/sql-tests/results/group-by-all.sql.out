@@ -51,14 +51,13 @@ USA	San Francisco	2
 
 
 -- !query
-select substr(all, 0, 1), count(*) from (select country as all, id from data) group by all
+SELECT count(1) FROM VALUES(1), (2), (3) AS T(all) GROUP BY all
 -- !query schema
-struct<substr(all, 0, 1):string,count(1):bigint>
+struct<count(1):bigint>
 -- !query output
-C	2
-K	1
-U	1
-U	3
+1
+1
+1
 
 
 -- !query
