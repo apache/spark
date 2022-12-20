@@ -30,6 +30,7 @@ from typing import (
 import json
 import decimal
 import datetime
+import warnings
 
 from pyspark.sql.types import (
     DateType,
@@ -55,7 +56,7 @@ import pyspark.sql.connect.proto as proto
 from pyspark.sql.connect.types import pyspark_types_to_proto_types
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import ColumnOrName
+    from pyspark.sql.connect._typing import ColumnOrName, WindowSpecType
     from pyspark.sql.connect.client import SparkConnectClient
 
 JVM_BYTE_MIN = -(1 << 7)
@@ -541,6 +542,98 @@ class LambdaFunction(Expression):
         return f"(LambdaFunction({str(self._function)}, {', '.join(self._arguments)})"
 
 
+class WindowExpression(Expression):
+    def __init__(
+        self,
+        windowFunction: Expression,
+        windowSpec: "WindowSpecType",
+    ) -> None:
+        super().__init__()
+
+        from pyspark.sql.connect.window import WindowSpec
+
+        assert windowFunction is not None and isinstance(windowFunction, Expression)
+
+        assert windowSpec is not None and isinstance(windowSpec, WindowSpec)
+
+        self._windowFunction = windowFunction
+
+        self._windowSpec = windowSpec
+
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
+        expr = proto.Expression()
+
+        expr.window.window_function.CopyFrom(self._windowFunction.to_plan(session))
+
+        if len(self._windowSpec._partitionSpec) > 0:
+            expr.window.partition_spec.extend(
+                [p.to_plan(session) for p in self._windowSpec._partitionSpec]
+            )
+        else:
+            warnings.warn(
+                "WARN WindowExpression: No Partition Defined for Window operation! "
+                "Moving all data to a single partition, this can cause serious "
+                "performance degradation."
+            )
+
+        if len(self._windowSpec._orderSpec) > 0:
+            expr.window.order_spec.extend(
+                [s.to_plan(session).sort_order for s in self._windowSpec._orderSpec]
+            )
+
+        if self._windowSpec._frame is not None:
+            if self._windowSpec._frame._isRowFrame:
+                expr.window.frame_spec.frame_type = (
+                    proto.Expression.Window.WindowFrame.FrameType.ROW_FRAME
+                )
+
+                start = self._windowSpec._frame._start
+                if start == 0:
+                    expr.window.frame_spec.lower.current_row = True
+                elif start == JVM_LONG_MIN:
+                    expr.window.frame_spec.lower.unbounded = True
+                elif JVM_INT_MIN <= start <= JVM_INT_MAX:
+                    expr.window.frame_spec.lower.value.literal.integer = start
+                else:
+                    raise ValueError(f"start is out of bound: {start}")
+
+                end = self._windowSpec._frame._end
+                if end == 0:
+                    expr.window.frame_spec.upper.current_row = True
+                elif end == JVM_LONG_MAX:
+                    expr.window.frame_spec.upper.unbounded = True
+                elif JVM_INT_MIN <= end <= JVM_INT_MAX:
+                    expr.window.frame_spec.upper.value.literal.integer = end
+                else:
+                    raise ValueError(f"end is out of bound: {end}")
+
+            else:
+                expr.window.frame_spec.frame_type = (
+                    proto.Expression.Window.WindowFrame.FrameType.RANGE_FRAME
+                )
+
+                start = self._windowSpec._frame._start
+                if start == 0:
+                    expr.window.frame_spec.lower.current_row = True
+                elif start == JVM_LONG_MIN:
+                    expr.window.frame_spec.lower.unbounded = True
+                else:
+                    expr.window.frame_spec.lower.value.literal.long = start
+
+                end = self._windowSpec._frame._end
+                if end == 0:
+                    expr.window.frame_spec.upper.current_row = True
+                elif end == JVM_LONG_MAX:
+                    expr.window.frame_spec.upper.unbounded = True
+                else:
+                    expr.window.frame_spec.upper.value.literal.long = end
+
+        return expr
+
+    def __repr__(self) -> str:
+        return f"WindowExpression({str(self._windowFunction)}, ({str(self._windowSpec)}))"
+
+
 class Column:
     def __init__(self, expr: Expression) -> None:
         if not isinstance(expr, Expression):
@@ -732,8 +825,46 @@ class Column:
     def __repr__(self) -> str:
         return "Column<'%s'>" % self._expr.__repr__()
 
-    def over(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("over() is not yet implemented.")
+    def over(self, window: "WindowSpecType") -> "Column":
+        """
+        Define a windowing column.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        window : :class:`WindowSpec`
+
+        Returns
+        -------
+        :class:`Column`
+
+        Examples
+        --------
+        >>> from pyspark.sql import Window
+        >>> window = Window.partitionBy("name").orderBy("age") \
+                .rowsBetween(Window.unboundedPreceding, Window.currentRow)
+        >>> from pyspark.sql.functions import rank, min
+        >>> from pyspark.sql.functions import desc
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
+        >>> df.withColumn("rank", rank().over(window)) \
+                .withColumn("min", min('age').over(window)).sort(desc("age")).show()
+        +---+-----+----+---+
+        |age| name|rank|min|
+        +---+-----+----+---+
+        |  5|  Bob|   1|  5|
+        |  2|Alice|   1|  2|
+        +---+-----+----+---+
+        """
+        from pyspark.sql.connect.window import WindowSpec
+
+        if not isinstance(window, WindowSpec):
+            raise TypeError(
+                f"window should be WindowSpec, but got {type(window).__name__} {window}"
+            )
+
+        return Column(WindowExpression(windowFunction=self._expr, windowSpec=window))
 
     def isin(self, *cols: Any) -> "Column":
         from pyspark.sql.connect.functions import lit

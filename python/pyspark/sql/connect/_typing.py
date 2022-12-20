@@ -27,8 +27,8 @@ import datetime
 import decimal
 
 from pyspark.sql.connect.column import Column
-
 from pyspark.sql.connect.dataframe import DataFrame
+from pyspark.sql.connect.window import WindowSpec
 
 ColumnOrName = Union[Column, str]
 
@@ -44,6 +44,7 @@ DateTimeLiteral = Union[datetime.datetime, datetime.date]
 
 DataFrameType = DataFrame
 
+WindowSpecType = WindowSpec
 
 class FunctionBuilderCallable(Protocol):
     def __call__(self, *_: ColumnOrName) -> Column:
