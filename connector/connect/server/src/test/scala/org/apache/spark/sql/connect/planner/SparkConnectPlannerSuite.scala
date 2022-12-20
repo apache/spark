@@ -617,4 +617,48 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
         .build())
     assert(10 === Dataset.ofRows(spark, logical).count())
   }
+
+  test("Hint with string attribute parameters") {
+    val input = proto.Relation
+      .newBuilder()
+      .setSql(
+        proto.SQL
+          .newBuilder()
+          .setQuery("select id from range(10)")
+          .build())
+
+    val logical = transform(
+      proto.Relation
+        .newBuilder()
+        .setHint(
+          proto.Hint
+            .newBuilder()
+            .setInput(input)
+            .setName("REPARTITION")
+            .addParameters(toConnectProtoValue("id")))
+        .build())
+    assert(10 === Dataset.ofRows(spark, logical).count())
+  }
+
+  test("Hint with wrong parameters") {
+    val input = proto.Relation
+      .newBuilder()
+      .setSql(
+        proto.SQL
+          .newBuilder()
+          .setQuery("select id from range(10)")
+          .build())
+
+    val logical = transform(
+      proto.Relation
+        .newBuilder()
+        .setHint(
+          proto.Hint
+            .newBuilder()
+            .setInput(input)
+            .setName("REPARTITION")
+            .addParameters(toConnectProtoValue(true)))
+        .build())
+    intercept[AnalysisException](Dataset.ofRows(spark, logical))
+  }
 }

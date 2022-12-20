@@ -306,7 +306,10 @@ class SparkConnectPlanner(session: SparkSession) {
   }
 
   private def transformHint(rel: proto.Hint): LogicalPlan = {
-    val params = rel.getParametersList.asScala.map(toCatalystValue).toSeq
+    val params = rel.getParametersList.asScala.map(toCatalystValue).toSeq.map {
+      case name: String => UnresolvedAttribute.quotedString(name)
+      case v => v
+    }
     UnresolvedHint(rel.getName, params, transformRelation(rel.getInput))
   }
 
