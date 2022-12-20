@@ -7,7 +7,8 @@ create temporary view data as select * from values
   ("USA", "Berkeley", "Xiao", 3, 13.0),
   ("China", "Hangzhou", "Wenchen", 4, 14.0),
   ("China", "Shanghai", "Shanghaiese", 5, 15.0),
-  ("Korea", "Seoul", "Hyukjin", 6, 16.0)
+  ("Korea", "Seoul", "Hyukjin", 6, 16.0),
+  ("UK", "London", "Sean", 7, 17.0)
   as data(country, city, name, id, power);
 
 -- basic
@@ -15,6 +16,15 @@ select country, count(*) from data group by ALL;
 
 -- different case
 select country, count(*) from data group by aLl;
+
+-- a column named "all" would still work
+select all, city, count(*) from (select country as all, city, id from data) group by all, city;
+
+-- a column named "all" should take precedence over the normal group by all expansion
+-- if the "group by all" is expanded to refer to the substr, then we'd have only 3 rows in output,
+-- because "USA" and "UK" both start with "U". if the "group by all" is referring to the all
+-- column, the output would have 4 rows.
+select substr(all, 0, 1), count(*) from (select country as all, id from data) group by all;
 
 -- two grouping columns and two aggregates
 select country, city, count(*), sum(power) from data group by all;

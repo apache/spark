@@ -6,7 +6,8 @@ create temporary view data as select * from values
   ("USA", "Berkeley", "Xiao", 3, 13.0),
   ("China", "Hangzhou", "Wenchen", 4, 14.0),
   ("China", "Shanghai", "Shanghaiese", 5, 15.0),
-  ("Korea", "Seoul", "Hyukjin", 6, 16.0)
+  ("Korea", "Seoul", "Hyukjin", 6, 16.0),
+  ("UK", "London", "Sean", 7, 17.0)
   as data(country, city, name, id, power)
 -- !query schema
 struct<>
@@ -21,6 +22,7 @@ struct<country:string,count(1):bigint>
 -- !query output
 China	2
 Korea	1
+UK	1
 USA	3
 
 
@@ -31,7 +33,32 @@ struct<country:string,count(1):bigint>
 -- !query output
 China	2
 Korea	1
+UK	1
 USA	3
+
+
+-- !query
+select all, city, count(*) from (select country as all, city, id from data) group by all, city
+-- !query schema
+struct<all:string,city:string,count(1):bigint>
+-- !query output
+China	Hangzhou	1
+China	Shanghai	1
+Korea	Seoul	1
+UK	London	1
+USA	Berkeley	1
+USA	San Francisco	2
+
+
+-- !query
+select substr(all, 0, 1), count(*) from (select country as all, id from data) group by all
+-- !query schema
+struct<substr(all, 0, 1):string,count(1):bigint>
+-- !query output
+C	2
+K	1
+U	1
+U	3
 
 
 -- !query
@@ -42,6 +69,7 @@ struct<country:string,city:string,count(1):bigint,sum(power):decimal(13,1)>
 China	Hangzhou	1	14.0
 China	Shanghai	1	15.0
 Korea	Seoul	1	16.0
+UK	London	1	17.0
 USA	Berkeley	1	13.0
 USA	San Francisco	2	23.0
 
@@ -54,6 +82,7 @@ struct<count(1):bigint,country:string,city:string,sum(power):decimal(13,1)>
 1	China	Hangzhou	14.0
 1	China	Shanghai	15.0
 1	Korea	Seoul	16.0
+1	UK	London	17.0
 1	USA	Berkeley	13.0
 2	USA	San Francisco	23.0
 
@@ -65,6 +94,7 @@ struct<con:string,count(1):bigint>
 -- !query output
 China	2
 Korea	1
+UK	1
 USA	3
 
 
@@ -75,6 +105,7 @@ struct<country:string,cnt:bigint>
 -- !query output
 China	2
 Korea	1
+UK	1
 USA	3
 
 
@@ -85,6 +116,7 @@ struct<upper(country):string,powerup:bigint>
 -- !query output
 CHINA	2
 KOREA	1
+UK	1
 USA	3
 
 
@@ -95,6 +127,7 @@ struct<country:string,powerup:decimal(14,1)>
 -- !query output
 China	39.0
 Korea	26.0
+UK	27.0
 USA	46.0
 
 
@@ -106,6 +139,7 @@ struct<country:string,city:string>
 China	Hangzhou
 China	Shanghai
 Korea	Seoul
+UK	London
 USA	Berkeley
 USA	San Francisco
 
@@ -118,6 +152,7 @@ struct<con:string,powerup:decimal(14,1)>
 -- !query output
 China	39.0
 Korea	26.0
+UK	27.0
 USA	46.0
 
 
@@ -135,7 +170,7 @@ select count(id) from data group by all
 -- !query schema
 struct<count(id):bigint>
 -- !query output
-6
+7
 
 
 -- !query
@@ -143,7 +178,7 @@ select count(id + power / 2) * 3 from data group by all
 -- !query schema
 struct<(count((id + (power / 2))) * 3):bigint>
 -- !query output
-18
+21
 
 
 -- !query
