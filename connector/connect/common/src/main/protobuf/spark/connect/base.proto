@@ -237,7 +237,7 @@ message ExecutePlanResponse {
   Metrics metrics = 4;
 
   // The metrics observed during the execution of the query plan.
-  ObservedMetrics observed_metrics = 5;
+  ObservedMetrics observed_metrics = 6;
 
   // A SQL command returns an opaque Relation that can be directly used as input for the next
   // call.

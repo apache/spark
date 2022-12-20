@@ -65,6 +65,11 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
     processAsArrowBatches(request.getClientId, dataframe, responseObserver)
     responseObserver.onNext(
       SparkConnectStreamHandler.sendMetricsToResponse(request.getClientId, dataframe))
+    val observedMetrics = dataframe.queryExecution.observedMetrics
+    if (observedMetrics.nonEmpty) {
+      responseObserver.onNext(
+        SparkConnectStreamHandler.sendObservedMetricsToResponse(request.getClientId, observedMetrics))
+    }
     responseObserver.onCompleted()
   }
 
@@ -210,7 +215,7 @@ object SparkConnectStreamHandler {
       .build()
   }
 
-  private def sendObservedMetricsToResponse(
+  def sendObservedMetricsToResponse(
       clientId: String,
       observedMetrics: Map[String, Row]): ExecutePlanResponse = {
     val metricsObjects = observedMetrics.map { case (name, row) =>
