@@ -955,7 +955,7 @@ class DataFrame(object):
             normalizedCumWeights.append(normalizedCumWeights[-1] + v)
         j = 1
         length = len(normalizedCumWeights)
-        result = []
+        splits = []
         while j < length:
             lowerBound = normalizedCumWeights[j - 1]
             upperBound = normalizedCumWeights[j]
@@ -970,10 +970,10 @@ class DataFrame(object):
                 ),
                 session=self._session,
             )
-            result.append(samplePlan)
+            splits.append(samplePlan)
             j += 1
 
-        return result
+        return splits
 
     def show(self, n: int = 20, truncate: Union[bool, int] = True, vertical: bool = False) -> None:
         """
