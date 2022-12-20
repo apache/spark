@@ -58,6 +58,7 @@ message Relation {
     Hint hint = 24;
     Unpivot unpivot = 25;
     ToSchema to_schema = 26;
+    RepartitionByExpression repartition_by_expression = 27;
 
     // NA functions
     NAFill fill_na = 90;
@@ -643,4 +644,15 @@ message ToSchema {
   //
   // The Sever side will update the dataframe with this schema.
   DataType schema = 2;
+}
+
+  message RepartitionByExpression {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) The partitioning expressions.
+  repeated Expression partition_exprs = 2;
+
+  // (Optional) number of partitions, must be positive.
+  optional int32 num_partitions = 3;
 }
