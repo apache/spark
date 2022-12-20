@@ -300,7 +300,6 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveGroupByAll ::
       ResolveOrdinalInOrderByAndGroupBy ::
       ResolveAggAliasInGroupBy ::
-
       ResolveMissingReferences ::
       ResolveOuterReferences ::
       ExtractGenerator ::
