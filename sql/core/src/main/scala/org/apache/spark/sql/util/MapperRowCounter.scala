@@ -66,12 +66,11 @@ class MapperRowCounter extends AccumulatorV2[jl.Long, java.util.List[(jl.Long, j
 
   def setPartitionId(id: Long): Unit = {
     this.synchronized {
-      val p = id
       if (isZero) {
-        getOrCreate.add((p, 0))
+        getOrCreate.add((id, 0))
       } else {
         val n = getOrCreate.get(0)._2
-        getOrCreate.set(0, (p, n))
+        getOrCreate.set(0, (id, n))
       }
     }
   }
