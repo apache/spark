@@ -2379,76 +2379,72 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       specialTs.getOrElse(toLiteral(stringToTimestamp(_, zoneId), TimestampType))
     }
 
-    try {
-      valueType match {
-        case "DATE" =>
-          val zoneId = getZoneId(conf.sessionLocalTimeZone)
-          val specialDate = convertSpecialDate(value, zoneId).map(Literal(_, DateType))
-          specialDate.getOrElse(toLiteral(stringToDate, DateType))
-        case "TIMESTAMP_NTZ" =>
-          convertSpecialTimestampNTZ(value, getZoneId(conf.sessionLocalTimeZone))
-            .map(Literal(_, TimestampNTZType))
-            .getOrElse(toLiteral(stringToTimestampWithoutTimeZone, TimestampNTZType))
-        case "TIMESTAMP_LTZ" =>
-          constructTimestampLTZLiteral(value)
-        case "TIMESTAMP" =>
-          SQLConf.get.timestampType match {
-            case TimestampNTZType =>
-              convertSpecialTimestampNTZ(value, getZoneId(conf.sessionLocalTimeZone))
-                .map(Literal(_, TimestampNTZType))
-                .getOrElse {
-                  val containsTimeZonePart =
-                    DateTimeUtils.parseTimestampString(UTF8String.fromString(value))._2.isDefined
-                  // If the input string contains time zone part, return a timestamp with local time
-                  // zone literal.
-                  if (containsTimeZonePart) {
-                    constructTimestampLTZLiteral(value)
-                  } else {
-                    toLiteral(stringToTimestampWithoutTimeZone, TimestampNTZType)
-                  }
+    valueType match {
+      case "DATE" =>
+        val zoneId = getZoneId(conf.sessionLocalTimeZone)
+        val specialDate = convertSpecialDate(value, zoneId).map(Literal(_, DateType))
+        specialDate.getOrElse(toLiteral(stringToDate, DateType))
+      case "TIMESTAMP_NTZ" =>
+        convertSpecialTimestampNTZ(value, getZoneId(conf.sessionLocalTimeZone))
+          .map(Literal(_, TimestampNTZType))
+          .getOrElse(toLiteral(stringToTimestampWithoutTimeZone, TimestampNTZType))
+      case "TIMESTAMP_LTZ" =>
+        constructTimestampLTZLiteral(value)
+      case "TIMESTAMP" =>
+        SQLConf.get.timestampType match {
+          case TimestampNTZType =>
+            convertSpecialTimestampNTZ(value, getZoneId(conf.sessionLocalTimeZone))
+              .map(Literal(_, TimestampNTZType))
+              .getOrElse {
+                val containsTimeZonePart =
+                  DateTimeUtils.parseTimestampString(UTF8String.fromString(value))._2.isDefined
+                // If the input string contains time zone part, return a timestamp with local time
+                // zone literal.
+                if (containsTimeZonePart) {
+                  constructTimestampLTZLiteral(value)
+                } else {
+                  toLiteral(stringToTimestampWithoutTimeZone, TimestampNTZType)
                 }
+              }
 
-            case TimestampType =>
-              constructTimestampLTZLiteral(value)
-          }
+          case TimestampType =>
+            constructTimestampLTZLiteral(value)
+        }
 
-        case "INTERVAL" =>
-          val interval = try {
-            IntervalUtils.stringToInterval(UTF8String.fromString(value))
-          } catch {
-            case e: IllegalArgumentException =>
-              val ex = QueryParsingErrors.cannotParseValueTypeError(valueType, value, ctx)
-              ex.setStackTrace(e.getStackTrace)
-              throw ex
-          }
-          if (!conf.legacyIntervalEnabled) {
-            val units = value
-              .split("\\s")
-              .map(_.toLowerCase(Locale.ROOT).stripSuffix("s"))
-              .filter(s => s != "interval" && s.matches("[a-z]+"))
-            constructMultiUnitsIntervalLiteral(ctx, interval, units)
-          } else {
-            Literal(interval, CalendarIntervalType)
-          }
-        case "X" =>
-          val padding = if (value.length % 2 != 0) "0" else ""
-          try {
-            Literal(Hex.decodeHex(padding + value))
-          } catch {
-            case _: DecoderException =>
-              throw new IllegalArgumentException(
-                s"contains illegal character for hexBinary: $padding$value");
-          }
-        case other =>
-          throw QueryParsingErrors.literalValueTypeUnsupportedError(
-            unsupportedType = other,
-            supportedTypes =
-              Seq("DATE", "TIMESTAMP_NTZ", "TIMESTAMP_LTZ", "TIMESTAMP", "INTERVAL", "X"),
-            ctx)
-      }
-    } catch {
-      case e: IllegalArgumentException =>
-        throw QueryParsingErrors.parsingValueTypeError(e, valueType, ctx)
+      case "INTERVAL" =>
+        val interval = try {
+          IntervalUtils.stringToInterval(UTF8String.fromString(value))
+        } catch {
+          case e: IllegalArgumentException =>
+            val ex = QueryParsingErrors.cannotParseValueTypeError(valueType, value, ctx)
+            ex.setStackTrace(e.getStackTrace)
+            throw ex
+        }
+        if (!conf.legacyIntervalEnabled) {
+          val units = value
+            .split("\\s")
+            .map(_.toLowerCase(Locale.ROOT).stripSuffix("s"))
+            .filter(s => s != "interval" && s.matches("[a-z]+"))
+          constructMultiUnitsIntervalLiteral(ctx, interval, units)
+        } else {
+          Literal(interval, CalendarIntervalType)
+        }
+      case "X" =>
+        val padding = if (value.length % 2 != 0) "0" else ""
+        try {
+          Literal(Hex.decodeHex(padding + value))
+        } catch {
+          case e: DecoderException =>
+            val ex = QueryParsingErrors.cannotParseValueTypeError("X", value, ctx)
+            ex.setStackTrace(e.getStackTrace)
+            throw ex
+        }
+      case other =>
+        throw QueryParsingErrors.literalValueTypeUnsupportedError(
+          unsupportedType = other,
+          supportedTypes =
+            Seq("DATE", "TIMESTAMP_NTZ", "TIMESTAMP_LTZ", "TIMESTAMP", "INTERVAL", "X"),
+          ctx)
     }
   }
 

@@ -296,36 +296,30 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         df = self.connect.readTable(table_name=self.tbl_name)
         plan = df.filter(df.col_name > 3).sort("col_a", "col_b")._plan.to_proto(self.connect)
         self.assertEqual(
-            [
-                f.expression.unresolved_attribute.unparsed_identifier
-                for f in plan.root.sort.sort_fields
-            ],
+            [f.child.unresolved_attribute.unparsed_identifier for f in plan.root.sort.order],
             ["col_a", "col_b"],
         )
         self.assertEqual(plan.root.sort.is_global, True)
         self.assertEqual(
-            plan.root.sort.sort_fields[0].direction,
-            proto.Sort.SortDirection.SORT_DIRECTION_ASCENDING,
+            plan.root.sort.order[0].direction,
+            proto.Expression.SortOrder.SortDirection.SORT_DIRECTION_ASCENDING,
         )
         self.assertEqual(
-            plan.root.sort.sort_fields[0].direction,
-            proto.Sort.SortNulls.SORT_NULLS_FIRST,
+            plan.root.sort.order[0].direction,
+            proto.Expression.SortOrder.NullOrdering.SORT_NULLS_FIRST,
         )
         self.assertEqual(
-            plan.root.sort.sort_fields[1].direction,
-            proto.Sort.SortDirection.SORT_DIRECTION_ASCENDING,
+            plan.root.sort.order[1].direction,
+            proto.Expression.SortOrder.SortDirection.SORT_DIRECTION_ASCENDING,
         )
         self.assertEqual(
-            plan.root.sort.sort_fields[1].direction,
-            proto.Sort.SortNulls.SORT_NULLS_FIRST,
+            plan.root.sort.order[1].direction,
+            proto.Expression.SortOrder.NullOrdering.SORT_NULLS_FIRST,
         )
 
         plan = df.filter(df.col_name > 3).orderBy("col_a", "col_b")._plan.to_proto(self.connect)
         self.assertEqual(
-            [
-                f.expression.unresolved_attribute.unparsed_identifier
-                for f in plan.root.sort.sort_fields
-            ],
+            [f.child.unresolved_attribute.unparsed_identifier for f in plan.root.sort.order],
             ["col_a", "col_b"],
         )
         self.assertEqual(plan.root.sort.is_global, True)
@@ -336,28 +330,25 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
             ._plan.to_proto(self.connect)
         )
         self.assertEqual(
-            [
-                f.expression.unresolved_attribute.unparsed_identifier
-                for f in plan.root.sort.sort_fields
-            ],
+            [f.child.unresolved_attribute.unparsed_identifier for f in plan.root.sort.order],
             ["col_a", "col_b"],
         )
         self.assertEqual(plan.root.sort.is_global, False)
         self.assertEqual(
-            plan.root.sort.sort_fields[0].direction,
-            proto.Sort.SortDirection.SORT_DIRECTION_DESCENDING,
+            plan.root.sort.order[0].direction,
+            proto.Expression.SortOrder.SortDirection.SORT_DIRECTION_DESCENDING,
         )
         self.assertEqual(
-            plan.root.sort.sort_fields[0].direction,
-            proto.Sort.SortNulls.SORT_NULLS_LAST,
+            plan.root.sort.order[0].direction,
+            proto.Expression.SortOrder.NullOrdering.SORT_NULLS_LAST,
         )
         self.assertEqual(
-            plan.root.sort.sort_fields[1].direction,
-            proto.Sort.SortDirection.SORT_DIRECTION_ASCENDING,
+            plan.root.sort.order[1].direction,
+            proto.Expression.SortOrder.SortDirection.SORT_DIRECTION_ASCENDING,
         )
         self.assertEqual(
-            plan.root.sort.sort_fields[1].direction,
-            proto.Sort.SortNulls.SORT_NULLS_FIRST,
+            plan.root.sort.order[1].direction,
+            proto.Expression.SortOrder.NullOrdering.SORT_NULLS_FIRST,
         )
 
     def test_drop(self):

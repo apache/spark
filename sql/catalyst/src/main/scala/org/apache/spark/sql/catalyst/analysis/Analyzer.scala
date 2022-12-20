@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils, StringUtils}
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, CaseInsensitiveMap, CharVarcharUtils, StringUtils}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.connector.catalog.{View => _, _}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -1759,6 +1759,117 @@ class Analyzer(override val catalogManager: CatalogManager)
         case o if containsStar(o.children) =>
           throw QueryCompilationErrors.invalidStarUsageError(s"expression '${o.prettyName}'",
             extractStar(o.children))
+      }
+    }
+  }
+
+  /**
+   * The first phase to resolve lateral column alias. See comments in
+   * [[ResolveLateralColumnAliasReference]] for more detailed explanation.
+   */
+  object WrapLateralColumnAliasReference extends Rule[LogicalPlan] {
+    import ResolveLateralColumnAliasReference.AliasEntry
+
+    private def insertIntoAliasMap(
+        a: Alias,
+        idx: Int,
+        aliasMap: CaseInsensitiveMap[Seq[AliasEntry]]): CaseInsensitiveMap[Seq[AliasEntry]] = {
+      val prevAliases = aliasMap.getOrElse(a.name, Seq.empty[AliasEntry])
+      aliasMap + (a.name -> (prevAliases :+ AliasEntry(a, idx)))
+    }
+
+    /**
+     * Use the given lateral alias to resolve the unresolved attribute with the name parts.
+     *
+     * Construct a dummy plan with the given lateral alias as project list, use the output of the
+     * plan to resolve.
+     * @return The resolved [[LateralColumnAliasReference]] if succeeds. None if fails to resolve.
+     */
+    private def resolveByLateralAlias(
+        nameParts: Seq[String], lateralAlias: Alias): Option[LateralColumnAliasReference] = {
+      val resolvedAttr = resolveExpressionByPlanOutput(
+        expr = UnresolvedAttribute(nameParts),
+        plan = LocalRelation(Seq(lateralAlias.toAttribute)),
+        throws = false
+      ).asInstanceOf[NamedExpression]
+      if (resolvedAttr.resolved) {
+        Some(LateralColumnAliasReference(resolvedAttr, nameParts, lateralAlias.toAttribute))
+      } else {
+        None
+      }
+    }
+
+    /**
+     * Recognize all the attributes in the given expression that reference lateral column aliases
+     * by looking up the alias map. Resolve these attributes and replace by wrapping with
+     * [[LateralColumnAliasReference]].
+     *
+     * @param currentPlan Because lateral alias has lower resolution priority than table columns,
+     *                    the current plan is needed to first try resolving the attribute by its
+     *                    children
+     */
+    private def wrapLCARef(
+        e: NamedExpression,
+        currentPlan: LogicalPlan,
+        aliasMap: CaseInsensitiveMap[Seq[AliasEntry]]): NamedExpression = {
+      e.transformWithPruning(_.containsAnyPattern(UNRESOLVED_ATTRIBUTE, OUTER_REFERENCE)) {
+        case u: UnresolvedAttribute if aliasMap.contains(u.nameParts.head) &&
+          resolveExpressionByPlanChildren(u, currentPlan).isInstanceOf[UnresolvedAttribute] =>
+          val aliases = aliasMap.get(u.nameParts.head).get
+          aliases.size match {
+            case n if n > 1 =>
+              throw QueryCompilationErrors.ambiguousLateralColumnAlias(u.name, n)
+            case n if n == 1 && aliases.head.alias.resolved =>
+              // Only resolved alias can be the lateral column alias
+              // The lateral alias can be a struct and have nested field, need to construct
+              // a dummy plan to resolve the expression
+              resolveByLateralAlias(u.nameParts, aliases.head.alias).getOrElse(u)
+            case _ => u
+          }
+        case o: OuterReference
+          if aliasMap.contains(
+            o.getTagValue(ResolveLateralColumnAliasReference.NAME_PARTS_FROM_UNRESOLVED_ATTR)
+              .map(_.head)
+              .getOrElse(o.name)) =>
+          // handle OuterReference exactly same as UnresolvedAttribute
+          val nameParts = o
+            .getTagValue(ResolveLateralColumnAliasReference.NAME_PARTS_FROM_UNRESOLVED_ATTR)
+            .getOrElse(Seq(o.name))
+          val aliases = aliasMap.get(nameParts.head).get
+          aliases.size match {
+            case n if n > 1 =>
+              throw QueryCompilationErrors.ambiguousLateralColumnAlias(nameParts, n)
+            case n if n == 1 && aliases.head.alias.resolved =>
+              resolveByLateralAlias(nameParts, aliases.head.alias).getOrElse(o)
+            case _ => o
+          }
+      }.asInstanceOf[NamedExpression]
+    }
+
+    override def apply(plan: LogicalPlan): LogicalPlan = {
+      if (!conf.getConf(SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED)) {
+        plan
+      } else {
+        plan.resolveOperatorsUpWithPruning(
+          _.containsAnyPattern(UNRESOLVED_ATTRIBUTE, OUTER_REFERENCE), ruleId) {
+          case p @ Project(projectList, _) if p.childrenResolved
+            && !ResolveReferences.containsStar(projectList)
+            && projectList.exists(_.containsAnyPattern(UNRESOLVED_ATTRIBUTE, OUTER_REFERENCE)) =>
+            var aliasMap = CaseInsensitiveMap(Map[String, Seq[AliasEntry]]())
+            val newProjectList = projectList.zipWithIndex.map {
+              case (a: Alias, idx) =>
+                val lcaWrapped = wrapLCARef(a, p, aliasMap).asInstanceOf[Alias]
+                // Insert the LCA-resolved alias instead of the unresolved one into map. If it is
+                // resolved, it can be referenced as LCA by later expressions (chaining).
+                // Unresolved Alias is also added to the map to perform ambiguous name check, but
+                // only resolved alias can be LCA.
+                aliasMap = insertIntoAliasMap(lcaWrapped, idx, aliasMap)
+                lcaWrapped
+              case (e, _) =>
+                wrapLCARef(e, p, aliasMap)
+            }
+            p.copy(projectList = newProjectList)
+        }
       }
     }
   }

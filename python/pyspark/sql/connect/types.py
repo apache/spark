@@ -75,6 +75,14 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
     elif isinstance(data_type, DayTimeIntervalType):
         ret.day_time_interval.start_field = data_type.startField
         ret.day_time_interval.end_field = data_type.endField
+    elif isinstance(data_type, StructType):
+        for field in data_type.fields:
+            struct_field = pb2.DataType.StructField()
+            struct_field.name = field.name
+            struct_field.data_type.CopyFrom(pyspark_types_to_proto_types(field.dataType))
+            struct_field.nullable = field.nullable
+            ret.struct.fields.append(struct_field)
+
     else:
         raise Exception(f"Unsupported data type {data_type}")
     return ret
