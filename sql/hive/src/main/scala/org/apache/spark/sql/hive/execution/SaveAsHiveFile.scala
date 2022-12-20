@@ -98,7 +98,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand with V1WritesHiveU
       hadoopConf = hadoopConf,
       partitionColumns = partitionAttributes,
       bucketSpec = bucketSpec,
-      statsTrackers = Seq(getWriteJobStatsTracker(hadoopConf)),
+      statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
       options = options)
   }
 

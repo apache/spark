@@ -30,12 +30,11 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.CommandUtils
-import org.apache.spark.sql.execution.datasources.{FileFormatWriter, V1WriteCommand, V1WritesUtils}
+import org.apache.spark.sql.execution.datasources.{V1WriteCommand, V1WritesUtils}
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.hive.client.hive._
-import org.apache.spark.sql.types.StructType
 
 
 /**
@@ -156,8 +155,6 @@ case class InsertIntoHiveTable(
     // Get a set of all the partition paths that were updated during this job
     val writtenParts =
       writeSummary.map(_.updatedPartitions).reduceOption(_ ++ _).getOrElse(Set.empty)
-    val partitionStats = FileFormatWriter.processPartitionStats(
-      writeSummary.map(_.stats), StructType.fromAttributes(partitionColumns))
 
     if (partition.nonEmpty) {
       if (numDynamicPartitions > 0) {
@@ -286,10 +283,6 @@ case class InsertIntoHiveTable(
             isOverwrite = doHiveOverwrite,
             inheritTableSpecs = inheritTableSpecs,
             isSrcLocal = false)
-          CommandUtils.updatePartitionedTableStats(
-            sparkSession, table,
-            partitionStats.map {case (_, stats) => partitionSpec -> stats},
-          oldPart.toSeq, overwrite)
         }
       }
     } else {
@@ -299,8 +292,6 @@ case class InsertIntoHiveTable(
         tmpLocation.toString, // TODO: URI
         overwrite,
         isSrcLocal = false)
-      CommandUtils.updateTableStats(
-        sparkSession, table, partitionStats.values.headOption, overwrite)
     }
   }
 

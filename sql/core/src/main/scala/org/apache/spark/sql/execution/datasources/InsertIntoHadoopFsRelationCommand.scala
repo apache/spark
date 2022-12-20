@@ -196,6 +196,21 @@ case class InsertIntoHadoopFsRelationCommand(
       val partitionStats = FileFormatWriter.processPartitionStats(
         writeSummary.map(_.stats), StructType.fromAttributes(partitionColumns))
 
+      // Find all the partitions that would be overwrite or deleted
+      val oldPartitions = if (conf.autoPartitionStatsticsUpdateEnabled) {
+        val updatedPartitions = updatedPartitionPaths.map(PartitioningUtils.parsePathFragment)
+        val oldParts = if (mode == SaveMode.Overwrite && !dynamicPartitionOverwrite) {
+          initialMatchingPartitions
+        } else {
+          updatedPartitions intersect initialMatchingPartitions.toSet
+        }
+        oldParts.map{ part =>
+          sparkSession.sessionState.catalog.getPartition(catalogTable.get.identifier, part)
+        }.toSeq
+      } else {
+        Seq.empty[CatalogTablePartition]
+      }
+
       // update metastore partition metadata
       if (updatedPartitionPaths.isEmpty && staticPartitions.nonEmpty
         && partitionColumns.length == staticPartitions.size) {
@@ -221,15 +236,6 @@ case class InsertIntoHadoopFsRelationCommand(
               partitionStats.values.headOption,
               mode == SaveMode.Overwrite)
           } else {
-            val updatedPartitions = updatedPartitionPaths.map(PartitioningUtils.parsePathFragment)
-            val oldParts = if (mode == SaveMode.Overwrite && !dynamicPartitionOverwrite) {
-              initialMatchingPartitions
-            } else {
-              updatedPartitions -- (updatedPartitions -- initialMatchingPartitions.toSet)
-            }
-            val oldPartitions = oldParts.map{ part =>
-              sparkSession.sessionState.catalog.getPartition(catalogTable.get.identifier, part)
-            }.toSeq
             CommandUtils.updatePartitionedTableStats(
               sparkSession,
               catalogTable.get,
