@@ -980,7 +980,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
   }
 
   test("SPARK-41413: check compatibility when partition values mismatch") {
-    withSQLConf(SQLConf.V2_BUCKETING_PUSH_PART_KEYS_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true") {
       val leftPartValues = Seq(Array[Any](1, 1), Array[Any](2, 2)).map(new GenericInternalRow(_))
       val rightPartValues = Seq(Array[Any](1, 1), Array[Any](2, 2), Array[Any](3, 3))
           .map(new GenericInternalRow(_))

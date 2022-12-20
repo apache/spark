@@ -1405,13 +1405,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val V2_BUCKETING_PUSH_PART_KEYS_ENABLED =
-    buildConf("spark.sql.sources.v2.bucketing.pushPartKeys.enabled")
-      .doc(s"Whether to pushdown common partition keys when ${V2_BUCKETING_ENABLED.key} is " +
-        "enabled. When turned on, if both sides of a join are of KeyGroupedPartitioning, even if " +
-        "they don't have the exact same partition keys, Spark will calculate a superset of " +
-        "partition keys and pushdown that info to scan nodes, which will use empty partitions " +
-        "for the missing keys on either side. This could help to eliminate unnecessary shuffles")
+  val V2_BUCKETING_PUSH_PART_VALUES_ENABLED =
+    buildConf("spark.sql.sources.v2.bucketing.pushPartValues.enabled")
+      .doc(s"Whether to pushdown common partition values when ${V2_BUCKETING_ENABLED.key} is " +
+        "enabled. When turned on, if both sides of a join are of KeyGroupedPartitioning and if " +
+        "they share compatible partition keys, even if they don't have the exact same partition " +
+        "values, Spark will calculate a superset of partition values and pushdown that info to " +
+        "scan nodes, which will use empty partitions for the missing partition values on either " +
+        "side. This could help to eliminate unnecessary shuffles")
       .version("3.4.0")
       .booleanConf
       .createWithDefault(false)
@@ -4525,7 +4526,8 @@ class SQLConf extends Serializable with Logging {
 
   def v2BucketingEnabled: Boolean = getConf(SQLConf.V2_BUCKETING_ENABLED)
 
-  def v2BucketingPushPartKeysEnabled: Boolean = getConf(SQLConf.V2_BUCKETING_PUSH_PART_KEYS_ENABLED)
+  def v2BucketingPushPartValuesEnabled: Boolean =
+    getConf(SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED)
 
   def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)

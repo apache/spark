@@ -52,9 +52,9 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
   override def beforeAll(): Unit = {
     super.beforeAll()
     originalV2BucketingEnabled = conf.getConf(V2_BUCKETING_ENABLED)
-    originalV2BucketingPushPartKeysEnabled = conf.getConf(V2_BUCKETING_PUSH_PART_KEYS_ENABLED)
+    originalV2BucketingPushPartKeysEnabled = conf.getConf(V2_BUCKETING_PUSH_PART_VALUES_ENABLED)
     conf.setConf(V2_BUCKETING_ENABLED, true)
-    conf.setConf(V2_BUCKETING_PUSH_PART_KEYS_ENABLED, true)
+    conf.setConf(V2_BUCKETING_PUSH_PART_VALUES_ENABLED, true)
     originalAutoBroadcastJoinThreshold = conf.getConf(AUTO_BROADCASTJOIN_THRESHOLD)
     conf.setConf(AUTO_BROADCASTJOIN_THRESHOLD, -1L)
   }
@@ -64,7 +64,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       super.afterAll()
     } finally {
       conf.setConf(V2_BUCKETING_ENABLED, originalV2BucketingEnabled)
-      conf.setConf(V2_BUCKETING_PUSH_PART_KEYS_ENABLED, originalV2BucketingPushPartKeysEnabled)
+      conf.setConf(V2_BUCKETING_PUSH_PART_VALUES_ENABLED, originalV2BucketingPushPartKeysEnabled)
       conf.setConf(AUTO_BROADCASTJOIN_THRESHOLD, originalAutoBroadcastJoinThreshold)
     }
   }

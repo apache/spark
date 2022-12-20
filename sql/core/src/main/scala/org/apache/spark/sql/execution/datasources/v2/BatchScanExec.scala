@@ -134,9 +134,9 @@ case class BatchScanExec(
         case p: KeyGroupedPartitioning =>
           val partitionMapping = finalPartitions.map(s =>
             s.head.asInstanceOf[HasPartitionKey].partitionKey() -> s).toMap
-          finalPartitions = p.partitionValuesOpt.get.map { partKey =>
+          finalPartitions = p.partitionValuesOpt.get.map { partValue =>
             // Use empty partition for those partition values that are not present
-            partitionMapping.getOrElse(partKey, Seq.empty)
+            partitionMapping.getOrElse(partValue, Seq.empty)
           }
         case _ =>
       }

@@ -185,7 +185,7 @@ case class EnsureRequirements(
           //   `day(b)`: [1, 2, 3]
           // Following the case 2 above, we don't have to shuffle both sides, but instead can just
           // push the common set of partition values: `[0, 1, 2, 3]` down to the two data sources.
-          if (!isCompatible && conf.v2BucketingPushPartKeysEnabled) {
+          if (!isCompatible && conf.v2BucketingPushPartValuesEnabled) {
             (getRootSpec(specs(left)), getRootSpec(specs(right))) match {
               case (leftSpec: KeyGroupedShuffleSpec, rightSpec: KeyGroupedShuffleSpec) =>
                 // Check if the two children are partition keys compatible. If so, find the
