@@ -25,7 +25,7 @@ import org.apache.spark.status.api.v1.{ApplicationEnvironmentInfo, ResourceProfi
 
 class ApplicationEnvironmentInfoWrapperSerializer extends ProtoBufSerDe {
 
-  override val supportClass: String = classOf[ApplicationEnvironmentInfoWrapper].getName
+  override val supportClass: Class[_] = classOf[ApplicationEnvironmentInfoWrapper]
 
   override def serialize(input: Any): Array[Byte] =
     serialize(input.asInstanceOf[ApplicationEnvironmentInfoWrapper])

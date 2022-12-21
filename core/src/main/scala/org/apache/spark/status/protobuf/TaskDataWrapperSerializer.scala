@@ -26,7 +26,7 @@ import org.apache.spark.util.Utils.weakIntern
 
 class TaskDataWrapperSerializer extends ProtoBufSerDe {
 
-  override val supportClass: String = classOf[TaskDataWrapper].getName
+  override val supportClass: Class[_] = classOf[TaskDataWrapper]
 
   override def serialize(input: Any): Array[Byte] =
     serialize(input.asInstanceOf[TaskDataWrapper])

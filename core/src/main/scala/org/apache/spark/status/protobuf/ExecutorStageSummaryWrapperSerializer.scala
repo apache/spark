@@ -23,7 +23,7 @@ import org.apache.spark.status.protobuf.Utils.getOptional
 
 class ExecutorStageSummaryWrapperSerializer extends ProtoBufSerDe {
 
-  override val supportClass: String = classOf[ExecutorStageSummaryWrapper].getName
+  override val supportClass: Class[_] = classOf[ExecutorStageSummaryWrapper]
 
   override def serialize(input: Any): Array[Byte] =
     serialize(input.asInstanceOf[ExecutorStageSummaryWrapper])

@@ -23,7 +23,7 @@ import org.apache.spark.annotation.{DeveloperApi, Unstable}
 @Unstable
 trait ProtoBufSerDe {
 
-  val supportClass: String
+  val supportClass: Class[_]
 
   def serialize(input: Any): Array[Byte]
 

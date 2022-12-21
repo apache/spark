@@ -28,7 +28,7 @@ import org.apache.spark.status.protobuf.Utils.getOptional
 
 class ApplicationInfoWrapperSerializer extends ProtoBufSerDe {
 
-  override val supportClass: String = classOf[ApplicationInfoWrapper].getName
+  override val supportClass: Class[_] = classOf[ApplicationInfoWrapper]
 
   override def serialize(input: Any): Array[Byte] =
     serialize(input.asInstanceOf[ApplicationInfoWrapper])

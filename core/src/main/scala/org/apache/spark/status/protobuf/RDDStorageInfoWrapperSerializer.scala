@@ -25,7 +25,7 @@ import org.apache.spark.status.protobuf.Utils.getOptional
 
 class RDDStorageInfoWrapperSerializer extends ProtoBufSerDe {
 
-  override val supportClass: String = classOf[RDDStorageInfoWrapper].getName
+  override val supportClass: Class[_] = classOf[RDDStorageInfoWrapper]
 
   override def serialize(input: Any): Array[Byte] =
     serialize(input.asInstanceOf[RDDStorageInfoWrapper])
