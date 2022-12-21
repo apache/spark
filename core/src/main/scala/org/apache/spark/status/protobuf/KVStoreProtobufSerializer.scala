@@ -40,7 +40,7 @@ private[spark] class KVStoreProtobufSerializer extends KVStoreScalaSerializer {
 
 private[spark] object KVStoreProtobufSerializer {
 
- private lazy val serializerMap: Map[String, ProtoBufSerDe] =
+ private[this] lazy val serializerMap: Map[String, ProtoBufSerDe] =
    ServiceLoader.load(classOf[ProtoBufSerDe])
      .asScala.map(serDe => serDe.supportClass -> serDe).toMap
 
