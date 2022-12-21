@@ -103,7 +103,7 @@ case class UnresolvedInlineTable(
  * @param name qualified name of this table-value function
  * @param functionArgs list of function arguments
  * @param outputNames alias names of function output columns. If these names given, an analyzer
- *                    adds [[Project]] to rename the output columns.
+ *                    turns the table-valued function into a [[TableValuedFunctionWithAlias]].
  */
 case class UnresolvedTableValuedFunction(
     name: Seq[String],
@@ -116,6 +116,28 @@ case class UnresolvedTableValuedFunction(
   override lazy val resolved = false
 
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_TABLE_VALUED_FUNCTION)
+}
+
+/**
+ * A table-valued function with output column aliases. The table function has been
+ * looked up and turned into a logical plan.
+ *
+ * @param name qualified name of the table-valued function
+ * @param child logical plan of the table-valued function
+ * @param outputNames alias names of function output columns. The analyzer adds [[Project]]
+ *                    to rename the output columns.
+ */
+case class TableValuedFunctionWithAlias(
+    name: Seq[String],
+    child: LogicalPlan,
+    outputNames: Seq[String]) extends UnaryNode {
+
+  override def output: Seq[Attribute] = Nil
+
+  override lazy val resolved = false
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(child = newChild)
 }
 
 object UnresolvedTableValuedFunction {

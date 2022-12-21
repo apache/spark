@@ -968,19 +968,12 @@ object TableFunctionRegistry {
     val newBuilder = (expressions: Seq[Expression]) => {
       val generator = builder(expressions)
       assert(generator.isInstanceOf[Generator])
-      // Check nested generators.
-      if (expressions.exists(_.find(_.isInstanceOf[Generator]).nonEmpty)) {
-        throw QueryCompilationErrors.nestedGeneratorError(generator)
-      }
-      // If the generator is not resolved, leave the output empty and wait for CheckAnalysis
-      // to throw appropriate exceptions.
-      val output = if (generator.resolved) generator.elementSchema.toAttributes else Nil
       Generate(
         generator,
         unrequiredChildIndex = Nil,
         outer = outer,
         qualifier = None,
-        generatorOutput = output,
+        generatorOutput = Nil,
         child = OneRowRelation())
     }
     (name, (info, newBuilder))

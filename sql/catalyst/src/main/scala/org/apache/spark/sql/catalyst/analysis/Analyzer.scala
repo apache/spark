@@ -2470,26 +2470,33 @@ class Analyzer(override val catalogManager: CatalogManager)
                 errorClass = "_LEGACY_ERROR_TEMP_2308",
                 messageParameters = Map("name" -> u.name.quoted))
           }
-          // If alias names assigned, add `Project` with the aliases
-          if (resolvedFunc.resolved && u.outputNames.nonEmpty) {
-            val outputAttrs = resolvedFunc.output
-            // Checks if the number of the aliases is equal to expected one
-            if (u.outputNames.size != outputAttrs.size) {
-              u.failAnalysis(
-                errorClass = "_LEGACY_ERROR_TEMP_2307",
-                messageParameters = Map(
-                  "funcName" -> u.name.quoted,
-                  "aliasesNum" -> u.outputNames.size.toString,
-                  "outColsNum" -> outputAttrs.size.toString))
-            }
-            val aliases = outputAttrs.zip(u.outputNames).map {
-              case (attr, name) => Alias(attr, name)()
-            }
-            Project(aliases, resolvedFunc)
+          if (u.outputNames.nonEmpty) {
+            // The `resolvedFunc` logical plan might not be resolved. For example, `explode(null)`
+            // will fail the data type check. The column aliases of the function should only
+            // be added once the table-valued function plan is resolved.
+            TableValuedFunctionWithAlias(u.name, resolvedFunc, u.outputNames)
           } else {
             resolvedFunc
           }
         }
+
+      // Resolve a table-valued function's column aliases.
+      case u: TableValuedFunctionWithAlias if u.child.resolved =>
+        // Add `Project` with the aliases.
+        val outputAttrs = u.child.output
+        // Checks if the number of the aliases is equal to expected one
+        if (u.outputNames.size != outputAttrs.size) {
+          u.failAnalysis(
+            errorClass = "_LEGACY_ERROR_TEMP_2307",
+            messageParameters = Map(
+              "funcName" -> u.name.quoted,
+              "aliasesNum" -> u.outputNames.size.toString,
+              "outColsNum" -> outputAttrs.size.toString))
+        }
+        val aliases = outputAttrs.zip(u.outputNames).map {
+          case (attr, name) => Alias(attr, name)()
+        }
+        Project(aliases, u.child)
 
       case q: LogicalPlan =>
         q.transformExpressionsWithPruning(
@@ -3028,7 +3035,7 @@ class Analyzer(override val catalogManager: CatalogManager)
    *    e.g. `SELECT * FROM tbl SORT BY explode(list)`
    */
   object ExtractGenerator extends Rule[LogicalPlan] {
-    private def hasGenerator(expr: Expression): Boolean = {
+    def hasGenerator(expr: Expression): Boolean = {
       expr.exists(_.isInstanceOf[Generator])
     }
 
@@ -3205,8 +3212,13 @@ class Analyzer(override val catalogManager: CatalogManager)
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsPattern(GENERATE), ruleId) {
       case g: Generate if !g.child.resolved || !g.generator.resolved => g
-      case g: Generate if !g.resolved =>
+      case g: Generate if !g.resolved => withPosition(g) {
+        // Check nested generators.
+        if (g.generator.children.exists(ExtractGenerator.hasGenerator)) {
+          throw QueryCompilationErrors.nestedGeneratorError(g.generator)
+        }
         g.copy(generatorOutput = makeGeneratorOutput(g.generator, g.generatorOutput.map(_.name)))
+      }
     }
 
     /**
