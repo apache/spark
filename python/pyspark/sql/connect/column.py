@@ -59,14 +59,14 @@ if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName, WindowSpecType
     from pyspark.sql.connect.client import SparkConnectClient
 
-JVM_BYTE_MIN = -(1 << 7)
-JVM_BYTE_MAX = (1 << 7) - 1
-JVM_SHORT_MIN = -(1 << 15)
-JVM_SHORT_MAX = (1 << 15) - 1
-JVM_INT_MIN = -(1 << 31)
-JVM_INT_MAX = (1 << 31) - 1
-JVM_LONG_MIN = -(1 << 63)
-JVM_LONG_MAX = (1 << 63) - 1
+JVM_BYTE_MIN: int = -(1 << 7)
+JVM_BYTE_MAX: int = (1 << 7) - 1
+JVM_SHORT_MIN: int = -(1 << 15)
+JVM_SHORT_MAX: int = (1 << 15) - 1
+JVM_INT_MIN: int = -(1 << 31)
+JVM_INT_MAX: int = (1 << 31) - 1
+JVM_LONG_MIN: int = -(1 << 63)
+JVM_LONG_MAX: int = (1 << 63) - 1
 
 
 def _func_op(name: str, doc: Optional[str] = "") -> Callable[["Column"], "Column"]:

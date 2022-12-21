@@ -23,6 +23,8 @@ from pyspark.sql.connect.column import (
     ColumnReference,
     Expression,
     SortOrder,
+    JVM_LONG_MIN,
+    JVM_LONG_MAX,
 )
 
 
@@ -291,14 +293,12 @@ class Window:
     >>> window = Window.orderBy("date").partitionBy("country").rangeBetween(-3, 3)
     """
 
-    _JAVA_MIN_LONG = -(1 << 63)  # -9223372036854775808
-    _JAVA_MAX_LONG = (1 << 63) - 1  # 9223372036854775807
-    _PRECEDING_THRESHOLD = max(-sys.maxsize, _JAVA_MIN_LONG)
-    _FOLLOWING_THRESHOLD = min(sys.maxsize, _JAVA_MAX_LONG)
+    _PRECEDING_THRESHOLD = max(-sys.maxsize, JVM_LONG_MIN)
+    _FOLLOWING_THRESHOLD = min(sys.maxsize, JVM_LONG_MAX)
 
-    unboundedPreceding: int = _JAVA_MIN_LONG
+    unboundedPreceding: int = JVM_LONG_MIN
 
-    unboundedFollowing: int = _JAVA_MAX_LONG
+    unboundedFollowing: int = JVM_LONG_MAX
 
     currentRow: int = 0
 
