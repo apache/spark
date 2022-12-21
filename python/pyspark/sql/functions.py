@@ -39,16 +39,16 @@ from typing import (
 
 from pyspark import SparkContext
 from pyspark.errors import (
-    notColumnOrStringError,
-    columnInListError,
-    invalidNumberOfColumnsError,
-    notColumnError,
-    notColumnOrIntegerOrStringError,
-    notStringError,
-    invalidHigherOrderFunctionArgumentNumberError,
-    notColumnOrIntegerError,
-    higherOrderFunctionShouldReturnColumnError,
-    unsupportedParamTypeForHigherOrderFunctionError,
+    not_column_or_string_error,
+    column_in_list_error,
+    invalid_number_of_columns_error,
+    not_column_error,
+    not_column_or_integer_or_string_error,
+    not_string_error,
+    invalid_higher_order_function_argument_number_error,
+    not_column_or_integer_error,
+    higher_order_function_should_return_column_error,
+    unsupported_param_type_for_higher_order_function_error,
 )
 from pyspark.rdd import PythonEvalType
 from pyspark.sql.column import Column, _to_java_column, _to_seq, _create_column_from_literal
@@ -181,7 +181,7 @@ def lit(col: Any) -> Column:
         return col
     elif isinstance(col, list):
         if any(isinstance(c, Column) for c in col):
-            raise columnInListError(func_name="lit")
+            raise column_in_list_error(func_name="lit")
         return array(*[lit(item) for item in col])
     else:
         if has_numpy and isinstance(col, np.generic):
@@ -3323,7 +3323,7 @@ def greatest(*cols: "ColumnOrName") -> Column:
     [Row(greatest=4)]
     """
     if len(cols) < 2:
-        raise invalidNumberOfColumnsError(func_name="greatest")
+        raise invalid_number_of_columns_error(func_name="greatest")
     return _invoke_function_over_seq_of_columns("greatest", cols)
 
 
@@ -3351,7 +3351,7 @@ def least(*cols: "ColumnOrName") -> Column:
     [Row(least=1)]
     """
     if len(cols) < 2:
-        raise invalidNumberOfColumnsError(func_name="least")
+        raise invalid_number_of_columns_error(func_name="least")
     return _invoke_function_over_seq_of_columns("least", cols)
 
 
@@ -3397,7 +3397,7 @@ def when(condition: Column, value: Any) -> Column:
     """
     # Explicitly not using ColumnOrName type here to make reading condition less opaque
     if not isinstance(condition, Column):
-        raise notColumnError(arg_name="condition", arg_type=type(condition))
+        raise not_column_error(arg_name="condition", arg_type=type(condition))
     v = value._jc if isinstance(value, Column) else value
 
     return _invoke_function("when", condition._jc, v)
@@ -4878,7 +4878,7 @@ def window(
 
     def check_string_field(field, fieldName):  # type: ignore[no-untyped-def]
         if not field or type(field) is not str:
-            raise notStringError(arg_name=fieldName, arg_type=type(field))
+            raise not_string_error(arg_name=fieldName, arg_type=type(field))
 
     time_col = _to_java_column(timeColumn)
     check_string_field(windowDuration, "windowDuration")
@@ -4992,7 +4992,7 @@ def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) 
 
     def check_field(field: Union[Column, str], fieldName: str) -> None:
         if field is None or not isinstance(field, (str, Column)):
-            raise notColumnOrStringError(arg_name=fieldName, arg_type=type(field))
+            raise not_column_or_string_error(arg_name=fieldName, arg_type=type(field))
 
     time_col = _to_java_column(timeColumn)
     check_field(gapDuration, "gapDuration")
@@ -5225,7 +5225,7 @@ def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None
     if errMsg is None:
         return _invoke_function_over_columns("assert_true", col)
     if not isinstance(errMsg, (str, Column)):
-        raise notColumnOrStringError(arg_name="errMsg", arg_type=type(errMsg))
+        raise not_column_or_string_error(arg_name="errMsg", arg_type=type(errMsg))
 
     errMsg = (
         _create_column_from_literal(errMsg) if isinstance(errMsg, str) else _to_java_column(errMsg)
@@ -5258,7 +5258,7 @@ def raise_error(errMsg: Union[Column, str]) -> Column:
     ...
     """
     if not isinstance(errMsg, (str, Column)):
-        raise notColumnOrStringError(arg_name="errMsg", arg_type=type(errMsg))
+        raise not_column_or_string_error(arg_name="errMsg", arg_type=type(errMsg))
 
     errMsg = (
         _create_column_from_literal(errMsg) if isinstance(errMsg, str) else _to_java_column(errMsg)
@@ -5740,9 +5740,9 @@ def overlay(
     [Row(overlayed='SPARK_COREL')]
     """
     if not isinstance(pos, (int, str, Column)):
-        raise notColumnOrIntegerOrStringError(arg_name="pos", arg_type=type(pos))
+        raise not_column_or_integer_or_string_error(arg_name="pos", arg_type=type(pos))
     if len is not None and not isinstance(len, (int, str, Column)):
-        raise notColumnOrIntegerOrStringError(arg_name="len", arg_type=type(len))
+        raise not_column_or_integer_or_string_error(arg_name="len", arg_type=type(len))
 
     pos = _create_column_from_literal(pos) if isinstance(pos, int) else _to_java_column(pos)
     len = _create_column_from_literal(len) if isinstance(len, int) else _to_java_column(len)
@@ -7396,7 +7396,7 @@ def schema_of_json(json: "ColumnOrName", options: Optional[Dict[str, str]] = Non
     elif isinstance(json, Column):
         col = _to_java_column(json)
     else:
-        raise notColumnOrStringError(arg_name="json", arg_type=type(json))
+        raise not_column_or_string_error(arg_name="json", arg_type=type(json))
 
     return _invoke_function("schema_of_json", col, _options_to_str(options))
 
@@ -7436,7 +7436,7 @@ def schema_of_csv(csv: "ColumnOrName", options: Optional[Dict[str, str]] = None)
     elif isinstance(csv, Column):
         col = _to_java_column(csv)
     else:
-        raise notColumnOrStringError(arg_name="csv", arg_type=type(csv))
+        raise not_column_or_string_error(arg_name="csv", arg_type=type(csv))
 
     return _invoke_function("schema_of_csv", col, _options_to_str(options))
 
@@ -8094,7 +8094,7 @@ def from_csv(
     elif isinstance(schema, Column):
         schema = _to_java_column(schema)
     else:
-        raise notColumnOrStringError(arg_name="schema", arg_type=type(schema))
+        raise not_column_or_string_error(arg_name="schema", arg_type=type(schema))
 
     return _invoke_function("from_csv", _to_java_column(col), schema, _options_to_str(options))
 
@@ -8130,13 +8130,13 @@ def _get_lambda_parameters(f: Callable) -> ValuesView[inspect.Parameter]:
     # Validate that
     # function arity is between 1 and 3
     if not (1 <= len(parameters) <= 3):
-        raise invalidHigherOrderFunctionArgumentNumberError(
+        raise invalid_higher_order_function_argument_number_error(
             func_name=f.__name__, num_args=len(parameters)
         )
 
     # and all arguments can be used as positional
     if not all(p.kind in supported_parameter_types for p in parameters):
-        raise unsupportedParamTypeForHigherOrderFunctionError(func_name=f.__name__)
+        raise unsupported_param_type_for_higher_order_function_error(func_name=f.__name__)
 
     return parameters
 
@@ -8168,7 +8168,7 @@ def _create_lambda(f: Callable) -> Callable:
     result = f(*args)
 
     if not isinstance(result, Column):
-        raise higherOrderFunctionShouldReturnColumnError(
+        raise higher_order_function_should_return_column_error(
             func_name=f.__name__, return_type=type(result)
         )
 
@@ -8858,7 +8858,7 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
 
     """
     if not isinstance(numBuckets, (int, Column)):
-        raise notColumnOrIntegerError(arg_name="numBuckets", arg_type=type(numBuckets))
+        raise not_column_or_integer_error(arg_name="numBuckets", arg_type=type(numBuckets))
 
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None

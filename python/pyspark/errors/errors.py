@@ -28,13 +28,13 @@ def _get_pyspark_errors() -> JavaClass:
     return spark._jvm.org.apache.spark.python.errors.PySparkErrors
 
 
-def columnInListError(func_name: str) -> "PySparkException":
+def column_in_list_error(func_name: str) -> "PySparkException":
     pyspark_errors = _get_pyspark_errors()
     e = pyspark_errors.columnInListError(func_name)
     return PySparkException(origin=e)
 
 
-def higherOrderFunctionShouldReturnColumnError(
+def higher_order_function_should_return_column_error(
     func_name: str, return_type: Type[Any]
 ) -> "PySparkException":
     pyspark_errors = _get_pyspark_errors()
@@ -42,49 +42,49 @@ def higherOrderFunctionShouldReturnColumnError(
     return PySparkException(origin=e)
 
 
-def notColumnError(arg_name: str, arg_type: Type[Any]) -> "PySparkException":
+def not_column_error(arg_name: str, arg_type: Type[Any]) -> "PySparkException":
     pyspark_errors = _get_pyspark_errors()
     e = pyspark_errors.notColumnError(arg_name, arg_type.__name__)
     return PySparkException(origin=e)
 
 
-def notStringError(arg_name: str, arg_type: Type[Any]) -> "PySparkException":
+def not_string_error(arg_name: str, arg_type: Type[Any]) -> "PySparkException":
     pyspark_errors = _get_pyspark_errors()
     e = pyspark_errors.notStringError(arg_name, arg_type.__name__)
     return PySparkException(origin=e)
 
 
-def notColumnOrIntegerError(arg_name: str, arg_type: Type[Any]) -> "PySparkException":
+def not_column_or_integer_error(arg_name: str, arg_type: Type[Any]) -> "PySparkException":
     pyspark_errors = _get_pyspark_errors()
     e = pyspark_errors.notColumnOrIntegerError(arg_name, arg_type.__name__)
     return PySparkException(origin=e)
 
 
-def notColumnOrIntegerOrStringError(arg_name: str, arg_type: Type[Any]) -> "PySparkException":
+def not_column_or_integer_or_string_error(arg_name: str, arg_type: Type[Any]) -> "PySparkException":
     pyspark_errors = _get_pyspark_errors()
     e = pyspark_errors.notColumnOrIntegerOrStringError(arg_name, arg_type.__name__)
     return PySparkException(origin=e)
 
 
-def notColumnOrStringError(arg_name: str, arg_type: Type[Any]) -> "PySparkException":
+def not_column_or_string_error(arg_name: str, arg_type: Type[Any]) -> "PySparkException":
     pyspark_errors = _get_pyspark_errors()
     e = pyspark_errors.notColumnOrStringError(arg_name, arg_type.__name__)
     return PySparkException(origin=e)
 
 
-def unsupportedParamTypeForHigherOrderFunctionError(func_name: str) -> "PySparkException":
+def unsupported_param_type_for_higher_order_function_error(func_name: str) -> "PySparkException":
     pyspark_errors = _get_pyspark_errors()
     e = pyspark_errors.unsupportedParamTypeForHigherOrderFunctionError(func_name)
     return PySparkException(origin=e)
 
 
-def invalidNumberOfColumnsError(func_name: str) -> "PySparkException":
+def invalid_number_of_columns_error(func_name: str) -> "PySparkException":
     pyspark_errors = _get_pyspark_errors()
     e = pyspark_errors.invalidNumberOfColumnsError(func_name)
     return PySparkException(origin=e)
 
 
-def invalidHigherOrderFunctionArgumentNumberError(
+def invalid_higher_order_function_argument_number_error(
     func_name: str, num_args: Union[str, int]
 ) -> "PySparkException":
     pyspark_errors = _get_pyspark_errors()
