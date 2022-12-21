@@ -14,15 +14,33 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.sql.connect.client
 
 import org.apache.spark.connect.proto
-import org.apache.spark.sql.Row
 
-class Dataset(val session: SparkSession, private[client] val plan: proto.Plan) {
+class SparkConnectClient(private val userContext: proto.UserContext) {
 
   /**
    * Placeholder method.
+   * @return User ID.
    */
-  def collect(): Array[Row] = throw new UnsupportedOperationException()
+  def userId: String = userContext.getUserId()
+}
+
+object SparkConnectClient {
+  def builder(): Builder = new Builder()
+
+  class Builder() {
+    private val userContextBuilder = proto.UserContext.newBuilder()
+
+    def userId(id: String): Builder = {
+      userContextBuilder.setUserId(id)
+      this
+    }
+
+    def build(): SparkConnectClient = {
+      new SparkConnectClient(userContextBuilder.build())
+    }
+  }
 }

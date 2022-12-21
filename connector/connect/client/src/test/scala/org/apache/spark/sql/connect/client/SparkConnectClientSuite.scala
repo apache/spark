@@ -21,15 +21,12 @@ import org.apache.spark.connect.proto
 
 class SparkConnectClientSuite extends AnyFunSuite { // scalastyle:ignore funsuite
 
-  private def getSparkSession = {
-    new SparkSession(proto.UserContext.newBuilder().build())
+  private def createClient = {
+    new SparkConnectClient(proto.UserContext.newBuilder().build())
   }
 
-  test("Placeholder test: Create SparkSession and Dataset") {
-    val sparkSession = getSparkSession
-    val dataset = sparkSession.range(0, 2, 1, 1)
-    assertThrows[UnsupportedOperationException] {
-      dataset.collect()
-    }
+  test("Placeholder test: Create SparkConnectClient") {
+    val client = SparkConnectClient.builder().userId("abc123").build()
+    assert(client.userId == "abc123")
   }
 }
