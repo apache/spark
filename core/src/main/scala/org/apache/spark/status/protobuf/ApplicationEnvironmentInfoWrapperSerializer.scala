@@ -23,7 +23,13 @@ import org.apache.spark.resource.{ExecutorResourceRequest, TaskResourceRequest}
 import org.apache.spark.status.ApplicationEnvironmentInfoWrapper
 import org.apache.spark.status.api.v1.{ApplicationEnvironmentInfo, ResourceProfileInfo, RuntimeInfo}
 
-object ApplicationEnvironmentInfoWrapperSerializer {
+class ApplicationEnvironmentInfoWrapperSerializer extends ProtoBufSerDe {
+
+  override val supportClass: String = classOf[ApplicationEnvironmentInfoWrapper].getName
+
+  override def serialize(input: Any): Array[Byte] =
+    serialize(input.asInstanceOf[ApplicationEnvironmentInfoWrapper])
+
   def serialize(input: ApplicationEnvironmentInfoWrapper): Array[Byte] = {
     val builder = StoreTypes.ApplicationEnvironmentInfoWrapper.newBuilder()
     builder.setInfo(serializeApplicationEnvironmentInfo(input.info))

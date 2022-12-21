@@ -23,7 +23,12 @@ import org.apache.spark.status.RDDStorageInfoWrapper
 import org.apache.spark.status.api.v1.{RDDDataDistribution, RDDPartitionInfo, RDDStorageInfo}
 import org.apache.spark.status.protobuf.Utils.getOptional
 
-object RDDStorageInfoWrapperSerializer {
+class RDDStorageInfoWrapperSerializer extends ProtoBufSerDe {
+
+  override val supportClass: String = classOf[RDDStorageInfoWrapper].getName
+
+  override def serialize(input: Any): Array[Byte] =
+    serialize(input.asInstanceOf[RDDStorageInfoWrapper])
   def serialize(input: RDDStorageInfoWrapper): Array[Byte] = {
     val builder = StoreTypes.RDDStorageInfoWrapper.newBuilder()
     builder.setInfo(serializeRDDStorageInfo(input.info))
