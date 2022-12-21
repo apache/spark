@@ -383,8 +383,8 @@ private[spark] class DAGScheduler(
   /**
    * Called by the TaskSetManager when it decides a speculative task is needed.
    */
-  def speculativeTaskSubmitted(task: Task[_]): Unit = {
-    eventProcessLoop.post(SpeculativeTaskSubmitted(task))
+  def speculativeTaskSubmitted(task: Task[_], taskIndex: Int): Unit = {
+    eventProcessLoop.post(SpeculativeTaskSubmitted(task, taskIndex))
   }
 
   /**
@@ -1178,8 +1178,10 @@ private[spark] class DAGScheduler(
     listenerBus.post(SparkListenerTaskStart(task.stageId, stageAttemptId, taskInfo))
   }
 
-  private[scheduler] def handleSpeculativeTaskSubmitted(task: Task[_]): Unit = {
-    listenerBus.post(SparkListenerSpeculativeTaskSubmitted(task.stageId, task.stageAttemptId))
+  private[scheduler] def handleSpeculativeTaskSubmitted(task: Task[_], taskIndex: Int): Unit = {
+    val speculativeTaskSubmittedEvent = new SparkListenerSpeculativeTaskSubmitted(
+      task.stageId, task.stageAttemptId, taskIndex, task.partitionId)
+    listenerBus.post(speculativeTaskSubmittedEvent)
   }
 
   private[scheduler] def handleUnschedulableTaskSetAdded(
@@ -2962,8 +2964,8 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
     case BeginEvent(task, taskInfo) =>
       dagScheduler.handleBeginEvent(task, taskInfo)
 
-    case SpeculativeTaskSubmitted(task) =>
-      dagScheduler.handleSpeculativeTaskSubmitted(task)
+    case SpeculativeTaskSubmitted(task, taskIndex) =>
+      dagScheduler.handleSpeculativeTaskSubmitted(task, taskIndex)
 
     case UnschedulableTaskSetAdded(stageId, stageAttemptId) =>
       dagScheduler.handleUnschedulableTaskSetAdded(stageId, stageAttemptId)

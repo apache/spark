@@ -916,6 +916,38 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             sdf.select(SF.posexplode_outer("d"), "c").toPandas(),
         )
 
+    def test_lambda_functions(self):
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        query = """
+            SELECT * FROM VALUES
+            (ARRAY('a', 'ab'), ARRAY(1, 2, 3), ARRAY(1, NULL, 3), 1, 2, 'a'),
+            (ARRAY('x', NULL), NULL, ARRAY(1, 3), 3, 4, 'x'),
+            (NULL, ARRAY(-1, -2, -3), Array(), 5, 6, NULL)
+            AS tab(a, b, c, d, e, f)
+            """
+        # +---------+------------+------------+---+---+----+
+        # |        a|           b|           c|  d|  e|   f|
+        # +---------+------------+------------+---+---+----+
+        # |  [a, ab]|   [1, 2, 3]|[1, null, 3]|  1|  2|   a|
+        # |[x, null]|        null|      [1, 3]|  3|  4|   x|
+        # |     null|[-1, -2, -3]|          []|  5|  6|null|
+        # +---------+------------+------------+---+---+----+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        # test exists
+        self.assert_eq(
+            cdf.select(CF.exists(cdf.b, lambda x: x < 0)).toPandas(),
+            sdf.select(SF.exists(sdf.b, lambda x: x < 0)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.exists("a", lambda x: CF.isnull(x))).toPandas(),
+            sdf.select(SF.exists("a", lambda x: SF.isnull(x))).toPandas(),
+        )
+
     def test_csv_functions(self):
         from pyspark.sql import functions as SF
         from pyspark.sql.connect import functions as CF

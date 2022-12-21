@@ -30,6 +30,8 @@ from typing import (
     Type,
 )
 
+import sys
+import random
 import pandas
 import warnings
 from collections.abc import Iterable
@@ -890,6 +892,88 @@ class DataFrame(object):
         )
 
     melt = unpivot
+
+    def hint(self, name: str, *params: Any) -> "DataFrame":
+        """
+        Specifies some hint on the current DataFrame. As an example, the following code specifies
+        that one of the plan can be broadcasted: `df1.join(df2.hint("broadcast"))`
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        name: str
+            the name of the hint, for example, "broadcast", "SHUFFLE_MERGE" and "shuffle_hash".
+        params: tuple
+            the parameters of the hint, theoretically a parameter can be any type, however, at
+            present, we only support int and str since only a limited number of hints are available,
+            for example, in `REPARTITION(3, c)` the "REPARTITION" is hint name and "3" is partition
+            number and "c" is partition expression.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with the hint
+        """
+        return DataFrame.withPlan(
+            plan.Hint(self._plan, name, list(params)),
+            session=self._session,
+        )
+
+    def randomSplit(
+        self,
+        weights: List[float],
+        seed: Optional[int] = None,
+    ) -> List["DataFrame"]:
+        """Randomly splits this :class:`DataFrame` with the provided weights.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        weights : list
+            list of doubles as weights with which to split the :class:`DataFrame`.
+            Weights will be normalized if they don't sum up to 1.0.
+        seed : int, optional
+            The seed for sampling.
+
+        Returns
+        -------
+        list
+            List of DataFrames.
+        """
+        for w in weights:
+            if w < 0.0:
+                raise ValueError("Weights must be positive. Found weight value: %s" % w)
+        seed = seed if seed is not None else random.randint(0, sys.maxsize)
+        total = sum(weights)
+        if total <= 0:
+            raise ValueError("Sum of weights must be positive, but got: %s" % w)
+        proportions = list(map(lambda x: x / total, weights))
+        normalizedCumWeights = [0.0]
+        for v in proportions:
+            normalizedCumWeights.append(normalizedCumWeights[-1] + v)
+        j = 1
+        length = len(normalizedCumWeights)
+        splits = []
+        while j < length:
+            lowerBound = normalizedCumWeights[j - 1]
+            upperBound = normalizedCumWeights[j]
+            samplePlan = DataFrame.withPlan(
+                plan.Sample(
+                    child=self._plan,
+                    lower_bound=lowerBound,
+                    upper_bound=upperBound,
+                    with_replacement=False,
+                    seed=int(seed),
+                    force_stable_sort=True,
+                ),
+                session=self._session,
+            )
+            splits.append(samplePlan)
+            j += 1
+
+        return splits
 
     def show(self, n: int = 20, truncate: Union[bool, int] = True, vertical: bool = False) -> None:
         """

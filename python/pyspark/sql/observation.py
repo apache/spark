@@ -21,6 +21,7 @@ from py4j.java_gateway import JavaObject, JVMView
 from pyspark.sql import column
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
+from pyspark.sql.utils import try_remote_observation
 
 __all__ = ["Observation"]
 
@@ -83,6 +84,7 @@ class Observation:
         self._jvm: Optional[JVMView] = None
         self._jo: Optional[JavaObject] = None
 
+    @try_remote_observation
     def _on(self, df: DataFrame, *exprs: Column) -> DataFrame:
         """Attaches this observation to the given :class:`DataFrame` to observe aggregations.
 
@@ -109,7 +111,9 @@ class Observation:
         )
         return DataFrame(observed_df, df.sparkSession)
 
-    @property
+    # Note that decorated property only works with Python 3.9+ which Spark Connect requires.
+    @property  # type: ignore[misc]
+    @try_remote_observation
     def get(self) -> Dict[str, Any]:
         """Get the observed metrics.
 
