@@ -502,7 +502,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       assert(result.rpInfo.taskResources(k) == input.rpInfo.taskResources(k))
     }
   }
-  
+
   test("RDD Operation Graph") {
     val input = new RDDOperationGraphWrapper(
       stageId = 1,
