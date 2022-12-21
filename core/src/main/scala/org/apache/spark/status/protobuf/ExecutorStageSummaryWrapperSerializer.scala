@@ -21,8 +21,14 @@ import org.apache.spark.status.ExecutorStageSummaryWrapper
 import org.apache.spark.status.api.v1.ExecutorStageSummary
 import org.apache.spark.status.protobuf.Utils.getOptional
 
-object ExecutorStageSummaryWrapperSerializer {
-  def serialize(input: ExecutorStageSummaryWrapper): Array[Byte] = {
+class ExecutorStageSummaryWrapperSerializer extends ProtobufSerDe {
+
+  override val supportClass: Class[_] = classOf[ExecutorStageSummaryWrapper]
+
+  override def serialize(input: Any): Array[Byte] =
+    serialize(input.asInstanceOf[ExecutorStageSummaryWrapper])
+
+  private def serialize(input: ExecutorStageSummaryWrapper): Array[Byte] = {
     val info = serializeExecutorStageSummary(input.info)
     val builder = StoreTypes.ExecutorStageSummaryWrapper.newBuilder()
       .setStageId(input.stageId.toLong)
