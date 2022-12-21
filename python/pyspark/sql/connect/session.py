@@ -45,6 +45,7 @@ from typing import (
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import OptionalPrimitiveType
+    from pyspark.sql.connect.catalog import Catalog
 
 
 # TODO(SPARK-38912): This method can be dropped once support for Python 3.8 is dropped
@@ -370,6 +371,23 @@ class SparkSession(object):
         :class:`SparkConnectClient`
         """
         return self._client
+
+    @property
+    def catalog(self) -> "Catalog":
+        """Interface through which the user may create, drop, alter or query underlying
+        databases, tables, functions, etc.
+
+        .. versionadded:: 3.4.0
+
+        Returns
+        -------
+        :class:`Catalog`
+        """
+        from pyspark.sql.connect.catalog import Catalog
+
+        if not hasattr(self, "_catalog"):
+            self._catalog = Catalog(self)
+        return self._catalog
 
     def register_udf(self, function: Any, return_type: Union[str, DataType]) -> str:
         return self._client.register_udf(function, return_type)
