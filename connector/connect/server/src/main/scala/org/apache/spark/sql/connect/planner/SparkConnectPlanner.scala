@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.{logical, Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
-import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, SubqueryAlias, Union, Unpivot, UnresolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, Sort, SubqueryAlias, Union, Unpivot, UnresolvedHint}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.{toCatalystExpression, toCatalystValue}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -132,12 +132,32 @@ class SparkConnectPlanner(session: SparkSession) {
    * wrap such fields into proto messages.
    */
   private def transformSample(rel: proto.Sample): LogicalPlan = {
+    val input = Dataset.ofRows(session, transformRelation(rel.getInput))
+    val plan = if (rel.getForceStableSort) {
+      // It is possible that the underlying dataframe doesn't guarantee the ordering of rows in its
+      // constituent partitions each time a split is materialized which could result in
+      // overlapping splits. To prevent this, we explicitly sort each input partition to make the
+      // ordering deterministic. Note that MapTypes cannot be sorted and are explicitly pruned out
+      // from the sort order.
+      val sortOrder = input.logicalPlan.output
+        .filter(attr => RowOrdering.isOrderable(attr.dataType))
+        .map(SortOrder(_, Ascending))
+      if (sortOrder.nonEmpty) {
+        Sort(sortOrder, global = false, input.logicalPlan)
+      } else {
+        input.logicalPlan
+      }
+    } else {
+      input.cache()
+      input.logicalPlan
+    }
+
     Sample(
       rel.getLowerBound,
       rel.getUpperBound,
       rel.getWithReplacement,
       if (rel.hasSeed) rel.getSeed else Utils.random.nextLong,
-      transformRelation(rel.getInput))
+      plan)
   }
 
   private def transformRepartition(rel: proto.Repartition): LogicalPlan = {
