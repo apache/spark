@@ -1058,47 +1058,47 @@
       },
       "HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN" : {
         "message" : [
-          "Function '<funcName>' should return Column, got <returnType>"
+          "Function `<funcName>` should return Column, got <returnType>"
         ]
       },
       "NOT_A_COLUMN" : {
         "message" : [
-          "Argument '<argName>' should be a column, got '<argType>'."
+          "Argument `<argName>` should be a column, got <argType>."
         ]
       },
       "NOT_A_STRING" : {
         "message" : [
-          "Argument '<argName>' should be a string, got '<argType>'."
+          "Argument `<argName>` should be a string, got <argType>."
         ]
       },
       "NOT_COLUMN_OR_INTEGER" : {
         "message" : [
-          "Argument '<argName>' should be a column or integer, got '<argType>'."
+          "Argument `<argName>` should be a column or integer, got <argType>."
         ]
       },
       "NOT_COLUMN_OR_INTEGER_OR_STRING" : {
         "message" : [
-          "Argument '<argName>' should be a column or integer or string, got '<argType>'."
+          "Argument `<argName>` should be a column or integer or string, got <argType>."
         ]
       },
       "NOT_COLUMN_OR_STRING" : {
         "message" : [
-          "Argument '<argName>' should be a column or string, got '<argType>'."
+          "Argument `<argName>` should be a column or string, got <argType>."
         ]
       },
       "UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION" : {
         "message" : [
-          "Function '<funcName>' should use only POSITIONAL or POSITIONAL OR KEYWORD arguments"
+          "Function `<funcName>` should use only POSITIONAL or POSITIONAL OR KEYWORD arguments"
         ]
       },
       "WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION" : {
         "message" : [
-          "Function '<funcName>' should take between 1 and 3 arguments, but provided function takes <numArgs>"
+          "Function `<funcName>` should take between 1 and 3 arguments, but provided function takes <numArgs>"
         ]
       },
       "WRONG_NUM_COLUMNS" : {
         "message" : [
-          "Function '<funcName>' should take at least two columns"
+          "Function `<funcName>` should take at least two columns"
         ]
       }
     }

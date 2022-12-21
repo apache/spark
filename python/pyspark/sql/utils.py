@@ -28,6 +28,7 @@ from py4j.protocol import Py4JJavaError
 
 from pyspark import SparkContext
 from pyspark.find_spark_home import _find_spark_home
+from pyspark.errors import PySparkException
 
 has_numpy = False
 try:
@@ -43,7 +44,7 @@ if TYPE_CHECKING:
     from pyspark.sql.dataframe import DataFrame
 
 
-class CapturedException(Exception):
+class CapturedException(PySparkException):
     def __init__(
         self,
         desc: Optional[str] = None,
@@ -68,50 +69,6 @@ class CapturedException(Exception):
         if self.cause is None and origin is not None and origin.getCause() is not None:
             self.cause = convert_exception(origin.getCause())
         self._origin = origin
-
-    def __str__(self) -> str:
-        assert SparkContext._jvm is not None
-
-        jvm = SparkContext._jvm
-        sql_conf = jvm.org.apache.spark.sql.internal.SQLConf.get()
-        debug_enabled = sql_conf.pysparkJVMStacktraceEnabled()
-        desc = self.desc
-        if debug_enabled:
-            desc = desc + "\n\nJVM stacktrace:\n%s" % self.stackTrace
-        return str(desc)
-
-    def getErrorClass(self) -> Optional[str]:
-        assert SparkContext._gateway is not None
-
-        gw = SparkContext._gateway
-        if self._origin is not None and is_instance_of(
-            gw, self._origin, "org.apache.spark.SparkThrowable"
-        ):
-            return self._origin.getErrorClass()
-        else:
-            return None
-
-    def getSqlState(self) -> Optional[str]:
-        assert SparkContext._gateway is not None
-
-        gw = SparkContext._gateway
-        if self._origin is not None and is_instance_of(
-            gw, self._origin, "org.apache.spark.SparkThrowable"
-        ):
-            return self._origin.getSqlState()
-        else:
-            return None
-
-    def getMessageParameters(self) -> Optional[dict]:
-        assert SparkContext._gateway is not None
-
-        gw = SparkContext._gateway
-        if self._origin is not None and is_instance_of(
-            gw, self._origin, "org.apache.spark.SparkThrowable"
-        ):
-            return self._origin.getMessageParameters()
-        else:
-            return None
 
 
 class AnalysisException(CapturedException):
