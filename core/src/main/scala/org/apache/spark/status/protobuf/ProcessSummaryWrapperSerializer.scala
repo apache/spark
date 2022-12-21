@@ -25,7 +25,14 @@ import org.apache.spark.status.ProcessSummaryWrapper
 import org.apache.spark.status.api.v1.ProcessSummary
 import org.apache.spark.status.protobuf.Utils.getOptional
 
-object ProcessSummaryWrapperSerializer {
+class ProcessSummaryWrapperSerializer extends ProtobufSerDe {
+
+  override val supportClass: Class[_] = classOf[ProcessSummaryWrapper]
+
+  override def serialize(input: Any): Array[Byte] = {
+    serialize(input.asInstanceOf[ProcessSummaryWrapper])
+  }
+
   def serialize(input: ProcessSummaryWrapper): Array[Byte] = {
     val builder = StoreTypes.ProcessSummaryWrapper.newBuilder()
     builder.setInfo(serializeProcessSummary(input.info))
