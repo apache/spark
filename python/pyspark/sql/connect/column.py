@@ -68,7 +68,7 @@ JVM_LONG_MIN = -(1 << 63)
 JVM_LONG_MAX = (1 << 63) - 1
 
 
-def _func_op(name: str, doc: str = "") -> Callable[["Column"], "Column"]:
+def _func_op(name: str, doc: Optional[str] = "") -> Callable[["Column"], "Column"]:
     def wrapped(self: "Column") -> "Column":
         return scalar_function(name, self)
 
@@ -77,7 +77,7 @@ def _func_op(name: str, doc: str = "") -> Callable[["Column"], "Column"]:
 
 
 def _bin_op(
-    name: str, doc: str = "binary function", reverse: bool = False
+    name: str, doc: Optional[str] = "binary function", reverse: bool = False
 ) -> Callable[["Column", Any], "Column"]:
     def wrapped(self: "Column", other: Any) -> "Column":
         from pyspark.sql.connect._typing import PrimitiveType
@@ -94,11 +94,12 @@ def _bin_op(
     return wrapped
 
 
-def _unary_op(name: str, doc: str = "unary function") -> Callable[["Column"], "Column"]:
-    def _(self: "Column") -> "Column":
+def _unary_op(name: str, doc: Optional[str] = "unary function") -> Callable[["Column"], "Column"]:
+    def wrapped(self: "Column") -> "Column":
         return scalar_function(name, self)
 
-    return _
+    wrapped.__doc__ = doc
+    return wrapped
 
 
 def scalar_function(op: str, *args: "Column") -> "Column":
@@ -595,8 +596,8 @@ class Column:
 
     # string methods
     contains = _bin_op("contains", PySparkColumn.contains.__doc__)
-    startswith = _bin_op("startsWith", PySparkColumn.startsWith.__doc__)
-    endswith = _bin_op("endsWith", PySparkColumn.endsWith.__doc__)
+    startswith = _bin_op("startsWith", PySparkColumn.startswith.__doc__)
+    endswith = _bin_op("endsWith", PySparkColumn.endswith.__doc__)
 
     def when(self, condition: "Column", value: Any) -> "Column":
         if not isinstance(condition, Column):
