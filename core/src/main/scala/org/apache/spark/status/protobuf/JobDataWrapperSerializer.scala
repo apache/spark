@@ -32,7 +32,7 @@ class JobDataWrapperSerializer extends ProtoBufSerDe {
   override def serialize(input: Any): Array[Byte] =
     serialize(input.asInstanceOf[JobDataWrapper])
 
-  def serialize(j: JobDataWrapper): Array[Byte] = {
+  private def serialize(j: JobDataWrapper): Array[Byte] = {
     val jobData = serializeJobData(j.info)
     val builder = StoreTypes.JobDataWrapper.newBuilder()
     builder.setInfo(jobData)

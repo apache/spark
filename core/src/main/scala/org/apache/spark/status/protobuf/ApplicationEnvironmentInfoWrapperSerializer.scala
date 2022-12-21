@@ -30,7 +30,7 @@ class ApplicationEnvironmentInfoWrapperSerializer extends ProtoBufSerDe {
   override def serialize(input: Any): Array[Byte] =
     serialize(input.asInstanceOf[ApplicationEnvironmentInfoWrapper])
 
-  def serialize(input: ApplicationEnvironmentInfoWrapper): Array[Byte] = {
+  private def serialize(input: ApplicationEnvironmentInfoWrapper): Array[Byte] = {
     val builder = StoreTypes.ApplicationEnvironmentInfoWrapper.newBuilder()
     builder.setInfo(serializeApplicationEnvironmentInfo(input.info))
     builder.build().toByteArray

@@ -31,7 +31,7 @@ class TaskDataWrapperSerializer extends ProtoBufSerDe {
   override def serialize(input: Any): Array[Byte] =
     serialize(input.asInstanceOf[TaskDataWrapper])
 
-  def serialize(input: TaskDataWrapper): Array[Byte] = {
+  private def serialize(input: TaskDataWrapper): Array[Byte] = {
     val builder = StoreTypes.TaskDataWrapper.newBuilder()
       .setTaskId(input.taskId)
       .setIndex(input.index)
