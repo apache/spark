@@ -240,3 +240,7 @@ message RDDStorageInfo {
 message RDDStorageInfoWrapper {
   RDDStorageInfo info = 1;
 }
+
+message ResourceProfileWrapper {
+  ResourceProfileInfo rpInfo = 1;
+}

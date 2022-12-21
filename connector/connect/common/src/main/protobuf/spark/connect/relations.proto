@@ -317,6 +317,10 @@ message Sample {
 
   // (Optional) The random seed.
   optional int64 seed = 5;
+
+  // (Optional) Explicitly sort the underlying plan to make the ordering deterministic.
+  // This flag is only used to randomly splits DataFrame with the provided weights.
+  optional bool force_stable_sort = 6;
 }
 
 // Relation of type [[Range]] that generates a sequence of integers.

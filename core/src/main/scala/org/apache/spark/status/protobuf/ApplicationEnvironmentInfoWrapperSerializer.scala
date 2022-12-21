@@ -103,7 +103,7 @@ class ApplicationEnvironmentInfoWrapperSerializer extends ProtoBufSerDe {
     builder.build()
   }
 
-  private def serializeResourceProfileInfo(info: ResourceProfileInfo):
+  private[status] def serializeResourceProfileInfo(info: ResourceProfileInfo):
     StoreTypes.ResourceProfileInfo = {
     val builder = StoreTypes.ResourceProfileInfo.newBuilder()
     builder.setId(info.id)
@@ -124,7 +124,7 @@ class ApplicationEnvironmentInfoWrapperSerializer extends ProtoBufSerDe {
     builder.build()
   }
 
-  private def deserializeResourceProfileInfo(info: StoreTypes.ResourceProfileInfo):
+  private[status] def deserializeResourceProfileInfo(info: StoreTypes.ResourceProfileInfo):
     ResourceProfileInfo = {
 
     new ResourceProfileInfo(

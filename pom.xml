@@ -213,7 +213,7 @@
     <commons-cli.version>1.5.0</commons-cli.version>
     <bouncycastle.version>1.60</bouncycastle.version>
     <tink.version>1.7.0</tink.version>
-    <netty.version>4.1.84.Final</netty.version>
+    <netty.version>4.1.86.Final</netty.version>
     <!--
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
@@ -896,6 +896,10 @@
           <exclusion>
             <groupId>io.netty</groupId>
             <artifactId>netty-transport-udt</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-handler-ssl-ocsp</artifactId>
           </exclusion>
           <exclusion>
             <groupId>org.jctools</groupId>
