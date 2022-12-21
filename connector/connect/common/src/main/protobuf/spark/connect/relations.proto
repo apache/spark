@@ -56,6 +56,7 @@ message Relation {
     WithColumns with_columns = 23;
     Hint hint = 24;
     Unpivot unpivot = 25;
+    ToSchema to_schema = 26;
 
     // NA functions
     NAFill fill_na = 90;
@@ -586,4 +587,14 @@ message Unpivot {
 
   // (Required) Name of the value column.
   string value_column_name = 5;
+}
+
+message ToSchema {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) The user provided schema.
+  //
+  // The Sever side will update the dataframe with this schema.
+  DataType schema = 2;
 }

@@ -389,6 +389,66 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             self.connect.sql(query).schema.__repr__(),
         )
 
+    def test_to(self):
+        # SPARK-41464: test DataFrame.to()
+
+        # The schema has not changed
+        schema = StructType(
+            [
+                StructField("id", IntegerType(), True),
+                StructField("name", StringType(), True),
+            ]
+        )
+
+        cdf = self.connect.read.table(self.tbl_name).to(schema)
+        df = self.spark.read.table(self.tbl_name).to(schema)
+
+        self.assertEqual(cdf.schema, df.schema)
+        self.assert_eq(cdf.toPandas(), df.toPandas())
+
+        # Change the column name
+        schema = StructType(
+            [
+                StructField("col1", IntegerType(), True),
+                StructField("col2", StringType(), True),
+            ]
+        )
+
+        cdf = self.connect.read.table(self.tbl_name).to(schema)
+        df = self.spark.read.table(self.tbl_name).to(schema)
+
+        self.assertEqual(cdf.schema, df.schema)
+        self.assert_eq(cdf.toPandas(), df.toPandas())
+
+        # Change the column data type
+        schema = StructType(
+            [
+                StructField("id", StringType(), True),
+                StructField("name", StringType(), True),
+            ]
+        )
+
+        cdf = self.connect.read.table(self.tbl_name).to(schema)
+        df = self.spark.read.table(self.tbl_name).to(schema)
+
+        self.assertEqual(cdf.schema, df.schema)
+        self.assert_eq(cdf.toPandas(), df.toPandas())
+
+        # Change the column data type failed
+        schema = StructType(
+            [
+                StructField("id", IntegerType(), True),
+                StructField("name", IntegerType(), True),
+            ]
+        )
+
+        with self.assertRaises(grpc.RpcError) as context:
+            self.connect.read.table(self.tbl_name).to(schema).toPandas()
+            self.assertIn(
+                """Column or field `name` is of type "STRING" while it's required to be "INT".""",
+                str(context.exception),
+            )
+
     def test_toDF(self):
         # SPARK-41310: test DataFrame.toDF()
         self.assertEqual(

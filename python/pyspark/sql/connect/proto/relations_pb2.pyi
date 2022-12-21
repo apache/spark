@@ -85,6 +85,7 @@ class Relation(google.protobuf.message.Message):
     WITH_COLUMNS_FIELD_NUMBER: builtins.int
     HINT_FIELD_NUMBER: builtins.int
     UNPIVOT_FIELD_NUMBER: builtins.int
+    TO_SCHEMA_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -143,6 +144,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def unpivot(self) -> global___Unpivot: ...
     @property
+    def to_schema(self) -> global___ToSchema: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -186,6 +189,7 @@ class Relation(google.protobuf.message.Message):
         with_columns: global___WithColumns | None = ...,
         hint: global___Hint | None = ...,
         unpivot: global___Unpivot | None = ...,
+        to_schema: global___ToSchema | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -257,6 +261,8 @@ class Relation(google.protobuf.message.Message):
             b"summary",
             "tail",
             b"tail",
+            "to_schema",
+            b"to_schema",
             "unknown",
             b"unknown",
             "unpivot",
@@ -328,6 +334,8 @@ class Relation(google.protobuf.message.Message):
             b"summary",
             "tail",
             b"tail",
+            "to_schema",
+            b"to_schema",
             "unknown",
             b"unknown",
             "unpivot",
@@ -363,6 +371,7 @@ class Relation(google.protobuf.message.Message):
         "with_columns",
         "hint",
         "unpivot",
+        "to_schema",
         "fill_na",
         "drop_na",
         "replace",
@@ -2023,3 +2032,32 @@ class Unpivot(google.protobuf.message.Message):
     ) -> None: ...
 
 global___Unpivot = Unpivot
+
+class ToSchema(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    SCHEMA_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    @property
+    def schema(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+        """(Required) The user provided schema.
+
+        The Sever side will update the dataframe with this schema.
+        """
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        schema: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input", "schema", b"schema"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["input", b"input", "schema", b"schema"]
+    ) -> None: ...
+
+global___ToSchema = ToSchema

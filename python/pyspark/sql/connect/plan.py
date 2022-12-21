@@ -1017,6 +1017,35 @@ class Range(LogicalPlan):
         """
 
 
+class ToSchema(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], schema: DataType) -> None:
+        super().__init__(child)
+        self._schema = schema
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+
+        plan = proto.Relation()
+        plan.to_schema.input.CopyFrom(self._child.plan(session))
+        plan.to_schema.schema.CopyFrom(pyspark_types_to_proto_types(self._schema))
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return f"""{i}<ToSchema schema='{self._schema}'>"""
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>ToSchema</b><br />
+              schema: {self._schema} <br />
+              {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
 class RenameColumnsNameByName(LogicalPlan):
     def __init__(self, child: Optional["LogicalPlan"], colsMap: Mapping[str, str]) -> None:
         super().__init__(child)

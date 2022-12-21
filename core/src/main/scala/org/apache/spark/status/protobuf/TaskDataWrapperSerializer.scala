@@ -24,8 +24,14 @@ import org.apache.spark.status.api.v1.AccumulableInfo
 import org.apache.spark.status.protobuf.Utils.getOptional
 import org.apache.spark.util.Utils.weakIntern
 
-object TaskDataWrapperSerializer {
-  def serialize(input: TaskDataWrapper): Array[Byte] = {
+class TaskDataWrapperSerializer extends ProtobufSerDe {
+
+  override val supportClass: Class[_] = classOf[TaskDataWrapper]
+
+  override def serialize(input: Any): Array[Byte] =
+    serialize(input.asInstanceOf[TaskDataWrapper])
+
+  private def serialize(input: TaskDataWrapper): Array[Byte] = {
     val builder = StoreTypes.TaskDataWrapper.newBuilder()
       .setTaskId(input.taskId)
       .setIndex(input.index)
