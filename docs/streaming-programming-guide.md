@@ -2336,7 +2336,7 @@ the case for Spark Streaming as the data in most cases is received over the netw
 `fileStream` is used). To achieve the same fault-tolerance properties for all of the generated RDDs,
 the received data is replicated among multiple Spark executors in worker nodes in the cluster
 (default replication factor is 2). This leads to two kinds of data in the
-system that need to recovered in the event of failures:
+system that need to be recovered in the event of failures:
 
 1. *Data received and replicated* - This data survives failure of a single worker node as a copy
   of it exists on one of the other nodes.
