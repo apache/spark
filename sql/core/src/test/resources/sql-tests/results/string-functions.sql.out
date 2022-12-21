@@ -841,6 +841,22 @@ NULL
 
 
 -- !query
+select decode(null, 6, 'Spark', NULL, 'SQL', 4, 'rocks')
+-- !query schema
+struct<decode(NULL, 6, Spark, NULL, SQL, 4, rocks):string>
+-- !query output
+SQL
+
+
+-- !query
+select decode(null, 6, 'Spark', NULL, 'SQL', 4, 'rocks', NULL, '.')
+-- !query schema
+struct<decode(NULL, 6, Spark, NULL, SQL, 4, rocks, NULL, .):string>
+-- !query output
+SQL
+
+
+-- !query
 SELECT CONTAINS(null, 'Spark')
 -- !query schema
 struct<contains(NULL, Spark):boolean>
