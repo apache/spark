@@ -978,7 +978,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         if (metaCols.isEmpty) {
           node
         } else {
-          val newNode = addMetadataCol(node, attr => metaCols.exists(_.exprId == attr.exprId))
+          val newNode = addMetadataCol(node, metaCols.map(_.exprId).toSet)
           // We should not change the output schema of the plan. We should project away the extra
           // metadata columns if necessary.
           if (newNode.sameOutput(node)) {
@@ -1014,21 +1014,24 @@ class Analyzer(override val catalogManager: CatalogManager)
 
     private def addMetadataCol(
         plan: LogicalPlan,
-        isRequired: Attribute => Boolean): LogicalPlan = plan match {
-      case s: ExposesMetadataColumns if s.metadataOutput.exists(isRequired) =>
+        requiredAttrIds: Set[ExprId]): LogicalPlan = plan match {
+      case s: ExposesMetadataColumns if s.metadataOutput.exists( a =>
+        requiredAttrIds.contains(a.exprId)) =>
         s.withMetadataColumns()
-      case p: Project if p.metadataOutput.exists(isRequired) =>
+      case p: Project if p.metadataOutput.exists(a => requiredAttrIds.contains(a.exprId)) =>
         val newProj = p.copy(
           projectList = p.projectList ++ p.metadataOutput,
-          child = addMetadataCol(p.child, isRequired))
+          child = addMetadataCol(p.child, requiredAttrIds))
         newProj.copyTagsFrom(p)
         newProj
-      case u: Union if u.metadataOutput.exists(isRequired) =>
-        // The metadata columns in different children could have different expression IDs (and hence
-        // might not appear in the list of required columns), but would still be required to compute
-        // the union of them.
-        u.withNewChildren(u.children.map(addMetadataCol(_, _ => true)))
-      case _ => plan.withNewChildren(plan.children.map(addMetadataCol(_, isRequired)))
+      case u: Union if u.metadataOutput.exists(a => requiredAttrIds.contains(a.exprId)) =>
+        u.withNewChildren(u.children.map { child =>
+          // The children of a Union will have the same attributes with different expression IDs
+          val exprIdMap = u.metadataOutput.map(_.exprId)
+            .zip(child.metadataOutput.map(_.exprId)).toMap
+          addMetadataCol(child, requiredAttrIds.map(a => exprIdMap.getOrElse(a, a)))
+        })
+      case _ => plan.withNewChildren(plan.children.map(addMetadataCol(_, requiredAttrIds)))
     }
   }
 
