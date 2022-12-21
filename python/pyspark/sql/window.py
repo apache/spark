@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 __all__ = ["Window", "WindowSpec"]
 
 
-def _to_java_cols(cols: Tuple[Union["ColumnOrName", List["ColumnOrName_"]], ...]) -> int:
+def _to_java_cols(cols: Tuple[Union["ColumnOrName", List["ColumnOrName_"]], ...]) -> JavaObject:
     sc = SparkContext._active_spark_context
     if len(cols) == 1 and isinstance(cols[0], list):
         cols = cols[0]  # type: ignore[assignment]

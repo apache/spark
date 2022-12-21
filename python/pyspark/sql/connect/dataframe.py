@@ -46,6 +46,7 @@ from pyspark.sql.connect.column import (
 )
 from pyspark.sql.connect.functions import col, lit
 from pyspark.sql.types import (
+    DataType,
     StructType,
     Row,
 )
@@ -1739,6 +1740,47 @@ class DataFrame(object):
             raise Exception("Cannot analyze on empty plan.")
         query = self._plan.to_proto(self._session.client)
         return self._session.client._analyze(query).input_files
+
+    def to(self, schema: DataType) -> "DataFrame":
+        """
+        Returns a new :class:`DataFrame` where each row is reconciled to match the specified
+        schema.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        schema : :class:`StructType`
+            Specified schema.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Reconciled DataFrame.
+
+        Notes
+        -----
+        * Reorder columns and/or inner fields by name to match the specified schema.
+
+        * Project away columns and/or inner fields that are not needed by the specified schema.
+            Missing columns and/or inner fields (present in the specified schema but not input
+            DataFrame) lead to failures.
+
+        * Cast the columns and/or inner fields to match the data types in the specified schema,
+            if the types are compatible, e.g., numeric to numeric (error if overflows), but
+            not string to int.
+
+        * Carry over the metadata from the specified schema, while the columns and/or inner fields
+            still keep their own metadata if not overwritten by the specified schema.
+
+        * Fail if the nullability is not compatible. For example, the column and/or inner field
+            is nullable but the specified schema requires them to be not nullable.
+        """
+        assert schema is not None
+        return DataFrame.withPlan(
+            plan.ToSchema(child=self._plan, schema=schema),
+            session=self._session,
+        )
 
     def toDF(self, *cols: str) -> "DataFrame":
         """Returns a new :class:`DataFrame` that with new specified column names

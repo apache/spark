@@ -35,7 +35,7 @@ import org.apache.spark.sql.connect.dsl.expressions._
 import org.apache.spark.sql.connect.dsl.plans._
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{IntegerType, MapType, Metadata, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, ByteType, DataType, DateType, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, Metadata, ShortType, StringType, StructField, StructType}
 
 /**
  * This suite is based on connect DSL and test that given same dataframe operations, whether
@@ -385,6 +385,27 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(
       connectTestRelation.stat.crosstab("id", "name"),
       sparkTestRelation.stat.crosstab("id", "name"))
+  }
+
+  test("Test to") {
+    val dataTypes: Seq[DataType] = Seq(
+      StringType,
+      DateType,
+      BooleanType,
+      ByteType,
+      ShortType,
+      IntegerType,
+      LongType,
+      FloatType,
+      DoubleType,
+      DecimalType.SYSTEM_DEFAULT,
+      DecimalType.USER_DEFAULT,
+      ArrayType(IntegerType, true),
+      MapType(StringType, IntegerType, false),
+      new StructType().add("f1", IntegerType))
+
+    val schema = StructType(dataTypes.map(t => StructField(t.getClass.getName, t)))
+    comparePlans(connectTestRelation.to(schema), sparkTestRelation.to(schema))
   }
 
   test("Test toDF") {

@@ -31,7 +31,7 @@ from pyspark.sql.connect.column import (
 from typing import Any, TYPE_CHECKING, Union, List, overload, Optional, Tuple, Callable, ValuesView
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import ColumnOrName
+    from pyspark.sql.connect._typing import ColumnOrName, DataFrameType
 
 
 # TODO(SPARK-40538) Add support for the missing PySpark functions.
@@ -224,36 +224,36 @@ def bitwise_not(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("~", col)
 
 
-# TODO(SPARK-41364): support broadcast
-# def broadcast(df: DataFrame) -> DataFrame:
-#     """
-#     Marks a DataFrame as small enough for use in broadcast joins.
-#
-#     .. versionadded:: 1.6.0
-#
-#     Returns
-#     -------
-#     :class:`~pyspark.sql.DataFrame`
-#         DataFrame marked as ready for broadcast join.
-#
-#     Examples
-#     --------
-#     >>> from pyspark.sql import types
-#     >>> df = spark.createDataFrame([1, 2, 3, 3, 4], types.IntegerType())
-#     >>> df_small = spark.range(3)
-#     >>> df_b = broadcast(df_small)
-#     >>> df.join(df_b, df.value == df_small.id).show()
-#     +-----+---+
-#     |value| id|
-#     +-----+---+
-#     |    1|  1|
-#     |    2|  2|
-#     +-----+---+
-#     """
-#
-#     sc = SparkContext._active_spark_context
-#     assert sc is not None and sc._jvm is not None
-#     return DataFrame(sc._jvm.functions.broadcast(df._jdf), df.sparkSession)
+def broadcast(df: "DataFrameType") -> "DataFrameType":
+    """
+    Marks a DataFrame as small enough for use in broadcast joins.
+
+    .. versionadded:: 3.4.0
+
+    Returns
+    -------
+    :class:`~pyspark.sql.DataFrame`
+        DataFrame marked as ready for broadcast join.
+
+    Examples
+    --------
+    >>> from pyspark.sql import types
+    >>> df = spark.createDataFrame([1, 2, 3, 3, 4], types.IntegerType())
+    >>> df_small = spark.range(3)
+    >>> df_b = broadcast(df_small)
+    >>> df.join(df_b, df.value == df_small.id).show()
+    +-----+---+
+    |value| id|
+    +-----+---+
+    |    1|  1|
+    |    2|  2|
+    +-----+---+
+    """
+    from pyspark.sql.connect.dataframe import DataFrame
+
+    if not isinstance(df, DataFrame):
+        raise TypeError(f"'df' must be a DataFrame, but got {type(df).__name__} {df}")
+    return df.hint("broadcast")
 
 
 def coalesce(*cols: "ColumnOrName") -> Column:
