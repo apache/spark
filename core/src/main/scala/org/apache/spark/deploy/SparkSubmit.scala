@@ -229,15 +229,20 @@ private[spark] class SparkSubmit extends Logging {
     var childMainClass = ""
 
     // Set the cluster manager
-    val clusterManager: Int = args.master match {
-      case "yarn" => YARN
-      case m if m.startsWith("spark") => STANDALONE
-      case m if m.startsWith("mesos") => MESOS
-      case m if m.startsWith("k8s") => KUBERNETES
-      case m if m.startsWith("local") => LOCAL
-      case _ =>
-        error("Master must either be yarn or start with spark, mesos, k8s, or local")
-        -1
+    val clusterManager: Int = args.maybeMaster match {
+      case Some(v) =>
+        assert(args.maybeRemote.isEmpty)
+        v match {
+          case "yarn" => YARN
+          case m if m.startsWith("spark") => STANDALONE
+          case m if m.startsWith("mesos") => MESOS
+          case m if m.startsWith("k8s") => KUBERNETES
+          case m if m.startsWith("local") => LOCAL
+          case _ =>
+            error("Master must either be yarn or start with spark, mesos, k8s, or local")
+            -1
+        }
+      case None => LOCAL // default master or remote mode.
     }
 
     // Set the deploy mode; default is client mode
@@ -259,7 +264,7 @@ private[spark] class SparkSubmit extends Logging {
     }
 
     if (clusterManager == KUBERNETES) {
-      args.master = Utils.checkAndGetK8sMasterUrl(args.master)
+      args.maybeMaster = Option(Utils.checkAndGetK8sMasterUrl(args.master))
       // Make sure KUBERNETES is included in our build if we're trying to use it
       if (!Utils.classIsLoadable(KUBERNETES_CLUSTER_SUBMIT_CLASS) && !Utils.isTesting) {
         error(
@@ -597,7 +602,11 @@ private[spark] class SparkSubmit extends Logging {
     val options = List[OptionAssigner](
 
       // All cluster managers
-      OptionAssigner(args.master, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, confKey = "spark.master"),
+      OptionAssigner(
+        if (args.maybeRemote.isDefined) args.maybeMaster.orNull else args.master,
+        ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, confKey = "spark.master"),
+      OptionAssigner(
+        args.maybeRemote.orNull, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, confKey = "spark.remote"),
       OptionAssigner(args.deployMode, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
         confKey = SUBMIT_DEPLOY_MODE.key),
       OptionAssigner(args.name, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, confKey = "spark.app.name"),

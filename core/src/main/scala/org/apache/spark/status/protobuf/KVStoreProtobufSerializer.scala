@@ -17,7 +17,7 @@
 
 package org.apache.spark.status.protobuf
 
-import org.apache.spark.status.{ApplicationEnvironmentInfoWrapper, ApplicationInfoWrapper, JobDataWrapper, TaskDataWrapper}
+import org.apache.spark.status._
 import org.apache.spark.status.KVUtils.KVStoreScalaSerializer
 
 private[spark] class KVStoreProtobufSerializer extends KVStoreScalaSerializer {
@@ -25,9 +25,13 @@ private[spark] class KVStoreProtobufSerializer extends KVStoreScalaSerializer {
     case j: JobDataWrapper => JobDataWrapperSerializer.
       serialize(j)
     case t: TaskDataWrapper => TaskDataWrapperSerializer.serialize(t)
+    case e: ExecutorStageSummaryWrapper => ExecutorStageSummaryWrapperSerializer.serialize(e)
     case a: ApplicationEnvironmentInfoWrapper =>
       ApplicationEnvironmentInfoWrapperSerializer.serialize(a)
     case a: ApplicationInfoWrapper => ApplicationInfoWrapperSerializer.serialize(a)
+    case r: RDDStorageInfoWrapper =>
+      RDDStorageInfoWrapperSerializer.serialize(r)
+    case r: ResourceProfileWrapper => ResourceProfileWrapperSerializer.serialize(r)
     case other => super.serialize(other)
   }
 
@@ -36,10 +40,16 @@ private[spark] class KVStoreProtobufSerializer extends KVStoreScalaSerializer {
       JobDataWrapperSerializer.deserialize(data).asInstanceOf[T]
     case _ if classOf[TaskDataWrapper].isAssignableFrom(klass) =>
       TaskDataWrapperSerializer.deserialize(data).asInstanceOf[T]
+    case _ if classOf[ExecutorStageSummaryWrapper].isAssignableFrom(klass) =>
+      ExecutorStageSummaryWrapperSerializer.deserialize(data).asInstanceOf[T]
     case _ if classOf[ApplicationEnvironmentInfoWrapper].isAssignableFrom(klass) =>
       ApplicationEnvironmentInfoWrapperSerializer.deserialize(data).asInstanceOf[T]
     case _ if classOf[ApplicationInfoWrapper].isAssignableFrom(klass) =>
       ApplicationInfoWrapperSerializer.deserialize(data).asInstanceOf[T]
+    case _ if classOf[RDDStorageInfoWrapper].isAssignableFrom(klass) =>
+      RDDStorageInfoWrapperSerializer.deserialize(data).asInstanceOf[T]
+    case _ if classOf[ResourceProfileWrapper].isAssignableFrom(klass) =>
+      ResourceProfileWrapperSerializer.deserialize(data).asInstanceOf[T]
     case other => super.deserialize(data, klass)
   }
 }

@@ -624,6 +624,39 @@ class Expression(google.protobuf.message.Message):
             self, oneof_group: typing_extensions.Literal["_metadata", b"_metadata"]
         ) -> typing_extensions.Literal["metadata"] | None: ...
 
+    class LambdaFunction(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        FUNCTION_FIELD_NUMBER: builtins.int
+        ARGUMENTS_FIELD_NUMBER: builtins.int
+        @property
+        def function(self) -> global___Expression:
+            """(Required) The lambda function.
+
+            The function body should use 'UnresolvedAttribute' as arguments, the sever side will
+            replace 'UnresolvedAttribute' with 'UnresolvedNamedLambdaVariable'.
+            """
+        @property
+        def arguments(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+            """(Required) Function variable names. Must contains 1 ~ 3 variables."""
+        def __init__(
+            self,
+            *,
+            function: global___Expression | None = ...,
+            arguments: collections.abc.Iterable[builtins.str] | None = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["function", b"function"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "arguments", b"arguments", "function", b"function"
+            ],
+        ) -> None: ...
+
     LITERAL_FIELD_NUMBER: builtins.int
     UNRESOLVED_ATTRIBUTE_FIELD_NUMBER: builtins.int
     UNRESOLVED_FUNCTION_FIELD_NUMBER: builtins.int
@@ -633,6 +666,7 @@ class Expression(google.protobuf.message.Message):
     CAST_FIELD_NUMBER: builtins.int
     UNRESOLVED_REGEX_FIELD_NUMBER: builtins.int
     SORT_ORDER_FIELD_NUMBER: builtins.int
+    LAMBDA_FUNCTION_FIELD_NUMBER: builtins.int
     @property
     def literal(self) -> global___Expression.Literal: ...
     @property
@@ -651,6 +685,8 @@ class Expression(google.protobuf.message.Message):
     def unresolved_regex(self) -> global___Expression.UnresolvedRegex: ...
     @property
     def sort_order(self) -> global___Expression.SortOrder: ...
+    @property
+    def lambda_function(self) -> global___Expression.LambdaFunction: ...
     def __init__(
         self,
         *,
@@ -663,6 +699,7 @@ class Expression(google.protobuf.message.Message):
         cast: global___Expression.Cast | None = ...,
         unresolved_regex: global___Expression.UnresolvedRegex | None = ...,
         sort_order: global___Expression.SortOrder | None = ...,
+        lambda_function: global___Expression.LambdaFunction | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -675,6 +712,8 @@ class Expression(google.protobuf.message.Message):
             b"expr_type",
             "expression_string",
             b"expression_string",
+            "lambda_function",
+            b"lambda_function",
             "literal",
             b"literal",
             "sort_order",
@@ -700,6 +739,8 @@ class Expression(google.protobuf.message.Message):
             b"expr_type",
             "expression_string",
             b"expression_string",
+            "lambda_function",
+            b"lambda_function",
             "literal",
             b"literal",
             "sort_order",
@@ -726,6 +767,7 @@ class Expression(google.protobuf.message.Message):
         "cast",
         "unresolved_regex",
         "sort_order",
+        "lambda_function",
     ] | None: ...
 
 global___Expression = Expression

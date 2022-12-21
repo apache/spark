@@ -60,10 +60,7 @@ from pyspark.sql.udf import UserDefinedFunction, _create_udf  # noqa: F401
 
 # Keep pandas_udf and PandasUDFType import for backwards compatible import; moved in SPARK-28264
 from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType  # noqa: F401
-from pyspark.sql.utils import to_str, has_numpy
-
-if has_numpy:
-    import numpy as np
+from pyspark.sql.utils import to_str, has_numpy, try_remote_functions
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import (
@@ -73,6 +70,8 @@ if TYPE_CHECKING:
         UserDefinedFunctionLike,
     )
 
+if has_numpy:
+    import numpy as np
 
 # Note to developers: all of PySpark functions here take string as column names whenever possible.
 # Namely, if columns are referred as arguments, they can always be both Column or string,
@@ -138,6 +137,7 @@ def _options_to_str(options: Optional[Dict[str, Any]] = None) -> Dict[str, Optio
     return {}
 
 
+@try_remote_functions
 def lit(col: Any) -> Column:
     """
     Creates a :class:`~pyspark.sql.Column` of literal value.
@@ -191,6 +191,7 @@ def lit(col: Any) -> Column:
         return _invoke_function("lit", col)
 
 
+@try_remote_functions
 def col(col: str) -> Column:
     """
     Returns a :class:`~pyspark.sql.Column` based on the given column name.
@@ -220,6 +221,7 @@ def col(col: str) -> Column:
 column = col
 
 
+@try_remote_functions
 def asc(col: "ColumnOrName") -> Column:
     """
     Returns a sort expression based on the ascending order of the given column name.
@@ -269,6 +271,7 @@ def asc(col: "ColumnOrName") -> Column:
     return col.asc() if isinstance(col, Column) else _invoke_function("asc", col)
 
 
+@try_remote_functions
 def desc(col: "ColumnOrName") -> Column:
     """
     Returns a sort expression based on the descending order of the given column name.
@@ -303,6 +306,7 @@ def desc(col: "ColumnOrName") -> Column:
     return col.desc() if isinstance(col, Column) else _invoke_function("desc", col)
 
 
+@try_remote_functions
 def sqrt(col: "ColumnOrName") -> Column:
     """
     Computes the square root of the specified float value.
@@ -332,6 +336,7 @@ def sqrt(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("sqrt", col)
 
 
+@try_remote_functions
 def abs(col: "ColumnOrName") -> Column:
     """
     Computes the absolute value.
@@ -361,6 +366,7 @@ def abs(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("abs", col)
 
 
+@try_remote_functions
 def mode(col: "ColumnOrName") -> Column:
     """
     Returns the most frequent value in a group.
@@ -395,6 +401,7 @@ def mode(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("mode", col)
 
 
+@try_remote_functions
 def max(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the maximum value of the expression in a group.
@@ -424,6 +431,7 @@ def max(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("max", col)
 
 
+@try_remote_functions
 def min(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the minimum value of the expression in a group.
@@ -453,6 +461,7 @@ def min(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("min", col)
 
 
+@try_remote_functions
 def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     """
     Returns the value associated with the maximum value of ord.
@@ -488,6 +497,7 @@ def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("max_by", col, ord)
 
 
+@try_remote_functions
 def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     """
     Returns the value associated with the minimum value of ord.
@@ -523,6 +533,7 @@ def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("min_by", col, ord)
 
 
+@try_remote_functions
 def count(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the number of items in a group.
@@ -554,6 +565,7 @@ def count(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("count", col)
 
 
+@try_remote_functions
 def sum(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the sum of all values in the expression.
@@ -583,6 +595,7 @@ def sum(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("sum", col)
 
 
+@try_remote_functions
 def avg(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the average of the values in a group.
@@ -612,6 +625,7 @@ def avg(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("avg", col)
 
 
+@try_remote_functions
 def mean(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the average of the values in a group.
@@ -642,6 +656,7 @@ def mean(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("mean", col)
 
 
+@try_remote_functions
 def median(col: "ColumnOrName") -> Column:
     """
     Returns the median of the values in a group.
@@ -676,6 +691,7 @@ def median(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("median", col)
 
 
+@try_remote_functions
 def sumDistinct(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the sum of distinct values in the expression.
@@ -689,6 +705,7 @@ def sumDistinct(col: "ColumnOrName") -> Column:
     return sum_distinct(col)
 
 
+@try_remote_functions
 def sum_distinct(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the sum of distinct values in the expression.
@@ -718,6 +735,7 @@ def sum_distinct(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("sum_distinct", col)
 
 
+@try_remote_functions
 def product(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the product of the values in a group.
@@ -750,6 +768,7 @@ def product(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("product", col)
 
 
+@try_remote_functions
 def acos(col: "ColumnOrName") -> Column:
     """
     Computes inverse cosine of the input column.
@@ -780,6 +799,7 @@ def acos(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("acos", col)
 
 
+@try_remote_functions
 def acosh(col: "ColumnOrName") -> Column:
     """
     Computes inverse hyperbolic cosine of the input column.
@@ -810,6 +830,7 @@ def acosh(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("acosh", col)
 
 
+@try_remote_functions
 def asin(col: "ColumnOrName") -> Column:
     """
     Computes inverse sine of the input column.
@@ -840,6 +861,7 @@ def asin(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("asin", col)
 
 
+@try_remote_functions
 def asinh(col: "ColumnOrName") -> Column:
     """
     Computes inverse hyperbolic sine of the input column.
@@ -869,6 +891,7 @@ def asinh(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("asinh", col)
 
 
+@try_remote_functions
 def atan(col: "ColumnOrName") -> Column:
     """
     Compute inverse tangent of the input column.
@@ -898,6 +921,7 @@ def atan(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("atan", col)
 
 
+@try_remote_functions
 def atanh(col: "ColumnOrName") -> Column:
     """
     Computes inverse hyperbolic tangent of the input column.
@@ -928,6 +952,7 @@ def atanh(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("atanh", col)
 
 
+@try_remote_functions
 def cbrt(col: "ColumnOrName") -> Column:
     """
     Computes the cube-root of the given value.
@@ -957,6 +982,7 @@ def cbrt(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("cbrt", col)
 
 
+@try_remote_functions
 def ceil(col: "ColumnOrName") -> Column:
     """
     Computes the ceiling of the given value.
@@ -986,6 +1012,7 @@ def ceil(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("ceil", col)
 
 
+@try_remote_functions
 def cos(col: "ColumnOrName") -> Column:
     """
     Computes cosine of the input column.
@@ -1012,6 +1039,7 @@ def cos(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("cos", col)
 
 
+@try_remote_functions
 def cosh(col: "ColumnOrName") -> Column:
     """
     Computes hyperbolic cosine of the input column.
@@ -1037,6 +1065,7 @@ def cosh(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("cosh", col)
 
 
+@try_remote_functions
 def cot(col: "ColumnOrName") -> Column:
     """
     Computes cotangent of the input column.
@@ -1063,6 +1092,7 @@ def cot(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("cot", col)
 
 
+@try_remote_functions
 def csc(col: "ColumnOrName") -> Column:
     """
     Computes cosecant of the input column.
@@ -1089,6 +1119,7 @@ def csc(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("csc", col)
 
 
+@try_remote_functions
 def exp(col: "ColumnOrName") -> Column:
     """
     Computes the exponential of the given value.
@@ -1118,6 +1149,7 @@ def exp(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("exp", col)
 
 
+@try_remote_functions
 def expm1(col: "ColumnOrName") -> Column:
     """
     Computes the exponential of the given value minus one.
@@ -1143,6 +1175,7 @@ def expm1(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("expm1", col)
 
 
+@try_remote_functions
 def floor(col: "ColumnOrName") -> Column:
     """
     Computes the floor of the given value.
@@ -1172,6 +1205,7 @@ def floor(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("floor", col)
 
 
+@try_remote_functions
 def log(col: "ColumnOrName") -> Column:
     """
     Computes the natural logarithm of the given value.
@@ -1198,6 +1232,7 @@ def log(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("log", col)
 
 
+@try_remote_functions
 def log10(col: "ColumnOrName") -> Column:
     """
     Computes the logarithm of the given value in Base 10.
@@ -1227,6 +1262,7 @@ def log10(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("log10", col)
 
 
+@try_remote_functions
 def log1p(col: "ColumnOrName") -> Column:
     """
     Computes the natural logarithm of the "given value plus one".
@@ -1258,6 +1294,7 @@ def log1p(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("log1p", col)
 
 
+@try_remote_functions
 def rint(col: "ColumnOrName") -> Column:
     """
     Returns the double value that is closest in value to the argument and
@@ -1295,6 +1332,7 @@ def rint(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("rint", col)
 
 
+@try_remote_functions
 def sec(col: "ColumnOrName") -> Column:
     """
     Computes secant of the input column.
@@ -1320,6 +1358,7 @@ def sec(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("sec", col)
 
 
+@try_remote_functions
 def signum(col: "ColumnOrName") -> Column:
     """
     Computes the signum of the given value.
@@ -1356,6 +1395,7 @@ def signum(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("signum", col)
 
 
+@try_remote_functions
 def sin(col: "ColumnOrName") -> Column:
     """
     Computes sine of the input column.
@@ -1382,6 +1422,7 @@ def sin(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("sin", col)
 
 
+@try_remote_functions
 def sinh(col: "ColumnOrName") -> Column:
     """
     Computes hyperbolic sine of the input column.
@@ -1408,6 +1449,7 @@ def sinh(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("sinh", col)
 
 
+@try_remote_functions
 def tan(col: "ColumnOrName") -> Column:
     """
     Computes tangent of the input column.
@@ -1434,6 +1476,7 @@ def tan(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("tan", col)
 
 
+@try_remote_functions
 def tanh(col: "ColumnOrName") -> Column:
     """
     Computes hyperbolic tangent of the input column.
@@ -1461,6 +1504,7 @@ def tanh(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("tanh", col)
 
 
+@try_remote_functions
 def toDegrees(col: "ColumnOrName") -> Column:
     """
     .. versionadded:: 1.4.0
@@ -1472,6 +1516,7 @@ def toDegrees(col: "ColumnOrName") -> Column:
     return degrees(col)
 
 
+@try_remote_functions
 def toRadians(col: "ColumnOrName") -> Column:
     """
     .. versionadded:: 1.4.0
@@ -1483,6 +1528,7 @@ def toRadians(col: "ColumnOrName") -> Column:
     return radians(col)
 
 
+@try_remote_functions
 def bitwiseNOT(col: "ColumnOrName") -> Column:
     """
     Computes bitwise not.
@@ -1496,6 +1542,7 @@ def bitwiseNOT(col: "ColumnOrName") -> Column:
     return bitwise_not(col)
 
 
+@try_remote_functions
 def bitwise_not(col: "ColumnOrName") -> Column:
     """
     Computes bitwise not.
@@ -1531,6 +1578,7 @@ def bitwise_not(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("bitwise_not", col)
 
 
+@try_remote_functions
 def asc_nulls_first(col: "ColumnOrName") -> Column:
     """
     Returns a sort expression based on the ascending order of the given
@@ -1570,6 +1618,7 @@ def asc_nulls_first(col: "ColumnOrName") -> Column:
     )
 
 
+@try_remote_functions
 def asc_nulls_last(col: "ColumnOrName") -> Column:
     """
     Returns a sort expression based on the ascending order of the given
@@ -1607,6 +1656,7 @@ def asc_nulls_last(col: "ColumnOrName") -> Column:
     )
 
 
+@try_remote_functions
 def desc_nulls_first(col: "ColumnOrName") -> Column:
     """
     Returns a sort expression based on the descending order of the given
@@ -1646,6 +1696,7 @@ def desc_nulls_first(col: "ColumnOrName") -> Column:
     )
 
 
+@try_remote_functions
 def desc_nulls_last(col: "ColumnOrName") -> Column:
     """
     Returns a sort expression based on the descending order of the given
@@ -1685,6 +1736,7 @@ def desc_nulls_last(col: "ColumnOrName") -> Column:
     )
 
 
+@try_remote_functions
 def stddev(col: "ColumnOrName") -> Column:
     """
     Aggregate function: alias for stddev_samp.
@@ -1710,6 +1762,7 @@ def stddev(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("stddev", col)
 
 
+@try_remote_functions
 def stddev_samp(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the unbiased sample standard deviation of
@@ -1736,6 +1789,7 @@ def stddev_samp(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("stddev_samp", col)
 
 
+@try_remote_functions
 def stddev_pop(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns population standard deviation of
@@ -1762,6 +1816,7 @@ def stddev_pop(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("stddev_pop", col)
 
 
+@try_remote_functions
 def variance(col: "ColumnOrName") -> Column:
     """
     Aggregate function: alias for var_samp
@@ -1791,6 +1846,7 @@ def variance(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("variance", col)
 
 
+@try_remote_functions
 def var_samp(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the unbiased sample variance of
@@ -1821,6 +1877,7 @@ def var_samp(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("var_samp", col)
 
 
+@try_remote_functions
 def var_pop(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the population variance of the values in a group.
@@ -1846,6 +1903,7 @@ def var_pop(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("var_pop", col)
 
 
+@try_remote_functions
 def skewness(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the skewness of the values in a group.
@@ -1871,6 +1929,7 @@ def skewness(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("skewness", col)
 
 
+@try_remote_functions
 def kurtosis(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the kurtosis of the values in a group.
@@ -1900,6 +1959,7 @@ def kurtosis(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("kurtosis", col)
 
 
+@try_remote_functions
 def collect_list(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns a list of objects with duplicates.
@@ -1930,6 +1990,7 @@ def collect_list(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("collect_list", col)
 
 
+@try_remote_functions
 def collect_set(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns a set of objects with duplicate elements eliminated.
@@ -1960,6 +2021,7 @@ def collect_set(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("collect_set", col)
 
 
+@try_remote_functions
 def degrees(col: "ColumnOrName") -> Column:
     """
     Converts an angle measured in radians to an approximately equivalent angle
@@ -1987,6 +2049,7 @@ def degrees(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("degrees", col)
 
 
+@try_remote_functions
 def radians(col: "ColumnOrName") -> Column:
     """
     Converts an angle measured in degrees to an approximately equivalent angle
@@ -2013,6 +2076,7 @@ def radians(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("radians", col)
 
 
+@try_remote_functions
 def atan2(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]) -> Column:
     """
     .. versionadded:: 1.4.0
@@ -2042,6 +2106,7 @@ def atan2(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]
     return _invoke_binary_math_function("atan2", col1, col2)
 
 
+@try_remote_functions
 def hypot(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]) -> Column:
     """
     Computes ``sqrt(a^2 + b^2)`` without intermediate overflow or underflow.
@@ -2069,6 +2134,7 @@ def hypot(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]
     return _invoke_binary_math_function("hypot", col1, col2)
 
 
+@try_remote_functions
 def pow(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]) -> Column:
     """
     Returns the value of the first argument raised to the power of the second argument.
@@ -2096,6 +2162,7 @@ def pow(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]) 
     return _invoke_binary_math_function("pow", col1, col2)
 
 
+@try_remote_functions
 def pmod(dividend: Union["ColumnOrName", float], divisor: Union["ColumnOrName", float]) -> Column:
     """
     Returns the positive value of dividend mod divisor.
@@ -2140,6 +2207,7 @@ def pmod(dividend: Union["ColumnOrName", float], divisor: Union["ColumnOrName", 
     return _invoke_binary_math_function("pmod", dividend, divisor)
 
 
+@try_remote_functions
 def row_number() -> Column:
     """
     Window function: returns a sequential number starting at 1 within a window partition.
@@ -2168,6 +2236,7 @@ def row_number() -> Column:
     return _invoke_function("row_number")
 
 
+@try_remote_functions
 def dense_rank() -> Column:
     """
     Window function: returns the rank of rows within a window partition, without any gaps.
@@ -2207,6 +2276,7 @@ def dense_rank() -> Column:
     return _invoke_function("dense_rank")
 
 
+@try_remote_functions
 def rank() -> Column:
     """
     Window function: returns the rank of rows within a window partition.
@@ -2246,6 +2316,7 @@ def rank() -> Column:
     return _invoke_function("rank")
 
 
+@try_remote_functions
 def cume_dist() -> Column:
     """
     Window function: returns the cumulative distribution of values within a window partition,
@@ -2277,6 +2348,7 @@ def cume_dist() -> Column:
     return _invoke_function("cume_dist")
 
 
+@try_remote_functions
 def percent_rank() -> Column:
     """
     Window function: returns the relative rank (i.e. percentile) of rows within a window partition.
@@ -2308,6 +2380,7 @@ def percent_rank() -> Column:
     return _invoke_function("percent_rank")
 
 
+@try_remote_functions
 def approxCountDistinct(col: "ColumnOrName", rsd: Optional[float] = None) -> Column:
     """
     .. versionadded:: 1.3.0
@@ -2319,6 +2392,7 @@ def approxCountDistinct(col: "ColumnOrName", rsd: Optional[float] = None) -> Col
     return approx_count_distinct(col, rsd)
 
 
+@try_remote_functions
 def approx_count_distinct(col: "ColumnOrName", rsd: Optional[float] = None) -> Column:
     """Aggregate function: returns a new :class:`~pyspark.sql.Column` for approximate distinct count
     of column `col`.
@@ -2353,6 +2427,7 @@ def approx_count_distinct(col: "ColumnOrName", rsd: Optional[float] = None) -> C
         return _invoke_function("approx_count_distinct", _to_java_column(col), rsd)
 
 
+@try_remote_functions
 def broadcast(df: DataFrame) -> DataFrame:
     """
     Marks a DataFrame as small enough for use in broadcast joins.
@@ -2384,6 +2459,7 @@ def broadcast(df: DataFrame) -> DataFrame:
     return DataFrame(sc._jvm.functions.broadcast(df._jdf), df.sparkSession)
 
 
+@try_remote_functions
 def coalesce(*cols: "ColumnOrName") -> Column:
     """Returns the first column that is not null.
 
@@ -2432,6 +2508,7 @@ def coalesce(*cols: "ColumnOrName") -> Column:
     return _invoke_function_over_seq_of_columns("coalesce", cols)
 
 
+@try_remote_functions
 def corr(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """Returns a new :class:`~pyspark.sql.Column` for the Pearson Correlation Coefficient for
     ``col1`` and ``col2``.
@@ -2461,6 +2538,7 @@ def corr(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("corr", col1, col2)
 
 
+@try_remote_functions
 def covar_pop(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """Returns a new :class:`~pyspark.sql.Column` for the population covariance of ``col1`` and
     ``col2``.
@@ -2490,6 +2568,7 @@ def covar_pop(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("covar_pop", col1, col2)
 
 
+@try_remote_functions
 def covar_samp(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """Returns a new :class:`~pyspark.sql.Column` for the sample covariance of ``col1`` and
     ``col2``.
@@ -2519,6 +2598,7 @@ def covar_samp(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("covar_samp", col1, col2)
 
 
+@try_remote_functions
 def countDistinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
     """Returns a new :class:`~pyspark.sql.Column` for distinct count of ``col`` or ``cols``.
 
@@ -2530,6 +2610,7 @@ def countDistinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
     return count_distinct(col, *cols)
 
 
+@try_remote_functions
 def count_distinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
     """Returns a new :class:`Column` for distinct count of ``col`` or ``cols``.
 
@@ -2577,6 +2658,7 @@ def count_distinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
     )
 
 
+@try_remote_functions
 def first(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     """Aggregate function: returns the first value in a group.
 
@@ -2627,6 +2709,7 @@ def first(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     return _invoke_function("first", _to_java_column(col), ignorenulls)
 
 
+@try_remote_functions
 def grouping(col: "ColumnOrName") -> Column:
     """
     Aggregate function: indicates whether a specified column in a GROUP BY list is aggregated
@@ -2659,6 +2742,7 @@ def grouping(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("grouping", col)
 
 
+@try_remote_functions
 def grouping_id(*cols: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the level of grouping, equals to
@@ -2703,6 +2787,7 @@ def grouping_id(*cols: "ColumnOrName") -> Column:
     return _invoke_function_over_seq_of_columns("grouping_id", cols)
 
 
+@try_remote_functions
 def input_file_name() -> Column:
     """
     Creates a string column for the file name of the current Spark task.
@@ -2725,6 +2810,7 @@ def input_file_name() -> Column:
     return _invoke_function("input_file_name")
 
 
+@try_remote_functions
 def isnan(col: "ColumnOrName") -> Column:
     """An expression that returns true if the column is NaN.
 
@@ -2754,6 +2840,7 @@ def isnan(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("isnan", col)
 
 
+@try_remote_functions
 def isnull(col: "ColumnOrName") -> Column:
     """An expression that returns true if the column is null.
 
@@ -2783,6 +2870,7 @@ def isnull(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("isnull", col)
 
 
+@try_remote_functions
 def last(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     """Aggregate function: returns the last value in a group.
 
@@ -2833,6 +2921,7 @@ def last(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     return _invoke_function("last", _to_java_column(col), ignorenulls)
 
 
+@try_remote_functions
 def monotonically_increasing_id() -> Column:
     """A column that generates monotonically increasing 64-bit integers.
 
@@ -2865,6 +2954,7 @@ def monotonically_increasing_id() -> Column:
     return _invoke_function("monotonically_increasing_id")
 
 
+@try_remote_functions
 def nanvl(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """Returns col1 if it is not NaN, or col2 if col1 is NaN.
 
@@ -2893,6 +2983,7 @@ def nanvl(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("nanvl", col1, col2)
 
 
+@try_remote_functions
 def percentile_approx(
     col: "ColumnOrName",
     percentage: Union[Column, float, List[float], Tuple[float]],
@@ -2967,6 +3058,7 @@ def percentile_approx(
     return _invoke_function("percentile_approx", _to_java_column(col), percentage, accuracy)
 
 
+@try_remote_functions
 def rand(seed: Optional[int] = None) -> Column:
     """Generates a random column with independent and identically distributed (i.i.d.) samples
     uniformly distributed in [0.0, 1.0).
@@ -3004,6 +3096,7 @@ def rand(seed: Optional[int] = None) -> Column:
         return _invoke_function("rand")
 
 
+@try_remote_functions
 def randn(seed: Optional[int] = None) -> Column:
     """Generates a column with independent and identically distributed (i.i.d.) samples from
     the standard normal distribution.
@@ -3041,6 +3134,7 @@ def randn(seed: Optional[int] = None) -> Column:
         return _invoke_function("randn")
 
 
+@try_remote_functions
 def round(col: "ColumnOrName", scale: int = 0) -> Column:
     """
     Round the given value to `scale` decimal places using HALF_UP rounding mode if `scale` >= 0
@@ -3068,6 +3162,7 @@ def round(col: "ColumnOrName", scale: int = 0) -> Column:
     return _invoke_function("round", _to_java_column(col), scale)
 
 
+@try_remote_functions
 def bround(col: "ColumnOrName", scale: int = 0) -> Column:
     """
     Round the given value to `scale` decimal places using HALF_EVEN rounding mode if `scale` >= 0
@@ -3095,6 +3190,7 @@ def bround(col: "ColumnOrName", scale: int = 0) -> Column:
     return _invoke_function("bround", _to_java_column(col), scale)
 
 
+@try_remote_functions
 def shiftLeft(col: "ColumnOrName", numBits: int) -> Column:
     """Shift the given value numBits left.
 
@@ -3107,6 +3203,7 @@ def shiftLeft(col: "ColumnOrName", numBits: int) -> Column:
     return shiftleft(col, numBits)
 
 
+@try_remote_functions
 def shiftleft(col: "ColumnOrName", numBits: int) -> Column:
     """Shift the given value numBits left.
 
@@ -3132,6 +3229,7 @@ def shiftleft(col: "ColumnOrName", numBits: int) -> Column:
     return _invoke_function("shiftleft", _to_java_column(col), numBits)
 
 
+@try_remote_functions
 def shiftRight(col: "ColumnOrName", numBits: int) -> Column:
     """(Signed) shift the given value numBits right.
 
@@ -3144,6 +3242,7 @@ def shiftRight(col: "ColumnOrName", numBits: int) -> Column:
     return shiftright(col, numBits)
 
 
+@try_remote_functions
 def shiftright(col: "ColumnOrName", numBits: int) -> Column:
     """(Signed) shift the given value numBits right.
 
@@ -3169,6 +3268,7 @@ def shiftright(col: "ColumnOrName", numBits: int) -> Column:
     return _invoke_function("shiftright", _to_java_column(col), numBits)
 
 
+@try_remote_functions
 def shiftRightUnsigned(col: "ColumnOrName", numBits: int) -> Column:
     """Unsigned shift the given value numBits right.
 
@@ -3181,6 +3281,7 @@ def shiftRightUnsigned(col: "ColumnOrName", numBits: int) -> Column:
     return shiftrightunsigned(col, numBits)
 
 
+@try_remote_functions
 def shiftrightunsigned(col: "ColumnOrName", numBits: int) -> Column:
     """Unsigned shift the given value numBits right.
 
@@ -3207,6 +3308,7 @@ def shiftrightunsigned(col: "ColumnOrName", numBits: int) -> Column:
     return _invoke_function("shiftrightunsigned", _to_java_column(col), numBits)
 
 
+@try_remote_functions
 def spark_partition_id() -> Column:
     """A column for partition ID.
 
@@ -3230,6 +3332,7 @@ def spark_partition_id() -> Column:
     return _invoke_function("spark_partition_id")
 
 
+@try_remote_functions
 def expr(str: str) -> Column:
     """Parses the expression string into the column that it represents
 
@@ -3269,6 +3372,7 @@ def struct(__cols: Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]) ->
     ...
 
 
+@try_remote_functions
 def struct(
     *cols: Union["ColumnOrName", Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]]
 ) -> Column:
@@ -3299,6 +3403,7 @@ def struct(
     return _invoke_function_over_seq_of_columns("struct", cols)  # type: ignore[arg-type]
 
 
+@try_remote_functions
 def greatest(*cols: "ColumnOrName") -> Column:
     """
     Returns the greatest value of the list of column names, skipping null values.
@@ -3327,6 +3432,7 @@ def greatest(*cols: "ColumnOrName") -> Column:
     return _invoke_function_over_seq_of_columns("greatest", cols)
 
 
+@try_remote_functions
 def least(*cols: "ColumnOrName") -> Column:
     """
     Returns the least value of the list of column names, skipping null values.
@@ -3355,6 +3461,7 @@ def least(*cols: "ColumnOrName") -> Column:
     return _invoke_function_over_seq_of_columns("least", cols)
 
 
+@try_remote_functions
 def when(condition: Column, value: Any) -> Column:
     """Evaluates a list of conditions and returns one of multiple possible result expressions.
     If :func:`pyspark.sql.Column.otherwise` is not invoked, None is returned for unmatched
@@ -3413,6 +3520,7 @@ def log(arg1: float, arg2: "ColumnOrName") -> Column:
     ...
 
 
+@try_remote_functions
 def log(arg1: Union["ColumnOrName", float], arg2: Optional["ColumnOrName"] = None) -> Column:
     """Returns the first argument-based logarithm of the second argument.
 
@@ -3461,6 +3569,7 @@ def log(arg1: Union["ColumnOrName", float], arg2: Optional["ColumnOrName"] = Non
         return _invoke_function("log", arg1, _to_java_column(arg2))
 
 
+@try_remote_functions
 def log2(col: "ColumnOrName") -> Column:
     """Returns the base-2 logarithm of the argument.
 
@@ -3489,6 +3598,7 @@ def log2(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("log2", col)
 
 
+@try_remote_functions
 def conv(col: "ColumnOrName", fromBase: int, toBase: int) -> Column:
     """
     Convert a number in a string column from one base to another.
@@ -3518,6 +3628,7 @@ def conv(col: "ColumnOrName", fromBase: int, toBase: int) -> Column:
     return _invoke_function("conv", _to_java_column(col), fromBase, toBase)
 
 
+@try_remote_functions
 def factorial(col: "ColumnOrName") -> Column:
     """
     Computes the factorial of the given value.
@@ -3546,6 +3657,7 @@ def factorial(col: "ColumnOrName") -> Column:
 # ---------------  Window functions ------------------------
 
 
+@try_remote_functions
 def lag(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) -> Column:
     """
     Window function: returns the value that is `offset` rows before the current row, and
@@ -3623,6 +3735,7 @@ def lag(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) -> 
     return _invoke_function("lag", _to_java_column(col), offset, default)
 
 
+@try_remote_functions
 def lead(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) -> Column:
     """
     Window function: returns the value that is `offset` rows after the current row, and
@@ -3700,6 +3813,7 @@ def lead(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) ->
     return _invoke_function("lead", _to_java_column(col), offset, default)
 
 
+@try_remote_functions
 def nth_value(col: "ColumnOrName", offset: int, ignoreNulls: Optional[bool] = False) -> Column:
     """
     Window function: returns the value that is the `offset`\\th row of the window frame
@@ -3770,6 +3884,7 @@ def nth_value(col: "ColumnOrName", offset: int, ignoreNulls: Optional[bool] = Fa
     return _invoke_function("nth_value", _to_java_column(col), offset, ignoreNulls)
 
 
+@try_remote_functions
 def ntile(n: int) -> Column:
     """
     Window function: returns the ntile group id (from 1 to `n` inclusive)
@@ -3827,6 +3942,7 @@ def ntile(n: int) -> Column:
 # ---------------------- Date/Timestamp functions ------------------------------
 
 
+@try_remote_functions
 def current_date() -> Column:
     """
     Returns the current date at the start of query evaluation as a :class:`DateType` column.
@@ -3852,6 +3968,7 @@ def current_date() -> Column:
     return _invoke_function("current_date")
 
 
+@try_remote_functions
 def current_timestamp() -> Column:
     """
     Returns the current timestamp at the start of query evaluation as a :class:`TimestampType`
@@ -3877,6 +3994,7 @@ def current_timestamp() -> Column:
     return _invoke_function("current_timestamp")
 
 
+@try_remote_functions
 def localtimestamp() -> Column:
     """
     Returns the current timestamp without time zone at the start of query evaluation
@@ -3903,6 +4021,7 @@ def localtimestamp() -> Column:
     return _invoke_function("localtimestamp")
 
 
+@try_remote_functions
 def date_format(date: "ColumnOrName", format: str) -> Column:
     """
     Converts a date/timestamp/string to a value of string in the format specified by the date
@@ -3940,6 +4059,7 @@ def date_format(date: "ColumnOrName", format: str) -> Column:
     return _invoke_function("date_format", _to_java_column(date), format)
 
 
+@try_remote_functions
 def year(col: "ColumnOrName") -> Column:
     """
     Extract the year of a given date/timestamp as integer.
@@ -3965,6 +4085,7 @@ def year(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("year", col)
 
 
+@try_remote_functions
 def quarter(col: "ColumnOrName") -> Column:
     """
     Extract the quarter of a given date/timestamp as integer.
@@ -3990,6 +4111,7 @@ def quarter(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("quarter", col)
 
 
+@try_remote_functions
 def month(col: "ColumnOrName") -> Column:
     """
     Extract the month of a given date/timestamp as integer.
@@ -4015,6 +4137,7 @@ def month(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("month", col)
 
 
+@try_remote_functions
 def dayofweek(col: "ColumnOrName") -> Column:
     """
     Extract the day of the week of a given date/timestamp as integer.
@@ -4041,6 +4164,7 @@ def dayofweek(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("dayofweek", col)
 
 
+@try_remote_functions
 def dayofmonth(col: "ColumnOrName") -> Column:
     """
     Extract the day of the month of a given date/timestamp as integer.
@@ -4066,6 +4190,7 @@ def dayofmonth(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("dayofmonth", col)
 
 
+@try_remote_functions
 def dayofyear(col: "ColumnOrName") -> Column:
     """
     Extract the day of the year of a given date/timestamp as integer.
@@ -4091,6 +4216,7 @@ def dayofyear(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("dayofyear", col)
 
 
+@try_remote_functions
 def hour(col: "ColumnOrName") -> Column:
     """
     Extract the hours of a given timestamp as integer.
@@ -4117,6 +4243,7 @@ def hour(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("hour", col)
 
 
+@try_remote_functions
 def minute(col: "ColumnOrName") -> Column:
     """
     Extract the minutes of a given timestamp as integer.
@@ -4143,6 +4270,7 @@ def minute(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("minute", col)
 
 
+@try_remote_functions
 def second(col: "ColumnOrName") -> Column:
     """
     Extract the seconds of a given date as integer.
@@ -4169,6 +4297,7 @@ def second(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("second", col)
 
 
+@try_remote_functions
 def weekofyear(col: "ColumnOrName") -> Column:
     """
     Extract the week number of a given date as integer.
@@ -4196,6 +4325,7 @@ def weekofyear(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("weekofyear", col)
 
 
+@try_remote_functions
 def make_date(year: "ColumnOrName", month: "ColumnOrName", day: "ColumnOrName") -> Column:
     """
     Returns a column with a date built from the year, month and day columns.
@@ -4225,6 +4355,7 @@ def make_date(year: "ColumnOrName", month: "ColumnOrName", day: "ColumnOrName") 
     return _invoke_function_over_columns("make_date", year, month, day)
 
 
+@try_remote_functions
 def date_add(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     """
     Returns the date that is `days` days after `start`. If `days` is a negative value
@@ -4259,6 +4390,7 @@ def date_add(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     return _invoke_function_over_columns("date_add", start, days)
 
 
+@try_remote_functions
 def date_sub(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     """
     Returns the date that is `days` days before `start`. If `days` is a negative value
@@ -4293,6 +4425,7 @@ def date_sub(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     return _invoke_function_over_columns("date_sub", start, days)
 
 
+@try_remote_functions
 def datediff(end: "ColumnOrName", start: "ColumnOrName") -> Column:
     """
     Returns the number of days from `start` to `end`.
@@ -4320,6 +4453,7 @@ def datediff(end: "ColumnOrName", start: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("datediff", end, start)
 
 
+@try_remote_functions
 def add_months(start: "ColumnOrName", months: Union["ColumnOrName", int]) -> Column:
     """
     Returns the date that is `months` months after `start`. If `months` is a negative value
@@ -4354,6 +4488,7 @@ def add_months(start: "ColumnOrName", months: Union["ColumnOrName", int]) -> Col
     return _invoke_function_over_columns("add_months", start, months)
 
 
+@try_remote_functions
 def months_between(date1: "ColumnOrName", date2: "ColumnOrName", roundOff: bool = True) -> Column:
     """
     Returns number of months between dates date1 and date2.
@@ -4391,6 +4526,7 @@ def months_between(date1: "ColumnOrName", date2: "ColumnOrName", roundOff: bool 
     )
 
 
+@try_remote_functions
 def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     """Converts a :class:`~pyspark.sql.Column` into :class:`pyspark.sql.types.DateType`
     using the optionally specified format. Specify formats according to `datetime pattern`_.
@@ -4439,6 +4575,7 @@ def to_timestamp(col: "ColumnOrName", format: str) -> Column:
     ...
 
 
+@try_remote_functions
 def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     """Converts a :class:`~pyspark.sql.Column` into :class:`pyspark.sql.types.TimestampType`
     using the optionally specified format. Specify formats according to `datetime pattern`_.
@@ -4477,6 +4614,7 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
         return _invoke_function("to_timestamp", _to_java_column(col), format)
 
 
+@try_remote_functions
 def trunc(date: "ColumnOrName", format: str) -> Column:
     """
     Returns date truncated to the unit specified by the format.
@@ -4508,6 +4646,7 @@ def trunc(date: "ColumnOrName", format: str) -> Column:
     return _invoke_function("trunc", _to_java_column(date), format)
 
 
+@try_remote_functions
 def date_trunc(format: str, timestamp: "ColumnOrName") -> Column:
     """
     Returns timestamp truncated to the unit specified by the format.
@@ -4541,6 +4680,7 @@ def date_trunc(format: str, timestamp: "ColumnOrName") -> Column:
     return _invoke_function("date_trunc", format, _to_java_column(timestamp))
 
 
+@try_remote_functions
 def next_day(date: "ColumnOrName", dayOfWeek: str) -> Column:
     """
     Returns the first date which is later than the value of the date column
@@ -4570,6 +4710,7 @@ def next_day(date: "ColumnOrName", dayOfWeek: str) -> Column:
     return _invoke_function("next_day", _to_java_column(date), dayOfWeek)
 
 
+@try_remote_functions
 def last_day(date: "ColumnOrName") -> Column:
     """
     Returns the last day of the month which the given date belongs to.
@@ -4595,6 +4736,7 @@ def last_day(date: "ColumnOrName") -> Column:
     return _invoke_function("last_day", _to_java_column(date))
 
 
+@try_remote_functions
 def from_unixtime(timestamp: "ColumnOrName", format: str = "yyyy-MM-dd HH:mm:ss") -> Column:
     """
     Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC) to a string
@@ -4636,6 +4778,7 @@ def unix_timestamp() -> Column:
     ...
 
 
+@try_remote_functions
 def unix_timestamp(
     timestamp: Optional["ColumnOrName"] = None, format: str = "yyyy-MM-dd HH:mm:ss"
 ) -> Column:
@@ -4673,6 +4816,7 @@ def unix_timestamp(
     return _invoke_function("unix_timestamp", _to_java_column(timestamp), format)
 
 
+@try_remote_functions
 def from_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
     """
     This is a common function for databases supporting TIMESTAMP WITHOUT TIMEZONE. This function
@@ -4723,6 +4867,7 @@ def from_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
     return _invoke_function("from_utc_timestamp", _to_java_column(timestamp), tz)
 
 
+@try_remote_functions
 def to_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
     """
     This is a common function for databases supporting TIMESTAMP WITHOUT TIMEZONE. This function
@@ -4773,6 +4918,7 @@ def to_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
     return _invoke_function("to_utc_timestamp", _to_java_column(timestamp), tz)
 
 
+@try_remote_functions
 def timestamp_seconds(col: "ColumnOrName") -> Column:
     """
     Converts the number of seconds from the Unix epoch (1970-01-01T00:00:00Z)
@@ -4810,6 +4956,7 @@ def timestamp_seconds(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("timestamp_seconds", col)
 
 
+@try_remote_functions
 def window(
     timeColumn: "ColumnOrName",
     windowDuration: str,
@@ -4896,6 +5043,7 @@ def window(
         return _invoke_function("window", time_col, windowDuration)
 
 
+@try_remote_functions
 def window_time(
     windowColumn: "ColumnOrName",
 ) -> Column:
@@ -4942,6 +5090,7 @@ def window_time(
     return _invoke_function("window_time", window_col)
 
 
+@try_remote_functions
 def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) -> Column:
     """
     Generates session window given a timestamp specifying column.
@@ -5003,6 +5152,7 @@ def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) 
 # ---------------------------- misc functions ----------------------------------
 
 
+@try_remote_functions
 def crc32(col: "ColumnOrName") -> Column:
     """
     Calculates the cyclic redundancy check value  (CRC32) of a binary column and
@@ -5028,6 +5178,7 @@ def crc32(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("crc32", col)
 
 
+@try_remote_functions
 def md5(col: "ColumnOrName") -> Column:
     """Calculates the MD5 digest and returns the value as a 32 character hex string.
 
@@ -5051,6 +5202,7 @@ def md5(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("md5", col)
 
 
+@try_remote_functions
 def sha1(col: "ColumnOrName") -> Column:
     """Returns the hex string result of SHA-1.
 
@@ -5074,6 +5226,7 @@ def sha1(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("sha1", col)
 
 
+@try_remote_functions
 def sha2(col: "ColumnOrName", numBits: int) -> Column:
     """Returns the hex string result of SHA-2 family of hash functions (SHA-224, SHA-256, SHA-384,
     and SHA-512). The numBits indicates the desired bit length of the result, which must have a
@@ -5108,6 +5261,7 @@ def sha2(col: "ColumnOrName", numBits: int) -> Column:
     return _invoke_function("sha2", _to_java_column(col), numBits)
 
 
+@try_remote_functions
 def hash(*cols: "ColumnOrName") -> Column:
     """Calculates the hash code of given columns, and returns the result as an int column.
 
@@ -5148,6 +5302,7 @@ def hash(*cols: "ColumnOrName") -> Column:
     return _invoke_function_over_seq_of_columns("hash", cols)
 
 
+@try_remote_functions
 def xxhash64(*cols: "ColumnOrName") -> Column:
     """Calculates the hash code of given columns using the 64-bit variant of the xxHash algorithm,
     and returns the result as a long column. The hash computation uses an initial seed of 42.
@@ -5189,6 +5344,7 @@ def xxhash64(*cols: "ColumnOrName") -> Column:
     return _invoke_function_over_seq_of_columns("xxhash64", cols)
 
 
+@try_remote_functions
 def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None) -> Column:
     """
     Returns `null` if the input column is `true`; throws an exception
@@ -5233,6 +5389,7 @@ def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None
     return _invoke_function("assert_true", _to_java_column(col), errMsg)
 
 
+@try_remote_functions
 def raise_error(errMsg: Union[Column, str]) -> Column:
     """
     Throws an exception with the provided error message.
@@ -5269,6 +5426,7 @@ def raise_error(errMsg: Union[Column, str]) -> Column:
 # ---------------------- String/Binary functions ------------------------------
 
 
+@try_remote_functions
 def upper(col: "ColumnOrName") -> Column:
     """
     Converts a string expression to upper case.
@@ -5300,6 +5458,7 @@ def upper(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("upper", col)
 
 
+@try_remote_functions
 def lower(col: "ColumnOrName") -> Column:
     """
     Converts a string expression to lower case.
@@ -5331,6 +5490,7 @@ def lower(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("lower", col)
 
 
+@try_remote_functions
 def ascii(col: "ColumnOrName") -> Column:
     """
     Computes the numeric value of the first character of the string column.
@@ -5362,6 +5522,7 @@ def ascii(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("ascii", col)
 
 
+@try_remote_functions
 def base64(col: "ColumnOrName") -> Column:
     """
     Computes the BASE64 encoding of a binary column and returns it as a string column.
@@ -5393,6 +5554,7 @@ def base64(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("base64", col)
 
 
+@try_remote_functions
 def unbase64(col: "ColumnOrName") -> Column:
     """
     Decodes a BASE64 encoded string column and returns it as a binary column.
@@ -5426,6 +5588,7 @@ def unbase64(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("unbase64", col)
 
 
+@try_remote_functions
 def ltrim(col: "ColumnOrName") -> Column:
     """
     Trim the spaces from left end for the specified string value.
@@ -5457,6 +5620,7 @@ def ltrim(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("ltrim", col)
 
 
+@try_remote_functions
 def rtrim(col: "ColumnOrName") -> Column:
     """
     Trim the spaces from right end for the specified string value.
@@ -5488,6 +5652,7 @@ def rtrim(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("rtrim", col)
 
 
+@try_remote_functions
 def trim(col: "ColumnOrName") -> Column:
     """
     Trim the spaces from both ends for the specified string column.
@@ -5519,6 +5684,7 @@ def trim(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("trim", col)
 
 
+@try_remote_functions
 def concat_ws(sep: str, *cols: "ColumnOrName") -> Column:
     """
     Concatenates multiple input string columns together into a single string column,
@@ -5549,6 +5715,7 @@ def concat_ws(sep: str, *cols: "ColumnOrName") -> Column:
     return _invoke_function("concat_ws", sep, _to_seq(sc, cols, _to_java_column))
 
 
+@try_remote_functions
 def decode(col: "ColumnOrName", charset: str) -> Column:
     """
     Computes the first argument into a string from a binary using the provided character set
@@ -5581,6 +5748,7 @@ def decode(col: "ColumnOrName", charset: str) -> Column:
     return _invoke_function("decode", _to_java_column(col), charset)
 
 
+@try_remote_functions
 def encode(col: "ColumnOrName", charset: str) -> Column:
     """
     Computes the first argument into a binary from a string using the provided character set
@@ -5613,6 +5781,7 @@ def encode(col: "ColumnOrName", charset: str) -> Column:
     return _invoke_function("encode", _to_java_column(col), charset)
 
 
+@try_remote_functions
 def format_number(col: "ColumnOrName", d: int) -> Column:
     """
     Formats the number X to a format like '#,--#,--#.--', rounded to d decimal places
@@ -5638,6 +5807,7 @@ def format_number(col: "ColumnOrName", d: int) -> Column:
     return _invoke_function("format_number", _to_java_column(col), d)
 
 
+@try_remote_functions
 def format_string(format: str, *cols: "ColumnOrName") -> Column:
     """
     Formats the arguments in printf-style and returns the result as a string column.
@@ -5667,6 +5837,7 @@ def format_string(format: str, *cols: "ColumnOrName") -> Column:
     return _invoke_function("format_string", format, _to_seq(sc, cols, _to_java_column))
 
 
+@try_remote_functions
 def instr(str: "ColumnOrName", substr: str) -> Column:
     """
     Locate the position of the first occurrence of substr column in the given string.
@@ -5700,6 +5871,7 @@ def instr(str: "ColumnOrName", substr: str) -> Column:
     return _invoke_function("instr", _to_java_column(str), substr)
 
 
+@try_remote_functions
 def overlay(
     src: "ColumnOrName",
     replace: "ColumnOrName",
@@ -5750,6 +5922,7 @@ def overlay(
     return _invoke_function("overlay", _to_java_column(src), _to_java_column(replace), pos, len)
 
 
+@try_remote_functions
 def sentences(
     string: "ColumnOrName",
     language: Optional["ColumnOrName"] = None,
@@ -5800,6 +5973,7 @@ def sentences(
     return _invoke_function_over_columns("sentences", string, language, country)
 
 
+@try_remote_functions
 def substring(str: "ColumnOrName", pos: int, len: int) -> Column:
     """
     Substring starts at `pos` and is of length `len` when str is String type or
@@ -5835,6 +6009,7 @@ def substring(str: "ColumnOrName", pos: int, len: int) -> Column:
     return _invoke_function("substring", _to_java_column(str), pos, len)
 
 
+@try_remote_functions
 def substring_index(str: "ColumnOrName", delim: str, count: int) -> Column:
     """
     Returns the substring from string str before count occurrences of the delimiter delim.
@@ -5869,6 +6044,7 @@ def substring_index(str: "ColumnOrName", delim: str, count: int) -> Column:
     return _invoke_function("substring_index", _to_java_column(str), delim, count)
 
 
+@try_remote_functions
 def levenshtein(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     """Computes the Levenshtein distance of the two given strings.
 
@@ -5895,6 +6071,7 @@ def levenshtein(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("levenshtein", left, right)
 
 
+@try_remote_functions
 def locate(substr: str, str: "ColumnOrName", pos: int = 1) -> Column:
     """
     Locate the position of the first occurrence of substr in a string column, after position pos.
@@ -5929,6 +6106,7 @@ def locate(substr: str, str: "ColumnOrName", pos: int = 1) -> Column:
     return _invoke_function("locate", substr, _to_java_column(str), pos)
 
 
+@try_remote_functions
 def lpad(col: "ColumnOrName", len: int, pad: str) -> Column:
     """
     Left-pad the string column to width `len` with `pad`.
@@ -5958,6 +6136,7 @@ def lpad(col: "ColumnOrName", len: int, pad: str) -> Column:
     return _invoke_function("lpad", _to_java_column(col), len, pad)
 
 
+@try_remote_functions
 def rpad(col: "ColumnOrName", len: int, pad: str) -> Column:
     """
     Right-pad the string column to width `len` with `pad`.
@@ -5987,6 +6166,7 @@ def rpad(col: "ColumnOrName", len: int, pad: str) -> Column:
     return _invoke_function("rpad", _to_java_column(col), len, pad)
 
 
+@try_remote_functions
 def repeat(col: "ColumnOrName", n: int) -> Column:
     """
     Repeats a string column n times, and returns it as a new string column.
@@ -6014,6 +6194,7 @@ def repeat(col: "ColumnOrName", n: int) -> Column:
     return _invoke_function("repeat", _to_java_column(col), n)
 
 
+@try_remote_functions
 def split(str: "ColumnOrName", pattern: str, limit: int = -1) -> Column:
     """
     Splits str around matches of the given pattern.
@@ -6055,6 +6236,7 @@ def split(str: "ColumnOrName", pattern: str, limit: int = -1) -> Column:
     return _invoke_function("split", _to_java_column(str), pattern, limit)
 
 
+@try_remote_functions
 def regexp_extract(str: "ColumnOrName", pattern: str, idx: int) -> Column:
     r"""Extract a specific group matched by a Java regex, from the specified string column.
     If the regex did not match, or the specified group did not match, an empty string is returned.
@@ -6090,6 +6272,7 @@ def regexp_extract(str: "ColumnOrName", pattern: str, idx: int) -> Column:
     return _invoke_function("regexp_extract", _to_java_column(str), pattern, idx)
 
 
+@try_remote_functions
 def regexp_replace(
     string: "ColumnOrName", pattern: Union[str, Column], replacement: Union[str, Column]
 ) -> Column:
@@ -6130,6 +6313,7 @@ def regexp_replace(
     return _invoke_function("regexp_replace", _to_java_column(string), pattern_col, replacement_col)
 
 
+@try_remote_functions
 def initcap(col: "ColumnOrName") -> Column:
     """Translate the first letter of each word to upper case in the sentence.
 
@@ -6153,6 +6337,7 @@ def initcap(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("initcap", col)
 
 
+@try_remote_functions
 def soundex(col: "ColumnOrName") -> Column:
     """
     Returns the SoundEx encoding for a string
@@ -6178,6 +6363,7 @@ def soundex(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("soundex", col)
 
 
+@try_remote_functions
 def bin(col: "ColumnOrName") -> Column:
     """Returns the string representation of the binary value of the given column.
 
@@ -6202,6 +6388,7 @@ def bin(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("bin", col)
 
 
+@try_remote_functions
 def hex(col: "ColumnOrName") -> Column:
     """Computes hex value of the given column, which could be :class:`pyspark.sql.types.StringType`,
     :class:`pyspark.sql.types.BinaryType`, :class:`pyspark.sql.types.IntegerType` or
@@ -6227,6 +6414,7 @@ def hex(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("hex", col)
 
 
+@try_remote_functions
 def unhex(col: "ColumnOrName") -> Column:
     """Inverse of hex. Interprets each pair of characters as a hexadecimal number
     and converts to the byte representation of number.
@@ -6251,6 +6439,7 @@ def unhex(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("unhex", col)
 
 
+@try_remote_functions
 def length(col: "ColumnOrName") -> Column:
     """Computes the character length of string data or number of bytes of binary data.
     The length of character data includes the trailing spaces. The length of binary data
@@ -6276,6 +6465,7 @@ def length(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("length", col)
 
 
+@try_remote_functions
 def octet_length(col: "ColumnOrName") -> Column:
     """
     Calculates the byte length for the specified string column.
@@ -6302,6 +6492,7 @@ def octet_length(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("octet_length", col)
 
 
+@try_remote_functions
 def bit_length(col: "ColumnOrName") -> Column:
     """
     Calculates the bit length for the specified string column.
@@ -6328,6 +6519,7 @@ def bit_length(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("bit_length", col)
 
 
+@try_remote_functions
 def translate(srcCol: "ColumnOrName", matching: str, replace: str) -> Column:
     """A function translate any character in the `srcCol` by a character in `matching`.
     The characters in `replace` is corresponding to the characters in `matching`.
@@ -6373,6 +6565,7 @@ def create_map(__cols: Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]
     ...
 
 
+@try_remote_functions
 def create_map(
     *cols: Union["ColumnOrName", Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]]
 ) -> Column:
@@ -6399,6 +6592,7 @@ def create_map(
     return _invoke_function_over_seq_of_columns("map", cols)  # type: ignore[arg-type]
 
 
+@try_remote_functions
 def map_from_arrays(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """Creates a new map from two arrays.
 
@@ -6445,6 +6639,7 @@ def array(__cols: Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]) -> 
     ...
 
 
+@try_remote_functions
 def array(
     *cols: Union["ColumnOrName", Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]]
 ) -> Column:
@@ -6480,6 +6675,7 @@ def array(
     return _invoke_function_over_seq_of_columns("array", cols)  # type: ignore[arg-type]
 
 
+@try_remote_functions
 def array_contains(col: "ColumnOrName", value: Any) -> Column:
     """
     Collection function: returns null if the array is null, true if the array contains the
@@ -6511,6 +6707,7 @@ def array_contains(col: "ColumnOrName", value: Any) -> Column:
     return _invoke_function("array_contains", _to_java_column(col), value)
 
 
+@try_remote_functions
 def arrays_overlap(a1: "ColumnOrName", a2: "ColumnOrName") -> Column:
     """
     Collection function: returns true if the arrays contain any common non-null element; if not,
@@ -6533,6 +6730,7 @@ def arrays_overlap(a1: "ColumnOrName", a2: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("arrays_overlap", a1, a2)
 
 
+@try_remote_functions
 def slice(
     x: "ColumnOrName", start: Union["ColumnOrName", int], length: Union["ColumnOrName", int]
 ) -> Column:
@@ -6568,6 +6766,7 @@ def slice(
     return _invoke_function_over_columns("slice", x, start, length)
 
 
+@try_remote_functions
 def array_join(
     col: "ColumnOrName", delimiter: str, null_replacement: Optional[str] = None
 ) -> Column:
@@ -6607,6 +6806,7 @@ def array_join(
         return _invoke_function("array_join", _to_java_column(col), delimiter, null_replacement)
 
 
+@try_remote_functions
 def concat(*cols: "ColumnOrName") -> Column:
     """
     Concatenates multiple input columns together into a single column.
@@ -6647,6 +6847,7 @@ def concat(*cols: "ColumnOrName") -> Column:
     return _invoke_function_over_seq_of_columns("concat", cols)
 
 
+@try_remote_functions
 def array_position(col: "ColumnOrName", value: Any) -> Column:
     """
     Collection function: Locates the position of the first occurrence of the given value
@@ -6680,6 +6881,7 @@ def array_position(col: "ColumnOrName", value: Any) -> Column:
     return _invoke_function("array_position", _to_java_column(col), value)
 
 
+@try_remote_functions
 def element_at(col: "ColumnOrName", extraction: Any) -> Column:
     """
     Collection function: Returns element of array at given index in `extraction` if col is array.
@@ -6724,6 +6926,7 @@ def element_at(col: "ColumnOrName", extraction: Any) -> Column:
     return _invoke_function_over_columns("element_at", col, lit(extraction))
 
 
+@try_remote_functions
 def get(col: "ColumnOrName", index: Union["ColumnOrName", int]) -> Column:
     """
     Collection function: Returns element of array at given (0-based) index.
@@ -6795,6 +6998,7 @@ def get(col: "ColumnOrName", index: Union["ColumnOrName", int]) -> Column:
     return _invoke_function_over_columns("get", col, index)
 
 
+@try_remote_functions
 def array_remove(col: "ColumnOrName", element: Any) -> Column:
     """
     Collection function: Remove all elements that equal to element from the given array.
@@ -6822,6 +7026,7 @@ def array_remove(col: "ColumnOrName", element: Any) -> Column:
     return _invoke_function("array_remove", _to_java_column(col), element)
 
 
+@try_remote_functions
 def array_distinct(col: "ColumnOrName") -> Column:
     """
     Collection function: removes duplicate values from the array.
@@ -6847,6 +7052,7 @@ def array_distinct(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("array_distinct", col)
 
 
+@try_remote_functions
 def array_intersect(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """
     Collection function: returns an array of the elements in the intersection of col1 and col2,
@@ -6876,6 +7082,7 @@ def array_intersect(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("array_intersect", col1, col2)
 
 
+@try_remote_functions
 def array_union(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """
     Collection function: returns an array of the elements in the union of col1 and col2,
@@ -6905,6 +7112,7 @@ def array_union(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("array_union", col1, col2)
 
 
+@try_remote_functions
 def array_except(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """
     Collection function: returns an array of the elements in col1 but not in col2,
@@ -6934,6 +7142,7 @@ def array_except(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("array_except", col1, col2)
 
 
+@try_remote_functions
 def explode(col: "ColumnOrName") -> Column:
     """
     Returns a new row for each element in the given array or map.
@@ -6975,6 +7184,7 @@ def explode(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("explode", col)
 
 
+@try_remote_functions
 def posexplode(col: "ColumnOrName") -> Column:
     """
     Returns a new row for each element with position in the given array or map.
@@ -7010,6 +7220,7 @@ def posexplode(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("posexplode", col)
 
 
+@try_remote_functions
 def inline(col: "ColumnOrName") -> Column:
     """
     Explodes an array of structs into a table.
@@ -7045,6 +7256,7 @@ def inline(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("inline", col)
 
 
+@try_remote_functions
 def explode_outer(col: "ColumnOrName") -> Column:
     """
     Returns a new row for each element in the given array or map.
@@ -7092,6 +7304,7 @@ def explode_outer(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("explode_outer", col)
 
 
+@try_remote_functions
 def posexplode_outer(col: "ColumnOrName") -> Column:
     """
     Returns a new row for each element with position in the given array or map.
@@ -7138,6 +7351,7 @@ def posexplode_outer(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("posexplode_outer", col)
 
 
+@try_remote_functions
 def inline_outer(col: "ColumnOrName") -> Column:
     """
     Explodes an array of structs into a table.
@@ -7179,6 +7393,7 @@ def inline_outer(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("inline_outer", col)
 
 
+@try_remote_functions
 def get_json_object(col: "ColumnOrName", path: str) -> Column:
     """
     Extracts json object from a json string based on json `path` specified, and returns json string
@@ -7209,6 +7424,7 @@ def get_json_object(col: "ColumnOrName", path: str) -> Column:
     return _invoke_function("get_json_object", _to_java_column(col), path)
 
 
+@try_remote_functions
 def json_tuple(col: "ColumnOrName", *fields: str) -> Column:
     """Creates a new row for a json column according to the given field names.
 
@@ -7238,6 +7454,7 @@ def json_tuple(col: "ColumnOrName", *fields: str) -> Column:
     return _invoke_function("json_tuple", _to_java_column(col), _to_seq(sc, fields))
 
 
+@try_remote_functions
 def from_json(
     col: "ColumnOrName",
     schema: Union[ArrayType, StructType, Column, str],
@@ -7303,6 +7520,7 @@ def from_json(
     return _invoke_function("from_json", _to_java_column(col), schema, _options_to_str(options))
 
 
+@try_remote_functions
 def to_json(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
     """
     Converts a column containing a :class:`StructType`, :class:`ArrayType` or a :class:`MapType`
@@ -7357,6 +7575,7 @@ def to_json(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Co
     return _invoke_function("to_json", _to_java_column(col), _options_to_str(options))
 
 
+@try_remote_functions
 def schema_of_json(json: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
     """
     Parses a JSON string and infers its schema in DDL format.
@@ -7401,6 +7620,7 @@ def schema_of_json(json: "ColumnOrName", options: Optional[Dict[str, str]] = Non
     return _invoke_function("schema_of_json", col, _options_to_str(options))
 
 
+@try_remote_functions
 def schema_of_csv(csv: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
     """
     Parses a CSV string and infers its schema in DDL format.
@@ -7441,6 +7661,7 @@ def schema_of_csv(csv: "ColumnOrName", options: Optional[Dict[str, str]] = None)
     return _invoke_function("schema_of_csv", col, _options_to_str(options))
 
 
+@try_remote_functions
 def to_csv(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
     """
     Converts a column containing a :class:`StructType` into a CSV string.
@@ -7476,6 +7697,7 @@ def to_csv(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Col
     return _invoke_function("to_csv", _to_java_column(col), _options_to_str(options))
 
 
+@try_remote_functions
 def size(col: "ColumnOrName") -> Column:
     """
     Collection function: returns the length of the array or map stored in the column.
@@ -7501,6 +7723,7 @@ def size(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("size", col)
 
 
+@try_remote_functions
 def array_min(col: "ColumnOrName") -> Column:
     """
     Collection function: returns the minimum value of the array.
@@ -7526,6 +7749,7 @@ def array_min(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("array_min", col)
 
 
+@try_remote_functions
 def array_max(col: "ColumnOrName") -> Column:
     """
     Collection function: returns the maximum value of the array.
@@ -7551,6 +7775,7 @@ def array_max(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("array_max", col)
 
 
+@try_remote_functions
 def sort_array(col: "ColumnOrName", asc: bool = True) -> Column:
     """
     Collection function: sorts the input array in ascending or descending order according
@@ -7584,6 +7809,7 @@ def sort_array(col: "ColumnOrName", asc: bool = True) -> Column:
     return _invoke_function("sort_array", _to_java_column(col), asc)
 
 
+@try_remote_functions
 def array_sort(
     col: "ColumnOrName", comparator: Optional[Callable[[Column, Column], Column]] = None
 ) -> Column:
@@ -7629,6 +7855,7 @@ def array_sort(
         return _invoke_higher_order_function("ArraySort", [col], [comparator])
 
 
+@try_remote_functions
 def shuffle(col: "ColumnOrName") -> Column:
     """
     Collection function: Generates a random permutation of the given array.
@@ -7658,6 +7885,7 @@ def shuffle(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("shuffle", col)
 
 
+@try_remote_functions
 def reverse(col: "ColumnOrName") -> Column:
     """
     Collection function: returns a reversed string or an array with reverse order of elements.
@@ -7686,6 +7914,7 @@ def reverse(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("reverse", col)
 
 
+@try_remote_functions
 def flatten(col: "ColumnOrName") -> Column:
     """
     Collection function: creates a single array from an array of arrays.
@@ -7725,6 +7954,7 @@ def flatten(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("flatten", col)
 
 
+@try_remote_functions
 def map_contains_key(col: "ColumnOrName", value: Any) -> Column:
     """
     Returns true if the map contains the key.
@@ -7763,6 +7993,7 @@ def map_contains_key(col: "ColumnOrName", value: Any) -> Column:
     return _invoke_function("map_contains_key", _to_java_column(col), value)
 
 
+@try_remote_functions
 def map_keys(col: "ColumnOrName") -> Column:
     """
     Collection function: Returns an unordered array containing the keys of the map.
@@ -7793,6 +8024,7 @@ def map_keys(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("map_keys", col)
 
 
+@try_remote_functions
 def map_values(col: "ColumnOrName") -> Column:
     """
     Collection function: Returns an unordered array containing the values of the map.
@@ -7823,6 +8055,7 @@ def map_values(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("map_values", col)
 
 
+@try_remote_functions
 def map_entries(col: "ColumnOrName") -> Column:
     """
     Collection function: Returns an unordered array of all entries in the given map.
@@ -7860,6 +8093,7 @@ def map_entries(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("map_entries", col)
 
 
+@try_remote_functions
 def map_from_entries(col: "ColumnOrName") -> Column:
     """
     Collection function: Converts an array of entries (key value struct types) to a map
@@ -7891,6 +8125,7 @@ def map_from_entries(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("map_from_entries", col)
 
 
+@try_remote_functions
 def array_repeat(col: "ColumnOrName", count: Union["ColumnOrName", int]) -> Column:
     """
     Collection function: creates an array containing a column repeated count times.
@@ -7920,6 +8155,7 @@ def array_repeat(col: "ColumnOrName", count: Union["ColumnOrName", int]) -> Colu
     return _invoke_function_over_columns("array_repeat", col, count)
 
 
+@try_remote_functions
 def arrays_zip(*cols: "ColumnOrName") -> Column:
     """
     Collection function: Returns a merged array of structs in which the N-th struct contains all
@@ -7970,6 +8206,7 @@ def map_concat(__cols: Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]
     ...
 
 
+@try_remote_functions
 def map_concat(
     *cols: Union["ColumnOrName", Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]]
 ) -> Column:
@@ -8003,6 +8240,7 @@ def map_concat(
     return _invoke_function_over_seq_of_columns("map_concat", cols)  # type: ignore[arg-type]
 
 
+@try_remote_functions
 def sequence(
     start: "ColumnOrName", stop: "ColumnOrName", step: Optional["ColumnOrName"] = None
 ) -> Column:
@@ -8042,6 +8280,7 @@ def sequence(
         return _invoke_function_over_columns("sequence", start, stop, step)
 
 
+@try_remote_functions
 def from_csv(
     col: "ColumnOrName",
     schema: Union[Column, str],
@@ -8215,6 +8454,7 @@ def transform(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Col
     ...
 
 
+@try_remote_functions
 def transform(
     col: "ColumnOrName",
     f: Union[Callable[[Column], Column], Callable[[Column, Column], Column]],
@@ -8268,6 +8508,7 @@ def transform(
     return _invoke_higher_order_function("ArrayTransform", [col], [f])
 
 
+@try_remote_functions
 def exists(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column:
     """
     Returns whether a predicate holds for one or more elements in the array.
@@ -8305,6 +8546,7 @@ def exists(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column:
     return _invoke_higher_order_function("ArrayExists", [col], [f])
 
 
+@try_remote_functions
 def forall(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column:
     """
     Returns whether a predicate holds for every element in the array.
@@ -8356,6 +8598,7 @@ def filter(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Column
     ...
 
 
+@try_remote_functions
 def filter(
     col: "ColumnOrName",
     f: Union[Callable[[Column], Column], Callable[[Column, Column], Column]],
@@ -8408,6 +8651,7 @@ def filter(
     return _invoke_higher_order_function("ArrayFilter", [col], [f])
 
 
+@try_remote_functions
 def aggregate(
     col: "ColumnOrName",
     initialValue: "ColumnOrName",
@@ -8479,6 +8723,7 @@ def aggregate(
         return _invoke_higher_order_function("ArrayAggregate", [col, initialValue], [merge])
 
 
+@try_remote_functions
 def zip_with(
     left: "ColumnOrName",
     right: "ColumnOrName",
@@ -8530,6 +8775,7 @@ def zip_with(
     return _invoke_higher_order_function("ZipWith", [left, right], [f])
 
 
+@try_remote_functions
 def transform_keys(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Column:
     """
     Applies a function to every key-value pair in a map and returns
@@ -8569,6 +8815,7 @@ def transform_keys(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -
     return _invoke_higher_order_function("TransformKeys", [col], [f])
 
 
+@try_remote_functions
 def transform_values(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Column:
     """
     Applies a function to every key-value pair in a map and returns
@@ -8608,6 +8855,7 @@ def transform_values(col: "ColumnOrName", f: Callable[[Column, Column], Column])
     return _invoke_higher_order_function("TransformValues", [col], [f])
 
 
+@try_remote_functions
 def map_filter(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Column:
     """
     Returns a map whose key-value pairs satisfy a predicate.
@@ -8645,6 +8893,7 @@ def map_filter(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Co
     return _invoke_higher_order_function("MapFilter", [col], [f])
 
 
+@try_remote_functions
 def map_zip_with(
     col1: "ColumnOrName",
     col2: "ColumnOrName",
@@ -8695,6 +8944,7 @@ def map_zip_with(
 # ---------------------- Partition transform functions --------------------------------
 
 
+@try_remote_functions
 def years(col: "ColumnOrName") -> Column:
     """
     Partition transform function: A transform for timestamps and dates
@@ -8728,6 +8978,7 @@ def years(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("years", col)
 
 
+@try_remote_functions
 def months(col: "ColumnOrName") -> Column:
     """
     Partition transform function: A transform for timestamps and dates
@@ -8761,6 +9012,7 @@ def months(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("months", col)
 
 
+@try_remote_functions
 def days(col: "ColumnOrName") -> Column:
     """
     Partition transform function: A transform for timestamps and dates
@@ -8794,6 +9046,7 @@ def days(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("days", col)
 
 
+@try_remote_functions
 def hours(col: "ColumnOrName") -> Column:
     """
     Partition transform function: A transform for timestamps
@@ -8827,6 +9080,7 @@ def hours(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("hours", col)
 
 
+@try_remote_functions
 def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
     """
     Partition transform function: A transform for any type that partitions
@@ -8870,6 +9124,7 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
     return _invoke_function("bucket", numBuckets, _to_java_column(col))
 
 
+@try_remote_functions
 def call_udf(udfName: str, *cols: "ColumnOrName") -> Column:
     """
     Call an user-defined function.
@@ -8917,6 +9172,7 @@ def call_udf(udfName: str, *cols: "ColumnOrName") -> Column:
     return _invoke_function("call_udf", udfName, _to_seq(sc, cols, _to_java_column))
 
 
+@try_remote_functions
 def unwrap_udt(col: "ColumnOrName") -> Column:
     """
     Unwrap UDT data type column into its underlying type.

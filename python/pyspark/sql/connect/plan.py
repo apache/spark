@@ -343,6 +343,51 @@ class WithColumns(LogicalPlan):
         """
 
 
+class Hint(LogicalPlan):
+    """Logical plan object for a Hint operation."""
+
+    def __init__(self, child: Optional["LogicalPlan"], name: str, params: List[Any]) -> None:
+        super().__init__(child)
+        self.name = name
+        self.params = params
+
+    def _convert_value(self, v: Any) -> proto.Expression.Literal:
+        value = proto.Expression.Literal()
+        if v is None:
+            value.null = True
+        elif isinstance(v, int):
+            value.integer = v
+        elif isinstance(v, str):
+            value.string = v
+        else:
+            raise ValueError(f"Could not convert literal for type {type(v)}")
+        return value
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+        plan = proto.Relation()
+        plan.hint.input.CopyFrom(self._child.plan(session))
+        plan.hint.name = self.name
+        for v in self.params:
+            plan.hint.parameters.append(self._convert_value(v))
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        return f"""{" " * indent}<Hint name='{self.name}', parameters='{self.params}'>"""
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>Hint</b><br />
+              name: {self.name} <br />
+              parameters: {self.params} <br />
+              {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
 class Filter(LogicalPlan):
     def __init__(self, child: Optional["LogicalPlan"], filter: Column) -> None:
         super().__init__(child)
@@ -597,12 +642,14 @@ class Sample(LogicalPlan):
         upper_bound: float,
         with_replacement: bool,
         seed: Optional[int],
+        force_stable_sort: bool = False,
     ) -> None:
         super().__init__(child)
         self.lower_bound = lower_bound
         self.upper_bound = upper_bound
         self.with_replacement = with_replacement
         self.seed = seed
+        self.force_stable_sort = force_stable_sort
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
@@ -613,6 +660,7 @@ class Sample(LogicalPlan):
         plan.sample.with_replacement = self.with_replacement
         if self.seed is not None:
             plan.sample.seed = self.seed
+        plan.sample.force_stable_sort = self.force_stable_sort
         return plan
 
     def print(self, indent: int = 0) -> str:

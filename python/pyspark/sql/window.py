@@ -14,14 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
 import sys
 from typing import cast, Iterable, List, Tuple, TYPE_CHECKING, Union
 
+from py4j.java_gateway import JavaObject
+
 from pyspark import SparkContext
 from pyspark.sql.column import _to_seq, _to_java_column
-
-from py4j.java_gateway import JavaObject
+from pyspark.sql.utils import try_remote_window
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import ColumnOrName, ColumnOrName_
@@ -70,6 +70,7 @@ class Window:
     currentRow: int = 0
 
     @staticmethod
+    @try_remote_window
     def partitionBy(*cols: Union["ColumnOrName", List["ColumnOrName_"]]) -> "WindowSpec":
         """
         Creates a :class:`WindowSpec` with the partitioning defined.
@@ -125,6 +126,7 @@ class Window:
         return WindowSpec(jspec)
 
     @staticmethod
+    @try_remote_window
     def orderBy(*cols: Union["ColumnOrName", List["ColumnOrName_"]]) -> "WindowSpec":
         """
         Creates a :class:`WindowSpec` with the ordering defined.
@@ -180,6 +182,7 @@ class Window:
         return WindowSpec(jspec)
 
     @staticmethod
+    @try_remote_window
     def rowsBetween(start: int, end: int) -> "WindowSpec":
         """
         Creates a :class:`WindowSpec` with the frame boundaries defined,
@@ -263,6 +266,7 @@ class Window:
         return WindowSpec(jspec)
 
     @staticmethod
+    @try_remote_window
     def rangeBetween(start: int, end: int) -> "WindowSpec":
         """
         Creates a :class:`WindowSpec` with the frame boundaries defined,
@@ -362,6 +366,7 @@ class WindowSpec:
     def __init__(self, jspec: JavaObject) -> None:
         self._jspec = jspec
 
+    @try_remote_window
     def partitionBy(self, *cols: Union["ColumnOrName", List["ColumnOrName_"]]) -> "WindowSpec":
         """
         Defines the partitioning columns in a :class:`WindowSpec`.
@@ -375,6 +380,7 @@ class WindowSpec:
         """
         return WindowSpec(self._jspec.partitionBy(_to_java_cols(cols)))
 
+    @try_remote_window
     def orderBy(self, *cols: Union["ColumnOrName", List["ColumnOrName_"]]) -> "WindowSpec":
         """
         Defines the ordering columns in a :class:`WindowSpec`.
@@ -388,6 +394,7 @@ class WindowSpec:
         """
         return WindowSpec(self._jspec.orderBy(_to_java_cols(cols)))
 
+    @try_remote_window
     def rowsBetween(self, start: int, end: int) -> "WindowSpec":
         """
         Defines the frame boundaries, from `start` (inclusive) to `end` (inclusive).
@@ -419,6 +426,7 @@ class WindowSpec:
             end = Window.unboundedFollowing
         return WindowSpec(self._jspec.rowsBetween(start, end))
 
+    @try_remote_window
     def rangeBetween(self, start: int, end: int) -> "WindowSpec":
         """
         Defines the frame boundaries, from `start` (inclusive) to `end` (inclusive).
