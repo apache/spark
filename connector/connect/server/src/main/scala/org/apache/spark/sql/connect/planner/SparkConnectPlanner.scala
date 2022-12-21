@@ -483,8 +483,6 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Expression.ExprTypeCase.SORT_ORDER => transformSortOrder(exp.getSortOrder)
       case proto.Expression.ExprTypeCase.LAMBDA_FUNCTION =>
         transformLambdaFunction(exp.getLambdaFunction)
-      case proto.Expression.ExprTypeCase.UNRESOLVED_NAMED_LAMBDA_VARIABLE =>
-        transformUnresolvedNamedLambdaVariable(exp.getUnresolvedNamedLambdaVariable)
       case _ =>
         throw InvalidPlanInput(
           s"Expression with ID: ${exp.getExprTypeCase.getNumber} is not supported")
@@ -545,10 +543,10 @@ class SparkConnectPlanner(session: SparkSession) {
   /**
    * Translates a LambdaFunction from proto to the Catalyst expression.
    */
-  private def transformLamdaFunction(lambda: proto.Expression.LambdaFunction): LambdaFunction = {
+  private def transformLambdaFunction(lambda: proto.Expression.LambdaFunction): LambdaFunction = {
     if (lambda.getArgumentsCount == 0 || lambda.getArgumentsCount > 3) {
       throw InvalidPlanInput(
-        "LambdaFunction requires [1, 3] arguments, " +
+        "LambdaFunction requires 1 ~ 3 arguments, " +
           s"but got ${lambda.getArgumentsCount} ones!")
     }
 

@@ -631,12 +631,16 @@ class Expression(google.protobuf.message.Message):
         ARGUMENTS_FIELD_NUMBER: builtins.int
         @property
         def function(self) -> global___Expression:
-            """(Required) The lambda function."""
+            """(Required) The lambda function.
+
+            The function body should use 'UnresolvedAttribute' as arguments, the sever side will
+            replace 'UnresolvedAttribute' with 'UnresolvedNamedLambdaVariable'.
+            """
         @property
         def arguments(
             self,
         ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
-            """(Required) Function variable names. Must not be empty."""
+            """(Required) Function variable names. Must contains 1 ~ 3 variables."""
         def __init__(
             self,
             *,

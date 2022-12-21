@@ -195,9 +195,12 @@ message Expression {
 
   message LambdaFunction {
     // (Required) The lambda function.
+    //
+    // The function body should use 'UnresolvedAttribute' as arguments, the sever side will
+    // replace 'UnresolvedAttribute' with 'UnresolvedNamedLambdaVariable'.
     Expression function = 1;
 
-    // (Required) Function variable names. Must not be empty.
+    // (Required) Function variable names. Must contains 1 ~ 3 variables.
     repeated string arguments = 2;
   }
 }
