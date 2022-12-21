@@ -149,7 +149,6 @@ def _invoke_higher_order_function(
 
     :return: a Column
     """
-    assert len(funs) == 1
     _cols = [_to_col(c) for c in cols]
     _funs = [_create_lambda(f) for f in funs]
 
@@ -3294,78 +3293,75 @@ def variance(col: "ColumnOrName") -> Column:
 # Collection Functions
 
 
-# TODO(SPARK-41434): need to support LambdaFunction Expression first
-# def aggregate(
-#         col: "ColumnOrName",
-#         initialValue: "ColumnOrName",
-#         merge: Callable[[Column, Column], Column],
-#         finish: Optional[Callable[[Column], Column]] = None,
-# ) -> Column:
-#     """
-#     Applies a binary operator to an initial state and all elements in the array,
-#     and reduces this to a single state. The final state is converted into the final result
-#     by applying a finish function.
-#
-#     Both functions can use methods of :class:`~pyspark.sql.Column`, functions defined in
-#     :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
-#     Python ``UserDefinedFunctions`` are not supported
-#     (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
-#
-#     .. versionadded:: 3.1.0
-#
-#     Parameters
-#     ----------
-#     col : :class:`~pyspark.sql.Column` or str
-#         name of column or expression
-#     initialValue : :class:`~pyspark.sql.Column` or str
-#         initial value. Name of column or expression
-#     merge : function
-#         a binary function ``(acc: Column, x: Column) -> Column...`` returning expression
-#         of the same type as ``zero``
-#     finish : function
-#         an optional unary function ``(x: Column) -> Column: ...``
-#         used to convert accumulated value.
-#
-#     Returns
-#     -------
-#     :class:`~pyspark.sql.Column`
-#         final value after aggregate function is applied.
-#
-#     Examples
-#     --------
-#     >>> df = spark.createDataFrame([(1, [20.0, 4.0, 2.0, 6.0, 10.0])], ("id", "values"))
-#     >>> df.select(aggregate("values", lit(0.0), lambda acc, x: acc + x).alias("sum")).show()
-#     +----+
-#     | sum|
-#     +----+
-#     |42.0|
-#     +----+
-#
-#     >>> def merge(acc, x):
-#     ...     count = acc.count + 1
-#     ...     sum = acc.sum + x
-#     ...     return struct(count.alias("count"), sum.alias("sum"))
-#     >>> df.select(
-#     ...     aggregate(
-#     ...         "values",
-#     ...         struct(lit(0).alias("count"), lit(0.0).alias("sum")),
-#     ...         merge,
-#     ...         lambda acc: acc.sum / acc.count,
-#     ...     ).alias("mean")
-#     ... ).show()
-#     +----+
-#     |mean|
-#     +----+
-#     | 8.4|
-#     +----+
-#     """
-#     if finish is not None:
-#         return _invoke_higher_order_function("ArrayAggregate", [col, initialValue],
-#           [merge, finish])
-#
-#     else:
-#         return _invoke_higher_order_function("ArrayAggregate", [col, initialValue],
-#           [merge])
+def aggregate(
+    col: "ColumnOrName",
+    initialValue: "ColumnOrName",
+    merge: Callable[[Column, Column], Column],
+    finish: Optional[Callable[[Column], Column]] = None,
+) -> Column:
+    """
+    Applies a binary operator to an initial state and all elements in the array,
+    and reduces this to a single state. The final state is converted into the final result
+    by applying a finish function.
+
+    Both functions can use methods of :class:`~pyspark.sql.Column`, functions defined in
+    :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
+    Python ``UserDefinedFunctions`` are not supported
+    (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        name of column or expression
+    initialValue : :class:`~pyspark.sql.Column` or str
+        initial value. Name of column or expression
+    merge : function
+        a binary function ``(acc: Column, x: Column) -> Column...`` returning expression
+        of the same type as ``zero``
+    finish : function
+        an optional unary function ``(x: Column) -> Column: ...``
+        used to convert accumulated value.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        final value after aggregate function is applied.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(1, [20.0, 4.0, 2.0, 6.0, 10.0])], ("id", "values"))
+    >>> df.select(aggregate("values", lit(0.0), lambda acc, x: acc + x).alias("sum")).show()
+    +----+
+    | sum|
+    +----+
+    |42.0|
+    +----+
+
+    >>> def merge(acc, x):
+    ...     count = acc.count + 1
+    ...     sum = acc.sum + x
+    ...     return struct(count.alias("count"), sum.alias("sum"))
+    >>> df.select(
+    ...     aggregate(
+    ...         "values",
+    ...         struct(lit(0).alias("count"), lit(0.0).alias("sum")),
+    ...         merge,
+    ...         lambda acc: acc.sum / acc.count,
+    ...     ).alias("mean")
+    ... ).show()
+    +----+
+    |mean|
+    +----+
+    | 8.4|
+    +----+
+    """
+    if finish is not None:
+        return _invoke_higher_order_function("aggregate", [col, initialValue], [merge, finish])
+
+    else:
+        return _invoke_higher_order_function("aggregate", [col, initialValue], [merge])
 
 
 def array(*cols: Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]) -> Column:
@@ -3690,51 +3686,48 @@ def array_repeat(col: "ColumnOrName", count: Union["ColumnOrName", int]) -> Colu
     return _invoke_function("array_repeat", _to_col(col), _count)
 
 
-# TODO(SPARK-41434): need to support LambdaFunction Expression first
-# def array_sort(
-#         col: "ColumnOrName", comparator: Optional[Callable[[Column, Column], Column]] = None
-# ) -> Column:
-#     """
-#     Collection function: sorts the input array in ascending order. The elements of the input array
-#     must be orderable. Null elements will be placed at the end of the returned array.
-#
-#     .. versionadded:: 2.4.0
-#     .. versionchanged:: 3.4.0
-#         Can take a `comparator` function.
-#
-#     Parameters
-#     ----------
-#     col : :class:`~pyspark.sql.Column` or str
-#         name of column or expression
-#     comparator : callable, optional
-#         A binary ``(Column, Column) -> Column: ...``.
-#         The comparator will take two
-#         arguments representing two elements of the array. It returns a negative integer, 0, or a
-#         positive integer as the first element is less than, equal to, or greater than the second
-#         element. If the comparator function returns null, the function will fail and raise an
-#         error.
-#
-#     Returns
-#     -------
-#     :class:`~pyspark.sql.Column`
-#         sorted array.
-#
-#     Examples
-#     --------
-#     >>> df = spark.createDataFrame([([2, 1, None, 3],),([1],),([],)], ['data'])
-#     >>> df.select(array_sort(df.data).alias('r')).collect()
-#     [Row(r=[1, 2, 3, None]), Row(r=[1]), Row(r=[])]
-#     >>> df = spark.createDataFrame([(["foo", "foobar", None, "bar"],),(["foo"],),([],)], ['data'])
-#     >>> df.select(array_sort(
-#     ...     "data",
-#     ...     lambda x, y: when(x.isNull() | y.isNull(), lit(0)).otherwise(length(y) - length(x))
-#     ... ).alias("r")).collect()
-#     [Row(r=['foobar', 'foo', None, 'bar']), Row(r=['foo']), Row(r=[])]
-#     """
-#     if comparator is None:
-#         return _invoke_function_over_columns("array_sort", col)
-#     else:
-#         return _invoke_higher_order_function("ArraySort", [col], [comparator])
+def array_sort(
+    col: "ColumnOrName", comparator: Optional[Callable[[Column, Column], Column]] = None
+) -> Column:
+    """
+    Collection function: sorts the input array in ascending order. The elements of the input array
+    must be orderable. Null elements will be placed at the end of the returned array.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        name of column or expression
+    comparator : callable, optional
+        A binary ``(Column, Column) -> Column: ...``.
+        The comparator will take two
+        arguments representing two elements of the array. It returns a negative integer, 0, or a
+        positive integer as the first element is less than, equal to, or greater than the second
+        element. If the comparator function returns null, the function will fail and raise an
+        error.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        sorted array.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([([2, 1, None, 3],),([1],),([],)], ['data'])
+    >>> df.select(array_sort(df.data).alias('r')).collect()
+    [Row(r=[1, 2, 3, None]), Row(r=[1]), Row(r=[])]
+    >>> df = spark.createDataFrame([(["foo", "foobar", None, "bar"],),(["foo"],),([],)], ['data'])
+    >>> df.select(array_sort(
+    ...     "data",
+    ...     lambda x, y: when(x.isNull() | y.isNull(), lit(0)).otherwise(length(y) - length(x))
+    ... ).alias("r")).collect()
+    [Row(r=['foobar', 'foo', None, 'bar']), Row(r=['foo']), Row(r=[])]
+    """
+    if comparator is None:
+        return _invoke_function_over_columns("array_sort", col)
+    else:
+        return _invoke_higher_order_function("array_sort", [col], [comparator])
 
 
 def array_union(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
@@ -4063,57 +4056,56 @@ def explode_outer(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("explode_outer", col)
 
 
-# TODO(SPARK-41434): need to support LambdaFunction Expression first
-# def filter(
-#         col: "ColumnOrName",
-#         f: Union[Callable[[Column], Column], Callable[[Column, Column], Column]],
-# ) -> Column:
-#     """
-#     Returns an array of elements for which a predicate holds in a given array.
-#
-#     .. versionadded:: 3.1.0
-#
-#     Parameters
-#     ----------
-#     col : :class:`~pyspark.sql.Column` or str
-#         name of column or expression
-#     f : function
-#         A function that returns the Boolean expression.
-#         Can take one of the following forms:
-#
-#         - Unary ``(x: Column) -> Column: ...``
-#         - Binary ``(x: Column, i: Column) -> Column...``, where the second argument is
-#             a 0-based index of the element.
-#
-#         and can use methods of :class:`~pyspark.sql.Column`, functions defined in
-#         :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
-#         Python ``UserDefinedFunctions`` are not supported
-#         (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
-#
-#     Returns
-#     -------
-#     :class:`~pyspark.sql.Column`
-#         filtered array of elements where given function evaluated to True
-#         when passed as an argument.
-#
-#     Examples
-#     --------
-#     >>> df = spark.createDataFrame(
-#     ...     [(1, ["2018-09-20",  "2019-02-03", "2019-07-01", "2020-06-01"])],
-#     ...     ("key", "values")
-#     ... )
-#     >>> def after_second_quarter(x):
-#     ...     return month(to_date(x)) > 6
-#     >>> df.select(
-#     ...     filter("values", after_second_quarter).alias("after_second_quarter")
-#     ... ).show(truncate=False)
-#     +------------------------+
-#     |after_second_quarter    |
-#     +------------------------+
-#     |[2018-09-20, 2019-07-01]|
-#     +------------------------+
-#     """
-#     return _invoke_higher_order_function("ArrayFilter", [col], [f])
+def filter(
+    col: "ColumnOrName",
+    f: Union[Callable[[Column], Column], Callable[[Column, Column], Column]],
+) -> Column:
+    """
+    Returns an array of elements for which a predicate holds in a given array.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        name of column or expression
+    f : function
+        A function that returns the Boolean expression.
+        Can take one of the following forms:
+
+        - Unary ``(x: Column) -> Column: ...``
+        - Binary ``(x: Column, i: Column) -> Column...``, where the second argument is
+            a 0-based index of the element.
+
+        and can use methods of :class:`~pyspark.sql.Column`, functions defined in
+        :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
+        Python ``UserDefinedFunctions`` are not supported
+        (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        filtered array of elements where given function evaluated to True
+        when passed as an argument.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame(
+    ...     [(1, ["2018-09-20",  "2019-02-03", "2019-07-01", "2020-06-01"])],
+    ...     ("key", "values")
+    ... )
+    >>> def after_second_quarter(x):
+    ...     return month(to_date(x)) > 6
+    >>> df.select(
+    ...     filter("values", after_second_quarter).alias("after_second_quarter")
+    ... ).show(truncate=False)
+    +------------------------+
+    |after_second_quarter    |
+    +------------------------+
+    |[2018-09-20, 2019-07-01]|
+    +------------------------+
+    """
+    return _invoke_higher_order_function("filter", [col], [f])
 
 
 def flatten(col: "ColumnOrName") -> Column:
@@ -4155,46 +4147,45 @@ def flatten(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("flatten", col)
 
 
-# TODO(SPARK-41434): need to support LambdaFunction Expression first
-# def forall(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column:
-#     """
-#     Returns whether a predicate holds for every element in the array.
-#
-#     .. versionadded:: 3.1.0
-#
-#     Parameters
-#     ----------
-#     col : :class:`~pyspark.sql.Column` or str
-#         name of column or expression
-#     f : function
-#         ``(x: Column) -> Column: ...``  returning the Boolean expression.
-#         Can use methods of :class:`~pyspark.sql.Column`, functions defined in
-#         :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
-#         Python ``UserDefinedFunctions`` are not supported
-#         (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
-#
-#     Returns
-#     -------
-#     :class:`~pyspark.sql.Column`
-#         True if "all" elements of an array evaluates to True when passed as an argument to
-#         given function and False otherwise.
-#
-#     Examples
-#     --------
-#     >>> df = spark.createDataFrame(
-#     ...     [(1, ["bar"]), (2, ["foo", "bar"]), (3, ["foobar", "foo"])],
-#     ...     ("key", "values")
-#     ... )
-#     >>> df.select(forall("values", lambda x: x.rlike("foo")).alias("all_foo")).show()
-#     +-------+
-#     |all_foo|
-#     +-------+
-#     |  false|
-#     |  false|
-#     |   true|
-#     +-------+
-#     """
-#     return _invoke_higher_order_function("ArrayForAll", [col], [f])
+def forall(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column:
+    """
+    Returns whether a predicate holds for every element in the array.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        name of column or expression
+    f : function
+        ``(x: Column) -> Column: ...``  returning the Boolean expression.
+        Can use methods of :class:`~pyspark.sql.Column`, functions defined in
+        :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
+        Python ``UserDefinedFunctions`` are not supported
+        (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        True if "all" elements of an array evaluates to True when passed as an argument to
+        given function and False otherwise.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame(
+    ...     [(1, ["bar"]), (2, ["foo", "bar"]), (3, ["foobar", "foo"])],
+    ...     ("key", "values")
+    ... )
+    >>> df.select(forall("values", lambda x: x.rlike("foo")).alias("all_foo")).show()
+    +-------+
+    |all_foo|
+    +-------+
+    |  false|
+    |  false|
+    |   true|
+    +-------+
+    """
+    return _invoke_higher_order_function("forall", [col], [f])
 
 
 # TODO: support options
@@ -4622,42 +4613,41 @@ def map_entries(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("map_entries", col)
 
 
-# TODO(SPARK-41434): need to support LambdaFunction Expression first
-# def map_filter(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Column:
-#     """
-#     Returns a map whose key-value pairs satisfy a predicate.
-#
-#     .. versionadded:: 3.1.0
-#
-#     Parameters
-#     ----------
-#     col : :class:`~pyspark.sql.Column` or str
-#         name of column or expression
-#     f : function
-#         a binary function ``(k: Column, v: Column) -> Column...``
-#         Can use methods of :class:`~pyspark.sql.Column`, functions defined in
-#         :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
-#         Python ``UserDefinedFunctions`` are not supported
-#         (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
-#
-#     Returns
-#     -------
-#     :class:`~pyspark.sql.Column`
-#         filtered map.
-#
-#     Examples
-#     --------
-#     >>> df = spark.createDataFrame([(1, {"foo": 42.0, "bar": 1.0, "baz": 32.0})], ("id", "data"))
-#     >>> df.select(map_filter(
-#     ...     "data", lambda _, v: v > 30.0).alias("data_filtered")
-#     ... ).show(truncate=False)
-#     +--------------------------+
-#     |data_filtered             |
-#     +--------------------------+
-#     |{baz -> 32.0, foo -> 42.0}|
-#     +--------------------------+
-#     """
-#     return _invoke_higher_order_function("MapFilter", [col], [f])
+def map_filter(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Column:
+    """
+    Returns a map whose key-value pairs satisfy a predicate.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        name of column or expression
+    f : function
+        a binary function ``(k: Column, v: Column) -> Column...``
+        Can use methods of :class:`~pyspark.sql.Column`, functions defined in
+        :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
+        Python ``UserDefinedFunctions`` are not supported
+        (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        filtered map.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(1, {"foo": 42.0, "bar": 1.0, "baz": 32.0})], ("id", "data"))
+    >>> df.select(map_filter(
+    ...     "data", lambda _, v: v > 30.0).alias("data_filtered")
+    ... ).show(truncate=False)
+    +--------------------------+
+    |data_filtered             |
+    +--------------------------+
+    |{baz -> 32.0, foo -> 42.0}|
+    +--------------------------+
+    """
+    return _invoke_higher_order_function("map_filter", [col], [f])
 
 
 def map_from_arrays(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
@@ -4787,52 +4777,51 @@ def map_values(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("map_values", col)
 
 
-# TODO(SPARK-41434): need to support LambdaFunction Expression first
-# def map_zip_with(
-#         col1: "ColumnOrName",
-#         col2: "ColumnOrName",
-#         f: Callable[[Column, Column, Column], Column],
-# ) -> Column:
-#     """
-#     Merge two given maps, key-wise into a single map using a function.
-#
-#     .. versionadded:: 3.1.0
-#
-#     Parameters
-#     ----------
-#     col1 : :class:`~pyspark.sql.Column` or str
-#         name of the first column or expression
-#     col2 : :class:`~pyspark.sql.Column` or str
-#         name of the second column or expression
-#     f : function
-#         a ternary function ``(k: Column, v1: Column, v2: Column) -> Column...``
-#         Can use methods of :class:`~pyspark.sql.Column`, functions defined in
-#         :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
-#         Python ``UserDefinedFunctions`` are not supported
-#         (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
-#
-#     Returns
-#     -------
-#     :class:`~pyspark.sql.Column`
-#         zipped map where entries are calculated by applying given function to each
-#         pair of arguments.
-#
-#     Examples
-#     --------
-#     >>> df = spark.createDataFrame([
-#     ...     (1, {"IT": 24.0, "SALES": 12.00}, {"IT": 2.0, "SALES": 1.4})],
-#     ...     ("id", "base", "ratio")
-#     ... )
-#     >>> df.select(map_zip_with(
-#     ...     "base", "ratio", lambda k, v1, v2: round(v1 * v2, 2)).alias("updated_data")
-#     ... ).show(truncate=False)
-#     +---------------------------+
-#     |updated_data               |
-#     +---------------------------+
-#     |{SALES -> 16.8, IT -> 48.0}|
-#     +---------------------------+
-#     """
-#     return _invoke_higher_order_function("MapZipWith", [col1, col2], [f])
+def map_zip_with(
+    col1: "ColumnOrName",
+    col2: "ColumnOrName",
+    f: Callable[[Column, Column, Column], Column],
+) -> Column:
+    """
+    Merge two given maps, key-wise into a single map using a function.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or str
+        name of the first column or expression
+    col2 : :class:`~pyspark.sql.Column` or str
+        name of the second column or expression
+    f : function
+        a ternary function ``(k: Column, v1: Column, v2: Column) -> Column...``
+        Can use methods of :class:`~pyspark.sql.Column`, functions defined in
+        :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
+        Python ``UserDefinedFunctions`` are not supported
+        (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        zipped map where entries are calculated by applying given function to each
+        pair of arguments.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([
+    ...     (1, {"IT": 24.0, "SALES": 12.00}, {"IT": 2.0, "SALES": 1.4})],
+    ...     ("id", "base", "ratio")
+    ... )
+    >>> df.select(map_zip_with(
+    ...     "base", "ratio", lambda k, v1, v2: round(v1 * v2, 2)).alias("updated_data")
+    ... ).show(truncate=False)
+    +---------------------------+
+    |updated_data               |
+    +---------------------------+
+    |{SALES -> 16.8, IT -> 48.0}|
+    +---------------------------+
+    """
+    return _invoke_higher_order_function("map_zip_with", [col1, col2], [f])
 
 
 def posexplode(col: "ColumnOrName") -> Column:
@@ -5257,190 +5246,187 @@ def to_json(col: "ColumnOrName") -> Column:
     return _invoke_function("to_json", _to_col(col))
 
 
-# TODO(SPARK-41434): need to support LambdaFunction Expression first
-# def transform(
-#         col: "ColumnOrName",
-#         f: Union[Callable[[Column], Column], Callable[[Column, Column], Column]],
-# ) -> Column:
-#     """
-#     Returns an array of elements after applying a transformation to each element in
-#     the input array.
-#
-#     .. versionadded:: 3.1.0
-#
-#     Parameters
-#     ----------
-#     col : :class:`~pyspark.sql.Column` or str
-#         name of column or expression
-#     f : function
-#         a function that is applied to each element of the input array.
-#         Can take one of the following forms:
-#
-#         - Unary ``(x: Column) -> Column: ...``
-#         - Binary ``(x: Column, i: Column) -> Column...``, where the second argument is
-#             a 0-based index of the element.
-#
-#         and can use methods of :class:`~pyspark.sql.Column`, functions defined in
-#         :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
-#         Python ``UserDefinedFunctions`` are not supported
-#         (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
-#
-#     Returns
-#     -------
-#     :class:`~pyspark.sql.Column`
-#         a new array of transformed elements.
-#
-#     Examples
-#     --------
-#     >>> df = spark.createDataFrame([(1, [1, 2, 3, 4])], ("key", "values"))
-#     >>> df.select(transform("values", lambda x: x * 2).alias("doubled")).show()
-#     +------------+
-#     |     doubled|
-#     +------------+
-#     |[2, 4, 6, 8]|
-#     +------------+
-#
-#     >>> def alternate(x, i):
-#     ...     return when(i % 2 == 0, x).otherwise(-x)
-#     >>> df.select(transform("values", alternate).alias("alternated")).show()
-#     +--------------+
-#     |    alternated|
-#     +--------------+
-#     |[1, -2, 3, -4]|
-#     +--------------+
-#     """
-#     return _invoke_higher_order_function("ArrayTransform", [col], [f])
+def transform(
+    col: "ColumnOrName",
+    f: Union[Callable[[Column], Column], Callable[[Column, Column], Column]],
+) -> Column:
+    """
+    Returns an array of elements after applying a transformation to each element in
+    the input array.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        name of column or expression
+    f : function
+        a function that is applied to each element of the input array.
+        Can take one of the following forms:
+
+        - Unary ``(x: Column) -> Column: ...``
+        - Binary ``(x: Column, i: Column) -> Column...``, where the second argument is
+            a 0-based index of the element.
+
+        and can use methods of :class:`~pyspark.sql.Column`, functions defined in
+        :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
+        Python ``UserDefinedFunctions`` are not supported
+        (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a new array of transformed elements.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(1, [1, 2, 3, 4])], ("key", "values"))
+    >>> df.select(transform("values", lambda x: x * 2).alias("doubled")).show()
+    +------------+
+    |     doubled|
+    +------------+
+    |[2, 4, 6, 8]|
+    +------------+
+
+    >>> def alternate(x, i):
+    ...     return when(i % 2 == 0, x).otherwise(-x)
+    >>> df.select(transform("values", alternate).alias("alternated")).show()
+    +--------------+
+    |    alternated|
+    +--------------+
+    |[1, -2, 3, -4]|
+    +--------------+
+    """
+    return _invoke_higher_order_function("transform", [col], [f])
 
 
-# TODO(SPARK-41434): need to support LambdaFunction Expression first
-# def transform_keys(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Column:
-#     """
-#     Applies a function to every key-value pair in a map and returns
-#     a map with the results of those applications as the new keys for the pairs.
-#
-#     .. versionadded:: 3.1.0
-#
-#     Parameters
-#     ----------
-#     col : :class:`~pyspark.sql.Column` or str
-#         name of column or expression
-#     f : function
-#         a binary function ``(k: Column, v: Column) -> Column...``
-#         Can use methods of :class:`~pyspark.sql.Column`, functions defined in
-#         :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
-#         Python ``UserDefinedFunctions`` are not supported
-#         (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
-#
-#     Returns
-#     -------
-#     :class:`~pyspark.sql.Column`
-#         a new map of enties where new keys were calculated by applying given function to
-#         each key value argument.
-#
-#     Examples
-#     --------
-#     >>> df = spark.createDataFrame([(1, {"foo": -2.0, "bar": 2.0})], ("id", "data"))
-#     >>> df.select(transform_keys(
-#     ...     "data", lambda k, _: upper(k)).alias("data_upper")
-#     ... ).show(truncate=False)
-#     +-------------------------+
-#     |data_upper               |
-#     +-------------------------+
-#     |{BAR -> 2.0, FOO -> -2.0}|
-#     +-------------------------+
-#     """
-#     return _invoke_higher_order_function("TransformKeys", [col], [f])
+def transform_keys(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Column:
+    """
+    Applies a function to every key-value pair in a map and returns
+    a map with the results of those applications as the new keys for the pairs.
 
-# TODO(SPARK-41434): need to support LambdaFunction Expression first
-# def transform_values(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Column:
-#     """
-#     Applies a function to every key-value pair in a map and returns
-#     a map with the results of those applications as the new values for the pairs.
-#
-#     .. versionadded:: 3.1.0
-#
-#     Parameters
-#     ----------
-#     col : :class:`~pyspark.sql.Column` or str
-#         name of column or expression
-#     f : function
-#         a binary function ``(k: Column, v: Column) -> Column...``
-#         Can use methods of :class:`~pyspark.sql.Column`, functions defined in
-#         :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
-#         Python ``UserDefinedFunctions`` are not supported
-#         (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
-#
-#     Returns
-#     -------
-#     :class:`~pyspark.sql.Column`
-#         a new map of enties where new values were calculated by applying given function to
-#         each key value argument.
-#
-#     Examples
-#     --------
-#     >>> df = spark.createDataFrame([(1, {"IT": 10.0, "SALES": 2.0, "OPS": 24.0})], ("id", "data"))
-#     >>> df.select(transform_values(
-#     ...     "data", lambda k, v: when(k.isin("IT", "OPS"), v + 10.0).otherwise(v)
-#     ... ).alias("new_data")).show(truncate=False)
-#     +---------------------------------------+
-#     |new_data                               |
-#     +---------------------------------------+
-#     |{OPS -> 34.0, IT -> 20.0, SALES -> 2.0}|
-#     +---------------------------------------+
-#     """
-#     return _invoke_higher_order_function("TransformValues", [col], [f])
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        name of column or expression
+    f : function
+        a binary function ``(k: Column, v: Column) -> Column...``
+        Can use methods of :class:`~pyspark.sql.Column`, functions defined in
+        :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
+        Python ``UserDefinedFunctions`` are not supported
+        (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a new map of enties where new keys were calculated by applying given function to
+        each key value argument.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(1, {"foo": -2.0, "bar": 2.0})], ("id", "data"))
+    >>> df.select(transform_keys(
+    ...     "data", lambda k, _: upper(k)).alias("data_upper")
+    ... ).show(truncate=False)
+    +-------------------------+
+    |data_upper               |
+    +-------------------------+
+    |{BAR -> 2.0, FOO -> -2.0}|
+    +-------------------------+
+    """
+    return _invoke_higher_order_function("transform_keys", [col], [f])
 
 
-# TODO(SPARK-41434): need to support LambdaFunction Expression first
-# def zip_with(
-#         left: "ColumnOrName",
-#         right: "ColumnOrName",
-#         f: Callable[[Column, Column], Column],
-# ) -> Column:
-#     """
-#     Merge two given arrays, element-wise, into a single array using a function.
-#     If one array is shorter, nulls are appended at the end to match the length of the longer
-#     array, before applying the function.
-#
-#     .. versionadded:: 3.1.0
-#
-#     Parameters
-#     ----------
-#     left : :class:`~pyspark.sql.Column` or str
-#         name of the first column or expression
-#     right : :class:`~pyspark.sql.Column` or str
-#         name of the second column or expression
-#     f : function
-#         a binary function ``(x1: Column, x2: Column) -> Column...``
-#         Can use methods of :class:`~pyspark.sql.Column`, functions defined in
-#         :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
-#         Python ``UserDefinedFunctions`` are not supported
-#         (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
-#
-#     Returns
-#     -------
-#     :class:`~pyspark.sql.Column`
-#         array of calculated values derived by applying given function to each pair of arguments.
-#
-#     Examples
-#     --------
-#     >>> df = spark.createDataFrame([(1, [1, 3, 5, 8], [0, 2, 4, 6])], ("id", "xs", "ys"))
-#     >>> df.select(zip_with("xs", "ys", lambda x, y: x ** y).alias("powers")).show(truncate=False)
-#     +---------------------------+
-#     |powers                     |
-#     +---------------------------+
-#     |[1.0, 9.0, 625.0, 262144.0]|
-#     +---------------------------+
-#
-#     >>> df = spark.createDataFrame([(1, ["foo", "bar"], [1, 2, 3])], ("id", "xs", "ys"))
-#     >>> df.select(zip_with("xs", "ys", lambda x, y: concat_ws("_", x, y)).alias("xs_ys")).show()
-#     +-----------------+
-#     |            xs_ys|
-#     +-----------------+
-#     |[foo_1, bar_2, 3]|
-#     +-----------------+
-#     """
-#     return _invoke_higher_order_function("ZipWith", [left, right], [f])
+def transform_values(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Column:
+    """
+    Applies a function to every key-value pair in a map and returns
+    a map with the results of those applications as the new values for the pairs.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        name of column or expression
+    f : function
+        a binary function ``(k: Column, v: Column) -> Column...``
+        Can use methods of :class:`~pyspark.sql.Column`, functions defined in
+        :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
+        Python ``UserDefinedFunctions`` are not supported
+        (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a new map of enties where new values were calculated by applying given function to
+        each key value argument.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(1, {"IT": 10.0, "SALES": 2.0, "OPS": 24.0})], ("id", "data"))
+    >>> df.select(transform_values(
+    ...     "data", lambda k, v: when(k.isin("IT", "OPS"), v + 10.0).otherwise(v)
+    ... ).alias("new_data")).show(truncate=False)
+    +---------------------------------------+
+    |new_data                               |
+    +---------------------------------------+
+    |{OPS -> 34.0, IT -> 20.0, SALES -> 2.0}|
+    +---------------------------------------+
+    """
+    return _invoke_higher_order_function("transform_values", [col], [f])
+
+
+def zip_with(
+    left: "ColumnOrName",
+    right: "ColumnOrName",
+    f: Callable[[Column, Column], Column],
+) -> Column:
+    """
+    Merge two given arrays, element-wise, into a single array using a function.
+    If one array is shorter, nulls are appended at the end to match the length of the longer
+    array, before applying the function.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or str
+        name of the first column or expression
+    right : :class:`~pyspark.sql.Column` or str
+        name of the second column or expression
+    f : function
+        a binary function ``(x1: Column, x2: Column) -> Column...``
+        Can use methods of :class:`~pyspark.sql.Column`, functions defined in
+        :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
+        Python ``UserDefinedFunctions`` are not supported
+        (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        array of calculated values derived by applying given function to each pair of arguments.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(1, [1, 3, 5, 8], [0, 2, 4, 6])], ("id", "xs", "ys"))
+    >>> df.select(zip_with("xs", "ys", lambda x, y: x ** y).alias("powers")).show(truncate=False)
+    +---------------------------+
+    |powers                     |
+    +---------------------------+
+    |[1.0, 9.0, 625.0, 262144.0]|
+    +---------------------------+
+
+    >>> df = spark.createDataFrame([(1, ["foo", "bar"], [1, 2, 3])], ("id", "xs", "ys"))
+    >>> df.select(zip_with("xs", "ys", lambda x, y: concat_ws("_", x, y)).alias("xs_ys")).show()
+    +-----------------+
+    |            xs_ys|
+    +-----------------+
+    |[foo_1, bar_2, 3]|
+    +-----------------+
+    """
+    return _invoke_higher_order_function("zip_with", [left, right], [f])
 
 
 # String/Binary functions

@@ -922,18 +922,18 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
 
         query = """
             SELECT * FROM VALUES
-            (ARRAY('a', 'ab'), ARRAY(1, 2, 3), ARRAY(1, NULL, 3), 1, 2, 'a'),
-            (ARRAY('x', NULL), NULL, ARRAY(1, 3), 3, 4, 'x'),
-            (NULL, ARRAY(-1, -2, -3), Array(), 5, 6, NULL)
-            AS tab(a, b, c, d, e, f)
+            (ARRAY('a', 'ab'), ARRAY(1, 2, 3), ARRAY(1, NULL, 3), 1, 2, 'a', NULL, MAP(0, 0)),
+            (ARRAY('x', NULL), NULL, ARRAY(1, 3), 3, 4, 'x', MAP(2, 0), MAP(-1, 1)),
+            (NULL, ARRAY(-1, -2, -3), Array(), 5, 6, NULL, MAP(-1, 2, -3, -4), NULL)
+            AS tab(a, b, c, d, e, f, g, h)
             """
-        # +---------+------------+------------+---+---+----+
-        # |        a|           b|           c|  d|  e|   f|
-        # +---------+------------+------------+---+---+----+
-        # |  [a, ab]|   [1, 2, 3]|[1, null, 3]|  1|  2|   a|
-        # |[x, null]|        null|      [1, 3]|  3|  4|   x|
-        # |     null|[-1, -2, -3]|          []|  5|  6|null|
-        # +---------+------------+------------+---+---+----+
+        # +---------+------------+------------+---+---+----+-------------------+---------+
+        # |        a|           b|           c|  d|  e|   f|                  g|        h|
+        # +---------+------------+------------+---+---+----+-------------------+---------+
+        # |  [a, ab]|   [1, 2, 3]|[1, null, 3]|  1|  2|   a|               null| {0 -> 0}|
+        # |[x, null]|        null|      [1, 3]|  3|  4|   x|           {2 -> 0}|{-1 -> 1}|
+        # |     null|[-1, -2, -3]|          []|  5|  6|null|{-1 -> 2, -3 -> -4}|     null|
+        # +---------+------------+------------+---+---+----+-------------------+---------+
 
         cdf = self.connect.sql(query)
         sdf = self.spark.sql(query)
@@ -946,6 +946,150 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
         self.assert_eq(
             cdf.select(CF.exists("a", lambda x: CF.isnull(x))).toPandas(),
             sdf.select(SF.exists("a", lambda x: SF.isnull(x))).toPandas(),
+        )
+
+        # test aggregate
+        # aggregate without finish
+        self.assert_eq(
+            cdf.select(CF.aggregate(cdf.b, "d", lambda acc, x: acc + x)).toPandas(),
+            sdf.select(SF.aggregate(sdf.b, "d", lambda acc, x: acc + x)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.aggregate("b", cdf.d, lambda acc, x: acc + x)).toPandas(),
+            sdf.select(SF.aggregate("b", sdf.d, lambda acc, x: acc + x)).toPandas(),
+        )
+
+        # aggregate with finish
+        self.assert_eq(
+            cdf.select(
+                CF.aggregate(cdf.b, "d", lambda acc, x: acc + x, lambda acc: acc + 100)
+            ).toPandas(),
+            sdf.select(
+                SF.aggregate(sdf.b, "d", lambda acc, x: acc + x, lambda acc: acc + 100)
+            ).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(
+                CF.aggregate("b", cdf.d, lambda acc, x: acc + x, lambda acc: acc + 100)
+            ).toPandas(),
+            sdf.select(
+                SF.aggregate("b", sdf.d, lambda acc, x: acc + x, lambda acc: acc + 100)
+            ).toPandas(),
+        )
+
+        # test array_sort
+        self.assert_eq(
+            cdf.select(CF.array_sort(cdf.b, lambda x, y: CF.abs(x) - CF.abs(y))).toPandas(),
+            sdf.select(SF.array_sort(sdf.b, lambda x, y: SF.abs(x) - SF.abs(y))).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(
+                CF.array_sort(
+                    "a",
+                    lambda x, y: CF.when(x.isNull() | y.isNull(), CF.lit(0)).otherwise(
+                        CF.length(y) - CF.length(x)
+                    ),
+                )
+            ).toPandas(),
+            sdf.select(
+                SF.array_sort(
+                    "a",
+                    lambda x, y: SF.when(x.isNull() | y.isNull(), SF.lit(0)).otherwise(
+                        SF.length(y) - SF.length(x)
+                    ),
+                )
+            ).toPandas(),
+        )
+
+        # test filter
+        self.assert_eq(
+            cdf.select(CF.filter(cdf.b, lambda x: x < 0)).toPandas(),
+            sdf.select(SF.filter(sdf.b, lambda x: x < 0)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.filter("a", lambda x: ~CF.isnull(x))).toPandas(),
+            sdf.select(SF.filter("a", lambda x: ~SF.isnull(x))).toPandas(),
+        )
+
+        # test forall
+        self.assert_eq(
+            cdf.select(CF.filter(cdf.b, lambda x: x != 0)).toPandas(),
+            sdf.select(SF.filter(sdf.b, lambda x: x != 0)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.filter("a", lambda x: ~CF.isnull(x))).toPandas(),
+            sdf.select(SF.filter("a", lambda x: ~SF.isnull(x))).toPandas(),
+        )
+
+        # test transform
+        # transform without index
+        self.assert_eq(
+            cdf.select(CF.transform(cdf.b, lambda x: x + 1)).toPandas(),
+            sdf.select(SF.transform(sdf.b, lambda x: x + 1)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.transform("b", lambda x: x + 1)).toPandas(),
+            sdf.select(SF.transform("b", lambda x: x + 1)).toPandas(),
+        )
+
+        # transform with index
+        self.assert_eq(
+            cdf.select(CF.transform(cdf.b, lambda x, i: x + 1 - i)).toPandas(),
+            sdf.select(SF.transform(sdf.b, lambda x, i: x + 1 - i)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.transform("b", lambda x, i: x + 1 - i)).toPandas(),
+            sdf.select(SF.transform("b", lambda x, i: x + 1 - i)).toPandas(),
+        )
+
+        # test zip_with
+        self.assert_eq(
+            cdf.select(CF.zip_with(cdf.b, "c", lambda v1, v2: v1 - CF.abs(v2))).toPandas(),
+            sdf.select(SF.zip_with(sdf.b, "c", lambda v1, v2: v1 - SF.abs(v2))).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.zip_with("b", cdf.c, lambda v1, v2: v1 - CF.abs(v2))).toPandas(),
+            sdf.select(SF.zip_with("b", sdf.c, lambda v1, v2: v1 - SF.abs(v2))).toPandas(),
+        )
+
+        # test map_filter
+        self.compare_by_show(
+            cdf.select(CF.map_filter(cdf.g, lambda k, v: k > v)),
+            sdf.select(SF.map_filter(sdf.g, lambda k, v: k > v)),
+        )
+        self.compare_by_show(
+            cdf.select(CF.map_filter("g", lambda k, v: k > v)),
+            sdf.select(SF.map_filter("g", lambda k, v: k > v)),
+        )
+
+        # test map_zip_with
+        self.compare_by_show(
+            cdf.select(CF.map_zip_with(cdf.g, "h", lambda k, v1, v2: v1 + v2)),
+            sdf.select(SF.map_zip_with(sdf.g, "h", lambda k, v1, v2: v1 + v2)),
+        )
+        self.compare_by_show(
+            cdf.select(CF.map_zip_with("g", cdf.h, lambda k, v1, v2: v1 + v2)),
+            sdf.select(SF.map_zip_with("g", sdf.h, lambda k, v1, v2: v1 + v2)),
+        )
+
+        # test transform_keys
+        self.compare_by_show(
+            cdf.select(CF.transform_keys(cdf.g, lambda k, v: k - 1)),
+            sdf.select(SF.transform_keys(sdf.g, lambda k, v: k - 1)),
+        )
+        self.compare_by_show(
+            cdf.select(CF.transform_keys("g", lambda k, v: k - 1)),
+            sdf.select(SF.transform_keys("g", lambda k, v: k - 1)),
+        )
+
+        # test transform_values
+        self.compare_by_show(
+            cdf.select(CF.transform_values(cdf.g, lambda k, v: CF.abs(v) + 1)),
+            sdf.select(SF.transform_values(sdf.g, lambda k, v: SF.abs(v) + 1)),
+        )
+        self.compare_by_show(
+            cdf.select(CF.transform_values("g", lambda k, v: CF.abs(v) + 1)),
+            sdf.select(SF.transform_values("g", lambda k, v: SF.abs(v) + 1)),
         )
 
     def test_csv_functions(self):
