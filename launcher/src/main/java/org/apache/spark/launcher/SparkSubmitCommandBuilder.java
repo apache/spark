@@ -192,6 +192,11 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       args.add(master);
     }
 
+    if (remote != null) {
+      args.add(parser.REMOTE);
+      args.add(remote);
+    }
+
     if (deployMode != null) {
       args.add(parser.DEPLOY_MODE);
       args.add(deployMode);
@@ -344,6 +349,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       // pass conf spark.pyspark.python to python by environment variable.
       env.put("PYSPARK_PYTHON", conf.get(SparkLauncher.PYSPARK_PYTHON));
     }
+    env.put("SPARK_REMOTE", remote);
     if (!isEmpty(pyOpts)) {
       pyargs.addAll(parseOptionString(pyOpts));
     }
@@ -457,9 +463,18 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     protected boolean handle(String opt, String value) {
       switch (opt) {
         case MASTER:
+          checkArgument(remote == null,
+            "Both master (%s) and remote (%s) cannot be set together.", master, remote);
           master = value;
           break;
+        case REMOTE:
+          checkArgument(remote == null,
+            "Both master (%s) and remote (%s) cannot be set together.", master, remote);
+          remote = value;
+          break;
         case DEPLOY_MODE:
+          checkArgument(remote == null,
+            "Both deploy-mode (%s) and remote (%s) cannot be set together.", deployMode, remote);
           deployMode = value;
           break;
         case PROPERTIES_FILE:

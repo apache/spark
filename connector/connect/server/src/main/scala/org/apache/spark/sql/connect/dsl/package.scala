@@ -27,6 +27,7 @@ import org.apache.spark.connect.proto.SetOperation.SetOpType
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.connect.planner.DataTypeProtoConverter
 import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.toConnectProtoValue
+import org.apache.spark.util.Utils
 
 /**
  * A collection of implicit conversions that create a DSL for constructing connect protos.
@@ -535,12 +536,12 @@ package object dsl {
           .build()
       }
 
-      def createDefaultSortField(col: String): Sort.SortField = {
-        Sort.SortField
+      def createDefaultSortField(col: String): Expression.SortOrder = {
+        Expression.SortOrder
           .newBuilder()
-          .setNulls(Sort.SortNulls.SORT_NULLS_FIRST)
-          .setDirection(Sort.SortDirection.SORT_DIRECTION_ASCENDING)
-          .setExpression(
+          .setNullOrdering(Expression.SortOrder.NullOrdering.SORT_NULLS_FIRST)
+          .setDirection(Expression.SortOrder.SortDirection.SORT_DIRECTION_ASCENDING)
+          .setChild(
             Expression.newBuilder
               .setUnresolvedAttribute(
                 Expression.UnresolvedAttribute.newBuilder.setUnparsedIdentifier(col).build())
@@ -555,7 +556,7 @@ package object dsl {
             Sort
               .newBuilder()
               .setInput(logicalPlan)
-              .addAllSortFields(columns.map(createDefaultSortField).asJava)
+              .addAllOrder(columns.map(createDefaultSortField).asJava)
               .setIsGlobal(true)
               .build())
           .build()
@@ -568,7 +569,7 @@ package object dsl {
             Sort
               .newBuilder()
               .setInput(logicalPlan)
-              .addAllSortFields(columns.map(createDefaultSortField).asJava)
+              .addAllOrder(columns.map(createDefaultSortField).asJava)
               .setIsGlobal(false)
               .build())
           .build()
@@ -774,6 +775,39 @@ package object dsl {
           variableColumnName: String,
           valueColumnName: String): Relation =
         unpivot(ids, variableColumnName, valueColumnName)
+
+      def randomSplit(weights: Array[Double], seed: Long): Array[Relation] = {
+        require(
+          weights.forall(_ >= 0),
+          s"Weights must be nonnegative, but got ${weights.mkString("[", ",", "]")}")
+        require(
+          weights.sum > 0,
+          s"Sum of weights must be positive, but got ${weights.mkString("[", ",", "]")}")
+
+        val sum = weights.toSeq.sum
+        val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _)
+        normalizedCumWeights
+          .sliding(2)
+          .map { x =>
+            Relation
+              .newBuilder()
+              .setSample(
+                Sample
+                  .newBuilder()
+                  .setInput(logicalPlan)
+                  .setLowerBound(x(0))
+                  .setUpperBound(x(1))
+                  .setWithReplacement(false)
+                  .setSeed(seed)
+                  .setForceStableSort(true)
+                  .build())
+              .build()
+          }
+          .toArray
+      }
+
+      def randomSplit(weights: Array[Double]): Array[Relation] =
+        randomSplit(weights, Utils.random.nextLong)
 
       private def createSetOperation(
           left: Relation,
