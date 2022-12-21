@@ -480,6 +480,7 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Expression.ExprTypeCase.CAST => transformCast(exp.getCast)
       case proto.Expression.ExprTypeCase.UNRESOLVED_REGEX =>
         transformUnresolvedRegex(exp.getUnresolvedRegex)
+      case proto.Expression.ExprTypeCase.SORT_ORDER => transformSortOrder(exp.getSortOrder)
       case _ =>
         throw InvalidPlanInput(
           s"Expression with ID: ${exp.getExprTypeCase.getNumber} is not supported")
@@ -699,10 +700,10 @@ class SparkConnectPlanner(session: SparkSession) {
     logical.Sort(
       child = transformRelation(sort.getInput),
       global = sort.getIsGlobal,
-      order = sort.getOrderList.asScala.toSeq.map(transformSortOrderExpression))
+      order = sort.getOrderList.asScala.toSeq.map(transformSortOrder))
   }
 
-  private def transformSortOrderExpression(order: proto.Expression.SortOrder) = {
+  private def transformSortOrder(order: proto.Expression.SortOrder) = {
     expressions.SortOrder(
       child = transformExpression(order.getChild),
       direction = order.getDirection match {
