@@ -30,7 +30,7 @@ class SpeculationStageSummaryWrapperSerializer extends ProtobufSerDe {
   private def serialize(s: SpeculationStageSummaryWrapper): Array[Byte] = {
     val summary = serializeSpeculationStageSummary(s.info)
     val builder = StoreTypes.SpeculationStageSummaryWrapper.newBuilder()
-    builder.setStageId(s.stageId)
+    builder.setStageId(s.stageId.toLong)
     builder.setStageAttemptId(s.stageAttemptId)
     builder.setInfo(summary)
     builder.build().toByteArray
@@ -39,7 +39,7 @@ class SpeculationStageSummaryWrapperSerializer extends ProtobufSerDe {
   def deserialize(bytes: Array[Byte]): SpeculationStageSummaryWrapper = {
     val wrapper = StoreTypes.SpeculationStageSummaryWrapper.parseFrom(bytes)
     new SpeculationStageSummaryWrapper(
-      stageId = wrapper.getStageId,
+      stageId = wrapper.getStageId.toInt,
       stageAttemptId = wrapper.getStageAttemptId,
       info = deserializeSpeculationStageSummary(wrapper.getInfo)
     )
