@@ -500,7 +500,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       assert(result.rpInfo.taskResources(k) == input.rpInfo.taskResources(k))
     }
   }
-  
+
   test("Executor Summary") {
     val memoryMetrics =
       Some(new MemoryMetrics(
