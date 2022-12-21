@@ -239,6 +239,11 @@
           "Input to the function <functionName> cannot contain elements of the \"MAP\" type. In Spark, same maps may have different hashcode, thus hash expressions are prohibited on \"MAP\" elements. To restore previous behavior set \"spark.sql.legacy.allowHashOnMapType\" to \"true\"."
         ]
       },
+      "INPUT_SIZE_NOT_ONE" : {
+        "message" : [
+          "Length of <exprName> should be 1"
+        ]
+      },
       "INVALID_ARG_VALUE" : {
         "message" : [
           "The <inputName> value must to be a <requireType> literal of <validValues>, but got <inputValue>."
@@ -858,6 +863,11 @@
     ],
     "sqlState" : "42000"
   },
+  "MISSING_GROUP_BY" : {
+    "message" : [
+      "The query does not include a GROUP BY clause. Add GROUP BY or turn it into the window functions using OVER clauses."
+    ]
+  },
   "MISSING_STATIC_PARTITION_COLUMN" : {
     "message" : [
       "Unknown static partition column: <columnName>"
@@ -1038,7 +1048,7 @@
   },
   "RECURSIVE_PROTOBUF_SCHEMA" : {
     "message" : [
-      "Found recursive reference in Protobuf schema, which can not be processed by Spark: <fieldDescriptor>"
+      "Found recursive reference in Protobuf schema, which can not be processed by Spark by default: <fieldDescriptor>. try setting the option `recursive.fields.max.depth` 0 to 10. Going beyond 10 levels of recursion is not allowed."
     ]
   },
   "RENAME_SRC_PATH_NOT_FOUND" : {
@@ -1162,6 +1172,11 @@
       "Found an unclosed bracketed comment. Please, append */ at the end of the comment."
     ]
   },
+  "UNEXPECTED_INPUT_TYPE" : {
+    "message" : [
+      "Parameter <paramIndex> of function <functionName> requires the <requiredType> type, however <inputSql> has the type <inputType>."
+    ]
+  },
   "UNKNOWN_PROTOBUF_MESSAGE_TYPE" : {
     "message" : [
       "Attempting to treat <descriptorName> as a Message, but it was <containingType>"
@@ -1251,6 +1266,12 @@
     },
     "sqlState" : "42000"
   },
+  "UNRESOLVED_ROUTINE" : {
+    "message" : [
+      "Cannot resolve function <routineName> on search path <searchPath>."
+    ],
+    "sqlState" : "42000"
+  },
   "UNSUPPORTED_DATATYPE" : {
     "message" : [
       "Unsupported data type <typeName>"
@@ -1289,6 +1310,16 @@
           "The ANALYZE TABLE FOR COLUMNS command can operate on temporary views that have been cached already. Consider to cache the view <viewName>."
         ]
       },
+      "ANALYZE_UNSUPPORTED_COLUMN_TYPE" : {
+        "message" : [
+          "The ANALYZE TABLE FOR COLUMNS command does not support the type <columnType> of the column <columnName> in the table <tableName>."
+        ]
+      },
+      "ANALYZE_VIEW" : {
+        "message" : [
+          "The ANALYZE TABLE command does not support views."
+        ]
+      },
       "CATALOG_OPERATION" : {
         "message" : [
           "Catalog <catalogName> does not support <operation>."
@@ -1312,6 +1343,11 @@
       "JDBC_TRANSACTION" : {
         "message" : [
           "The target JDBC server does not support transactions and can only support ALTER TABLE with a single action."
+        ]
+      },
+      "LATERAL_COLUMN_ALIAS_IN_AGGREGATE_FUNC" : {
+        "message" : [
+          "Referencing a lateral column alias <lca> in the aggregate function <aggFunc>."
         ]
       },
       "LATERAL_JOIN_USING" : {
@@ -1641,11 +1677,6 @@
   "_LEGACY_ERROR_TEMP_0018" : {
     "message" : [
       "Function trim doesn't support with type <trimOption>. Please use BOTH, LEADING or TRAILING as trim type."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0022" : {
-    "message" : [
-      "<msg>."
     ]
   },
   "_LEGACY_ERROR_TEMP_0023" : {
@@ -2033,11 +2064,6 @@
   "_LEGACY_ERROR_TEMP_1040" : {
     "message" : [
       "Gap duration expression used in session window must be CalendarIntervalType, but got <dt>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1041" : {
-    "message" : [
-      "Undefined function <name>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1045" : {
@@ -2627,18 +2653,6 @@
       "The number of partitions can't be specified with unspecified distribution. Invalid writer requirements detected."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1179" : {
-    "message" : [
-      "Table-valued function <name> with alternatives: <usage>",
-      "cannot be applied to (<arguments>): <details>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1180" : {
-    "message" : [
-      "Incompatible input data type.",
-      "Expected: <expectedDataType>; Found: <foundDataType>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1181" : {
     "message" : [
       "Stream-stream join without equality predicate is not supported."
@@ -2892,16 +2906,6 @@
       "Partition spec is invalid. The spec (<specKeys>) must match the partition spec (<partitionColumnNames>) defined in table '<tableName>'."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1235" : {
-    "message" : [
-      "Column <name> in table <tableIdent> is of type <dataType>, and Spark does not support statistics collection on this column type."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1236" : {
-    "message" : [
-      "ANALYZE TABLE is not supported on views."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1237" : {
     "message" : [
       "The list of partition columns with values in partition specification for table '<table>' in database '<database>' is not a prefix of the list of partition columns defined in the table schema. Expected a prefix of [<schemaColumns>], but got [<specColumns>]."
@@ -2915,16 +2919,6 @@
   "_LEGACY_ERROR_TEMP_1241" : {
     "message" : [
       "CREATE-TABLE-AS-SELECT cannot create table with location to a non-empty directory <tablePath>. To allow overwriting the existing non-empty directory, set '<config>' to true."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1242" : {
-    "message" : [
-      "Undefined function: <rawName>. This function is neither a built-in/temporary function, nor a persistent function that is qualified as <fullName>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1243" : {
-    "message" : [
-      "Undefined function: <rawName>"
     ]
   },
   "_LEGACY_ERROR_TEMP_1244" : {
@@ -4295,7 +4289,7 @@
   },
   "_LEGACY_ERROR_TEMP_2175" : {
     "message" : [
-      "Rule id not found for <ruleName>"
+      "Rule id not found for <ruleName>. Please modify RuleIdCollection.scala if you are adding a new rule."
     ]
   },
   "_LEGACY_ERROR_TEMP_2176" : {
@@ -5116,11 +5110,6 @@
   "_LEGACY_ERROR_TEMP_2421" : {
     "message" : [
       "nondeterministic expression <sqlExpr> should not appear in the arguments of an aggregate function."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2422" : {
-    "message" : [
-      "grouping expressions sequence is empty, and '<sqlExpr>' is not an aggregate function. Wrap '<aggExprs>' in windowing function(s) or wrap '<sqlExpr>' in first() (or first_value) if you don't care which value you get."
     ]
   },
   "_LEGACY_ERROR_TEMP_2423" : {

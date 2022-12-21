@@ -66,7 +66,7 @@ def sql(
         in pandas-on-Spark is ignored. By default, the index is always lost.
 
         .. note:: If you want to preserve the index, explicitly use :func:`DataFrame.reset_index`,
-            and pass it to the sql statement with `index_col` parameter.
+            and pass it to the SQL statement with `index_col` parameter.
 
             For example,
 
@@ -182,7 +182,7 @@ def sql(
 class PandasSQLStringFormatter(string.Formatter):
     """
     A standard ``string.Formatter`` in Python that can understand pandas-on-Spark instances
-    with basic Python objects. This object has to be clear after the use for single SQL
+    with basic Python objects. This object must be clear after the use for single SQL
     query; cannot be reused across multiple SQL queries without cleaning.
     """
 

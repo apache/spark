@@ -20,7 +20,7 @@ import tempfile
 
 from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.sql import SparkSession, Row
-from pyspark.sql.types import StructType, StructField, LongType, StringType
+from pyspark.sql.types import StructType, StructField, LongType, StringType, IntegerType
 import pyspark.sql.functions
 from pyspark.testing.utils import ReusedPySparkTestCase
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
@@ -219,8 +219,15 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertEqual(sdf.schema, cdf.schema)
         self.assert_eq(sdf.toPandas(), cdf.toPandas())
 
-        # TODO: add cases for StructType after 'pyspark_types_to_proto_types' support StructType
         for schema in [
+            StructType(
+                [
+                    StructField("col1", IntegerType(), True),
+                    StructField("col2", IntegerType(), True),
+                    StructField("col3", IntegerType(), True),
+                    StructField("col4", IntegerType(), True),
+                ]
+            ),
             "struct<col1 int, col2 int, col3 int, col4 int>",
             "col1 int, col2 int, col3 int, col4 int",
             "col1 int, col2 long, col3 string, col4 long",
@@ -381,6 +388,66 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             self.spark.sql(query).schema.__repr__(),
             self.connect.sql(query).schema.__repr__(),
         )
+
+    def test_to(self):
+        # SPARK-41464: test DataFrame.to()
+
+        # The schema has not changed
+        schema = StructType(
+            [
+                StructField("id", IntegerType(), True),
+                StructField("name", StringType(), True),
+            ]
+        )
+
+        cdf = self.connect.read.table(self.tbl_name).to(schema)
+        df = self.spark.read.table(self.tbl_name).to(schema)
+
+        self.assertEqual(cdf.schema, df.schema)
+        self.assert_eq(cdf.toPandas(), df.toPandas())
+
+        # Change the column name
+        schema = StructType(
+            [
+                StructField("col1", IntegerType(), True),
+                StructField("col2", StringType(), True),
+            ]
+        )
+
+        cdf = self.connect.read.table(self.tbl_name).to(schema)
+        df = self.spark.read.table(self.tbl_name).to(schema)
+
+        self.assertEqual(cdf.schema, df.schema)
+        self.assert_eq(cdf.toPandas(), df.toPandas())
+
+        # Change the column data type
+        schema = StructType(
+            [
+                StructField("id", StringType(), True),
+                StructField("name", StringType(), True),
+            ]
+        )
+
+        cdf = self.connect.read.table(self.tbl_name).to(schema)
+        df = self.spark.read.table(self.tbl_name).to(schema)
+
+        self.assertEqual(cdf.schema, df.schema)
+        self.assert_eq(cdf.toPandas(), df.toPandas())
+
+        # Change the column data type failed
+        schema = StructType(
+            [
+                StructField("id", IntegerType(), True),
+                StructField("name", IntegerType(), True),
+            ]
+        )
+
+        with self.assertRaises(grpc.RpcError) as context:
+            self.connect.read.table(self.tbl_name).to(schema).toPandas()
+            self.assertIn(
+                """Column or field `name` is of type "STRING" while it's required to be "INT".""",
+                str(context.exception),
+            )
 
     def test_toDF(self):
         # SPARK-41310: test DataFrame.toDF()
@@ -809,6 +876,21 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             .toPandas(),
         )
 
+    def test_random_split(self):
+        # SPARK-41440: test randomSplit(weights, seed).
+        relations = (
+            self.connect.read.table(self.tbl_name).filter("id > 3").randomSplit([1.0, 2.0, 3.0], 2)
+        )
+        datasets = (
+            self.spark.read.table(self.tbl_name).filter("id > 3").randomSplit([1.0, 2.0, 3.0], 2)
+        )
+
+        self.assertTrue(len(relations) == len(datasets))
+        i = 0
+        while i < len(relations):
+            self.assert_eq(relations[i].toPandas(), datasets[i].toPandas())
+            i += 1
+
     def test_with_columns(self):
         # SPARK-41256: test withColumn(s).
         self.assert_eq(
@@ -831,6 +913,31 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             )
             .toPandas(),
         )
+
+    def test_hint(self):
+        # SPARK-41349: Test hint
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name).hint("COALESCE", 3000).toPandas(),
+            self.spark.read.table(self.tbl_name).hint("COALESCE", 3000).toPandas(),
+        )
+
+        # Hint with unsupported name will be ignored
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name).hint("illegal").toPandas(),
+            self.spark.read.table(self.tbl_name).hint("illegal").toPandas(),
+        )
+
+        # Hint with unsupported parameter values
+        with self.assertRaises(grpc.RpcError):
+            self.connect.read.table(self.tbl_name).hint("REPARTITION", "id+1").toPandas()
+
+        # Hint with unsupported parameter types
+        with self.assertRaises(ValueError):
+            self.connect.read.table(self.tbl_name).hint("REPARTITION", 1.1).toPandas()
+
+        # Hint with wrong combination
+        with self.assertRaises(grpc.RpcError):
+            self.connect.read.table(self.tbl_name).hint("REPARTITION", "id", 3).toPandas()
 
     def test_empty_dataset(self):
         # SPARK-41005: Test arrow based collection with empty dataset.
@@ -960,6 +1067,18 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assert_eq(
             self.connect.read.table(self.tbl_name).agg({"name": "min", "id": "max"}).toPandas(),
             self.spark.read.table(self.tbl_name).agg({"name": "min", "id": "max"}).toPandas(),
+        )
+
+    def test_subtract(self):
+        # SPARK-41453: test dataframe.subtract()
+        ndf1 = self.connect.read.table(self.tbl_name)
+        ndf2 = ndf1.filter("id > 3")
+        df1 = self.spark.read.table(self.tbl_name)
+        df2 = df1.filter("id > 3")
+
+        self.assert_eq(
+            ndf1.subtract(ndf2).toPandas(),
+            df1.subtract(df2).toPandas(),
         )
 
     def test_write_operations(self):

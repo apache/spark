@@ -291,14 +291,63 @@ class SparkConnectTests(SparkConnectSQLTestCase):
                 df.select(df.id.cast(x)).toPandas(), df2.select(df2.id.cast(x)).toPandas()
             )
 
+    def test_isin(self):
+        # SPARK-41526: test Column.isin
+        query = """
+            SELECT * FROM VALUES
+            (1, 1, 0, NULL), (2, NULL, 1, 2.0), (3, 3, 4, 3.5)
+            AS tab(a, b, c, d)
+            """
+        # +---+----+---+----+
+        # |  a|   b|  c|   d|
+        # +---+----+---+----+
+        # |  1|   1|  0|null|
+        # |  2|null|  1| 2.0|
+        # |  3|   3|  4| 3.5|
+        # +---+----+---+----+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        # test literals
+        self.assert_eq(
+            cdf.select(cdf.b.isin(1, 2, 3)).toPandas(),
+            sdf.select(sdf.b.isin(1, 2, 3)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.b.isin([1, 2, 3])).toPandas(),
+            sdf.select(sdf.b.isin([1, 2, 3])).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.b.isin(set([1, 2, 3]))).toPandas(),
+            sdf.select(sdf.b.isin(set([1, 2, 3]))).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.d.isin([1.0, None, 3.5])).toPandas(),
+            sdf.select(sdf.d.isin([1.0, None, 3.5])).toPandas(),
+        )
+
+        # test columns
+        self.assert_eq(
+            cdf.select(cdf.a.isin(cdf.b)).toPandas(),
+            sdf.select(sdf.a.isin(sdf.b)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.a.isin(cdf.b, cdf.c)).toPandas(),
+            sdf.select(sdf.a.isin(sdf.b, sdf.c)).toPandas(),
+        )
+
+        # test columns mixed with literals
+        self.assert_eq(
+            cdf.select(cdf.a.isin(cdf.b, 4, 5, 6)).toPandas(),
+            sdf.select(sdf.a.isin(sdf.b, 4, 5, 6)).toPandas(),
+        )
+
     def test_unsupported_functions(self):
         # SPARK-41225: Disable unsupported functions.
         c = self.connect.range(1).id
         for f in (
-            "otherwise",
             "over",
-            "isin",
-            "when",
             "getItem",
             "astype",
             "between",

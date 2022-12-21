@@ -33,6 +33,7 @@ export LC_ALL=C
 HADOOP_MODULE_PROFILES="-Phive-thriftserver -Pmesos -Pkubernetes -Pyarn -Phive \
     -Pspark-ganglia-lgpl -Pkinesis-asl -Phadoop-cloud"
 MVN="build/mvn"
+VERSIONS_MAVEN_PLUGIN="org.codehaus.mojo:versions-maven-plugin:2.14.1"
 HADOOP_HIVE_PROFILES=(
     hadoop-2-hive-2.3
     hadoop-3-hive-2.3
@@ -76,13 +77,11 @@ function reset_version {
   find "$HOME/.m2/" | grep "$TEMP_VERSION" | xargs rm -rf
 
   # Restore the original version number:
-  # SPARK-41522: pin versions-maven-plugin version to recover test-dependencies.sh and make GA task pass.
-  $MVN -q org.codehaus.mojo:versions-maven-plugin:2.13.0:set -DnewVersion=$OLD_VERSION -DgenerateBackupPoms=false > /dev/null
+  $MVN -q $VERSIONS_MAVEN_PLUGIN:set -DnewVersion=$OLD_VERSION -DgenerateBackupPoms=false > /dev/null
 }
 trap reset_version EXIT
 
-# SPARK-41522: pin versions-maven-plugin version to recover test-dependencies.sh and make GA task pass.
-$MVN -q org.codehaus.mojo:versions-maven-plugin:2.13.0:set -DnewVersion=$TEMP_VERSION -DgenerateBackupPoms=false > /dev/null
+$MVN -q $VERSIONS_MAVEN_PLUGIN:set -DnewVersion=$TEMP_VERSION -DgenerateBackupPoms=false > /dev/null
 
 # Generate manifests for each Hadoop profile:
 for HADOOP_HIVE_PROFILE in "${HADOOP_HIVE_PROFILES[@]}"; do
