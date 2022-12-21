@@ -4045,7 +4045,7 @@ object SQLConf {
         "higher resolution priority than the lateral column alias.")
       .version("3.4.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   /**
    * Holds information about keys that have been deprecated.

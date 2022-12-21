@@ -2302,7 +2302,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def analyzeTableNotSupportedOnViewsError(): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1236",
+      errorClass = "UNSUPPORTED_FEATURE.ANALYZE_VIEW",
       messageParameters = Map.empty)
   }
 
@@ -3395,7 +3395,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     }
   }
 
-  def ambiguousLateralColumnAlias(name: String, numOfMatches: Int): Throwable = {
+  def ambiguousLateralColumnAliasError(name: String, numOfMatches: Int): Throwable = {
     new AnalysisException(
       errorClass = "AMBIGUOUS_LATERAL_COLUMN_ALIAS",
       messageParameters = Map(
@@ -3404,12 +3404,23 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       )
     )
   }
-  def ambiguousLateralColumnAlias(nameParts: Seq[String], numOfMatches: Int): Throwable = {
+  def ambiguousLateralColumnAliasError(nameParts: Seq[String], numOfMatches: Int): Throwable = {
     new AnalysisException(
       errorClass = "AMBIGUOUS_LATERAL_COLUMN_ALIAS",
       messageParameters = Map(
         "name" -> toSQLId(nameParts),
         "n" -> numOfMatches.toString
+      )
+    )
+  }
+
+  def lateralColumnAliasInAggFuncUnsupportedError(
+      lcaNameParts: Seq[String], aggExpr: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_AGGREGATE_FUNC",
+      messageParameters = Map(
+        "lca" -> toSQLId(lcaNameParts),
+        "aggFunc" -> toSQLExpr(aggExpr)
       )
     )
   }

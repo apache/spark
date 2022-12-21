@@ -180,14 +180,14 @@ class SparkSession(object):
             return self.config("spark.app.name", name)
 
         def remote(self, location: str = "sc://localhost") -> "SparkSession.Builder":
-            return self.config("spark.connect.location", location)
+            return self.config("spark.remote", location)
 
         def enableHiveSupport(self) -> "SparkSession.Builder":
             raise NotImplementedError("enableHiveSupport not  implemented for Spark Connect")
 
         def getOrCreate(self) -> "SparkSession":
             """Creates a new instance."""
-            return SparkSession(connectionString=self._options["spark.connect.location"])
+            return SparkSession(connectionString=self._options["spark.remote"])
 
     _client: SparkConnectClient
 
