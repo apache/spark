@@ -36,6 +36,10 @@ object ResolveOrderByAll extends Rule[LogicalPlan] {
 
   val ALL = "ALL"
 
+  /**
+   * An extractor to pull out the SortOrder field in the ORDER BY ALL clause. We pull out that
+   * SortOrder object so we can pass its direction and null ordering.
+   */
   object OrderByAll {
     def unapply(s: Sort): Option[SortOrder] = {
       // This only applies to global ordering.
