@@ -79,7 +79,9 @@ class SQLStringFormatter(string.Formatter):
         else:
             return val
 
-    def check_unused_args(self, used_args: Sequence[Any], args: Sequence[Any], kwargs: Mapping[str, Any]) -> None:
+    def check_unused_args(
+        self, used_args: Sequence[Any], args: Sequence[Any], kwargs: Mapping[str, Any]
+    ) -> None:
         for k in kwargs:
             if isinstance(kwargs[k], str) and not used_args.__contains__(k):
                 self.unused_args[k] = kwargs[k]
