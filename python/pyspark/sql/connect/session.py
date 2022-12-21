@@ -22,6 +22,7 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 
+from pyspark.sql.session import classproperty, SparkSession as PySparkSession
 from pyspark.sql.types import DataType, StructType
 
 from pyspark.sql.connect.client import SparkConnectClient
@@ -47,48 +48,7 @@ if TYPE_CHECKING:
     from pyspark.sql.connect._typing import OptionalPrimitiveType
 
 
-# TODO(SPARK-38912): This method can be dropped once support for Python 3.8 is dropped
-# In Python 3.9, the @property decorator has been made compatible with the
-# @classmethod decorator (https://docs.python.org/3.9/library/functions.html#classmethod)
-#
-# @classmethod + @property is also affected by a bug in Python's docstring which was backported
-# to Python 3.9.6 (https://github.com/python/cpython/pull/28838)
-class classproperty(property):
-    """Same as Python's @property decorator, but for class attributes.
-
-    Examples
-    --------
-    >>> class Builder:
-    ...    def build(self):
-    ...        return MyClass()
-    ...
-    >>> class MyClass:
-    ...     @classproperty
-    ...     def builder(cls):
-    ...         print("instantiating new builder")
-    ...         return Builder()
-    ...
-    >>> c1 = MyClass.builder
-    instantiating new builder
-    >>> c2 = MyClass.builder
-    instantiating new builder
-    >>> c1 == c2
-    False
-    >>> isinstance(c1.build(), MyClass)
-    True
-    """
-
-    def __get__(self, instance: Any, owner: Any = None) -> "SparkSession.Builder":
-        # The "type: ignore" below silences the following error from mypy:
-        # error: Argument 1 to "classmethod" has incompatible
-        # type "Optional[Callable[[Any], Any]]";
-        # expected "Callable[..., Any]"  [arg-type]
-        return classmethod(self.fget).__get__(None, owner)()  # type: ignore
-
-
 class SparkSession(object):
-    """Conceptually the remote spark session that communicates with the server"""
-
     class Builder:
         """Builder for :class:`SparkSession`."""
 
@@ -112,39 +72,6 @@ class SparkSession(object):
             *,
             map: Optional[Dict[str, "OptionalPrimitiveType"]] = None,
         ) -> "SparkSession.Builder":
-            """Sets a config option. Options set using this method are automatically propagated to
-            both :class:`SparkConf` and :class:`SparkSession`'s own configuration.
-
-            .. versionadded:: 2.0.0
-
-            Parameters
-            ----------
-            key : str, optional
-                a key name string for configuration property
-            value : str, optional
-                a value for configuration property
-            map: dictionary, optional
-                a dictionary of configurations to set
-
-                .. versionadded:: 3.4.0
-
-            Returns
-            -------
-            :class:`SparkSession.Builder`
-
-            Examples
-            --------
-            For a (key, value) pair, you can omit parameter names.
-
-            >>> SparkSession.builder.config("spark.some.config.option", "some-value")
-            <pyspark.sql.session.SparkSession.Builder...
-
-            Additionally, you can pass a dictionary of configurations to set.
-
-            >>> SparkSession.builder.config(
-            ...     map={"spark.some.config.number": 123, "spark.some.config.float": 0.123})
-            <pyspark.sql.session.SparkSession.Builder...
-            """
             with self._lock:
                 if map is not None:
                     for k, v in map.items():
@@ -157,48 +84,19 @@ class SparkSession(object):
             return self
 
         def appName(self, name: str) -> "SparkSession.Builder":
-            """Sets a name for the application, which will be shown in the Spark web UI.
-
-            If no application name is set, a randomly generated name will be used.
-
-            .. versionadded:: 2.0.0
-
-            Parameters
-            ----------
-            name : str
-                an application name
-
-            Returns
-            -------
-            :class:`SparkSession.Builder`
-
-            Examples
-            --------
-            >>> SparkSession.builder.appName("My app")
-            <pyspark.sql.session.SparkSession.Builder...
-            """
             return self.config("spark.app.name", name)
 
         def remote(self, location: str = "sc://localhost") -> "SparkSession.Builder":
             return self.config("spark.remote", location)
 
         def enableHiveSupport(self) -> "SparkSession.Builder":
-            raise NotImplementedError("enableHiveSupport not  implemented for Spark Connect")
+            raise NotImplementedError("enableHiveSupport not implemented for Spark Connect")
 
         def getOrCreate(self) -> "SparkSession":
-            """Creates a new instance."""
             return SparkSession(connectionString=self._options["spark.remote"])
 
     _client: SparkConnectClient
 
-    # TODO(SPARK-38912): Replace @classproperty with @classmethod + @property once support for
-    # Python 3.8 is dropped.
-    #
-    # In Python 3.9, the @property decorator has been made compatible with the
-    # @classmethod decorator (https://docs.python.org/3.9/library/functions.html#classmethod)
-    #
-    # @classmethod + @property is also affected by a bug in Python's docstring which was backported
-    # to Python 3.9.6 (https://github.com/python/cpython/pull/28838)
     @classproperty
     def builder(cls) -> Builder:
         """Creates a :class:`Builder` for constructing a :class:`SparkSession`."""
@@ -210,10 +108,10 @@ class SparkSession(object):
 
         Parameters
         ----------
-        connectionString: Optional[str]
+        connectionString: str, optional
             Connection string that is used to extract the connection parameters and configure
             the GRPC connection. Defaults to `sc://localhost`.
-        userId : Optional[str]
+        userId : str, optional
             Optional unique user ID that is used to differentiate multiple users and
             isolate their Spark Sessions. If the `user_id` is not set, will default to
             the $USER environment. Defining the user ID as part of the connection string
@@ -224,75 +122,15 @@ class SparkSession(object):
 
     @property
     def read(self) -> "DataFrameReader":
-        """
-        Returns a :class:`DataFrameReader` that can be used to read data
-        in as a :class:`DataFrame`.
-
-        .. versionadded:: 3.4.0
-
-        Returns
-        -------
-        :class:`DataFrameReader`
-
-        Examples
-        --------
-        >>> spark.read
-        <pyspark.sql.connect.readwriter.DataFrameReader object ...>
-
-        Write a DataFrame into a JSON file and read it back.
-
-        >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
-        ...     # Write a DataFrame into a JSON file
-        ...     spark.createDataFrame(
-        ...         [{"age": 100, "name": "Hyukjin Kwon"}]
-        ...     ).write.mode("overwrite").format("json").save(d)
-        ...
-        ...     # Read the JSON file as a DataFrame.
-        ...     spark.read.format('json').load(d).show()
-        +---+------------+
-        |age|        name|
-        +---+------------+
-        |100|Hyukjin Kwon|
-        +---+------------+
-        """
         return DataFrameReader(self)
+
+    read.__doc__ = PySparkSession.read.__doc__
 
     def createDataFrame(
         self,
         data: Union["pd.DataFrame", "np.ndarray", Iterable[Any]],
         schema: Optional[Union[StructType, str, List[str], Tuple[str, ...]]] = None,
     ) -> "DataFrame":
-        """
-        Creates a :class:`DataFrame` from a :class:`pandas.DataFrame`.
-
-        .. versionadded:: 3.4.0
-
-
-        Parameters
-        ----------
-        data : :class:`pandas.DataFrame` or :class:`list`, or :class:`numpy.ndarray`.
-        schema : :class:`pyspark.sql.types.DataType`, str or list, optional
-
-            When ``schema`` is :class:`pyspark.sql.types.DataType` or a datatype string, it must
-            match the real data, or an exception will be thrown at runtime. If the given schema is
-            not :class:`pyspark.sql.types.StructType`, it will be wrapped into a
-            :class:`pyspark.sql.types.StructType` as its only field, and the field name will be
-            "value". Each record will also be wrapped into a tuple, which can be converted to row
-            later.
-
-        Returns
-        -------
-        :class:`DataFrame`
-
-        Examples
-        --------
-        >>> import pandas
-        >>> pdf = pandas.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]})
-        >>> self.connect.createDataFrame(pdf).collect()
-        [Row(a=1, b='a'), Row(a=2, b='b'), Row(a=3, b='c')]
-
-        """
         assert data is not None
         if isinstance(data, DataFrame):
             raise TypeError("data is already a DataFrame")
@@ -360,6 +198,33 @@ class SparkSession(object):
         else:
             return DataFrame.withPlan(LocalRelation(table), self)
 
+    createDataFrame.__doc__ = PySparkSession.createDataFrame.__doc__
+
+    def sql(self, sqlQuery: str) -> "DataFrame":
+        return DataFrame.withPlan(SQL(sqlQuery), self)
+
+    sql.__doc__ = PySparkSession.sql.__doc__
+
+    def range(
+        self,
+        start: int,
+        end: Optional[int] = None,
+        step: int = 1,
+        numPartitions: Optional[int] = None,
+    ) -> DataFrame:
+        if end is None:
+            actual_end = start
+            start = 0
+        else:
+            actual_end = end
+
+        return DataFrame.withPlan(
+            Range(start=start, end=actual_end, step=step, num_partitions=numPartitions), self
+        )
+
+    range.__doc__ = PySparkSession.__doc__
+
+    # SparkConnect-specific API
     @property
     def client(self) -> "SparkConnectClient":
         """
@@ -374,44 +239,5 @@ class SparkSession(object):
     def register_udf(self, function: Any, return_type: Union[str, DataType]) -> str:
         return self._client.register_udf(function, return_type)
 
-    def sql(self, sql_string: str) -> "DataFrame":
-        return DataFrame.withPlan(SQL(sql_string), self)
 
-    def range(
-        self,
-        start: int,
-        end: Optional[int] = None,
-        step: int = 1,
-        numPartitions: Optional[int] = None,
-    ) -> DataFrame:
-        """
-        Create a :class:`DataFrame` with column named ``id`` and typed Long,
-        containing elements in a range from ``start`` to ``end`` (exclusive) with
-        step value ``step``.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        start : int
-            the start value
-        end : int
-            the end value (exclusive)
-        step : int, optional
-            the incremental step (default: 1)
-        numPartitions : int, optional
-            the number of partitions of the DataFrame
-
-        Returns
-        -------
-        :class:`DataFrame`
-        """
-        if end is None:
-            actual_end = start
-            start = 0
-        else:
-            actual_end = end
-
-        return DataFrame.withPlan(
-            Range(start=start, end=actual_end, step=step, num_partitions=numPartitions), self
-        )
+SparkSession.__doc__ = PySparkSession.__doc__
