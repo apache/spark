@@ -29,6 +29,7 @@ class RDDStorageInfoWrapperSerializer extends ProtobufSerDe {
 
   override def serialize(input: Any): Array[Byte] =
     serialize(input.asInstanceOf[RDDStorageInfoWrapper])
+
   private def serialize(input: RDDStorageInfoWrapper): Array[Byte] = {
     val builder = StoreTypes.RDDStorageInfoWrapper.newBuilder()
     builder.setInfo(serializeRDDStorageInfo(input.info))
