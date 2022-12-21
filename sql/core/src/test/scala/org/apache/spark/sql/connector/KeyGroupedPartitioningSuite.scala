@@ -28,7 +28,6 @@ import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.connector.distributions.Distributions
 import org.apache.spark.sql.connector.expressions._
 import org.apache.spark.sql.connector.expressions.Expressions._
-import org.apache.spark.sql.connector.read.partitioning.KeyGroupedPartitioning
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
@@ -438,12 +437,6 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
         "ON i.id = p.item_id ORDER BY id, purchase_price, sale_price")
 
     val shuffles = collectShuffles(df.queryExecution.executedPlan)
-    shuffles.foreach { s =>
-      assert(s.outputPartitioning.isInstanceOf[KeyGroupedPartitioning],
-        s"expected KeyGroupedPartitioning but found ${s.outputPartitioning.getClass.getName}")
-      assert(s.outputPartitioning.numPartitions == 3,
-        s"expected 3 partitions for $s but found ${s.outputPartitioning.numPartitions}")
-    }
     assert(shuffles.isEmpty, "should not contain any shuffle")
     checkAnswer(df, Seq(Row(1, "aa", 40.0, 42.0), Row(3, "bb", 10.0, 19.5)))
   }
@@ -469,12 +462,6 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
         "ON i.id = p.item_id ORDER BY id, purchase_price, sale_price")
 
     val shuffles = collectShuffles(df.queryExecution.executedPlan)
-    shuffles.foreach { s =>
-      assert(s.outputPartitioning.isInstanceOf[KeyGroupedPartitioning],
-        s"expected KeyGroupedPartitioning but found ${s.outputPartitioning.getClass.getName}")
-      assert(s.outputPartitioning.numPartitions == 4,
-        s"expected 4 partitions for $s but found ${s.outputPartitioning.numPartitions}")
-    }
     assert(shuffles.isEmpty, "should not contain any shuffle")
     checkAnswer(df, Seq(Row(1, "aa", 40.0, 42.0), Row(2, "bb", 10.0, 19.5)))
   }
@@ -499,12 +486,6 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
         "ON i.id = p.item_id ORDER BY id, purchase_price, sale_price")
 
     val shuffles = collectShuffles(df.queryExecution.executedPlan)
-    shuffles.foreach { s =>
-      assert(s.outputPartitioning.isInstanceOf[KeyGroupedPartitioning],
-        s"expected KeyGroupedPartitioning but found ${s.outputPartitioning.getClass.getName}")
-      assert(s.outputPartitioning.numPartitions == 6,
-        s"expected 6 partitions for $s but found ${s.outputPartitioning.numPartitions}")
-    }
     assert(shuffles.isEmpty, "should not contain any shuffle")
     checkAnswer(df, Seq.empty)
   }

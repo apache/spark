@@ -160,8 +160,11 @@ case class EnsureRequirements(
             node.mapChildren(child => populatePartitionValues(child, values))
         }
 
-      // Check if 1) all children are of `KeyGroupedPartitioning` and 2) they are all compatible
-      // with each other. If both are true, skip shuffle.
+      // Check if the following conditions are satisfied:
+      //   1. There are exactly two children (e.g., join). Note that Spark doesn't support
+      //      multi-way join at the moment, so this check should be sufficient.
+      //   2. All children are of `KeyGroupedPartitioning`, and they are compatible with each other
+      // If both are true, skip shuffle.
       val allCompatible = childrenIndexes.length == 2 && {
         val left = childrenIndexes.head
         val right = childrenIndexes(1)
