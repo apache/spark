@@ -7159,6 +7159,7 @@ def array_compact(col: "ColumnOrName") -> Column:
     """
     return _invoke_function_over_columns("array_compact", col)
 
+
 @try_remote_functions
 def explode(col: "ColumnOrName") -> Column:
     """
