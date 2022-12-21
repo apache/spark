@@ -56,7 +56,7 @@ object ResolveGroupByAll extends Rule[LogicalPlan] {
       // expression list (because we don't know they would be aggregate expressions until resolved).
       if (a.aggregateExpressions.forall(_.resolved)) {
         val groupingExprs =
-          a.aggregateExpressions.filter(!_.containsPattern(AGGREGATE_EXPRESSION))
+          a.aggregateExpressions.filter(!_.exists(AggregateExpression.isAggregate))
 
         // If the grouping exprs are empty, this could either be (1) a valid global aggregate, or
         // (2) we simply fail to infer the grouping columns. As an example, in "i + sum(j)", we will
