@@ -25,12 +25,12 @@ import org.apache.spark.util.AccumulatorV2
  *
  * @since 3.4.0
  */
-class MapperRowCounter extends AccumulatorV2[jl.Long, java.util.List[(jl.Long, jl.Long)]] {
+class MapperRowCounter extends AccumulatorV2[jl.Long, java.util.List[(jl.Integer, jl.Long)]] {
 
-  private var _agg: java.util.List[(jl.Long, jl.Long)] = _
+  private var _agg: java.util.List[(jl.Integer, jl.Long)] = _
 
   private def getOrCreate = {
-    _agg = Option(_agg).getOrElse(new java.util.ArrayList[(jl.Long, jl.Long)]())
+    _agg = Option(_agg).getOrElse(new java.util.ArrayList[(jl.Integer, jl.Long)]())
     _agg
   }
 
@@ -64,7 +64,7 @@ class MapperRowCounter extends AccumulatorV2[jl.Long, java.util.List[(jl.Long, j
     }
   }
 
-  def setPartitionId(id: Long): Unit = {
+  def setPartitionId(id: jl.Integer): Unit = {
     this.synchronized {
       if (isZero) {
         getOrCreate.add((id, 0))
@@ -76,7 +76,7 @@ class MapperRowCounter extends AccumulatorV2[jl.Long, java.util.List[(jl.Long, j
   }
 
   override def merge(
-      other: AccumulatorV2[jl.Long, java.util.List[(jl.Long, jl.Long)]]): Unit
+      other: AccumulatorV2[jl.Long, java.util.List[(jl.Integer, jl.Long)]]): Unit
   = other match {
     case o: MapperRowCounter =>
       this.synchronized(getOrCreate.addAll(o.value))
@@ -85,5 +85,5 @@ class MapperRowCounter extends AccumulatorV2[jl.Long, java.util.List[(jl.Long, j
         s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
   }
 
-  override def value: java.util.List[(jl.Long, jl.Long)] = this.synchronized(getOrCreate)
+  override def value: java.util.List[(jl.Integer, jl.Long)] = this.synchronized(getOrCreate)
 }
