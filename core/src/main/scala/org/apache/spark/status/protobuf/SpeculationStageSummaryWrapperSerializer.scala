@@ -20,8 +20,14 @@ package org.apache.spark.status.protobuf
 import org.apache.spark.status.SpeculationStageSummaryWrapper
 import org.apache.spark.status.api.v1.SpeculationStageSummary
 
-object SpeculationStageSummaryWrapperSerializer {
-  def serialize(s: SpeculationStageSummaryWrapper): Array[Byte] = {
+object SpeculationStageSummaryWrapperSerializer extends ProtobufSerDe {
+
+  override val supportClass: Class[_] = classOf[SpeculationStageSummaryWrapper]
+
+  override def serialize(input: Any): Array[Byte] =
+    serialize(input.asInstanceOf[SpeculationStageSummaryWrapper])
+
+  private def serialize(s: SpeculationStageSummaryWrapper): Array[Byte] = {
     val summary = serializeSpeculationStageSummary(s.info)
     val builder = StoreTypes.SpeculationStageSummaryWrapper.newBuilder()
     builder.setStageId(s.stageId)
