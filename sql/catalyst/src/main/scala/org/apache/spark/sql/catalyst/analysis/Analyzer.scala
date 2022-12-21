@@ -1023,6 +1023,11 @@ class Analyzer(override val catalogManager: CatalogManager)
           child = addMetadataCol(p.child, isRequired))
         newProj.copyTagsFrom(p)
         newProj
+      case u: Union if u.metadataOutput.exists(isRequired) =>
+        // The metadata columns in different children could have different expression IDs (and hence
+        // might not appear in the list of required columns), but would still be required to compute
+        // the union of them.
+        u.withNewChildren(u.children.map(addMetadataCol(_, _ => true)))
       case _ => plan.withNewChildren(plan.children.map(addMetadataCol(_, isRequired)))
     }
   }
