@@ -23,15 +23,15 @@
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.12</artifactId>
     <version>3.4.0-SNAPSHOT</version>
-    <relativePath>../../../pom.xml</relativePath>
+    <relativePath>../../../../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-connect-client_2.12</artifactId>
+  <artifactId>spark-connect-client-jvm_2.12</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Connect Client</name>
   <url>https://spark.apache.org/</url>
   <properties>
-    <sbt.project.name>connect-client</sbt.project.name>
+    <sbt.project.name>connect-client-jvm</sbt.project.name>
   </properties>
 
   <dependencies>
