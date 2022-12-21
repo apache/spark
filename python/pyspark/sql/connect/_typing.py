@@ -28,6 +28,8 @@ import decimal
 
 from pyspark.sql.connect.column import Column
 
+from pyspark.sql.connect.dataframe import DataFrame
+
 ColumnOrName = Union[Column, str]
 
 PrimitiveType = Union[bool, float, int, str]
@@ -39,6 +41,8 @@ LiteralType = PrimitiveType
 DecimalLiteral = decimal.Decimal
 
 DateTimeLiteral = Union[datetime.datetime, datetime.date]
+
+DataFrameType = DataFrame
 
 
 class FunctionBuilderCallable(Protocol):

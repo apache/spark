@@ -18,19 +18,26 @@
 package org.apache.spark.status.protobuf
 
 import org.apache.spark.status.ResourceProfileWrapper
-import org.apache.spark.status.protobuf.ApplicationEnvironmentInfoWrapperSerializer.{deserializeResourceProfileInfo, serializeResourceProfileInfo}
 
-object ResourceProfileWrapperSerializer {
-  def serialize(input: ResourceProfileWrapper): Array[Byte] = {
+class ResourceProfileWrapperSerializer extends ProtobufSerDe {
+
+  private val appEnvSerializer = new ApplicationEnvironmentInfoWrapperSerializer
+
+  override val supportClass: Class[_] = classOf[ResourceProfileWrapper]
+
+  override def serialize(input: Any): Array[Byte] =
+    serialize(input.asInstanceOf[ResourceProfileWrapper])
+
+  private def serialize(input: ResourceProfileWrapper): Array[Byte] = {
     val builder = StoreTypes.ResourceProfileWrapper.newBuilder()
-    builder.setRpInfo(serializeResourceProfileInfo(input.rpInfo))
+    builder.setRpInfo(appEnvSerializer.serializeResourceProfileInfo(input.rpInfo))
     builder.build().toByteArray
   }
 
   def deserialize(bytes: Array[Byte]): ResourceProfileWrapper = {
     val wrapper = StoreTypes.ResourceProfileWrapper.parseFrom(bytes)
     new ResourceProfileWrapper(
-      rpInfo = deserializeResourceProfileInfo(wrapper.getRpInfo)
+      rpInfo = appEnvSerializer.deserializeResourceProfileInfo(wrapper.getRpInfo)
     )
   }
 }

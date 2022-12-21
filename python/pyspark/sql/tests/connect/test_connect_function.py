@@ -70,6 +70,48 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
 
         self.assertEqual(str1, str2)
 
+    def test_broadcast(self):
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        query = """
+            SELECT * FROM VALUES
+            (0, float("NAN"), NULL), (1, NULL, 2.0), (2, 2.1, 3.5)
+            AS tab(a, b, c)
+            """
+        # +---+----+----+
+        # |  a|   b|   c|
+        # +---+----+----+
+        # |  0| NaN|null|
+        # |  1|null| 2.0|
+        # |  2| 2.1| 3.5|
+        # +---+----+----+
+
+        cdf = self.connect.sql(query)
+        cdf1 = cdf.select(cdf.a, "b")
+        cdf2 = cdf.select(cdf.a, "c")
+
+        sdf = self.spark.sql(query)
+        sdf1 = sdf.select(sdf.a, "b")
+        sdf2 = sdf.select(sdf.a, "c")
+
+        self.assert_eq(
+            cdf1.join(cdf2, on="a").toPandas(),
+            sdf1.join(sdf2, on="a").toPandas(),
+        )
+        self.assert_eq(
+            cdf1.join(CF.broadcast(cdf2), on="a").toPandas(),
+            sdf1.join(SF.broadcast(sdf2), on="a").toPandas(),
+        )
+        self.assert_eq(
+            CF.broadcast(cdf1).join(cdf2, on="a").toPandas(),
+            SF.broadcast(sdf1).join(sdf2, on="a").toPandas(),
+        )
+        self.assert_eq(
+            CF.broadcast(cdf1).join(CF.broadcast(cdf2), on="a").toPandas(),
+            SF.broadcast(sdf1).join(SF.broadcast(sdf2), on="a").toPandas(),
+        )
+
     def test_normal_functions(self):
         from pyspark.sql import functions as SF
         from pyspark.sql.connect import functions as CF

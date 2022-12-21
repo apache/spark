@@ -27,6 +27,7 @@ import org.apache.spark.connect.proto.SetOperation.SetOpType
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.connect.planner.DataTypeProtoConverter
 import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.toConnectProtoValue
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
 /**
@@ -682,6 +683,17 @@ package object dsl {
               .build())
           .build()
       }
+
+      def to(schema: StructType): Relation =
+        Relation
+          .newBuilder()
+          .setToSchema(
+            ToSchema
+              .newBuilder()
+              .setInput(logicalPlan)
+              .setSchema(DataTypeProtoConverter.toConnectProtoType(schema))
+              .build())
+          .build()
 
       def toDF(columnNames: String*): Relation =
         Relation

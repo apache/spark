@@ -1266,6 +1266,12 @@
     },
     "sqlState" : "42000"
   },
+  "UNRESOLVED_ROUTINE" : {
+    "message" : [
+      "Cannot resolve function <routineName> on search path <searchPath>."
+    ],
+    "sqlState" : "42000"
+  },
   "UNSUPPORTED_DATATYPE" : {
     "message" : [
       "Unsupported data type <typeName>"
@@ -2058,11 +2064,6 @@
   "_LEGACY_ERROR_TEMP_1040" : {
     "message" : [
       "Gap duration expression used in session window must be CalendarIntervalType, but got <dt>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1041" : {
-    "message" : [
-      "Undefined function <name>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1045" : {
@@ -2918,16 +2919,6 @@
   "_LEGACY_ERROR_TEMP_1241" : {
     "message" : [
       "CREATE-TABLE-AS-SELECT cannot create table with location to a non-empty directory <tablePath>. To allow overwriting the existing non-empty directory, set '<config>' to true."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1242" : {
-    "message" : [
-      "Undefined function: <rawName>. This function is neither a built-in/temporary function, nor a persistent function that is qualified as <fullName>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1243" : {
-    "message" : [
-      "Undefined function: <rawName>"
     ]
   },
   "_LEGACY_ERROR_TEMP_1244" : {
