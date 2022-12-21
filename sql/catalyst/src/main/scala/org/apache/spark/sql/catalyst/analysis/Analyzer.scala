@@ -2323,7 +2323,11 @@ class Analyzer(override val catalogManager: CatalogManager)
               externalFunctionNameSet.add(fullName)
               f
             } else {
-              throw QueryCompilationErrors.noSuchFunctionError(nameParts, f, Some(fullName))
+              val catalogPath = (catalog.name() +: catalogManager.currentNamespace).mkString(".")
+              throw QueryCompilationErrors.unresolvedRoutineError(
+                nameParts,
+                Seq("system.builtin", "system.session", catalogPath),
+                f.origin)
             }
           }
       }
@@ -2420,8 +2424,13 @@ class Analyzer(override val catalogManager: CatalogManager)
                 errorClass = "_LEGACY_ERROR_TEMP_2306",
                 messageParameters = Map(
                   "class" -> other.getClass.getCanonicalName))
-              // We don't support persistent high-order functions yet.
-            }.getOrElse(throw QueryCompilationErrors.noSuchFunctionError(nameParts, u))
+            }.getOrElse {
+              throw QueryCompilationErrors.unresolvedRoutineError(
+                nameParts,
+                // We don't support persistent high-order functions yet.
+                Seq("system.builtin", "system.session"),
+                u.origin)
+            }
           }
 
           case u if !u.childrenResolved => u // Skip until children are resolved.
