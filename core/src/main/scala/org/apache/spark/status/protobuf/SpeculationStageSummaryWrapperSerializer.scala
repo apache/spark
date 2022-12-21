@@ -20,7 +20,7 @@ package org.apache.spark.status.protobuf
 import org.apache.spark.status.SpeculationStageSummaryWrapper
 import org.apache.spark.status.api.v1.SpeculationStageSummary
 
-object SpeculationStageSummaryWrapperSerializer extends ProtobufSerDe {
+class SpeculationStageSummaryWrapperSerializer extends ProtobufSerDe {
 
   override val supportClass: Class[_] = classOf[SpeculationStageSummaryWrapper]
 
