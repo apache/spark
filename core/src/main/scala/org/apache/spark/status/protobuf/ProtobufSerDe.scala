@@ -19,13 +19,36 @@ package org.apache.spark.status.protobuf
 
 import org.apache.spark.annotation.{DeveloperApi, Unstable}
 
+/**
+ * :: DeveloperApi ::
+ * `ProtobufSerDe` used to represent the API for serialize and deserialize of
+ * Protobuf data related to UI. The subclass should implement this trait and
+ * register itself to `org.apache.spark.status.protobuf.ProtobufSerDe` so that
+ * `KVStoreProtobufSerializer` can use `ServiceLoader` to load and use them.
+ *
+ * TODO: SPARK-41644 How to define `ProtobufSerDe` as `ProtobufSerDe[T]`
+ *
+ * @since 3.4.0
+ */
 @DeveloperApi
 @Unstable
 trait ProtobufSerDe {
 
+  /**
+   * Specify the data types supported by the current `ProtobufSerDe`
+   */
   val supportClass: Class[_]
 
+  /**
+   * Serialize the input data of the type corresponding to `supportClass`
+   * to `Array[Byte]`, since the current input parameter type is `Any`,
+   * the input type needs to be guaranteed from the code level.
+   */
   def serialize(input: Any): Array[Byte]
 
+  /**
+   * Deserialize the input `Array[Byte]` to an object of the
+   * type corresponding to `supportClass`.
+   */
   def deserialize(bytes: Array[Byte]): Any
 }
