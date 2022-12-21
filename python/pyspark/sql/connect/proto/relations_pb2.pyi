@@ -1161,6 +1161,7 @@ class Sample(google.protobuf.message.Message):
     UPPER_BOUND_FIELD_NUMBER: builtins.int
     WITH_REPLACEMENT_FIELD_NUMBER: builtins.int
     SEED_FIELD_NUMBER: builtins.int
+    FORCE_STABLE_SORT_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
         """(Required) Input relation for a Sample."""
@@ -1172,6 +1173,10 @@ class Sample(google.protobuf.message.Message):
     """(Optional) Whether to sample with replacement."""
     seed: builtins.int
     """(Optional) The random seed."""
+    force_stable_sort: builtins.bool
+    """(Optional) Explicitly sort the underlying plan to make the ordering deterministic.
+    This flag is only used to randomly splits DataFrame with the provided weights.
+    """
     def __init__(
         self,
         *,
@@ -1180,14 +1185,19 @@ class Sample(google.protobuf.message.Message):
         upper_bound: builtins.float = ...,
         with_replacement: builtins.bool | None = ...,
         seed: builtins.int | None = ...,
+        force_stable_sort: builtins.bool | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
+            "_force_stable_sort",
+            b"_force_stable_sort",
             "_seed",
             b"_seed",
             "_with_replacement",
             b"_with_replacement",
+            "force_stable_sort",
+            b"force_stable_sort",
             "input",
             b"input",
             "seed",
@@ -1199,10 +1209,14 @@ class Sample(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "_force_stable_sort",
+            b"_force_stable_sort",
             "_seed",
             b"_seed",
             "_with_replacement",
             b"_with_replacement",
+            "force_stable_sort",
+            b"force_stable_sort",
             "input",
             b"input",
             "lower_bound",
@@ -1215,6 +1229,10 @@ class Sample(google.protobuf.message.Message):
             b"with_replacement",
         ],
     ) -> None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_force_stable_sort", b"_force_stable_sort"]
+    ) -> typing_extensions.Literal["force_stable_sort"] | None: ...
     @typing.overload
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["_seed", b"_seed"]

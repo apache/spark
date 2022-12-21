@@ -598,6 +598,22 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(connectPlan1, sparkPlan1)
   }
 
+  test("Test RandomSplit") {
+    val splitRelations0 = connectTestRelation.randomSplit(Array[Double](1, 2, 3), 1)
+    val splits0 = sparkTestRelation.randomSplit(Array[Double](1, 2, 3), 1)
+    assert(splitRelations0.length == splits0.length)
+    splitRelations0.zip(splits0).foreach { case (connectPlan, sparkPlan) =>
+      comparePlans(connectPlan, sparkPlan)
+    }
+
+    val splitRelations1 = connectTestRelation.randomSplit(Array[Double](1, 2, 3))
+    val splits1 = sparkTestRelation.randomSplit(Array[Double](1, 2, 3))
+    assert(splitRelations1.length == splits1.length)
+    splitRelations1.zip(splits1).foreach { case (connectPlan, sparkPlan) =>
+      comparePlans(connectPlan, sparkPlan)
+    }
+  }
+
   private def createLocalRelationProtoByAttributeReferences(
       attrs: Seq[AttributeReference]): proto.Relation = {
     val localRelationBuilder = proto.LocalRelation.newBuilder()

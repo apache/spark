@@ -1048,7 +1048,7 @@
   },
   "RECURSIVE_PROTOBUF_SCHEMA" : {
     "message" : [
-      "Found recursive reference in Protobuf schema, which can not be processed by Spark: <fieldDescriptor>"
+      "Found recursive reference in Protobuf schema, which can not be processed by Spark by default: <fieldDescriptor>. try setting the option `recursive.fields.max.depth` 0 to 10. Going beyond 10 levels of recursion is not allowed."
     ]
   },
   "RENAME_SRC_PATH_NOT_FOUND" : {
@@ -1309,6 +1309,11 @@
           "The ANALYZE TABLE FOR COLUMNS command does not support the type <columnType> of the column <columnName> in the table <tableName>."
         ]
       },
+      "ANALYZE_VIEW" : {
+        "message" : [
+          "The ANALYZE TABLE command does not support views."
+        ]
+      },
       "CATALOG_OPERATION" : {
         "message" : [
           "Catalog <catalogName> does not support <operation>."
@@ -1332,6 +1337,11 @@
       "JDBC_TRANSACTION" : {
         "message" : [
           "The target JDBC server does not support transactions and can only support ALTER TABLE with a single action."
+        ]
+      },
+      "LATERAL_COLUMN_ALIAS_IN_AGGREGATE_FUNC" : {
+        "message" : [
+          "Referencing a lateral column alias <lca> in the aggregate function <aggFunc>."
         ]
       },
       "LATERAL_JOIN_USING" : {
@@ -1661,11 +1671,6 @@
   "_LEGACY_ERROR_TEMP_0018" : {
     "message" : [
       "Function trim doesn't support with type <trimOption>. Please use BOTH, LEADING or TRAILING as trim type."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0022" : {
-    "message" : [
-      "<msg>."
     ]
   },
   "_LEGACY_ERROR_TEMP_0023" : {
@@ -2898,11 +2903,6 @@
   "_LEGACY_ERROR_TEMP_1232" : {
     "message" : [
       "Partition spec is invalid. The spec (<specKeys>) must match the partition spec (<partitionColumnNames>) defined in table '<tableName>'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1236" : {
-    "message" : [
-      "ANALYZE TABLE is not supported on views."
     ]
   },
   "_LEGACY_ERROR_TEMP_1237" : {

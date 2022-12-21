@@ -1818,7 +1818,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           val aliases = aliasMap.get(u.nameParts.head).get
           aliases.size match {
             case n if n > 1 =>
-              throw QueryCompilationErrors.ambiguousLateralColumnAlias(u.name, n)
+              throw QueryCompilationErrors.ambiguousLateralColumnAliasError(u.name, n)
             case n if n == 1 && aliases.head.alias.resolved =>
               // Only resolved alias can be the lateral column alias
               // The lateral alias can be a struct and have nested field, need to construct
@@ -1838,7 +1838,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           val aliases = aliasMap.get(nameParts.head).get
           aliases.size match {
             case n if n > 1 =>
-              throw QueryCompilationErrors.ambiguousLateralColumnAlias(nameParts, n)
+              throw QueryCompilationErrors.ambiguousLateralColumnAliasError(nameParts, n)
             case n if n == 1 && aliases.head.alias.resolved =>
               resolveByLateralAlias(nameParts, aliases.head.alias).getOrElse(o)
             case _ => o
@@ -1853,8 +1853,8 @@ class Analyzer(override val catalogManager: CatalogManager)
         plan.resolveOperatorsUpWithPruning(
           _.containsAnyPattern(UNRESOLVED_ATTRIBUTE, OUTER_REFERENCE), ruleId) {
           case p @ Project(projectList, _) if p.childrenResolved
-            && !ResolveReferences.containsStar(projectList)
-            && projectList.exists(_.containsAnyPattern(UNRESOLVED_ATTRIBUTE, OUTER_REFERENCE)) =>
+              && !ResolveReferences.containsStar(projectList)
+              && projectList.exists(_.containsAnyPattern(UNRESOLVED_ATTRIBUTE, OUTER_REFERENCE)) =>
             var aliasMap = CaseInsensitiveMap(Map[String, Seq[AliasEntry]]())
             val newProjectList = projectList.zipWithIndex.map {
               case (a: Alias, idx) =>
@@ -1869,6 +1869,30 @@ class Analyzer(override val catalogManager: CatalogManager)
                 wrapLCARef(e, p, aliasMap)
             }
             p.copy(projectList = newProjectList)
+
+          // Implementation notes:
+          // In Aggregate, introducing and wrapping this resolved leaf expression
+          // LateralColumnAliasReference is especially needed because it needs an accurate condition
+          // to trigger adding a Project above and extracting and pushing down aggregate functions
+          // or grouping expressions. Such operation can only be done once. With this
+          // LateralColumnAliasReference, that condition can simply be when the whole Aggregate is
+          // resolved. Otherwise, it can't tell if all aggregate functions are created and
+          // resolved so that it can start the extraction, because the lateral alias reference is
+          // unresolved and can be the argument to functions, blocking the resolution of functions.
+          case agg @ Aggregate(_, aggExprs, _) if agg.childrenResolved
+              && !ResolveReferences.containsStar(aggExprs)
+              && aggExprs.exists(_.containsAnyPattern(UNRESOLVED_ATTRIBUTE, OUTER_REFERENCE)) =>
+
+            var aliasMap = CaseInsensitiveMap(Map[String, Seq[AliasEntry]]())
+            val newAggExprs = aggExprs.zipWithIndex.map {
+              case (a: Alias, idx) =>
+                val lcaWrapped = wrapLCARef(a, agg, aliasMap).asInstanceOf[Alias]
+                aliasMap = insertIntoAliasMap(lcaWrapped, idx, aliasMap)
+                lcaWrapped
+              case (e, _) =>
+                wrapLCARef(e, agg, aliasMap)
+            }
+            agg.copy(aggregateExpressions = newAggExprs)
         }
       }
     }

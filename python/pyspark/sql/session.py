@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
+import os
 import sys
 import warnings
 from collections.abc import Sized
@@ -250,15 +250,43 @@ class SparkSession(SparkConversionMixin):
             ...     map={"spark.some.config.number": 123, "spark.some.config.float": 0.123})
             <pyspark.sql.session.SparkSession.Builder...
             """
+
+            def check_startup_urls(k: str, v: str) -> None:
+                if k == "spark.master":
+                    if "spark.remote" in self._options or "SPARK_REMOTE" in os.environ:
+                        raise RuntimeError(
+                            "Spark master cannot be configured with Spark Connect server; "
+                            "however, found URL for Spark Connect [%s]"
+                            % self._options.get("spark.remote", os.environ.get("SPARK_REMOTE"))
+                        )
+                elif k == "spark.remote":
+                    if "spark.master" in self._options or "MASTER" in os.environ:
+                        raise RuntimeError(
+                            "Spark Connect server cannot be configured with Spark master; "
+                            "however, found URL for Spark master [%s]"
+                            % self._options.get("spark.master", os.environ.get("MASTER"))
+                        )
+
+                    if "SPARK_REMOTE" in os.environ and os.environ["SPARK_REMOTE"] != v:
+                        raise RuntimeError(
+                            "Only one Spark Connect client URL can be set; however, got a different"
+                            "URL [%s] from the existing [%s]" % (os.environ["SPARK_REMOTE"], v)
+                        )
+
             with self._lock:
                 if conf is not None:
                     for (k, v) in conf.getAll():
+                        check_startup_urls(k, v)
                         self._options[k] = v
                 elif map is not None:
                     for k, v in map.items():  # type: ignore[assignment]
-                        self._options[k] = to_str(v)
+                        v = to_str(v)  # type: ignore[assignment]
+                        check_startup_urls(k, v)
+                        self._options[k] = v
                 else:
-                    self._options[cast(str, key)] = to_str(value)
+                    value = to_str(value)
+                    check_startup_urls(key, value)  # type: ignore[arg-type]
+                    self._options[cast(str, key)] = value
                 return self
 
         def master(self, master: str) -> "SparkSession.Builder":
@@ -283,6 +311,28 @@ class SparkSession(SparkConversionMixin):
             <pyspark.sql.session.SparkSession.Builder...
             """
             return self.config("spark.master", master)
+
+        def remote(self, url: str) -> "SparkSession.Builder":
+            """Sets the Spark remote URL to connect to, such as "sc://host:port" to run
+            it via Spark Connect server.
+
+            .. versionadded:: 3.4.0
+
+            Parameters
+            ----------
+            url : str
+                URL to Spark Connect server
+
+            Returns
+            -------
+            :class:`SparkSession.Builder`
+
+            Examples
+            --------
+            >>> SparkSession.builder.remote("sc://localhost")  # doctest: +SKIP
+            <pyspark.sql.session.SparkSession.Builder...
+            """
+            return self.config("spark.remote", url)
 
         def appName(self, name: str) -> "SparkSession.Builder":
             """Sets a name for the application, which will be shown in the Spark web UI.
@@ -361,8 +411,33 @@ class SparkSession(SparkConversionMixin):
             >>> s1.conf.get("k2") == s2.conf.get("k2") == "v2"
             True
             """
+            from pyspark.context import SparkContext
+
+            opts = dict(self._options)
+            if "SPARK_REMOTE" in os.environ or "spark.remote" in opts:
+                with SparkContext._lock:
+                    from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
+
+                    if (
+                        SparkContext._active_spark_context is None
+                        and SparkSession._instantiatedSession is None
+                    ):
+                        url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
+                        os.environ["SPARK_REMOTE"] = url
+                        opts["spark.remote"] = url
+                        return cast(
+                            SparkSession, RemoteSparkSession.builder.config(map=opts).getOrCreate()
+                        )
+                    elif "SPARK_TESTING" not in os.environ:
+                        raise RuntimeError(
+                            "Cannot start a remote Spark session because there "
+                            "is a regular Spark Connect already running."
+                        )
+
+                # Cannot reach here in production. Test-only.
+                return cast(SparkSession, RemoteSparkSession.builder.config(map=opts).getOrCreate())
+
             with self._lock:
-                from pyspark.context import SparkContext
                 from pyspark.conf import SparkConf
 
                 session = SparkSession._instantiatedSession

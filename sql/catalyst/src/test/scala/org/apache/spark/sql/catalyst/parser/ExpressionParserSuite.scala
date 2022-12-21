@@ -669,8 +669,12 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("x'A10C'", Literal(Array(0xa1, 0x0c).map(_.toByte)))
     checkError(
       exception = parseException("x'A1OC'"),
-      errorClass = "_LEGACY_ERROR_TEMP_0022",
-      parameters = Map("msg" -> "contains illegal character for hexBinary: A1OC"),
+      errorClass = "INVALID_TYPED_LITERAL",
+      sqlState = "42000",
+      parameters = Map(
+        "valueType" -> "\"X\"",
+        "value" -> "'A1OC'"
+      ),
       context = ExpectedContext(
         fragment = "x'A1OC'",
         start = 0,

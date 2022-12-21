@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.{logical, Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
-import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, SubqueryAlias, Union, Unpivot, UnresolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, Sort, SubqueryAlias, Union, Unpivot, UnresolvedHint}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.{toCatalystExpression, toCatalystValue}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -132,12 +132,32 @@ class SparkConnectPlanner(session: SparkSession) {
    * wrap such fields into proto messages.
    */
   private def transformSample(rel: proto.Sample): LogicalPlan = {
+    val input = Dataset.ofRows(session, transformRelation(rel.getInput))
+    val plan = if (rel.getForceStableSort) {
+      // It is possible that the underlying dataframe doesn't guarantee the ordering of rows in its
+      // constituent partitions each time a split is materialized which could result in
+      // overlapping splits. To prevent this, we explicitly sort each input partition to make the
+      // ordering deterministic. Note that MapTypes cannot be sorted and are explicitly pruned out
+      // from the sort order.
+      val sortOrder = input.logicalPlan.output
+        .filter(attr => RowOrdering.isOrderable(attr.dataType))
+        .map(SortOrder(_, Ascending))
+      if (sortOrder.nonEmpty) {
+        Sort(sortOrder, global = false, input.logicalPlan)
+      } else {
+        input.logicalPlan
+      }
+    } else {
+      input.cache()
+      input.logicalPlan
+    }
+
     Sample(
       rel.getLowerBound,
       rel.getUpperBound,
       rel.getWithReplacement,
       if (rel.hasSeed) rel.getSeed else Utils.random.nextLong,
-      transformRelation(rel.getInput))
+      plan)
   }
 
   private def transformRepartition(rel: proto.Repartition): LogicalPlan = {
@@ -480,6 +500,9 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Expression.ExprTypeCase.CAST => transformCast(exp.getCast)
       case proto.Expression.ExprTypeCase.UNRESOLVED_REGEX =>
         transformUnresolvedRegex(exp.getUnresolvedRegex)
+      case proto.Expression.ExprTypeCase.SORT_ORDER => transformSortOrder(exp.getSortOrder)
+      case proto.Expression.ExprTypeCase.LAMBDA_FUNCTION =>
+        transformLambdaFunction(exp.getLambdaFunction)
       case _ =>
         throw InvalidPlanInput(
           s"Expression with ID: ${exp.getExprTypeCase.getNumber} is not supported")
@@ -535,6 +558,38 @@ class SparkConnectPlanner(session: SparkSession) {
         fun.getArgumentsList.asScala.map(transformExpression).toSeq,
         isDistinct = fun.getIsDistinct)
     }
+  }
+
+  /**
+   * Translates a LambdaFunction from proto to the Catalyst expression.
+   */
+  private def transformLambdaFunction(lambda: proto.Expression.LambdaFunction): LambdaFunction = {
+    if (lambda.getArgumentsCount == 0 || lambda.getArgumentsCount > 3) {
+      throw InvalidPlanInput(
+        "LambdaFunction requires 1 ~ 3 arguments, " +
+          s"but got ${lambda.getArgumentsCount} ones!")
+    }
+
+    val variableNames = lambda.getArgumentsList.asScala.toSeq
+
+    // generate unique variable names: Map(x -> x_0, y -> y_1)
+    val newVariables = variableNames.map { name =>
+      val uniqueName = UnresolvedNamedLambdaVariable.freshVarName(name)
+      (name, UnresolvedNamedLambdaVariable(Seq(uniqueName)))
+    }.toMap
+
+    val function = transformExpression(lambda.getFunction)
+
+    // rewrite function by replacing UnresolvedAttribute with UnresolvedNamedLambdaVariable
+    val newFunction = function transform {
+      case variable: UnresolvedAttribute
+          if variable.nameParts.length == 1 &&
+            newVariables.contains(variable.nameParts.head) =>
+        newVariables(variable.nameParts.head)
+    }
+
+    // LambdaFunction["x_0, y_1 -> x_0 < y_1", ["x_0", "y_1"]]
+    LambdaFunction(function = newFunction, arguments = variableNames.map(newVariables))
   }
 
   /**
@@ -699,10 +754,10 @@ class SparkConnectPlanner(session: SparkSession) {
     logical.Sort(
       child = transformRelation(sort.getInput),
       global = sort.getIsGlobal,
-      order = sort.getOrderList.asScala.toSeq.map(transformSortOrderExpression))
+      order = sort.getOrderList.asScala.toSeq.map(transformSortOrder))
   }
 
-  private def transformSortOrderExpression(order: proto.Expression.SortOrder) = {
+  private def transformSortOrder(order: proto.Expression.SortOrder) = {
     expressions.SortOrder(
       child = transformExpression(order.getChild),
       direction = order.getDirection match {

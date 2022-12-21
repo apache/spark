@@ -816,6 +816,21 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             .toPandas(),
         )
 
+    def test_random_split(self):
+        # SPARK-41440: test randomSplit(weights, seed).
+        relations = (
+            self.connect.read.table(self.tbl_name).filter("id > 3").randomSplit([1.0, 2.0, 3.0], 2)
+        )
+        datasets = (
+            self.spark.read.table(self.tbl_name).filter("id > 3").randomSplit([1.0, 2.0, 3.0], 2)
+        )
+
+        self.assertTrue(len(relations) == len(datasets))
+        i = 0
+        while i < len(relations):
+            self.assert_eq(relations[i].toPandas(), datasets[i].toPandas())
+            i += 1
+
     def test_with_columns(self):
         # SPARK-41256: test withColumn(s).
         self.assert_eq(

@@ -14,6 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
+import inspect
+
 from pyspark.sql.connect.column import (
     Column,
     CaseWhen,
@@ -22,9 +25,10 @@ from pyspark.sql.connect.column import (
     ColumnReference,
     UnresolvedFunction,
     SQLExpression,
+    LambdaFunction,
 )
 
-from typing import Any, TYPE_CHECKING, Union, List, overload, Optional, Tuple
+from typing import Any, TYPE_CHECKING, Union, List, overload, Optional, Tuple, Callable, ValuesView
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName
@@ -78,6 +82,78 @@ def _invoke_binary_math_function(name: str, col1: Any, col2: Any) -> Column:
     # For legacy reasons, the arguments here can be implicitly converted into column
     _cols = [_to_col(c) if isinstance(c, (str, Column)) else lit(c) for c in (col1, col2)]
     return _invoke_function(name, *_cols)
+
+
+def _get_lambda_parameters(f: Callable) -> ValuesView[inspect.Parameter]:
+    signature = inspect.signature(f)
+    parameters = signature.parameters.values()
+
+    # We should exclude functions that use, variable args and keyword argument
+    # names, as well as keyword only args.
+    supported_parameter_types = {
+        inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        inspect.Parameter.POSITIONAL_ONLY,
+    }
+
+    # Validate that the function arity is between 1 and 3.
+    if not (1 <= len(parameters) <= 3):
+        raise ValueError(
+            "f should take between 1 and 3 arguments, but provided function takes {}".format(
+                len(parameters)
+            )
+        )
+
+    # Verify that all arguments can be used as positional arguments.
+    if not all(p.kind in supported_parameter_types for p in parameters):
+        raise ValueError("All arguments of f must be usable as POSITIONAL arguments")
+
+    return parameters
+
+
+def _create_lambda(f: Callable) -> LambdaFunction:
+    """
+    Create `o.a.s.sql.expressions.LambdaFunction` corresponding
+    to transformation described by f
+
+    :param f: A Python of one of the following forms:
+            - (Column) -> Column: ...
+            - (Column, Column) -> Column: ...
+            - (Column, Column, Column) -> Column: ...
+    """
+    parameters = _get_lambda_parameters(f)
+
+    arg_names = ["x", "y", "z"][: len(parameters)]
+    arg_cols = [column(arg) for arg in arg_names]
+
+    result = f(*arg_cols)
+
+    if not isinstance(result, Column):
+        raise ValueError(f"Callable {f} should return Column, got {type(result)}")
+
+    return LambdaFunction(result._expr, arg_names)
+
+
+def _invoke_higher_order_function(
+    name: str,
+    cols: List["ColumnOrName"],
+    funs: List[Callable],
+) -> Column:
+    """
+    Invokes expression identified by name,
+    (relative to ```org.apache.spark.sql.catalyst.expressions``)
+    and wraps the result with Column (first Scala one, then Python).
+
+    :param name: Name of the expression
+    :param cols: a list of columns
+    :param funs: a list of((*Column) -> Column functions.
+
+    :return: a Column
+    """
+    assert len(funs) == 1
+    _cols = [_to_col(c) for c in cols]
+    _funs = [_create_lambda(f) for f in funs]
+
+    return _invoke_function(name, *_cols, *_funs)
 
 
 # Normal Functions
@@ -3862,42 +3938,41 @@ def element_at(col: "ColumnOrName", extraction: Any) -> Column:
     return _invoke_function("element_at", _to_col(col), lit(extraction))
 
 
-# TODO(SPARK-41434): need to support LambdaFunction Expression first
-# def exists(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column:
-#     """
-#     Returns whether a predicate holds for one or more elements in the array.
-#
-#     .. versionadded:: 3.1.0
-#
-#     Parameters
-#     ----------
-#     col : :class:`~pyspark.sql.Column` or str
-#         name of column or expression
-#     f : function
-#         ``(x: Column) -> Column: ...``  returning the Boolean expression.
-#         Can use methods of :class:`~pyspark.sql.Column`, functions defined in
-#         :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
-#         Python ``UserDefinedFunctions`` are not supported
-#         (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
-#
-#     Returns
-#     -------
-#     :class:`~pyspark.sql.Column`
-#         True if "any" element of an array evaluates to True when passed as an argument to
-#         given function and False otherwise.
-#
-#     Examples
-#     --------
-#     >>> df = spark.createDataFrame([(1, [1, 2, 3, 4]), (2, [3, -1, 0])],("key", "values"))
-#     >>> df.select(exists("values", lambda x: x < 0).alias("any_negative")).show()
-#     +------------+
-#     |any_negative|
-#     +------------+
-#     |       false|
-#     |        true|
-#     +------------+
-#     """
-#     return _invoke_higher_order_function("ArrayExists", [col], [f])
+def exists(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column:
+    """
+    Returns whether a predicate holds for one or more elements in the array.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        name of column or expression
+    f : function
+        ``(x: Column) -> Column: ...``  returning the Boolean expression.
+        Can use methods of :class:`~pyspark.sql.Column`, functions defined in
+        :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
+        Python ``UserDefinedFunctions`` are not supported
+        (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        True if "any" element of an array evaluates to True when passed as an argument to
+        given function and False otherwise.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(1, [1, 2, 3, 4]), (2, [3, -1, 0])],("key", "values"))
+    >>> df.select(exists("values", lambda x: x < 0).alias("any_negative")).show()
+    +------------+
+    |any_negative|
+    +------------+
+    |       false|
+    |        true|
+    +------------+
+    """
+    return _invoke_higher_order_function("exists", [col], [f])
 
 
 def explode(col: "ColumnOrName") -> Column:

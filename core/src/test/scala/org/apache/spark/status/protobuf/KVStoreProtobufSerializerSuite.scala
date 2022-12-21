@@ -459,6 +459,48 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     }
   }
 
+  test("Resource Profile") {
+    val input = new ResourceProfileWrapper(
+      rpInfo = new ResourceProfileInfo(
+        id = 0,
+        executorResources = Map(
+          "0" -> new ExecutorResourceRequest(
+            resourceName = "exec1",
+            amount = 64,
+            discoveryScript = "script0",
+            vendor = "apache_2"),
+          "1" -> new ExecutorResourceRequest(
+            resourceName = "exec2",
+            amount = 65,
+            discoveryScript = "script1",
+            vendor = "apache_1")
+        ),
+        taskResources = Map(
+          "0" -> new TaskResourceRequest(resourceName = "exec1", amount = 1),
+          "1" -> new TaskResourceRequest(resourceName = "exec2", amount = 1)
+        )
+      )
+    )
+
+    val bytes = serializer.serialize(input)
+    val result = serializer.deserialize(bytes, classOf[ResourceProfileWrapper])
+    assert(result.rpInfo.id == input.rpInfo.id)
+    assert(result.rpInfo.executorResources.size == input.rpInfo.executorResources.size)
+    assert(result.rpInfo.executorResources.keys.size == input.rpInfo.executorResources.keys.size)
+    result.rpInfo.executorResources.keysIterator.foreach { k =>
+      assert(result.rpInfo.executorResources.contains(k))
+      assert(input.rpInfo.executorResources.contains(k))
+      assert(result.rpInfo.executorResources(k) == input.rpInfo.executorResources(k))
+    }
+    assert(result.rpInfo.taskResources.size == input.rpInfo.taskResources.size)
+    assert(result.rpInfo.taskResources.keys.size == input.rpInfo.taskResources.keys.size)
+    result.rpInfo.taskResources.keysIterator.foreach { k =>
+      assert(result.rpInfo.taskResources.contains(k))
+      assert(input.rpInfo.taskResources.contains(k))
+      assert(result.rpInfo.taskResources(k) == input.rpInfo.taskResources(k))
+    }
+  }
+  
   test("Executor Summary") {
     val memoryMetrics =
       Some(new MemoryMetrics(

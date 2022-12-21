@@ -241,6 +241,10 @@ message RDDStorageInfoWrapper {
   RDDStorageInfo info = 1;
 }
 
+message ResourceProfileWrapper {
+  ResourceProfileInfo rpInfo = 1;
+}
+
 message MemoryMetrics {
   int64 used_on_heap_storage_memory = 1;
   int64 used_off_heap_storage_memory = 2;
@@ -290,3 +294,4 @@ message ExecutorSummary {
 message ExecutorSummaryWrapper {
   ExecutorSummary info = 1;
 }
+
