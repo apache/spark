@@ -231,8 +231,7 @@ object SparkConnectStreamHandler {
         ExecutePlanResponse.ObservedMetrics
           .newBuilder()
           .addAllMetricsObjects(metricsObjects.asJava)
-          .build()
-      )
+          .build())
       .build()
   }
 
