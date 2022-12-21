@@ -42,6 +42,7 @@ import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.command.CreateViewCommand
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.types._
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
 final case class InvalidPlanInput(
@@ -96,6 +97,7 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Relation.RelTypeCase.WITH_COLUMNS => transformWithColumns(rel.getWithColumns)
       case proto.Relation.RelTypeCase.HINT => transformHint(rel.getHint)
       case proto.Relation.RelTypeCase.UNPIVOT => transformUnpivot(rel.getUnpivot)
+      case proto.Relation.RelTypeCase.DETERMINIZE => transformDeterminize(rel.getDeterminize)
       case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
         throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
       case _ => throw InvalidPlanInput(s"${rel.getUnknown} not supported.")
@@ -358,6 +360,38 @@ class SparkConnectPlanner(session: SparkSession) {
         rel.getVariableColumnName,
         Seq(rel.getValueColumnName),
         transformRelation(rel.getInput))
+    }
+  }
+
+  private def transformDeterminize(rel: proto.Determinize): LogicalPlan = {
+    if (!rel.hasInput) {
+      throw InvalidPlanInput("Determinize needs a plan input")
+    }
+
+    val input = transformRelation(rel.getInput)
+    if (input.deterministic) {
+      return input
+    }
+
+    val dataset = Dataset.ofRows(session, input)
+    if (dataset.logicalPlan.deterministic || dataset.storageLevel != StorageLevel.NONE) {
+      return dataset.logicalPlan
+    }
+
+    // It is possible that the underlying dataframe doesn't guarantee the ordering of rows in its
+    // constituent partitions each time a split is materialized which could result in
+    // overlapping splits. To prevent this, we explicitly sort each input partition to make the
+    // ordering deterministic. Note that MapTypes cannot be sorted and are explicitly pruned out
+    // from the sort order.
+    val sortOrder = input.output
+      .filter(attr => RowOrdering.isOrderable(attr.dataType))
+      .map(SortOrder(_, Ascending))
+    if (sortOrder.nonEmpty) {
+      Sort(sortOrder, global = false, input)
+    } else {
+      // SPARK-12662: If sort order is empty, we materialize the dataset to guarantee determinism
+      dataset.cache()
+      dataset.logicalPlan
     }
   }
 

@@ -67,6 +67,8 @@ message Relation {
     StatCrosstab crosstab = 101;
     StatDescribe describe = 102;
 
+    Determinize determinize = 110;
+
     Unknown unknown = 999;
   }
 }
@@ -586,4 +588,13 @@ message Unpivot {
 
   // (Required) Name of the value column.
   string value_column_name = 5;
+}
+
+// Make the input relation deterministic.
+// If the input is already deterministic, it is a no-op (for example,
+// the input is a LocalRelation, or already cached); otherwise, it will
+// try local sorting and caching.
+message Determinize {
+  // (Required) The input relation.
+  Relation input = 1;
 }
