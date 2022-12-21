@@ -23,7 +23,7 @@ import org.apache.spark.resource.{ExecutorResourceRequest, TaskResourceRequest}
 import org.apache.spark.status.ApplicationEnvironmentInfoWrapper
 import org.apache.spark.status.api.v1.{ApplicationEnvironmentInfo, ResourceProfileInfo, RuntimeInfo}
 
-class ApplicationEnvironmentInfoWrapperSerializer extends ProtoBufSerDe {
+class ApplicationEnvironmentInfoWrapperSerializer extends ProtobufSerDe {
 
   override val supportClass: Class[_] = classOf[ApplicationEnvironmentInfoWrapper]
 

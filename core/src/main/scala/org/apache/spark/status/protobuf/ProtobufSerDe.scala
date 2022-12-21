@@ -21,7 +21,7 @@ import org.apache.spark.annotation.{DeveloperApi, Unstable}
 
 @DeveloperApi
 @Unstable
-trait ProtoBufSerDe {
+trait ProtobufSerDe {
 
   val supportClass: Class[_]
 

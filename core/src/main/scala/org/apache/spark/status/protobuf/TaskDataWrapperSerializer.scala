@@ -24,7 +24,7 @@ import org.apache.spark.status.api.v1.AccumulableInfo
 import org.apache.spark.status.protobuf.Utils.getOptional
 import org.apache.spark.util.Utils.weakIntern
 
-class TaskDataWrapperSerializer extends ProtoBufSerDe {
+class TaskDataWrapperSerializer extends ProtobufSerDe {
 
   override val supportClass: Class[_] = classOf[TaskDataWrapper]
 

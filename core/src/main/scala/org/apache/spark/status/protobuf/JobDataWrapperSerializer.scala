@@ -25,7 +25,7 @@ import org.apache.spark.status.JobDataWrapper
 import org.apache.spark.status.api.v1.JobData
 import org.apache.spark.status.protobuf.Utils.getOptional
 
-class JobDataWrapperSerializer extends ProtoBufSerDe {
+class JobDataWrapperSerializer extends ProtobufSerDe {
 
   override val supportClass: Class[_] = classOf[JobDataWrapper]
 

@@ -21,7 +21,7 @@ import org.apache.spark.status.ExecutorStageSummaryWrapper
 import org.apache.spark.status.api.v1.ExecutorStageSummary
 import org.apache.spark.status.protobuf.Utils.getOptional
 
-class ExecutorStageSummaryWrapperSerializer extends ProtoBufSerDe {
+class ExecutorStageSummaryWrapperSerializer extends ProtobufSerDe {
 
   override val supportClass: Class[_] = classOf[ExecutorStageSummaryWrapper]
 

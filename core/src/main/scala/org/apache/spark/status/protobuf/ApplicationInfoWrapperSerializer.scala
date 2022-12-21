@@ -26,7 +26,7 @@ import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
 import org.apache.spark.status.protobuf.Utils.getOptional
 
 
-class ApplicationInfoWrapperSerializer extends ProtoBufSerDe {
+class ApplicationInfoWrapperSerializer extends ProtobufSerDe {
 
   override val supportClass: Class[_] = classOf[ApplicationInfoWrapper]
 

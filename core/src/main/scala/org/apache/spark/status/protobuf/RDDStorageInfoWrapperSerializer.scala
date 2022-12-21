@@ -23,7 +23,7 @@ import org.apache.spark.status.RDDStorageInfoWrapper
 import org.apache.spark.status.api.v1.{RDDDataDistribution, RDDPartitionInfo, RDDStorageInfo}
 import org.apache.spark.status.protobuf.Utils.getOptional
 
-class RDDStorageInfoWrapperSerializer extends ProtoBufSerDe {
+class RDDStorageInfoWrapperSerializer extends ProtobufSerDe {
 
   override val supportClass: Class[_] = classOf[RDDStorageInfoWrapper]
 
