@@ -95,9 +95,17 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
     checkKeywordsNotExist(sql("describe functioN Upper"), "Extended Usage")
 
-    val e = intercept[AnalysisException](sql("describe functioN abcadf"))
-    assert(e.message.contains("Undefined function: abcadf. This function is neither a " +
-      "built-in/temporary function, nor a persistent function"))
+    val sqlText = "describe functioN abcadf"
+    checkError(
+      exception = intercept[AnalysisException](sql(sqlText)),
+      errorClass = "UNRESOLVED_ROUTINE",
+      parameters = Map(
+        "routineName" -> "`abcadf`",
+        "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
+      context = ExpectedContext(
+        fragment = sqlText,
+        start = 0,
+        stop = 23))
   }
 
   test("SPARK-34678: describe functions for table-valued functions") {
