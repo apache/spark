@@ -160,6 +160,15 @@ struct<g:int,i:int>
 
 
 -- !query
+select * from data order by all limit 2
+-- !query schema
+struct<g:int,i:int>
+-- !query output
+0	1
+0	2
+
+
+-- !query
 select * from values("z", 1), ("y", 2), ("x", 3) AS T(col1, all) order by all
 -- !query schema
 struct<col1:string,all:int>
@@ -167,3 +176,27 @@ struct<col1:string,all:int>
 z	1
 y	2
 x	3
+
+
+-- !query
+select name, dept, rank() over (partition by dept order by all) as rank
+from values('Lisa', 'Sales', 10000, 35) as T(name, dept, salary, age)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "objectName" : "`all`",
+    "proposal" : "`T`.`age`, `T`.`name`, `T`.`dept`, `T`.`salary`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 60,
+    "stopIndex" : 62,
+    "fragment" : "all"
+  } ]
+}

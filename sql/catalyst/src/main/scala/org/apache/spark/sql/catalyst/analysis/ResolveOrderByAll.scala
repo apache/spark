@@ -66,7 +66,7 @@ object ResolveOrderByAll extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
     _.containsAllPatterns(UNRESOLVED_ATTRIBUTE, SORT), ruleId) {
-    // This only makes sense if the children is resolved.
+    // This only makes sense if the child is resolved.
     case s: Sort if s.child.resolved =>
       s match {
         case OrderByAll(sortOrder) =>

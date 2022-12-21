@@ -32,7 +32,13 @@ select * from data order by all desc nulls last;
 select * from data union all select * from data order by all;
 select * from data union select * from data order by all;
 
+-- limit
+select * from data order by all limit 2;
+
 -- precedence: if there's a column already named all, reference that, instead of expanding.
 -- result should be 1, 2, 3, and not 3, 2, 1
 select * from values("z", 1), ("y", 2), ("x", 3) AS T(col1, all) order by all;
 
+-- shouldn't work in window functions
+select name, dept, rank() over (partition by dept order by all) as rank
+from values('Lisa', 'Sales', 10000, 35) as T(name, dept, salary, age);
