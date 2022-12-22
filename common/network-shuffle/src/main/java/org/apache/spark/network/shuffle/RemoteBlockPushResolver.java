@@ -1285,6 +1285,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           freeDeferredBufs();
           if (isTooLateBlockPush) {
             mergeManager.pushMergeMetrics.lateBlockPushes.mark();
+          } else {
+            mergeManager.pushMergeMetrics.staleBlockPushes.mark();
           }
           return;
         }
@@ -1308,6 +1310,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           try {
             if (deferredBufs != null && !deferredBufs.isEmpty()) {
               writeDeferredBufs();
+              mergeManager.pushMergeMetrics.deferredBlocks.mark();
             }
             writeBuf(buf);
           } catch (IOException ioe) {
@@ -1327,8 +1330,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           // block to disk. If we still couldn't write this block to disk after this, we give up
           // on this block push request and respond failure to client. We could potentially
           // buffer the block longer or wait for a few iterations inside #onData or #onComplete
-          // to increase the chance of writing the block to disk, however this would incur more
-          // memory footprint or decrease the server processing throughput for the shuffle
+          // to increase the chance of writing the block to disk, however this would incur
+          // more memory footprint or decrease the server processing throughput for the shuffle
           // service. In addition, during test we observed that by randomizing the order in
           // which clients sends block push requests batches, only ~0.5% blocks failed to be
           // written to disk due to this reason. We thus decide to optimize for server
@@ -1369,6 +1372,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         }
         if (isStale(info, partitionInfo.appAttemptShuffleMergeId.shuffleMergeId)) {
           freeDeferredBufs();
+          mergeManager.pushMergeMetrics.staleBlockPushes.mark();
           throw new BlockPushNonFatalFailure(
             new BlockPushReturnCode(ReturnCode.STALE_BLOCK_PUSH.id(), streamId).toByteBuffer(),
             BlockPushNonFatalFailure.getErrorMsg(streamId, ReturnCode.STALE_BLOCK_PUSH));
@@ -1388,6 +1392,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
                 abortIfNecessary();
                 isWriting = true;
                 writeDeferredBufs();
+                mergeManager.pushMergeMetrics.deferredBlocks.mark();
               }
             } catch (IOException ioe) {
               incrementIOExceptionsAndAbortIfNecessary();
@@ -2010,12 +2015,18 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     static final String BLOCK_BYTES_WRITTEN_METRIC = "blockBytesWritten";
     // deferredBlockBytes tracks the size of the current deferred block parts buffered in memory.
     static final String DEFERRED_BLOCK_BYTES_METRIC = "deferredBlockBytes";
+    // deferredBlocks tracks the number of deferred blocks got written to the merged shuffle file
+    static final String DEFERRED_BLOCKS_METRIC = "deferredBlocks";
+    // staleBlockPushes tracks how many times a shuffle block push request it stale
+    static final String STALE_BLOCK_PUSHES_METRIC = "staleBlockPushes";
 
     private final Map<String, Metric> allMetrics;
     private final Meter blockAppendCollisions;
     private final Meter lateBlockPushes;
     private final Meter blockBytesWritten;
     private final Counter deferredBlockBytes;
+    private final Meter deferredBlocks;
+    private final Meter staleBlockPushes;
 
     private PushMergeMetrics() {
       allMetrics = new HashMap<>();
@@ -2027,6 +2038,10 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       allMetrics.put(BLOCK_BYTES_WRITTEN_METRIC, blockBytesWritten);
       deferredBlockBytes = new Counter();
       allMetrics.put(DEFERRED_BLOCK_BYTES_METRIC, deferredBlockBytes);
+      deferredBlocks = new Meter();
+      allMetrics.put(DEFERRED_BLOCKS_METRIC, deferredBlocks);
+      staleBlockPushes = new Meter();
+      allMetrics.put(STALE_BLOCK_PUSHES_METRIC, staleBlockPushes);
     }
 
     @Override
