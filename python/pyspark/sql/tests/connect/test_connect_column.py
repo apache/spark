@@ -274,6 +274,10 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assert_eq(
             df.select(df.id.cast("string")).toPandas(), df2.select(df2.id.cast("string")).toPandas()
         )
+        self.assert_eq(
+            df.select(df.id.astype("string")).toPandas(),
+            df2.select(df2.id.astype("string")).toPandas(),
+        )
 
         for x in [
             StringType(),
@@ -349,7 +353,6 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         for f in (
             "over",
             "getItem",
-            "astype",
             "between",
             "getField",
             "withField",
