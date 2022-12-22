@@ -794,5 +794,5 @@ message CollectMetrics {
   repeated Expression metrics = 3;
 
   // (Optional) The identity whether Observation are used.
-  bool is_observation = 4;
+  optional bool is_observation = 4;
 }

@@ -237,7 +237,7 @@ message ExecutePlanResponse {
   Metrics metrics = 4;
 
   // The metrics observed during the execution of the query plan.
-  ObservedMetrics observed_metrics = 6;
+  optional ObservedMetrics observed_metrics = 6;
 
   // A SQL command returns an opaque Relation that can be directly used as input for the next
   // call.
@@ -269,6 +269,7 @@ message ExecutePlanResponse {
     }
   }
 
+  // This message is only used by dataframe.observe if the observation is Observation.
   message ObservedMetrics {
 
     repeated ObservedMetricsObject metrics_objects = 1;

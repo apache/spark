@@ -826,8 +826,6 @@ class DataFrame:
         This method only supports batch queries.
         Continuous execution is currently not supported yet.
         """
-        from pyspark.sql import Observation
-
         if len(exprs) == 0:
             raise ValueError("'exprs' should not be empty")
         if not all(isinstance(c, Column) for c in exprs):

@@ -961,6 +961,14 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       sparkTestRelation.observe("my_metric", min(Column("id")).as("min_val"))
     comparePlans(connectPlan1, sparkPlan1)
 
+    checkError(
+      exception = intercept[AnalysisException] {
+        analyzePlan(
+          transform(connectTestRelation.observe("my_metric", "id".protoAttr.cast("string"))))
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2322",
+      parameters = Map("sqlExpr" -> "CAST(id AS STRING) AS id"))
+
     val connectPlan2 =
       connectTestRelation.observe(
         Observation("my_metric"),
@@ -982,6 +990,15 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     val sparkPlan3 =
       sparkTestRelation.observe(Observation("my_metric"), min(Column("id")).as("min_val"))
     comparePlans(connectPlan3, sparkPlan3)
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        analyzePlan(
+          transform(
+            connectTestRelation.observe(Observation("my_metric"), "id".protoAttr.cast("string"))))
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2322",
+      parameters = Map("sqlExpr" -> "CAST(id AS STRING) AS id"))
   }
 
   test("Test RandomSplit") {
