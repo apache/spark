@@ -39,6 +39,65 @@ message Expression {
     UnresolvedRegex unresolved_regex = 8;
     SortOrder sort_order = 9;
     LambdaFunction lambda_function = 10;
+    Window window = 11;
+  }
+
+
+  // Expression for the OVER clause or WINDOW clause.
+  message Window {
+
+    // (Required) The window function.
+    Expression window_function = 1;
+
+    // (Optional) The way that input rows are partitioned.
+    repeated Expression partition_spec = 2;
+
+    // (Optional) Ordering of rows in a partition.
+    repeated SortOrder order_spec = 3;
+
+    // (Optional) Window frame in a partition.
+    //
+    // If not set, it will be treated as 'UnspecifiedFrame'.
+    WindowFrame frame_spec = 4;
+
+    // The window frame
+    message WindowFrame {
+
+      // (Required) The type of the frame.
+      FrameType frame_type = 1;
+
+      // (Required) The lower bound of the frame.
+      FrameBoundary lower = 2;
+
+      // (Required) The upper bound of the frame.
+      FrameBoundary upper = 3;
+
+      enum FrameType {
+        FRAME_TYPE_UNDEFINED = 0;
+
+        // RowFrame treats rows in a partition individually.
+        FRAME_TYPE_ROW = 1;
+
+        // RangeFrame treats rows in a partition as groups of peers.
+        // All rows having the same 'ORDER BY' ordering are considered as peers.
+        FRAME_TYPE_RANGE = 2;
+      }
+
+      message FrameBoundary {
+        oneof boundary {
+          // CURRENT ROW boundary
+          bool current_row = 1;
+
+          // UNBOUNDED boundary.
+          // For lower bound, it will be converted to 'UnboundedPreceding'.
+          // for upper bound, it will be converted to 'UnboundedFollowing'.
+          bool unbounded = 2;
+
+          // This is an expression for future proofing. We are expecting literals on the server side.
+          Expression value = 3;
+        }
+      }
+    }
   }
 
   // SortOrder is used to specify the  data ordering, it is normally used in Sort and Window.

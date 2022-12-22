@@ -16,6 +16,7 @@
 #
 
 import inspect
+import warnings
 
 from pyspark.sql.connect.column import (
     Column,
@@ -32,9 +33,6 @@ from typing import Any, TYPE_CHECKING, Union, List, overload, Optional, Tuple, C
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName, DataFrameType
-
-
-# TODO(SPARK-40538) Add support for the missing PySpark functions.
 
 
 def _to_col(col: "ColumnOrName") -> Column:
@@ -175,17 +173,17 @@ def lit(col: Any) -> Column:
         return Column(LiteralExpression(col, dataType))
 
 
-# def bitwiseNOT(col: "ColumnOrName") -> Column:
-#     """
-#     Computes bitwise not.
-#
-#     .. versionadded:: 1.4.0
-#
-#     .. deprecated:: 3.2.0
-#         Use :func:`bitwise_not` instead.
-#     """
-#     warnings.warn("Deprecated in 3.2, use bitwise_not instead.", FutureWarning)
-#     return bitwise_not(col)
+def bitwiseNOT(col: "ColumnOrName") -> Column:
+    """
+    Computes bitwise not.
+
+    .. versionadded:: 3.4.0
+
+    .. deprecated:: 3.4.0
+        Use :func:`bitwise_not` instead.
+    """
+    warnings.warn("Deprecated in 3.4, use bitwise_not instead.", FutureWarning)
+    return bitwise_not(col)
 
 
 def bitwise_not(col: "ColumnOrName") -> Column:
@@ -1868,16 +1866,16 @@ def sec(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("sec", col)
 
 
-# def shiftLeft(col: "ColumnOrName", numBits: int) -> Column:
-#     """Shift the given value numBits left.
-#
-#     .. versionadded:: 1.5.0
-#
-#     .. deprecated:: 3.2.0
-#         Use :func:`shiftleft` instead.
-#     """
-#     warnings.warn("Deprecated in 3.2, use shiftleft instead.", FutureWarning)
-#     return shiftleft(col, numBits)
+def shiftLeft(col: "ColumnOrName", numBits: int) -> Column:
+    """Shift the given value numBits left.
+
+    .. versionadded:: 3.4.0
+
+    .. deprecated:: 3.4.0
+        Use :func:`shiftleft` instead.
+    """
+    warnings.warn("Deprecated in 3.4, use shiftleft instead.", FutureWarning)
+    return shiftleft(col, numBits)
 
 
 def shiftleft(col: "ColumnOrName", numBits: int) -> Column:
@@ -1905,16 +1903,16 @@ def shiftleft(col: "ColumnOrName", numBits: int) -> Column:
     return _invoke_function("shiftleft", _to_col(col), lit(numBits))
 
 
-# def shiftRight(col: "ColumnOrName", numBits: int) -> Column:
-#     """(Signed) shift the given value numBits right.
-#
-#     .. versionadded:: 1.5.0
-#
-#     .. deprecated:: 3.2.0
-#         Use :func:`shiftright` instead.
-#     """
-#     warnings.warn("Deprecated in 3.2, use shiftright instead.", FutureWarning)
-#     return shiftright(col, numBits)
+def shiftRight(col: "ColumnOrName", numBits: int) -> Column:
+    """(Signed) shift the given value numBits right.
+
+    .. versionadded:: 3.4.0
+
+    .. deprecated:: 3.4.0
+        Use :func:`shiftright` instead.
+    """
+    warnings.warn("Deprecated in 3.4, use shiftright instead.", FutureWarning)
+    return shiftright(col, numBits)
 
 
 def shiftright(col: "ColumnOrName", numBits: int) -> Column:
@@ -1942,16 +1940,16 @@ def shiftright(col: "ColumnOrName", numBits: int) -> Column:
     return _invoke_function("shiftright", _to_col(col), lit(numBits))
 
 
-# def shiftRightUnsigned(col: "ColumnOrName", numBits: int) -> Column:
-#     """Unsigned shift the given value numBits right.
-#
-#     .. versionadded:: 1.5.0
-#
-#     .. deprecated:: 3.2.0
-#         Use :func:`shiftrightunsigned` instead.
-#     """
-#     warnings.warn("Deprecated in 3.2, use shiftrightunsigned instead.", FutureWarning)
-#     return shiftrightunsigned(col, numBits)
+def shiftRightUnsigned(col: "ColumnOrName", numBits: int) -> Column:
+    """Unsigned shift the given value numBits right.
+
+    .. versionadded:: 3.4.0
+
+    .. deprecated:: 3.4.0
+        Use :func:`shiftrightunsigned` instead.
+    """
+    warnings.warn("Deprecated in 3.4, use shiftrightunsigned instead.", FutureWarning)
+    return shiftrightunsigned(col, numBits)
 
 
 def shiftrightunsigned(col: "ColumnOrName", numBits: int) -> Column:
@@ -2150,26 +2148,26 @@ def tanh(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("tanh", col)
 
 
-# def toDegrees(col: "ColumnOrName") -> Column:
-#     """
-#     .. versionadded:: 1.4.0
-#
-#     .. deprecated:: 2.1.0
-#         Use :func:`degrees` instead.
-#     """
-#     warnings.warn("Deprecated in 2.1, use degrees instead.", FutureWarning)
-#     return degrees(col)
-#
-#
-# def toRadians(col: "ColumnOrName") -> Column:
-#     """
-#     .. versionadded:: 1.4.0
-#
-#     .. deprecated:: 2.1.0
-#         Use :func:`radians` instead.
-#     """
-#     warnings.warn("Deprecated in 2.1, use radians instead.", FutureWarning)
-#     return radians(col)
+def toDegrees(col: "ColumnOrName") -> Column:
+    """
+    .. versionadded:: 3.4.0
+
+    .. deprecated:: 3.4.0
+        Use :func:`degrees` instead.
+    """
+    warnings.warn("Deprecated in 3.4, use degrees instead.", FutureWarning)
+    return degrees(col)
+
+
+def toRadians(col: "ColumnOrName") -> Column:
+    """
+    .. versionadded:: 3.4.0
+
+    .. deprecated:: 3.4.0
+        Use :func:`radians` instead.
+    """
+    warnings.warn("Deprecated in 3.4, use radians instead.", FutureWarning)
+    return radians(col)
 
 
 def unhex(col: "ColumnOrName") -> Column:
@@ -2199,15 +2197,15 @@ def unhex(col: "ColumnOrName") -> Column:
 # Aggregate Functions
 
 
-# def approxCountDistinct(col: "ColumnOrName", rsd: Optional[float] = None) -> Column:
-#     """
-#     .. versionadded:: 1.3.0
-#
-#     .. deprecated:: 2.1.0
-#         Use :func:`approx_count_distinct` instead.
-#     """
-#     warnings.warn("Deprecated in 2.1, use approx_count_distinct instead.", FutureWarning)
-#     return approx_count_distinct(col, rsd)
+def approxCountDistinct(col: "ColumnOrName", rsd: Optional[float] = None) -> Column:
+    """
+    .. versionadded:: 3.4.0
+
+    .. deprecated:: 3.4.0
+        Use :func:`approx_count_distinct` instead.
+    """
+    warnings.warn("Deprecated in 3.4, use approx_count_distinct instead.", FutureWarning)
+    return approx_count_distinct(col, rsd)
 
 
 def approx_count_distinct(col: "ColumnOrName", rsd: Optional[float] = None) -> Column:
@@ -2393,15 +2391,15 @@ def count(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("count", col)
 
 
-# def countDistinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
-#     """Returns a new :class:`~pyspark.sql.Column` for distinct count of ``col`` or ``cols``.
-#
-#     An alias of :func:`count_distinct`, and it is encouraged to use :func:`count_distinct`
-#     directly.
-#
-#     .. versionadded:: 1.3.0
-#     """
-#     return count_distinct(col, *cols)
+def countDistinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
+    """Returns a new :class:`~pyspark.sql.Column` for distinct count of ``col`` or ``cols``.
+
+    An alias of :func:`count_distinct`, and it is encouraged to use :func:`count_distinct`
+    directly.
+
+    .. versionadded:: 3.4.0
+    """
+    return count_distinct(col, *cols)
 
 
 def count_distinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
@@ -3163,20 +3161,19 @@ def sum(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("sum", col)
 
 
-# def sumDistinct(col: "ColumnOrName") -> Column:
-#     """
-#     Aggregate function: returns the sum of distinct values in the expression.
-#
-#     .. versionadded:: 1.3.0
-#
-#     .. deprecated:: 3.2.0
-#         Use :func:`sum_distinct` instead.
-#     """
-#     warnings.warn("Deprecated in 3.2, use sum_distinct instead.", FutureWarning)
-#     return sum_distinct(col)
+def sumDistinct(col: "ColumnOrName") -> Column:
+    """
+    Aggregate function: returns the sum of distinct values in the expression.
+
+    .. versionadded:: 3.4.0
+
+    .. deprecated:: 3.4.0
+        Use :func:`sum_distinct` instead.
+    """
+    warnings.warn("Deprecated in 3.4, use sum_distinct instead.", FutureWarning)
+    return sum_distinct(col)
 
 
-# TODO(SPARK-41381): add isDistinct in UnresolvedFunction
 def sum_distinct(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the sum of distinct values in the expression.
@@ -3288,6 +3285,465 @@ def variance(col: "ColumnOrName") -> Column:
     +------------+
     """
     return var_samp(col)
+
+
+# Window Functions
+
+
+def cume_dist() -> Column:
+    """
+    Window function: returns the cumulative distribution of values within a window partition,
+    i.e. the fraction of rows that are below the current row.
+
+    .. versionadded:: 3.4.0
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for calculating cumulative distribution.
+
+    Examples
+    --------
+    >>> from pyspark.sql import Window, types
+    >>> df = spark.createDataFrame([1, 2, 3, 3, 4], types.IntegerType())
+    >>> w = Window.orderBy("value")
+    >>> df.withColumn("cd", cume_dist().over(w)).show()
+    +-----+---+
+    |value| cd|
+    +-----+---+
+    |    1|0.2|
+    |    2|0.4|
+    |    3|0.8|
+    |    3|0.8|
+    |    4|1.0|
+    +-----+---+
+    """
+    return _invoke_function("cume_dist")
+
+
+def dense_rank() -> Column:
+    """
+    Window function: returns the rank of rows within a window partition, without any gaps.
+
+    The difference between rank and dense_rank is that dense_rank leaves no gaps in ranking
+    sequence when there are ties. That is, if you were ranking a competition using dense_rank
+    and had three people tie for second place, you would say that all three were in second
+    place and that the next person came in third. Rank would give me sequential numbers, making
+    the person that came in third place (after the ties) would register as coming in fifth.
+
+    This is equivalent to the DENSE_RANK function in SQL.
+
+    .. versionadded:: 3.4.0
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for calculating ranks.
+
+    Examples
+    --------
+    >>> from pyspark.sql import Window, types
+    >>> df = spark.createDataFrame([1, 1, 2, 3, 3, 4], types.IntegerType())
+    >>> w = Window.orderBy("value")
+    >>> df.withColumn("drank", dense_rank().over(w)).show()
+    +-----+-----+
+    |value|drank|
+    +-----+-----+
+    |    1|    1|
+    |    1|    1|
+    |    2|    2|
+    |    3|    3|
+    |    3|    3|
+    |    4|    4|
+    +-----+-----+
+    """
+    return _invoke_function("dense_rank")
+
+
+def lag(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) -> Column:
+    """
+    Window function: returns the value that is `offset` rows before the current row, and
+    `default` if there is less than `offset` rows before the current row. For example,
+    an `offset` of one will return the previous row at any given point in the window partition.
+
+    This is equivalent to the LAG function in SQL.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        name of column or expression
+    offset : int, optional default 1
+        number of row to extend
+    default : optional
+        default value
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        value before current row based on `offset`.
+
+    Examples
+    --------
+    >>> from pyspark.sql import Window
+    >>> df = spark.createDataFrame([("a", 1),
+    ...                             ("a", 2),
+    ...                             ("a", 3),
+    ...                             ("b", 8),
+    ...                             ("b", 2)], ["c1", "c2"])
+    >>> df.show()
+    +---+---+
+    | c1| c2|
+    +---+---+
+    |  a|  1|
+    |  a|  2|
+    |  a|  3|
+    |  b|  8|
+    |  b|  2|
+    +---+---+
+    >>> w = Window.partitionBy("c1").orderBy("c2")
+    >>> df.withColumn("previos_value", lag("c2").over(w)).show()
+    +---+---+-------------+
+    | c1| c2|previos_value|
+    +---+---+-------------+
+    |  a|  1|         null|
+    |  a|  2|            1|
+    |  a|  3|            2|
+    |  b|  2|         null|
+    |  b|  8|            2|
+    +---+---+-------------+
+    >>> df.withColumn("previos_value", lag("c2", 1, 0).over(w)).show()
+    +---+---+-------------+
+    | c1| c2|previos_value|
+    +---+---+-------------+
+    |  a|  1|            0|
+    |  a|  2|            1|
+    |  a|  3|            2|
+    |  b|  2|            0|
+    |  b|  8|            2|
+    +---+---+-------------+
+    >>> df.withColumn("previos_value", lag("c2", 2, -1).over(w)).show()
+    +---+---+-------------+
+    | c1| c2|previos_value|
+    +---+---+-------------+
+    |  a|  1|           -1|
+    |  a|  2|           -1|
+    |  a|  3|            1|
+    |  b|  2|           -1|
+    |  b|  8|           -1|
+    +---+---+-------------+
+    """
+    if default is None:
+        return _invoke_function("lag", _to_col(col), lit(offset))
+    else:
+        return _invoke_function("lag", _to_col(col), lit(offset), lit(default))
+
+
+def lead(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) -> Column:
+    """
+    Window function: returns the value that is `offset` rows after the current row, and
+    `default` if there is less than `offset` rows after the current row. For example,
+    an `offset` of one will return the next row at any given point in the window partition.
+
+    This is equivalent to the LEAD function in SQL.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        name of column or expression
+    offset : int, optional default 1
+        number of row to extend
+    default : optional
+        default value
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        value after current row based on `offset`.
+
+    Examples
+    --------
+    >>> from pyspark.sql import Window
+    >>> df = spark.createDataFrame([("a", 1),
+    ...                             ("a", 2),
+    ...                             ("a", 3),
+    ...                             ("b", 8),
+    ...                             ("b", 2)], ["c1", "c2"])
+    >>> df.show()
+    +---+---+
+    | c1| c2|
+    +---+---+
+    |  a|  1|
+    |  a|  2|
+    |  a|  3|
+    |  b|  8|
+    |  b|  2|
+    +---+---+
+    >>> w = Window.partitionBy("c1").orderBy("c2")
+    >>> df.withColumn("next_value", lead("c2").over(w)).show()
+    +---+---+----------+
+    | c1| c2|next_value|
+    +---+---+----------+
+    |  a|  1|         2|
+    |  a|  2|         3|
+    |  a|  3|      null|
+    |  b|  2|         8|
+    |  b|  8|      null|
+    +---+---+----------+
+    >>> df.withColumn("next_value", lead("c2", 1, 0).over(w)).show()
+    +---+---+----------+
+    | c1| c2|next_value|
+    +---+---+----------+
+    |  a|  1|         2|
+    |  a|  2|         3|
+    |  a|  3|         0|
+    |  b|  2|         8|
+    |  b|  8|         0|
+    +---+---+----------+
+    >>> df.withColumn("next_value", lead("c2", 2, -1).over(w)).show()
+    +---+---+----------+
+    | c1| c2|next_value|
+    +---+---+----------+
+    |  a|  1|         3|
+    |  a|  2|        -1|
+    |  a|  3|        -1|
+    |  b|  2|        -1|
+    |  b|  8|        -1|
+    +---+---+----------+
+    """
+
+    if default is None:
+        return _invoke_function("lead", _to_col(col), lit(offset))
+    else:
+        return _invoke_function("lead", _to_col(col), lit(offset), lit(default))
+
+
+def nth_value(col: "ColumnOrName", offset: int, ignoreNulls: Optional[bool] = None) -> Column:
+    """
+    Window function: returns the value that is the `offset`\\th row of the window frame
+    (counting from 1), and `null` if the size of window frame is less than `offset` rows.
+
+    It will return the `offset`\\th non-null value it sees when `ignoreNulls` is set to
+    true. If all values are null, then null is returned.
+
+    This is equivalent to the nth_value function in SQL.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        name of column or expression
+    offset : int
+        number of row to use as the value
+    ignoreNulls : bool, optional
+        indicates the Nth value should skip null in the
+        determination of which row to use
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        value of nth row.
+
+    Examples
+    --------
+    >>> from pyspark.sql import Window
+    >>> df = spark.createDataFrame([("a", 1),
+    ...                             ("a", 2),
+    ...                             ("a", 3),
+    ...                             ("b", 8),
+    ...                             ("b", 2)], ["c1", "c2"])
+    >>> df.show()
+    +---+---+
+    | c1| c2|
+    +---+---+
+    |  a|  1|
+    |  a|  2|
+    |  a|  3|
+    |  b|  8|
+    |  b|  2|
+    +---+---+
+    >>> w = Window.partitionBy("c1").orderBy("c2")
+    >>> df.withColumn("nth_value", nth_value("c2", 1).over(w)).show()
+    +---+---+---------+
+    | c1| c2|nth_value|
+    +---+---+---------+
+    |  a|  1|        1|
+    |  a|  2|        1|
+    |  a|  3|        1|
+    |  b|  2|        2|
+    |  b|  8|        2|
+    +---+---+---------+
+    >>> df.withColumn("nth_value", nth_value("c2", 2).over(w)).show()
+    +---+---+---------+
+    | c1| c2|nth_value|
+    +---+---+---------+
+    |  a|  1|     null|
+    |  a|  2|        2|
+    |  a|  3|        2|
+    |  b|  2|     null|
+    |  b|  8|        8|
+    +---+---+---------+
+    """
+    if ignoreNulls is None:
+        return _invoke_function("nth_value", _to_col(col), lit(offset))
+    else:
+        return _invoke_function("nth_value", _to_col(col), lit(offset), lit(ignoreNulls))
+
+
+def ntile(n: int) -> Column:
+    """
+    Window function: returns the ntile group id (from 1 to `n` inclusive)
+    in an ordered window partition. For example, if `n` is 4, the first
+    quarter of the rows will get value 1, the second quarter will get 2,
+    the third quarter will get 3, and the last quarter will get 4.
+
+    This is equivalent to the NTILE function in SQL.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    n : int
+        an integer
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        portioned group id.
+
+    Examples
+    --------
+    >>> from pyspark.sql import Window
+    >>> df = spark.createDataFrame([("a", 1),
+    ...                             ("a", 2),
+    ...                             ("a", 3),
+    ...                             ("b", 8),
+    ...                             ("b", 2)], ["c1", "c2"])
+    >>> df.show()
+    +---+---+
+    | c1| c2|
+    +---+---+
+    |  a|  1|
+    |  a|  2|
+    |  a|  3|
+    |  b|  8|
+    |  b|  2|
+    +---+---+
+    >>> w = Window.partitionBy("c1").orderBy("c2")
+    >>> df.withColumn("ntile", ntile(2).over(w)).show()
+    +---+---+-----+
+    | c1| c2|ntile|
+    +---+---+-----+
+    |  a|  1|    1|
+    |  a|  2|    1|
+    |  a|  3|    2|
+    |  b|  2|    1|
+    |  b|  8|    2|
+    +---+---+-----+
+    """
+    return _invoke_function("ntile", lit(n))
+
+
+def percent_rank() -> Column:
+    """
+    Window function: returns the relative rank (i.e. percentile) of rows within a window partition.
+
+    .. versionadded:: 3.4.0
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for calculating relative rank.
+
+    Examples
+    --------
+    >>> from pyspark.sql import Window, types
+    >>> df = spark.createDataFrame([1, 1, 2, 3, 3, 4], types.IntegerType())
+    >>> w = Window.orderBy("value")
+    >>> df.withColumn("pr", percent_rank().over(w)).show()
+    +-----+---+
+    |value| pr|
+    +-----+---+
+    |    1|0.0|
+    |    1|0.0|
+    |    2|0.4|
+    |    3|0.6|
+    |    3|0.6|
+    |    4|1.0|
+    +-----+---+
+    """
+    return _invoke_function("percent_rank")
+
+
+def rank() -> Column:
+    """
+    Window function: returns the rank of rows within a window partition.
+
+    The difference between rank and dense_rank is that dense_rank leaves no gaps in ranking
+    sequence when there are ties. That is, if you were ranking a competition using dense_rank
+    and had three people tie for second place, you would say that all three were in second
+    place and that the next person came in third. Rank would give me sequential numbers, making
+    the person that came in third place (after the ties) would register as coming in fifth.
+
+    This is equivalent to the RANK function in SQL.
+
+    .. versionadded:: 3.4.0
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for calculating ranks.
+
+    Examples
+    --------
+    >>> from pyspark.sql import Window, types
+    >>> df = spark.createDataFrame([1, 1, 2, 3, 3, 4], types.IntegerType())
+    >>> w = Window.orderBy("value")
+    >>> df.withColumn("drank", rank().over(w)).show()
+    +-----+-----+
+    |value|drank|
+    +-----+-----+
+    |    1|    1|
+    |    1|    1|
+    |    2|    3|
+    |    3|    4|
+    |    3|    4|
+    |    4|    6|
+    +-----+-----+
+    """
+    return _invoke_function("rank")
+
+
+def row_number() -> Column:
+    """
+    Window function: returns a sequential number starting at 1 within a window partition.
+
+    .. versionadded:: 3.4.0
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for calculating row numbers.
+
+    Examples
+    --------
+    >>> from pyspark.sql import Window
+    >>> df = spark.range(3)
+    >>> w = Window.orderBy(df.id.desc())
+    >>> df.withColumn("desc_order", row_number().over(w)).show()
+    +---+----------+
+    | id|desc_order|
+    +---+----------+
+    |  2|         1|
+    |  1|         2|
+    |  0|         3|
+    +---+----------+
+    """
+    return _invoke_function("row_number")
 
 
 # Collection Functions

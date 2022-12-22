@@ -570,4 +570,27 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     assert(result.shuffleWriteRecords == input.shuffleWriteRecords)
     assert(result.shuffleWriteTime == input.shuffleWriteTime)
   }
+
+  test("Speculation Stage Summary") {
+    val input = new SpeculationStageSummaryWrapper(
+      stageId = 1,
+      stageAttemptId = 2,
+      info = new SpeculationStageSummary(
+        numTasks = 3,
+        numActiveTasks = 4,
+        numCompletedTasks = 5,
+        numFailedTasks = 6,
+        numKilledTasks = 7
+      )
+    )
+    val bytes = serializer.serialize(input)
+    val result = serializer.deserialize(bytes, classOf[SpeculationStageSummaryWrapper])
+    assert(result.stageId == input.stageId)
+    assert(result.stageAttemptId == input.stageAttemptId)
+    assert(result.info.numTasks == input.info.numTasks)
+    assert(result.info.numActiveTasks == input.info.numActiveTasks)
+    assert(result.info.numCompletedTasks == input.info.numCompletedTasks)
+    assert(result.info.numFailedTasks == input.info.numFailedTasks)
+    assert(result.info.numKilledTasks == input.info.numKilledTasks)
+  }
 }
