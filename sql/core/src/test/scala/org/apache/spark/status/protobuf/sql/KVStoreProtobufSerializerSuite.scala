@@ -27,7 +27,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
 
   private val serializer = new KVStoreProtobufSerializer()
 
-  test("SQL Execution UI Data") {
+  test("SQLExecutionUIData") {
     val input = SqlResourceSuite.sqlExecutionUIData
     val bytes = serializer.serialize(input)
     val result = serializer.deserialize(bytes, classOf[SQLExecutionUIData])
