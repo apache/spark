@@ -16,6 +16,7 @@
 #
 
 import inspect
+import warnings
 
 from pyspark.sql.connect.column import (
     Column,
@@ -32,9 +33,6 @@ from typing import Any, TYPE_CHECKING, Union, List, overload, Optional, Tuple, C
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName, DataFrameType
-
-
-# TODO(SPARK-40538) Add support for the missing PySpark functions.
 
 
 def _to_col(col: "ColumnOrName") -> Column:
@@ -175,17 +173,17 @@ def lit(col: Any) -> Column:
         return Column(LiteralExpression(col, dataType))
 
 
-# def bitwiseNOT(col: "ColumnOrName") -> Column:
-#     """
-#     Computes bitwise not.
-#
-#     .. versionadded:: 1.4.0
-#
-#     .. deprecated:: 3.2.0
-#         Use :func:`bitwise_not` instead.
-#     """
-#     warnings.warn("Deprecated in 3.2, use bitwise_not instead.", FutureWarning)
-#     return bitwise_not(col)
+def bitwiseNOT(col: "ColumnOrName") -> Column:
+    """
+    Computes bitwise not.
+
+    .. versionadded:: 3.4.0
+
+    .. deprecated:: 3.4.0
+        Use :func:`bitwise_not` instead.
+    """
+    warnings.warn("Deprecated in 3.4, use bitwise_not instead.", FutureWarning)
+    return bitwise_not(col)
 
 
 def bitwise_not(col: "ColumnOrName") -> Column:
@@ -1868,16 +1866,16 @@ def sec(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("sec", col)
 
 
-# def shiftLeft(col: "ColumnOrName", numBits: int) -> Column:
-#     """Shift the given value numBits left.
-#
-#     .. versionadded:: 1.5.0
-#
-#     .. deprecated:: 3.2.0
-#         Use :func:`shiftleft` instead.
-#     """
-#     warnings.warn("Deprecated in 3.2, use shiftleft instead.", FutureWarning)
-#     return shiftleft(col, numBits)
+def shiftLeft(col: "ColumnOrName", numBits: int) -> Column:
+    """Shift the given value numBits left.
+
+    .. versionadded:: 3.4.0
+
+    .. deprecated:: 3.4.0
+        Use :func:`shiftleft` instead.
+    """
+    warnings.warn("Deprecated in 3.4, use shiftleft instead.", FutureWarning)
+    return shiftleft(col, numBits)
 
 
 def shiftleft(col: "ColumnOrName", numBits: int) -> Column:
@@ -1905,16 +1903,16 @@ def shiftleft(col: "ColumnOrName", numBits: int) -> Column:
     return _invoke_function("shiftleft", _to_col(col), lit(numBits))
 
 
-# def shiftRight(col: "ColumnOrName", numBits: int) -> Column:
-#     """(Signed) shift the given value numBits right.
-#
-#     .. versionadded:: 1.5.0
-#
-#     .. deprecated:: 3.2.0
-#         Use :func:`shiftright` instead.
-#     """
-#     warnings.warn("Deprecated in 3.2, use shiftright instead.", FutureWarning)
-#     return shiftright(col, numBits)
+def shiftRight(col: "ColumnOrName", numBits: int) -> Column:
+    """(Signed) shift the given value numBits right.
+
+    .. versionadded:: 3.4.0
+
+    .. deprecated:: 3.4.0
+        Use :func:`shiftright` instead.
+    """
+    warnings.warn("Deprecated in 3.4, use shiftright instead.", FutureWarning)
+    return shiftright(col, numBits)
 
 
 def shiftright(col: "ColumnOrName", numBits: int) -> Column:
@@ -1942,16 +1940,16 @@ def shiftright(col: "ColumnOrName", numBits: int) -> Column:
     return _invoke_function("shiftright", _to_col(col), lit(numBits))
 
 
-# def shiftRightUnsigned(col: "ColumnOrName", numBits: int) -> Column:
-#     """Unsigned shift the given value numBits right.
-#
-#     .. versionadded:: 1.5.0
-#
-#     .. deprecated:: 3.2.0
-#         Use :func:`shiftrightunsigned` instead.
-#     """
-#     warnings.warn("Deprecated in 3.2, use shiftrightunsigned instead.", FutureWarning)
-#     return shiftrightunsigned(col, numBits)
+def shiftRightUnsigned(col: "ColumnOrName", numBits: int) -> Column:
+    """Unsigned shift the given value numBits right.
+
+    .. versionadded:: 3.4.0
+
+    .. deprecated:: 3.4.0
+        Use :func:`shiftrightunsigned` instead.
+    """
+    warnings.warn("Deprecated in 3.4, use shiftrightunsigned instead.", FutureWarning)
+    return shiftrightunsigned(col, numBits)
 
 
 def shiftrightunsigned(col: "ColumnOrName", numBits: int) -> Column:
@@ -2150,26 +2148,26 @@ def tanh(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("tanh", col)
 
 
-# def toDegrees(col: "ColumnOrName") -> Column:
-#     """
-#     .. versionadded:: 1.4.0
-#
-#     .. deprecated:: 2.1.0
-#         Use :func:`degrees` instead.
-#     """
-#     warnings.warn("Deprecated in 2.1, use degrees instead.", FutureWarning)
-#     return degrees(col)
-#
-#
-# def toRadians(col: "ColumnOrName") -> Column:
-#     """
-#     .. versionadded:: 1.4.0
-#
-#     .. deprecated:: 2.1.0
-#         Use :func:`radians` instead.
-#     """
-#     warnings.warn("Deprecated in 2.1, use radians instead.", FutureWarning)
-#     return radians(col)
+def toDegrees(col: "ColumnOrName") -> Column:
+    """
+    .. versionadded:: 3.4.0
+
+    .. deprecated:: 3.4.0
+        Use :func:`degrees` instead.
+    """
+    warnings.warn("Deprecated in 3.4, use degrees instead.", FutureWarning)
+    return degrees(col)
+
+
+def toRadians(col: "ColumnOrName") -> Column:
+    """
+    .. versionadded:: 3.4.0
+
+    .. deprecated:: 3.4.0
+        Use :func:`radians` instead.
+    """
+    warnings.warn("Deprecated in 3.4, use radians instead.", FutureWarning)
+    return radians(col)
 
 
 def unhex(col: "ColumnOrName") -> Column:
@@ -2199,15 +2197,15 @@ def unhex(col: "ColumnOrName") -> Column:
 # Aggregate Functions
 
 
-# def approxCountDistinct(col: "ColumnOrName", rsd: Optional[float] = None) -> Column:
-#     """
-#     .. versionadded:: 1.3.0
-#
-#     .. deprecated:: 2.1.0
-#         Use :func:`approx_count_distinct` instead.
-#     """
-#     warnings.warn("Deprecated in 2.1, use approx_count_distinct instead.", FutureWarning)
-#     return approx_count_distinct(col, rsd)
+def approxCountDistinct(col: "ColumnOrName", rsd: Optional[float] = None) -> Column:
+    """
+    .. versionadded:: 3.4.0
+
+    .. deprecated:: 3.4.0
+        Use :func:`approx_count_distinct` instead.
+    """
+    warnings.warn("Deprecated in 3.4, use approx_count_distinct instead.", FutureWarning)
+    return approx_count_distinct(col, rsd)
 
 
 def approx_count_distinct(col: "ColumnOrName", rsd: Optional[float] = None) -> Column:
@@ -2393,15 +2391,15 @@ def count(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("count", col)
 
 
-# def countDistinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
-#     """Returns a new :class:`~pyspark.sql.Column` for distinct count of ``col`` or ``cols``.
-#
-#     An alias of :func:`count_distinct`, and it is encouraged to use :func:`count_distinct`
-#     directly.
-#
-#     .. versionadded:: 1.3.0
-#     """
-#     return count_distinct(col, *cols)
+def countDistinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
+    """Returns a new :class:`~pyspark.sql.Column` for distinct count of ``col`` or ``cols``.
+
+    An alias of :func:`count_distinct`, and it is encouraged to use :func:`count_distinct`
+    directly.
+
+    .. versionadded:: 3.4.0
+    """
+    return count_distinct(col, *cols)
 
 
 def count_distinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
@@ -3163,20 +3161,19 @@ def sum(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("sum", col)
 
 
-# def sumDistinct(col: "ColumnOrName") -> Column:
-#     """
-#     Aggregate function: returns the sum of distinct values in the expression.
-#
-#     .. versionadded:: 1.3.0
-#
-#     .. deprecated:: 3.2.0
-#         Use :func:`sum_distinct` instead.
-#     """
-#     warnings.warn("Deprecated in 3.2, use sum_distinct instead.", FutureWarning)
-#     return sum_distinct(col)
+def sumDistinct(col: "ColumnOrName") -> Column:
+    """
+    Aggregate function: returns the sum of distinct values in the expression.
+
+    .. versionadded:: 3.4.0
+
+    .. deprecated:: 3.4.0
+        Use :func:`sum_distinct` instead.
+    """
+    warnings.warn("Deprecated in 3.4, use sum_distinct instead.", FutureWarning)
+    return sum_distinct(col)
 
 
-# TODO(SPARK-41381): add isDistinct in UnresolvedFunction
 def sum_distinct(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the sum of distinct values in the expression.

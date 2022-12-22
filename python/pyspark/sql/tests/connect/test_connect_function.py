@@ -137,6 +137,10 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             sdf.select(SF.bitwise_not(sdf.a)).toPandas(),
         )
         self.assert_eq(
+            cdf.select(CF.bitwiseNOT(cdf.a)).toPandas(),
+            sdf.select(SF.bitwiseNOT(sdf.a)).toPandas(),
+        )
+        self.assert_eq(
             cdf.select(CF.coalesce(cdf.a, "b", cdf.c)).toPandas(),
             sdf.select(SF.coalesce(sdf.a, "b", sdf.c)).toPandas(),
         )
@@ -416,6 +420,7 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             (CF.cot, SF.cot),
             (CF.csc, SF.csc),
             (CF.degrees, SF.degrees),
+            (CF.toDegrees, SF.toDegrees),
             (CF.exp, SF.exp),
             (CF.expm1, SF.expm1),
             (CF.factorial, SF.factorial),
@@ -426,6 +431,7 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             (CF.log1p, SF.log1p),
             (CF.log2, SF.log2),
             (CF.radians, SF.radians),
+            (CF.toRadians, SF.toRadians),
             (CF.rint, SF.rint),
             (CF.sec, SF.sec),
             (CF.signum, SF.signum),
@@ -474,12 +480,24 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             sdf.select(SF.shiftleft("b", 1)).toPandas(),
         )
         self.assert_eq(
+            cdf.select(CF.shiftLeft("b", 1)).toPandas(),
+            sdf.select(SF.shiftLeft("b", 1)).toPandas(),
+        )
+        self.assert_eq(
             cdf.select(CF.shiftright("b", 1)).toPandas(),
             sdf.select(SF.shiftright("b", 1)).toPandas(),
         )
         self.assert_eq(
+            cdf.select(CF.shiftRight("b", 1)).toPandas(),
+            sdf.select(SF.shiftRight("b", 1)).toPandas(),
+        )
+        self.assert_eq(
             cdf.select(CF.shiftrightunsigned("b", 1)).toPandas(),
             sdf.select(SF.shiftrightunsigned("b", 1)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.shiftRightUnsigned("b", 1)).toPandas(),
+            sdf.select(SF.shiftRightUnsigned("b", 1)).toPandas(),
         )
 
     def test_aggregation_functions(self):
@@ -506,6 +524,7 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
         # TODO(SPARK-41383): add tests for grouping, grouping_id after DataFrame.cube is supported.
         for cfunc, sfunc in [
             (CF.approx_count_distinct, SF.approx_count_distinct),
+            (CF.approxCountDistinct, SF.approxCountDistinct),
             (CF.avg, SF.avg),
             (CF.collect_list, SF.collect_list),
             (CF.collect_set, SF.collect_set),
@@ -525,6 +544,7 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             (CF.stddev_samp, SF.stddev_samp),
             (CF.sum, SF.sum),
             (CF.sum_distinct, SF.sum_distinct),
+            (CF.sumDistinct, SF.sumDistinct),
             (CF.var_pop, SF.var_pop),
             (CF.var_samp, SF.var_samp),
             (CF.variance, SF.variance),
@@ -576,6 +596,10 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
         self.assert_eq(
             cdf.select(CF.count_distinct("b"), CF.count_distinct(cdf.c)).toPandas(),
             sdf.select(SF.count_distinct("b"), SF.count_distinct(sdf.c)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.countDistinct("b"), CF.countDistinct(cdf.c)).toPandas(),
+            sdf.select(SF.countDistinct("b"), SF.countDistinct(sdf.c)).toPandas(),
         )
         # The output column names of 'groupBy.agg(count_distinct)' in PySpark
         # are incorrect, see SPARK-41391.
