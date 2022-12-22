@@ -257,6 +257,41 @@ message ResourceProfileWrapper {
   ResourceProfileInfo rpInfo = 1;
 }
 
+message CachedQuantile {
+  int64 stage_id = 1;
+  int32 stage_attempt_id = 2;
+  string quantile = 3;
+  int64 task_count = 4;
+  double duration = 5;
+  double executor_deserialize_time = 6;
+  double executor_deserialize_cpu_time = 7;
+  double executor_run_time = 8;
+  double executor_cpu_time = 9;
+  double result_size = 10;
+  double jvm_gc_time = 11;
+  double result_serialization_time = 12;
+  double getting_result_time = 13;
+  double scheduler_delay = 14;
+  double peak_execution_memory = 15;
+  double memory_bytes_spilled = 16;
+  double disk_bytes_spilled = 17;
+  double bytes_read = 18;
+  double records_read = 19;
+  double bytes_written = 20;
+  double records_written = 21;
+  double shuffle_read_bytes = 22;
+  double shuffle_records_read = 23;
+  double shuffle_remote_blocks_fetched = 24;
+  double shuffle_local_blocks_fetched = 25;
+  double shuffle_fetch_wait_time = 26;
+  double shuffle_remote_bytes_read = 27;
+  double shuffle_remote_bytes_read_to_disk = 28;
+  double shuffle_total_blocks_fetched = 29;
+  double shuffle_write_bytes = 30;
+  double shuffle_write_records = 31;
+  double shuffle_write_time = 32;
+}
+
 message SpeculationStageSummary {
   int32 num_tasks = 1;
   int32 num_active_tasks = 2;
