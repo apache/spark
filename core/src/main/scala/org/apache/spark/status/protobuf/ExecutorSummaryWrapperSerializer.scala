@@ -81,7 +81,9 @@ class ExecutorSummaryWrapperSerializer extends ProtobufSerDe {
     input.memoryMetrics.foreach { metrics =>
       builder.setMemoryMetrics(serializeMemoryMetrics(metrics))
     }
-    input.blacklistedInStages.foreach(builder.addBlacklistedInStages)
+    input.blacklistedInStages.foreach { stage =>
+      builder.addBlacklistedInStages(stage.toLong)
+    }
     input.peakMemoryMetrics.foreach { metrics =>
       builder.setPeakMemoryMetrics(ExecutorMetricsSerializer.serialize(metrics))
     }
@@ -95,7 +97,9 @@ class ExecutorSummaryWrapperSerializer extends ProtobufSerDe {
     builder.setResourceProfileId(input.resourceProfileId)
     builder.setIsExcluded(input.isExcluded)
 
-    input.excludedInStages.foreach(builder.addExcludedInStages)
+    input.excludedInStages.foreach { stage =>
+      builder.addExcludedInStages(stage.toLong)
+    }
 
     builder.build()
   }
@@ -135,14 +139,12 @@ class ExecutorSummaryWrapperSerializer extends ProtobufSerDe {
       removeReason = removeReason,
       executorLogs = binary.getExecutorLogsMap.asScala.toMap,
       memoryMetrics = memoryMetrics,
-      // TODO: fix toInt
       blacklistedInStages = binary.getBlacklistedInStagesList.asScala.map(_.toInt).toSet,
       peakMemoryMetrics = peakMemoryMetrics,
       attributes = binary.getAttributesMap.asScala.toMap,
       resources = binary.getResourcesMap.asScala.mapValues(deserializeResourceInformation).toMap,
       resourceProfileId = binary.getResourceProfileId,
       isExcluded = binary.getIsExcluded,
-      // TODO: fix toInt
       excludedInStages = binary.getExcludedInStagesList.asScala.map(_.toInt).toSet)
   }
 

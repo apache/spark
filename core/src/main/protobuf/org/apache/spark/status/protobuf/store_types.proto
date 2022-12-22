@@ -296,13 +296,13 @@ message ExecutorSummary {
   optional string remove_reason = 22;
   map<string, string> executor_logs = 23;
   optional MemoryMetrics memory_metrics = 24;
-  repeated int32 blacklisted_in_stages = 25;
+  repeated int64 blacklisted_in_stages = 25;
   optional ExecutorMetrics peak_memory_metrics = 26;
   map<string, string> attributes = 27;
   map<string, ResourceInformation> resources = 28;
   int32 resource_profile_id = 29;
   bool is_excluded = 30;
-  repeated int32 excluded_in_stages = 31;
+  repeated int64 excluded_in_stages = 31;
 }
 
 message ExecutorSummaryWrapper {
