@@ -35,20 +35,6 @@
   </properties>
 
   <dependencies>
-    <!-- The dependency on catalyst is a temporary measure until the narrow dependencies required by the client
-     are extracted out into a new module. -->
-    <dependency>
-      <groupId>org.apache.spark</groupId>
-      <artifactId>spark-catalyst_${scala.binary.version}</artifactId>
-      <version>${project.version}</version>
-      <scope>provided</scope>
-      <exclusions>
-        <exclusion>
-          <groupId>com.google.guava</groupId>
-          <artifactId>guava</artifactId>
-        </exclusion>
-      </exclusions>
-    </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-connect-common_${scala.binary.version}</artifactId>
