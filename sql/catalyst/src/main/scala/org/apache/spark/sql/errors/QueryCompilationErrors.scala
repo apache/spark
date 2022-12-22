@@ -3239,7 +3239,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map(
         "protobufType" -> protobufType,
         "toType" -> toSQLType(sqlType)),
-      cause = Option(cause.getCause))
+      cause = Option(cause))
   }
 
   def cannotConvertSqlTypeToProtobufError(
@@ -3251,7 +3251,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map(
         "protobufType" -> protobufType,
         "toType" -> toSQLType(sqlType)),
-      cause = Option(cause.getCause))
+      cause = Option(cause))
   }
 
   def protobufTypeUnsupportedYetError(protobufType: String): Throwable = {
