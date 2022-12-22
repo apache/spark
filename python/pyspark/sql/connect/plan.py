@@ -22,7 +22,8 @@ import pyarrow as pa
 from pyspark.sql.types import DataType
 
 import pyspark.sql.connect.proto as proto
-from pyspark.sql.connect.column import Column, SortOrder, ColumnReference
+from pyspark.sql.connect.column import Column
+from pyspark.sql.connect.expressions import SortOrder, ColumnReference
 from pyspark.sql.connect.types import pyspark_types_to_proto_types
 
 if TYPE_CHECKING:

@@ -24,12 +24,12 @@ import pyarrow as pa
 
 from pyspark.sql.session import classproperty, SparkSession as PySparkSession
 from pyspark.sql.types import DataType, StructType
+from pyspark.sql.utils import to_str
 
 from pyspark.sql.connect.client import SparkConnectClient
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.connect.plan import SQL, Range, LocalRelation
 from pyspark.sql.connect.readwriter import DataFrameReader
-from pyspark.sql.utils import to_str
 
 from typing import (
     Optional,

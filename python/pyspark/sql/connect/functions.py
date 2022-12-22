@@ -18,8 +18,8 @@
 import inspect
 import warnings
 
-from pyspark.sql.connect.column import (
-    Column,
+from pyspark.sql.connect.column import Column
+from pyspark.sql.connect.expressions import (
     CaseWhen,
     Expression,
     LiteralExpression,
@@ -32,7 +32,8 @@ from pyspark.sql.connect.column import (
 from typing import Any, TYPE_CHECKING, Union, List, overload, Optional, Tuple, Callable, ValuesView
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import ColumnOrName, DataFrameType
+    from pyspark.sql.connect._typing import ColumnOrName
+    from pyspark.sql.connect.dataframe import DataFrame
 
 
 def _to_col(col: "ColumnOrName") -> Column:
@@ -221,7 +222,7 @@ def bitwise_not(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("~", col)
 
 
-def broadcast(df: "DataFrameType") -> "DataFrameType":
+def broadcast(df: "DataFrame") -> "DataFrame":
     """
     Marks a DataFrame as small enough for use in broadcast joins.
 
