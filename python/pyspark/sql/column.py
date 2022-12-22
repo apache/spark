@@ -189,6 +189,9 @@ class Column:
 
     .. versionadded:: 1.3.0
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Examples
     --------
     Column instances can be created by
@@ -282,6 +285,9 @@ class Column:
 
     .. versionadded:: 2.3.0
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Parameters
     ----------
     other
@@ -358,6 +364,9 @@ class Column:
     _bitwiseOR_doc = """
     Compute bitwise OR of this expression with another expression.
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Parameters
     ----------
     other
@@ -374,6 +383,9 @@ class Column:
     _bitwiseAND_doc = """
     Compute bitwise AND of this expression with another expression.
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Parameters
     ----------
     other
@@ -389,6 +401,9 @@ class Column:
     """
     _bitwiseXOR_doc = """
     Compute bitwise XOR of this expression with another expression.
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -625,6 +640,9 @@ class Column:
     _contains_doc = """
     Contains the other element. Returns a boolean :class:`Column` based on a string match.
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Parameters
     ----------
     other
@@ -645,6 +663,9 @@ class Column:
     other : :class:`Column` or str
         string at start of line (do not use a regex `^`)
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Examples
     --------
     >>> df = spark.createDataFrame(
@@ -656,6 +677,9 @@ class Column:
     """
     _endswith_doc = """
     String ends with. Returns a boolean :class:`Column` based on a string match.
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Parameters
     ----------
@@ -679,6 +703,9 @@ class Column:
     def like(self: "Column", other: str) -> "Column":
         """
         SQL like expression. Returns a boolean :class:`Column` based on a SQL LIKE match.
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -710,6 +737,9 @@ class Column:
         SQL RLIKE expression (LIKE with Regex). Returns a boolean :class:`Column` based on a regex
         match.
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         other : str
@@ -737,6 +767,9 @@ class Column:
         based on a case insensitive match.
 
         .. versionadded:: 3.3.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -776,6 +809,9 @@ class Column:
         Return a :class:`Column` which is a substring of the column.
 
         .. versionadded:: 1.3.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -818,6 +854,9 @@ class Column:
         expression is contained by the evaluated values of the arguments.
 
         .. versionadded:: 1.5.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -938,6 +977,9 @@ class Column:
     _isNull_doc = """
     True if the current expression is null.
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Examples
     --------
     >>> from pyspark.sql import Row
@@ -947,6 +989,9 @@ class Column:
     """
     _isNotNull_doc = """
     True if the current expression is NOT null.
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Examples
     --------
@@ -965,6 +1010,9 @@ class Column:
         return more than one column, such as explode).
 
         .. versionadded:: 1.3.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -1020,6 +1068,9 @@ class Column:
         Casts the column into type ``dataType``.
 
         .. versionadded:: 1.3.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -1100,6 +1151,9 @@ class Column:
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         condition : :class:`Column`
@@ -1141,6 +1195,9 @@ class Column:
         If :func:`Column.otherwise` is not invoked, None is returned for unmatched conditions.
 
         .. versionadded:: 1.4.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
