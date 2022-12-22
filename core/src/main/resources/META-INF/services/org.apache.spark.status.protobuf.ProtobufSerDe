@@ -19,6 +19,7 @@ org.apache.spark.status.protobuf.RDDStorageInfoWrapperSerializer
 org.apache.spark.status.protobuf.ApplicationInfoWrapperSerializer
 org.apache.spark.status.protobuf.ApplicationEnvironmentInfoWrapperSerializer
 org.apache.spark.status.protobuf.ExecutorStageSummaryWrapperSerializer
+org.apache.spark.status.protobuf.StreamBlockDataSerializer
 org.apache.spark.status.protobuf.TaskDataWrapperSerializer
 org.apache.spark.status.protobuf.JobDataWrapperSerializer
 org.apache.spark.status.protobuf.ResourceProfileWrapperSerializer
