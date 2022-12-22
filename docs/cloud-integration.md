@@ -362,16 +362,23 @@ declare to spark that they are compatible. If dynamic partition overwrite
 is required when writing data through a hadoop committer, Spark
 will always permit this when the original `FileOutputCommitter`
 is used. For other committers, after their instantiation, Spark
-will probe for their declaration of compatibility, and
-permit the operation if state that they are compatible.
+will probe for their declaration of compatibility.
 
-If the committer is not compatible, the operation will fail with
-the error message
-`PathOutputCommitter does not support dynamicPartitionOverwrite`
+If the committer is not compatible, the job will execute, but it
+will print a warning
+```
+Committer  (committer name) has incomplete support for dynamic partition overwrite.
+```
 
-Unless there is a compatible committer for the target filesystem,
-the sole solution is to use a cloud-friendly format for data
-storage.
+The job will still execute safely, and if the spark process fails at
+any point before job commit, none of the output will be visible.
+During job commit, the final stage of overwriting the existing partitions
+may be slow -and the larger the amount of data generated the longer it
+will take.
+
+The solution is to use a cloud-friendly format for data storage, which should
+deliver fast atomic job commits on all of the object stores which
+Spark is compatible with.
 
 ## Further Reading
 
