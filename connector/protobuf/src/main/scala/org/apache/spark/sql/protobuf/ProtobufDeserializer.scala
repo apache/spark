@@ -156,6 +156,9 @@ private[sql] class ProtobufDeserializer(
     (protoType.getJavaType, catalystType) match {
 
       case (null, NullType) => (updater, ordinal, _) => updater.setNullAt(ordinal)
+      // It is possible that this will result in data being dropped, This is intentional,
+      // to catch recursive fields and drop them as necessary.
+      case (MESSAGE, NullType) => (updater, ordinal, _) => updater.setNullAt(ordinal)
 
       // TODO: we can avoid boxing if future version of Protobuf provide primitive accessors.
       case (BOOLEAN, BooleanType) =>
@@ -171,7 +174,7 @@ private[sql] class ProtobufDeserializer(
         (updater, ordinal, value) => updater.setShort(ordinal, value.asInstanceOf[Short])
 
       case  (
-        BOOLEAN | INT | FLOAT | DOUBLE | LONG | STRING | ENUM | BYTE_STRING,
+        MESSAGE | BOOLEAN | INT | FLOAT | DOUBLE | LONG | STRING | ENUM | BYTE_STRING,
         ArrayType(dataType: DataType, containsNull)) if protoType.isRepeated =>
         newArrayWriter(protoType, protoPath, catalystPath, dataType, containsNull)
 
@@ -234,9 +237,6 @@ private[sql] class ProtobufDeserializer(
           val row = new SpecificInternalRow(st)
           writeRecord(new RowUpdater(row), value.asInstanceOf[DynamicMessage])
           updater.set(ordinal, row)
-
-      case (MESSAGE, ArrayType(st: StructType, containsNull)) =>
-        newArrayWriter(protoType, protoPath, catalystPath, st, containsNull)
 
       case (ENUM, StringType) =>
         (updater, ordinal, value) => updater.set(ordinal, UTF8String.fromString(value.toString))

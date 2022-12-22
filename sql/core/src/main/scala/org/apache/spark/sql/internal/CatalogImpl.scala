@@ -274,7 +274,10 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
           className = className,
           isTemporary = true)
 
-      case _ => throw QueryCompilationErrors.noSuchFunctionError(ident, plan)
+      case _ =>
+        val catalogPath = (currentCatalog +:
+          sparkSession.sessionState.catalogManager.currentNamespace).mkString(".")
+        throw QueryCompilationErrors.unresolvedRoutineError(ident, Seq(catalogPath), plan.origin)
     }
   }
 

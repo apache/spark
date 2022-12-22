@@ -642,12 +642,14 @@ class Sample(LogicalPlan):
         upper_bound: float,
         with_replacement: bool,
         seed: Optional[int],
+        force_stable_sort: bool = False,
     ) -> None:
         super().__init__(child)
         self.lower_bound = lower_bound
         self.upper_bound = upper_bound
         self.with_replacement = with_replacement
         self.seed = seed
+        self.force_stable_sort = force_stable_sort
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
@@ -658,6 +660,7 @@ class Sample(LogicalPlan):
         plan.sample.with_replacement = self.with_replacement
         if self.seed is not None:
             plan.sample.seed = self.seed
+        plan.sample.force_stable_sort = self.force_stable_sort
         return plan
 
     def print(self, indent: int = 0) -> str:
@@ -1011,6 +1014,35 @@ class Range(LogicalPlan):
                 {self._child_repr_()}
             </li>
         </uL>
+        """
+
+
+class ToSchema(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], schema: DataType) -> None:
+        super().__init__(child)
+        self._schema = schema
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+
+        plan = proto.Relation()
+        plan.to_schema.input.CopyFrom(self._child.plan(session))
+        plan.to_schema.schema.CopyFrom(pyspark_types_to_proto_types(self._schema))
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return f"""{i}<ToSchema schema='{self._schema}'>"""
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>ToSchema</b><br />
+              schema: {self._schema} <br />
+              {self._child_repr_()}
+           </li>
+        </ul>
         """
 
 

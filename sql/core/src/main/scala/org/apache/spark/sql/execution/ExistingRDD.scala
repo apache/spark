@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, Encoder, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -103,6 +104,8 @@ case class LogicalRDD(
     originConstraints: Option[ExpressionSet] = None)
   extends LeafNode with MultiInstanceRelation {
 
+  import LogicalRDD._
+
   override protected final def otherCopyArgs: Seq[AnyRef] =
     session :: originStats :: originConstraints :: Nil
 
@@ -122,22 +125,8 @@ case class LogicalRDD(
       case e: Attribute => rewrite.getOrElse(e, e)
     }.asInstanceOf[SortOrder])
 
-    val rewrittenStatistics = originStats.map { s =>
-      Statistics(
-        s.sizeInBytes,
-        s.rowCount,
-        AttributeMap[ColumnStat](s.attributeStats.map {
-          case (attr, v) => (rewrite.getOrElse(attr, attr), v)
-        }),
-        s.isRuntime
-      )
-    }
-
-    val rewrittenConstraints = originConstraints.map { c =>
-      c.map(_.transform {
-        case e: Attribute => rewrite.getOrElse(e, e)
-      })
-    }
+    val rewrittenStatistics = originStats.map(rewriteStatistics(_, rewrite))
+    val rewrittenConstraints = originConstraints.map(rewriteConstraints(_, rewrite))
 
     LogicalRDD(
       output.map(rewrite),
@@ -163,7 +152,7 @@ case class LogicalRDD(
   override lazy val constraints: ExpressionSet = originConstraints.getOrElse(ExpressionSet())
 }
 
-object LogicalRDD {
+object LogicalRDD extends Logging {
   /**
    * Create a new LogicalRDD based on existing Dataset. Stats and constraints are inherited from
    * origin Dataset.
@@ -183,8 +172,11 @@ object LogicalRDD {
       }
     }
 
+    val logicalPlan = originDataset.logicalPlan
     val optimizedPlan = originDataset.queryExecution.optimizedPlan
     val executedPlan = originDataset.queryExecution.executedPlan
+
+    val (stats, constraints) = rewriteStatsAndConstraints(logicalPlan, optimizedPlan)
 
     LogicalRDD(
       originDataset.logicalPlan.output,
@@ -192,7 +184,68 @@ object LogicalRDD {
       firstLeafPartitioning(executedPlan.outputPartitioning),
       executedPlan.outputOrdering,
       isStreaming
-    )(originDataset.sparkSession, Some(optimizedPlan.stats), Some(optimizedPlan.constraints))
+    )(originDataset.sparkSession, stats, constraints)
+  }
+
+  private[sql] def buildOutputAssocForRewrite(
+      source: Seq[Attribute],
+      destination: Seq[Attribute]): Option[Map[Attribute, Attribute]] = {
+    // We check the name and type, allowing nullability, exprId, metadata, qualifier be different
+    // E.g. This could happen during optimization phase.
+    val rewrite = source.zip(destination).flatMap { case (attr1, attr2) =>
+      if (attr1.name == attr2.name && attr1.dataType == attr2.dataType) {
+        Some(attr1 -> attr2)
+      } else {
+        None
+      }
+    }.toMap
+
+    if (rewrite.size == source.size) {
+      Some(rewrite)
+    } else {
+      None
+    }
+  }
+
+  private[sql] def rewriteStatsAndConstraints(
+      logicalPlan: LogicalPlan,
+      optimizedPlan: LogicalPlan): (Option[Statistics], Option[ExpressionSet]) = {
+    val rewrite = buildOutputAssocForRewrite(optimizedPlan.output, logicalPlan.output)
+
+    rewrite.map { rw =>
+      val rewrittenStatistics = rewriteStatistics(optimizedPlan.stats, rw)
+      val rewrittenConstraints = rewriteConstraints(optimizedPlan.constraints, rw)
+
+      (Some(rewrittenStatistics), Some(rewrittenConstraints))
+    }.getOrElse {
+      // can't rewrite stats and constraints, give up
+      logWarning("The output columns are expected to the same (for name and type) for output " +
+        "between logical plan and optimized plan, but they aren't. output in logical plan: " +
+        s"${logicalPlan.output.map(_.simpleString(10))} / output in optimized plan: " +
+        s"${optimizedPlan.output.map(_.simpleString(10))}")
+
+      (None, None)
+    }
+  }
+
+  private[sql] def rewriteStatistics(
+      originStats: Statistics,
+      colRewrite: Map[Attribute, Attribute]): Statistics = {
+    Statistics(
+      originStats.sizeInBytes,
+      originStats.rowCount,
+      AttributeMap[ColumnStat](originStats.attributeStats.map {
+        case (attr, v) => (colRewrite.getOrElse(attr, attr), v)
+      }),
+      originStats.isRuntime)
+  }
+
+  private[sql] def rewriteConstraints(
+      originConstraints: ExpressionSet,
+      colRewrite: Map[Attribute, Attribute]): ExpressionSet = {
+    originConstraints.map(_.transform {
+      case e: Attribute => colRewrite.getOrElse(e, e)
+    })
   }
 }
 

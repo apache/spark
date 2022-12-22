@@ -60,6 +60,9 @@ class DataFrameReader(OptionUtils):
     to access this.
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
     """
 
     def __init__(self, spark: "SparkSession"):
@@ -75,6 +78,9 @@ class DataFrameReader(OptionUtils):
         """Specifies the input data source format.
 
         .. versionadded:: 1.4.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -115,6 +121,9 @@ class DataFrameReader(OptionUtils):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         schema : :class:`pyspark.sql.types.StructType` or str
@@ -152,6 +161,9 @@ class DataFrameReader(OptionUtils):
         Adds an input option for the underlying data source.
 
         .. versionadded:: 1.5.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -192,6 +204,9 @@ class DataFrameReader(OptionUtils):
         Adds input options for the underlying data source.
 
         .. versionadded:: 1.4.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -237,6 +252,9 @@ class DataFrameReader(OptionUtils):
         """Loads data from a data source and returns it as a :class:`DataFrame`.
 
         .. versionadded:: 1.4.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -329,6 +347,9 @@ class DataFrameReader(OptionUtils):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         path : str, list or :class:`RDD`
@@ -420,6 +441,9 @@ class DataFrameReader(OptionUtils):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         tableName : str
@@ -453,6 +477,9 @@ class DataFrameReader(OptionUtils):
         Loads Parquet files, returning the result as a :class:`DataFrame`.
 
         .. versionadded:: 1.4.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -896,7 +923,10 @@ class DataFrameWriter(OptionUtils):
     (e.g. file systems, key-value stores, etc). Use :attr:`DataFrame.write`
     to access this.
 
-    .. versionadded:: 1.4
+    .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
     """
 
     def __init__(self, df: "DataFrame"):
@@ -920,6 +950,9 @@ class DataFrameWriter(OptionUtils):
         * `ignore`: Silently ignore this operation if data already exists.
 
         .. versionadded:: 1.4.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Examples
         --------
@@ -972,6 +1005,9 @@ class DataFrameWriter(OptionUtils):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         source : str
@@ -1007,6 +1043,9 @@ class DataFrameWriter(OptionUtils):
         Adds an output option for the underlying data source.
 
         .. versionadded:: 1.5.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -1045,6 +1084,9 @@ class DataFrameWriter(OptionUtils):
         Adds output options for the underlying data source.
 
         .. versionadded:: 1.4.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -1098,6 +1140,9 @@ class DataFrameWriter(OptionUtils):
         to Hive's partitioning scheme.
 
         .. versionadded:: 1.4.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -1156,6 +1201,9 @@ class DataFrameWriter(OptionUtils):
         but with a different bucket hash function and is not compatible with Hive's bucketing.
 
         .. versionadded:: 2.3.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -1225,6 +1273,9 @@ class DataFrameWriter(OptionUtils):
 
         .. versionadded:: 2.3.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         col : str, tuple or list
@@ -1285,6 +1336,9 @@ class DataFrameWriter(OptionUtils):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         path : str, optional
@@ -1340,6 +1394,9 @@ class DataFrameWriter(OptionUtils):
         schema of the table.
 
         .. versionadded:: 1.4.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -1401,6 +1458,9 @@ class DataFrameWriter(OptionUtils):
         * `ignore`: Silently ignore this operation if data already exists.
 
         .. versionadded:: 1.4.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Notes
         -----
@@ -1467,6 +1527,9 @@ class DataFrameWriter(OptionUtils):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         path : str
@@ -1530,6 +1593,9 @@ class DataFrameWriter(OptionUtils):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         path : str
@@ -1586,6 +1652,9 @@ class DataFrameWriter(OptionUtils):
         The text files will be encoded as UTF-8.
 
         .. versionadded:: 1.6.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -1653,6 +1722,9 @@ class DataFrameWriter(OptionUtils):
         r"""Saves the content of the :class:`DataFrame` in CSV format at the specified path.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -1726,6 +1798,9 @@ class DataFrameWriter(OptionUtils):
         """Saves the content of the :class:`DataFrame` in ORC format at the specified path.
 
         .. versionadded:: 1.5.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------

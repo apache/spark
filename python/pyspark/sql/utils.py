@@ -14,7 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Any, Callable, Optional, Sequence, TYPE_CHECKING, cast
+import functools
+import os
+from typing import Any, Callable, Optional, Sequence, TYPE_CHECKING, cast, TypeVar
 
 import py4j
 from py4j.java_collections import JavaArray
@@ -29,6 +31,10 @@ from py4j.protocol import Py4JJavaError
 from pyspark import SparkContext
 from pyspark.find_spark_home import _find_spark_home
 
+if TYPE_CHECKING:
+    from pyspark.sql.session import SparkSession
+    from pyspark.sql.dataframe import DataFrame
+
 has_numpy = False
 try:
     import numpy as np  # noqa: F401
@@ -38,9 +44,7 @@ except ImportError:
     pass
 
 
-if TYPE_CHECKING:
-    from pyspark.sql.session import SparkSession
-    from pyspark.sql.dataframe import DataFrame
+FuncT = TypeVar("FuncT", bound=Callable[..., Any])
 
 
 class CapturedException(Exception):
@@ -307,3 +311,52 @@ def is_timestamp_ntz_preferred() -> bool:
     """
     jvm = SparkContext._jvm
     return jvm is not None and jvm.PythonSQLUtils.isTimestampNTZPreferred()
+
+
+def is_remote() -> bool:
+    """
+    Returns if the current running environment is for Spark Connect.
+    """
+    return "SPARK_REMOTE" in os.environ
+
+
+def try_remote_functions(f: FuncT) -> FuncT:
+    """Mark API supported from Spark Connect."""
+
+    @functools.wraps(f)
+    def wrapped(*args: Any, **kwargs: Any) -> Any:
+
+        if is_remote():
+            from pyspark.sql.connect import functions
+
+            return getattr(functions, f.__name__)(*args, **kwargs)
+        else:
+            return f(*args, **kwargs)
+
+    return cast(FuncT, wrapped)
+
+
+def try_remote_window(f: FuncT) -> FuncT:
+    """Mark API supported from Spark Connect."""
+
+    @functools.wraps(f)
+    def wrapped(*args: Any, **kwargs: Any) -> Any:
+        # TODO(SPARK-41292): Support Window functions
+        if is_remote():
+            raise NotImplementedError()
+        return f(*args, **kwargs)
+
+    return cast(FuncT, wrapped)
+
+
+def try_remote_observation(f: FuncT) -> FuncT:
+    """Mark API supported from Spark Connect."""
+
+    @functools.wraps(f)
+    def wrapped(*args: Any, **kwargs: Any) -> Any:
+        # TODO(SPARK-41527): Add the support of Observation.
+        if is_remote():
+            raise NotImplementedError()
+        return f(*args, **kwargs)
+
+    return cast(FuncT, wrapped)

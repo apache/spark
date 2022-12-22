@@ -14,34 +14,269 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
 import sys
-from typing import cast, Iterable, List, Tuple, TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Union, Sequence, List, Optional
 
-from py4j.java_gateway import JavaObject
+from pyspark.sql.connect.column import (
+    Column,
+    ColumnReference,
+    Expression,
+    SortOrder,
+    JVM_LONG_MIN,
+    JVM_LONG_MAX,
+)
 
-from pyspark import SparkContext
-from pyspark.sql.column import _to_seq, _to_java_column
-from pyspark.sql.utils import try_remote_window
 
 if TYPE_CHECKING:
-    from pyspark.sql._typing import ColumnOrName, ColumnOrName_
+    from pyspark.sql.connect._typing import ColumnOrName
 
 __all__ = ["Window", "WindowSpec"]
 
 
-def _to_java_cols(cols: Tuple[Union["ColumnOrName", List["ColumnOrName_"]], ...]) -> JavaObject:
-    sc = SparkContext._active_spark_context
-    if len(cols) == 1 and isinstance(cols[0], list):
-        cols = cols[0]  # type: ignore[assignment]
-    assert sc is not None
-    return _to_seq(sc, cast(Iterable["ColumnOrName"], cols), _to_java_column)
+class WindowFrame:
+    def __init__(self, isRowFrame: bool, start: int, end: int) -> None:
+        super().__init__()
+
+        assert isinstance(isRowFrame, bool)
+
+        assert isinstance(start, int)
+
+        assert isinstance(end, int)
+
+        self._isRowFrame = isRowFrame
+
+        self._start = start
+
+        self._end = end
+
+    def __repr__(self) -> str:
+        if self._isRowFrame:
+            return f"WindowFrame(ROW_FRAME, {self._start}, {self._end})"
+        else:
+            return f"WindowFrame(RANGE_FRAME, {self._start}, {self._end})"
+
+
+class WindowSpec:
+
+    """
+    A window specification that defines the partitioning, ordering,
+    and frame boundaries.
+
+    Use the static methods in :class:`Window` to create a :class:`WindowSpec`.
+
+    .. versionadded:: 3.4.0
+    """
+
+    def __init__(
+        self,
+        partitionSpec: Sequence[Expression],
+        orderSpec: Sequence[SortOrder],
+        frame: Optional[WindowFrame],
+    ) -> None:
+
+        assert isinstance(partitionSpec, list) and all(
+            isinstance(p, Expression) for p in partitionSpec
+        )
+
+        assert isinstance(orderSpec, list) and all(isinstance(s, SortOrder) for s in orderSpec)
+
+        assert frame is None or isinstance(frame, WindowFrame)
+
+        self._partitionSpec = partitionSpec
+
+        self._orderSpec = orderSpec
+
+        self._frame = frame
+
+    def partitionBy(self, *cols: Union["ColumnOrName", List["ColumnOrName"]]) -> "WindowSpec":
+        """
+        Defines the partitioning columns in a :class:`WindowSpec`.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        cols : str, :class:`Column` or list
+            names of columns or expressions
+        """
+
+        _cols: List[ColumnOrName] = []
+        for col in cols:
+            if isinstance(col, (str, Column)):
+                _cols.append(col)
+            elif isinstance(col, list):
+                for c in col:
+                    if isinstance(c, (str, Column)):
+                        _cols.append(c)
+                    else:
+                        raise TypeError(
+                            f"cols must be str or Column or list, but got {type(c).__name__} {c}"
+                        )
+            else:
+                raise TypeError(
+                    f"cols must be str or Column or list, but got {type(col).__name__} {col}"
+                )
+
+        newPartitionSpec: List[Expression] = []
+        for c in _cols:
+            if isinstance(c, Column):
+                newPartitionSpec.append(c._expr)
+            else:
+                newPartitionSpec.append(ColumnReference(c))
+
+        return WindowSpec(
+            partitionSpec=newPartitionSpec,
+            orderSpec=self._orderSpec,
+            frame=self._frame,
+        )
+
+    def orderBy(self, *cols: Union["ColumnOrName", List["ColumnOrName"]]) -> "WindowSpec":
+        """
+        Defines the ordering columns in a :class:`WindowSpec`.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        cols : str, :class:`Column` or list
+            names of columns or expressions
+        """
+        _cols: List[ColumnOrName] = []
+        for col in cols:
+            if isinstance(col, (str, Column)):
+                _cols.append(col)
+            elif isinstance(col, list):
+                for c in col:
+                    if isinstance(c, (str, Column)):
+                        _cols.append(c)
+                    else:
+                        raise TypeError(
+                            f"cols must be str or Column or list, but got {type(c).__name__} {c}"
+                        )
+            else:
+                raise TypeError(
+                    f"cols must be str or Column or list, but got {type(col).__name__} {col}"
+                )
+
+        newOrderSpec: List[SortOrder] = []
+        for c in _cols:
+            if isinstance(c, Column):
+                if isinstance(c._expr, SortOrder):
+                    newOrderSpec.append(c._expr)
+                else:
+                    newOrderSpec.append(SortOrder(c._expr))
+            else:
+                newOrderSpec.append(SortOrder(ColumnReference(c)))
+
+        return WindowSpec(
+            partitionSpec=self._partitionSpec,
+            orderSpec=newOrderSpec,
+            frame=self._frame,
+        )
+
+    def rowsBetween(self, start: int, end: int) -> "WindowSpec":
+        """
+        Defines the frame boundaries, from `start` (inclusive) to `end` (inclusive).
+
+        Both `start` and `end` are relative positions from the current row.
+        For example, "0" means "current row", while "-1" means the row before
+        the current row, and "5" means the fifth row after the current row.
+
+        We recommend users use ``Window.unboundedPreceding``, ``Window.unboundedFollowing``,
+        and ``Window.currentRow`` to specify special boundary values, rather than using integral
+        values directly.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        start : int
+            boundary start, inclusive.
+            The frame is unbounded if this is ``Window.unboundedPreceding``, or
+            any value less than or equal to max(-sys.maxsize, -9223372036854775808).
+        end : int
+            boundary end, inclusive.
+            The frame is unbounded if this is ``Window.unboundedFollowing``, or
+            any value greater than or equal to min(sys.maxsize, 9223372036854775807).
+        """
+
+        if not isinstance(start, int):
+            raise TypeError(f"start must be a int, but got {type(start).__name__}")
+        if not isinstance(end, int):
+            raise TypeError(f"end must be a int, but got {type(end).__name__}")
+
+        if start <= Window._PRECEDING_THRESHOLD:
+            start = Window.unboundedPreceding
+        if end >= Window._FOLLOWING_THRESHOLD:
+            end = Window.unboundedFollowing
+
+        return WindowSpec(
+            partitionSpec=self._partitionSpec,
+            orderSpec=self._orderSpec,
+            frame=WindowFrame(isRowFrame=True, start=start, end=end),
+        )
+
+    def rangeBetween(self, start: int, end: int) -> "WindowSpec":
+        """
+        Defines the frame boundaries, from `start` (inclusive) to `end` (inclusive).
+
+        Both `start` and `end` are relative from the current row. For example,
+        "0" means "current row", while "-1" means one off before the current row,
+        and "5" means the five off after the current row.
+
+        We recommend users use ``Window.unboundedPreceding``, ``Window.unboundedFollowing``,
+        and ``Window.currentRow`` to specify special boundary values, rather than using integral
+        values directly.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        start : int
+            boundary start, inclusive.
+            The frame is unbounded if this is ``Window.unboundedPreceding``, or
+            any value less than or equal to max(-sys.maxsize, -9223372036854775808).
+        end : int
+            boundary end, inclusive.
+            The frame is unbounded if this is ``Window.unboundedFollowing``, or
+            any value greater than or equal to min(sys.maxsize, 9223372036854775807).
+        """
+
+        if not isinstance(start, int):
+            raise TypeError(f"start must be a int, but got {type(start).__name__}")
+        if not isinstance(end, int):
+            raise TypeError(f"end must be a int, but got {type(end).__name__}")
+
+        if start <= Window._PRECEDING_THRESHOLD:
+            start = Window.unboundedPreceding
+        if end >= Window._FOLLOWING_THRESHOLD:
+            end = Window.unboundedFollowing
+
+        return WindowSpec(
+            partitionSpec=self._partitionSpec,
+            orderSpec=self._orderSpec,
+            frame=WindowFrame(isRowFrame=False, start=start, end=end),
+        )
+
+    def __repr__(self) -> str:
+        strs: List[str] = []
+        if len(self._partitionSpec) > 0:
+            str_p = ", ".join([str(p) for p in self._partitionSpec])
+            strs.append(f"PartitionBy({str_p})")
+        if len(self._orderSpec) > 0:
+            str_s = ", ".join([str(s) for s in self._orderSpec])
+            strs.append(f"OrderBy({str_s})")
+        if self._frame is not None:
+            strs.append(str(self._frame))
+        return "WindowSpec(" + ", ".join(strs) + ")"
 
 
 class Window:
     """
     Utility functions for defining window in DataFrames.
 
-    .. versionadded:: 1.4
+    .. versionadded:: 3.4
 
     Notes
     -----
@@ -58,24 +293,23 @@ class Window:
     >>> window = Window.orderBy("date").partitionBy("country").rangeBetween(-3, 3)
     """
 
-    _JAVA_MIN_LONG = -(1 << 63)  # -9223372036854775808
-    _JAVA_MAX_LONG = (1 << 63) - 1  # 9223372036854775807
-    _PRECEDING_THRESHOLD = max(-sys.maxsize, _JAVA_MIN_LONG)
-    _FOLLOWING_THRESHOLD = min(sys.maxsize, _JAVA_MAX_LONG)
+    _PRECEDING_THRESHOLD = max(-sys.maxsize, JVM_LONG_MIN)
+    _FOLLOWING_THRESHOLD = min(sys.maxsize, JVM_LONG_MAX)
 
-    unboundedPreceding: int = _JAVA_MIN_LONG
+    unboundedPreceding: int = JVM_LONG_MIN
 
-    unboundedFollowing: int = _JAVA_MAX_LONG
+    unboundedFollowing: int = JVM_LONG_MAX
 
     currentRow: int = 0
 
+    _spec = WindowSpec(partitionSpec=[], orderSpec=[], frame=None)
+
     @staticmethod
-    @try_remote_window
-    def partitionBy(*cols: Union["ColumnOrName", List["ColumnOrName_"]]) -> "WindowSpec":
+    def partitionBy(*cols: Union["ColumnOrName", List["ColumnOrName"]]) -> "WindowSpec":
         """
         Creates a :class:`WindowSpec` with the partitioning defined.
 
-        .. versionadded:: 1.4.0
+        .. versionadded:: 3.4.0
 
         Parameters
         ----------
@@ -120,18 +354,15 @@ class Window:
         |  3|       b|         3|
         +---+--------+----------+
         """
-        sc = SparkContext._active_spark_context
-        assert sc is not None and sc._jvm is not None
-        jspec = sc._jvm.org.apache.spark.sql.expressions.Window.partitionBy(_to_java_cols(cols))
-        return WindowSpec(jspec)
+
+        return Window._spec.partitionBy(*cols)
 
     @staticmethod
-    @try_remote_window
-    def orderBy(*cols: Union["ColumnOrName", List["ColumnOrName_"]]) -> "WindowSpec":
+    def orderBy(*cols: Union["ColumnOrName", List["ColumnOrName"]]) -> "WindowSpec":
         """
         Creates a :class:`WindowSpec` with the ordering defined.
 
-        .. versionadded:: 1.4.0
+        .. versionadded:: 3.4.0
 
         Parameters
         ----------
@@ -176,13 +407,10 @@ class Window:
         |  3|       b|         1|
         +---+--------+----------+
         """
-        sc = SparkContext._active_spark_context
-        assert sc is not None and sc._jvm is not None
-        jspec = sc._jvm.org.apache.spark.sql.expressions.Window.orderBy(_to_java_cols(cols))
-        return WindowSpec(jspec)
+
+        return Window._spec.orderBy(*cols)
 
     @staticmethod
-    @try_remote_window
     def rowsBetween(start: int, end: int) -> "WindowSpec":
         """
         Creates a :class:`WindowSpec` with the frame boundaries defined,
@@ -202,7 +430,7 @@ class Window:
         offset of -1 and a upper bound offset of +2. The frame for row with index 5 would range from
         index 4 to index 7.
 
-        .. versionadded:: 2.1.0
+        .. versionadded:: 3.4.0
 
         Parameters
         ----------
@@ -256,17 +484,10 @@ class Window:
         +---+--------+---+
 
         """
-        if start <= Window._PRECEDING_THRESHOLD:
-            start = Window.unboundedPreceding
-        if end >= Window._FOLLOWING_THRESHOLD:
-            end = Window.unboundedFollowing
-        sc = SparkContext._active_spark_context
-        assert sc is not None and sc._jvm is not None
-        jspec = sc._jvm.org.apache.spark.sql.expressions.Window.rowsBetween(start, end)
-        return WindowSpec(jspec)
+
+        return Window._spec.rowsBetween(start, end)
 
     @staticmethod
-    @try_remote_window
     def rangeBetween(start: int, end: int) -> "WindowSpec":
         """
         Creates a :class:`WindowSpec` with the frame boundaries defined,
@@ -289,7 +510,7 @@ class Window:
         unbounded, because no value modification is needed, in this case multiple and non-numeric
         ORDER BY expression are allowed.
 
-        .. versionadded:: 2.1.0
+        .. versionadded:: 3.4.0
 
         Parameters
         ----------
@@ -343,138 +564,5 @@ class Window:
         +---+--------+---+
 
         """
-        if start <= Window._PRECEDING_THRESHOLD:
-            start = Window.unboundedPreceding
-        if end >= Window._FOLLOWING_THRESHOLD:
-            end = Window.unboundedFollowing
-        sc = SparkContext._active_spark_context
-        assert sc is not None and sc._jvm is not None
-        jspec = sc._jvm.org.apache.spark.sql.expressions.Window.rangeBetween(start, end)
-        return WindowSpec(jspec)
 
-
-class WindowSpec:
-    """
-    A window specification that defines the partitioning, ordering,
-    and frame boundaries.
-
-    Use the static methods in :class:`Window` to create a :class:`WindowSpec`.
-
-    .. versionadded:: 1.4.0
-    """
-
-    def __init__(self, jspec: JavaObject) -> None:
-        self._jspec = jspec
-
-    @try_remote_window
-    def partitionBy(self, *cols: Union["ColumnOrName", List["ColumnOrName_"]]) -> "WindowSpec":
-        """
-        Defines the partitioning columns in a :class:`WindowSpec`.
-
-        .. versionadded:: 1.4.0
-
-        Parameters
-        ----------
-        cols : str, :class:`Column` or list
-            names of columns or expressions
-        """
-        return WindowSpec(self._jspec.partitionBy(_to_java_cols(cols)))
-
-    @try_remote_window
-    def orderBy(self, *cols: Union["ColumnOrName", List["ColumnOrName_"]]) -> "WindowSpec":
-        """
-        Defines the ordering columns in a :class:`WindowSpec`.
-
-        .. versionadded:: 1.4.0
-
-        Parameters
-        ----------
-        cols : str, :class:`Column` or list
-            names of columns or expressions
-        """
-        return WindowSpec(self._jspec.orderBy(_to_java_cols(cols)))
-
-    @try_remote_window
-    def rowsBetween(self, start: int, end: int) -> "WindowSpec":
-        """
-        Defines the frame boundaries, from `start` (inclusive) to `end` (inclusive).
-
-        Both `start` and `end` are relative positions from the current row.
-        For example, "0" means "current row", while "-1" means the row before
-        the current row, and "5" means the fifth row after the current row.
-
-        We recommend users use ``Window.unboundedPreceding``, ``Window.unboundedFollowing``,
-        and ``Window.currentRow`` to specify special boundary values, rather than using integral
-        values directly.
-
-        .. versionadded:: 1.4.0
-
-        Parameters
-        ----------
-        start : int
-            boundary start, inclusive.
-            The frame is unbounded if this is ``Window.unboundedPreceding``, or
-            any value less than or equal to max(-sys.maxsize, -9223372036854775808).
-        end : int
-            boundary end, inclusive.
-            The frame is unbounded if this is ``Window.unboundedFollowing``, or
-            any value greater than or equal to min(sys.maxsize, 9223372036854775807).
-        """
-        if start <= Window._PRECEDING_THRESHOLD:
-            start = Window.unboundedPreceding
-        if end >= Window._FOLLOWING_THRESHOLD:
-            end = Window.unboundedFollowing
-        return WindowSpec(self._jspec.rowsBetween(start, end))
-
-    @try_remote_window
-    def rangeBetween(self, start: int, end: int) -> "WindowSpec":
-        """
-        Defines the frame boundaries, from `start` (inclusive) to `end` (inclusive).
-
-        Both `start` and `end` are relative from the current row. For example,
-        "0" means "current row", while "-1" means one off before the current row,
-        and "5" means the five off after the current row.
-
-        We recommend users use ``Window.unboundedPreceding``, ``Window.unboundedFollowing``,
-        and ``Window.currentRow`` to specify special boundary values, rather than using integral
-        values directly.
-
-        .. versionadded:: 1.4.0
-
-        Parameters
-        ----------
-        start : int
-            boundary start, inclusive.
-            The frame is unbounded if this is ``Window.unboundedPreceding``, or
-            any value less than or equal to max(-sys.maxsize, -9223372036854775808).
-        end : int
-            boundary end, inclusive.
-            The frame is unbounded if this is ``Window.unboundedFollowing``, or
-            any value greater than or equal to min(sys.maxsize, 9223372036854775807).
-        """
-        if start <= Window._PRECEDING_THRESHOLD:
-            start = Window.unboundedPreceding
-        if end >= Window._FOLLOWING_THRESHOLD:
-            end = Window.unboundedFollowing
-        return WindowSpec(self._jspec.rangeBetween(start, end))
-
-
-def _test() -> None:
-    import doctest
-    from pyspark.sql import SparkSession
-    import pyspark.sql.window
-
-    globs = pyspark.sql.window.__dict__.copy()
-    spark = SparkSession.builder.master("local[4]").appName("sql.window tests").getOrCreate()
-    globs["spark"] = spark
-
-    (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.window, globs=globs, optionflags=doctest.NORMALIZE_WHITESPACE
-    )
-    spark.stop()
-    if failure_count:
-        sys.exit(-1)
-
-
-if __name__ == "__main__":
-    _test()
+        return Window._spec.rangeBetween(start, end)
