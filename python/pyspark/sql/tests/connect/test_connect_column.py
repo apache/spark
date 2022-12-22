@@ -108,6 +108,67 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             df4.filter(df4.name.isNotNull()).toPandas(),
         )
 
+    def test_datetime(self):
+        query = """
+            SELECT * FROM VALUES
+            (TIMESTAMP('2022-12-22 15:50:00'), DATE('2022-12-25'), 1.1),
+            (TIMESTAMP('2022-12-22 18:50:00'), NULL, 2.2),
+            (TIMESTAMP('2022-12-23 15:50:00'), DATE('2022-12-24'), 3.3),
+            (NULL, DATE('2022-12-22'), NULL)
+            AS tab(a, b, c)
+            """
+        # +-------------------+----------+----+
+        # |                  a|         b|   c|
+        # +-------------------+----------+----+
+        # |2022-12-22 15:50:00|2022-12-25| 1.1|
+        # |2022-12-22 18:50:00|      null| 2.2|
+        # |2022-12-23 15:50:00|2022-12-24| 3.3|
+        # |               null|2022-12-22|null|
+        # +-------------------+----------+----+
+
+        cdf = self.spark.sql(query)
+        sdf = self.connect.sql(query)
+
+        # datetime.date
+        self.assert_eq(
+            cdf.select(cdf.a < datetime.date(2022, 12, 23)).toPandas(),
+            sdf.select(sdf.a < datetime.date(2022, 12, 23)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.a != datetime.date(2022, 12, 23)).toPandas(),
+            sdf.select(sdf.a != datetime.date(2022, 12, 23)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.a == datetime.date(2022, 12, 22)).toPandas(),
+            sdf.select(sdf.a == datetime.date(2022, 12, 22)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.b < datetime.date(2022, 12, 23)).toPandas(),
+            sdf.select(sdf.b < datetime.date(2022, 12, 23)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.b >= datetime.date(2022, 12, 23)).toPandas(),
+            sdf.select(sdf.b >= datetime.date(2022, 12, 23)).toPandas(),
+        )
+
+        # datetime.datetime
+        self.assert_eq(
+            cdf.select(cdf.a < datetime.datetime(2022, 12, 22, 17, 0, 0)).toPandas(),
+            sdf.select(sdf.a < datetime.datetime(2022, 12, 22, 17, 0, 0)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.a > datetime.datetime(2022, 12, 22, 17, 0, 0)).toPandas(),
+            sdf.select(sdf.a > datetime.datetime(2022, 12, 22, 17, 0, 0)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.b >= datetime.datetime(2022, 12, 23, 17, 0, 0)).toPandas(),
+            sdf.select(sdf.b >= datetime.datetime(2022, 12, 23, 17, 0, 0)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.b < datetime.datetime(2022, 12, 23, 17, 0, 0)).toPandas(),
+            sdf.select(sdf.b < datetime.datetime(2022, 12, 23, 17, 0, 0)).toPandas(),
+        )
+
     def test_simple_binary_expressions(self):
         """Test complex expression"""
         df = self.connect.read.table(self.tbl_name)
@@ -274,6 +335,10 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assert_eq(
             df.select(df.id.cast("string")).toPandas(), df2.select(df2.id.cast("string")).toPandas()
         )
+        self.assert_eq(
+            df.select(df.id.astype("string")).toPandas(),
+            df2.select(df2.id.astype("string")).toPandas(),
+        )
 
         for x in [
             StringType(),
@@ -347,9 +412,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         # SPARK-41225: Disable unsupported functions.
         c = self.connect.range(1).id
         for f in (
-            "over",
             "getItem",
-            "astype",
             "between",
             "getField",
             "withField",
