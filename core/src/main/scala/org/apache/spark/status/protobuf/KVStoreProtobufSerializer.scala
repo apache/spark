@@ -17,36 +17,33 @@
 
 package org.apache.spark.status.protobuf
 
-import org.apache.spark.status._
+import java.util.ServiceLoader
+
+import collection.JavaConverters._
+
 import org.apache.spark.status.KVUtils.KVStoreScalaSerializer
 
 private[spark] class KVStoreProtobufSerializer extends KVStoreScalaSerializer {
-  override def serialize(o: Object): Array[Byte] = o match {
-    case j: JobDataWrapper => JobDataWrapperSerializer.
-      serialize(j)
-    case t: TaskDataWrapper => TaskDataWrapperSerializer.serialize(t)
-    case e: ExecutorStageSummaryWrapper => ExecutorStageSummaryWrapperSerializer.serialize(e)
-    case a: ApplicationEnvironmentInfoWrapper =>
-      ApplicationEnvironmentInfoWrapperSerializer.serialize(a)
-    case a: ApplicationInfoWrapper => ApplicationInfoWrapperSerializer.serialize(a)
-    case r: RDDStorageInfoWrapper =>
-      RDDStorageInfoWrapperSerializer.serialize(r)
-    case other => super.serialize(other)
-  }
+  override def serialize(o: Object): Array[Byte] =
+    KVStoreProtobufSerializer.getSerializer(o.getClass) match {
+      case Some(serializer) => serializer.serialize(o)
+      case _ => super.serialize(o)
+    }
 
-  override def deserialize[T](data: Array[Byte], klass: Class[T]): T = klass match {
-    case _ if classOf[JobDataWrapper].isAssignableFrom(klass) =>
-      JobDataWrapperSerializer.deserialize(data).asInstanceOf[T]
-    case _ if classOf[TaskDataWrapper].isAssignableFrom(klass) =>
-      TaskDataWrapperSerializer.deserialize(data).asInstanceOf[T]
-    case _ if classOf[ExecutorStageSummaryWrapper].isAssignableFrom(klass) =>
-      ExecutorStageSummaryWrapperSerializer.deserialize(data).asInstanceOf[T]
-    case _ if classOf[ApplicationEnvironmentInfoWrapper].isAssignableFrom(klass) =>
-      ApplicationEnvironmentInfoWrapperSerializer.deserialize(data).asInstanceOf[T]
-    case _ if classOf[ApplicationInfoWrapper].isAssignableFrom(klass) =>
-      ApplicationInfoWrapperSerializer.deserialize(data).asInstanceOf[T]
-    case _ if classOf[RDDStorageInfoWrapper].isAssignableFrom(klass) =>
-      RDDStorageInfoWrapperSerializer.deserialize(data).asInstanceOf[T]
-    case other => super.deserialize(data, klass)
-  }
+  override def deserialize[T](data: Array[Byte], klass: Class[T]): T =
+    KVStoreProtobufSerializer.getSerializer(klass) match {
+      case Some(serializer) =>
+        serializer.deserialize(data).asInstanceOf[T]
+      case _ => super.deserialize(data, klass)
+    }
+}
+
+private[spark] object KVStoreProtobufSerializer {
+
+ private[this] lazy val serializerMap: Map[Class[_], ProtobufSerDe] =
+   ServiceLoader.load(classOf[ProtobufSerDe])
+     .asScala.map(serDe => serDe.supportClass -> serDe).toMap
+
+  def getSerializer(klass: Class[_]): Option[ProtobufSerDe] =
+    serializerMap.get(klass)
 }

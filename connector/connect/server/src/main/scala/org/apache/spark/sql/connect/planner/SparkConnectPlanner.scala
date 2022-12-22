@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.{logical, Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
-import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, SubqueryAlias, Union, Unpivot, UnresolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, Sort, SubqueryAlias, Union, Unpivot, UnresolvedHint}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.{toCatalystExpression, toCatalystValue}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -89,6 +89,7 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Relation.RelTypeCase.DESCRIBE => transformStatDescribe(rel.getDescribe)
       case proto.Relation.RelTypeCase.CROSSTAB =>
         transformStatCrosstab(rel.getCrosstab)
+      case proto.Relation.RelTypeCase.TO_SCHEMA => transformToSchema(rel.getToSchema)
       case proto.Relation.RelTypeCase.RENAME_COLUMNS_BY_SAME_LENGTH_NAMES =>
         transformRenameColumnsBySamelenghtNames(rel.getRenameColumnsBySameLengthNames)
       case proto.Relation.RelTypeCase.RENAME_COLUMNS_BY_NAME_TO_NAME_MAP =>
@@ -132,12 +133,32 @@ class SparkConnectPlanner(session: SparkSession) {
    * wrap such fields into proto messages.
    */
   private def transformSample(rel: proto.Sample): LogicalPlan = {
+    val input = Dataset.ofRows(session, transformRelation(rel.getInput))
+    val plan = if (rel.getForceStableSort) {
+      // It is possible that the underlying dataframe doesn't guarantee the ordering of rows in its
+      // constituent partitions each time a split is materialized which could result in
+      // overlapping splits. To prevent this, we explicitly sort each input partition to make the
+      // ordering deterministic. Note that MapTypes cannot be sorted and are explicitly pruned out
+      // from the sort order.
+      val sortOrder = input.logicalPlan.output
+        .filter(attr => RowOrdering.isOrderable(attr.dataType))
+        .map(SortOrder(_, Ascending))
+      if (sortOrder.nonEmpty) {
+        Sort(sortOrder, global = false, input.logicalPlan)
+      } else {
+        input.logicalPlan
+      }
+    } else {
+      input.cache()
+      input.logicalPlan
+    }
+
     Sample(
       rel.getLowerBound,
       rel.getUpperBound,
       rel.getWithReplacement,
       if (rel.hasSeed) rel.getSeed else Utils.random.nextLong,
-      transformRelation(rel.getInput))
+      plan)
   }
 
   private def transformRepartition(rel: proto.Repartition): LogicalPlan = {
@@ -267,6 +288,16 @@ class SparkConnectPlanner(session: SparkSession) {
       .ofRows(session, transformRelation(rel.getInput))
       .stat
       .crosstab(rel.getCol1, rel.getCol2)
+      .logicalPlan
+  }
+
+  private def transformToSchema(rel: proto.ToSchema): LogicalPlan = {
+    val schema = DataTypeProtoConverter.toCatalystType(rel.getSchema)
+    assert(schema.isInstanceOf[StructType])
+
+    Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .to(schema.asInstanceOf[StructType])
       .logicalPlan
   }
 
@@ -481,6 +512,10 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Expression.ExprTypeCase.UNRESOLVED_REGEX =>
         transformUnresolvedRegex(exp.getUnresolvedRegex)
       case proto.Expression.ExprTypeCase.SORT_ORDER => transformSortOrder(exp.getSortOrder)
+      case proto.Expression.ExprTypeCase.LAMBDA_FUNCTION =>
+        transformLambdaFunction(exp.getLambdaFunction)
+      case proto.Expression.ExprTypeCase.WINDOW =>
+        transformWindowExpression(exp.getWindow)
       case _ =>
         throw InvalidPlanInput(
           s"Expression with ID: ${exp.getExprTypeCase.getNumber} is not supported")
@@ -539,6 +574,38 @@ class SparkConnectPlanner(session: SparkSession) {
   }
 
   /**
+   * Translates a LambdaFunction from proto to the Catalyst expression.
+   */
+  private def transformLambdaFunction(lambda: proto.Expression.LambdaFunction): LambdaFunction = {
+    if (lambda.getArgumentsCount == 0 || lambda.getArgumentsCount > 3) {
+      throw InvalidPlanInput(
+        "LambdaFunction requires 1 ~ 3 arguments, " +
+          s"but got ${lambda.getArgumentsCount} ones!")
+    }
+
+    val variableNames = lambda.getArgumentsList.asScala.toSeq
+
+    // generate unique variable names: Map(x -> x_0, y -> y_1)
+    val newVariables = variableNames.map { name =>
+      val uniqueName = UnresolvedNamedLambdaVariable.freshVarName(name)
+      (name, UnresolvedNamedLambdaVariable(Seq(uniqueName)))
+    }.toMap
+
+    val function = transformExpression(lambda.getFunction)
+
+    // rewrite function by replacing UnresolvedAttribute with UnresolvedNamedLambdaVariable
+    val newFunction = function transform {
+      case variable: UnresolvedAttribute
+          if variable.nameParts.length == 1 &&
+            newVariables.contains(variable.nameParts.head) =>
+        newVariables(variable.nameParts.head)
+    }
+
+    // LambdaFunction["x_0, y_1 -> x_0 < y_1", ["x_0", "y_1"]]
+    LambdaFunction(function = newFunction, arguments = variableNames.map(newVariables))
+  }
+
+  /**
    * For some reason, not all functions are registered in 'FunctionRegistry'. For a unregistered
    * function, we can still wrap it under the proto 'UnresolvedFunction', and then resolve it in
    * this method.
@@ -568,6 +635,16 @@ class SparkConnectPlanner(session: SparkSession) {
         }
         val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
         Some(In(children.head, children.tail))
+
+      case "nth_value" if fun.getArgumentsCount == 3 =>
+        // NthValue does not have a constructor which accepts Expression typed 'ignoreNulls'
+        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
+        val ignoreNulls = children.last match {
+          case Literal(bool: Boolean, BooleanType) => bool
+          case other =>
+            throw InvalidPlanInput(s"ignoreNulls should be a literal boolean, but got $other")
+        }
+        Some(NthValue(children(0), children(1), ignoreNulls))
 
       case _ => None
     }
@@ -625,6 +702,70 @@ class SparkConnectPlanner(session: SparkSession) {
       case _ =>
         UnresolvedAttribute.quotedString(regex.getColName)
     }
+  }
+
+  private def transformWindowExpression(window: proto.Expression.Window) = {
+    if (!window.hasWindowFunction) {
+      throw InvalidPlanInput(s"WindowFunction is required in WindowExpression")
+    }
+
+    val frameSpec = if (window.hasFrameSpec) {
+      val protoFrameSpec = window.getFrameSpec
+
+      val frameType = protoFrameSpec.getFrameType match {
+        case proto.Expression.Window.WindowFrame.FrameType.FRAME_TYPE_ROW => RowFrame
+
+        case proto.Expression.Window.WindowFrame.FrameType.FRAME_TYPE_RANGE => RangeFrame
+
+        case other => throw InvalidPlanInput(s"Unknown FrameType $other")
+      }
+
+      if (!protoFrameSpec.hasLower) {
+        throw InvalidPlanInput(s"LowerBound is required in WindowFrame")
+      }
+      val lower = protoFrameSpec.getLower.getBoundaryCase match {
+        case proto.Expression.Window.WindowFrame.FrameBoundary.BoundaryCase.CURRENT_ROW =>
+          CurrentRow
+
+        case proto.Expression.Window.WindowFrame.FrameBoundary.BoundaryCase.UNBOUNDED =>
+          UnboundedPreceding
+
+        case proto.Expression.Window.WindowFrame.FrameBoundary.BoundaryCase.VALUE =>
+          transformExpression(protoFrameSpec.getLower.getValue)
+
+        case other => throw InvalidPlanInput(s"Unknown FrameBoundary $other")
+      }
+
+      if (!protoFrameSpec.hasUpper) {
+        throw InvalidPlanInput(s"UpperBound is required in WindowFrame")
+      }
+      val upper = protoFrameSpec.getUpper.getBoundaryCase match {
+        case proto.Expression.Window.WindowFrame.FrameBoundary.BoundaryCase.CURRENT_ROW =>
+          CurrentRow
+
+        case proto.Expression.Window.WindowFrame.FrameBoundary.BoundaryCase.UNBOUNDED =>
+          UnboundedFollowing
+
+        case proto.Expression.Window.WindowFrame.FrameBoundary.BoundaryCase.VALUE =>
+          transformExpression(protoFrameSpec.getUpper.getValue)
+
+        case other => throw InvalidPlanInput(s"Unknown FrameBoundary $other")
+      }
+
+      SpecifiedWindowFrame(frameType = frameType, lower = lower, upper = upper)
+
+    } else {
+      UnspecifiedFrame
+    }
+
+    val windowSpec = WindowSpecDefinition(
+      partitionSpec = window.getPartitionSpecList.asScala.toSeq.map(transformExpression),
+      orderSpec = window.getOrderSpecList.asScala.toSeq.map(transformSortOrder),
+      frameSpecification = frameSpec)
+
+    WindowExpression(
+      windowFunction = transformExpression(window.getWindowFunction),
+      windowSpec = windowSpec)
   }
 
   private def transformSetOperation(u: proto.SetOperation): LogicalPlan = {

@@ -1212,6 +1212,12 @@
     ],
     "sqlState" : "42000"
   },
+  "UNRESOLVED_ALL_IN_GROUP_BY" : {
+    "message" : [
+      "Cannot infer grouping columns for GROUP BY ALL based on the select clause. Please explicitly specify the grouping columns."
+    ],
+    "sqlState" : "42000"
+  },
   "UNRESOLVED_COLUMN" : {
     "message" : [
       "A column or function parameter with name <objectName> cannot be resolved."
@@ -1264,6 +1270,12 @@
         ]
       }
     },
+    "sqlState" : "42000"
+  },
+  "UNRESOLVED_ROUTINE" : {
+    "message" : [
+      "Cannot resolve function <routineName> on search path <searchPath>."
+    ],
     "sqlState" : "42000"
   },
   "UNSUPPORTED_DATATYPE" : {
@@ -1337,6 +1349,11 @@
       "JDBC_TRANSACTION" : {
         "message" : [
           "The target JDBC server does not support transactions and can only support ALTER TABLE with a single action."
+        ]
+      },
+      "LATERAL_COLUMN_ALIAS_IN_AGGREGATE_FUNC" : {
+        "message" : [
+          "Referencing a lateral column alias <lca> in the aggregate function <aggFunc>."
         ]
       },
       "LATERAL_JOIN_USING" : {
@@ -2053,11 +2070,6 @@
   "_LEGACY_ERROR_TEMP_1040" : {
     "message" : [
       "Gap duration expression used in session window must be CalendarIntervalType, but got <dt>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1041" : {
-    "message" : [
-      "Undefined function <name>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1045" : {
@@ -2913,16 +2925,6 @@
   "_LEGACY_ERROR_TEMP_1241" : {
     "message" : [
       "CREATE-TABLE-AS-SELECT cannot create table with location to a non-empty directory <tablePath>. To allow overwriting the existing non-empty directory, set '<config>' to true."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1242" : {
-    "message" : [
-      "Undefined function: <rawName>. This function is neither a built-in/temporary function, nor a persistent function that is qualified as <fullName>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1243" : {
-    "message" : [
-      "Undefined function: <rawName>"
     ]
   },
   "_LEGACY_ERROR_TEMP_1244" : {

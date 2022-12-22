@@ -28,6 +28,7 @@ import decimal
 
 from pyspark.sql.connect.column import Column
 
+
 ColumnOrName = Union[Column, str]
 
 PrimitiveType = Union[bool, float, int, str]

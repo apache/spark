@@ -131,10 +131,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1242",
+  "errorClass" : "UNRESOLVED_ROUTINE",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "fullName" : "spark_catalog.default.not_exist",
-    "rawName" : "not_exist"
+    "routineName" : "`not_exist`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -153,9 +154,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1243",
+  "errorClass" : "UNRESOLVED_ROUTINE",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "rawName" : "not_exist.not_exist"
+    "routineName" : "`not_exist`.`not_exist`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -299,10 +302,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1242",
+  "errorClass" : "UNRESOLVED_ROUTINE",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "fullName" : "spark_catalog.default.not_exist",
-    "rawName" : "not_exist"
+    "routineName" : "`not_exist`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -321,9 +325,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1243",
+  "errorClass" : "UNRESOLVED_ROUTINE",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "rawName" : "not_exist.not_exist"
+    "routineName" : "`not_exist`.`not_exist`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",

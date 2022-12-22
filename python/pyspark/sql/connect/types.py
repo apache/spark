@@ -17,7 +17,6 @@
 
 from typing import Optional
 
-import pyspark.sql.connect.proto as pb2
 from pyspark.sql.types import (
     DataType,
     ByteType,
@@ -42,6 +41,18 @@ from pyspark.sql.types import (
     BooleanType,
     NullType,
 )
+
+import pyspark.sql.connect.proto as pb2
+
+
+JVM_BYTE_MIN: int = -(1 << 7)
+JVM_BYTE_MAX: int = (1 << 7) - 1
+JVM_SHORT_MIN: int = -(1 << 15)
+JVM_SHORT_MAX: int = (1 << 15) - 1
+JVM_INT_MIN: int = -(1 << 31)
+JVM_INT_MAX: int = (1 << 31) - 1
+JVM_LONG_MIN: int = -(1 << 63)
+JVM_LONG_MAX: int = (1 << 63) - 1
 
 
 def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
@@ -82,7 +93,6 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
             struct_field.data_type.CopyFrom(pyspark_types_to_proto_types(field.dataType))
             struct_field.nullable = field.nullable
             ret.struct.fields.append(struct_field)
-
     else:
         raise Exception(f"Unsupported data type {data_type}")
     return ret

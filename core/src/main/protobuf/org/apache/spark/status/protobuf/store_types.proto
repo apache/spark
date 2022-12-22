@@ -240,3 +240,21 @@ message RDDStorageInfo {
 message RDDStorageInfoWrapper {
   RDDStorageInfo info = 1;
 }
+
+message ResourceProfileWrapper {
+  ResourceProfileInfo rpInfo = 1;
+}
+
+message SpeculationStageSummary {
+  int32 num_tasks = 1;
+  int32 num_active_tasks = 2;
+  int32 num_completed_tasks = 3;
+  int32 num_failed_tasks = 4;
+  int32 num_killed_tasks = 5;
+}
+
+message SpeculationStageSummaryWrapper {
+  int64 stage_id = 1;
+  int32 stage_attempt_id = 2;
+  SpeculationStageSummary info = 3;
+}
