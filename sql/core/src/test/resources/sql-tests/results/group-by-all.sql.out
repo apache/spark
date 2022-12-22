@@ -224,3 +224,35 @@ org.apache.spark.sql.AnalysisException
     "fragment" : "group by all"
   } ]
 }
+
+
+-- !query
+select country, (select count(*) from data) as cnt, count(id) as cnt_id from data group by all
+-- !query schema
+struct<country:string,cnt:bigint,cnt_id:bigint>
+-- !query output
+China	7	2
+Korea	7	1
+UK	7	1
+USA	7	3
+
+
+-- !query
+select country, (select count(*) from data d1 where d1.country = d2.country), count(id) from data d2 group by 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2423",
+  "messageParameters" : {
+    "sqlExpr" : "scalarsubquery(d2.country)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 17,
+    "stopIndex" : 76,
+    "fragment" : "(select count(*) from data d1 where d1.country = d2.country)"
+  } ]
+}

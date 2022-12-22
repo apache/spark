@@ -34,6 +34,7 @@ select count(*), country, city, sum(power) from data group by all;
 -- alias in grouping column
 select country as con, count(*) from data group by all;
 
+
 -- alias in aggregate column
 select country, count(*) as cnt from data group by all;
 
@@ -69,3 +70,9 @@ select id + count(*) from data group by all;
 
 -- an even more complex case that we choose not to infer; fail with a useful error message
 select (id + id) / 2 + count(*) * 2 from data group by all;
+
+-- uncorrelated subquery should work
+select country, (select count(*) from data) as cnt, count(id) as cnt_id from data group by all;
+
+-- a crazy correlated subquery
+select (select count(*) from data d1 where d1.country = d2.country), count(id) from data d2 group by all;

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -42,35 +42,33 @@ object ResolveGroupByAll extends Rule[LogicalPlan] {
       return false
     }
     a.groupingExpressions.head match {
-      case a: UnresolvedAttribute => a.name.toUpperCase() == ALL
+      case a: UnresolvedAttribute => a.equalsIgnoreCase(ALL)
       case _ => false
     }
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
     _.containsAllPatterns(UNRESOLVED_ATTRIBUTE, AGGREGATE), ruleId) {
-    // Match a group by with a single unresolved star
-    case a: Aggregate if matchToken(a) =>
+    case a: Aggregate
+      if a.child.resolved && a.aggregateExpressions.forall(_.resolved) && matchToken(a) =>
       // Only makes sense to do the rewrite once all the aggregate expressions have been resolved.
       // Otherwise, we might incorrectly pull an actual aggregate expression over to the grouping
       // expression list (because we don't know they would be aggregate expressions until resolved).
-      if (a.aggregateExpressions.forall(_.resolved)) {
-        val groupingExprs =
-          a.aggregateExpressions.filter(!_.exists(AggregateExpression.isAggregate))
+      val groupingExprs = a.aggregateExpressions.filter {
+        case s: SubqueryExpression => !s.isCorrelated
+        case expr => !expr.exists(AggregateExpression.isAggregate)
+      }
 
-        // If the grouping exprs are empty, this could either be (1) a valid global aggregate, or
-        // (2) we simply fail to infer the grouping columns. As an example, in "i + sum(j)", we will
-        // not automatically infer the grouping column to be "i".
-        if (groupingExprs.isEmpty && a.aggregateExpressions.exists(containsAttribute)) {
-          // Case (2): don't replace the ALL. We will eventually tell the user in checkAnalysis
-          // that we cannot resolve the all in group by.
-          a
-        } else {
-          // Case (1): this is a valid global aggregate.
-          a.copy(groupingExpressions = groupingExprs)
-        }
-      } else {
+      // If the grouping exprs are empty, this could either be (1) a valid global aggregate, or
+      // (2) we simply fail to infer the grouping columns. As an example, in "i + sum(j)", we will
+      // not automatically infer the grouping column to be "i".
+      if (groupingExprs.isEmpty && a.aggregateExpressions.exists(containsAttribute)) {
+        // Case (2): don't replace the ALL. We will eventually tell the user in checkAnalysis
+        // that we cannot resolve the all in group by.
         a
+      } else {
+        // Case (1): this is a valid global aggregate.
+        a.copy(groupingExpressions = groupingExprs)
       }
   }
 
@@ -89,7 +87,8 @@ object ResolveGroupByAll extends Rule[LogicalPlan] {
       false
     case _: Attribute =>
       true
-      // TODO: do we need to worry about ScalarSubquery here?
+    case sub: SubqueryExpression =>
+      !sub.isCorrelated
     case e =>
       e.children.exists(containsAttribute)
   }
