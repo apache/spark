@@ -3174,7 +3174,6 @@ def sumDistinct(col: "ColumnOrName") -> Column:
     return sum_distinct(col)
 
 
-# TODO(SPARK-41381): add isDistinct in UnresolvedFunction
 def sum_distinct(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the sum of distinct values in the expression.
