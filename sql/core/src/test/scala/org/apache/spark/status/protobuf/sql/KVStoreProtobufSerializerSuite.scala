@@ -20,10 +20,9 @@ package org.apache.spark.status.protobuf.sql
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.execution.ui.SQLExecutionUIData
 import org.apache.spark.status.api.v1.sql.SqlResourceSuite
+import org.apache.spark.status.protobuf.KVStoreProtobufSerializer
 
 class KVStoreProtobufSerializerSuite extends SparkFunSuite {
-
-  import org.apache.spark.status.protobuf.KVStoreProtobufSerializer
 
   private val serializer = new KVStoreProtobufSerializer()
 
