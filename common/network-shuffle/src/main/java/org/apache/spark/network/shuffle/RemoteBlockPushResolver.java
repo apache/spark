@@ -583,8 +583,12 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     // getting killed. When this happens, we need to distinguish the duplicate blocks as they
     // arrive. More details on this is explained in later comments.
 
-    // Track if the block is received after shuffle merge finalize
-    final boolean isTooLate = partitionInfoBeforeCheck == null;
+    // Track if the block is received after shuffle merge finalize. The block would be considered
+    // as too late if it received after shuffle merge finalize, and hence mark it as a late block
+    // push to the pushMergeMetrics
+    if (partitionInfoBeforeCheck == null) {
+      pushMergeMetrics.lateBlockPushes.mark();
+    }
     // Check if the given block is already merged by checking the bitmap against the given map
     // index
     final AppShufflePartitionInfo partitionInfo = failure != null ? null :
@@ -610,9 +614,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
         @Override
         public void onComplete(String streamId) {
-          if (isTooLate) {
-            pushMergeMetrics.lateBlockPushes.mark();
-          }
           // Throw non-fatal failure here so the block data is drained from channel and server
           // responds the error code to the client.
           if (finalFailure != null) {
