@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -54,10 +54,7 @@ object ResolveGroupByAll extends Rule[LogicalPlan] {
       // Only makes sense to do the rewrite once all the aggregate expressions have been resolved.
       // Otherwise, we might incorrectly pull an actual aggregate expression over to the grouping
       // expression list (because we don't know they would be aggregate expressions until resolved).
-      val groupingExprs = a.aggregateExpressions.filter {
-        case s: SubqueryExpression => !s.isCorrelated
-        case expr => !expr.exists(AggregateExpression.isAggregate)
-      }
+      val groupingExprs = a.aggregateExpressions.filter(!_.exists(AggregateExpression.isAggregate))
 
       // If the grouping exprs are empty, this could either be (1) a valid global aggregate, or
       // (2) we simply fail to infer the grouping columns. As an example, in "i + sum(j)", we will
@@ -87,8 +84,6 @@ object ResolveGroupByAll extends Rule[LogicalPlan] {
       false
     case _: Attribute =>
       true
-    case sub: SubqueryExpression =>
-      !sub.isCorrelated
     case e =>
       e.children.exists(containsAttribute)
   }

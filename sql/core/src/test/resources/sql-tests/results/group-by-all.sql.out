@@ -245,3 +245,22 @@ struct<scalarsubquery(country):bigint,count(id):bigint>
 1	2
 2	2
 3	3
+
+
+-- !query
+select coutnry, (select count(*) from data d1 where d1.country = d2.country), count(id) from data d2 group by all
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNRESOLVED_ALL_IN_GROUP_BY",
+  "sqlState" : "42000",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 102,
+    "stopIndex" : 113,
+    "fragment" : "group by all"
+  } ]
+}
