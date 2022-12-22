@@ -631,6 +631,34 @@ class Drop(LogicalPlan):
         """
 
 
+class DeterministicOrder(LogicalPlan):
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+    ) -> None:
+        super().__init__(child)
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+        plan = proto.Relation()
+        plan.deterministic_order.input.CopyFrom(self._child.plan(session))
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
+        return f"{' ' * indent}" f"<DeterministicOrder>" f"\n{c_buf}"
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+            <li>
+                <b>DeterministicOrder</b><br />
+                {self._child_repr_()}
+            </li>
+        </uL>
+        """
+
+
 class Sample(LogicalPlan):
     def __init__(
         self,
@@ -639,14 +667,12 @@ class Sample(LogicalPlan):
         upper_bound: float,
         with_replacement: bool,
         seed: Optional[int],
-        force_stable_sort: bool = False,
     ) -> None:
         super().__init__(child)
         self.lower_bound = lower_bound
         self.upper_bound = upper_bound
         self.with_replacement = with_replacement
         self.seed = seed
-        self.force_stable_sort = force_stable_sort
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
@@ -657,7 +683,6 @@ class Sample(LogicalPlan):
         plan.sample.with_replacement = self.with_replacement
         if self.seed is not None:
             plan.sample.seed = self.seed
-        plan.sample.force_stable_sort = self.force_stable_sort
         return plan
 
     def print(self, indent: int = 0) -> str:

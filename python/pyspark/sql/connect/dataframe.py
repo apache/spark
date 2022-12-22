@@ -516,14 +516,14 @@ class DataFrame:
         while j < length:
             lowerBound = normalizedCumWeights[j - 1]
             upperBound = normalizedCumWeights[j]
+            deterministicOrder = plan.DeterministicOrder(self._plan)
             samplePlan = DataFrame.withPlan(
                 plan.Sample(
-                    child=self._plan,
+                    child=deterministicOrder,
                     lower_bound=lowerBound,
                     upper_bound=upperBound,
                     with_replacement=False,
                     seed=int(seed),
-                    force_stable_sort=True,
                 ),
                 session=self._session,
             )

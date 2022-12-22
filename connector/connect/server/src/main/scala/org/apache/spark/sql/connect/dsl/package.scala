@@ -854,12 +854,18 @@ package object dsl {
               .setSample(
                 Sample
                   .newBuilder()
-                  .setInput(logicalPlan)
+                  .setInput(
+                    Relation
+                      .newBuilder()
+                      .setDeterministicOrder(
+                        DeterministicOrder
+                          .newBuilder()
+                          .setInput(logicalPlan)
+                          .build()))
                   .setLowerBound(x(0))
                   .setUpperBound(x(1))
                   .setWithReplacement(false)
                   .setSeed(seed)
-                  .setForceStableSort(true)
                   .build())
               .build()
           }

@@ -87,6 +87,7 @@ class Relation(google.protobuf.message.Message):
     HINT_FIELD_NUMBER: builtins.int
     UNPIVOT_FIELD_NUMBER: builtins.int
     TO_SCHEMA_FIELD_NUMBER: builtins.int
+    DETERMINISTIC_ORDER_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -169,6 +170,8 @@ class Relation(google.protobuf.message.Message):
     def unpivot(self) -> global___Unpivot: ...
     @property
     def to_schema(self) -> global___ToSchema: ...
+    @property
+    def deterministic_order(self) -> global___DeterministicOrder: ...
     @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
@@ -270,6 +273,7 @@ class Relation(google.protobuf.message.Message):
         hint: global___Hint | None = ...,
         unpivot: global___Unpivot | None = ...,
         to_schema: global___ToSchema | None = ...,
+        deterministic_order: global___DeterministicOrder | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -328,6 +332,8 @@ class Relation(google.protobuf.message.Message):
             b"deduplicate",
             "describe",
             b"describe",
+            "deterministic_order",
+            b"deterministic_order",
             "drop",
             b"drop",
             "drop_global_temp_view",
@@ -447,6 +453,8 @@ class Relation(google.protobuf.message.Message):
             b"deduplicate",
             "describe",
             b"describe",
+            "deterministic_order",
+            b"deterministic_order",
             "drop",
             b"drop",
             "drop_global_temp_view",
@@ -569,6 +577,7 @@ class Relation(google.protobuf.message.Message):
         "hint",
         "unpivot",
         "to_schema",
+        "deterministic_order",
         "fill_na",
         "drop_na",
         "replace",
@@ -1462,7 +1471,6 @@ class Sample(google.protobuf.message.Message):
     UPPER_BOUND_FIELD_NUMBER: builtins.int
     WITH_REPLACEMENT_FIELD_NUMBER: builtins.int
     SEED_FIELD_NUMBER: builtins.int
-    FORCE_STABLE_SORT_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
         """(Required) Input relation for a Sample."""
@@ -1474,10 +1482,6 @@ class Sample(google.protobuf.message.Message):
     """(Optional) Whether to sample with replacement."""
     seed: builtins.int
     """(Optional) The random seed."""
-    force_stable_sort: builtins.bool
-    """(Optional) Explicitly sort the underlying plan to make the ordering deterministic.
-    This flag is only used to randomly splits DataFrame with the provided weights.
-    """
     def __init__(
         self,
         *,
@@ -1486,19 +1490,14 @@ class Sample(google.protobuf.message.Message):
         upper_bound: builtins.float = ...,
         with_replacement: builtins.bool | None = ...,
         seed: builtins.int | None = ...,
-        force_stable_sort: builtins.bool | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "_force_stable_sort",
-            b"_force_stable_sort",
             "_seed",
             b"_seed",
             "_with_replacement",
             b"_with_replacement",
-            "force_stable_sort",
-            b"force_stable_sort",
             "input",
             b"input",
             "seed",
@@ -1510,14 +1509,10 @@ class Sample(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "_force_stable_sort",
-            b"_force_stable_sort",
             "_seed",
             b"_seed",
             "_with_replacement",
             b"_with_replacement",
-            "force_stable_sort",
-            b"force_stable_sort",
             "input",
             b"input",
             "lower_bound",
@@ -1530,10 +1525,6 @@ class Sample(google.protobuf.message.Message):
             b"with_replacement",
         ],
     ) -> None: ...
-    @typing.overload
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_force_stable_sort", b"_force_stable_sort"]
-    ) -> typing_extensions.Literal["force_stable_sort"] | None: ...
     @typing.overload
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["_seed", b"_seed"]
@@ -2353,3 +2344,26 @@ class ToSchema(google.protobuf.message.Message):
     ) -> None: ...
 
 global___ToSchema = ToSchema
+
+class DeterministicOrder(google.protobuf.message.Message):
+    """Explicitly sort the underlying plan to make the ordering deterministic for Sample.
+    Note: this message is only used to randomly splits DataFrame with the provided weights.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(self, field_name: typing_extensions.Literal["input", b"input"]) -> None: ...
+
+global___DeterministicOrder = DeterministicOrder

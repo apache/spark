@@ -78,6 +78,8 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Relation.RelTypeCase.SQL => transformSql(rel.getSql)
       case proto.Relation.RelTypeCase.LOCAL_RELATION =>
         transformLocalRelation(rel.getLocalRelation)
+      case proto.Relation.RelTypeCase.DETERMINISTIC_ORDER =>
+        transformDeterministicOrder(rel.getDeterministicOrder)
       case proto.Relation.RelTypeCase.SAMPLE => transformSample(rel.getSample)
       case proto.Relation.RelTypeCase.RANGE => transformRange(rel.getRange)
       case proto.Relation.RelTypeCase.SUBQUERY_ALIAS =>
@@ -171,6 +173,24 @@ class SparkConnectPlanner(session: SparkSession) {
     SubqueryAlias(aliasIdentifier, transformRelation(alias.getInput))
   }
 
+  private def transformDeterministicOrder(rel: proto.DeterministicOrder): LogicalPlan = {
+    val input = Dataset.ofRows(session, transformRelation(rel.getInput))
+    // It is possible that the underlying dataframe doesn't guarantee the ordering of rows in its
+    // constituent partitions each time a split is materialized which could result in
+    // overlapping splits. To prevent this, we explicitly sort each input partition to make the
+    // ordering deterministic. Note that MapTypes cannot be sorted and are explicitly pruned out
+    // from the sort order.
+    val sortOrder = input.logicalPlan.output
+      .filter(attr => RowOrdering.isOrderable(attr.dataType))
+      .map(SortOrder(_, Ascending))
+    if (sortOrder.nonEmpty) {
+      Sort(sortOrder, global = false, input.logicalPlan)
+    } else {
+      input.cache()
+      input.logicalPlan
+    }
+  }
+
   /**
    * All fields of [[proto.Sample]] are optional. However, given those are proto primitive types,
    * we cannot differentiate if the field is not or set when the field's value equals to the type
@@ -178,32 +198,12 @@ class SparkConnectPlanner(session: SparkSession) {
    * wrap such fields into proto messages.
    */
   private def transformSample(rel: proto.Sample): LogicalPlan = {
-    val input = Dataset.ofRows(session, transformRelation(rel.getInput))
-    val plan = if (rel.getForceStableSort) {
-      // It is possible that the underlying dataframe doesn't guarantee the ordering of rows in its
-      // constituent partitions each time a split is materialized which could result in
-      // overlapping splits. To prevent this, we explicitly sort each input partition to make the
-      // ordering deterministic. Note that MapTypes cannot be sorted and are explicitly pruned out
-      // from the sort order.
-      val sortOrder = input.logicalPlan.output
-        .filter(attr => RowOrdering.isOrderable(attr.dataType))
-        .map(SortOrder(_, Ascending))
-      if (sortOrder.nonEmpty) {
-        Sort(sortOrder, global = false, input.logicalPlan)
-      } else {
-        input.logicalPlan
-      }
-    } else {
-      input.cache()
-      input.logicalPlan
-    }
-
     Sample(
       rel.getLowerBound,
       rel.getUpperBound,
       rel.getWithReplacement,
       if (rel.hasSeed) rel.getSeed else Utils.random.nextLong,
-      plan)
+      transformRelation(rel.getInput))
   }
 
   private def transformRepartition(rel: proto.Repartition): LogicalPlan = {
