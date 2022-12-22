@@ -22,4 +22,5 @@ org.apache.spark.status.protobuf.ExecutorStageSummaryWrapperSerializer
 org.apache.spark.status.protobuf.TaskDataWrapperSerializer
 org.apache.spark.status.protobuf.JobDataWrapperSerializer
 org.apache.spark.status.protobuf.ResourceProfileWrapperSerializer
+org.apache.spark.status.protobuf.SpeculationStageSummaryWrapperSerializer
 org.apache.spark.status.protobuf.ExecutorSummaryWrapperSerializer

@@ -1212,6 +1212,12 @@
     ],
     "sqlState" : "42000"
   },
+  "UNRESOLVED_ALL_IN_GROUP_BY" : {
+    "message" : [
+      "Cannot infer grouping columns for GROUP BY ALL based on the select clause. Please explicitly specify the grouping columns."
+    ],
+    "sqlState" : "42000"
+  },
   "UNRESOLVED_COLUMN" : {
     "message" : [
       "A column or function parameter with name <objectName> cannot be resolved."
