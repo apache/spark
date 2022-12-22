@@ -584,7 +584,7 @@ class WindowExpression(Expression):
         if self._windowSpec._frame is not None:
             if self._windowSpec._frame._isRowFrame:
                 expr.window.frame_spec.frame_type = (
-                    proto.Expression.Window.WindowFrame.FrameType.ROW_FRAME
+                    proto.Expression.Window.WindowFrame.FrameType.FRAME_TYPE_ROW
                 )
 
                 start = self._windowSpec._frame._start
@@ -609,7 +609,7 @@ class WindowExpression(Expression):
 
             else:
                 expr.window.frame_spec.frame_type = (
-                    proto.Expression.Window.WindowFrame.FrameType.RANGE_FRAME
+                    proto.Expression.Window.WindowFrame.FrameType.FRAME_TYPE_RANGE
                 )
 
                 start = self._windowSpec._frame._start

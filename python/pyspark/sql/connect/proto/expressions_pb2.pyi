@@ -78,17 +78,19 @@ class Expression(google.protobuf.message.Message):
                 builtins.type,
             ):  # noqa: F821
                 DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
-                ROW_FRAME: Expression.Window.WindowFrame._FrameType.ValueType  # 0
+                FRAME_TYPE_UNDEFINED: Expression.Window.WindowFrame._FrameType.ValueType  # 0
+                FRAME_TYPE_ROW: Expression.Window.WindowFrame._FrameType.ValueType  # 1
                 """RowFrame treats rows in a partition individually."""
-                RANGE_FRAME: Expression.Window.WindowFrame._FrameType.ValueType  # 1
+                FRAME_TYPE_RANGE: Expression.Window.WindowFrame._FrameType.ValueType  # 2
                 """RangeFrame treats rows in a partition as groups of peers.
                 All rows having the same 'ORDER BY' ordering are considered as peers.
                 """
 
             class FrameType(_FrameType, metaclass=_FrameTypeEnumTypeWrapper): ...
-            ROW_FRAME: Expression.Window.WindowFrame.FrameType.ValueType  # 0
+            FRAME_TYPE_UNDEFINED: Expression.Window.WindowFrame.FrameType.ValueType  # 0
+            FRAME_TYPE_ROW: Expression.Window.WindowFrame.FrameType.ValueType  # 1
             """RowFrame treats rows in a partition individually."""
-            RANGE_FRAME: Expression.Window.WindowFrame.FrameType.ValueType  # 1
+            FRAME_TYPE_RANGE: Expression.Window.WindowFrame.FrameType.ValueType  # 2
             """RangeFrame treats rows in a partition as groups of peers.
             All rows having the same 'ORDER BY' ordering are considered as peers.
             """

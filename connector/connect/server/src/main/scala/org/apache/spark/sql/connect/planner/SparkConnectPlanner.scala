@@ -713,9 +713,9 @@ class SparkConnectPlanner(session: SparkSession) {
       val protoFrameSpec = window.getFrameSpec
 
       val frameType = protoFrameSpec.getFrameType match {
-        case proto.Expression.Window.WindowFrame.FrameType.ROW_FRAME => RowFrame
+        case proto.Expression.Window.WindowFrame.FrameType.FRAME_TYPE_ROW => RowFrame
 
-        case proto.Expression.Window.WindowFrame.FrameType.RANGE_FRAME => RangeFrame
+        case proto.Expression.Window.WindowFrame.FrameType.FRAME_TYPE_RANGE => RangeFrame
 
         case other => throw InvalidPlanInput(s"Unknown FrameType $other")
       }

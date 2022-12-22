@@ -73,12 +73,14 @@ message Expression {
       FrameBoundary upper = 3;
 
       enum FrameType {
+        FRAME_TYPE_UNDEFINED = 0;
+
         // RowFrame treats rows in a partition individually.
-        ROW_FRAME = 0;
+        FRAME_TYPE_ROW = 1;
 
         // RangeFrame treats rows in a partition as groups of peers.
         // All rows having the same 'ORDER BY' ordering are considered as peers.
-        RANGE_FRAME = 1;
+        FRAME_TYPE_RANGE = 2;
       }
 
       message FrameBoundary {
