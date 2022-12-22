@@ -22,7 +22,6 @@ import com.google.protobuf.Descriptors.{Descriptor, FieldDescriptor}
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.protobuf.ScalaReflectionLock
 import org.apache.spark.sql.types._
 
 @DeveloperApi
@@ -48,7 +47,7 @@ object SchemaConverters {
 
   def toSqlTypeHelper(
       descriptor: Descriptor,
-      protobufOptions: ProtobufOptions): SchemaType = ScalaReflectionLock.synchronized {
+      protobufOptions: ProtobufOptions): SchemaType = {
     SchemaType(
       StructType(descriptor.getFields.asScala.flatMap(
         structFieldFor(_,
