@@ -17,7 +17,7 @@
 
 import os
 import string
-from typing import Any, Optional, Union, List, Sequence, Mapping, Tuple
+from typing import Any, Dict, Optional, Union, List, Sequence, Mapping, Tuple
 import uuid
 import warnings
 
@@ -43,7 +43,7 @@ _CAPTURE_SCOPES = 3
 def sql(
     query: str,
     index_col: Optional[Union[str, List[str]]] = None,
-    args: dict[str, str] = {},
+    args: Dict[str, str] = {},
     **kwargs: Any,
 ) -> DataFrame:
     """
