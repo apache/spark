@@ -44,6 +44,11 @@ from pyspark.sql.connect.expressions import (
 
 
 if TYPE_CHECKING:
+    from pyspark.sql.connect._typing import (
+        LiteralType,
+        DateTimeLiteral,
+        DecimalLiteral,
+    )
     from pyspark.sql.connect.client import SparkConnectClient
     from pyspark.sql.connect.window import WindowSpec
 
@@ -351,6 +356,13 @@ class Column:
 
     def between(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("between() is not yet implemented.")
+
+    def between(
+        self,
+        lowerBound: Union["Column", "LiteralType", "DateTimeLiteral", "DecimalLiteral"],
+        upperBound: Union["Column", "LiteralType", "DateTimeLiteral", "DecimalLiteral"],
+    ) -> "Column":
+        return (self >= lowerBound) & (self <= upperBound)
 
     def getField(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("getField() is not yet implemented.")

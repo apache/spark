@@ -479,6 +479,32 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             sdf.select(sdf.a.isin(sdf.b, 4, 5, 6)).toPandas(),
         )
 
+    def test_between(self):
+        query = """
+            SELECT * FROM VALUES
+            (1, 1, 0, NULL), (2, NULL, 1, 2.0), (3, 3, 4, 3.5)
+            AS tab(a, b, c, d)
+            """
+        # +---+----+---+----+
+        # |  a|   b|  c|   d|
+        # +---+----+---+----+
+        # |  1|   1|  0|null|
+        # |  2|null|  1| 2.0|
+        # |  3|   3|  4| 3.5|
+        # +---+----+---+----+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        self.assert_eq(
+            cdf.select(cdf.b.between(0, 4)).toPandas(),
+            sdf.select(sdf.b.between(0, 4)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.b.between(0, 4)).toPandas(),
+            sdf.select(sdf.b.between(0, 4)).toPandas(),
+        )
+
     def test_unsupported_functions(self):
         # SPARK-41225: Disable unsupported functions.
         c = self.connect.range(1).id
