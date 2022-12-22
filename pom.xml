@@ -826,8 +826,7 @@
       <dependency>
         <groupId>com.google.protobuf</groupId>
         <artifactId>protobuf-java</artifactId>
-        <version>${protobuf.hadoopDependency.version}</version>
-        <scope>${hadoop.deps.scope}</scope>
+        <version>${protobuf.version}</version>
       </dependency>
       <dependency>
         <groupId>org.roaringbitmap</groupId>
