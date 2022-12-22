@@ -57,7 +57,7 @@ class MapperRowCounter extends AccumulatorV2[jl.Long, java.util.List[(jl.Integer
 
   override def add(v: jl.Long): Unit = {
     this.synchronized {
-      assert(!isZero, "agg must have been initialized")
+      assert(getOrCreate.size() == 1, "agg must have been initialized")
       val p = getOrCreate.get(0)._1
       val n = getOrCreate.get(0)._2 + 1
       getOrCreate.set(0, (p, n))
@@ -66,12 +66,8 @@ class MapperRowCounter extends AccumulatorV2[jl.Long, java.util.List[(jl.Integer
 
   def setPartitionId(id: jl.Integer): Unit = {
     this.synchronized {
-      if (isZero) {
-        getOrCreate.add((id, 0))
-      } else {
-        val n = getOrCreate.get(0)._2
-        getOrCreate.set(0, (id, n))
-      }
+      assert(isZero, "agg must not have been initialized")
+      getOrCreate.add((id, 0))
     }
   }
 
