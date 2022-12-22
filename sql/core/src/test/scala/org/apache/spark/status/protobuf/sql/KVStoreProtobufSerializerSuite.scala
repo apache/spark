@@ -111,7 +111,40 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     assert(result.executionId == input.executionId)
     assert(result.nodes.size == input.nodes.size)
 
-    assert(result.edges.size == input.edges.size)
-  }
+    def compareNodes(n1: SparkPlanGraphNodeWrapper, n2: SparkPlanGraphNodeWrapper): Unit = {
+      assert(n1.node.id == n2.node.id)
+      assert(n1.node.name == n2.node.name)
+      assert(n1.node.desc == n2.node.desc)
 
+      assert(n1.node.metrics.size == n2.node.metrics.size)
+      n1.node.metrics.zip(n2.node.metrics).foreach { case (m1, m2) =>
+        assert(m1.name == m2.name)
+        assert(m1.accumulatorId == m2.accumulatorId)
+        assert(m1.metricType == m2.metricType)
+      }
+
+      assert(n1.cluster.id == n2.cluster.id)
+      assert(n1.cluster.name == n2.cluster.name)
+      assert(n1.cluster.desc == n2.cluster.desc)
+      assert(n1.cluster.nodes.size == n2.cluster.nodes.size)
+      n1.cluster.nodes.zip(n2.cluster.nodes).foreach { case (n3, n4) =>
+        compareNodes(n3, n4)
+      }
+      n1.cluster.metrics.zip(n2.cluster.metrics).foreach { case (m1, m2) =>
+        assert(m1.name == m2.name)
+        assert(m1.accumulatorId == m2.accumulatorId)
+        assert(m1.metricType == m2.metricType)
+      }
+    }
+
+    result.nodes.zip(input.nodes).foreach { case (n1, n2) =>
+      compareNodes(n1, n2)
+    }
+
+    assert(result.edges.size == input.edges.size)
+    result.edges.zip(input.edges).foreach { case (e1, e2) =>
+      assert(e1.fromId == e2.fromId)
+      assert(e1.toId == e2.toId)
+    }
+  }
 }
