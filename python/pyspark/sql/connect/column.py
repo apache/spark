@@ -16,7 +16,6 @@
 #
 
 from typing import (
-    get_args,
     TYPE_CHECKING,
     Callable,
     Any,
@@ -80,10 +79,9 @@ def _bin_op(
     name: str, doc: Optional[str] = "binary function", reverse: bool = False
 ) -> Callable[["Column", Any], "Column"]:
     def wrapped(self: "Column", other: Any) -> "Column":
-        from pyspark.sql.connect._typing import PrimitiveType
         from pyspark.sql.connect.functions import lit
 
-        if isinstance(other, get_args(PrimitiveType)):
+        if isinstance(other, (bool, float, int, str, datetime.datetime, datetime.date)):
             other = lit(other)
         if not reverse:
             return scalar_function(name, self, other)
@@ -687,10 +685,9 @@ class Column:
         """Returns a binary expression with the current column as the left
         side and the other expression as the right side.
         """
-        from pyspark.sql.connect._typing import PrimitiveType
         from pyspark.sql.connect.functions import lit
 
-        if isinstance(other, get_args(PrimitiveType)):
+        if isinstance(other, (bool, float, int, str, datetime.datetime, datetime.date)):
             other = lit(other)
         return scalar_function("==", self, other)
 
