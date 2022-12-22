@@ -17,14 +17,11 @@
 
 package org.apache.spark.internal.io.cloud
 
-import java.io.IOException
-
 import org.apache.hadoop.fs.{Path, StreamCapabilities}
 import org.apache.hadoop.mapreduce.TaskAttemptContext
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter, PathOutputCommitter, PathOutputCommitterFactory}
 
-import org.apache.spark.internal.io.FileNameSpec
-import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
+import org.apache.spark.internal.io.{FileNameSpec, HadoopMapReduceCommitProtocol}
 
 /**
  * Spark Commit protocol for Path Output Committers.
@@ -41,16 +38,24 @@ import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
  * Dynamic Partition support will be determined once the committer is
  * instantiated in the setupJob/setupTask methods. If this
  * class was instantiated with `dynamicPartitionOverwrite` set to true,
- * then the instantiated committer must either be an instance of
+ * then the instantiated committer should either be an instance of
  * `FileOutputCommitter` or it must implement the `StreamCapabilities`
  * interface and declare that it has the capability
  * `mapreduce.job.committer.dynamic.partitioning`.
  * That feature is available on Hadoop releases with the Intermediate
- * Manifest Committer for GCS and ABFS; it is not supported by the
- * S3A committers.
+ * Manifest Committer for GCS and ABFS; it is not declared
+ * as supported by the S3A committers where file rename is O(data).
+ * If a committer does not declare explicit support for dynamic partition
+ * support then the extra set of renames which take place during job commit,
+ * after the PathOutputCommitter itself promotes work to the destination
+ * directory, may take a large amount of time.
+ * That is exactly the behaviour of dynamic partitioned jobs on S3
+ * through the S3A committer: this will work, but job commit reverts
+ * to being O(data).
+ *
  * @constructor Instantiate.
- * @param jobId                     job
- * @param dest                      destination
+ * @param jobId job
+ * @param dest destination
  * @param dynamicPartitionOverwrite does the caller want support for dynamic
  *                                  partition overwrite?
  */
@@ -123,7 +128,8 @@ class PathOutputCommitProtocol(
           logDebug(
             s"Committer $committer has declared compatibility with dynamic partition overwrite")
         } else {
-          throw new IOException(PathOutputCommitProtocol.UNSUPPORTED + ": " + committer)
+          logWarning(s"Committer $committer has incomplete support for" +
+            " dynamic partition overwrite. It may be slow.")
         }
       }
     }
@@ -155,6 +161,11 @@ class PathOutputCommitProtocol(
       dir: Option[String],
       spec: FileNameSpec): String = {
 
+    // if there is dynamic partition overwrite, its directory must
+    // be validated and included in the set of partitions.
+    if (dynamicPartitionOverwrite) {
+      addPartitionedDir(dir)
+    }
     val workDir = committer.getWorkPath
     val parent = dir.map {
       d => new Path(workDir, d)
@@ -165,26 +176,42 @@ class PathOutputCommitProtocol(
   }
 
   /**
-   * Reject any requests for an absolute path file on a committer which
-   * is not compatible with it.
+   * Make the getPartitions call visible for testing.
+   */
+  override protected[cloud] def getPartitions: Option[Set[String]] =
+    super.getPartitions
+
+  /**
+   * Create a temporary file with an absolute path.
+   * Note that this is dangerous as the outcome of any job commit failure
+   * is undefined, and potentially slow on cloud storage.
    *
    * @param taskContext task context
    * @param absoluteDir final directory
    * @param spec output filename
    * @return a path string
-   * @throws UnsupportedOperationException if incompatible
    */
   override def newTaskTempFileAbsPath(
     taskContext: TaskAttemptContext,
     absoluteDir: String,
     spec: FileNameSpec): String = {
 
-    if (supportsDynamicPartitions) {
-      super.newTaskTempFileAbsPath(taskContext, absoluteDir, spec)
-    } else {
-      throw new UnsupportedOperationException(s"Absolute output locations not supported" +
-        s" by committer $committer")
+    // qualify the path in the same fs as the staging dir.
+    // this makes sure they are in the same filesystem
+    val fs = stagingDir.getFileSystem(taskContext.getConfiguration)
+    val target = fs.makeQualified(new Path(absoluteDir))
+    if (dynamicPartitionOverwrite) {
+      // safety check to make sure that the destination path
+      // is not a parent of the destination -as if so it will
+      // be deleted and the job will fail quite dramatically.
+
+      require(!isAncestorOf(target, stagingDir),
+        s"cannot not use $target as a destination of work" +
+          s" in dynamic partitioned overwrite query writing to $stagingDir")
     }
+    val temp = super.newTaskTempFileAbsPath(taskContext, absoluteDir, spec)
+    logTrace(s"Creating temporary file $temp for absolute dir $target")
+    temp
   }
 }
 
@@ -206,10 +233,6 @@ object PathOutputCommitProtocol {
    */
   val REJECT_FILE_OUTPUT_DEFVAL = false
 
-  /** Error string for tests. */
-  private[cloud] val UNSUPPORTED: String = "PathOutputCommitter does not support" +
-    " dynamicPartitionOverwrite"
-
   /**
    * Stream Capabilities probe for spark dynamic partitioning compatibility.
    */
@@ -220,4 +243,33 @@ object PathOutputCommitProtocol {
    * Scheme prefix for per-filesystem scheme committers.
    */
   private[cloud] val OUTPUTCOMMITTER_FACTORY_SCHEME = "mapreduce.outputcommitter.factory.scheme"
+
+  /**
+   * Classname of the manifest committer factory (Hadoop 3.3.5+).
+   * If present, the manifest committer is available; if absent it is not.
+   * By setting the factory for a filesystem scheme or a job to this
+   * committer, task commit is implemented by saving a JSON manifest of
+   * files to rename.
+   * Job commit consists of reading these files, creating the destination directories
+   * and then renaming the new files into their final location.
+   */
+  private[cloud] val MANIFEST_COMMITTER_FACTORY =
+    "org.apache.hadoop.mapreduce.lib.output.committer.manifest.ManifestCommitterFactory"
+
+  /**
+   * Is one path equal to or ancestor of another?
+   *
+   * @param parent parent path; may be root.
+   * @param child path which is to be tested
+   * @return true if the paths are the same or parent is above child
+   */
+  private[cloud] def isAncestorOf(parent: Path, child: Path): Boolean = {
+    if (parent == child) {
+      true
+    } else if (child.isRoot) {
+      false
+    } else {
+      isAncestorOf(parent, child.getParent)
+    }
+  }
 }
