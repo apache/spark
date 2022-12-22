@@ -56,8 +56,9 @@ import pyspark.sql.connect.proto as proto
 from pyspark.sql.connect.types import pyspark_types_to_proto_types
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import ColumnOrName, WindowSpecType
+    from pyspark.sql.connect._typing import ColumnOrName
     from pyspark.sql.connect.client import SparkConnectClient
+    from pyspark.sql.connect.window import WindowSpec
 
 JVM_BYTE_MIN: int = -(1 << 7)
 JVM_BYTE_MAX: int = (1 << 7) - 1
@@ -546,7 +547,7 @@ class WindowExpression(Expression):
     def __init__(
         self,
         windowFunction: Expression,
-        windowSpec: "WindowSpecType",
+        windowSpec: "WindowSpec",
     ) -> None:
         super().__init__()
 
@@ -825,7 +826,7 @@ class Column:
     def __repr__(self) -> str:
         return "Column<'%s'>" % self._expr.__repr__()
 
-    def over(self, window: "WindowSpecType") -> "Column":
+    def over(self, window: "WindowSpec") -> "Column":
         """
         Define a windowing column.
 
