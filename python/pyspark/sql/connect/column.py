@@ -729,6 +729,8 @@ class Column:
 
     cast.__doc__ = PySparkColumn.cast.__doc__
 
+    astype = cast
+
     def __repr__(self) -> str:
         return "Column<'%s'>" % self._expr.__repr__()
 
@@ -749,9 +751,6 @@ class Column:
 
     def getItem(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("getItem() is not yet implemented.")
-
-    def astype(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("astype() is not yet implemented.")
 
     def between(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("between() is not yet implemented.")
