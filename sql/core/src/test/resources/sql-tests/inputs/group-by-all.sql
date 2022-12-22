@@ -80,3 +80,8 @@ select (select count(*) from data d1 where d1.country = d2.country), count(id) f
 -- make sure we report the right error when there's an attribute in correlated subquery
 -- that is, to report UNRESOLVED_ALL_IN_GROUP_BY, rather than some random subquery error.
 select coutnry, (select count(*) from data d1 where d1.country = d2.country), count(id) from data d2 group by all;
+
+-- make sure this still works in ansi mode; this is important because all is a reserved keyword
+-- in ansi, so we should make sure the analyzer rule still works.
+set spark.sql.ansi.enabled = true;
+select country, count(*) from data group by ALL;

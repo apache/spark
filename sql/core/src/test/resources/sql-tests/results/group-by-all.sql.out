@@ -264,3 +264,22 @@ org.apache.spark.sql.AnalysisException
     "fragment" : "group by all"
   } ]
 }
+
+
+-- !query
+set spark.sql.ansi.enabled = true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.ansi.enabled	true
+
+
+-- !query
+select country, count(*) from data group by ALL
+-- !query schema
+struct<country:string,count(1):bigint>
+-- !query output
+China	2
+Korea	1
+UK	1
+USA	3
