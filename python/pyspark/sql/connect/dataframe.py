@@ -35,6 +35,10 @@ import pandas
 import warnings
 from collections.abc import Iterable
 
+from pyspark import _NoValue
+from pyspark._globals import _NoValueType
+from pyspark.sql.types import DataType, StructType, Row
+
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.group import GroupedData
 from pyspark.sql.connect.readwriter import DataFrameWriter
@@ -42,16 +46,10 @@ from pyspark.sql.connect.column import (
     Column,
     scalar_function,
     sql_expression,
-    UnresolvedRegex,
 )
+from pyspark.sql.connect.expressions import UnresolvedRegex
 from pyspark.sql.connect.functions import col, lit
-from pyspark.sql.types import (
-    DataType,
-    StructType,
-    Row,
-)
-from pyspark import _NoValue
-from pyspark._globals import _NoValueType
+
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName, LiteralType, OptionalPrimitiveType

@@ -18,8 +18,8 @@
 import inspect
 import warnings
 
-from pyspark.sql.connect.column import (
-    Column,
+from pyspark.sql.connect.column import Column
+from pyspark.sql.connect.expressions import (
     CaseWhen,
     Expression,
     LiteralExpression,
