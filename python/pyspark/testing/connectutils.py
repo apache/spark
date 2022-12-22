@@ -46,7 +46,6 @@ if have_pandas and have_pyarrow and have_grpc:
     connect_url = "--remote sc://localhost"
     jars_args = "--jars %s" % connect_jar
     plugin_args = "--conf spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin"
-    os.environ["PYSPARK_SUBMIT_ARGS"] = " ".join([jars_args, plugin_args, existing_args])
     os.environ["PYSPARK_SUBMIT_ARGS"] = " ".join(
         [connect_url, jars_args, plugin_args, existing_args]
     )
