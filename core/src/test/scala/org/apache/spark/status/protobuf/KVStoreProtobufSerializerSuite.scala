@@ -459,6 +459,30 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     }
   }
 
+  test("Stream Block Data") {
+    val input = new StreamBlockData(
+      name = "a",
+      executorId = "executor-1",
+      hostPort = "123",
+      storageLevel = "LOCAL",
+      useMemory = true,
+      useDisk = false,
+      deserialized = true,
+      memSize = 1L,
+      diskSize = 2L)
+    val bytes = serializer.serialize(input)
+    val result = serializer.deserialize(bytes, classOf[StreamBlockData])
+    assert(result.name == input.name)
+    assert(result.executorId == input.executorId)
+    assert(result.hostPort == input.hostPort)
+    assert(result.storageLevel == input.storageLevel)
+    assert(result.useMemory == input.useMemory)
+    assert(result.useDisk == input.useDisk)
+    assert(result.deserialized == input.deserialized)
+    assert(result.memSize == input.memSize)
+    assert(result.diskSize == input.diskSize)
+  }
+
   test("Resource Profile") {
     val input = new ResourceProfileWrapper(
       rpInfo = new ResourceProfileInfo(

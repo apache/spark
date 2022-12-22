@@ -206,6 +206,18 @@ message ApplicationInfoWrapper {
   ApplicationInfo info = 1;
 }
 
+message StreamBlockData {
+  string name = 1;
+  string executor_id = 2;
+  string host_port = 3;
+  string storage_level = 4;
+  bool use_memory = 5;
+  bool use_disk = 6;
+  bool deserialized = 7;
+  int64 mem_size = 8;
+  int64 disk_size = 9;
+}
+
 message RDDDataDistribution {
   string address = 1;
   int64 memory_used = 2;
