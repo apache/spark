@@ -160,6 +160,9 @@ class SparkSession(SparkConversionMixin):
     tables, execute SQL over tables, cache tables, and read parquet files.
     To create a :class:`SparkSession`, use the following builder pattern:
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     .. autoattribute:: builder
        :annotation:
 
@@ -425,9 +428,7 @@ class SparkSession(SparkConversionMixin):
                         url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
                         os.environ["SPARK_REMOTE"] = url
                         opts["spark.remote"] = url
-                        return cast(
-                            SparkSession, RemoteSparkSession.builder.config(map=opts).getOrCreate()
-                        )
+                        return RemoteSparkSession.builder.config(map=opts).getOrCreate()
                     elif "SPARK_TESTING" not in os.environ:
                         raise RuntimeError(
                             "Cannot start a remote Spark session because there "
@@ -435,7 +436,7 @@ class SparkSession(SparkConversionMixin):
                         )
 
                 # Cannot reach here in production. Test-only.
-                return cast(SparkSession, RemoteSparkSession.builder.config(map=opts).getOrCreate())
+                return RemoteSparkSession.builder.config(map=opts).getOrCreate()
 
             with self._lock:
                 from pyspark.conf import SparkConf
@@ -729,6 +730,9 @@ class SparkSession(SparkConversionMixin):
         step value ``step``.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -1074,6 +1078,9 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         data : :class:`RDD` or iterable
@@ -1293,6 +1300,9 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         sqlQuery : str
@@ -1418,6 +1428,9 @@ class SparkSession(SparkConversionMixin):
         in as a :class:`DataFrame`.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Returns
         -------
