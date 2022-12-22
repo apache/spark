@@ -45,6 +45,7 @@ from typing import (
 )
 
 if TYPE_CHECKING:
+    from pyspark.sql.connect.catalog import Catalog
     from pyspark.sql.connect._typing import OptionalPrimitiveType
 
 
@@ -204,6 +205,16 @@ class SparkSession(object):
         return DataFrame.withPlan(SQL(sqlQuery), self)
 
     sql.__doc__ = PySparkSession.sql.__doc__
+
+    @property
+    def catalog(self) -> "Catalog":
+        from pyspark.sql.connect.catalog import Catalog
+
+        if not hasattr(self, "_catalog"):
+            self._catalog = Catalog(self)
+        return self._catalog
+
+    sql.__doc__ = PySparkSession.catalog.__doc__
 
     def range(
         self,
