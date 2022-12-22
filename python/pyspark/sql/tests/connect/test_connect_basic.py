@@ -467,8 +467,8 @@ class SparkConnectTests(SparkConnectSQLTestCase):
 
     def test_is_local(self):
         # SPARK-41216: Test is local
-        self.assertTrue(self.connect.sql("SHOW DATABASES").isLocal)
-        self.assertFalse(self.connect.read.table(self.tbl_name).isLocal)
+        self.assertTrue(self.connect.sql("SHOW DATABASES").isLocal())
+        self.assertFalse(self.connect.read.table(self.tbl_name).isLocal())
 
     def test_is_streaming(self):
         # SPARK-41216: Test is streaming
@@ -957,7 +957,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertTrue(self.connect.sql("SELECT 1 AS X LIMIT 0").isEmpty())
 
     def test_session(self):
-        self.assertEqual(self.connect, self.connect.sql("SELECT 1").sparkSession())
+        self.assertEqual(self.connect, self.connect.sql("SELECT 1").sparkSession)
 
     def test_show(self):
         # SPARK-41111: Test the show method
