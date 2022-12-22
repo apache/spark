@@ -118,6 +118,24 @@ case class UnresolvedTableValuedFunction(
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_TABLE_VALUED_FUNCTION)
 }
 
+object UnresolvedTableValuedFunction {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
+  def apply(
+      name: String,
+      functionArgs: Seq[Expression],
+      outputNames: Seq[String]): UnresolvedTableValuedFunction = {
+    UnresolvedTableValuedFunction(Seq(name), functionArgs, outputNames)
+  }
+
+  def apply(
+      name: FunctionIdentifier,
+      functionArgs: Seq[Expression],
+      outputNames: Seq[String]): UnresolvedTableValuedFunction = {
+    UnresolvedTableValuedFunction(name.asMultipart, functionArgs, outputNames)
+  }
+}
+
 /**
  * A table-valued function with output column aliases. The table function has been
  * looked up and turned into a logical plan.
@@ -136,26 +154,10 @@ case class TableValuedFunctionWithAlias(
 
   override lazy val resolved = false
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(TABLE_VALUED_FUNCTION_WITH_ALIAS)
+
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
     copy(child = newChild)
-}
-
-object UnresolvedTableValuedFunction {
-  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-
-  def apply(
-      name: String,
-      functionArgs: Seq[Expression],
-      outputNames: Seq[String]): UnresolvedTableValuedFunction = {
-    UnresolvedTableValuedFunction(Seq(name), functionArgs, outputNames)
-  }
-
-  def apply(
-      name: FunctionIdentifier,
-      functionArgs: Seq[Expression],
-      outputNames: Seq[String]): UnresolvedTableValuedFunction = {
-    UnresolvedTableValuedFunction(name.asMultipart, functionArgs, outputNames)
-  }
 }
 
 /**

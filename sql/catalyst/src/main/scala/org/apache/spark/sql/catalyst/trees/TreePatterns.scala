@@ -137,6 +137,7 @@ object TreePattern extends Enumeration  {
   val UNRESOLVED_WINDOW_EXPRESSION: Value = Value
 
   // Unresolved Plan patterns (Alphabetically ordered)
+  val TABLE_VALUED_FUNCTION_WITH_ALIAS: Value = Value
   val UNRESOLVED_FUNC: Value = Value
   val UNRESOLVED_SUBQUERY_COLUMN_ALIAS: Value = Value
   val UNRESOLVED_TABLE_VALUED_FUNCTION: Value = Value

@@ -28,6 +28,9 @@ select * from range(0, 5, 0);
 -- range call with a mixed-case function name
 select * from RaNgE(2);
 
+-- range call with alias
+select i from range(0, 2) t(i);
+
 -- explode
 select * from explode(array(1, 2));
 select * from explode(map('a', 1, 'b', 2));

@@ -177,6 +177,15 @@ struct<id:bigint>
 
 
 -- !query
+select i from range(0, 2) t(i)
+-- !query schema
+struct<i:bigint>
+-- !query output
+0
+1
+
+
+-- !query
 select * from explode(array(1, 2))
 -- !query schema
 struct<col:int>
