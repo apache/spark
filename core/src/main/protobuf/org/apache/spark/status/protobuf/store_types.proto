@@ -258,3 +258,40 @@ message SpeculationStageSummaryWrapper {
   int32 stage_attempt_id = 2;
   SpeculationStageSummary info = 3;
 }
+
+message SQLPlanMetric {
+  string name = 1;
+  int64 accumulator_id = 2;
+  string metric_type = 3;
+}
+
+message SparkPlanGraphNode {
+  int64 id = 1;
+  string name = 2;
+  string desc = 3;
+  repeated SQLPlanMetric metrics = 4;
+}
+
+message SparkPlanGraphClusterWrapper {
+  int64 id = 1;
+  string name = 2;
+  string desc = 3;
+  repeated SparkPlanGraphNodeWrapper nodes = 4;
+  repeated SQLPlanMetric metrics = 5;
+}
+
+message SparkPlanGraphNodeWrapper {
+  SparkPlanGraphNode node = 1;
+  SparkPlanGraphClusterWrapper cluster = 2;
+}
+
+message SparkPlanGraphEdge {
+  int64 from_id = 1;
+  int64 to_id = 2;
+}
+
+message SparkPlanGraphWrapper {
+  int64 execution_id = 1;
+  repeated SparkPlanGraphNodeWrapper nodes = 2;
+  repeated SparkPlanGraphEdge edges = 3;
+}

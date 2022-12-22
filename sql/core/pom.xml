@@ -208,12 +208,6 @@
       <artifactId>htmlunit-driver</artifactId>
       <scope>test</scope>
     </dependency>
-    <dependency>
-      <groupId>com.google.protobuf</groupId>
-      <artifactId>protobuf-java</artifactId>
-      <version>${protobuf.version}</version>
-      <scope>compile</scope>
-    </dependency>
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
@@ -278,27 +272,6 @@
           </execution>
         </executions>
       </plugin>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-shade-plugin</artifactId>
-        <configuration>
-          <shadedArtifactAttached>false</shadedArtifactAttached>
-          <shadeTestJar>true</shadeTestJar>
-          <relocations>
-            <relocation>
-              <pattern>com.google.common</pattern>
-              <shadedPattern>${spark.shade.packageName}.guava</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>com.google.protobuf</pattern>
-              <shadedPattern>${spark.shade.packageName}.spark-core.protobuf</shadedPattern>
-              <includes>
-                <include>com.google.protobuf.**</include>
-              </includes>
-            </relocation>
-          </relocations>
-        </configuration>
-      </plugin>
     </plugins>
   </build>
   
@@ -317,69 +290,6 @@
           <scope>test</scope>
         </dependency>
       </dependencies>
-    </profile>
-    <profile>
-      <id>default-protoc</id>
-      <activation>
-        <property>
-          <name>!skipDefaultProtoc</name>
-        </property>
-      </activation>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>com.github.os72</groupId>
-            <artifactId>protoc-jar-maven-plugin</artifactId>
-            <version>${protoc-jar-maven-plugin.version}</version>
-            <executions>
-              <execution>
-                <phase>generate-sources</phase>
-                <goals>
-                  <goal>run</goal>
-                </goals>
-                <configuration>
-                  <protocArtifact>com.google.protobuf:protoc:${protobuf.version}</protocArtifact>
-                  <protocVersion>${protobuf.version}</protocVersion>
-                  <inputDirectories>
-                    <include>src/main/protobuf</include>
-                  </inputDirectories>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
-    <profile>
-      <id>user-defined-protoc</id>
-      <properties>
-        <spark.protoc.executable.path>${env.SPARK_PROTOC_EXEC_PATH}</spark.protoc.executable.path>
-      </properties>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>com.github.os72</groupId>
-            <artifactId>protoc-jar-maven-plugin</artifactId>
-            <version>${protoc-jar-maven-plugin.version}</version>
-            <executions>
-              <execution>
-                <phase>generate-sources</phase>
-                <goals>
-                  <goal>run</goal>
-                </goals>
-                <configuration>
-                  <protocArtifact>com.google.protobuf:protoc:${protobuf.version}</protocArtifact>
-                  <protocVersion>${protobuf.version}</protocVersion>
-                  <protocCommand>${spark.protoc.executable.path}</protocCommand>
-                  <inputDirectories>
-                    <include>src/main/protobuf</include>
-                  </inputDirectories>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
     </profile>
   </profiles>
 </project>

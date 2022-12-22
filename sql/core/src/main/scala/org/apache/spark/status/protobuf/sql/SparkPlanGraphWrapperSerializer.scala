@@ -21,6 +21,7 @@ import collection.JavaConverters._
 
 import org.apache.spark.sql.execution.ui.{SparkPlanGraphClusterWrapper, SparkPlanGraphEdge, SparkPlanGraphNode, SparkPlanGraphNodeWrapper, SparkPlanGraphWrapper, SQLPlanMetric}
 import org.apache.spark.status.protobuf.ProtobufSerDe
+import org.apache.spark.status.protobuf.StoreTypes
 
 class SparkPlanGraphWrapperSerializer extends ProtobufSerDe {
 
