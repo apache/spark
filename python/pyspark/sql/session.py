@@ -1309,7 +1309,7 @@ class SparkSession(SparkConversionMixin):
             SQL query string.
         args : dict
             A dictionary of named parameters that begin from the `:` marker and
-            their SQL literals for substituting. 
+            their SQL literals for substituting.
 
             .. versionadded:: 3.4.0
         kwargs : dict
