@@ -118,7 +118,9 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
    * Also check if the plan only has simple expressions (attribute reference, literals) so that we
    * do not add a subquery that might have an expensive computation
    */
-  private def isSelectiveFilterOverScan(plan: LogicalPlan): Boolean = {
+  private def isSelectiveFilterOverScan(
+      plan: LogicalPlan,
+      filterCreationSideExp: Expression): Boolean = {
     @tailrec
     def isSelective(
         p: LogicalPlan,
@@ -146,6 +148,15 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
           predicateReference ++ condition.references,
           hasHitFilter = true,
           hasHitSelectiveFilter = hasHitSelectiveFilter || isLikelySelective(condition))
+      case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, left, right, _)
+        if canPruneLeft(joinType) =>
+        if (leftKeys.contains(filterCreationSideExp)) {
+          isSelective(left, predicateReference, hasHitFilter, hasHitSelectiveFilter)
+        } else if (rightKeys.contains(filterCreationSideExp)) {
+          isSelective(right, predicateReference, hasHitFilter, hasHitSelectiveFilter)
+        } else {
+          false
+        }
       case _: LeafNode => hasHitSelectiveFilter
       case _ => false
     }
@@ -157,6 +168,23 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   private def isSimpleExpression(e: Expression): Boolean = {
     !e.containsAnyPattern(PYTHON_UDF, SCALA_UDF, INVOKE, JSON_TO_STRUCT, LIKE_FAMLIY,
       REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE)
+  }
+
+  private def confirmFilterCreationSidePlan(
+      filterCreationSideExp: Expression,
+      filterCreationSidePlan: LogicalPlan): LogicalPlan = {
+    var selected = filterCreationSidePlan
+    filterCreationSidePlan.collect {
+      case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, left, right, _)
+        if canPruneLeft(joinType) =>
+        if (leftKeys.contains(filterCreationSideExp)) {
+          selected = confirmFilterCreationSidePlan(filterCreationSideExp, left)
+        }
+        if (rightKeys.contains(filterCreationSideExp)) {
+          selected = confirmFilterCreationSidePlan(filterCreationSideExp, right)
+        }
+    }
+    selected
   }
 
   private def isProbablyShuffleJoin(left: LogicalPlan,
@@ -211,9 +239,10 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       filterApplicationSide: LogicalPlan,
       filterCreationSide: LogicalPlan,
       filterApplicationSideExp: Expression,
+      filterCreationSideExp: Expression,
       hint: JoinHint): Boolean = {
-    findExpressionAndTrackLineageDown(filterApplicationSideExp,
-      filterApplicationSide).isDefined && isSelectiveFilterOverScan(filterCreationSide) &&
+    findExpressionAndTrackLineageDown(filterApplicationSideExp, filterApplicationSide).isDefined &&
+      isSelectiveFilterOverScan(filterCreationSide, filterCreationSideExp) &&
       (isProbablyShuffleJoin(filterApplicationSide, filterCreationSide, hint) ||
         probablyHasShuffle(filterApplicationSide)) &&
       satisfyByteSizeRequirement(filterApplicationSide)
@@ -296,13 +325,15 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             isSimpleExpression(l) && isSimpleExpression(r)) {
             val oldLeft = newLeft
             val oldRight = newRight
-            if (canPruneLeft(joinType) && filteringHasBenefit(left, right, l, hint)) {
-              newLeft = injectFilter(l, newLeft, r, right)
+            if (canPruneLeft(joinType) && filteringHasBenefit(left, right, l, r, hint)) {
+              val filterCreationSidePlan = confirmFilterCreationSidePlan(r, right)
+              newLeft = injectFilter(l, newLeft, r, filterCreationSidePlan)
             }
             // Did we actually inject on the left? If not, try on the right
             if (newLeft.fastEquals(oldLeft) && canPruneRight(joinType) &&
-              filteringHasBenefit(right, left, r, hint)) {
-              newRight = injectFilter(r, newRight, l, left)
+              filteringHasBenefit(right, left, r, l, hint)) {
+              val filterCreationSidePlan = confirmFilterCreationSidePlan(l, left)
+              newRight = injectFilter(r, newRight, l, filterCreationSidePlan)
             }
             if (!newLeft.fastEquals(oldLeft) || !newRight.fastEquals(oldRight)) {
               filterCounter = filterCounter + 1
