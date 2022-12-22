@@ -18,15 +18,16 @@
 import sys
 from typing import TYPE_CHECKING, Union, Sequence, List, Optional
 
-from pyspark.sql.connect.column import (
-    Column,
+from pyspark.sql.connect.column import Column
+from pyspark.sql.connect.expressions import (
     ColumnReference,
     Expression,
     SortOrder,
+)
+from pyspark.sql.connect.types import (
     JVM_LONG_MIN,
     JVM_LONG_MAX,
 )
-
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName
