@@ -40,12 +40,8 @@ class SQLExecutionUIDataSerializer extends ExtendedSerializer {
     }
     ui.metrics.foreach(m => builder.addMetrics(SQLPlanMetricSerializer.serialize(m)))
     builder.setSubmissionTime(ui.submissionTime)
-    if (ui.completionTime.isDefined) {
-      builder.setCompletionTime(ui.completionTime.get.getTime)
-    }
-    if (ui.errorMessage.isDefined) {
-      builder.setErrorMessage(ui.errorMessage.get)
-    }
+    ui.completionTime.foreach(ct => builder.setCompletionTime(ct.getTime))
+    ui.errorMessage.foreach(builder.setErrorMessage)
     ui.jobs.foreach {
       case (id, status) =>
         builder.putJobs(id.toLong, StoreTypes.JobExecutionStatus.valueOf(status.toString))
@@ -58,31 +54,31 @@ class SQLExecutionUIDataSerializer extends ExtendedSerializer {
   }
 
   override def deserialize(bytes: Array[Byte]): SQLExecutionUIData = {
-    val binary = StoreTypes.SQLExecutionUIData.parseFrom(bytes)
+    val ui = StoreTypes.SQLExecutionUIData.parseFrom(bytes)
     val completionTime =
-      getOptional(binary.hasCompletionTime, () => new Date(binary.getCompletionTime))
-    val errorMessage = getOptional(binary.hasErrorMessage, () => binary.getErrorMessage)
+      getOptional(ui.hasCompletionTime, () => new Date(ui.getCompletionTime))
+    val errorMessage = getOptional(ui.hasErrorMessage, () => ui.getErrorMessage)
     val metrics =
-      binary.getMetricsList.asScala.map(m => SQLPlanMetricSerializer.deserialize(m)).toSeq
-    val jobs = binary.getJobsMap.asScala.map {
+      ui.getMetricsList.asScala.map(m => SQLPlanMetricSerializer.deserialize(m)).toSeq
+    val jobs = ui.getJobsMap.asScala.map {
       case (jobId, status) => jobId.toInt -> JobExecutionStatus.valueOf(status.toString)
     }.toMap
-    val metricValues = binary.getMetricValuesMap.asScala.map {
+    val metricValues = ui.getMetricValuesMap.asScala.map {
       case (k, v) => k.toLong -> v
     }.toMap
 
     new SQLExecutionUIData(
-      executionId = binary.getExecutionId,
-      description = binary.getDescription,
-      details = binary.getDetails,
-      physicalPlanDescription = binary.getPhysicalPlanDescription,
-      modifiedConfigs = binary.getModifiedConfigsMap.asScala.toMap,
+      executionId = ui.getExecutionId,
+      description = ui.getDescription,
+      details = ui.getDetails,
+      physicalPlanDescription = ui.getPhysicalPlanDescription,
+      modifiedConfigs = ui.getModifiedConfigsMap.asScala.toMap,
       metrics = metrics,
-      submissionTime = binary.getSubmissionTime,
+      submissionTime = ui.getSubmissionTime,
       completionTime = completionTime,
       errorMessage = errorMessage,
       jobs = jobs,
-      stages = binary.getStagesList.asScala.map(_.toInt).toSet,
+      stages = ui.getStagesList.asScala.map(_.toInt).toSet,
       metricValues = metricValues
     )
   }

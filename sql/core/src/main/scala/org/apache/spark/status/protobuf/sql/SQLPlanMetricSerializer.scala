@@ -30,7 +30,7 @@ object SQLPlanMetricSerializer {
       .build()
   }
 
-  def deserialize(binary: StoreTypes.SQLPlanMetric): SQLPlanMetric = {
-    SQLPlanMetric(binary.getName, binary.getAccumulatorId, binary.getMetricType)
+  def deserialize(metrics: StoreTypes.SQLPlanMetric): SQLPlanMetric = {
+    SQLPlanMetric(metrics.getName, metrics.getAccumulatorId, metrics.getMetricType)
   }
 }
