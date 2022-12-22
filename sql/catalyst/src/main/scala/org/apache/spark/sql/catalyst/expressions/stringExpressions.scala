@@ -2462,7 +2462,7 @@ object Decode {
         while (itr.hasNext) {
           val search = itr.next
           if (itr.hasNext) {
-            val condition = EqualTo(input, search)
+            val condition = EqualNullSafe(input, search)
             branches += ((condition, itr.next))
           } else {
             default = search
@@ -2493,6 +2493,8 @@ object Decode {
        Non domestic
       > SELECT _FUNC_(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle');
        NULL
+      > SELECT _FUNC_(null, 6, 'Spark', NULL, 'SQL', 4, 'rocks');
+       SQL
   """,
   since = "3.2.0",
   group = "string_funcs")

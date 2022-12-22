@@ -18,9 +18,11 @@
 import functools
 from typing import TYPE_CHECKING, Optional, Any, Iterable, Union
 
-import pyspark.sql.connect.proto as proto
 import pyspark.sql.types
-from pyspark.sql.connect.column import Expression, UnresolvedFunction, Column
+
+import pyspark.sql.connect.proto as proto
+from pyspark.sql.connect.column import Column
+from pyspark.sql.connect.expressions import Expression, UnresolvedFunction
 from pyspark.sql.connect.functions import col
 
 

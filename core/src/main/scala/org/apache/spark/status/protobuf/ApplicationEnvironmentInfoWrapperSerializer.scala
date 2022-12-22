@@ -23,8 +23,14 @@ import org.apache.spark.resource.{ExecutorResourceRequest, TaskResourceRequest}
 import org.apache.spark.status.ApplicationEnvironmentInfoWrapper
 import org.apache.spark.status.api.v1.{ApplicationEnvironmentInfo, ResourceProfileInfo, RuntimeInfo}
 
-object ApplicationEnvironmentInfoWrapperSerializer {
-  def serialize(input: ApplicationEnvironmentInfoWrapper): Array[Byte] = {
+class ApplicationEnvironmentInfoWrapperSerializer extends ProtobufSerDe {
+
+  override val supportClass: Class[_] = classOf[ApplicationEnvironmentInfoWrapper]
+
+  override def serialize(input: Any): Array[Byte] =
+    serialize(input.asInstanceOf[ApplicationEnvironmentInfoWrapper])
+
+  private def serialize(input: ApplicationEnvironmentInfoWrapper): Array[Byte] = {
     val builder = StoreTypes.ApplicationEnvironmentInfoWrapper.newBuilder()
     builder.setInfo(serializeApplicationEnvironmentInfo(input.info))
     builder.build().toByteArray
@@ -97,7 +103,7 @@ object ApplicationEnvironmentInfoWrapperSerializer {
     builder.build()
   }
 
-  private def serializeResourceProfileInfo(info: ResourceProfileInfo):
+  private[status] def serializeResourceProfileInfo(info: ResourceProfileInfo):
     StoreTypes.ResourceProfileInfo = {
     val builder = StoreTypes.ResourceProfileInfo.newBuilder()
     builder.setId(info.id)
@@ -118,7 +124,7 @@ object ApplicationEnvironmentInfoWrapperSerializer {
     builder.build()
   }
 
-  private def deserializeResourceProfileInfo(info: StoreTypes.ResourceProfileInfo):
+  private[status] def deserializeResourceProfileInfo(info: StoreTypes.ResourceProfileInfo):
     ResourceProfileInfo = {
 
     new ResourceProfileInfo(

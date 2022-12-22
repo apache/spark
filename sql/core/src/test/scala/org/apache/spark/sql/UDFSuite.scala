@@ -139,12 +139,19 @@ class UDFSuite extends QueryTest with SharedSparkSession {
   }
 
   test("error reporting for undefined functions") {
-    val df = spark.emptyDataFrame
-    val e = intercept[AnalysisException] {
-      df.selectExpr("a_function_that_does_not_exist()")
-    }
-    assert(e.getMessage.contains("Undefined function"))
-    assert(e.getMessage.contains("a_function_that_does_not_exist"))
+    val sqlText = "a_function_that_does_not_exist()"
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.emptyDataFrame.selectExpr(sqlText)
+      },
+      errorClass = "UNRESOLVED_ROUTINE",
+      parameters = Map(
+        "routineName" -> "`a_function_that_does_not_exist`",
+        "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
+      context = ExpectedContext(
+        fragment = sqlText,
+        start = 0,
+        stop = 31))
   }
 
   test("Simple UDF") {
