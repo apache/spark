@@ -100,7 +100,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   /**
    * The flag for deleting the current merged shuffle data.
    */
-  public static final int DELETE_CURRENT_MERGED_SHUFFLE_ID = -1;
+  public static final int DELETE_ALL_MERGED_SHUFFLE = -1;
 
   private static final String DB_KEY_DELIMITER = ";";
   private static final ErrorHandler.BlockPushErrorHandler ERROR_HANDLER = createErrorHandler();
@@ -412,16 +412,27 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
                   + "with the current attempt id %s stored in shuffle service for application %s",
               msg.appAttemptId, appShuffleInfo.attemptId, msg.appId));
     }
-    appShuffleInfo.shuffles.computeIfPresent(msg.shuffleId, (shuffleId, mergePartitionsInfo) -> {
-      boolean deleteCurrent =
-          msg.shuffleMergeId == DELETE_CURRENT_MERGED_SHUFFLE_ID ||
+    appShuffleInfo.shuffles.compute(msg.shuffleId, (shuffleId, mergePartitionsInfo) -> {
+      if (mergePartitionsInfo == null) {
+        if (msg.shuffleMergeId == DELETE_ALL_MERGED_SHUFFLE) {
+          return null;
+        } else {
+          writeAppAttemptShuffleMergeInfoToDB(new AppAttemptShuffleMergeId(
+              msg.appId, msg.appAttemptId, msg.shuffleId, msg.shuffleMergeId));
+          return new AppShuffleMergePartitionsInfo(msg.shuffleMergeId, true);
+        }
+      }
+      boolean deleteAllMergedShuffle =
+          msg.shuffleMergeId == DELETE_ALL_MERGED_SHUFFLE ||
               msg.shuffleMergeId == mergePartitionsInfo.shuffleMergeId;
+      int shuffleMergeId = msg.shuffleMergeId != DELETE_ALL_MERGED_SHUFFLE ?
+          msg.shuffleMergeId : mergePartitionsInfo.shuffleMergeId;
       AppAttemptShuffleMergeId currentAppAttemptShuffleMergeId =
           new AppAttemptShuffleMergeId(
               msg.appId, msg.appAttemptId, msg.shuffleId, mergePartitionsInfo.shuffleMergeId);
       AppAttemptShuffleMergeId appAttemptShuffleMergeId = new AppAttemptShuffleMergeId(
-          msg.appId, msg.appAttemptId, msg.shuffleId, msg.shuffleMergeId);
-      if(deleteCurrent) {
+          msg.appId, msg.appAttemptId, msg.shuffleId, shuffleMergeId);
+      if(deleteAllMergedShuffle) {
         // request to clean up shuffle we are currently hosting
         if (!mergePartitionsInfo.isFinalized()) {
           submitCleanupTask(() -> {
@@ -431,17 +442,17 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           });
         } else {
           submitCleanupTask(() -> {
-            deleteMergedFiles(currentAppAttemptShuffleMergeId,
+            deleteMergedFiles(currentAppAttemptShuffleMergeId, appShuffleInfo,
                 mergePartitionsInfo.getReduceIds());
             writeAppAttemptShuffleMergeInfoToDB(appAttemptShuffleMergeId);
             mergePartitionsInfo.setReduceIds(new int[0]);
           });
         }
-      } else if(msg.shuffleMergeId < mergePartitionsInfo.shuffleMergeId) {
+      } else if(shuffleMergeId < mergePartitionsInfo.shuffleMergeId) {
         throw new RuntimeException(String.format("Asked to remove old shuffle merged data for " +
                 "application %s shuffleId %s shuffleMergeId %s, but current shuffleMergeId %s ",
-            msg.appId, msg.shuffleId, msg.shuffleMergeId, mergePartitionsInfo.shuffleMergeId));
-      } else if (msg.shuffleMergeId > mergePartitionsInfo.shuffleMergeId) {
+            msg.appId, msg.shuffleId, shuffleMergeId, mergePartitionsInfo.shuffleMergeId));
+      } else if (shuffleMergeId > mergePartitionsInfo.shuffleMergeId) {
         // cleanup request for newer shuffle - remove the outdated data we have.
         submitCleanupTask(() -> {
           closeAndDeleteOutdatedPartitions(
@@ -449,7 +460,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           writeAppAttemptShuffleMergeInfoToDB(appAttemptShuffleMergeId);
         });
       }
-      return new AppShuffleMergePartitionsInfo(msg.shuffleMergeId, true);
+      return new AppShuffleMergePartitionsInfo(shuffleMergeId, true);
     });
   }
 
@@ -527,35 +538,46 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       });
   }
 
-  void deleteMergedFiles(AppAttemptShuffleMergeId appAttemptShuffleMergeId, int[] reduceIds) {
+  void deleteMergedFiles(
+      AppAttemptShuffleMergeId appAttemptShuffleMergeId,
+      AppShuffleInfo appShuffleInfo,
+      int[] reduceIds) {
     removeAppShufflePartitionInfoFromDB(appAttemptShuffleMergeId);
-    AppShuffleInfo appShuffleInfo = validateAndGetAppShuffleInfo(appAttemptShuffleMergeId.appId);
     int shuffleId = appAttemptShuffleMergeId.shuffleId;
     int shuffleMergeId = appAttemptShuffleMergeId.shuffleMergeId;
     for (int reduceId : reduceIds) {
       try {
         File dataFile =
             appShuffleInfo.getMergedShuffleDataFile(shuffleId, shuffleMergeId, reduceId);
-        dataFile.delete();
+        if(!dataFile.delete()) {
+          logger.warn("Fail to delete merged data file for {} reduceId {}",
+              appAttemptShuffleMergeId, reduceId);
+        }
       } catch (Exception e) {
-        logger.warn("Fail to delete merged data file for {} reduceId {}",
-            appAttemptShuffleMergeId, reduceId);
+        logger.error(String.format("Fail to delete merged data file for {} reduceId {}",
+            appAttemptShuffleMergeId, reduceId), e);
       }
       try {
         File indexFile = new File(
             appShuffleInfo.getMergedShuffleIndexFilePath(shuffleId, shuffleMergeId, reduceId));
-        indexFile.delete();
+        if(!indexFile.delete()) {
+          logger.warn("Fail to delete merged index file for {} reduceId {}",
+              appAttemptShuffleMergeId, reduceId);
+        }
       } catch (Exception e) {
-        logger.warn("Fail to delete merged index file for {} reduceId {}",
-            appAttemptShuffleMergeId, reduceId);
+        logger.error(String.format("Fail to delete merged index file for {} reduceId {}",
+            appAttemptShuffleMergeId, reduceId), e);
       }
       try {
         File metaFile =
             appShuffleInfo.getMergedShuffleMetaFile(shuffleId, shuffleMergeId, reduceId);
-        metaFile.delete();
+        if(!metaFile.delete()) {
+          logger.warn("Fail to delete merged meta file for {} reduceId {}",
+              appAttemptShuffleMergeId, reduceId);
+        }
       } catch (Exception e) {
-        logger.warn("Fail to delete merged meta file for {} reduceId {}",
-            appAttemptShuffleMergeId, reduceId);
+        logger.error(String.format("Fail to delete merged meta file for {} reduceId {}",
+            appAttemptShuffleMergeId, reduceId), e);
       }
     }
   }
@@ -795,8 +817,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
                 "finalizing shuffle partition {}", msg.appId, msg.appAttemptId, msg.shuffleId,
                 msg.shuffleMergeId, partition.reduceId);
           } finally {
-            Boolean deleteFile = partition.mapTracker.getCardinality() == 0;
-            partition.closeAllFilesAndDeleteIfNeeded(deleteFile);
+            partition.closeAllFilesAndDeleteIfNeeded(false);
           }
         }
       }
@@ -1557,13 +1578,12 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     private final int shuffleMergeId;
     private final Map<Integer, AppShufflePartitionInfo> shuffleMergePartitions;
 
-    private int[] reduceIds;
+    private final AtomicReference<int[]> reduceIds = new AtomicReference<>(new int[0]);
 
     public AppShuffleMergePartitionsInfo(int shuffleMergeId, boolean shuffleFinalized) {
       this.shuffleMergeId = shuffleMergeId;
       this.shuffleMergePartitions = shuffleFinalized ? SHUFFLE_FINALIZED_MARKER :
           new ConcurrentHashMap<>();
-      this.reduceIds = new int[0];
     }
 
     @VisibleForTesting
@@ -1576,11 +1596,11 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     }
 
     public void setReduceIds(int[] reduceIds) {
-      this.reduceIds = reduceIds;
+      this.reduceIds.set(reduceIds);
     }
 
     public int[] getReduceIds() {
-      return reduceIds;
+      return this.reduceIds.get();
     }
   }
 

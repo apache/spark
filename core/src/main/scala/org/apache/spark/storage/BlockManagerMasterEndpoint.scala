@@ -377,7 +377,7 @@ class BlockManagerMasterEndpoint(
         mergerLocations.map { bmId =>
           Future[Boolean] {
             shuffleClient.removeShuffleMerge(bmId.host, bmId.port, shuffleId,
-              RemoteBlockPushResolver.DELETE_CURRENT_MERGED_SHUFFLE_ID)
+              RemoteBlockPushResolver.DELETE_ALL_MERGED_SHUFFLE)
           }
         }
       }.getOrElse(Seq.empty)
