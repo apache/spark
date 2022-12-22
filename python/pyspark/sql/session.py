@@ -1388,7 +1388,7 @@ class SparkSession(SparkConversionMixin):
 
         And substitude named parameters with the `:` prefix by SQL literals.
 
-        >>> spark.sql("SELECT * FROM {df} WHERE {df[B]} > :threshold", {"threshold" : "5"}, df=mydf).show()
+        >>> spark.sql("SELECT * FROM {df} WHERE {df[B]} > :minB", {"minB" : "5"}, df=mydf).show()
         +---+---+
         |  A|  B|
         +---+---+
