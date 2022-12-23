@@ -223,7 +223,7 @@ object SparkConnectStreamHandler {
         .addAllValues(cols.asJava)
         .build()
     }
-    // Send a last batch with the observed metrics
+    // Prepare a response with the observed metrics.
     ExecutePlanResponse
       .newBuilder()
       .setClientId(clientId)
