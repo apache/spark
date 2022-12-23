@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import java.util.Date
 
 import org.apache.spark.{SparkException, TaskContext}
-import org.apache.spark.internal.io.FileCommitProtocol
+import org.apache.spark.internal.io.{FileCommitProtocol, SparkHadoopWriterUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -72,7 +72,7 @@ case class WriteFilesExec(child: SparkPlan) extends UnaryExecNode {
     val concurrentOutputWriterSpec = writeFilesSpec.concurrentOutputWriterSpecFunc(child)
     val description = writeFilesSpec.description
     val committer = writeFilesSpec.committer
-    val jobIdInstant = new Date().getTime
+    val jobTrackerID = SparkHadoopWriterUtils.createJobTrackerID(new Date())
     rddWithNonEmptyPartitions.mapPartitionsInternal { iterator =>
       val sparkStageId = TaskContext.get().stageId()
       val sparkPartitionId = TaskContext.get().partitionId()
@@ -80,7 +80,7 @@ case class WriteFilesExec(child: SparkPlan) extends UnaryExecNode {
 
       val ret = FileFormatWriter.executeTask(
         description,
-        jobIdInstant,
+        jobTrackerID,
         sparkStageId,
         sparkPartitionId,
         sparkAttemptNumber,
