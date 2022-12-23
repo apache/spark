@@ -546,7 +546,6 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     assert(result.info.removeTime == input.info.removeTime)
     assert(result.info.processLogs.size == input.info.processLogs.size)
     result.info.processLogs.keys.foreach { k =>
-      assert(result.info.processLogs.contains(k))
       assert(input.info.processLogs.contains(k))
       assert(result.info.processLogs(k) == input.info.processLogs(k))
     }
