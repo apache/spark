@@ -514,6 +514,8 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Expression.ExprTypeCase.SORT_ORDER => transformSortOrder(exp.getSortOrder)
       case proto.Expression.ExprTypeCase.LAMBDA_FUNCTION =>
         transformLambdaFunction(exp.getLambdaFunction)
+      case proto.Expression.ExprTypeCase.WINDOW =>
+        transformWindowExpression(exp.getWindow)
       case _ =>
         throw InvalidPlanInput(
           s"Expression with ID: ${exp.getExprTypeCase.getNumber} is not supported")
@@ -634,6 +636,16 @@ class SparkConnectPlanner(session: SparkSession) {
         val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
         Some(In(children.head, children.tail))
 
+      case "nth_value" if fun.getArgumentsCount == 3 =>
+        // NthValue does not have a constructor which accepts Expression typed 'ignoreNulls'
+        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
+        val ignoreNulls = children.last match {
+          case Literal(bool: Boolean, BooleanType) => bool
+          case other =>
+            throw InvalidPlanInput(s"ignoreNulls should be a literal boolean, but got $other")
+        }
+        Some(NthValue(children(0), children(1), ignoreNulls))
+
       case _ => None
     }
   }
@@ -690,6 +702,70 @@ class SparkConnectPlanner(session: SparkSession) {
       case _ =>
         UnresolvedAttribute.quotedString(regex.getColName)
     }
+  }
+
+  private def transformWindowExpression(window: proto.Expression.Window) = {
+    if (!window.hasWindowFunction) {
+      throw InvalidPlanInput(s"WindowFunction is required in WindowExpression")
+    }
+
+    val frameSpec = if (window.hasFrameSpec) {
+      val protoFrameSpec = window.getFrameSpec
+
+      val frameType = protoFrameSpec.getFrameType match {
+        case proto.Expression.Window.WindowFrame.FrameType.FRAME_TYPE_ROW => RowFrame
+
+        case proto.Expression.Window.WindowFrame.FrameType.FRAME_TYPE_RANGE => RangeFrame
+
+        case other => throw InvalidPlanInput(s"Unknown FrameType $other")
+      }
+
+      if (!protoFrameSpec.hasLower) {
+        throw InvalidPlanInput(s"LowerBound is required in WindowFrame")
+      }
+      val lower = protoFrameSpec.getLower.getBoundaryCase match {
+        case proto.Expression.Window.WindowFrame.FrameBoundary.BoundaryCase.CURRENT_ROW =>
+          CurrentRow
+
+        case proto.Expression.Window.WindowFrame.FrameBoundary.BoundaryCase.UNBOUNDED =>
+          UnboundedPreceding
+
+        case proto.Expression.Window.WindowFrame.FrameBoundary.BoundaryCase.VALUE =>
+          transformExpression(protoFrameSpec.getLower.getValue)
+
+        case other => throw InvalidPlanInput(s"Unknown FrameBoundary $other")
+      }
+
+      if (!protoFrameSpec.hasUpper) {
+        throw InvalidPlanInput(s"UpperBound is required in WindowFrame")
+      }
+      val upper = protoFrameSpec.getUpper.getBoundaryCase match {
+        case proto.Expression.Window.WindowFrame.FrameBoundary.BoundaryCase.CURRENT_ROW =>
+          CurrentRow
+
+        case proto.Expression.Window.WindowFrame.FrameBoundary.BoundaryCase.UNBOUNDED =>
+          UnboundedFollowing
+
+        case proto.Expression.Window.WindowFrame.FrameBoundary.BoundaryCase.VALUE =>
+          transformExpression(protoFrameSpec.getUpper.getValue)
+
+        case other => throw InvalidPlanInput(s"Unknown FrameBoundary $other")
+      }
+
+      SpecifiedWindowFrame(frameType = frameType, lower = lower, upper = upper)
+
+    } else {
+      UnspecifiedFrame
+    }
+
+    val windowSpec = WindowSpecDefinition(
+      partitionSpec = window.getPartitionSpecList.asScala.toSeq.map(transformExpression),
+      orderSpec = window.getOrderSpecList.asScala.toSeq.map(transformSortOrder),
+      frameSpecification = frameSpec)
+
+    WindowExpression(
+      windowFunction = transformExpression(window.getWindowFunction),
+      windowSpec = windowSpec)
   }
 
   private def transformSetOperation(u: proto.SetOperation): LogicalPlan = {
@@ -798,32 +874,72 @@ class SparkConnectPlanner(session: SparkSession) {
   }
 
   private def transformAggregate(rel: proto.Aggregate): LogicalPlan = {
-    assert(rel.hasInput)
+    if (!rel.hasInput) {
+      throw InvalidPlanInput("Aggregate needs a plan input")
+    }
+    val input = transformRelation(rel.getInput)
 
-    val groupingExprs =
-      rel.getGroupingExpressionsList.asScala
-        .map(transformExpression)
-        .map {
-          case ua @ UnresolvedAttribute(_) => ua
-          case a @ Alias(_, _) => a
-          case x => UnresolvedAlias(x)
+    def toNamedExpression(expr: Expression): NamedExpression = expr match {
+      case named: NamedExpression => named
+      case expr => UnresolvedAlias(expr)
+    }
+
+    val groupingExprs = rel.getGroupingExpressionsList.asScala.toSeq.map(transformExpression)
+    val aggExprs = rel.getAggregateExpressionsList.asScala.toSeq.map(transformExpression)
+    val aliasedAgg = (groupingExprs ++ aggExprs).map(toNamedExpression)
+
+    rel.getGroupType match {
+      case proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY =>
+        logical.Aggregate(
+          groupingExpressions = groupingExprs,
+          aggregateExpressions = aliasedAgg,
+          child = input)
+
+      case proto.Aggregate.GroupType.GROUP_TYPE_ROLLUP =>
+        logical.Aggregate(
+          groupingExpressions = Seq(Rollup(groupingExprs.map(Seq(_)))),
+          aggregateExpressions = aliasedAgg,
+          child = input)
+
+      case proto.Aggregate.GroupType.GROUP_TYPE_CUBE =>
+        logical.Aggregate(
+          groupingExpressions = Seq(Cube(groupingExprs.map(Seq(_)))),
+          aggregateExpressions = aliasedAgg,
+          child = input)
+
+      case proto.Aggregate.GroupType.GROUP_TYPE_PIVOT =>
+        if (!rel.hasPivot) {
+          throw InvalidPlanInput("Aggregate with GROUP_TYPE_PIVOT requires a Pivot")
         }
 
-    // Retain group columns in aggregate expressions:
-    val aggExprs =
-      groupingExprs ++ rel.getResultExpressionsList.asScala.map(transformResultExpression)
+        val pivotExpr = transformExpression(rel.getPivot.getCol)
 
-    logical.Aggregate(
-      child = transformRelation(rel.getInput),
-      groupingExpressions = groupingExprs.toSeq,
-      aggregateExpressions = aggExprs.toSeq)
-  }
+        var valueExprs = rel.getPivot.getValuesList.asScala.toSeq.map(transformLiteral)
+        if (valueExprs.isEmpty) {
+          // This is to prevent unintended OOM errors when the number of distinct values is large
+          val maxValues = session.sessionState.conf.dataFramePivotMaxValues
+          // Get the distinct values of the column and sort them so its consistent
+          val pivotCol = Column(pivotExpr)
+          valueExprs = Dataset
+            .ofRows(session, input)
+            .select(pivotCol)
+            .distinct()
+            .limit(maxValues + 1)
+            .sort(pivotCol) // ensure that the output columns are in a consistent logical order
+            .collect()
+            .map(_.get(0))
+            .toSeq
+            .map(expressions.Literal.apply)
+        }
 
-  private def transformResultExpression(exp: proto.Expression): expressions.NamedExpression = {
-    if (exp.hasAlias) {
-      transformAlias(exp.getAlias)
-    } else {
-      UnresolvedAlias(transformExpression(exp))
+        logical.Pivot(
+          groupByExprsOpt = Some(groupingExprs.map(toNamedExpression)),
+          pivotColumn = pivotExpr,
+          pivotValues = valueExprs,
+          aggregates = aggExprs,
+          child = input)
+
+      case other => throw InvalidPlanInput(s"Unknown Group Type $other")
     }
   }
 

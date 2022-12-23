@@ -25,7 +25,6 @@ object ExecutorMetricsSerializer {
     val builder = StoreTypes.ExecutorMetrics.newBuilder()
     ExecutorMetricType.metricToOffset.foreach { case (metric, _) =>
       builder.putMetrics(metric, e.getMetricValue(metric))
-      metric -> e.getMetricValue(metric)
     }
     builder.build()
   }

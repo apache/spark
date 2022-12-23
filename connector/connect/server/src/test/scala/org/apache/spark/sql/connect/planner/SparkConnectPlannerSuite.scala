@@ -303,8 +303,9 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
     val agg = proto.Aggregate.newBuilder
       .setInput(readRel)
-      .addResultExpressions(sum)
+      .addAggregateExpressions(sum)
       .addGroupingExpressions(unresolvedAttribute)
+      .setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
       .build()
 
     val res = transform(proto.Relation.newBuilder.setAggregate(agg).build())
