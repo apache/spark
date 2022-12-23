@@ -207,9 +207,9 @@ object ScalaReflection extends ScalaReflection {
     case JavaBigIntEncoder =>
       createDeserializerForJavaBigInteger(input, returnNullable = false)
     case DayTimeIntervalEncoder =>
-      createDeserializerForPeriod(input)
-    case YearMonthIntervalEncoder =>
       createDeserializerForDuration(input)
+    case YearMonthIntervalEncoder =>
+      createDeserializerForPeriod(input)
     case DateEncoder =>
       createDeserializerForSqlDate(input)
     case LocalDateEncoder =>

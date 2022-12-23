@@ -147,6 +147,6 @@ object AgnosticEncoders {
   case object LocalDateEncoder extends LeafEncoder[LocalDate](DateType)
   case object TimestampEncoder extends LeafEncoder[java.sql.Timestamp](TimestampType)
   case object InstantEncoder extends LeafEncoder[Instant](TimestampType)
-  case object LocalDateTimeEncoder extends LeafEncoder[LocalDateTime](TimestampType)
+  case object LocalDateTimeEncoder extends LeafEncoder[LocalDateTime](TimestampNTZType)
 }
 
