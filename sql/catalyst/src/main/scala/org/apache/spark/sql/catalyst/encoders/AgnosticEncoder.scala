@@ -124,13 +124,13 @@ object AgnosticEncoders {
 
   // Primitive wrapper encoders.
   case object NullEncoder extends LeafEncoder[java.lang.Void](NullType)
-  case object BooleanEncoder extends LeafEncoder[java.lang.Boolean](BooleanType)
-  case object ByteEncoder extends LeafEncoder[java.lang.Byte](ByteType)
-  case object ShortEncoder extends LeafEncoder[java.lang.Short](ShortType)
-  case object IntEncoder extends LeafEncoder[java.lang.Integer](IntegerType)
-  case object LongEncoder extends LeafEncoder[java.lang.Long](LongType)
-  case object FloatEncoder extends LeafEncoder[java.lang.Float](FloatType)
-  case object DoubleEncoder extends LeafEncoder[java.lang.Double](DoubleType)
+  case object BoxedBooleanEncoder extends LeafEncoder[java.lang.Boolean](BooleanType)
+  case object BoxedByteEncoder extends LeafEncoder[java.lang.Byte](ByteType)
+  case object BoxedShortEncoder extends LeafEncoder[java.lang.Short](ShortType)
+  case object BoxedIntEncoder extends LeafEncoder[java.lang.Integer](IntegerType)
+  case object BoxedLongEncoder extends LeafEncoder[java.lang.Long](LongType)
+  case object BoxedFloatEncoder extends LeafEncoder[java.lang.Float](FloatType)
+  case object BoxedDoubleEncoder extends LeafEncoder[java.lang.Double](DoubleType)
 
   // Nullable leaf encoders
   case object StringEncoder extends LeafEncoder[String](StringType)

@@ -172,19 +172,19 @@ object ScalaReflection extends ScalaReflection {
       typePath: WalkedTypePath): Expression = enc match {
     case _ if isNativeEncoder(enc) =>
       input
-    case BooleanEncoder =>
+    case BoxedBooleanEncoder =>
       createDeserializerForTypesSupportValueOf(input, enc.clsTag.runtimeClass)
-    case ByteEncoder =>
+    case BoxedByteEncoder =>
       createDeserializerForTypesSupportValueOf(input, enc.clsTag.runtimeClass)
-    case ShortEncoder =>
+    case BoxedShortEncoder =>
       createDeserializerForTypesSupportValueOf(input, enc.clsTag.runtimeClass)
-    case IntEncoder =>
+    case BoxedIntEncoder =>
       createDeserializerForTypesSupportValueOf(input, enc.clsTag.runtimeClass)
-    case LongEncoder =>
+    case BoxedLongEncoder =>
       createDeserializerForTypesSupportValueOf(input, enc.clsTag.runtimeClass)
-    case FloatEncoder =>
+    case BoxedFloatEncoder =>
       createDeserializerForTypesSupportValueOf(input, enc.clsTag.runtimeClass)
-    case DoubleEncoder =>
+    case BoxedDoubleEncoder =>
       createDeserializerForTypesSupportValueOf(input, enc.clsTag.runtimeClass)
     case JavaEnumEncoder(tag) =>
       val toString = createDeserializerForString(input, returnNullable = false)
@@ -313,13 +313,13 @@ object ScalaReflection extends ScalaReflection {
 
   private def serializerFor(enc: AgnosticEncoder[_], input: Expression): Expression = enc match {
     case _ if isNativeEncoder(enc) => input
-    case BooleanEncoder => createSerializerForBoolean(input)
-    case ByteEncoder => createSerializerForByte(input)
-    case ShortEncoder => createSerializerForShort(input)
-    case IntEncoder => createSerializerForInteger(input)
-    case LongEncoder => createSerializerForLong(input)
-    case FloatEncoder => createSerializerForFloat(input)
-    case DoubleEncoder => createSerializerForDouble(input)
+    case BoxedBooleanEncoder => createSerializerForBoolean(input)
+    case BoxedByteEncoder => createSerializerForByte(input)
+    case BoxedShortEncoder => createSerializerForShort(input)
+    case BoxedIntEncoder => createSerializerForInteger(input)
+    case BoxedLongEncoder => createSerializerForLong(input)
+    case BoxedFloatEncoder => createSerializerForFloat(input)
+    case BoxedDoubleEncoder => createSerializerForDouble(input)
     case JavaEnumEncoder(_) => createSerializerForJavaEnum(input)
     case ScalaEnumEncoder(_, _) => createSerializerForScalaEnum(input)
     case StringEncoder => createSerializerForString(input)
@@ -661,13 +661,13 @@ object ScalaReflection extends ScalaReflection {
       case t if isSubtype(t, definitions.LongTpe) => PrimitiveLongEncoder
       case t if isSubtype(t, definitions.FloatTpe) => PrimitiveFloatEncoder
       case t if isSubtype(t, definitions.DoubleTpe) => PrimitiveDoubleEncoder
-      case t if isSubtype(t, localTypeOf[java.lang.Boolean]) => BooleanEncoder
-      case t if isSubtype(t, localTypeOf[java.lang.Byte]) => ByteEncoder
-      case t if isSubtype(t, localTypeOf[java.lang.Short]) => ShortEncoder
-      case t if isSubtype(t, localTypeOf[java.lang.Integer]) => IntEncoder
-      case t if isSubtype(t, localTypeOf[java.lang.Long]) => LongEncoder
-      case t if isSubtype(t, localTypeOf[java.lang.Float]) => FloatEncoder
-      case t if isSubtype(t, localTypeOf[java.lang.Double]) => DoubleEncoder
+      case t if isSubtype(t, localTypeOf[java.lang.Boolean]) => BoxedBooleanEncoder
+      case t if isSubtype(t, localTypeOf[java.lang.Byte]) => BoxedByteEncoder
+      case t if isSubtype(t, localTypeOf[java.lang.Short]) => BoxedShortEncoder
+      case t if isSubtype(t, localTypeOf[java.lang.Integer]) => BoxedIntEncoder
+      case t if isSubtype(t, localTypeOf[java.lang.Long]) => BoxedLongEncoder
+      case t if isSubtype(t, localTypeOf[java.lang.Float]) => BoxedFloatEncoder
+      case t if isSubtype(t, localTypeOf[java.lang.Double]) => BoxedDoubleEncoder
       case t if isSubtype(t, localTypeOf[Array[Byte]]) => BinaryEncoder
 
       // Enums

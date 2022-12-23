@@ -544,7 +544,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val valueEnc = ScalaReflection.encoderFor[U]
 
     def kvSerializerFor(enc: AgnosticEncoder[_])(inputObject: Expression): Expression = enc match {
-      case AgnosticEncoders.IntEncoder =>
+      case AgnosticEncoders.BoxedIntEncoder =>
         Invoke(inputObject, "intValue", IntegerType)
       case AgnosticEncoders.StringEncoder =>
         StaticInvoke(
