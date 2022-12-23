@@ -49,8 +49,11 @@ class SQLExecutionUIDataSerializer extends ProtobufSerDe {
         builder.putJobs(id.toLong, StoreTypes.JobExecutionStatus.valueOf(status.toString))
     }
     ui.stages.foreach(stageId => builder.addStages(stageId.toLong))
-    ui.metricValues.foreach {
-      case (k, v) => builder.putMetricValues(k, v)
+    val metricValues = ui.metricValues
+    if (metricValues != null) {
+      metricValues.foreach {
+        case (k, v) => builder.putMetricValues(k, v)
+      }
     }
     builder.build().toByteArray
   }
