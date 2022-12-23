@@ -60,11 +60,10 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.session import SparkSession
 
 
-class DataFrame(object):
+class DataFrame:
     def __init__(
         self,
         session: "SparkSession",
-        data: Optional[List[Any]] = None,
         schema: Optional[StructType] = None,
     ):
         """Creates a new data frame"""
@@ -246,9 +245,52 @@ class DataFrame(object):
     first.__doc__ = PySparkDataFrame.first.__doc__
 
     def groupBy(self, *cols: "ColumnOrName") -> GroupedData:
-        return GroupedData(self, *cols)
+        _cols: List[Column] = []
+        for c in cols:
+            if isinstance(c, Column):
+                _cols.append(c)
+            elif isinstance(c, str):
+                _cols.append(self[c])
+            else:
+                raise TypeError(
+                    f"groupBy requires all cols be Column or str, but got {type(c).__name__} {c}"
+                )
+
+        return GroupedData(df=self, group_type="groupby", grouping_cols=_cols)
 
     groupBy.__doc__ = PySparkDataFrame.groupBy.__doc__
+
+    def rollup(self, *cols: "ColumnOrName") -> "GroupedData":
+        _cols: List[Column] = []
+        for c in cols:
+            if isinstance(c, Column):
+                _cols.append(c)
+            elif isinstance(c, str):
+                _cols.append(self[c])
+            else:
+                raise TypeError(
+                    f"rollup requires all cols be Column or str, but got {type(c).__name__} {c}"
+                )
+
+        return GroupedData(df=self, group_type="rollup", grouping_cols=_cols)
+
+    rollup.__doc__ = PySparkDataFrame.rollup.__doc__
+
+    def cube(self, *cols: "ColumnOrName") -> "GroupedData":
+        _cols: List[Column] = []
+        for c in cols:
+            if isinstance(c, Column):
+                _cols.append(c)
+            elif isinstance(c, str):
+                _cols.append(self[c])
+            else:
+                raise TypeError(
+                    f"cube requires all cols be Column or str, but got {type(c).__name__} {c}"
+                )
+
+        return GroupedData(df=self, group_type="cube", grouping_cols=_cols)
+
+    cube.__doc__ = PySparkDataFrame.cube.__doc__
 
     @overload
     def head(self) -> Optional[Row]:
