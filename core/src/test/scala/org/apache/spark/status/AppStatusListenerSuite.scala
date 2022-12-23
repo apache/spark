@@ -1910,7 +1910,7 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
 
     assert(listener.deadExecutors.size === 0)
   }
-  
+
   test("SPARK-41683: Should correctly calculate numActiveStages if some stages are not submitted") {
     val stage1 = new StageInfo( 0, 0, "stage1", 0, Seq.empty, Seq.empty, "", resourceProfileId = 0)
     val stage2 = new StageInfo( 1, 0, "stage2", 0, Seq.empty, Seq.empty, "", resourceProfileId = 0)
@@ -1929,7 +1929,6 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
     val job = jobs.head
     assert(job.numActiveStages == 0)
   }
-
 
   private def key(stage: StageInfo): Array[Int] = Array(stage.stageId, stage.attemptNumber)
 
