@@ -325,38 +325,6 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
             .unresolved_attribute.unparsed_identifier,
             "id",
         )
-        self.assertEqual(plan.root.collect_metrics.is_observation, False)
-
-        from pyspark.sql import Observation
-
-        plan = (
-            df.filter(df.col_name > 3)
-            .observe(Observation("my_metric"), min("id"), max("id"), sum("id"))
-            ._plan.to_proto(self.connect)
-        )
-        self.assertEqual(plan.root.collect_metrics.name, "my_metric")
-        self.assertTrue(
-            all(isinstance(c, proto.Expression) for c in plan.root.collect_metrics.metrics)
-        )
-        self.assertEqual(
-            plan.root.collect_metrics.metrics[0].unresolved_function.function_name, "min"
-        )
-        self.assertTrue(
-            len(plan.root.collect_metrics.metrics[0].unresolved_function.arguments) == 1
-        )
-        self.assertTrue(
-            all(
-                isinstance(c, proto.Expression)
-                for c in plan.root.collect_metrics.metrics[0].unresolved_function.arguments
-            )
-        )
-        self.assertEqual(
-            plan.root.collect_metrics.metrics[0]
-            .unresolved_function.arguments[0]
-            .unresolved_attribute.unparsed_identifier,
-            "id",
-        )
-        self.assertEqual(plan.root.collect_metrics.is_observation, True)
 
     def test_summary(self):
         df = self.connect.readTable(table_name=self.tbl_name)

@@ -276,7 +276,8 @@ message ExecutePlanResponse {
 
     message ObservedMetricsObject {
       string name = 1;
-      repeated string values = 2;
+      DataType schema = 2;
+      repeated string values = 3;
     }
   }
 }

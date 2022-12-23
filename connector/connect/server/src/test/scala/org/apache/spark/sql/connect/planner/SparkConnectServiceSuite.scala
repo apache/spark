@@ -317,8 +317,9 @@ class SparkConnectServiceSuite extends SharedSparkSession {
             .newBuilder()
             .setInput(connect.sql("select id, exp(id) as eid from range(0, 100, 1, 4)"))
             .setName("my_metric")
-            .setIsObservation(true)
-            .addAllMetrics(Seq(proto_min("id".protoAttr).as("min_val")).asJava))
+            .addAllMetrics(Seq(
+              proto_min("id".protoAttr).as("min_val"),
+              proto_max("id".protoAttr).as("max_val")).asJava))
         .build()
       val plan = proto.Plan
         .newBuilder()
@@ -357,9 +358,15 @@ class SparkConnectServiceSuite extends SharedSparkSession {
       val metricsObjectsList = observedMetrics.getMetricsObjectsList.asScala
       val metricsObject = metricsObjectsList.head
       assert(metricsObject.getName == "my_metric")
-      assert(metricsObject.getValuesCount == 1)
+      assert(metricsObject.getSchema.hasStruct)
+      assert(metricsObject.getSchema.getStruct.getFieldsCount == 2)
+      val fieldsList = metricsObject.getSchema.getStruct.getFieldsList.asScala
+      assert(fieldsList.head.getName == "min_val")
+      assert(fieldsList.last.getName == "max_val")
+      assert(metricsObject.getValuesCount == 2)
       val valuesList = metricsObject.getValuesList.asScala
       assert(valuesList.head == "0")
+      assert(valuesList.last == "99")
     }
   }
 }

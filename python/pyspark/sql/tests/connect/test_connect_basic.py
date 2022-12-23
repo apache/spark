@@ -1639,37 +1639,30 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         observation_name = "my_metric"
 
-        self.assert_eq(
-            self.connect.read.table(self.tbl_name)
-            .filter("id > 3")
-            .observe(observation_name, CF.min("id"), CF.max("id"), CF.sum("id"))
-            .toPandas(),
-            self.spark.read.table(self.tbl_name)
-            .filter("id > 3")
-            .observe(observation_name, SF.min("id"), SF.max("id"), SF.sum("id"))
-            .toPandas(),
-        )
-
-        observation = Observation(observation_name)
         cdf = (
             self.connect.read.table(self.tbl_name)
             .filter("id > 3")
-            .observe(observation, CF.min("id"), CF.max("id"), CF.sum("id"))
+            .observe(observation_name, CF.min("id"), CF.max("id"), CF.sum("id"))
             .toPandas()
         )
         df = (
             self.spark.read.table(self.tbl_name)
             .filter("id > 3")
-            .observe(observation, SF.min("id"), SF.max("id"), SF.sum("id"))
+            .observe(observation_name, SF.min("id"), SF.max("id"), SF.sum("id"))
             .toPandas()
         )
 
         self.assert_eq(cdf, df)
 
         observed_metrics = cdf.attrs["observed_metrics"]
-        first_metrics = observed_metrics[0]
-        self.assert_eq(first_metrics.name, observation_name)
-        self.assert_eq(first_metrics.metrics, [["4", "99", "4944"]])
+        self.assert_eq(len(observed_metrics), 1)
+        self.assert_eq(observed_metrics[0].name, observation_name)
+        struct_fields = observed_metrics[0].schema.struct.fields
+        self.assert_eq(len(struct_fields), 3)
+        self.assert_eq(struct_fields[0].name, "min(id)")
+        self.assert_eq(struct_fields[1].name, "max(id)")
+        self.assert_eq(struct_fields[2].name, "sum(id)")
+        self.assert_eq(observed_metrics[0].metrics, [["4", "99", "4944"]])
 
     def test_with_columns(self):
         # SPARK-41256: test withColumn(s).

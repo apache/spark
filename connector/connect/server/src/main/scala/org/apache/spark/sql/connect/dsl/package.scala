@@ -24,7 +24,7 @@ import org.apache.spark.connect.proto._
 import org.apache.spark.connect.proto.Expression.ExpressionString
 import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.connect.proto.SetOperation.SetOpType
-import org.apache.spark.sql.{Observation, SaveMode}
+import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.planner.{SaveModeConverter, TableSaveMethodConverter}
 import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.toConnectProtoValue
@@ -1083,19 +1083,6 @@ package object dsl {
               .newBuilder()
               .setInput(logicalPlan)
               .setName(name)
-              .addAllMetrics((expr +: exprs).asJava))
-          .build()
-      }
-
-      def observe(observation: Observation, expr: Expression, exprs: Expression*): Relation = {
-        Relation
-          .newBuilder()
-          .setCollectMetrics(
-            CollectMetrics
-              .newBuilder()
-              .setInput(logicalPlan)
-              .setName(observation.name)
-              .setIsObservation(true)
               .addAllMetrics((expr +: exprs).asJava))
           .build()
       }
