@@ -786,46 +786,6 @@ class DataFrame:
         observation: Union["Observation", str],
         *exprs: Column,
     ) -> "DataFrame":
-        """Define (named) metrics to observe on the DataFrame. This method returns an 'observed'
-        DataFrame that returns the same result as the input, with the following guarantees:
-
-        * It will compute the defined aggregates (metrics) on all the data that is flowing through
-            the Dataset at that point.
-
-        * It will report the value of the defined aggregate columns as soon as we reach a completion
-            point. A completion point is either the end of a query (batch mode) or the end of a
-            streaming epoch. The value of the aggregates only reflects the data processed since
-            the previous completion point.
-
-        The metrics columns must either contain a literal (e.g. lit(42)), or should contain one or
-        more aggregate functions (e.g. sum(a) or sum(a + b) + avg(c) - lit(1)). Expressions that
-        contain references to the input Dataset's columns must always be wrapped in an aggregate
-        function.
-
-        A user can observe these metrics by adding
-        Python's :class:`~pyspark.sql.streaming.StreamingQueryListener`,
-        Scala/Java's ``org.apache.spark.sql.streaming.StreamingQueryListener`` or Scala/Java's
-        ``org.apache.spark.sql.util.QueryExecutionListener`` to the spark session.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        observation : :class:`Observation` or str
-            `str` to specify the name, or an :class:`Observation` instance to obtain the metric.
-        exprs : :class:`Column`
-            column expressions (:class:`Column`).
-
-        Returns
-        -------
-        :class:`DataFrame`
-            the observed :class:`DataFrame`.
-
-        Notes
-        -----
-        This method only supports batch queries.
-        Continuous execution is currently not supported yet.
-        """
         if len(exprs) == 0:
             raise ValueError("'exprs' should not be empty")
         if not all(isinstance(c, Column) for c in exprs):
@@ -833,16 +793,18 @@ class DataFrame:
 
         if isinstance(observation, Observation):
             return DataFrame.withPlan(
-                plan.CollectMetrics(self._plan, observation._name, exprs, True),
+                plan.CollectMetrics(self._plan, str(observation._name), list(exprs), True),
                 self._session,
             )
         elif isinstance(observation, str):
             return DataFrame.withPlan(
-                plan.CollectMetrics(self._plan, observation, exprs, False),
+                plan.CollectMetrics(self._plan, observation, list(exprs), False),
                 self._session,
             )
         else:
             raise ValueError("'observation' should be either `Observation` or `str`.")
+
+    observe.__doc__ = PySparkDataFrame.observe.__doc__
 
     def show(self, n: int = 20, truncate: Union[bool, int] = True, vertical: bool = False) -> None:
         print(self._show_string(n, truncate, vertical))
