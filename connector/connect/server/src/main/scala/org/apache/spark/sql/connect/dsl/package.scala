@@ -857,11 +857,10 @@ package object dsl {
                   .setInput(
                     Relation
                       .newBuilder()
-                      .setDeterministicOrder(
-                        DeterministicOrder
-                          .newBuilder()
-                          .setInput(logicalPlan)
-                          .build()))
+                      .setDeterministicOrder(DeterministicOrder
+                        .newBuilder()
+                        .setInput(logicalPlan)
+                        .build()))
                   .setLowerBound(x(0))
                   .setUpperBound(x(1))
                   .setWithReplacement(false)
