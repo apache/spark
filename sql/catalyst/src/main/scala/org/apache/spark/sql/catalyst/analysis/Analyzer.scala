@@ -2312,7 +2312,11 @@ class Analyzer(override val catalogManager: CatalogManager)
 
       plan.resolveExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_FUNCTION)) {
         case f @ UnresolvedFunction(nameParts, _, _, _, _) =>
-          if (ResolveFunctions.lookupBuiltinOrTempFunction(nameParts).isDefined) {
+          val normQualifier = normalizeFuncName(nameParts).dropRight(1);
+          if ((Set(Seq(), Seq("builtin"), Seq("session"),
+            Seq("system", "builtin"), Seq("system", "session")) contains normQualifier) &&
+            ResolveFunctions.lookupBuiltinOrTempFunction(nameParts.takeRight(2))
+              .isDefined) {
             f
           } else {
             val CatalogAndIdentifier(catalog, ident) = expandIdentifier(nameParts)
@@ -2467,16 +2471,16 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     def lookupBuiltinOrTempFunction(name: Seq[String]): Option[ExpressionInfo] = {
-      if (name.length == 1) {
-        v1SessionCatalog.lookupBuiltinOrTempFunction(name.head)
+      if (name.length == 1 || name.length == 2) {
+        v1SessionCatalog.lookupBuiltinOrTempFunction(name)
       } else {
         None
       }
     }
 
     def lookupBuiltinOrTempTableFunction(name: Seq[String]): Option[ExpressionInfo] = {
-      if (name.length == 1) {
-        v1SessionCatalog.lookupBuiltinOrTempTableFunction(name.head)
+      if (name.length == 1 || name.length == 2) {
+        v1SessionCatalog.lookupBuiltinOrTempTableFunction(name)
       } else {
         None
       }
@@ -2486,8 +2490,10 @@ class Analyzer(override val catalogManager: CatalogManager)
         name: Seq[String],
         arguments: Seq[Expression],
         u: Option[UnresolvedFunction]): Option[Expression] = {
-      if (name.length == 1) {
-        v1SessionCatalog.resolveBuiltinOrTempFunction(name.head, arguments).map { func =>
+      val normQualifier = normalizeFuncName(name).dropRight(1);
+      if ((Set(Seq(), Seq("builtin"), Seq("session"),
+        Seq("system", "builtin"), Seq("system", "session")) contains normQualifier)) {
+        v1SessionCatalog.resolveBuiltinOrTempFunction(name.takeRight(2), arguments).map { func =>
           if (u.isDefined) validateFunction(func, arguments.length, u.get) else func
         }
       } else {
@@ -2498,8 +2504,10 @@ class Analyzer(override val catalogManager: CatalogManager)
     private def resolveBuiltinOrTempTableFunction(
         name: Seq[String],
         arguments: Seq[Expression]): Option[LogicalPlan] = {
-      if (name.length == 1) {
-        v1SessionCatalog.resolveBuiltinOrTempTableFunction(name.head, arguments)
+      val normQualifier = normalizeFuncName(name).dropRight(1);
+      if (normQualifier.length == 0 ||
+        normQualifier == Seq("builtin") || normQualifier == Seq("system", "builtin")) {
+        v1SessionCatalog.resolveBuiltinOrTempTableFunction(name, arguments)
       } else {
         None
       }
@@ -2667,6 +2675,14 @@ class Analyzer(override val catalogManager: CatalogManager)
       }
       val aggregator = V2Aggregator(aggFunc, arguments)
       aggregator.toAggregateExpression(u.isDistinct, u.filter)
+    }
+
+    def normalizeFuncName(name: Seq[String]): Seq[String] = {
+      if (conf.caseSensitiveAnalysis) {
+        name
+      } else {
+        name.map(_.toLowerCase(Locale.ROOT))
+      }
     }
   }
 

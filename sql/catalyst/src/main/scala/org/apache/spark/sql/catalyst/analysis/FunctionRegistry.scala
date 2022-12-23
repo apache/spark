@@ -815,7 +815,7 @@ object FunctionRegistry {
     val fr = new SimpleFunctionRegistry
     expressions.foreach {
       case (name, (info, builder)) =>
-        fr.internalRegisterFunction(FunctionIdentifier(name), info, builder)
+        fr.internalRegisterFunction(FunctionIdentifier(name, Option("builtin")), info, builder)
     }
     fr
   }
@@ -968,7 +968,7 @@ object TableFunctionRegistry {
     val fr = new SimpleTableFunctionRegistry
     logicalPlans.foreach {
       case (name, (info, builder)) =>
-        fr.internalRegisterFunction(FunctionIdentifier(name), info, builder)
+        fr.internalRegisterFunction(FunctionIdentifier(name, Option("builtin")), info, builder)
     }
     fr
   }

@@ -138,11 +138,8 @@ case class DropFunctionCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     if (isTemp) {
-      assert(identifier.database.isEmpty)
-      if (FunctionRegistry.builtin.functionExists(identifier)) {
-        throw QueryCompilationErrors.cannotDropBuiltinFuncError(identifier.funcName)
-      }
-      catalog.dropTempFunction(identifier.funcName, ifExists)
+      assert(identifier.database == Some("session"))
+      catalog.dropTempFunction(identifier, ifExists)
     } else {
       // We are dropping a permanent function.
       catalog.dropFunction(identifier, ignoreIfNotExists = ifExists)
@@ -162,7 +159,7 @@ case class DropFunctionCommand(
  * '|' is for alternation.
  * For example, "show functions like 'yea*|windo*'" will return "window" and "year".
  */
-case class ShowFunctionsCommand(
+case class ShowFunctionsCommand (
     db: String,
     pattern: Option[String],
     showUserFunctions: Boolean,

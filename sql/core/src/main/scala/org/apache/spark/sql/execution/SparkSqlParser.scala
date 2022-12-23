@@ -568,12 +568,13 @@ class SparkSqlAstBuilder extends AstBuilder {
 
       if (functionIdentifier.length > 2) {
         throw QueryParsingErrors.unsupportedFunctionNameError(functionIdentifier, ctx)
-      } else if (functionIdentifier.length == 2) {
+      } else if (functionIdentifier.length == 2 &&
+        functionIdentifier.head.toLowerCase(Locale.ROOT) != "session") {
         // Temporary function names should not contain database prefix like "database.function"
         throw QueryParsingErrors.specifyingDBInCreateTempFuncError(functionIdentifier.head, ctx)
       }
       CreateFunctionCommand(
-        FunctionIdentifier(functionIdentifier.last),
+        FunctionIdentifier(functionIdentifier.last, Option("session")),
         string(visitStringLit(ctx.className)),
         resources.toSeq,
         true,
@@ -594,11 +595,14 @@ class SparkSqlAstBuilder extends AstBuilder {
     val functionName = visitMultipartIdentifier(ctx.multipartIdentifier)
     val isTemp = ctx.TEMPORARY != null
     if (isTemp) {
-      if (functionName.length > 1) {
+      if (functionName.length > 2) {
+        throw QueryParsingErrors.unsupportedFunctionNameError(functionName, ctx)
+      } else if (functionName.length == 2 &&
+        functionName.head.toLowerCase(Locale.ROOT) != "session") {
         throw QueryParsingErrors.invalidNameForDropTempFunc(functionName, ctx)
       }
       DropFunctionCommand(
-        identifier = FunctionIdentifier(functionName.head),
+        identifier = FunctionIdentifier(functionName.last, Option("session")),
         ifExists = ctx.EXISTS != null,
         isTemp = true)
     } else {

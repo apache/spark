@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, quoteNameParts}
@@ -128,8 +129,9 @@ class NoSuchPartitionsException(errorClass: String, messageParameters: Map[Strin
   }
 }
 
-class NoSuchTempFunctionException(func: String)
-  extends AnalysisException(errorClass = "ROUTINE_NOT_FOUND", Map("routineName" -> s"`$func`"))
+class NoSuchTempFunctionException(func: FunctionIdentifier)
+  extends AnalysisException(errorClass = "ROUTINE_NOT_FOUND",
+    Map("routineName" -> s"`${func.database.get}`.`${func.funcName}`"))
 
 class NoSuchIndexException(message: String, cause: Option[Throwable] = None)
   extends AnalysisException(errorClass = "INDEX_NOT_FOUND",
