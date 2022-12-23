@@ -19,9 +19,9 @@ import decimal
 import datetime
 
 from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
-from pyspark.sql.connect.column import (
-    Column,
-    LiteralExpression,
+from pyspark.sql.connect.column import Column
+from pyspark.sql.connect.expressions import LiteralExpression
+from pyspark.sql.connect.types import (
     JVM_BYTE_MIN,
     JVM_BYTE_MAX,
     JVM_SHORT_MIN,

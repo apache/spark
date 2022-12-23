@@ -236,6 +236,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             failUnresolvedAttribute(operator, key, "UNRESOLVED_MAP_KEY")
         }
 
+        // Fail if we still have an unresolved all in group by. This needs to run before the
+        // general unresolved check below to throw a more tailored error message.
+        ResolveGroupByAll.checkAnalysis(operator)
+
         getAllExpressions(operator).foreach(_.foreachUp {
           case a: Attribute if !a.resolved =>
             failUnresolvedAttribute(operator, a, "UNRESOLVED_COLUMN")
