@@ -89,7 +89,7 @@ class SparkPlanGraphWrapperSerializer extends ProtobufSerDe {
     val builder = StoreTypes.SparkPlanGraphNode.newBuilder()
     builder.setId(node.id)
     builder.setName(node.name)
-    builder.setName(node.desc)
+    builder.setDesc(node.desc)
     node.metrics.foreach { metric =>
       builder.addMetrics(serializeSQLPlanMetric(metric))
     }
