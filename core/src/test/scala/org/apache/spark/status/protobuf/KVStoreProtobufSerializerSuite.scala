@@ -22,7 +22,7 @@ import java.util.Date
 import org.apache.spark.{JobExecutionStatus, SparkFunSuite}
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.metrics.ExecutorMetricType
-import org.apache.spark.resource.{ExecutorResourceRequest, TaskResourceRequest}
+import org.apache.spark.resource.{ExecutorResourceRequest, ResourceInformation, TaskResourceRequest}
 import org.apache.spark.status._
 import org.apache.spark.status.api.v1._
 
@@ -459,6 +459,30 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     }
   }
 
+  test("Stream Block Data") {
+    val input = new StreamBlockData(
+      name = "a",
+      executorId = "executor-1",
+      hostPort = "123",
+      storageLevel = "LOCAL",
+      useMemory = true,
+      useDisk = false,
+      deserialized = true,
+      memSize = 1L,
+      diskSize = 2L)
+    val bytes = serializer.serialize(input)
+    val result = serializer.deserialize(bytes, classOf[StreamBlockData])
+    assert(result.name == input.name)
+    assert(result.executorId == input.executorId)
+    assert(result.hostPort == input.hostPort)
+    assert(result.storageLevel == input.storageLevel)
+    assert(result.useMemory == input.useMemory)
+    assert(result.useDisk == input.useDisk)
+    assert(result.deserialized == input.deserialized)
+    assert(result.memSize == input.memSize)
+    assert(result.diskSize == input.diskSize)
+  }
+
   test("Resource Profile") {
     val input = new ResourceProfileWrapper(
       rpInfo = new ResourceProfileInfo(
@@ -501,6 +525,76 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     }
   }
 
+  test("CachedQuantile") {
+    val input = new CachedQuantile(
+      stageId = 1,
+      stageAttemptId = 2,
+      quantile = "a",
+      taskCount = 3L,
+      duration = 4L,
+      executorDeserializeTime = 5.1,
+      executorDeserializeCpuTime = 6.1,
+      executorRunTime = 7.1,
+      executorCpuTime = 8.1,
+      resultSize = 9.1,
+      jvmGcTime = 10.1,
+      resultSerializationTime = 11.1,
+      gettingResultTime = 12.1,
+      schedulerDelay = 13.1,
+      peakExecutionMemory = 14.1,
+      memoryBytesSpilled = 15.1,
+      diskBytesSpilled = 16.1,
+      bytesRead = 17.1,
+      recordsRead = 18.1,
+      bytesWritten = 19.1,
+      recordsWritten = 20.1,
+      shuffleReadBytes = 21.1,
+      shuffleRecordsRead = 22.1,
+      shuffleRemoteBlocksFetched = 23.1,
+      shuffleLocalBlocksFetched = 24.1,
+      shuffleFetchWaitTime = 25.1,
+      shuffleRemoteBytesRead = 26.1,
+      shuffleRemoteBytesReadToDisk = 27.1,
+      shuffleTotalBlocksFetched = 28.1,
+      shuffleWriteBytes = 29.1,
+      shuffleWriteRecords = 30.1,
+      shuffleWriteTime = 31.1)
+    val bytes = serializer.serialize(input)
+    val result = serializer.deserialize(bytes, classOf[CachedQuantile])
+    assert(result.stageId == input.stageId)
+    assert(result.stageAttemptId == input.stageAttemptId)
+    assert(result.quantile == input.quantile)
+    assert(result.taskCount == input.taskCount)
+    assert(result.duration == input.duration)
+    assert(result.executorDeserializeTime == input.executorDeserializeTime)
+    assert(result.executorDeserializeCpuTime == input.executorDeserializeCpuTime)
+    assert(result.executorRunTime == input.executorRunTime)
+    assert(result.executorCpuTime == input.executorCpuTime)
+    assert(result.resultSize == input.resultSize)
+    assert(result.jvmGcTime == input.jvmGcTime)
+    assert(result.resultSerializationTime == input.resultSerializationTime)
+    assert(result.gettingResultTime == input.gettingResultTime)
+    assert(result.schedulerDelay == input.schedulerDelay)
+    assert(result.peakExecutionMemory == input.peakExecutionMemory)
+    assert(result.memoryBytesSpilled == input.memoryBytesSpilled)
+    assert(result.diskBytesSpilled == input.diskBytesSpilled)
+    assert(result.bytesRead == input.bytesRead)
+    assert(result.recordsRead == input.recordsRead)
+    assert(result.bytesWritten == input.bytesWritten)
+    assert(result.recordsWritten == input.recordsWritten)
+    assert(result.shuffleReadBytes == input.shuffleReadBytes)
+    assert(result.shuffleRecordsRead == input.shuffleRecordsRead)
+    assert(result.shuffleRemoteBlocksFetched == input.shuffleRemoteBlocksFetched)
+    assert(result.shuffleLocalBlocksFetched == input.shuffleLocalBlocksFetched)
+    assert(result.shuffleFetchWaitTime == input.shuffleFetchWaitTime)
+    assert(result.shuffleRemoteBytesRead == input.shuffleRemoteBytesRead)
+    assert(result.shuffleRemoteBytesReadToDisk == input.shuffleRemoteBytesReadToDisk)
+    assert(result.shuffleTotalBlocksFetched == input.shuffleTotalBlocksFetched)
+    assert(result.shuffleWriteBytes == input.shuffleWriteBytes)
+    assert(result.shuffleWriteRecords == input.shuffleWriteRecords)
+    assert(result.shuffleWriteTime == input.shuffleWriteTime)
+  }
+
   test("Speculation Stage Summary") {
     val input = new SpeculationStageSummaryWrapper(
       stageId = 1,
@@ -522,6 +616,135 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     assert(result.info.numCompletedTasks == input.info.numCompletedTasks)
     assert(result.info.numFailedTasks == input.info.numFailedTasks)
     assert(result.info.numKilledTasks == input.info.numKilledTasks)
+  }
+
+  test("Executor Summary") {
+    val memoryMetrics =
+      Some(new MemoryMetrics(
+        usedOnHeapStorageMemory = 15,
+        usedOffHeapStorageMemory = 16,
+        totalOnHeapStorageMemory = 17,
+        totalOffHeapStorageMemory = 18))
+    val peakMemoryMetric =
+      Some(new ExecutorMetrics(Array(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L, 1024L)))
+    val resources =
+      Map("resource1" -> new ResourceInformation("re1", Array("add1", "add2")))
+    val input = new ExecutorSummaryWrapper(
+      info = new ExecutorSummary(
+        id = "id_1",
+        hostPort = "localhost:7777",
+        isActive = true,
+        rddBlocks = 1,
+        memoryUsed = 64,
+        diskUsed = 128,
+        totalCores = 2,
+        maxTasks = 6,
+        activeTasks = 5,
+        failedTasks = 4,
+        completedTasks = 3,
+        totalTasks = 7,
+        totalDuration = 8,
+        totalGCTime = 9,
+        totalInputBytes = 10,
+        totalShuffleRead = 11,
+        totalShuffleWrite = 12,
+        isBlacklisted = false,
+        maxMemory = 256,
+        addTime = new Date(13),
+        removeTime = Some(new Date(14)),
+        removeReason = Some("reason_1"),
+        executorLogs = Map("log1" -> "logs/log1.log", "log2" -> "/log/log2.log"),
+        memoryMetrics = memoryMetrics,
+        blacklistedInStages = Set(19, 20, 21),
+        peakMemoryMetrics = peakMemoryMetric,
+        attributes = Map("attri1" -> "value1", "attri2" -> "val2"),
+        resources = resources,
+        resourceProfileId = 22,
+        isExcluded = true,
+        excludedInStages = Set(23, 24)
+      )
+    )
+
+    val bytes = serializer.serialize(input)
+    val result = serializer.deserialize(bytes, classOf[ExecutorSummaryWrapper])
+
+    assert(result.info.id == input.info.id)
+    assert(result.info.hostPort == input.info.hostPort)
+    assert(result.info.isActive == input.info.isActive)
+    assert(result.info.rddBlocks == input.info.rddBlocks)
+    assert(result.info.memoryUsed == input.info.memoryUsed)
+    assert(result.info.diskUsed == input.info.diskUsed)
+    assert(result.info.totalCores == input.info.totalCores)
+    assert(result.info.maxTasks == input.info.maxTasks)
+    assert(result.info.activeTasks == input.info.activeTasks)
+    assert(result.info.failedTasks == input.info.failedTasks)
+    assert(result.info.completedTasks == input.info.completedTasks)
+    assert(result.info.totalTasks == input.info.totalTasks)
+    assert(result.info.totalDuration == input.info.totalDuration)
+    assert(result.info.totalGCTime == input.info.totalGCTime)
+    assert(result.info.totalInputBytes == input.info.totalInputBytes)
+    assert(result.info.totalShuffleRead == input.info.totalShuffleRead)
+    assert(result.info.totalShuffleWrite == input.info.totalShuffleWrite)
+    assert(result.info.isBlacklisted == input.info.isBlacklisted)
+    assert(result.info.maxMemory == input.info.maxMemory)
+    assert(result.info.addTime == input.info.addTime)
+    assert(result.info.removeTime == input.info.removeTime)
+    assert(result.info.removeReason == input.info.removeReason)
+
+    assert(result.info.executorLogs.size == input.info.executorLogs.size)
+    result.info.executorLogs.keys.foreach { k =>
+      assert(input.info.executorLogs.contains(k))
+      assert(result.info.executorLogs(k) == input.info.executorLogs(k))
+    }
+
+    assert(result.info.memoryMetrics.isDefined == input.info.memoryMetrics.isDefined)
+    if (result.info.memoryMetrics.isDefined && input.info.memoryMetrics.isDefined) {
+      assert(result.info.memoryMetrics.get.usedOnHeapStorageMemory ==
+        input.info.memoryMetrics.get.usedOnHeapStorageMemory)
+      assert(result.info.memoryMetrics.get.usedOffHeapStorageMemory ==
+        input.info.memoryMetrics.get.usedOffHeapStorageMemory)
+      assert(result.info.memoryMetrics.get.totalOnHeapStorageMemory ==
+        input.info.memoryMetrics.get.totalOnHeapStorageMemory)
+      assert(result.info.memoryMetrics.get.totalOffHeapStorageMemory ==
+        input.info.memoryMetrics.get.totalOffHeapStorageMemory)
+    }
+
+    assert(result.info.blacklistedInStages.size == input.info.blacklistedInStages.size)
+    result.info.blacklistedInStages.foreach { stage =>
+      assert(input.info.blacklistedInStages.contains(stage))
+    }
+
+    assert(result.info.peakMemoryMetrics.isDefined == input.info.peakMemoryMetrics.isDefined)
+    if (result.info.peakMemoryMetrics.isDefined && input.info.peakMemoryMetrics.isDefined) {
+      ExecutorMetricType.metricToOffset.foreach { case (name, index) =>
+        result.info.peakMemoryMetrics.get.getMetricValue(name) ==
+          input.info.peakMemoryMetrics.get.getMetricValue(name)
+      }
+    }
+
+    assert(result.info.attributes.size == input.info.attributes.size)
+    result.info.attributes.keys.foreach { k =>
+      assert(input.info.attributes.contains(k))
+      assert(result.info.attributes(k) == input.info.attributes(k))
+    }
+
+    assert(result.info.resources.size == input.info.resources.size)
+    result.info.resources.keys.foreach { k =>
+      assert(input.info.resources.contains(k))
+      assert(result.info.resources(k).name == input.info.resources(k).name)
+      result.info.resources(k).addresses.zip(input.info.resources(k).addresses).foreach {
+        case (a1, a2) =>
+          assert(a1 == a2)
+      }
+    }
+
+    assert(result.info.resourceProfileId == input.info.resourceProfileId)
+    assert(result.info.isExcluded == input.info.isExcluded)
+
+    assert(result.info.excludedInStages.size == input.info.excludedInStages.size)
+    result.info.excludedInStages.foreach { stage =>
+      assert(input.info.excludedInStages.contains(stage))
+    }
   }
 
   test("Process Summary") {

@@ -59,7 +59,10 @@ class GroupedData(PandasGroupedOpsMixin):
     A set of methods for aggregations on a :class:`DataFrame`,
     created by :func:`DataFrame.groupBy`.
 
-    .. versionadded:: 1.3
+    .. versionadded:: 1.3.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
     """
 
     def __init__(self, jgd: JavaObject, df: DataFrame):
@@ -97,6 +100,9 @@ class GroupedData(PandasGroupedOpsMixin):
         Alternatively, ``exprs`` can also be a list of aggregate :class:`Column` expressions.
 
         .. versionadded:: 1.3.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -175,6 +181,9 @@ class GroupedData(PandasGroupedOpsMixin):
 
         .. versionadded:: 1.3.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Examples
         --------
         >>> df = spark.createDataFrame(
@@ -208,6 +217,9 @@ class GroupedData(PandasGroupedOpsMixin):
 
         .. versionadded:: 1.3.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         cols : str
@@ -221,6 +233,9 @@ class GroupedData(PandasGroupedOpsMixin):
         :func:`mean` is an alias for :func:`avg`.
 
         .. versionadded:: 1.3.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -268,6 +283,9 @@ class GroupedData(PandasGroupedOpsMixin):
 
         .. versionadded:: 1.3.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Examples
         --------
         >>> df = spark.createDataFrame([
@@ -308,6 +326,9 @@ class GroupedData(PandasGroupedOpsMixin):
         """Computes the min value for each numeric column for each group.
 
         .. versionadded:: 1.3.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -354,6 +375,9 @@ class GroupedData(PandasGroupedOpsMixin):
         """Computes the sum for each numeric columns for each group.
 
         .. versionadded:: 1.3.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------

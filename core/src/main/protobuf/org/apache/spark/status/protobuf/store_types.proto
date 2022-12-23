@@ -206,6 +206,18 @@ message ApplicationInfoWrapper {
   ApplicationInfo info = 1;
 }
 
+message StreamBlockData {
+  string name = 1;
+  string executor_id = 2;
+  string host_port = 3;
+  string storage_level = 4;
+  bool use_memory = 5;
+  bool use_disk = 6;
+  bool deserialized = 7;
+  int64 mem_size = 8;
+  int64 disk_size = 9;
+}
+
 message RDDDataDistribution {
   string address = 1;
   int64 memory_used = 2;
@@ -245,6 +257,41 @@ message ResourceProfileWrapper {
   ResourceProfileInfo rpInfo = 1;
 }
 
+message CachedQuantile {
+  int64 stage_id = 1;
+  int32 stage_attempt_id = 2;
+  string quantile = 3;
+  int64 task_count = 4;
+  double duration = 5;
+  double executor_deserialize_time = 6;
+  double executor_deserialize_cpu_time = 7;
+  double executor_run_time = 8;
+  double executor_cpu_time = 9;
+  double result_size = 10;
+  double jvm_gc_time = 11;
+  double result_serialization_time = 12;
+  double getting_result_time = 13;
+  double scheduler_delay = 14;
+  double peak_execution_memory = 15;
+  double memory_bytes_spilled = 16;
+  double disk_bytes_spilled = 17;
+  double bytes_read = 18;
+  double records_read = 19;
+  double bytes_written = 20;
+  double records_written = 21;
+  double shuffle_read_bytes = 22;
+  double shuffle_records_read = 23;
+  double shuffle_remote_blocks_fetched = 24;
+  double shuffle_local_blocks_fetched = 25;
+  double shuffle_fetch_wait_time = 26;
+  double shuffle_remote_bytes_read = 27;
+  double shuffle_remote_bytes_read_to_disk = 28;
+  double shuffle_total_blocks_fetched = 29;
+  double shuffle_write_bytes = 30;
+  double shuffle_write_records = 31;
+  double shuffle_write_time = 32;
+}
+
 message SpeculationStageSummary {
   int32 num_tasks = 1;
   int32 num_active_tasks = 2;
@@ -271,4 +318,54 @@ message ProcessSummary {
 
 message ProcessSummaryWrapper {
   ProcessSummary info = 1;
+}
+
+message MemoryMetrics {
+  int64 used_on_heap_storage_memory = 1;
+  int64 used_off_heap_storage_memory = 2;
+  int64 total_on_heap_storage_memory = 3;
+  int64 total_off_heap_storage_memory = 4;
+}
+
+message ResourceInformation {
+  string name = 1;
+  repeated string addresses = 2;
+}
+
+message ExecutorSummary {
+  string id = 1;
+  string host_port = 2;
+  bool is_active = 3;
+  int32 rdd_blocks = 4;
+  int64 memory_used = 5;
+  int64 disk_used = 6;
+  int32 total_cores = 7;
+  int32 max_tasks = 8;
+  int32 active_tasks = 9;
+  int32 failed_tasks = 10;
+  int32 completed_tasks = 11;
+  int32 total_tasks = 12;
+  int64 total_duration = 13;
+  int64 total_gc_time = 14;
+  int64 total_input_bytes = 15;
+  int64 total_shuffle_read = 16;
+  int64 total_shuffle_write = 17;
+  bool is_blacklisted = 18;
+  int64 max_memory = 19;
+  int64 add_time = 20;
+  optional int64 remove_time = 21;
+  optional string remove_reason = 22;
+  map<string, string> executor_logs = 23;
+  optional MemoryMetrics memory_metrics = 24;
+  repeated int64 blacklisted_in_stages = 25;
+  optional ExecutorMetrics peak_memory_metrics = 26;
+  map<string, string> attributes = 27;
+  map<string, ResourceInformation> resources = 28;
+  int32 resource_profile_id = 29;
+  bool is_excluded = 30;
+  repeated int64 excluded_in_stages = 31;
+}
+
+message ExecutorSummaryWrapper {
+  ExecutorSummary info = 1;
 }
