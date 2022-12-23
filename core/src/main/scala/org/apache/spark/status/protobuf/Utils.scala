@@ -17,10 +17,91 @@
 
 package org.apache.spark.status.protobuf
 
+import java.util.{List => JList}
+
+import collection.JavaConverters._
+
+import org.apache.spark.status.api.v1.{AccumulableInfo, ExecutorStageSummary}
+
+import scala.collection.mutable.ArrayBuffer
+
 object Utils {
   def getOptional[T](condition: Boolean, result: () => T): Option[T] = if (condition) {
     Some(result())
   } else {
     None
+  }
+
+  private[protobuf] def serializeAccumulableInfo(
+      input: AccumulableInfo): StoreTypes.AccumulableInfo = {
+    val builder = StoreTypes.AccumulableInfo.newBuilder()
+      .setId(input.id)
+      .setName(input.name)
+      .setValue(input.value)
+    input.update.foreach(builder.setUpdate)
+    builder.build()
+  }
+
+  private[protobuf] def deserializeAccumulableInfos(
+      updates: JList[StoreTypes.AccumulableInfo]): ArrayBuffer[AccumulableInfo] = {
+    val accumulatorUpdates = new ArrayBuffer[AccumulableInfo]()
+    updates.forEach { update =>
+      accumulatorUpdates.append(new AccumulableInfo(
+        id = update.getId,
+        name = update.getName,
+        update = getOptional(update.hasUpdate, update.getUpdate),
+        value = update.getValue))
+    }
+    accumulatorUpdates
+  }
+
+  private[protobuf] def serializeExecutorStageSummary(
+      input: ExecutorStageSummary): StoreTypes.ExecutorStageSummary = {
+    val builder = StoreTypes.ExecutorStageSummary.newBuilder()
+      .setTaskTime(input.taskTime)
+      .setFailedTasks(input.failedTasks)
+      .setSucceededTasks(input.succeededTasks)
+      .setKilledTasks(input.killedTasks)
+      .setInputBytes(input.inputBytes)
+      .setInputRecords(input.inputRecords)
+      .setOutputBytes(input.outputBytes)
+      .setOutputRecords(input.outputRecords)
+      .setShuffleRead(input.shuffleRead)
+      .setShuffleReadRecords(input.shuffleReadRecords)
+      .setShuffleWrite(input.shuffleWrite)
+      .setShuffleWriteRecords(input.shuffleWriteRecords)
+      .setMemoryBytesSpilled(input.memoryBytesSpilled)
+      .setDiskBytesSpilled(input.diskBytesSpilled)
+      .setIsBlacklistedForStage(input.isBlacklistedForStage)
+      .setIsExcludedForStage(input.isExcludedForStage)
+    input.peakMemoryMetrics.map { m =>
+      builder.setPeakMemoryMetrics(ExecutorMetricsSerializer.serialize(m))
+    }
+    builder.build()
+  }
+
+  private[protobuf] def deserializeExecutorStageSummary(
+      binary: StoreTypes.ExecutorStageSummary): ExecutorStageSummary = {
+    val peakMemoryMetrics =
+      getOptional(binary.hasPeakMemoryMetrics,
+        () => ExecutorMetricsSerializer.deserialize(binary.getPeakMemoryMetrics))
+    new ExecutorStageSummary(
+      taskTime = binary.getTaskTime,
+      failedTasks = binary.getFailedTasks,
+      succeededTasks = binary.getSucceededTasks,
+      killedTasks = binary.getKilledTasks,
+      inputBytes = binary.getInputBytes,
+      inputRecords = binary.getInputRecords,
+      outputBytes = binary.getOutputBytes,
+      outputRecords = binary.getOutputRecords,
+      shuffleRead = binary.getShuffleRead,
+      shuffleReadRecords = binary.getShuffleReadRecords,
+      shuffleWrite = binary.getShuffleWrite,
+      shuffleWriteRecords = binary.getShuffleWriteRecords,
+      memoryBytesSpilled = binary.getMemoryBytesSpilled,
+      diskBytesSpilled = binary.getDiskBytesSpilled,
+      isBlacklistedForStage = binary.getIsBlacklistedForStage,
+      peakMemoryMetrics = peakMemoryMetrics,
+      isExcludedForStage = binary.getIsExcludedForStage)
   }
 }

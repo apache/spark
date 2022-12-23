@@ -746,4 +746,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       assert(input.info.excludedInStages.contains(stage))
     }
   }
+
+  test("Stage Data") {
+  }
 }
