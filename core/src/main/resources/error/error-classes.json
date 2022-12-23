@@ -3693,7 +3693,7 @@
   },
   "_LEGACY_ERROR_TEMP_2054" : {
     "message" : [
-      "Task failed while writing rows."
+      "Task failed while writing rows. <message>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2055" : {
