@@ -43,4 +43,46 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     assert(result.stages == input.stages)
     assert(result.metricValues == input.metricValues)
   }
+
+  test("SQLExecutionUIData with metricValues is empty map and null") {
+    val templateData = SqlResourceSuite.sqlExecutionUIData
+
+    val input1 = new SQLExecutionUIData(
+      executionId = templateData.executionId,
+      description = templateData.description,
+      details = templateData.details,
+      physicalPlanDescription = templateData.physicalPlanDescription,
+      modifiedConfigs = templateData.modifiedConfigs,
+      metrics = templateData.metrics,
+      submissionTime = templateData.submissionTime,
+      completionTime = templateData.completionTime,
+      errorMessage = templateData.errorMessage,
+      jobs = templateData.jobs,
+      stages = templateData.stages,
+      metricValues = Map.empty
+    )
+    val bytes1 = serializer.serialize(input1)
+    val result1 = serializer.deserialize(bytes1, classOf[SQLExecutionUIData])
+    // input.metricValues is empty map, result.metricValues is empty map.
+    assert(result1.metricValues.isEmpty)
+
+    val input2 = new SQLExecutionUIData(
+      executionId = templateData.executionId,
+      description = templateData.description,
+      details = templateData.details,
+      physicalPlanDescription = templateData.physicalPlanDescription,
+      modifiedConfigs = templateData.modifiedConfigs,
+      metrics = templateData.metrics,
+      submissionTime = templateData.submissionTime,
+      completionTime = templateData.completionTime,
+      errorMessage = templateData.errorMessage,
+      jobs = templateData.jobs,
+      stages = templateData.stages,
+      metricValues = null
+    )
+    val bytes2 = serializer.serialize(input2)
+    val result2 = serializer.deserialize(bytes2, classOf[SQLExecutionUIData])
+    // input.metricValues is null, result.metricValues is also empty map.
+    assert(result2.metricValues.isEmpty)
+  }
 }
