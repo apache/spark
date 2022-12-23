@@ -31,11 +31,13 @@ import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableMap;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.spark.network.shuffle.protocol.RemoveShuffleMerge;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -1318,6 +1320,71 @@ public class RemoteBlockPushResolverSuite {
       + "\"shuffleId\":\"1\", \"shuffleMergeId\":\"1\"}";
     assertEquals(partitionId, mapper.readValue(legacyPartitionIdJson,
       RemoteBlockPushResolver.AppAttemptShuffleMergeId.class));
+  }
+
+  @Test
+  public void testRemoveShuffleMerge() throws IOException, InterruptedException {
+    Semaphore closed = new Semaphore(0);
+    String testApp = "testRemoveShuffleMerge";
+    RemoteBlockPushResolver pushResolver = new RemoteBlockPushResolver(conf, null) {
+      @Override
+      void closeAndDeleteOutdatedPartitions(
+          AppAttemptShuffleMergeId appAttemptShuffleMergeId,
+          Map<Integer, AppShufflePartitionInfo> partitions) {
+        super.closeAndDeleteOutdatedPartitions(appAttemptShuffleMergeId, partitions);
+        closed.release();
+      }
+
+      @Override
+      void deleteMergedFiles(
+          AppAttemptShuffleMergeId appAttemptShuffleMergeId,
+          AppShuffleInfo appShuffleInfo,
+          int[] reduceIds) {
+        super.deleteMergedFiles(appAttemptShuffleMergeId, appShuffleInfo, reduceIds);
+        closed.release();
+      }
+    };
+    pushResolver.registerExecutor(testApp, new ExecutorShuffleInfo(
+        prepareLocalDirs(localDirs, MERGE_DIRECTORY), 1, MERGE_DIRECTORY_META));
+
+    // 1. Check whether the data is cleaned up when merged shuffle is finalized
+    RemoteBlockPushResolver.AppShuffleInfo shuffleInfo =
+        pushResolver.validateAndGetAppShuffleInfo(testApp);
+    StreamCallbackWithID streamCallback1 = pushResolver.receiveBlockDataAsStream(
+        new PushBlockStream(testApp, NO_ATTEMPT_ID, 0, 1, 0, 0, 0));
+    streamCallback1.onData(streamCallback1.getID(), ByteBuffer.wrap(new byte[2]));
+    streamCallback1.onComplete(streamCallback1.getID());
+    pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(testApp, NO_ATTEMPT_ID, 0, 1));
+    assertTrue(shuffleInfo.getMergedShuffleMetaFile(0, 1, 0).exists());
+    assertTrue(new File(shuffleInfo.getMergedShuffleIndexFilePath(0, 1, 0)).exists());
+    assertTrue(shuffleInfo.getMergedShuffleDataFile(0, 1, 0).exists());
+    pushResolver.removeShuffleMerge(
+        new RemoveShuffleMerge(testApp, NO_ATTEMPT_ID, 0, 1));
+    closed.tryAcquire(10, TimeUnit.SECONDS);
+    assertFalse(shuffleInfo.getMergedShuffleMetaFile(0, 1, 0).exists());
+    assertFalse(new File(shuffleInfo.getMergedShuffleIndexFilePath(0, 1, 0)).exists());
+    assertFalse(shuffleInfo.getMergedShuffleDataFile(0, 1, 0).exists());
+
+    // 2. Check whether the data is cleaned up when merged shuffle is not finalized.
+    StreamCallbackWithID streamCallback2 = pushResolver.receiveBlockDataAsStream(
+        new PushBlockStream(testApp, NO_ATTEMPT_ID, 2, 1, 0, 0, 0));
+    streamCallback2.onData(streamCallback2.getID(), ByteBuffer.wrap(new byte[2]));
+    streamCallback2.onComplete(streamCallback2.getID());
+    assertTrue(shuffleInfo.getMergedShuffleMetaFile(2, 1, 0).exists());
+    pushResolver.removeShuffleMerge(
+        new RemoveShuffleMerge(testApp, NO_ATTEMPT_ID, 2, 1));
+    closed.tryAcquire(10, TimeUnit.SECONDS);
+    assertFalse(shuffleInfo.getMergedShuffleMetaFile(2, 1, 0).exists());
+
+    // 3. Check whether the data is cleaned up when higher shuffleMergeId finalize request comes
+    StreamCallbackWithID streamCallback3 = pushResolver.receiveBlockDataAsStream(
+        new PushBlockStream(testApp, NO_ATTEMPT_ID, 3, 1, 0, 0, 0));
+    streamCallback3.onData(streamCallback3.getID(), ByteBuffer.wrap(new byte[2]));
+    streamCallback3.onComplete(streamCallback3.getID());
+    assertTrue(shuffleInfo.getMergedShuffleMetaFile(3, 1, 0).exists());
+    pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(testApp, NO_ATTEMPT_ID, 3, 2));
+    closed.tryAcquire(10, TimeUnit.SECONDS);
+    assertFalse(shuffleInfo.getMergedShuffleMetaFile(3, 1, 0).exists());
   }
 
   private void useTestFiles(boolean useTestIndexFile, boolean useTestMetaFile) throws IOException {

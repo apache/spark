@@ -817,7 +817,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
                 "finalizing shuffle partition {}", msg.appId, msg.appAttemptId, msg.shuffleId,
                 msg.shuffleMergeId, partition.reduceId);
           } finally {
-            partition.closeAllFilesAndDeleteIfNeeded(false);
+            Boolean deleteFile = partition.mapTracker.getCardinality() == 0;
+            partition.closeAllFilesAndDeleteIfNeeded(deleteFile);
           }
         }
       }
