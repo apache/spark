@@ -1312,6 +1312,7 @@ class SparkSession(SparkConversionMixin):
             their SQL literals for substituting.
 
             .. versionadded:: 3.4.0
+
         kwargs : dict
             Other variables that the user wants to set that can be referenced in the query
 

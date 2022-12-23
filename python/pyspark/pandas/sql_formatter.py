@@ -107,6 +107,7 @@ def sql(
         their SQL literals for substituting.
 
         .. versionadded:: 3.4.0
+
     kwargs
         other variables that the user want to set that can be referenced in the query
 
