@@ -30,7 +30,7 @@ object LiteralValueProtoConverter {
    * @return
    *   Expression
    */
-  def toCatalystExpression(lit: proto.Expression.Literal): expressions.Expression = {
+  def toCatalystExpression(lit: proto.Expression.Literal): expressions.Literal = {
     lit.getLiteralTypeCase match {
       case proto.Expression.Literal.LiteralTypeCase.NULL =>
         expressions.Literal(null, NullType)

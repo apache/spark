@@ -813,7 +813,7 @@
   },
   "INVALID_SQL_ARG" : {
     "message" : [
-      "The argument <name> of `sql()` is invalid. Consider to replace it by a SQL literal statement."
+      "The argument <name> of `sql()` is invalid. Consider to replace it by a SQL literal."
     ]
   },
   "INVALID_SQL_SYNTAX" : {
@@ -1164,7 +1164,7 @@
   },
   "UNBOUND_SQL_PARAMETER" : {
     "message" : [
-      "Found the unbound parameter: <name>. Please, fix `args` and provide a mapping of the parameter to a SQL literal statement."
+      "Found the unbound parameter: <name>. Please, fix `args` and provide a mapping of the parameter to a SQL literal."
     ]
   },
   "UNCLOSED_BRACKETED_COMMENT" : {
@@ -3693,7 +3693,7 @@
   },
   "_LEGACY_ERROR_TEMP_2054" : {
     "message" : [
-      "Task failed while writing rows."
+      "Task failed while writing rows. <message>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2055" : {

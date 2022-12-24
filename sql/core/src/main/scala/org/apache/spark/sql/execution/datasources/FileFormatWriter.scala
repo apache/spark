@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
+import org.apache.spark.sql.connector.write.WriterCommitMessage
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{ProjectExec, SortExec, SparkPlan, SQLExecution, UnsafeExternalRowSorter}
 import org.apache.spark.sql.internal.SQLConf
@@ -103,14 +104,6 @@ object FileFormatWriter extends Logging {
       .map(FileSourceMetadataAttribute.cleanupFileSourceMetadataInformation))
     val dataColumns = finalOutputSpec.outputColumns.filterNot(partitionSet.contains)
 
-    val hasEmpty2Null = plan.exists(p => V1WritesUtils.hasEmptyToNull(p.expressions))
-    val empty2NullPlan = if (hasEmpty2Null) {
-      plan
-    } else {
-      val projectList = V1WritesUtils.convertEmptyToNull(plan.output, partitionColumns)
-      if (projectList.nonEmpty) ProjectExec(projectList, plan) else plan
-    }
-
     val writerBucketSpec = V1WritesUtils.getWriterBucketSpec(bucketSpec, dataColumns, options)
     val sortColumns = V1WritesUtils.getBucketSortColumns(bucketSpec, dataColumns)
 
@@ -144,9 +137,10 @@ object FileFormatWriter extends Logging {
     // columns.
     val requiredOrdering = partitionColumns.drop(numStaticPartitionCols) ++
         writerBucketSpec.map(_.bucketIdExpression) ++ sortColumns
+    val writeFilesOpt = V1WritesUtils.getWriteFilesOpt(plan)
     // the sort order doesn't matter
     // Use the output ordering from the original plan before adding the empty2null projection.
-    val actualOrdering = plan.outputOrdering.map(_.child)
+    val actualOrdering = writeFilesOpt.map(_.child).getOrElse(plan).outputOrdering.map(_.child)
     val orderingMatched = V1WritesUtils.isOrderingMatched(requiredOrdering, actualOrdering)
 
     SQLExecution.checkSQLExecutionId(sparkSession)
@@ -154,10 +148,6 @@ object FileFormatWriter extends Logging {
     // propagate the description UUID into the jobs, so that committers
     // get an ID guaranteed to be unique.
     job.getConfiguration.set("spark.sql.sources.writeJobUUID", description.uuid)
-
-    // This call shouldn't be put into the `try` block below because it only initializes and
-    // prepares the job, any exception thrown from here shouldn't cause abortJob() to be called.
-    committer.setupJob(job)
 
     // When `PLANNED_WRITE_ENABLED` is true, the optimizer rule V1Writes will add logical sort
     // operator based on the required ordering of the V1 write command. So the output
@@ -169,27 +159,55 @@ object FileFormatWriter extends Logging {
     //    V1 write command will be empty).
     if (Utils.isTesting) outputOrderingMatched = orderingMatched
 
-    try {
+    if (writeFilesOpt.isDefined) {
+      // build `WriteFilesSpec` for `WriteFiles`
+      val concurrentOutputWriterSpecFunc = (plan: SparkPlan) => {
+        val sortPlan = createSortPlan(plan, requiredOrdering, outputSpec)
+        createConcurrentOutputWriterSpec(sparkSession, sortPlan, sortColumns)
+      }
+      val writeSpec = WriteFilesSpec(
+        description = description,
+        committer = committer,
+        concurrentOutputWriterSpecFunc = concurrentOutputWriterSpecFunc
+      )
+      executeWrite(sparkSession, plan, writeSpec, job)
+    } else {
+      executeWrite(sparkSession, plan, job, description, committer, outputSpec,
+        requiredOrdering, partitionColumns, sortColumns, orderingMatched)
+    }
+  }
+  // scalastyle:on argcount
+
+  private def executeWrite(
+      sparkSession: SparkSession,
+      plan: SparkPlan,
+      job: Job,
+      description: WriteJobDescription,
+      committer: FileCommitProtocol,
+      outputSpec: OutputSpec,
+      requiredOrdering: Seq[Expression],
+      partitionColumns: Seq[Attribute],
+      sortColumns: Seq[Attribute],
+      orderingMatched: Boolean): Set[String] = {
+    val hasEmpty2Null = plan.exists(p => V1WritesUtils.hasEmptyToNull(p.expressions))
+    val empty2NullPlan = if (hasEmpty2Null) {
+      plan
+    } else {
+      val projectList = V1WritesUtils.convertEmptyToNull(plan.output, partitionColumns)
+      if (projectList.nonEmpty) ProjectExec(projectList, plan) else plan
+    }
+
+    writeAndCommit(job, description, committer) {
       val (rdd, concurrentOutputWriterSpec) = if (orderingMatched) {
         (empty2NullPlan.execute(), None)
       } else {
-        // SPARK-21165: the `requiredOrdering` is based on the attributes from analyzed plan, and
-        // the physical plan may have different attribute ids due to optimizer removing some
-        // aliases. Here we bind the expression ahead to avoid potential attribute ids mismatch.
-        val orderingExpr = bindReferences(
-          requiredOrdering.map(SortOrder(_, Ascending)), finalOutputSpec.outputColumns)
-        val sortPlan = SortExec(
-          orderingExpr,
-          global = false,
-          child = empty2NullPlan)
-
-        val maxWriters = sparkSession.sessionState.conf.maxConcurrentOutputFileWriters
-        val concurrentWritersEnabled = maxWriters > 0 && sortColumns.isEmpty
-        if (concurrentWritersEnabled) {
-          (empty2NullPlan.execute(),
-            Some(ConcurrentOutputWriterSpec(maxWriters, () => sortPlan.createSorter())))
+        val sortPlan = createSortPlan(empty2NullPlan, requiredOrdering, outputSpec)
+        val concurrentOutputWriterSpec = createConcurrentOutputWriterSpec(
+          sparkSession, sortPlan, sortColumns)
+        if (concurrentOutputWriterSpec.isDefined) {
+          (empty2NullPlan.execute(), concurrentOutputWriterSpec)
         } else {
-          (sortPlan.execute(), None)
+          (sortPlan.execute(), concurrentOutputWriterSpec)
         }
       }
 
@@ -221,7 +239,19 @@ object FileFormatWriter extends Logging {
           committer.onTaskCommit(res.commitMsg)
           ret(index) = res
         })
+      ret
+    }
+  }
 
+  private def writeAndCommit(
+      job: Job,
+      description: WriteJobDescription,
+      committer: FileCommitProtocol)(f: => Array[WriteTaskResult]): Set[String] = {
+    // This call shouldn't be put into the `try` block below because it only initializes and
+    // prepares the job, any exception thrown from here shouldn't cause abortJob() to be called.
+    committer.setupJob(job)
+    try {
+      val ret = f
       val commitMsgs = ret.map(_.commitMsg)
 
       logInfo(s"Start to commit write Job ${description.uuid}.")
@@ -239,10 +269,70 @@ object FileFormatWriter extends Logging {
       throw cause
     }
   }
-  // scalastyle:on argcount
+
+  /**
+   * Write files using [[SparkPlan.executeWrite]]
+   */
+  private def executeWrite(
+      session: SparkSession,
+      planForWrites: SparkPlan,
+      writeFilesSpec: WriteFilesSpec,
+      job: Job): Set[String] = {
+    val committer = writeFilesSpec.committer
+    val description = writeFilesSpec.description
+
+    writeAndCommit(job, description, committer) {
+      val rdd = planForWrites.executeWrite(writeFilesSpec)
+      val ret = new Array[WriteTaskResult](rdd.partitions.length)
+      session.sparkContext.runJob(
+        rdd,
+        (context: TaskContext, iter: Iterator[WriterCommitMessage]) => {
+          assert(iter.hasNext)
+          val commitMessage = iter.next()
+          assert(!iter.hasNext)
+          commitMessage
+        },
+        rdd.partitions.indices,
+        (index, res: WriterCommitMessage) => {
+          assert(res.isInstanceOf[WriteTaskResult])
+          val writeTaskResult = res.asInstanceOf[WriteTaskResult]
+          committer.onTaskCommit(writeTaskResult.commitMsg)
+          ret(index) = writeTaskResult
+        })
+      ret
+    }
+  }
+
+  private def createSortPlan(
+      plan: SparkPlan,
+      requiredOrdering: Seq[Expression],
+      outputSpec: OutputSpec): SortExec = {
+    // SPARK-21165: the `requiredOrdering` is based on the attributes from analyzed plan, and
+    // the physical plan may have different attribute ids due to optimizer removing some
+    // aliases. Here we bind the expression ahead to avoid potential attribute ids mismatch.
+    val orderingExpr = bindReferences(
+      requiredOrdering.map(SortOrder(_, Ascending)), outputSpec.outputColumns)
+    SortExec(
+      orderingExpr,
+      global = false,
+      child = plan)
+  }
+
+  private def createConcurrentOutputWriterSpec(
+      sparkSession: SparkSession,
+      sortPlan: SortExec,
+      sortColumns: Seq[Attribute]): Option[ConcurrentOutputWriterSpec] = {
+    val maxWriters = sparkSession.sessionState.conf.maxConcurrentOutputFileWriters
+    val concurrentWritersEnabled = maxWriters > 0 && sortColumns.isEmpty
+    if (concurrentWritersEnabled) {
+      Some(ConcurrentOutputWriterSpec(maxWriters, () => sortPlan.createSorter()))
+    } else {
+      None
+    }
+  }
 
   /** Writes data out in a single Spark task. */
-  private def executeTask(
+  private[spark] def executeTask(
       description: WriteJobDescription,
       jobTrackerID: String,
       sparkStageId: Int,

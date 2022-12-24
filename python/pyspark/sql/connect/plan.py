@@ -692,36 +692,71 @@ class Aggregate(LogicalPlan):
     def __init__(
         self,
         child: Optional["LogicalPlan"],
-        grouping_cols: List[Column],
-        measures: Sequence[Column],
+        group_type: str,
+        grouping_cols: Sequence[Column],
+        aggregate_cols: Sequence[Column],
+        pivot_col: Optional[Column],
+        pivot_values: Optional[Sequence[Any]],
     ) -> None:
         super().__init__(child)
-        self.grouping_cols = grouping_cols
-        self.measures = measures
 
-    def _convert_measure(self, m: Column, session: "SparkConnectClient") -> proto.Expression:
-        proto_expr = proto.Expression()
-        proto_expr.CopyFrom(m.to_plan(session))
-        return proto_expr
+        assert isinstance(group_type, str) and group_type in ["groupby", "rollup", "cube", "pivot"]
+        self._group_type = group_type
+
+        assert isinstance(grouping_cols, list) and all(isinstance(c, Column) for c in grouping_cols)
+        self._grouping_cols = grouping_cols
+
+        assert isinstance(aggregate_cols, list) and all(
+            isinstance(c, Column) for c in aggregate_cols
+        )
+        self._aggregate_cols = aggregate_cols
+
+        if group_type == "pivot":
+            assert pivot_col is not None and isinstance(pivot_col, Column)
+            assert pivot_values is None or isinstance(pivot_values, list)
+        else:
+            assert pivot_col is None
+            assert pivot_values is None
+
+        self._pivot_col = pivot_col
+        self._pivot_values = pivot_values
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        from pyspark.sql.connect.functions import lit
+
         assert self._child is not None
-        groupings = [x.to_plan(session) for x in self.grouping_cols]
 
         agg = proto.Relation()
+
         agg.aggregate.input.CopyFrom(self._child.plan(session))
-        agg.aggregate.result_expressions.extend(
-            list(map(lambda x: self._convert_measure(x, session), self.measures))
+
+        agg.aggregate.grouping_expressions.extend([c.to_plan(session) for c in self._grouping_cols])
+        agg.aggregate.aggregate_expressions.extend(
+            [c.to_plan(session) for c in self._aggregate_cols]
         )
 
-        agg.aggregate.grouping_expressions.extend(groupings)
+        if self._group_type == "groupby":
+            agg.aggregate.group_type = proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY
+        elif self._group_type == "rollup":
+            agg.aggregate.group_type = proto.Aggregate.GroupType.GROUP_TYPE_ROLLUP
+        elif self._group_type == "cube":
+            agg.aggregate.group_type = proto.Aggregate.GroupType.GROUP_TYPE_CUBE
+        elif self._group_type == "pivot":
+            agg.aggregate.group_type = proto.Aggregate.GroupType.GROUP_TYPE_PIVOT
+            assert self._pivot_col is not None
+            agg.aggregate.pivot.col.CopyFrom(self._pivot_col.to_plan(session))
+            if self._pivot_values is not None and len(self._pivot_values) > 0:
+                agg.aggregate.pivot.values.extend(
+                    [lit(v).to_plan(session).literal for v in self._pivot_values]
+                )
+
         return agg
 
     def print(self, indent: int = 0) -> str:
         c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
         return (
-            f"{' ' * indent}<Sort columns={self.grouping_cols}"
-            f"measures={self.measures}>\n{c_buf}"
+            f"{' ' * indent}<Groupby={self._grouping_cols}"
+            f"Aggregate={self._aggregate_cols}>\n{c_buf}"
         )
 
     def _repr_html_(self) -> str:

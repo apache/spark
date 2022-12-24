@@ -1293,20 +1293,26 @@ class SparkSession(SparkConversionMixin):
         df._schema = struct
         return df
 
-    def sql(self, sqlQuery: str, **kwargs: Any) -> DataFrame:
+    def sql(self, sqlQuery: str, args: Dict[str, str] = {}, **kwargs: Any) -> DataFrame:
         """Returns a :class:`DataFrame` representing the result of the given query.
         When ``kwargs`` is specified, this method formats the given string by using the Python
-        standard formatter.
+        standard formatter. The method binds named parameters to SQL literals from `args`.
 
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Support Spark Connect and parameterized SQL.
 
         Parameters
         ----------
         sqlQuery : str
             SQL query string.
+        args : dict
+            A dictionary of named parameters that begin from the `:` marker and
+            their SQL literals for substituting.
+
+            .. versionadded:: 3.4.0
+
         kwargs : dict
             Other variables that the user wants to set that can be referenced in the query
 
@@ -1380,13 +1386,22 @@ class SparkSession(SparkConversionMixin):
         |  2|  4|
         |  3|  6|
         +---+---+
+
+        And substitude named parameters with the `:` prefix by SQL literals.
+
+        >>> spark.sql("SELECT * FROM {df} WHERE {df[B]} > :minB", {"minB" : "5"}, df=mydf).show()
+        +---+---+
+        |  A|  B|
+        +---+---+
+        |  3|  6|
+        +---+---+
         """
 
         formatter = SQLStringFormatter(self)
         if len(kwargs) > 0:
             sqlQuery = formatter.format(sqlQuery, **kwargs)
         try:
-            return DataFrame(self._jsparkSession.sql(sqlQuery), self)
+            return DataFrame(self._jsparkSession.sql(sqlQuery, args), self)
         finally:
             if len(kwargs) > 0:
                 formatter.clear()

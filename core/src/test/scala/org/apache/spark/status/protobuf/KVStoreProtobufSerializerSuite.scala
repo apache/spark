@@ -714,6 +714,33 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     }
   }
 
+  test("Process Summary") {
+    val input = new ProcessSummaryWrapper(
+      info = new ProcessSummary(
+        id = "id_1",
+        hostPort = "localhost:2020",
+        isActive = true,
+        totalCores = 4,
+        addTime = new Date(1234567L),
+        removeTime = Some(new Date(1234568L)),
+        processLogs = Map("log1" -> "log/log1", "log2" -> "logs/log2.log")
+      )
+    )
+    val bytes = serializer.serialize(input)
+    val result = serializer.deserialize(bytes, classOf[ProcessSummaryWrapper])
+    assert(result.info.id == input.info.id)
+    assert(result.info.hostPort == input.info.hostPort)
+    assert(result.info.isActive == input.info.isActive)
+    assert(result.info.totalCores == input.info.totalCores)
+    assert(result.info.addTime == input.info.addTime)
+    assert(result.info.removeTime == input.info.removeTime)
+    assert(result.info.processLogs.size == input.info.processLogs.size)
+    result.info.processLogs.keys.foreach { k =>
+      assert(input.info.processLogs.contains(k))
+      assert(result.info.processLogs(k) == input.info.processLogs(k))
+    }
+  }
+
   test("Stage Data") {
     val accumulatorUpdates = Seq(
       new AccumulableInfo(1L, "duration", Some("update"), "value1"),
