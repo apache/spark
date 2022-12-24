@@ -21,6 +21,8 @@ import java.util.Date
 
 import collection.JavaConverters._
 
+import org.apache.commons.collections4.MapUtils
+
 import org.apache.spark.status.StageDataWrapper
 import org.apache.spark.status.api.v1.{ExecutorMetricsDistributions, ExecutorPeakMetricsDistributions, InputMetricDistributions, InputMetrics, OutputMetricDistributions, OutputMetrics, ShuffleReadMetricDistributions, ShuffleReadMetrics, ShuffleWriteMetricDistributions, ShuffleWriteMetrics, SpeculationStageSummary, StageData, StageStatus, TaskData, TaskMetricDistributions, TaskMetrics}
 import org.apache.spark.status.protobuf.Utils.getOptional
@@ -30,12 +32,14 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
 
   override val supportClass: Class[_] = classOf[StageDataWrapper]
 
-  override def serialize(input: Any): Array[Byte] = {
-    val stageDataWrapper = input.asInstanceOf[StageDataWrapper]
+  override def serialize(input: Any): Array[Byte] =
+    serialize(input.asInstanceOf[StageDataWrapper])
+
+  private def serialize(s: StageDataWrapper): Array[Byte] = {
     val builder = StoreTypes.StageDataWrapper.newBuilder()
-      .setInfo(serializeStageData(stageDataWrapper.info))
-    stageDataWrapper.jobIds.foreach(id => builder.addJobIds(id.toLong))
-    stageDataWrapper.locality.foreach { entry =>
+    builder.setInfo(serializeStageData(s.info))
+    s.jobIds.foreach(id => builder.addJobIds(id.toLong))
+    s.locality.foreach { entry =>
       builder.putLocality(entry._1, entry._2)
     }
     builder.build().toByteArray
@@ -131,8 +135,8 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
     stageDataBuilder.build()
   }
 
-  private def serializeStageStatus(s: StageStatus): StoreTypes.StageStatus = {
-    StoreTypes.StageStatus.valueOf(s.toString)
+  private def serializeStageStatus(s: StageStatus): StoreTypes.StageData.StageStatus = {
+    StoreTypes.StageData.StageStatus.valueOf(s.toString)
   }
 
   private def serializeTaskData(t: TaskData): StoreTypes.TaskData = {
@@ -315,13 +319,23 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
     emd.inputBytes.foreach(ib => builder.addInputBytes(ib))
     emd.inputRecords.foreach(ir => builder.addInputRecords(ir))
     emd.outputBytes.foreach(ob => builder.addOutputBytes(ob))
-    emd.outputRecords.foreach(or => builder.addOutputBytes(or))
+    emd.outputRecords.foreach(or => builder.addOutputRecords(or))
     emd.shuffleRead.foreach(sr => builder.addShuffleRead(sr))
     emd.shuffleReadRecords.foreach(srr => builder.addShuffleReadRecords(srr))
     emd.shuffleWrite.foreach(sw => builder.addShuffleWrite(sw))
     emd.shuffleWriteRecords.foreach(swr => builder.addShuffleWriteRecords(swr))
     emd.memoryBytesSpilled.foreach(mbs => builder.addMemoryBytesSpilled(mbs))
     emd.diskBytesSpilled.foreach(dbs => builder.addDiskBytesSpilled(dbs))
+    builder.setPeakMemoryMetrics(serializeExecutorPeakMetricsDistributions(emd.peakMemoryMetrics))
+    builder.build()
+  }
+
+  private def serializeExecutorPeakMetricsDistributions(
+      epmd: ExecutorPeakMetricsDistributions): StoreTypes.ExecutorPeakMetricsDistributions = {
+    val builder = StoreTypes.ExecutorPeakMetricsDistributions.newBuilder()
+    epmd.quantiles.foreach(q => builder.addQuantiles(q))
+    epmd.executorMetrics.foreach(em => builder.addExecutorMetrics(
+      ExecutorMetricsSerializer.serialize(em)))
     builder.build()
   }
 
@@ -348,13 +362,17 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
     val description =
       getOptional(binary.hasDescription, () => weakIntern(binary.getDescription))
     val accumulatorUpdates = Utils.deserializeAccumulableInfos(binary.getAccumulatorUpdatesList)
-    val tasks = Some(binary.getTasksMap.asScala.map(
-      entry => (entry._1.toLong, deserializeTaskData(entry._2))).toMap)
-    val executorSummary = Some(
-      binary.getExecutorSummaryMap.asScala.mapValues(
-        Utils.deserializeExecutorStageSummary(_)).toMap
-    )
-
+    val tasks = MapUtils.isEmpty(binary.getTasksMap) match {
+      case true => None
+      case _ => Some(binary.getTasksMap.asScala.map(
+        entry => (entry._1.toLong, deserializeTaskData(entry._2))).toMap)
+    }
+    val executorSummary = MapUtils.isEmpty(binary.getExecutorSummaryMap) match {
+      case true => None
+      case _ => Some(binary.getExecutorSummaryMap.asScala.mapValues(
+          Utils.deserializeExecutorStageSummary(_)).toMap
+      )
+    }
     val speculationSummary =
       getOptional(binary.hasSpeculationSummary,
         () => deserializeSpeculationStageSummary(binary.getSpeculationSummary))

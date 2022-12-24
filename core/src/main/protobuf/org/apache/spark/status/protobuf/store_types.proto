@@ -356,15 +356,6 @@ message ExecutorSummaryWrapper {
   ExecutorSummary info = 1;
 }
 
-enum StageStatus {
-  STAGE_STATUS_UNSPECIFIED = 0;
-  STAGE_STATUS_ACTIVE = 1;
-  STAGE_STATUS_COMPLETE = 2;
-  STAGE_STATUS_FAILED = 3;
-  STAGE_STATUS_PENDING = 4;
-  STAGE_STATUS_SKIPPED = 5;
-}
-
 message StageDataWrapper {
   StageData info = 1;
   repeated int64 job_ids = 2;
@@ -393,6 +384,15 @@ message TaskData {
 }
 
 message StageData {
+  enum StageStatus {
+    UNSPECIFIED = 0;
+    ACTIVE = 1;
+    COMPLETE = 2;
+    FAILED = 3;
+    PENDING = 4;
+    SKIPPED = 5;
+  }
+
   StageStatus status = 1;
   int64 stage_id = 2;
   int32 attempt_id = 3;

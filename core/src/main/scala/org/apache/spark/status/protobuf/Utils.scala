@@ -19,11 +19,9 @@ package org.apache.spark.status.protobuf
 
 import java.util.{List => JList}
 
-import collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.status.api.v1.{AccumulableInfo, ExecutorStageSummary}
-
-import scala.collection.mutable.ArrayBuffer
 
 object Utils {
   def getOptional[T](condition: Boolean, result: () => T): Option[T] = if (condition) {
