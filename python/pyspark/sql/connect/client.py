@@ -387,7 +387,7 @@ class PlanObservedMetrics:
         return self._name
 
     @property
-    def schema(self) -> str:
+    def schema(self) -> DataType:
         return self._schema
 
     @property
