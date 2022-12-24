@@ -58,11 +58,12 @@ class MasterWebUI(
       override def doPost(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
         val hostnames: Seq[String] = Option(req.getParameterValues("host"))
           .getOrElse(Array[String]()).toSeq
+        val idleOnly: Boolean = Option(req.getParameter("idleOnly")).exists(_.toBoolean)
         if (!isDecommissioningRequestAllowed(req)) {
           resp.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED)
         } else {
           val removedWorkers = masterEndpointRef.askSync[Integer](
-            DecommissionWorkersOnHosts(hostnames))
+            DecommissionWorkersOnHosts(hostnames, idleOnly))
           logInfo(s"Decommissioning of hosts $hostnames decommissioned $removedWorkers workers")
           if (removedWorkers > 0) {
             resp.setStatus(HttpServletResponse.SC_OK)

@@ -489,9 +489,9 @@ private[deploy] class Master(
       val formattedExecutorIds = formatExecutorIds(executorIds)
       context.reply(handleKillExecutors(appId, formattedExecutorIds))
 
-    case DecommissionWorkersOnHosts(hostnames) =>
+    case DecommissionWorkersOnHosts(hostnames, idleOnly) =>
       if (state != RecoveryState.STANDBY) {
-        context.reply(decommissionWorkersOnHosts(hostnames))
+        context.reply(decommissionWorkersOnHosts(hostnames, idleOnly))
       } else {
         context.reply(0)
       }
@@ -913,11 +913,13 @@ private[deploy] class Master(
    *
    * Returns the number of workers that matched the hostnames.
    */
-  private def decommissionWorkersOnHosts(hostnames: Seq[String]): Integer = {
+  private def decommissionWorkersOnHosts(hostnames: Seq[String],
+    idleOnly: Boolean = false): Integer = {
     val hostnamesSet = hostnames.map(_.toLowerCase(Locale.ROOT)).toSet
     val workersToRemove = addressToWorker
       .filterKeys(addr => hostnamesSet.contains(addr.host.toLowerCase(Locale.ROOT)))
       .values
+      .filterNot(idleOnly && !_.isIdle)
 
     val workersToRemoveHostPorts = workersToRemove.map(_.hostPort)
     logInfo(s"Decommissioning the workers with host:ports ${workersToRemoveHostPorts}")

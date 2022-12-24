@@ -134,8 +134,11 @@ private[deploy] object DeployMessages {
    * Used by the MasterWebUI to request the master to decommission all workers that are active on
    * any of the given hostnames.
    * @param hostnames: A list of hostnames without the ports. Like "localhost", "foo.bar.com" etc
+   * @param idleOnly: only decommission idle workers
    */
-  case class DecommissionWorkersOnHosts(hostnames: Seq[String])
+  case class DecommissionWorkersOnHosts(
+    hostnames: Seq[String],
+    idleOnly: Boolean = false)
 
   // Master to Worker
 

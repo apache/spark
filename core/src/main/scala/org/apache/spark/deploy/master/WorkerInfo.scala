@@ -144,6 +144,8 @@ private[spark] class WorkerInfo(
 
   def isAlive(): Boolean = this.state == WorkerState.ALIVE
 
+  def isIdle: Boolean = coresUsed == 0 && memoryUsed == 0
+
   /**
    * acquire specified amount resources for driver/executor from the worker
    * @param resourceReqs the resources requirement from driver/executor
