@@ -202,8 +202,7 @@ class Column:
         ...
 
     def substr(self, startPos: Union[int, "Column"], length: Union[int, "Column"]) -> "Column":
-        from pyspark.sql.connect.function_builder import functions as F
-        from pyspark.sql.connect.functions import lit
+        from pyspark.sql.connect.functions import lit, substring
 
         if type(startPos) != type(length):
             raise TypeError(
@@ -226,7 +225,7 @@ class Column:
         else:
             start_exp = startPos
 
-        return F.substr(self, start_exp, length_exp)
+        return substring(self, start_exp, length_exp)
 
     substr.__doc__ = PySparkColumn.substr.__doc__
 

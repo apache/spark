@@ -1118,13 +1118,13 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertEqual(5.0, res[1][1])
 
         # Additional GroupBy tests with 3 rows
-        from pyspark.sql.connect.function_builder import functions as FB
+        import pyspark.sql.connect.functions as CF
         import pyspark.sql.functions as PF
 
         df_a = self.connect.range(10).groupBy((col("id") % lit(3)).alias("moded"))
         df_b = self.spark.range(10).groupBy((PF.col("id") % PF.lit(3)).alias("moded"))
         self.assertEqual(
-            set(df_b.agg(PF.sum("id")).collect()), set(df_a.agg(FB.sum("id")).collect())
+            set(df_b.agg(PF.sum("id")).collect()), set(df_a.agg(CF.sum("id")).collect())
         )
 
         # Dict agg
