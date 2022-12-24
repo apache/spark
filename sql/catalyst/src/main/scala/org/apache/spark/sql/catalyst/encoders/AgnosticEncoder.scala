@@ -73,15 +73,17 @@ object AgnosticEncoders {
       valueEncoder.nullable)
   }
 
+  case class EncoderField(name: String, enc: AgnosticEncoder[_]) {
+    def structField: StructField = StructField(name, enc.dataType, enc.nullable)
+  }
+
   // This supports both Product and DefinedByConstructorParams
   case class ProductEncoder[K](
       override val clsTag: ClassTag[K],
-      fields: Seq[(String, AgnosticEncoder[_])])
+      fields: Seq[EncoderField])
     extends AgnosticEncoder[K] {
     override def isPrimitive: Boolean = false
-    override val schema: StructType = StructType(fields.map {
-      case (name, enc) => StructField(name, enc.dataType, enc.nullable)
-    })
+    override val schema: StructType = StructType(fields.map(_.structField))
     override def dataType: DataType = schema
   }
 
