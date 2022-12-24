@@ -1633,7 +1633,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
     def test_observe(self):
         # SPARK-41527: test DataFrame.observe()
-        from pyspark.sql import Observation
         from pyspark.sql import functions as SF
         from pyspark.sql.connect import functions as CF
 
