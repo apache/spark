@@ -92,6 +92,17 @@ private[spark] object KVUtils extends Logging {
     db
   }
 
+  def serializerForHistoryServer(conf: SparkConf): KVStoreScalaSerializer = {
+    History.LocalStoreSerializer.withName(conf.get(History.LOCAL_STORE_SERIALIZER)) match {
+      case History.LocalStoreSerializer.JSON =>
+        new KVStoreScalaSerializer
+      case History.LocalStoreSerializer.PROTOBUF =>
+        new KVStoreProtobufSerializer()
+      case other =>
+        throw new IllegalArgumentException(s"Unrecognized KV store serializer $other")
+    }
+  }
+
   def createKVStore(
       storePath: Option[File],
       live: Boolean,
@@ -111,7 +122,7 @@ private[spark] object KVUtils extends Logging {
         // The default serializer is slow since it is using JSON+GZip encoding.
         Some(new KVStoreProtobufSerializer())
       } else {
-        None
+        Some(serializerForHistoryServer(conf))
       }
 
       val dir = diskBackend match {
