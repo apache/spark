@@ -2070,6 +2070,50 @@ def timestamp_seconds(col: "ColumnOrName") -> Column:
 timestamp_seconds.__doc__ = pysparkfuncs.timestamp_seconds.__doc__
 
 
+# Partition Transformation Functions
+
+
+def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
+    if isinstance(numBuckets, int):
+        _numBuckets = lit(numBuckets)
+    elif isinstance(numBuckets, Column):
+        _numBuckets = numBuckets
+    else:
+        raise TypeError("numBuckets should be a Column or an int, got {}".format(type(numBuckets)))
+
+    return _invoke_function("bucket", _numBuckets, _to_col(col))
+
+
+bucket.__doc__ = pysparkfuncs.bucket.__doc__
+
+
+def years(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("years", col)
+
+
+years.__doc__ = pysparkfuncs.years.__doc__
+
+
+def months(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("months", col)
+
+
+months.__doc__ = pysparkfuncs.months.__doc__
+
+
+def days(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("days", col)
+
+
+days.__doc__ = pysparkfuncs.days.__doc__
+
+
+def hours(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("hours", col)
+
+
+hours.__doc__ = pysparkfuncs.hours.__doc__
+
 # Misc Functions
 
 

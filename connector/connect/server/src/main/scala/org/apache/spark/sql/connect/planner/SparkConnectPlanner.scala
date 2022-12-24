@@ -646,6 +646,27 @@ class SparkConnectPlanner(session: SparkSession) {
         }
         Some(NthValue(children(0), children(1), ignoreNulls))
 
+      case "bucket" if fun.getArgumentsCount == 2 =>
+        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
+        (children.head, children.last) match {
+          case (numBuckets: Literal, child) if numBuckets.dataType == IntegerType =>
+            Some(Bucket(numBuckets, child))
+          case (other, _) =>
+            throw InvalidPlanInput(s"numBuckets should be a literal integer, but got $other")
+        }
+
+      case "years" if fun.getArgumentsCount == 1 =>
+        Some(Years(transformExpression(fun.getArguments(0))))
+
+      case "months" if fun.getArgumentsCount == 1 =>
+        Some(Months(transformExpression(fun.getArguments(0))))
+
+      case "days" if fun.getArgumentsCount == 1 =>
+        Some(Days(transformExpression(fun.getArguments(0))))
+
+      case "hours" if fun.getArgumentsCount == 1 =>
+        Some(Hours(transformExpression(fun.getArguments(0))))
+
       case _ => None
     }
   }
