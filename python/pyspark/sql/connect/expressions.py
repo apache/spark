@@ -261,6 +261,10 @@ class LiteralExpression(Expression):
         else:
             raise ValueError(f"Unsupported Data Type {type(value).__name__}")
 
+    @classmethod
+    def _from_value(cls, value: Any) -> "LiteralExpression":
+        return LiteralExpression(value=value, dataType=LiteralExpression._infer_type(value))
+
     def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
         """Converts the literal expression to the literal in proto."""
 
