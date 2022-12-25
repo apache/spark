@@ -402,7 +402,7 @@ class SparkConnectClient(object):
         ]
 
     def to_pandas(self, plan: pb2.Plan) -> "pandas.DataFrame":
-        _logger.debug(f"Executing plan {plan}")
+        _logger.debug(f"Executing plan {self._proto_to_string(plan)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
         return self._execute_and_fetch(req)
@@ -441,7 +441,7 @@ class SparkConnectClient(object):
         return StructType(fields)
 
     def explain_string(self, plan: pb2.Plan, explain_mode: str = "extended") -> str:
-        _logger.debug(f"Explain (mode={explain_mode}) for plan {plan}")
+        _logger.debug(f"Explain (mode={explain_mode}) for plan {self._proto_to_string(plan)}")
         result = self._analyze(plan, explain_mode)
         return result.explain_string
 
