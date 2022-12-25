@@ -126,6 +126,13 @@ class Column:
     __rand__ = _bin_op("and")
     __ror__ = _bin_op("or")
 
+    # container operators
+    def __contains__(self, item: Any) -> None:
+        raise ValueError(
+            "Cannot apply 'in' operator against a column: please use 'contains' "
+            "in a string column or 'array_contains' function for an array column."
+        )
+
     # bitwise operators
     bitwiseOR = _bin_op("bitwiseOR", PySparkColumn.bitwiseOR.__doc__)
     bitwiseAND = _bin_op("bitwiseAND", PySparkColumn.bitwiseAND.__doc__)
@@ -355,6 +362,14 @@ class Column:
 
     def __iter__(self) -> None:
         raise TypeError("Column is not iterable")
+
+    def __nonzero__(self) -> None:
+        raise ValueError(
+            "Cannot convert column into bool: please use '&' for 'and', '|' for 'or', "
+            "'~' for 'not' when building DataFrame boolean expressions."
+        )
+
+    __bool__ = __nonzero__
 
 
 Column.__doc__ = PySparkColumn.__doc__
