@@ -20,7 +20,6 @@ package org.apache.spark.status.protobuf
 import java.util.Date
 
 import collection.JavaConverters._
-
 import org.apache.commons.collections4.MapUtils
 
 import org.apache.spark.status.StageDataWrapper
@@ -86,7 +85,6 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
       .setDetails(stageData.details)
       .setSchedulingPool(stageData.schedulingPool)
       .setResourceProfileId(stageData.resourceProfileId)
-
     stageData.submissionTime.foreach { d =>
       stageDataBuilder.setSubmissionTime(d.getTime)
     }
@@ -131,7 +129,6 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
     stageData.executorMetricsDistributions.foreach { emd =>
       stageDataBuilder.setExecutorMetricsDistributions(serializeExecutorMetricsDistributions(emd))
     }
-
     stageDataBuilder.build()
   }
 
@@ -154,7 +151,6 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
       .setSpeculative(t.speculative)
       .setSchedulerDelay(t.schedulerDelay)
       .setGettingResultTime(t.gettingResultTime)
-
     t.resultFetchStart.foreach { rfs =>
       taskDataBuilder.setResultFetchStart(rfs.getTime)
     }
@@ -173,7 +169,6 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
     t.executorLogs.foreach { entry =>
       taskDataBuilder.putExecutorLogs(entry._1, entry._2)
     }
-
     taskDataBuilder.build()
   }
 
@@ -484,7 +479,7 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
       binary: StoreTypes.InputMetricDistributions): InputMetricDistributions = {
     new InputMetricDistributions(
       bytesRead = binary.getBytesReadList.asScala.map(_.toDouble).toIndexedSeq,
-      recordsRead = binary.getRecordsReadList.asScala.map(_.toDouble).toIndexedSeq,
+      recordsRead = binary.getRecordsReadList.asScala.map(_.toDouble).toIndexedSeq
     )
   }
 
@@ -575,8 +570,7 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
       taskMetrics = taskMetrics,
       executorLogs = binary.getExecutorLogsMap.asScala.toMap,
       schedulerDelay = binary.getSchedulerDelay,
-      gettingResultTime = binary.getGettingResultTime
-    )
+      gettingResultTime = binary.getGettingResultTime)
   }
 
   private def deserializeTaskMetrics(binary: StoreTypes.TaskMetrics): TaskMetrics = {
@@ -614,12 +608,11 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
       binary.getRemoteBytesRead,
       binary.getRemoteBytesReadToDisk,
       binary.getLocalBytesRead,
-      binary.getRecordsRead
-    )
+      binary.getRecordsRead)
   }
 
   private def deserializeShuffleWriteMetrics(
-    binary: StoreTypes.ShuffleWriteMetrics): ShuffleWriteMetrics = {
+      binary: StoreTypes.ShuffleWriteMetrics): ShuffleWriteMetrics = {
     new ShuffleWriteMetrics(
       binary.getBytesWritten,
       binary.getWriteTime,
