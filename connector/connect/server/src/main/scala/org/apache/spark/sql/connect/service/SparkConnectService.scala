@@ -20,19 +20,23 @@ package org.apache.spark.sql.connect.service
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
 
 import com.google.common.base.Ticker
 import com.google.common.cache.CacheBuilder
+import com.google.protobuf.{Any => ProtoAny}
+import com.google.rpc.{Code => RPCCode, ErrorInfo, Status => RPCStatus}
 import io.grpc.{Server, Status}
 import io.grpc.netty.NettyServerBuilder
+import io.grpc.protobuf.StatusProto
 import io.grpc.protobuf.services.ProtoReflectionService
 import io.grpc.stub.StreamObserver
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AnalyzePlanRequest, AnalyzePlanResponse, ExecutePlanRequest, ExecutePlanResponse, SparkConnectServiceGrpc}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Dataset, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Dataset, SparkSession}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_BINDING_PORT
 import org.apache.spark.sql.connect.planner.{DataTypeProtoConverter, SparkConnectPlanner}
 import org.apache.spark.sql.execution.{CodegenMode, CostMode, ExplainMode, ExtendedMode, FormattedMode, SimpleMode}
@@ -50,6 +54,67 @@ class SparkConnectService(debug: Boolean)
     with Logging {
 
   /**
+   * Common exception handling function for the Analysis and Execution methods. Closes the stream
+   * after the error has been sent.
+   *
+   * @param opType
+   *   String value indicating the operation type (analysis, execution)
+   * @param observer
+   *   The GRPC response observer.
+   * @tparam V
+   * @return
+   */
+  private def handleError[V](
+      opType: String,
+      observer: StreamObserver[V]): PartialFunction[Throwable, Any] = {
+    case ae: AnalysisException =>
+      logError(s"Error during: $opType", ae)
+      val status = RPCStatus
+        .newBuilder()
+        .setCode(RPCCode.INTERNAL_VALUE)
+        .addDetails(
+          ProtoAny.pack(
+            ErrorInfo
+              .newBuilder()
+              .setReason(ae.getClass.getSimpleName)
+              .setDomain("org.apache.spark")
+              .putMetadata("message", ae.getSimpleMessage)
+              .putMetadata("plan", Option(ae.plan).flatten.map(p => s"$p").getOrElse(""))
+              .build()))
+        .setMessage(ae.getLocalizedMessage)
+        .build()
+      observer.onError(StatusProto.toStatusRuntimeException(status))
+    case se: SparkException =>
+      logError(s"Error during: $opType", se)
+      val status = RPCStatus
+        .newBuilder()
+        .setCode(RPCCode.INTERNAL_VALUE)
+        .addDetails(
+          ProtoAny.pack(
+            ErrorInfo
+              .newBuilder()
+              .setReason(se.getClass.getSimpleName)
+              .setDomain("org.apache.spark")
+              .putMetadata("message", se.getMessage)
+              .build()))
+        .setMessage(se.getLocalizedMessage)
+        .build()
+      observer.onError(StatusProto.toStatusRuntimeException(status))
+    case NonFatal(nf) =>
+      logError(s"Error during: $opType", nf)
+      val status = RPCStatus
+        .newBuilder()
+        .setCode(RPCCode.INTERNAL_VALUE)
+        .setMessage(nf.getLocalizedMessage)
+        .build()
+      observer.onError(StatusProto.toStatusRuntimeException(status))
+    case e: Throwable =>
+      logError(s"Error during: $opType", e)
+      observer.onError(
+        Status.UNKNOWN.withCause(e).withDescription(e.getLocalizedMessage).asRuntimeException())
+  }
+
+  /**
    * This is the main entry method for Spark Connect and all calls to execute a plan.
    *
    * The plan execution is delegated to the [[SparkConnectStreamHandler]]. All error handling
@@ -64,12 +129,7 @@ class SparkConnectService(debug: Boolean)
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     try {
       new SparkConnectStreamHandler(responseObserver).handle(request)
-    } catch {
-      case e: Throwable =>
-        log.error("Error executing plan.", e)
-        responseObserver.onError(
-          Status.UNKNOWN.withCause(e).withDescription(e.getLocalizedMessage).asRuntimeException())
-    }
+    } catch handleError("execute", observer = responseObserver)
   }
 
   /**
@@ -112,12 +172,7 @@ class SparkConnectService(debug: Boolean)
       response.setClientId(request.getClientId)
       responseObserver.onNext(response.build())
       responseObserver.onCompleted()
-    } catch {
-      case e: Throwable =>
-        log.error("Error analyzing plan.", e)
-        responseObserver.onError(
-          Status.UNKNOWN.withCause(e).withDescription(e.getLocalizedMessage).asRuntimeException())
-    }
+    } catch handleError("analyze", observer = responseObserver)
   }
 
   def handleAnalyzePlanRequest(
