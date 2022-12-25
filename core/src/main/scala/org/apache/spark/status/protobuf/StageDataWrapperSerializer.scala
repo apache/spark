@@ -566,7 +566,7 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
       taskLocality = weakIntern(binary.getTaskLocality),
       speculative = binary.getSpeculative,
       accumulatorUpdates = Utils.deserializeAccumulableInfos(binary.getAccumulatorUpdatesList),
-      errorMessage = getOptional(binary.hasErrorMessage, binary.getErrorMessage),
+      errorMessage = getOptional(binary.hasErrorMessage, () => weakIntern(binary.getErrorMessage)),
       taskMetrics = taskMetrics,
       executorLogs = binary.getExecutorLogsMap.asScala.toMap,
       schedulerDelay = binary.getSchedulerDelay,
