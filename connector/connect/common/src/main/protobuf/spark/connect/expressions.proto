@@ -139,7 +139,7 @@ message Expression {
 
   message Literal {
     oneof literal_type {
-      bool null = 1;
+      DataType null = 1;
       bytes binary = 2;
       bool boolean = 3;
 
@@ -163,19 +163,7 @@ message Expression {
       CalendarInterval calendar_interval = 19;
       int32 year_month_interval = 20;
       int64 day_time_interval = 21;
-
-      DataType typed_null = 22;
     }
-
-    // whether the literal type should be treated as a nullable type. Applies to
-    // all members of union other than the Typed null (which should directly
-    // declare nullability).
-    bool nullable = 50;
-
-    // optionally points to a type_variation_anchor defined in this plan.
-    // Applies to all members of union other than the Typed null (which should
-    // directly declare the type variation).
-    uint32 type_variation_reference = 51;
 
     message Decimal {
       // the string representation.

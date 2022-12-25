@@ -456,10 +456,8 @@ class Expression(google.protobuf.message.Message):
         CALENDAR_INTERVAL_FIELD_NUMBER: builtins.int
         YEAR_MONTH_INTERVAL_FIELD_NUMBER: builtins.int
         DAY_TIME_INTERVAL_FIELD_NUMBER: builtins.int
-        TYPED_NULL_FIELD_NUMBER: builtins.int
-        NULLABLE_FIELD_NUMBER: builtins.int
-        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        null: builtins.bool
+        @property
+        def null(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
         binary: builtins.bytes
         boolean: builtins.bool
         byte: builtins.int
@@ -481,22 +479,10 @@ class Expression(google.protobuf.message.Message):
         def calendar_interval(self) -> global___Expression.Literal.CalendarInterval: ...
         year_month_interval: builtins.int
         day_time_interval: builtins.int
-        @property
-        def typed_null(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
-        nullable: builtins.bool
-        """whether the literal type should be treated as a nullable type. Applies to
-        all members of union other than the Typed null (which should directly
-        declare nullability).
-        """
-        type_variation_reference: builtins.int
-        """optionally points to a type_variation_anchor defined in this plan.
-        Applies to all members of union other than the Typed null (which should
-        directly declare the type variation).
-        """
         def __init__(
             self,
             *,
-            null: builtins.bool = ...,
+            null: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
             binary: builtins.bytes = ...,
             boolean: builtins.bool = ...,
             byte: builtins.int = ...,
@@ -513,9 +499,6 @@ class Expression(google.protobuf.message.Message):
             calendar_interval: global___Expression.Literal.CalendarInterval | None = ...,
             year_month_interval: builtins.int = ...,
             day_time_interval: builtins.int = ...,
-            typed_null: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
-            nullable: builtins.bool = ...,
-            type_variation_reference: builtins.int = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -554,8 +537,6 @@ class Expression(google.protobuf.message.Message):
                 b"timestamp",
                 "timestamp_ntz",
                 b"timestamp_ntz",
-                "typed_null",
-                b"typed_null",
                 "year_month_interval",
                 b"year_month_interval",
             ],
@@ -589,8 +570,6 @@ class Expression(google.protobuf.message.Message):
                 b"long",
                 "null",
                 b"null",
-                "nullable",
-                b"nullable",
                 "short",
                 b"short",
                 "string",
@@ -599,10 +578,6 @@ class Expression(google.protobuf.message.Message):
                 b"timestamp",
                 "timestamp_ntz",
                 b"timestamp_ntz",
-                "type_variation_reference",
-                b"type_variation_reference",
-                "typed_null",
-                b"typed_null",
                 "year_month_interval",
                 b"year_month_interval",
             ],
@@ -627,7 +602,6 @@ class Expression(google.protobuf.message.Message):
             "calendar_interval",
             "year_month_interval",
             "day_time_interval",
-            "typed_null",
         ] | None: ...
 
     class UnresolvedAttribute(google.protobuf.message.Message):
