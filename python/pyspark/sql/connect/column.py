@@ -16,6 +16,7 @@
 #
 
 import datetime
+import decimal
 
 from typing import (
     TYPE_CHECKING,
@@ -61,7 +62,9 @@ def _bin_op(
     def wrapped(self: "Column", other: Any) -> "Column":
         from pyspark.sql.connect.functions import lit
 
-        if isinstance(other, (bool, float, int, str, datetime.datetime, datetime.date)):
+        if isinstance(
+            other, (bool, float, int, str, datetime.datetime, datetime.date, decimal.Decimal)
+        ):
             other = lit(other)
         if not reverse:
             return scalar_function(name, self, other)
@@ -236,7 +239,9 @@ class Column:
         """
         from pyspark.sql.connect.functions import lit
 
-        if isinstance(other, (bool, float, int, str, datetime.datetime, datetime.date)):
+        if isinstance(
+            other, (bool, float, int, str, datetime.datetime, datetime.date, decimal.Decimal)
+        ):
             other = lit(other)
         return scalar_function("==", self, other)
 
