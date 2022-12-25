@@ -422,7 +422,7 @@ class DataFrame:
                 )
 
         pdf = DataFrame.withPlan(
-            plan.ShowString(child=self._plan, numRows=n, truncate=_truncate, vertical=vertical),
+            plan.ShowString(child=self._plan, num_rows=n, truncate=_truncate, vertical=vertical),
             session=self._session,
         ).toPandas()
         assert pdf is not None

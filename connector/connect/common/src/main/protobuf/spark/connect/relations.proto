@@ -399,7 +399,7 @@ message ShowString {
   Relation input = 1;
 
   // (Required) Number of rows to show.
-  int32 numRows = 2;
+  int32 num_rows = 2;
 
   // (Required) If set to more than 0, truncates strings to
   // `truncate` characters and all cells will be aligned right.

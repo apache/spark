@@ -213,10 +213,10 @@ class LocalRelation(LogicalPlan):
 
 class ShowString(LogicalPlan):
     def __init__(
-        self, child: Optional["LogicalPlan"], numRows: int, truncate: int, vertical: bool
+        self, child: Optional["LogicalPlan"], num_rows: int, truncate: int, vertical: bool
     ) -> None:
         super().__init__(child)
-        self.numRows = numRows
+        self.num_rows = num_rows
         self.truncate = truncate
         self.vertical = vertical
 
@@ -224,7 +224,7 @@ class ShowString(LogicalPlan):
         assert self._child is not None
         plan = proto.Relation()
         plan.show_string.input.CopyFrom(self._child.plan(session))
-        plan.show_string.numRows = self.numRows
+        plan.show_string.num_rows = self.num_rows
         plan.show_string.truncate = self.truncate
         plan.show_string.vertical = self.vertical
         return plan
@@ -232,7 +232,7 @@ class ShowString(LogicalPlan):
     def print(self, indent: int = 0) -> str:
         return (
             f"{' ' * indent}"
-            f"<ShowString numRows='{self.numRows}', "
+            f"<ShowString numRows='{self.num_rows}', "
             f"truncate='{self.truncate}', "
             f"vertical='{self.vertical}'>"
         )
@@ -242,7 +242,7 @@ class ShowString(LogicalPlan):
         <ul>
            <li>
               <b>ShowString</b><br />
-              NumRows: {self.numRows} <br />
+              NumRows: {self.num_rows} <br />
               Truncate: {self.truncate} <br />
               Vertical: {self.vertical} <br />
               {self._child_repr_()}
