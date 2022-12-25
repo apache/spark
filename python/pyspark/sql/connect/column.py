@@ -202,8 +202,6 @@ class Column:
         ...
 
     def substr(self, startPos: Union[int, "Column"], length: Union[int, "Column"]) -> "Column":
-        from pyspark.sql.connect.functions import lit, substring
-
         if type(startPos) != type(length):
             raise TypeError(
                 "startPos and length must be the same type. "
@@ -213,19 +211,21 @@ class Column:
                 )
             )
 
-        if isinstance(length, int):
-            length_exp = lit(length)
-        elif isinstance(length, Column):
-            length_exp = length
+        if isinstance(length, Column):
+            length_expr = length._expr
+        elif isinstance(length, int):
+            length_expr = LiteralExpression._from_value(length)
         else:
             raise TypeError("Unsupported type for substr().")
 
-        if isinstance(startPos, int):
-            start_exp = lit(startPos)
+        if isinstance(startPos, Column):
+            start_expr = startPos._expr
+        elif isinstance(startPos, int):
+            start_expr = LiteralExpression._from_value(startPos)
         else:
-            start_exp = startPos
+            raise TypeError("Unsupported type for substr().")
 
-        return substring(self, start_exp, length_exp)
+        return Column(UnresolvedFunction("substring", [self._expr, start_expr, length_expr]))
 
     substr.__doc__ = PySparkColumn.substr.__doc__
 
