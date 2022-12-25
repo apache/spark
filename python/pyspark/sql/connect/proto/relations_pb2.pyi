@@ -1485,13 +1485,13 @@ class ShowString(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
-    NUMROWS_FIELD_NUMBER: builtins.int
+    NUM_ROWS_FIELD_NUMBER: builtins.int
     TRUNCATE_FIELD_NUMBER: builtins.int
     VERTICAL_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
         """(Required) The input relation."""
-    numRows: builtins.int
+    num_rows: builtins.int
     """(Required) Number of rows to show."""
     truncate: builtins.int
     """(Required) If set to more than 0, truncates strings to
@@ -1503,7 +1503,7 @@ class ShowString(google.protobuf.message.Message):
         self,
         *,
         input: global___Relation | None = ...,
-        numRows: builtins.int = ...,
+        num_rows: builtins.int = ...,
         truncate: builtins.int = ...,
         vertical: builtins.bool = ...,
     ) -> None: ...
@@ -1515,8 +1515,8 @@ class ShowString(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "input",
             b"input",
-            "numRows",
-            b"numRows",
+            "num_rows",
+            b"num_rows",
             "truncate",
             b"truncate",
             "vertical",
