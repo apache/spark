@@ -249,12 +249,14 @@ class Expression(google.protobuf.message.Message):
             builtins.type,
         ):  # noqa: F821
             DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
-            SORT_DIRECTION_ASCENDING: Expression.SortOrder._SortDirection.ValueType  # 0
-            SORT_DIRECTION_DESCENDING: Expression.SortOrder._SortDirection.ValueType  # 1
+            SORT_DIRECTION_UNSPECIFIED: Expression.SortOrder._SortDirection.ValueType  # 0
+            SORT_DIRECTION_ASCENDING: Expression.SortOrder._SortDirection.ValueType  # 1
+            SORT_DIRECTION_DESCENDING: Expression.SortOrder._SortDirection.ValueType  # 2
 
         class SortDirection(_SortDirection, metaclass=_SortDirectionEnumTypeWrapper): ...
-        SORT_DIRECTION_ASCENDING: Expression.SortOrder.SortDirection.ValueType  # 0
-        SORT_DIRECTION_DESCENDING: Expression.SortOrder.SortDirection.ValueType  # 1
+        SORT_DIRECTION_UNSPECIFIED: Expression.SortOrder.SortDirection.ValueType  # 0
+        SORT_DIRECTION_ASCENDING: Expression.SortOrder.SortDirection.ValueType  # 1
+        SORT_DIRECTION_DESCENDING: Expression.SortOrder.SortDirection.ValueType  # 2
 
         class _NullOrdering:
             ValueType = typing.NewType("ValueType", builtins.int)
@@ -267,12 +269,14 @@ class Expression(google.protobuf.message.Message):
             builtins.type,
         ):  # noqa: F821
             DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
-            SORT_NULLS_FIRST: Expression.SortOrder._NullOrdering.ValueType  # 0
-            SORT_NULLS_LAST: Expression.SortOrder._NullOrdering.ValueType  # 1
+            SORT_NULLS_UNSPECIFIED: Expression.SortOrder._NullOrdering.ValueType  # 0
+            SORT_NULLS_FIRST: Expression.SortOrder._NullOrdering.ValueType  # 1
+            SORT_NULLS_LAST: Expression.SortOrder._NullOrdering.ValueType  # 2
 
         class NullOrdering(_NullOrdering, metaclass=_NullOrderingEnumTypeWrapper): ...
-        SORT_NULLS_FIRST: Expression.SortOrder.NullOrdering.ValueType  # 0
-        SORT_NULLS_LAST: Expression.SortOrder.NullOrdering.ValueType  # 1
+        SORT_NULLS_UNSPECIFIED: Expression.SortOrder.NullOrdering.ValueType  # 0
+        SORT_NULLS_FIRST: Expression.SortOrder.NullOrdering.ValueType  # 1
+        SORT_NULLS_LAST: Expression.SortOrder.NullOrdering.ValueType  # 2
 
         CHILD_FIELD_NUMBER: builtins.int
         DIRECTION_FIELD_NUMBER: builtins.int

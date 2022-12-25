@@ -113,13 +113,15 @@ message Expression {
     NullOrdering null_ordering = 3;
 
     enum SortDirection {
-      SORT_DIRECTION_ASCENDING = 0;
-      SORT_DIRECTION_DESCENDING = 1;
+      SORT_DIRECTION_UNSPECIFIED = 0;
+      SORT_DIRECTION_ASCENDING = 1;
+      SORT_DIRECTION_DESCENDING = 2;
     }
 
     enum NullOrdering {
-      SORT_NULLS_FIRST = 0;
-      SORT_NULLS_LAST = 1;
+      SORT_NULLS_UNSPECIFIED = 0;
+      SORT_NULLS_FIRST = 1;
+      SORT_NULLS_LAST = 2;
     }
   }
 
