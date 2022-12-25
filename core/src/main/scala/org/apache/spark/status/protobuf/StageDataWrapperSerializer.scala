@@ -424,7 +424,7 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
       details = weakIntern(binary.getDetails),
       schedulingPool = weakIntern(binary.getSchedulingPool),
       rddIds = binary.getRddIdsList.asScala.map(_.toInt).toSeq,
-      accumulatorUpdates = accumulatorUpdates,
+      accumulatorUpdates = accumulatorUpdates.toSeq,
       tasks = tasks,
       executorSummary = executorSummary,
       speculationSummary = speculationSummary,
