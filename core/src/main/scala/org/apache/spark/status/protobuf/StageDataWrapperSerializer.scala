@@ -550,6 +550,7 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
     val resultFetchStart = getOptional(binary.hasResultFetchStart,
       () => new Date(binary.getResultFetchStart))
     val duration = getOptional(binary.hasDuration, () => binary.getDuration)
+    val accumulatorUpdates = Utils.deserializeAccumulableInfos(binary.getAccumulatorUpdatesList)
     val taskMetrics = getOptional(binary.hasTaskMetrics,
       () => deserializeTaskMetrics(binary.getTaskMetrics))
     new TaskData(
@@ -565,7 +566,7 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
       status = weakIntern(binary.getStatus),
       taskLocality = weakIntern(binary.getTaskLocality),
       speculative = binary.getSpeculative,
-      accumulatorUpdates = Utils.deserializeAccumulableInfos(binary.getAccumulatorUpdatesList),
+      accumulatorUpdates = accumulatorUpdates.toSeq,
       errorMessage = getOptional(binary.hasErrorMessage, () => weakIntern(binary.getErrorMessage)),
       taskMetrics = taskMetrics,
       executorLogs = binary.getExecutorLogsMap.asScala.toMap,
