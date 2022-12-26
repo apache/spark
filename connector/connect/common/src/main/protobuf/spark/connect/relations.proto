@@ -87,9 +87,10 @@ message Relation {
     DropTempView drop_temp_view = 215;
     DropGlobalTempView drop_global_temp_view = 216;
     RecoverPartitions recover_partitions = 217;
-    IsCached is_cached = 218;
-    CacheTable cache_table = 219;
-    UncacheTable uncache_table = 220;
+// TODO(SPARK-XXXXX): cache related API
+//    IsCached is_cached = 218;
+//    CacheTable cache_table = 219;
+//    UncacheTable uncache_table = 220;
     ClearCache clear_cache = 221;
     RefreshTable refresh_table = 222;
     RefreshByPath refresh_by_path = 223;

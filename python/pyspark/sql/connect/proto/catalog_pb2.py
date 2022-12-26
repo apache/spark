@@ -33,7 +33,7 @@ from pyspark.sql.connect.proto import types_pb2 as spark_dot_connect_dot_types__
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
-    b'\n\x1bspark/connect/catalog.proto\x12\rspark.connect\x1a\x19spark/connect/types.proto"\x11\n\x0f\x43urrentDatabase"-\n\x12SetCurrentDatabase\x12\x17\n\x07\x64\x62_name\x18\x01 \x01(\tR\x06\x64\x62Name"\x0f\n\rListDatabases"6\n\nListTables\x12\x1c\n\x07\x64\x62_name\x18\x01 \x01(\tH\x00R\x06\x64\x62Name\x88\x01\x01\x42\n\n\x08_db_name"9\n\rListFunctions\x12\x1c\n\x07\x64\x62_name\x18\x01 \x01(\tH\x00R\x06\x64\x62Name\x88\x01\x01\x42\n\n\x08_db_name"V\n\x0bListColumns\x12\x1d\n\ntable_name\x18\x01 \x01(\tR\ttableName\x12\x1c\n\x07\x64\x62_name\x18\x02 \x01(\tH\x00R\x06\x64\x62Name\x88\x01\x01\x42\n\n\x08_db_name"&\n\x0bGetDatabase\x12\x17\n\x07\x64\x62_name\x18\x01 \x01(\tR\x06\x64\x62Name"S\n\x08GetTable\x12\x1d\n\ntable_name\x18\x01 \x01(\tR\ttableName\x12\x1c\n\x07\x64\x62_name\x18\x02 \x01(\tH\x00R\x06\x64\x62Name\x88\x01\x01\x42\n\n\x08_db_name"\\\n\x0bGetFunction\x12#\n\rfunction_name\x18\x01 \x01(\tR\x0c\x66unctionName\x12\x1c\n\x07\x64\x62_name\x18\x02 \x01(\tH\x00R\x06\x64\x62Name\x88\x01\x01\x42\n\n\x08_db_name")\n\x0e\x44\x61tabaseExists\x12\x17\n\x07\x64\x62_name\x18\x01 \x01(\tR\x06\x64\x62Name"V\n\x0bTableExists\x12\x1d\n\ntable_name\x18\x01 \x01(\tR\ttableName\x12\x1c\n\x07\x64\x62_name\x18\x02 \x01(\tH\x00R\x06\x64\x62Name\x88\x01\x01\x42\n\n\x08_db_name"_\n\x0e\x46unctionExists\x12#\n\rfunction_name\x18\x01 \x01(\tR\x0c\x66unctionName\x12\x1c\n\x07\x64\x62_name\x18\x02 \x01(\tH\x00R\x06\x64\x62Name\x88\x01\x01\x42\n\n\x08_db_name"\xb8\x02\n\x13\x43reateExternalTable\x12\x1d\n\ntable_name\x18\x01 \x01(\tR\ttableName\x12\x12\n\x04path\x18\x02 \x01(\tR\x04path\x12\x1b\n\x06source\x18\x03 \x01(\tH\x00R\x06source\x88\x01\x01\x12\x34\n\x06schema\x18\x04 \x01(\x0b\x32\x17.spark.connect.DataTypeH\x01R\x06schema\x88\x01\x01\x12I\n\x07options\x18\x05 \x03(\x0b\x32/.spark.connect.CreateExternalTable.OptionsEntryR\x07options\x1a:\n\x0cOptionsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x02\x38\x01\x42\t\n\x07_sourceB\t\n\x07_schema"\xdf\x02\n\x0b\x43reateTable\x12\x1d\n\ntable_name\x18\x01 \x01(\tR\ttableName\x12\x12\n\x04path\x18\x02 \x01(\tR\x04path\x12\x1b\n\x06source\x18\x03 \x01(\tH\x00R\x06source\x88\x01\x01\x12%\n\x0b\x64\x65scription\x18\x04 \x01(\tH\x01R\x0b\x64\x65scription\x88\x01\x01\x12\x34\n\x06schema\x18\x05 \x01(\x0b\x32\x17.spark.connect.DataTypeH\x02R\x06schema\x88\x01\x01\x12\x41\n\x07options\x18\x06 \x03(\x0b\x32\'.spark.connect.CreateTable.OptionsEntryR\x07options\x1a:\n\x0cOptionsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x02\x38\x01\x42\t\n\x07_sourceB\x0e\n\x0c_descriptionB\t\n\x07_schema"+\n\x0c\x44ropTempView\x12\x1b\n\tview_name\x18\x01 \x01(\tR\x08viewName"1\n\x12\x44ropGlobalTempView\x12\x1b\n\tview_name\x18\x01 \x01(\tR\x08viewName"2\n\x11RecoverPartitions\x12\x1d\n\ntable_name\x18\x01 \x01(\tR\ttableName")\n\x08IsCached\x12\x1d\n\ntable_name\x18\x01 \x01(\tR\ttableName"+\n\nCacheTable\x12\x1d\n\ntable_name\x18\x01 \x01(\tR\ttableName"-\n\x0cUncacheTable\x12\x1d\n\ntable_name\x18\x01 \x01(\tR\ttableName"\x0c\n\nClearCache"-\n\x0cRefreshTable\x12\x1d\n\ntable_name\x18\x01 \x01(\tR\ttableName"#\n\rRefreshByPath\x12\x12\n\x04path\x18\x01 \x01(\tR\x04path"\x10\n\x0e\x43urrentCatalog"6\n\x11SetCurrentCatalog\x12!\n\x0c\x63\x61talog_name\x18\x01 \x01(\tR\x0b\x63\x61talogName"\x0e\n\x0cListCatalogsB"\n\x1eorg.apache.spark.connect.protoP\x01\x62\x06proto3'
+    b'\n\x1bspark/connect/catalog.proto\x12\rspark.connect\x1a\x19spark/connect/types.proto"\x11\n\x0f\x43urrentDatabase"-\n\x12SetCurrentDatabase\x12\x17\n\x07\x64\x62_name\x18\x01 \x01(\tR\x06\x64\x62Name"\x0f\n\rListDatabases"6\n\nListTables\x12\x1c\n\x07\x64\x62_name\x18\x01 \x01(\tH\x00R\x06\x64\x62Name\x88\x01\x01\x42\n\n\x08_db_name"9\n\rListFunctions\x12\x1c\n\x07\x64\x62_name\x18\x01 \x01(\tH\x00R\x06\x64\x62Name\x88\x01\x01\x42\n\n\x08_db_name"V\n\x0bListColumns\x12\x1d\n\ntable_name\x18\x01 \x01(\tR\ttableName\x12\x1c\n\x07\x64\x62_name\x18\x02 \x01(\tH\x00R\x06\x64\x62Name\x88\x01\x01\x42\n\n\x08_db_name"&\n\x0bGetDatabase\x12\x17\n\x07\x64\x62_name\x18\x01 \x01(\tR\x06\x64\x62Name"S\n\x08GetTable\x12\x1d\n\ntable_name\x18\x01 \x01(\tR\ttableName\x12\x1c\n\x07\x64\x62_name\x18\x02 \x01(\tH\x00R\x06\x64\x62Name\x88\x01\x01\x42\n\n\x08_db_name"\\\n\x0bGetFunction\x12#\n\rfunction_name\x18\x01 \x01(\tR\x0c\x66unctionName\x12\x1c\n\x07\x64\x62_name\x18\x02 \x01(\tH\x00R\x06\x64\x62Name\x88\x01\x01\x42\n\n\x08_db_name")\n\x0e\x44\x61tabaseExists\x12\x17\n\x07\x64\x62_name\x18\x01 \x01(\tR\x06\x64\x62Name"V\n\x0bTableExists\x12\x1d\n\ntable_name\x18\x01 \x01(\tR\ttableName\x12\x1c\n\x07\x64\x62_name\x18\x02 \x01(\tH\x00R\x06\x64\x62Name\x88\x01\x01\x42\n\n\x08_db_name"_\n\x0e\x46unctionExists\x12#\n\rfunction_name\x18\x01 \x01(\tR\x0c\x66unctionName\x12\x1c\n\x07\x64\x62_name\x18\x02 \x01(\tH\x00R\x06\x64\x62Name\x88\x01\x01\x42\n\n\x08_db_name"\xc6\x02\n\x13\x43reateExternalTable\x12\x1d\n\ntable_name\x18\x01 \x01(\tR\ttableName\x12\x17\n\x04path\x18\x02 \x01(\tH\x00R\x04path\x88\x01\x01\x12\x1b\n\x06source\x18\x03 \x01(\tH\x01R\x06source\x88\x01\x01\x12\x34\n\x06schema\x18\x04 \x01(\x0b\x32\x17.spark.connect.DataTypeH\x02R\x06schema\x88\x01\x01\x12I\n\x07options\x18\x05 \x03(\x0b\x32/.spark.connect.CreateExternalTable.OptionsEntryR\x07options\x1a:\n\x0cOptionsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x02\x38\x01\x42\x07\n\x05_pathB\t\n\x07_sourceB\t\n\x07_schema"\xed\x02\n\x0b\x43reateTable\x12\x1d\n\ntable_name\x18\x01 \x01(\tR\ttableName\x12\x17\n\x04path\x18\x02 \x01(\tH\x00R\x04path\x88\x01\x01\x12\x1b\n\x06source\x18\x03 \x01(\tH\x01R\x06source\x88\x01\x01\x12%\n\x0b\x64\x65scription\x18\x04 \x01(\tH\x02R\x0b\x64\x65scription\x88\x01\x01\x12\x34\n\x06schema\x18\x05 \x01(\x0b\x32\x17.spark.connect.DataTypeH\x03R\x06schema\x88\x01\x01\x12\x41\n\x07options\x18\x06 \x03(\x0b\x32\'.spark.connect.CreateTable.OptionsEntryR\x07options\x1a:\n\x0cOptionsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x02\x38\x01\x42\x07\n\x05_pathB\t\n\x07_sourceB\x0e\n\x0c_descriptionB\t\n\x07_schema"+\n\x0c\x44ropTempView\x12\x1b\n\tview_name\x18\x01 \x01(\tR\x08viewName"1\n\x12\x44ropGlobalTempView\x12\x1b\n\tview_name\x18\x01 \x01(\tR\x08viewName"2\n\x11RecoverPartitions\x12\x1d\n\ntable_name\x18\x01 \x01(\tR\ttableName"\x0c\n\nClearCache"-\n\x0cRefreshTable\x12\x1d\n\ntable_name\x18\x01 \x01(\tR\ttableName"#\n\rRefreshByPath\x12\x12\n\x04path\x18\x01 \x01(\tR\x04path"\x10\n\x0e\x43urrentCatalog"6\n\x11SetCurrentCatalog\x12!\n\x0c\x63\x61talog_name\x18\x01 \x01(\tR\x0b\x63\x61talogName"\x0e\n\x0cListCatalogsB"\n\x1eorg.apache.spark.connect.protoP\x01\x62\x06proto3'
 )
 
 
@@ -56,9 +56,6 @@ _CREATETABLE_OPTIONSENTRY = _CREATETABLE.nested_types_by_name["OptionsEntry"]
 _DROPTEMPVIEW = DESCRIPTOR.message_types_by_name["DropTempView"]
 _DROPGLOBALTEMPVIEW = DESCRIPTOR.message_types_by_name["DropGlobalTempView"]
 _RECOVERPARTITIONS = DESCRIPTOR.message_types_by_name["RecoverPartitions"]
-_ISCACHED = DESCRIPTOR.message_types_by_name["IsCached"]
-_CACHETABLE = DESCRIPTOR.message_types_by_name["CacheTable"]
-_UNCACHETABLE = DESCRIPTOR.message_types_by_name["UncacheTable"]
 _CLEARCACHE = DESCRIPTOR.message_types_by_name["ClearCache"]
 _REFRESHTABLE = DESCRIPTOR.message_types_by_name["RefreshTable"]
 _REFRESHBYPATH = DESCRIPTOR.message_types_by_name["RefreshByPath"]
@@ -272,39 +269,6 @@ RecoverPartitions = _reflection.GeneratedProtocolMessageType(
 )
 _sym_db.RegisterMessage(RecoverPartitions)
 
-IsCached = _reflection.GeneratedProtocolMessageType(
-    "IsCached",
-    (_message.Message,),
-    {
-        "DESCRIPTOR": _ISCACHED,
-        "__module__": "spark.connect.catalog_pb2"
-        # @@protoc_insertion_point(class_scope:spark.connect.IsCached)
-    },
-)
-_sym_db.RegisterMessage(IsCached)
-
-CacheTable = _reflection.GeneratedProtocolMessageType(
-    "CacheTable",
-    (_message.Message,),
-    {
-        "DESCRIPTOR": _CACHETABLE,
-        "__module__": "spark.connect.catalog_pb2"
-        # @@protoc_insertion_point(class_scope:spark.connect.CacheTable)
-    },
-)
-_sym_db.RegisterMessage(CacheTable)
-
-UncacheTable = _reflection.GeneratedProtocolMessageType(
-    "UncacheTable",
-    (_message.Message,),
-    {
-        "DESCRIPTOR": _UNCACHETABLE,
-        "__module__": "spark.connect.catalog_pb2"
-        # @@protoc_insertion_point(class_scope:spark.connect.UncacheTable)
-    },
-)
-_sym_db.RegisterMessage(UncacheTable)
-
 ClearCache = _reflection.GeneratedProtocolMessageType(
     "ClearCache",
     (_message.Message,),
@@ -404,35 +368,29 @@ if _descriptor._USE_C_DESCRIPTORS == False:
     _FUNCTIONEXISTS._serialized_start = 709
     _FUNCTIONEXISTS._serialized_end = 804
     _CREATEEXTERNALTABLE._serialized_start = 807
-    _CREATEEXTERNALTABLE._serialized_end = 1119
-    _CREATEEXTERNALTABLE_OPTIONSENTRY._serialized_start = 1039
-    _CREATEEXTERNALTABLE_OPTIONSENTRY._serialized_end = 1097
-    _CREATETABLE._serialized_start = 1122
-    _CREATETABLE._serialized_end = 1473
-    _CREATETABLE_OPTIONSENTRY._serialized_start = 1039
-    _CREATETABLE_OPTIONSENTRY._serialized_end = 1097
-    _DROPTEMPVIEW._serialized_start = 1475
-    _DROPTEMPVIEW._serialized_end = 1518
-    _DROPGLOBALTEMPVIEW._serialized_start = 1520
-    _DROPGLOBALTEMPVIEW._serialized_end = 1569
-    _RECOVERPARTITIONS._serialized_start = 1571
-    _RECOVERPARTITIONS._serialized_end = 1621
-    _ISCACHED._serialized_start = 1623
-    _ISCACHED._serialized_end = 1664
-    _CACHETABLE._serialized_start = 1666
-    _CACHETABLE._serialized_end = 1709
-    _UNCACHETABLE._serialized_start = 1711
-    _UNCACHETABLE._serialized_end = 1756
-    _CLEARCACHE._serialized_start = 1758
-    _CLEARCACHE._serialized_end = 1770
-    _REFRESHTABLE._serialized_start = 1772
-    _REFRESHTABLE._serialized_end = 1817
-    _REFRESHBYPATH._serialized_start = 1819
-    _REFRESHBYPATH._serialized_end = 1854
-    _CURRENTCATALOG._serialized_start = 1856
-    _CURRENTCATALOG._serialized_end = 1872
-    _SETCURRENTCATALOG._serialized_start = 1874
-    _SETCURRENTCATALOG._serialized_end = 1928
-    _LISTCATALOGS._serialized_start = 1930
-    _LISTCATALOGS._serialized_end = 1944
+    _CREATEEXTERNALTABLE._serialized_end = 1133
+    _CREATEEXTERNALTABLE_OPTIONSENTRY._serialized_start = 1044
+    _CREATEEXTERNALTABLE_OPTIONSENTRY._serialized_end = 1102
+    _CREATETABLE._serialized_start = 1136
+    _CREATETABLE._serialized_end = 1501
+    _CREATETABLE_OPTIONSENTRY._serialized_start = 1044
+    _CREATETABLE_OPTIONSENTRY._serialized_end = 1102
+    _DROPTEMPVIEW._serialized_start = 1503
+    _DROPTEMPVIEW._serialized_end = 1546
+    _DROPGLOBALTEMPVIEW._serialized_start = 1548
+    _DROPGLOBALTEMPVIEW._serialized_end = 1597
+    _RECOVERPARTITIONS._serialized_start = 1599
+    _RECOVERPARTITIONS._serialized_end = 1649
+    _CLEARCACHE._serialized_start = 1651
+    _CLEARCACHE._serialized_end = 1663
+    _REFRESHTABLE._serialized_start = 1665
+    _REFRESHTABLE._serialized_end = 1710
+    _REFRESHBYPATH._serialized_start = 1712
+    _REFRESHBYPATH._serialized_end = 1747
+    _CURRENTCATALOG._serialized_start = 1749
+    _CURRENTCATALOG._serialized_end = 1765
+    _SETCURRENTCATALOG._serialized_start = 1767
+    _SETCURRENTCATALOG._serialized_end = 1821
+    _LISTCATALOGS._serialized_start = 1823
+    _LISTCATALOGS._serialized_end = 1837
 # @@protoc_insertion_point(module_scope)

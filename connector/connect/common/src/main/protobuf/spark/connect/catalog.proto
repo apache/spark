@@ -150,24 +150,24 @@ message RecoverPartitions {
   string table_name = 1;
 }
 
-// See `spark.catalog.isCached`
-message IsCached {
-  // (Required)
-  string table_name = 1;
-}
-
-// See `spark.catalog.cacheTable`
-// TODO(SPARK-XXXXX) Support storage level.
-message CacheTable {
-  // (Required)
-  string table_name = 1;
-}
-
-// See `spark.catalog.uncacheTable`
-message UncacheTable {
-  // (Required)
-  string table_name = 1;
-}
+// TODO(SPARK-XXXXX): cache related API
+//// See `spark.catalog.isCached`
+//message IsCached {
+//  // (Required)
+//  string table_name = 1;
+//}
+//
+//// See `spark.catalog.cacheTable`
+//message CacheTable {
+//  // (Required)
+//  string table_name = 1;
+//}
+//
+//// See `spark.catalog.uncacheTable`
+//message UncacheTable {
+//  // (Required)
+//  string table_name = 1;
+//}
 
 // See `spark.catalog.clearCache`
 message ClearCache { }

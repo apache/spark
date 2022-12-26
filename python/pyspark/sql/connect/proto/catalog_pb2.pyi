@@ -362,7 +362,7 @@ class CreateExternalTable(google.protobuf.message.Message):
     table_name: builtins.str
     """(Required)"""
     path: builtins.str
-    """(Required)"""
+    """(Optional)"""
     source: builtins.str
     """(Optional)"""
     @property
@@ -377,7 +377,7 @@ class CreateExternalTable(google.protobuf.message.Message):
         self,
         *,
         table_name: builtins.str = ...,
-        path: builtins.str = ...,
+        path: builtins.str | None = ...,
         source: builtins.str | None = ...,
         schema: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
         options: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
@@ -385,12 +385,25 @@ class CreateExternalTable(google.protobuf.message.Message):
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "_schema", b"_schema", "_source", b"_source", "schema", b"schema", "source", b"source"
+            "_path",
+            b"_path",
+            "_schema",
+            b"_schema",
+            "_source",
+            b"_source",
+            "path",
+            b"path",
+            "schema",
+            b"schema",
+            "source",
+            b"source",
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "_path",
+            b"_path",
             "_schema",
             b"_schema",
             "_source",
@@ -407,6 +420,10 @@ class CreateExternalTable(google.protobuf.message.Message):
             b"table_name",
         ],
     ) -> None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_path", b"_path"]
+    ) -> typing_extensions.Literal["path"] | None: ...
     @typing.overload
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["_schema", b"_schema"]
@@ -449,7 +466,7 @@ class CreateTable(google.protobuf.message.Message):
     table_name: builtins.str
     """(Required)"""
     path: builtins.str
-    """(Required)"""
+    """(Optional)"""
     source: builtins.str
     """(Optional)"""
     description: builtins.str
@@ -466,7 +483,7 @@ class CreateTable(google.protobuf.message.Message):
         self,
         *,
         table_name: builtins.str = ...,
-        path: builtins.str = ...,
+        path: builtins.str | None = ...,
         source: builtins.str | None = ...,
         description: builtins.str | None = ...,
         schema: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
@@ -477,12 +494,16 @@ class CreateTable(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "_description",
             b"_description",
+            "_path",
+            b"_path",
             "_schema",
             b"_schema",
             "_source",
             b"_source",
             "description",
             b"description",
+            "path",
+            b"path",
             "schema",
             b"schema",
             "source",
@@ -494,6 +515,8 @@ class CreateTable(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "_description",
             b"_description",
+            "_path",
+            b"_path",
             "_schema",
             b"_schema",
             "_source",
@@ -516,6 +539,10 @@ class CreateTable(google.protobuf.message.Message):
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["_description", b"_description"]
     ) -> typing_extensions.Literal["description"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_path", b"_path"]
+    ) -> typing_extensions.Literal["path"] | None: ...
     @typing.overload
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["_schema", b"_schema"]
@@ -584,67 +611,27 @@ class RecoverPartitions(google.protobuf.message.Message):
 
 global___RecoverPartitions = RecoverPartitions
 
-class IsCached(google.protobuf.message.Message):
-    """See `spark.catalog.isCached`"""
-
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-    TABLE_NAME_FIELD_NUMBER: builtins.int
-    table_name: builtins.str
-    """(Required)"""
-    def __init__(
-        self,
-        *,
-        table_name: builtins.str = ...,
-    ) -> None: ...
-    def ClearField(
-        self, field_name: typing_extensions.Literal["table_name", b"table_name"]
-    ) -> None: ...
-
-global___IsCached = IsCached
-
-class CacheTable(google.protobuf.message.Message):
-    """See `spark.catalog.cacheTable`
-    TODO(SPARK-XXXXX) Support storage level.
-    """
-
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-    TABLE_NAME_FIELD_NUMBER: builtins.int
-    table_name: builtins.str
-    """(Required)"""
-    def __init__(
-        self,
-        *,
-        table_name: builtins.str = ...,
-    ) -> None: ...
-    def ClearField(
-        self, field_name: typing_extensions.Literal["table_name", b"table_name"]
-    ) -> None: ...
-
-global___CacheTable = CacheTable
-
-class UncacheTable(google.protobuf.message.Message):
-    """See `spark.catalog.uncacheTable`"""
-
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-    TABLE_NAME_FIELD_NUMBER: builtins.int
-    table_name: builtins.str
-    """(Required)"""
-    def __init__(
-        self,
-        *,
-        table_name: builtins.str = ...,
-    ) -> None: ...
-    def ClearField(
-        self, field_name: typing_extensions.Literal["table_name", b"table_name"]
-    ) -> None: ...
-
-global___UncacheTable = UncacheTable
-
 class ClearCache(google.protobuf.message.Message):
-    """See `spark.catalog.clearCache`"""
+    """// See `spark.catalog.isCached`
+    message IsCached {
+     // (Required)
+     string table_name = 1;
+    }
+
+    // See `spark.catalog.cacheTable`
+    message CacheTable {
+     // (Required)
+     string table_name = 1;
+    }
+
+    // See `spark.catalog.uncacheTable`
+    message UncacheTable {
+     // (Required)
+     string table_name = 1;
+    }
+
+    See `spark.catalog.clearCache`
+    """
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 

@@ -128,9 +128,10 @@ class SparkConnectPlanner(session: SparkSession) {
         transformDropGlobalTempView(rel.getDropGlobalTempView)
       case proto.Relation.RelTypeCase.RECOVER_PARTITIONS =>
         transformRecoverPartitions(rel.getRecoverPartitions)
-      case proto.Relation.RelTypeCase.IS_CACHED => transformIsCached(rel.getIsCached)
-      case proto.Relation.RelTypeCase.CACHE_TABLE => transformCacheTable(rel.getCacheTable)
-      case proto.Relation.RelTypeCase.UNCACHE_TABLE => transformUncacheTable(rel.getUncacheTable)
+// TODO(SPARK-XXXXX): cache related API
+//      case proto.Relation.RelTypeCase.IS_CACHED => transformIsCached(rel.getIsCached)
+//      case proto.Relation.RelTypeCase.CACHE_TABLE => transformCacheTable(rel.getCacheTable)
+//      case proto.Relation.RelTypeCase.UNCACHE_TABLE => transformUncacheTable(rel.getUncacheTable)
       case proto.Relation.RelTypeCase.CLEAR_CACHE => transformClearCache(rel.getClearCache)
       case proto.Relation.RelTypeCase.REFRESH_TABLE => transformRefreshTable(rel.getRefreshTable)
       case proto.Relation.RelTypeCase.REFRESH_BY_PATH =>
@@ -1346,23 +1347,23 @@ class SparkConnectPlanner(session: SparkSession) {
     emptyLocalRelation
   }
 
-  private def transformIsCached(getIsCached: proto.IsCached): LogicalPlan = {
-    session
-      .createDataset(session.catalog.isCached(getIsCached.getTableName) :: Nil)(
-        Encoders.scalaBoolean)
-      .logicalPlan
-  }
-
-  private def transformCacheTable(getCacheTable: proto.CacheTable): LogicalPlan = {
-    // TODO(SPARK-XXXXX) Support storage level.
-    session.catalog.cacheTable(getCacheTable.getTableName)
-    emptyLocalRelation
-  }
-
-  private def transformUncacheTable(getUncacheTable: proto.UncacheTable): LogicalPlan = {
-    session.catalog.uncacheTable(getUncacheTable.getTableName)
-    emptyLocalRelation
-  }
+// TODO(SPARK-XXXXX): cache related API
+//  private def transformIsCached(getIsCached: proto.IsCached): LogicalPlan = {
+//    session
+//      .createDataset(session.catalog.isCached(getIsCached.getTableName) :: Nil)(
+//        Encoders.scalaBoolean)
+//      .logicalPlan
+//  }
+//
+//  private def transformCacheTable(getCacheTable: proto.CacheTable): LogicalPlan = {
+//    session.catalog.cacheTable(getCacheTable.getTableName)
+//    emptyLocalRelation
+//  }
+//
+//  private def transformUncacheTable(getUncacheTable: proto.UncacheTable): LogicalPlan = {
+//    session.catalog.uncacheTable(getUncacheTable.getTableName)
+//    emptyLocalRelation
+//  }
 
   private def transformClearCache(getClearCache: proto.ClearCache): LogicalPlan = {
     session.catalog.clearCache()

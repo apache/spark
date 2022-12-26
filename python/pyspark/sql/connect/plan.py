@@ -2131,82 +2131,83 @@ class RecoverPartitions(LogicalPlan):
         """
 
 
-class IsCached(LogicalPlan):
-    def __init__(self, table_name: str) -> None:
-        super().__init__(None)
-        self._table_name = table_name
-
-    def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation()
-        plan.is_cached.table_name = self._table_name
-        return plan
-
-    def print(self, indent: int = 0) -> str:
-        i = " " * indent
-        return f"{i}" f"<{self.__class__.__name__} table_name='{self._table_name}'>"
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>{self.__class__.__name__}</b><br />
-              table_name: {self._table_name} <br />
-            {self._child_repr_()}
-           </li>
-        </ul>
-        """
-
-
-class CacheTable(LogicalPlan):
-    def __init__(self, table_name: str) -> None:
-        super().__init__(None)
-        self._table_name = table_name
-
-    def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation()
-        plan.cache_table.table_name = self._table_name
-        return plan
-
-    def print(self, indent: int = 0) -> str:
-        i = " " * indent
-        return f"{i}" f"<{self.__class__.__name__} table_name='{self._table_name}'>"
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>{self.__class__.__name__}</b><br />
-              table_name: {self._table_name} <br />
-            {self._child_repr_()}
-           </li>
-        </ul>
-        """
-
-
-class UncacheTable(LogicalPlan):
-    def __init__(self, table_name: str) -> None:
-        super().__init__(None)
-        self._table_name = table_name
-
-    def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation()
-        plan.uncache_table.table_name = self._table_name
-        return plan
-
-    def print(self, indent: int = 0) -> str:
-        i = " " * indent
-        return f"{i}" f"<{self.__class__.__name__} table_name='{self._table_name}'>"
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>{self.__class__.__name__}</b><br />
-              table_name: {self._table_name} <br />
-            {self._child_repr_()}
-           </li>
-        </ul>
-        """
+# TODO(SPARK-XXXXX): cache related API
+# class IsCached(LogicalPlan):
+#     def __init__(self, table_name: str) -> None:
+#         super().__init__(None)
+#         self._table_name = table_name
+#
+#     def plan(self, session: "SparkConnectClient") -> proto.Relation:
+#         plan = proto.Relation()
+#         plan.is_cached.table_name = self._table_name
+#         return plan
+#
+#     def print(self, indent: int = 0) -> str:
+#         i = " " * indent
+#         return f"{i}" f"<{self.__class__.__name__} table_name='{self._table_name}'>"
+#
+#     def _repr_html_(self) -> str:
+#         return f"""
+#         <ul>
+#            <li>
+#               <b>{self.__class__.__name__}</b><br />
+#               table_name: {self._table_name} <br />
+#             {self._child_repr_()}
+#            </li>
+#         </ul>
+#         """
+#
+#
+# class CacheTable(LogicalPlan):
+#     def __init__(self, table_name: str) -> None:
+#         super().__init__(None)
+#         self._table_name = table_name
+#
+#     def plan(self, session: "SparkConnectClient") -> proto.Relation:
+#         plan = proto.Relation()
+#         plan.cache_table.table_name = self._table_name
+#         return plan
+#
+#     def print(self, indent: int = 0) -> str:
+#         i = " " * indent
+#         return f"{i}" f"<{self.__class__.__name__} table_name='{self._table_name}'>"
+#
+#     def _repr_html_(self) -> str:
+#         return f"""
+#         <ul>
+#            <li>
+#               <b>{self.__class__.__name__}</b><br />
+#               table_name: {self._table_name} <br />
+#             {self._child_repr_()}
+#            </li>
+#         </ul>
+#         """
+#
+#
+# class UncacheTable(LogicalPlan):
+#     def __init__(self, table_name: str) -> None:
+#         super().__init__(None)
+#         self._table_name = table_name
+#
+#     def plan(self, session: "SparkConnectClient") -> proto.Relation:
+#         plan = proto.Relation()
+#         plan.uncache_table.table_name = self._table_name
+#         return plan
+#
+#     def print(self, indent: int = 0) -> str:
+#         i = " " * indent
+#         return f"{i}" f"<{self.__class__.__name__} table_name='{self._table_name}'>"
+#
+#     def _repr_html_(self) -> str:
+#         return f"""
+#         <ul>
+#            <li>
+#               <b>{self.__class__.__name__}</b><br />
+#               table_name: {self._table_name} <br />
+#             {self._child_repr_()}
+#            </li>
+#         </ul>
+#         """
 
 
 class ClearCache(LogicalPlan):

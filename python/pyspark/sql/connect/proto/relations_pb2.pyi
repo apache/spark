@@ -110,9 +110,6 @@ class Relation(google.protobuf.message.Message):
     DROP_TEMP_VIEW_FIELD_NUMBER: builtins.int
     DROP_GLOBAL_TEMP_VIEW_FIELD_NUMBER: builtins.int
     RECOVER_PARTITIONS_FIELD_NUMBER: builtins.int
-    IS_CACHED_FIELD_NUMBER: builtins.int
-    CACHE_TABLE_FIELD_NUMBER: builtins.int
-    UNCACHE_TABLE_FIELD_NUMBER: builtins.int
     CLEAR_CACHE_FIELD_NUMBER: builtins.int
     REFRESH_TABLE_FIELD_NUMBER: builtins.int
     REFRESH_BY_PATH_FIELD_NUMBER: builtins.int
@@ -224,13 +221,11 @@ class Relation(google.protobuf.message.Message):
     @property
     def recover_partitions(self) -> pyspark.sql.connect.proto.catalog_pb2.RecoverPartitions: ...
     @property
-    def is_cached(self) -> pyspark.sql.connect.proto.catalog_pb2.IsCached: ...
-    @property
-    def cache_table(self) -> pyspark.sql.connect.proto.catalog_pb2.CacheTable: ...
-    @property
-    def uncache_table(self) -> pyspark.sql.connect.proto.catalog_pb2.UncacheTable: ...
-    @property
-    def clear_cache(self) -> pyspark.sql.connect.proto.catalog_pb2.ClearCache: ...
+    def clear_cache(self) -> pyspark.sql.connect.proto.catalog_pb2.ClearCache:
+        """IsCached is_cached = 218;
+        CacheTable cache_table = 219;
+        UncacheTable uncache_table = 220;
+        """
     @property
     def refresh_table(self) -> pyspark.sql.connect.proto.catalog_pb2.RefreshTable: ...
     @property
@@ -297,9 +292,6 @@ class Relation(google.protobuf.message.Message):
         drop_global_temp_view: pyspark.sql.connect.proto.catalog_pb2.DropGlobalTempView
         | None = ...,
         recover_partitions: pyspark.sql.connect.proto.catalog_pb2.RecoverPartitions | None = ...,
-        is_cached: pyspark.sql.connect.proto.catalog_pb2.IsCached | None = ...,
-        cache_table: pyspark.sql.connect.proto.catalog_pb2.CacheTable | None = ...,
-        uncache_table: pyspark.sql.connect.proto.catalog_pb2.UncacheTable | None = ...,
         clear_cache: pyspark.sql.connect.proto.catalog_pb2.ClearCache | None = ...,
         refresh_table: pyspark.sql.connect.proto.catalog_pb2.RefreshTable | None = ...,
         refresh_by_path: pyspark.sql.connect.proto.catalog_pb2.RefreshByPath | None = ...,
@@ -313,8 +305,6 @@ class Relation(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "aggregate",
             b"aggregate",
-            "cache_table",
-            b"cache_table",
             "clear_cache",
             b"clear_cache",
             "common",
@@ -357,8 +347,6 @@ class Relation(google.protobuf.message.Message):
             b"get_table",
             "hint",
             b"hint",
-            "is_cached",
-            b"is_cached",
             "join",
             b"join",
             "limit",
@@ -423,8 +411,6 @@ class Relation(google.protobuf.message.Message):
             b"tail",
             "to_schema",
             b"to_schema",
-            "uncache_table",
-            b"uncache_table",
             "unknown",
             b"unknown",
             "unpivot",
@@ -438,8 +424,6 @@ class Relation(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "aggregate",
             b"aggregate",
-            "cache_table",
-            b"cache_table",
             "clear_cache",
             b"clear_cache",
             "common",
@@ -482,8 +466,6 @@ class Relation(google.protobuf.message.Message):
             b"get_table",
             "hint",
             b"hint",
-            "is_cached",
-            b"is_cached",
             "join",
             b"join",
             "limit",
@@ -548,8 +530,6 @@ class Relation(google.protobuf.message.Message):
             b"tail",
             "to_schema",
             b"to_schema",
-            "uncache_table",
-            b"uncache_table",
             "unknown",
             b"unknown",
             "unpivot",
@@ -609,9 +589,6 @@ class Relation(google.protobuf.message.Message):
         "drop_temp_view",
         "drop_global_temp_view",
         "recover_partitions",
-        "is_cached",
-        "cache_table",
-        "uncache_table",
         "clear_cache",
         "refresh_table",
         "refresh_by_path",

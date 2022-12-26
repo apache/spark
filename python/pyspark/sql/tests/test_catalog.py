@@ -16,7 +16,6 @@
 #
 
 from pyspark.sql.types import StructType, StructField, IntegerType
-from pyspark.sql.utils import AnalysisException
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -29,6 +28,8 @@ class CatalogTestsMixin:
             spark.catalog.setCurrentDatabase("some_db")
             self.assertEqual(spark.catalog.currentDatabase(), "some_db")
             self.assertRaisesRegex(
+                # TODO(SPARK-XXXXX): Should catch specific exceptions for both
+                #  Spark Connect and PySpark
                 Exception,
                 "does_not_exist",
                 lambda: spark.catalog.setCurrentDatabase("does_not_exist"),
