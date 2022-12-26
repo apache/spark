@@ -101,6 +101,8 @@ function mypy_data_test {
       return
     fi
 
+   set -x
+
     PYTEST_REPORT=$( (MYPYPATH=python $PYTEST_BUILD \
       -c dev/pyproject.toml \
       --rootdir python \
@@ -162,8 +164,8 @@ function mypy_test {
         return
     fi
 
-    mypy_annotation_test
-    mypy_examples_test
+    # mypy_annotation_test
+    # mypy_examples_test
     mypy_data_test
 }
 
@@ -243,8 +245,8 @@ pushd "$SPARK_ROOT_DIR" &> /dev/null
 PYTHON_SOURCE="$(git ls-files '*.py')"
 
 compile_python_test "$PYTHON_SOURCE"
-black_test
-flake8_test
+# black_test
+# flake8_test
 mypy_test
 
 echo
