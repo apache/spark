@@ -381,7 +381,7 @@ class SparkConnectClient(object):
         name = f"fun_{uuid.uuid4().hex}"
         fun = pb2.CreateScalarFunction()
         fun.parts.append(name)
-        _logger.info(f"Registering UDF: {fun}")
+        _logger.info(f"Registering UDF: {self._proto_to_string(fun)}")
         fun.serialized_function = cloudpickle.dumps((function, return_type))
 
         req = self._execute_plan_request_with_metadata()
@@ -402,7 +402,7 @@ class SparkConnectClient(object):
         ]
 
     def to_pandas(self, plan: pb2.Plan) -> "pandas.DataFrame":
-        _logger.debug(f"Executing plan {self._proto_to_string(plan)}")
+        _logger.info(f"Executing plan {self._proto_to_string(plan)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
         return self._execute_and_fetch(req)
@@ -425,7 +425,7 @@ class SparkConnectClient(object):
         return text_format.MessageToString(p, as_one_line=True)
 
     def schema(self, plan: pb2.Plan) -> StructType:
-        _logger.debug(f"Schema for plan: {self._proto_to_string(plan)}")
+        _logger.info(f"Schema for plan: {self._proto_to_string(plan)}")
         proto_schema = self._analyze(plan).schema
         # Server side should populate the struct field which is the schema.
         assert proto_schema.HasField("struct")
@@ -441,12 +441,12 @@ class SparkConnectClient(object):
         return StructType(fields)
 
     def explain_string(self, plan: pb2.Plan, explain_mode: str = "extended") -> str:
-        _logger.debug(f"Explain (mode={explain_mode}) for plan {self._proto_to_string(plan)}")
+        _logger.info(f"Explain (mode={explain_mode}) for plan {self._proto_to_string(plan)}")
         result = self._analyze(plan, explain_mode)
         return result.explain_string
 
     def execute_command(self, command: pb2.Command) -> None:
-        _logger.debug(f"Execute command for command {command}")
+        _logger.info(f"Execute command for command {self._proto_to_string(command)}")
         req = self._execute_plan_request_with_metadata()
         if self._user_id:
             req.user_context.user_id = self._user_id

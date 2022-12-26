@@ -66,7 +66,7 @@ class SparkConnectService(debug: Boolean)
    */
   private def handleError[V](
       opType: String,
-      observer: StreamObserver[V]): PartialFunction[Throwable, Any] = {
+      observer: StreamObserver[V]): PartialFunction[Throwable, Unit] = {
     case ae: AnalysisException =>
       logError(s"Error during: $opType", ae)
       val status = RPCStatus

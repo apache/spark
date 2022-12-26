@@ -25,7 +25,6 @@ from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.sql.connect.client import SparkConnectClientException
 
 if should_test_connect:
-    import grpc
     from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
 
 
