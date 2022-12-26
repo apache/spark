@@ -32,7 +32,7 @@ for example, compiling `connect` module on CentOS 6 or CentOS 7 which the defaul
 specifying the user-defined `protoc` and `protoc-gen-grpc-java` binary files as follows:
 
 ```bash
-export CONNECT_PROTOC_EXEC_PATH=/path-to-protoc-exe
+export SPARK_PROTOC_EXEC_PATH=/path-to-protoc-exe
 export CONNECT_PLUGIN_EXEC_PATH=/path-to-protoc-gen-grpc-java-exe
 ./build/mvn -Phive -Puser-defined-protoc clean package
 ```
@@ -40,7 +40,7 @@ export CONNECT_PLUGIN_EXEC_PATH=/path-to-protoc-gen-grpc-java-exe
 or
 
 ```bash
-export CONNECT_PROTOC_EXEC_PATH=/path-to-protoc-exe
+export SPARK_PROTOC_EXEC_PATH=/path-to-protoc-exe
 export CONNECT_PLUGIN_EXEC_PATH=/path-to-protoc-gen-grpc-java-exe
 ./build/sbt -Puser-defined-protoc clean package
 ```
@@ -82,14 +82,14 @@ To use the release version of Spark Connect:
 
 ```bash
 # Run all Spark Connect Python tests as a module.
-./python/run-tests --module pyspark-connect
+./python/run-tests --module pyspark-connect --parallelism 1
 ```
 
 
 ## Development Topics
 
 ### Generate proto generated files for the Python client
-1. Install `buf version 1.9.0`: https://docs.buf.build/installation
+1. Install `buf version 1.11.0`: https://docs.buf.build/installation
 2. Run `pip install grpcio==1.48.1 protobuf==3.19.5 mypy-protobuf==3.3.0`
 3. Run `./connector/connect/dev/generate_protos.sh`
 4. Optional Check `./dev/check-codegen-python.py`

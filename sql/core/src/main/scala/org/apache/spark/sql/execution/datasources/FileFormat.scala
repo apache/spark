@@ -204,19 +204,22 @@ object FileFormat {
    */
   val OPTION_RETURNING_BATCH = "returning_batch"
 
-  /** Schema of metadata struct that can be produced by every file format. */
+  /**
+   * Schema of metadata struct that can be produced by every file format,
+   * metadata fields for every file format must be *not* nullable.
+   * */
   val BASE_METADATA_STRUCT: StructType = new StructType()
-    .add(StructField(FileFormat.FILE_PATH, StringType))
-    .add(StructField(FileFormat.FILE_NAME, StringType))
-    .add(StructField(FileFormat.FILE_SIZE, LongType))
-    .add(StructField(FileFormat.FILE_MODIFICATION_TIME, TimestampType))
+    .add(StructField(FileFormat.FILE_PATH, StringType, nullable = false))
+    .add(StructField(FileFormat.FILE_NAME, StringType, nullable = false))
+    .add(StructField(FileFormat.FILE_SIZE, LongType, nullable = false))
+    .add(StructField(FileFormat.FILE_MODIFICATION_TIME, TimestampType, nullable = false))
 
   /**
    * Create a file metadata struct column containing fields supported by the given file format.
    */
   def createFileMetadataCol(fileFormat: FileFormat): AttributeReference = {
     val struct = if (fileFormat.isInstanceOf[ParquetFileFormat]) {
-      BASE_METADATA_STRUCT.add(StructField(FileFormat.ROW_INDEX, LongType))
+      BASE_METADATA_STRUCT.add(StructField(FileFormat.ROW_INDEX, LongType, nullable = false))
     } else {
       BASE_METADATA_STRUCT
     }

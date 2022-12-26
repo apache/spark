@@ -724,4 +724,29 @@ class HashedRelationSuite extends SharedSparkSession {
         assert(actualValues === expectedValues)
     }
   }
+
+  test("LongToUnsafeRowMap support ignoresDuplicatedKey") {
+    val taskMemoryManager = new TaskMemoryManager(
+      new UnifiedMemoryManager(
+        new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
+        Long.MaxValue,
+        Long.MaxValue / 2,
+        1),
+      0)
+    val unsafeProj = UnsafeProjection.create(Seq(BoundReference(0, LongType, false)))
+    val keys = Seq(1L, 1L, 1L)
+    Seq(true, false).foreach { ignoresDuplicatedKey =>
+      val map = new LongToUnsafeRowMap(taskMemoryManager, 1, ignoresDuplicatedKey)
+      keys.foreach { k =>
+        map.append(k, unsafeProj(InternalRow(k)))
+      }
+      map.optimize()
+      val res = new UnsafeRow(1)
+      val it = map.get(1L, res)
+      assert(it.hasNext)
+      assert(it.next.getLong(0) == 1)
+      assert(it.hasNext != ignoresDuplicatedKey)
+      map.free()
+    }
+  }
 }

@@ -107,6 +107,14 @@
               </includes>
             </relocation>
           </relocations>
+          <filters>
+            <filter>
+              <artifact>*:*</artifact>
+              <excludes>
+                <exclude>google/protobuf/**</exclude>
+              </excludes>
+            </filter>
+          </filters>
         </configuration>
       </plugin>
     </plugins>
@@ -122,7 +130,7 @@
           <plugin>
             <groupId>com.github.os72</groupId>
             <artifactId>protoc-jar-maven-plugin</artifactId>
-            <version>3.11.4</version>
+            <version>${protoc-jar-maven-plugin.version}</version>
             <!-- Generates Java classes for tests. TODO(Raghu): Generate descriptor files too. -->
             <executions>
               <execution>
@@ -147,14 +155,14 @@
     <profile>
       <id>user-defined-protoc</id>
       <properties>
-        <protobuf.protoc.executable.path>${env.PROTOBUF_PROTOC_EXEC_PATH}</protobuf.protoc.executable.path>
+        <spark.protoc.executable.path>${env.SPARK_PROTOC_EXEC_PATH}</spark.protoc.executable.path>
       </properties>
       <build>
         <plugins>
           <plugin>
             <groupId>com.github.os72</groupId>
             <artifactId>protoc-jar-maven-plugin</artifactId>
-            <version>3.11.4</version>
+            <version>${protoc-jar-maven-plugin.version}</version>
             <!-- Generates Java classes for tests. TODO(Raghu): Generate descriptor files too. -->
             <executions>
               <execution>
@@ -165,7 +173,7 @@
                 <configuration>
                   <protocArtifact>com.google.protobuf:protoc:${protobuf.version}</protocArtifact>
                   <protocVersion>${protobuf.version}</protocVersion>
-                  <protocCommand>${protobuf.protoc.executable.path}</protocCommand>
+                  <protocCommand>${spark.protoc.executable.path}</protocCommand>
                   <inputDirectories>
                     <include>src/test/resources/protobuf</include>
                   </inputDirectories>

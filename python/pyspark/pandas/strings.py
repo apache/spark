@@ -78,7 +78,7 @@ class StringMethods:
 
     def title(self) -> "ps.Series":
         """
-        Convert Strings in the series to be titlecase.
+        Convert Strings in the series to be title case.
 
         Examples
         --------
@@ -151,7 +151,7 @@ class StringMethods:
 
     def swapcase(self) -> "ps.Series":
         """
-        Convert strings in the Series/Index to be swapcased.
+        Convert strings in the Series/Index to be swap cased.
 
         Examples
         --------
@@ -484,7 +484,7 @@ class StringMethods:
         dtype: bool
 
         Note that checks against characters mixed with any additional
-        punctuation or whitespace will evaluate to false for an alphanumeric
+        punctuation or whitespace will evaluate too false for an alphanumeric
         check.
 
         >>> s2 = ps.Series(['A B', '1.5', '3,000'])
@@ -549,7 +549,7 @@ class StringMethods:
 
         The s.str.isdigit method is the same as s.str.isdecimal but also
         includes special digits, like superscripted and subscripted digits in
-        unicode.
+        Unicode.
 
         >>> s.str.isdigit()
         0     True
@@ -648,7 +648,7 @@ class StringMethods:
 
     def istitle(self) -> "ps.Series":
         """
-        Check whether all characters in each string are titlecase.
+        Check whether all characters in each string are title case.
 
         This is equivalent to running the Python string method
         :func:`str.istitle` for each element of the Series/Index.
@@ -708,7 +708,7 @@ class StringMethods:
 
         The s2.str.isdigit method is the same as s2.str.isdecimal but also
         includes special digits, like superscripted and subscripted digits in
-        unicode.
+        Unicode.
 
         >>> s2.str.isdigit()
         0     True
@@ -758,7 +758,7 @@ class StringMethods:
 
         The s.str.isdigit method is the same as s.str.isdecimal but also
         includes special digits, like superscripted and subscripted digits in
-        unicode.
+        Unicode.
 
         >>> s.str.isdigit()
         0     True
@@ -1026,7 +1026,7 @@ class StringMethods:
 
     def find(self, sub: str, start: int = 0, end: Optional[int] = None) -> "ps.Series":
         """
-        Return lowest indexes in each strings in the Series where the
+        Return lowest indexes in each string in the Series where the
         substring is fully contained between [start:end].
 
         Return -1 on failure. Equivalent to standard :func:`str.find`.
@@ -1168,7 +1168,7 @@ class StringMethods:
 
     def index(self, sub: str, start: int = 0, end: Optional[int] = None) -> "ps.Series":
         """
-        Return lowest indexes in each strings where the substring is fully
+        Return lowest indexes in each string where the substring is fully
         contained between [start:end].
 
         This is the same as :func:`str.find` except instead of returning -1,
@@ -1612,7 +1612,7 @@ class StringMethods:
 
     def rfind(self, sub: str, start: int = 0, end: Optional[int] = None) -> "ps.Series":
         """
-        Return highest indexes in each strings in the Series where the
+        Return highest indexes in each string in the Series where the
         substring is fully contained between [start:end].
 
         Return -1 on failure. Equivalent to standard :func:`str.rfind`.
@@ -1667,7 +1667,7 @@ class StringMethods:
 
     def rindex(self, sub: str, start: int = 0, end: Optional[int] = None) -> "ps.Series":
         """
-        Return highest indexes in each strings where the substring is fully
+        Return highest indexes in each string where the substring is fully
         contained between [start:end].
 
         This is the same as :func:`str.rfind` except instead of returning -1,
@@ -1908,7 +1908,7 @@ class StringMethods:
             Limit number of splits in output. None, 0 and -1 will be
             interpreted as return all splits.
         expand : bool, default False
-            Expand the splitted strings into separate columns.
+            Expand the split strings into separate columns.
 
             * If ``True``, `n` must be a positive integer, and return DataFrame expanding
               dimensionality.
@@ -2064,7 +2064,7 @@ class StringMethods:
             Limit number of splits in output. None, 0 and -1 will be
             interpreted as return all splits.
         expand : bool, default False
-            Expand the splitted strings into separate columns.
+            Expand the split strings into separate columns.
 
             * If ``True``, `n` must be a positive integer, and return DataFrame expanding
               dimensionality.
@@ -2248,7 +2248,7 @@ class StringMethods:
             If true, whitespace that, after wrapping, happens to end up at the
             beginning or end of a line is dropped (default: True).
         break_long_words : bool, optional
-            If true, then words longer than width will be broken in order to
+            If true, then words longer than width will be broken to
             ensure that no lines are longer than width. If it is false, long
             words will not be broken, and some lines may be longer than width
             (default: True).

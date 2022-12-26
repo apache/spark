@@ -2549,14 +2549,30 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       val df = sql("SELECT h2.my_avg(id) FROM h2.test.people")
       checkAggregateRemoved(df)
       checkAnswer(df, Row(1) :: Nil)
-      val e1 = intercept[AnalysisException] {
-        checkAnswer(sql("SELECT h2.test.my_avg2(id) FROM h2.test.people"), Seq.empty)
-      }
-      assert(e1.getMessage.contains("Undefined function: h2.test.my_avg2"))
-      val e2 = intercept[AnalysisException] {
-        checkAnswer(sql("SELECT h2.my_avg2(id) FROM h2.test.people"), Seq.empty)
-      }
-      assert(e2.getMessage.contains("Undefined function: h2.my_avg2"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          checkAnswer(sql("SELECT h2.test.my_avg2(id) FROM h2.test.people"), Seq.empty)
+        },
+        errorClass = "UNRESOLVED_ROUTINE",
+        parameters = Map(
+          "routineName" -> "`h2`.`test`.`my_avg2`",
+          "searchPath" -> "[`system`.`builtin`, `system`.`session`, `h2`.`default`]"),
+        context = ExpectedContext(
+          fragment = "h2.test.my_avg2(id)",
+          start = 7,
+          stop = 25))
+      checkError(
+        exception = intercept[AnalysisException] {
+          checkAnswer(sql("SELECT h2.my_avg2(id) FROM h2.test.people"), Seq.empty)
+        },
+        errorClass = "UNRESOLVED_ROUTINE",
+        parameters = Map(
+          "routineName" -> "`h2`.`my_avg2`",
+          "searchPath" -> "[`system`.`builtin`, `system`.`session`, `h2`.`default`]"),
+        context = ExpectedContext(
+          fragment = "h2.my_avg2(id)",
+          start = 7,
+          stop = 20))
     } finally {
       JdbcDialects.unregisterDialect(testH2Dialect)
       JdbcDialects.registerDialect(H2Dialect)

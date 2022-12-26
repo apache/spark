@@ -21,6 +21,7 @@ import java.io.File
 
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.util.Utils
 
 /**
@@ -89,6 +90,19 @@ object WideSchemaBenchmark extends SqlBasedBenchmark {
       val selectExpr = (1 to width).map(i => s"id as a_$i")
       benchmark.addCase(s"$width select expressions") { iter =>
         spark.range(1).toDF.selectExpr(selectExpr: _*)
+      }
+    }
+    benchmark.run()
+  }
+
+  def optimizeLargeSelectExpressions(): Unit = {
+    val benchmark = new Benchmark("optimize large select", 1, output = output)
+    Seq(100, 1000, 10000).foreach { width =>
+      val columns = (1 to width).map(i => s"id as c_$i")
+      val df = spark.range(1).selectExpr(columns: _*).cache()
+      df.count()  // force caching
+      benchmark.addCase(s"$width columns") { iter =>
+        df.withColumn("id", lit(1)).withColumn("name", lit("name")).queryExecution.optimizedPlan
       }
     }
     benchmark.run()
@@ -213,6 +227,10 @@ object WideSchemaBenchmark extends SqlBasedBenchmark {
 
     runBenchmarkWithDeleteTmpFiles("parsing large select expressions") {
       parsingLargeSelectExpressions()
+    }
+
+    runBenchmarkWithDeleteTmpFiles("optimize large select expressions") {
+      optimizeLargeSelectExpressions()
     }
 
     runBenchmarkWithDeleteTmpFiles("many column field read and write") {

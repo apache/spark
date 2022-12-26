@@ -113,6 +113,7 @@ if (in_spark):
 # Also don't forget to update python/docs/source/getting_started/install.rst.
 _minimum_pandas_version = "1.0.5"
 _minimum_pyarrow_version = "1.0.0"
+_minimum_grpc_version = "1.48.1"
 
 
 class InstallCommand(install):
@@ -215,7 +216,10 @@ try:
                   'pyspark.ml.param',
                   'pyspark.sql',
                   'pyspark.sql.avro',
+                  'pyspark.sql.connect',
+                  'pyspark.sql.connect.proto',
                   'pyspark.sql.pandas',
+                  'pyspark.sql.protobuf',
                   'pyspark.sql.streaming',
                   'pyspark.streaming',
                   'pyspark.bin',
@@ -273,6 +277,12 @@ try:
                 'pyarrow>=%s' % _minimum_pyarrow_version,
                 'numpy>=1.15',
             ],
+            'connect': [
+                'pandas>=%s' % _minimum_pandas_version,
+                'pyarrow>=%s' % _minimum_pyarrow_version,
+                'grpc>=%s' % _minimum_grpc_version,
+                'numpy>=1.15',
+            ],
         },
         python_requires='>=3.7',
         classifiers=[
@@ -282,6 +292,7 @@ try:
             'Programming Language :: Python :: 3.8',
             'Programming Language :: Python :: 3.9',
             'Programming Language :: Python :: 3.10',
+            'Programming Language :: Python :: 3.11',
             'Programming Language :: Python :: Implementation :: CPython',
             'Programming Language :: Python :: Implementation :: PyPy',
             'Typing :: Typed'],

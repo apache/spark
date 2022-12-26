@@ -16,6 +16,14 @@ struct<>
 
 
 -- !query
+CREATE VIEW t3(c1, c2) AS VALUES (0, ARRAY(0, 1)), (1, ARRAY(2)), (2, ARRAY()), (null, ARRAY(4))
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 SELECT * FROM t1, LATERAL (SELECT c1)
 -- !query schema
 struct<c1:int,c2:int,c1:int>
@@ -788,6 +796,48 @@ struct<c1:int,c2:int>
 
 
 -- !query
+SELECT * FROM t3 JOIN LATERAL (SELECT EXPLODE(c2))
+-- !query schema
+struct<c1:int,c2:array<int>,col:int>
+-- !query output
+0	[0,1]	0
+0	[0,1]	1
+1	[2]	2
+NULL	[4]	4
+
+
+-- !query
+SELECT * FROM t3 JOIN LATERAL (SELECT EXPLODE_OUTER(c2))
+-- !query schema
+struct<c1:int,c2:array<int>,col:int>
+-- !query output
+0	[0,1]	0
+0	[0,1]	1
+1	[2]	2
+2	[]	NULL
+NULL	[4]	4
+
+
+-- !query
+SELECT * FROM t3 JOIN LATERAL (SELECT EXPLODE(c2)) t(c3) ON c1 = c3
+-- !query schema
+struct<c1:int,c2:array<int>,c3:int>
+-- !query output
+0	[0,1]	0
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL (SELECT EXPLODE(c2)) t(c3) ON c1 = c3
+-- !query schema
+struct<c1:int,c2:array<int>,c3:int>
+-- !query output
+0	[0,1]	0
+1	[2]	NULL
+2	[]	NULL
+NULL	[4]	NULL
+
+
+-- !query
 DROP VIEW t1
 -- !query schema
 struct<>
@@ -797,6 +847,14 @@ struct<>
 
 -- !query
 DROP VIEW t2
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW t3
 -- !query schema
 struct<>
 -- !query output
