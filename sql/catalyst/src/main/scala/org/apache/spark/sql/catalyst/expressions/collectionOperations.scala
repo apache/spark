@@ -4605,13 +4605,14 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
  * Given an array, and another element append the element at the end of the array.
  */
 @ExpressionDescription(
-  usage = """_FUNC_(array, element) - Add the element at the end of the array passed as first
-      argument. Type of element should be similar to type of the elements of the array.""",
+  usage = """
+      _FUNC_(array, element) - Add the element at the end of the array passed as first
+      argument. Type of element should be similar to type of the elements of the array.
+      """,
   examples = """
     Examples:
       > SELECT _FUNC_(array('b', 'd', 'c', 'a'), 'd');
        ["b","d","c","a","d"]
-
   """,
   since = "3.4.0",
   group = "array_funcs")
@@ -4619,7 +4620,6 @@ case class ArrayAppend(left: Expression, right: Expression)
   extends BinaryExpression
     with ImplicitCastInputTypes
     with ComplexTypeMergingExpression
-    with NullIntolerant
     with QueryErrorsBase {
   override def prettyName: String = "array_append"
 
@@ -4661,6 +4661,15 @@ case class ArrayAppend(left: Expression, right: Expression)
     }
   }
 
+  override def eval(input: InternalRow): Any = {
+    val value1 = left.eval(input)
+    if (value1 == null) {
+      null
+    } else {
+      val value2 = right.eval(input)
+      nullSafeEval(value1, value2)
+    }
+  }
 
   override protected def nullSafeEval(arr: Any, elementData: Any): Any = {
     val arrayData = arr.asInstanceOf[ArrayData]
@@ -4674,29 +4683,54 @@ case class ArrayAppend(left: Expression, right: Expression)
     new GenericArrayData(finalData)
   }
 
+  override def nullable: Boolean = left.nullable
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(
-      ctx, ev, (eval1, eval2) => {
-        val newArraySize = ctx.freshName("newArraySize")
-        val i = ctx.freshName("i")
-        val values = ctx.freshName("values")
-        val allocation = CodeGenerator.createArrayData(
-          values, elementType, newArraySize, s" $prettyName failed.")
-        val assignment = CodeGenerator.createArrayAssignment(
-          values, elementType, eval1, i, i, true)
-        s"""
-           |int $newArraySize = $eval1.numElements() + 1;
-           |$allocation
-           |int $i = 0;
-           |while ($i < $eval1.numElements()) {
-           |  $assignment
-           |  $i ++;
-           |}
-           |${CodeGenerator.setArrayElement(values, elementType, i, eval2)}
-           |${ev.value} = $values;
-           |""".stripMargin
-      }
-    )
+    val leftGen = left.genCode(ctx)
+    val rightGen = right.genCode(ctx)
+    val f = (eval1: String, eval2: String) => {
+      val newArraySize = ctx.freshName("newArraySize")
+      val i = ctx.freshName("i")
+      val values = ctx.freshName("values")
+      val allocation = CodeGenerator.createArrayData(
+        values, elementType, newArraySize, s" $prettyName failed.")
+      val assignment = CodeGenerator.createArrayAssignment(
+        values, elementType, eval1, i, i, left.dataType.asInstanceOf[ArrayType].containsNull)
+      s"""
+         |int $newArraySize = $eval1.numElements() + 1;
+         |$allocation
+         |int $i = 0;
+         |while ($i < $eval1.numElements()) {
+         |  $assignment
+         |  $i ++;
+         |}
+         |${CodeGenerator.setArrayElement(values, elementType, i, eval2, Some(rightGen.isNull))}
+         |${ev.value} = $values;
+         |""".stripMargin
+    }
+    val resultCode = f(leftGen.value, rightGen.value)
+    if (nullable) {
+      val nullSafeEval =
+        leftGen.code + rightGen.code + ctx.nullSafeExec(left.nullable, leftGen.isNull) {
+          s"""
+            ${ev.isNull} = false; // resultCode could change nullability.
+            $resultCode
+          """
+        }
+      ev.copy(code =
+        code"""
+        boolean ${ev.isNull} = true;
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $nullSafeEval
+      """)
+    }
+    else {
+      ev.copy(code =
+        code"""
+        ${leftGen.code}
+        ${rightGen.code}
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $resultCode""", isNull = FalseLiteral)
+    }
   }
 
   /**

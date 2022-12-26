@@ -5286,7 +5286,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       (null, null)
     ).toDF("a", "b")
     checkAnswer(df4.selectExpr("array_append(a, b)"),
-      Seq(Row(Seq("a", "b", "c", "d")), Row(null), Row(null), Row(null)))
+      Seq(Row(Seq("a", "b", "c", "d")), Row(null), Row(Seq("x", "y", "z", null)), Row(null)))
 
     val df5 = Seq((Array[Double](3d, 2d, 5d, 1d, 2d), 3)).toDF("a", "b")
     checkAnswer(df5.selectExpr("array_append(a, b)"),
@@ -5322,7 +5322,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     val df9 = spark.sql("SELECT array(1, 2, null) as a, CAST(null AS INT) as b")
     checkAnswer(df9.selectExpr("array_append(a, b)"),
-      Seq(Row(null))
+      Seq(Row(Seq(1, 2, null, null)))
     )
 
     val df10 = spark.createDataFrame(
@@ -5335,7 +5335,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     )
 
     checkAnswer(df10.selectExpr("array_append(a, b)"),
-      Seq(Row(null))
+      Seq(Row(Seq(1, 2, 3, null, null)))
     )
   }
 }
