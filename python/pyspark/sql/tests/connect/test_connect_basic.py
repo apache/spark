@@ -389,6 +389,66 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             self.connect.sql(query).schema.__repr__(),
         )
 
+    def test_to(self):
+        # SPARK-41464: test DataFrame.to()
+
+        # The schema has not changed
+        schema = StructType(
+            [
+                StructField("id", IntegerType(), True),
+                StructField("name", StringType(), True),
+            ]
+        )
+
+        cdf = self.connect.read.table(self.tbl_name).to(schema)
+        df = self.spark.read.table(self.tbl_name).to(schema)
+
+        self.assertEqual(cdf.schema, df.schema)
+        self.assert_eq(cdf.toPandas(), df.toPandas())
+
+        # Change the column name
+        schema = StructType(
+            [
+                StructField("col1", IntegerType(), True),
+                StructField("col2", StringType(), True),
+            ]
+        )
+
+        cdf = self.connect.read.table(self.tbl_name).to(schema)
+        df = self.spark.read.table(self.tbl_name).to(schema)
+
+        self.assertEqual(cdf.schema, df.schema)
+        self.assert_eq(cdf.toPandas(), df.toPandas())
+
+        # Change the column data type
+        schema = StructType(
+            [
+                StructField("id", StringType(), True),
+                StructField("name", StringType(), True),
+            ]
+        )
+
+        cdf = self.connect.read.table(self.tbl_name).to(schema)
+        df = self.spark.read.table(self.tbl_name).to(schema)
+
+        self.assertEqual(cdf.schema, df.schema)
+        self.assert_eq(cdf.toPandas(), df.toPandas())
+
+        # Change the column data type failed
+        schema = StructType(
+            [
+                StructField("id", IntegerType(), True),
+                StructField("name", IntegerType(), True),
+            ]
+        )
+
+        with self.assertRaises(grpc.RpcError) as context:
+            self.connect.read.table(self.tbl_name).to(schema).toPandas()
+            self.assertIn(
+                """Column or field `name` is of type "STRING" while it's required to be "INT".""",
+                str(context.exception),
+            )
+
     def test_toDF(self):
         # SPARK-41310: test DataFrame.toDF()
         self.assertEqual(
@@ -407,8 +467,8 @@ class SparkConnectTests(SparkConnectSQLTestCase):
 
     def test_is_local(self):
         # SPARK-41216: Test is local
-        self.assertTrue(self.connect.sql("SHOW DATABASES").isLocal)
-        self.assertFalse(self.connect.read.table(self.tbl_name).isLocal)
+        self.assertTrue(self.connect.sql("SHOW DATABASES").isLocal())
+        self.assertFalse(self.connect.read.table(self.tbl_name).isLocal())
 
     def test_is_streaming(self):
         # SPARK-41216: Test is streaming
@@ -897,7 +957,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertTrue(self.connect.sql("SELECT 1 AS X LIMIT 0").isEmpty())
 
     def test_session(self):
-        self.assertEqual(self.connect, self.connect.sql("SELECT 1").sparkSession())
+        self.assertEqual(self.connect, self.connect.sql("SELECT 1").sparkSession)
 
     def test_show(self):
         # SPARK-41111: Test the show method
@@ -1058,13 +1118,13 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertEqual(5.0, res[1][1])
 
         # Additional GroupBy tests with 3 rows
-        from pyspark.sql.connect.function_builder import functions as FB
+        import pyspark.sql.connect.functions as CF
         import pyspark.sql.functions as PF
 
         df_a = self.connect.range(10).groupBy((col("id") % lit(3)).alias("moded"))
         df_b = self.spark.range(10).groupBy((PF.col("id") % PF.lit(3)).alias("moded"))
         self.assertEqual(
-            set(df_b.agg(PF.sum("id")).collect()), set(df_a.agg(FB.sum("id")).collect())
+            set(df_b.agg(PF.sum("id")).collect()), set(df_a.agg(CF.sum("id")).collect())
         )
 
         # Dict agg
@@ -1094,6 +1154,142 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             set(connect_df.select("id").crossJoin(other=connect_df.select("name")).toPandas()),
             set(spark_df.select("id").crossJoin(other=spark_df.select("name")).toPandas()),
         )
+
+    def test_grouped_data(self):
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        query = """
+            SELECT * FROM VALUES
+                ('James', 'Sales', 3000, 2020),
+                ('Michael', 'Sales', 4600, 2020),
+                ('Robert', 'Sales', 4100, 2020),
+                ('Maria', 'Finance', 3000, 2020),
+                ('James', 'Sales', 3000, 2019),
+                ('Scott', 'Finance', 3300, 2020),
+                ('Jen', 'Finance', 3900, 2020),
+                ('Jeff', 'Marketing', 3000, 2020),
+                ('Kumar', 'Marketing', 2000, 2020),
+                ('Saif', 'Sales', 4100, 2020)
+            AS T(name, department, salary, year)
+            """
+
+        # +-------+----------+------+----+
+        # |   name|department|salary|year|
+        # +-------+----------+------+----+
+        # |  James|     Sales|  3000|2020|
+        # |Michael|     Sales|  4600|2020|
+        # | Robert|     Sales|  4100|2020|
+        # |  Maria|   Finance|  3000|2020|
+        # |  James|     Sales|  3000|2019|
+        # |  Scott|   Finance|  3300|2020|
+        # |    Jen|   Finance|  3900|2020|
+        # |   Jeff| Marketing|  3000|2020|
+        # |  Kumar| Marketing|  2000|2020|
+        # |   Saif|     Sales|  4100|2020|
+        # +-------+----------+------+----+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        # test groupby
+        self.assert_eq(
+            cdf.groupBy("name").agg(CF.sum(cdf.salary)).toPandas(),
+            sdf.groupBy("name").agg(SF.sum(sdf.salary)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.groupBy("name", cdf.department).agg(CF.max("year"), CF.min(cdf.salary)).toPandas(),
+            sdf.groupBy("name", sdf.department).agg(SF.max("year"), SF.min(sdf.salary)).toPandas(),
+        )
+
+        # test rollup
+        self.assert_eq(
+            cdf.rollup("name").agg(CF.sum(cdf.salary)).toPandas(),
+            sdf.rollup("name").agg(SF.sum(sdf.salary)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.rollup("name", cdf.department).agg(CF.max("year"), CF.min(cdf.salary)).toPandas(),
+            sdf.rollup("name", sdf.department).agg(SF.max("year"), SF.min(sdf.salary)).toPandas(),
+        )
+
+        # test cube
+        self.assert_eq(
+            cdf.cube("name").agg(CF.sum(cdf.salary)).toPandas(),
+            sdf.cube("name").agg(SF.sum(sdf.salary)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.cube("name", cdf.department).agg(CF.max("year"), CF.min(cdf.salary)).toPandas(),
+            sdf.cube("name", sdf.department).agg(SF.max("year"), SF.min(sdf.salary)).toPandas(),
+        )
+
+        # test pivot
+        # pivot with values
+        self.assert_eq(
+            cdf.groupBy("name")
+            .pivot("department", ["Sales", "Marketing"])
+            .agg(CF.sum(cdf.salary))
+            .toPandas(),
+            sdf.groupBy("name")
+            .pivot("department", ["Sales", "Marketing"])
+            .agg(SF.sum(sdf.salary))
+            .toPandas(),
+        )
+        self.assert_eq(
+            cdf.groupBy(cdf.name)
+            .pivot("department", ["Sales", "Finance", "Marketing"])
+            .agg(CF.sum(cdf.salary))
+            .toPandas(),
+            sdf.groupBy(sdf.name)
+            .pivot("department", ["Sales", "Finance", "Marketing"])
+            .agg(SF.sum(sdf.salary))
+            .toPandas(),
+        )
+        self.assert_eq(
+            cdf.groupBy(cdf.name)
+            .pivot("department", ["Sales", "Finance", "Unknown"])
+            .agg(CF.sum(cdf.salary))
+            .toPandas(),
+            sdf.groupBy(sdf.name)
+            .pivot("department", ["Sales", "Finance", "Unknown"])
+            .agg(SF.sum(sdf.salary))
+            .toPandas(),
+        )
+
+        # pivot without values
+        self.assert_eq(
+            cdf.groupBy("name").pivot("department").agg(CF.sum(cdf.salary)).toPandas(),
+            sdf.groupBy("name").pivot("department").agg(SF.sum(sdf.salary)).toPandas(),
+        )
+
+        self.assert_eq(
+            cdf.groupBy("name").pivot("year").agg(CF.sum(cdf.salary)).toPandas(),
+            sdf.groupBy("name").pivot("year").agg(SF.sum(sdf.salary)).toPandas(),
+        )
+
+        # check error
+        with self.assertRaisesRegex(
+            Exception,
+            "PIVOT after ROLLUP is not supported",
+        ):
+            cdf.rollup("name").pivot("department").agg(CF.sum(cdf.salary))
+
+        with self.assertRaisesRegex(
+            Exception,
+            "PIVOT after CUBE is not supported",
+        ):
+            cdf.cube("name").pivot("department").agg(CF.sum(cdf.salary))
+
+        with self.assertRaisesRegex(
+            Exception,
+            "Repeated PIVOT operation is not supported",
+        ):
+            cdf.groupBy("name").pivot("year").pivot("year").agg(CF.sum(cdf.salary))
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "value should be a bool, float, int or str, but got bytes",
+        ):
+            cdf.groupBy("name").pivot("department", ["Sales", b"Marketing"]).agg(CF.sum(cdf.salary))
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)

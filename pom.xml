@@ -102,6 +102,7 @@
     <module>connector/avro</module>
     <module>connector/connect/server</module>
     <module>connector/connect/common</module>
+    <module>connector/connect/client/jvm</module>
     <module>connector/protobuf</module>
     <!-- See additional modules enabled by profiles below -->
   </modules>
@@ -684,7 +685,7 @@
       <dependency>
         <groupId>org.rocksdb</groupId>
         <artifactId>rocksdbjni</artifactId>
-        <version>7.7.3</version>
+        <version>7.8.3</version>
       </dependency>
       <dependency>
         <groupId>${leveldbjni.group}</groupId>

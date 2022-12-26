@@ -349,7 +349,9 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       // pass conf spark.pyspark.python to python by environment variable.
       env.put("PYSPARK_PYTHON", conf.get(SparkLauncher.PYSPARK_PYTHON));
     }
-    env.put("SPARK_REMOTE", remote);
+    if (remote != null) {
+      env.put("SPARK_REMOTE", remote);
+    }
     if (!isEmpty(pyOpts)) {
       pyargs.addAll(parseOptionString(pyOpts));
     }

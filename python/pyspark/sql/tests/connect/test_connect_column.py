@@ -19,9 +19,9 @@ import decimal
 import datetime
 
 from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
-from pyspark.sql.connect.column import (
-    Column,
-    LiteralExpression,
+from pyspark.sql.connect.column import Column
+from pyspark.sql.connect.expressions import LiteralExpression
+from pyspark.sql.connect.types import (
     JVM_BYTE_MIN,
     JVM_BYTE_MAX,
     JVM_SHORT_MIN,
@@ -106,6 +106,138 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assert_eq(
             df3.filter(df3.name.isNotNull()).toPandas(),
             df4.filter(df4.name.isNotNull()).toPandas(),
+        )
+
+    def test_invalid_ops(self):
+        query = """
+            SELECT * FROM VALUES
+            (1, 1, 0, NULL), (2, NULL, 1, 2.0), (3, 3, 4, 3.5)
+            AS tab(a, b, c, d)
+            """
+        cdf = self.connect.sql(query)
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Cannot apply 'in' operator against a column",
+        ):
+            1 in cdf.a
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Cannot convert column into bool",
+        ):
+            cdf.a > 2 and cdf.b < 1
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Cannot convert column into bool",
+        ):
+            cdf.a > 2 or cdf.b < 1
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Cannot convert column into bool",
+        ):
+            not (cdf.a > 2)
+
+    def test_datetime(self):
+        query = """
+            SELECT * FROM VALUES
+            (TIMESTAMP('2022-12-22 15:50:00'), DATE('2022-12-25'), 1.1),
+            (TIMESTAMP('2022-12-22 18:50:00'), NULL, 2.2),
+            (TIMESTAMP('2022-12-23 15:50:00'), DATE('2022-12-24'), 3.3),
+            (NULL, DATE('2022-12-22'), NULL)
+            AS tab(a, b, c)
+            """
+        # +-------------------+----------+----+
+        # |                  a|         b|   c|
+        # +-------------------+----------+----+
+        # |2022-12-22 15:50:00|2022-12-25| 1.1|
+        # |2022-12-22 18:50:00|      null| 2.2|
+        # |2022-12-23 15:50:00|2022-12-24| 3.3|
+        # |               null|2022-12-22|null|
+        # +-------------------+----------+----+
+
+        cdf = self.spark.sql(query)
+        sdf = self.connect.sql(query)
+
+        # datetime.date
+        self.assert_eq(
+            cdf.select(cdf.a < datetime.date(2022, 12, 23)).toPandas(),
+            sdf.select(sdf.a < datetime.date(2022, 12, 23)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.a != datetime.date(2022, 12, 23)).toPandas(),
+            sdf.select(sdf.a != datetime.date(2022, 12, 23)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.a == datetime.date(2022, 12, 22)).toPandas(),
+            sdf.select(sdf.a == datetime.date(2022, 12, 22)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.b < datetime.date(2022, 12, 23)).toPandas(),
+            sdf.select(sdf.b < datetime.date(2022, 12, 23)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.b >= datetime.date(2022, 12, 23)).toPandas(),
+            sdf.select(sdf.b >= datetime.date(2022, 12, 23)).toPandas(),
+        )
+
+        # datetime.datetime
+        self.assert_eq(
+            cdf.select(cdf.a < datetime.datetime(2022, 12, 22, 17, 0, 0)).toPandas(),
+            sdf.select(sdf.a < datetime.datetime(2022, 12, 22, 17, 0, 0)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.a > datetime.datetime(2022, 12, 22, 17, 0, 0)).toPandas(),
+            sdf.select(sdf.a > datetime.datetime(2022, 12, 22, 17, 0, 0)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.b >= datetime.datetime(2022, 12, 23, 17, 0, 0)).toPandas(),
+            sdf.select(sdf.b >= datetime.datetime(2022, 12, 23, 17, 0, 0)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.b < datetime.datetime(2022, 12, 23, 17, 0, 0)).toPandas(),
+            sdf.select(sdf.b < datetime.datetime(2022, 12, 23, 17, 0, 0)).toPandas(),
+        )
+
+    def test_decimal(self):
+        # SPARK-41701: test decimal
+        query = """
+            SELECT * FROM VALUES
+            (1, 1, 0, NULL), (2, NULL, 1, 2.0), (3, 3, 4, 3.5)
+            AS tab(a, b, c, d)
+            """
+        # +---+----+---+----+
+        # |  a|   b|  c|   d|
+        # +---+----+---+----+
+        # |  1|   1|  0|null|
+        # |  2|null|  1| 2.0|
+        # |  3|   3|  4| 3.5|
+        # +---+----+---+----+
+
+        cdf = self.spark.sql(query)
+        sdf = self.connect.sql(query)
+
+        self.assert_eq(
+            cdf.select(cdf.a < decimal.Decimal(3)).toPandas(),
+            sdf.select(sdf.a < decimal.Decimal(3)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.a != decimal.Decimal(2)).toPandas(),
+            sdf.select(sdf.a != decimal.Decimal(2)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.a == decimal.Decimal(2)).toPandas(),
+            sdf.select(sdf.a == decimal.Decimal(2)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.b < decimal.Decimal(2.5)).toPandas(),
+            sdf.select(sdf.b < decimal.Decimal(2.5)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.d >= decimal.Decimal(3.0)).toPandas(),
+            sdf.select(sdf.d >= decimal.Decimal(3.0)).toPandas(),
         )
 
     def test_simple_binary_expressions(self):
@@ -274,6 +406,10 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assert_eq(
             df.select(df.id.cast("string")).toPandas(), df2.select(df2.id.cast("string")).toPandas()
         )
+        self.assert_eq(
+            df.select(df.id.astype("string")).toPandas(),
+            df2.select(df2.id.astype("string")).toPandas(),
+        )
 
         for x in [
             StringType(),
@@ -347,9 +483,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         # SPARK-41225: Disable unsupported functions.
         c = self.connect.range(1).id
         for f in (
-            "over",
             "getItem",
-            "astype",
             "between",
             "getField",
             "withField",
