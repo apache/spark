@@ -25,7 +25,6 @@ import com.google.common.collect.{Lists, Maps}
 import org.apache.spark.TaskContext
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.WriteOperation
 import org.apache.spark.sql.{Column, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
@@ -41,6 +40,7 @@ import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.command.CreateViewCommand
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
+import org.apache.spark.sql.internal.CatalogImpl
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -1041,7 +1041,7 @@ class SparkConnectPlanner(session: SparkSession) {
    *
    * @param writeOperation
    */
-  def handleWriteOperation(writeOperation: WriteOperation): Unit = {
+  def handleWriteOperation(writeOperation: proto.WriteOperation): Unit = {
     // Transform the input plan into the logical plan.
     val planner = new SparkConnectPlanner(session)
     val plan = planner.transformRelation(writeOperation.getInput)
@@ -1092,4 +1092,300 @@ class SparkConnectPlanner(session: SparkSession) {
     }
   }
 
+  /**
+   * Transforms the catalog operation and executes it.
+   */
+  def transformCatalog(rel: proto.Catalog): LogicalPlan = {
+    rel.getCatTypeCase match {
+      case proto.Catalog.CatTypeCase.CURRENT_DATABASE =>
+        transformCurrentDatabase(rel.getCurrentDatabase)
+      case proto.Catalog.CatTypeCase.SET_CURRENT_DATABASE =>
+        transformSetCurrentDatabase(rel.getSetCurrentDatabase)
+      case proto.Catalog.CatTypeCase.LIST_DATABASES =>
+        transformListDatabases(rel.getListDatabases)
+      case proto.Catalog.CatTypeCase.LIST_TABLES => transformListTables(rel.getListTables)
+      case proto.Catalog.CatTypeCase.LIST_FUNCTIONS =>
+        transformListFunctions(rel.getListFunctions)
+      case proto.Catalog.CatTypeCase.LIST_COLUMNS => transformListColumns(rel.getListColumns)
+      case proto.Catalog.CatTypeCase.GET_DATABASE => transformGetDatabase(rel.getGetDatabase)
+      case proto.Catalog.CatTypeCase.GET_TABLE => transformGetTable(rel.getGetTable)
+      case proto.Catalog.CatTypeCase.GET_FUNCTION => transformGetFunction(rel.getGetFunction)
+      case proto.Catalog.CatTypeCase.DATABASE_EXISTS =>
+        transformDatabaseExists(rel.getDatabaseExists)
+      case proto.Catalog.CatTypeCase.TABLE_EXISTS => transformTableExists(rel.getTableExists)
+      case proto.Catalog.CatTypeCase.FUNCTION_EXISTS =>
+        transformFunctionExists(rel.getFunctionExists)
+      case proto.Catalog.CatTypeCase.CREATE_EXTERNAL_TABLE =>
+        transformCreateExternalTable(rel.getCreateExternalTable)
+      case proto.Catalog.CatTypeCase.CREATE_TABLE => transformCreateTable(rel.getCreateTable)
+      case proto.Catalog.CatTypeCase.DROP_TEMP_VIEW => transformDropTempView(rel.getDropTempView)
+      case proto.Catalog.CatTypeCase.DROP_GLOBAL_TEMP_VIEW =>
+        transformDropGlobalTempView(rel.getDropGlobalTempView)
+      case proto.Catalog.CatTypeCase.RECOVER_PARTITIONS =>
+        transformRecoverPartitions(rel.getRecoverPartitions)
+      case proto.Catalog.CatTypeCase.IS_CACHED => transformIsCached(rel.getIsCached)
+      case proto.Catalog.CatTypeCase.CACHE_TABLE => transformCacheTable(rel.getCacheTable)
+      case proto.Catalog.CatTypeCase.UNCACHE_TABLE => transformUncacheTable(rel.getUncacheTable)
+      case proto.Catalog.CatTypeCase.CLEAR_CACHE => transformClearCache(rel.getClearCache)
+      case proto.Catalog.CatTypeCase.REFRESH_TABLE => transformRefreshTable(rel.getRefreshTable)
+      case proto.Catalog.CatTypeCase.REFRESH_BY_PATH =>
+        transformRefreshByPath(rel.getRefreshByPath)
+      case proto.Catalog.CatTypeCase.CURRENT_CATALOG =>
+        transformCurrentCatalog(rel.getCurrentCatalog)
+      case proto.Catalog.CatTypeCase.SET_CURRENT_CATALOG =>
+        transformSetCurrentCatalog(rel.getSetCurrentCatalog)
+      case proto.Catalog.CatTypeCase.LIST_CATALOGS => transformListCatalogs(rel.getListCatalogs)
+      case other => throw InvalidPlanInput(s"$other not supported.")
+    }
+  }
+
+  private val emptyLocalRelation = LocalRelation(
+    output = AttributeReference("value", StringType, false)() :: Nil,
+    data = Seq.empty)
+
+  private def transformCurrentDatabase(getCurrentDatabase: proto.CurrentDatabase): LogicalPlan = {
+    CatalogImpl.makeDataset(session.catalog.currentDatabase :: Nil, session).logicalPlan
+  }
+
+  private def transformSetCurrentDatabase(
+      getSetCurrentDatabase: proto.SetCurrentDatabase): LogicalPlan = {
+    session.catalog.setCurrentDatabase(getSetCurrentDatabase.getDbName)
+    emptyLocalRelation
+  }
+
+  private def transformListDatabases(getListDatabases: proto.ListDatabases): LogicalPlan = {
+    session.catalog.listDatabases().logicalPlan
+  }
+
+  private def transformListTables(getListTables: proto.ListTables): LogicalPlan = {
+    if (getListTables.hasDbName) {
+      session.catalog.listTables(getListTables.getDbName).logicalPlan
+    } else {
+      session.catalog.listTables().logicalPlan
+    }
+  }
+
+  private def transformListFunctions(getListFunctions: proto.ListFunctions): LogicalPlan = {
+    if (getListFunctions.hasDbName) {
+      session.catalog.listFunctions(getListFunctions.getDbName).logicalPlan
+    } else {
+      session.catalog.listFunctions().logicalPlan
+    }
+  }
+
+  private def transformListColumns(getListColumns: proto.ListColumns): LogicalPlan = {
+    if (getListColumns.hasDbName) {
+      session.catalog
+        .listColumns(dbName = getListColumns.getDbName, tableName = getListColumns.getTableName)
+        .logicalPlan
+    } else {
+      session.catalog.listColumns(getListColumns.getTableName).logicalPlan
+    }
+  }
+
+  private def transformGetDatabase(getGetDatabase: proto.GetDatabase): LogicalPlan = {
+    CatalogImpl
+      .makeDataset(session.catalog.getDatabase(getGetDatabase.getDbName) :: Nil, session)
+      .logicalPlan
+  }
+
+  private def transformGetTable(getGetTable: proto.GetTable): LogicalPlan = {
+    if (getGetTable.hasDbName) {
+      CatalogImpl
+        .makeDataset(
+          session.catalog.getTable(
+            dbName = getGetTable.getDbName,
+            tableName = getGetTable.getTableName) :: Nil,
+          session)
+        .logicalPlan
+    } else {
+      CatalogImpl
+        .makeDataset(session.catalog.getTable(getGetTable.getTableName) :: Nil, session)
+        .logicalPlan
+    }
+  }
+
+  private def transformGetFunction(getGetFunction: proto.GetFunction): LogicalPlan = {
+    if (getGetFunction.hasDbName) {
+      CatalogImpl
+        .makeDataset(
+          session.catalog.getFunction(
+            dbName = getGetFunction.getDbName,
+            functionName = getGetFunction.getFunctionName) :: Nil,
+          session)
+        .logicalPlan
+    } else {
+      CatalogImpl
+        .makeDataset(session.catalog.getTable(getGetFunction.getFunctionName) :: Nil, session)
+        .logicalPlan
+    }
+  }
+
+  private def transformDatabaseExists(getDatabaseExists: proto.DatabaseExists): LogicalPlan = {
+    CatalogImpl
+      .makeDataset(session.catalog.databaseExists(getDatabaseExists.getDbName) :: Nil, session)
+      .logicalPlan
+  }
+
+  private def transformTableExists(getTableExists: proto.TableExists): LogicalPlan = {
+    if (getTableExists.hasDbName) {
+      CatalogImpl
+        .makeDataset(
+          session.catalog.tableExists(
+            dbName = getTableExists.getDbName,
+            tableName = getTableExists.getTableName) :: Nil,
+          session)
+        .logicalPlan
+    } else {
+      CatalogImpl
+        .makeDataset(session.catalog.tableExists(getTableExists.getTableName) :: Nil, session)
+        .logicalPlan
+    }
+  }
+
+  private def transformFunctionExists(getFunctionExists: proto.FunctionExists): LogicalPlan = {
+    if (getFunctionExists.hasDbName) {
+      CatalogImpl
+        .makeDataset(
+          session.catalog.functionExists(
+            dbName = getFunctionExists.getDbName,
+            functionName = getFunctionExists.getFunctionName) :: Nil,
+          session)
+        .logicalPlan
+    } else {
+      CatalogImpl
+        .makeDataset(
+          session.catalog.functionExists(getFunctionExists.getFunctionName) :: Nil,
+          session)
+        .logicalPlan
+    }
+  }
+
+  private def transformCreateExternalTable(
+      getCreateExternalTable: proto.CreateExternalTable): LogicalPlan = {
+    val schema = if (getCreateExternalTable.hasSchema) {
+      val struct = DataTypeProtoConverter.toCatalystType(getCreateExternalTable.getSchema)
+      assert(struct.isInstanceOf[StructType])
+      struct.asInstanceOf[StructType]
+    } else {
+      new StructType
+    }
+
+    val source = if (getCreateExternalTable.hasSource) {
+      getCreateExternalTable.getSource
+    } else {
+      session.sessionState.conf.defaultDataSourceName
+    }
+    session.catalog
+      .createTable(
+        tableName = getCreateExternalTable.getTableName,
+        source = source,
+        schema = schema,
+        options = (getCreateExternalTable.getOptionsMap.asScala ++
+          Map("path" -> getCreateExternalTable.getPath)).asJava)
+      .logicalPlan
+  }
+
+  private def transformCreateTable(getCreateTable: proto.CreateTable): LogicalPlan = {
+    val schema = if (getCreateTable.hasSchema) {
+      val struct = DataTypeProtoConverter.toCatalystType(getCreateTable.getSchema)
+      assert(struct.isInstanceOf[StructType])
+      struct.asInstanceOf[StructType]
+    } else {
+      new StructType
+    }
+
+    val source = if (getCreateTable.hasSource) {
+      getCreateTable.getSource
+    } else {
+      session.sessionState.conf.defaultDataSourceName
+    }
+
+    val description = if (getCreateTable.hasDescription) {
+      getCreateTable.getDescription
+    } else {
+      ""
+    }
+
+    session.catalog
+      .createTable(
+        tableName = getCreateTable.getTableName,
+        source = source,
+        schema = schema,
+        description = description,
+        options = (getCreateTable.getOptionsMap.asScala ++
+          Map("path" -> getCreateTable.getPath)).asJava)
+      .logicalPlan
+  }
+
+  private def transformDropTempView(getDropTempView: proto.DropTempView): LogicalPlan = {
+    CatalogImpl
+      .makeDataset(session.catalog.dropTempView(getDropTempView.getViewName) :: Nil, session)
+      .logicalPlan
+  }
+
+  private def transformDropGlobalTempView(
+      getDropGlobalTempView: proto.DropGlobalTempView): LogicalPlan = {
+    CatalogImpl
+      .makeDataset(
+        session.catalog.dropGlobalTempView(getDropGlobalTempView.getViewName) :: Nil,
+        session)
+      .logicalPlan
+  }
+
+  private def transformRecoverPartitions(
+      getRecoverPartitions: proto.RecoverPartitions): LogicalPlan = {
+    session.catalog.recoverPartitions(getRecoverPartitions.getTableName)
+    emptyLocalRelation
+  }
+
+  private def transformIsCached(getIsCached: proto.IsCached): LogicalPlan = {
+    CatalogImpl
+      .makeDataset(session.catalog.isCached(getIsCached.getTableName) :: Nil, session)
+      .logicalPlan
+  }
+
+  private def transformCacheTable(getCacheTable: proto.CacheTable): LogicalPlan = {
+    // TODO(SPARK-XXXXX) Support storage level.
+    session.catalog.cacheTable(getCacheTable.getTableName)
+    emptyLocalRelation
+  }
+
+  private def transformUncacheTable(getUncacheTable: proto.UncacheTable): LogicalPlan = {
+    session.catalog.cacheTable(getUncacheTable.getTableName)
+    emptyLocalRelation
+  }
+
+  private def transformClearCache(getClearCache: proto.ClearCache): LogicalPlan = {
+    session.catalog.clearCache()
+    emptyLocalRelation
+  }
+
+  private def transformRefreshTable(getRefreshTable: proto.RefreshTable): LogicalPlan = {
+    session.catalog.refreshTable(getRefreshTable.getTableName)
+    emptyLocalRelation
+  }
+
+  private def transformRefreshByPath(getRefreshByPath: proto.RefreshByPath): LogicalPlan = {
+    session.catalog.refreshByPath(getRefreshByPath.getPath)
+    emptyLocalRelation
+  }
+
+  private def transformCurrentCatalog(getCurrentCatalog: proto.CurrentCatalog): LogicalPlan = {
+    CatalogImpl.makeDataset(session.catalog.currentCatalog() :: Nil, session).logicalPlan
+  }
+
+  private def transformSetCurrentCatalog(
+      getSetCurrentCatalog: proto.SetCurrentCatalog): LogicalPlan = {
+    CatalogImpl
+      .makeDataset(
+        session.catalog.setCurrentCatalog(getSetCurrentCatalog.getCatalogName) :: Nil,
+        session)
+      .logicalPlan
+    emptyLocalRelation
+  }
+
+  private def transformListCatalogs(getListCatalogs: proto.ListCatalogs): LogicalPlan = {
+    session.catalog.listCatalogs().logicalPlan
+  }
 }
