@@ -547,7 +547,7 @@ class SparkConnectClient(object):
                 if b.HasField("arrow_batch"):
                     _logger.debug(
                         f"Received arrow batch rows={b.arrow_batch.row_count} "
-                        "size={len(b.arrow_batch.data)}"
+                        f"size={len(b.arrow_batch.data)}"
                     )
                     pb = self._process_batch(b.arrow_batch)
                     result_dfs.append(pb)
