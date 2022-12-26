@@ -196,7 +196,7 @@ class JobData private[spark](
     val description: Option[String],
     val submissionTime: Option[Date],
     val completionTime: Option[Date],
-    val stageIds: collection.Seq[Int],
+    val stageIds: Seq[Int],
     val jobGroup: Option[String],
     val status: JobExecutionStatus,
     val numTasks: Int,
@@ -221,7 +221,7 @@ class RDDStorageInfo private[spark](
     val memoryUsed: Long,
     val diskUsed: Long,
     val dataDistribution: Option[collection.Seq[RDDDataDistribution]],
-    val partitions: Option[collection.Seq[RDDPartitionInfo]])
+    val partitions: Option[Seq[RDDPartitionInfo]])
 
 class RDDDataDistribution private[spark](
     val address: String,
@@ -242,7 +242,7 @@ class RDDPartitionInfo private[spark](
     val storageLevel: String,
     val memoryUsed: Long,
     val diskUsed: Long,
-    val executors: collection.Seq[String])
+    val executors: Seq[String])
 
 class StageData private[spark](
     val status: StageStatus,
@@ -456,11 +456,11 @@ class VersionInfo private[spark](
 // REST call, they are not stored with it.
 class ApplicationEnvironmentInfo private[spark] (
     val runtime: RuntimeInfo,
-    val sparkProperties: collection.Seq[(String, String)],
-    val hadoopProperties: collection.Seq[(String, String)],
-    val systemProperties: collection.Seq[(String, String)],
-    val metricsProperties: collection.Seq[(String, String)],
-    val classpathEntries: collection.Seq[(String, String)],
+    val sparkProperties: Seq[(String, String)],
+    val hadoopProperties: Seq[(String, String)],
+    val systemProperties: Seq[(String, String)],
+    val metricsProperties: Seq[(String, String)],
+    val classpathEntries: Seq[(String, String)],
     val resourceProfiles: collection.Seq[ResourceProfileInfo])
 
 class RuntimeInfo private[spark](

@@ -99,7 +99,7 @@ class RDDStorageInfoWrapperSerializer extends ProtobufSerDe {
           Some(info.getDataDistributionList.asScala.map(deserializeRDDDataDistribution))
         },
       partitions =
-        Some(info.getPartitionsList.asScala.map(deserializeRDDPartitionInfo))
+        Some(info.getPartitionsList.asScala.map(deserializeRDDPartitionInfo).toSeq)
     )
   }
 
@@ -126,7 +126,7 @@ class RDDStorageInfoWrapperSerializer extends ProtobufSerDe {
       storageLevel = info.getStorageLevel,
       memoryUsed = info.getMemoryUsed,
       diskUsed = info.getDiskUsed,
-      executors = info.getExecutorsList.asScala
+      executors = info.getExecutorsList.asScala.toSeq
     )
   }
 }
