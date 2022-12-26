@@ -24,6 +24,7 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.mutable.{HashMap, HashSet, Queue}
 import scala.concurrent.Future
 
+import com.google.common.cache.CacheBuilder
 import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.{ExecutorAllocationClient, SparkEnv, TaskState}
@@ -101,6 +102,15 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   // Executors which are being decommissioned. Maps from executorId to ExecutorDecommissionInfo.
   protected val executorsPendingDecommission = new HashMap[String, ExecutorDecommissionInfo]
+
+  // Unknown Executors which are being decommissioned. This could be caused by unregistered executor
+  // This executor should be decommissioned after registration.
+  // Maps from executorId to (ExecutorDecommissionInfo, adjustTargetNumExecutors,
+  // triggeredByExecutor).
+  protected val unknownExecutorsPendingDecommission =
+    CacheBuilder.newBuilder()
+      .maximumSize(1000)
+      .build[String, (ExecutorDecommissionInfo, Boolean, Boolean)]()
 
   // A map of ResourceProfile id to map of hostname with its possible task number running on it
   @GuardedBy("CoarseGrainedSchedulerBackend.this")
@@ -295,6 +305,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           listenerBus.post(
             SparkListenerExecutorAdded(System.currentTimeMillis(), executorId, data))
           // Note: some tests expect the reply to come after we put the executor in the map
+          // Decommission executor whose request received before registration
+          Option(unknownExecutorsPendingDecommission.getIfPresent(executorId))
+            .foreach(v => {
+              decommissionExecutors(Array((executorId, v._1)), v._2, v._3)
+              unknownExecutorsPendingDecommission.invalidate(executorId)
+            })
           context.reply(true)
         }
 
@@ -528,11 +544,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // Do not change this code without running the K8s integration suites
     val executorsToDecommission = executorsAndDecomInfo.flatMap { case (executorId, decomInfo) =>
       // Only bother decommissioning executors which are alive.
+      // Keep executor decommission info in case executor started, but not registered yet
       if (isExecutorActive(executorId)) {
         scheduler.executorDecommission(executorId, decomInfo)
         executorsPendingDecommission(executorId) = decomInfo
         Some(executorId)
       } else {
+        unknownExecutorsPendingDecommission.put(executorId,
+          (decomInfo, adjustTargetNumExecutors, triggeredByExecutor))
         None
       }
     }
