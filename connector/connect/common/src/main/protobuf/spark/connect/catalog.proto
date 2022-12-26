@@ -104,8 +104,8 @@ message FunctionExists {
 message CreateExternalTable {
   // (Required)
   string table_name = 1;
-  // (Required)
-  string path = 2;
+  // (Optional)
+  optional string path = 2;
   // (Optional)
   optional string source = 3;
   // (Optional)
@@ -119,8 +119,8 @@ message CreateExternalTable {
 message CreateTable {
   // (Required)
   string table_name = 1;
-  // (Required)
-  string path = 2;
+  // (Optional)
+  optional string path = 2;
   // (Optional)
   optional string source = 3;
   // (Optional)

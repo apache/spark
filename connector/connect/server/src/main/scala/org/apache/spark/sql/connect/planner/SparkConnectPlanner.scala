@@ -1211,7 +1211,7 @@ class SparkConnectPlanner(session: SparkSession) {
         .logicalPlan
     } else {
       CatalogImpl
-        .makeDataset(session.catalog.getTable(getGetFunction.getFunctionName) :: Nil, session)
+        .makeDataset(session.catalog.getFunction(getGetFunction.getFunctionName) :: Nil, session)
         .logicalPlan
     }
   }
@@ -1270,13 +1270,19 @@ class SparkConnectPlanner(session: SparkSession) {
     } else {
       session.sessionState.conf.defaultDataSourceName
     }
+
+    val options = if (getCreateExternalTable.hasPath) {
+      (getCreateExternalTable.getOptionsMap.asScala ++
+        Map("path" -> getCreateExternalTable.getPath)).asJava
+    } else {
+      getCreateExternalTable.getOptionsMap
+    }
     session.catalog
       .createTable(
         tableName = getCreateExternalTable.getTableName,
         source = source,
         schema = schema,
-        options = (getCreateExternalTable.getOptionsMap.asScala ++
-          Map("path" -> getCreateExternalTable.getPath)).asJava)
+        options = options)
       .logicalPlan
   }
 
@@ -1301,14 +1307,20 @@ class SparkConnectPlanner(session: SparkSession) {
       ""
     }
 
+    val options = if (getCreateTable.hasPath) {
+      (getCreateTable.getOptionsMap.asScala ++
+        Map("path" -> getCreateTable.getPath)).asJava
+    } else {
+      getCreateTable.getOptionsMap
+    }
+
     session.catalog
       .createTable(
         tableName = getCreateTable.getTableName,
         source = source,
         schema = schema,
         description = description,
-        options = (getCreateTable.getOptionsMap.asScala ++
-          Map("path" -> getCreateTable.getPath)).asJava)
+        options = options)
       .logicalPlan
   }
 
@@ -1348,7 +1360,7 @@ class SparkConnectPlanner(session: SparkSession) {
   }
 
   private def transformUncacheTable(getUncacheTable: proto.UncacheTable): LogicalPlan = {
-    session.catalog.cacheTable(getUncacheTable.getTableName)
+    session.catalog.uncacheTable(getUncacheTable.getTableName)
     emptyLocalRelation
   }
 

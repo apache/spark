@@ -81,9 +81,9 @@ class Catalog:
         return [
             Database(
                 name=row.iloc[0],
-                catalog=row.iloc[2],
-                description=row.iloc[3],
-                locationUri=row.iloc[4],
+                catalog=row.iloc[1],
+                description=row.iloc[2],
+                locationUri=row.iloc[3],
             )
             for _, row in pdf.iterrows()
         ]
@@ -116,7 +116,8 @@ class Catalog:
             Table(
                 name=row.iloc[0],
                 catalog=row.iloc[1],
-                namespace=row.iloc[2],  # TODO: Namespace handling.
+                # If empty or None, returns None.
+                namespace=None if row.iloc[2] is None else list(row.iloc[2]) or None,
                 description=row.iloc[3],
                 tableType=row.iloc[4],
                 isTemporary=row.iloc[5],
@@ -133,7 +134,8 @@ class Catalog:
         return Table(
             name=row.iloc[0],
             catalog=row.iloc[1],
-            namespace=row.iloc[2],  # TODO: Namespace handling.
+            # If empty or None, returns None.
+            namespace=None if row.iloc[2] is None else list(row.iloc[2]) or None,
             description=row.iloc[3],
             tableType=row.iloc[4],
             isTemporary=row.iloc[5],
@@ -142,12 +144,14 @@ class Catalog:
     getTable.__doc__ = PySparkCatalog.getTable.__doc__
 
     def listFunctions(self, dbName: Optional[str] = None) -> List[Function]:
-        pdf = self._catalog_to_pandas(plan.ListTables(db_name=dbName))
+        pdf = self._catalog_to_pandas(plan.ListFunctions(db_name=dbName))
+        print(pdf)
         return [
             Function(
                 name=row.iloc[0],
                 catalog=row.iloc[1],
-                namespace=row.iloc[2],  # TODO: Namespace handling
+                # If empty or None, returns None.
+                namespace=None if row.iloc[2] is None else list(row.iloc[2]) or None,
                 description=row.iloc[3],
                 className=row.iloc[4],
                 isTemporary=row.iloc[5],
@@ -173,7 +177,8 @@ class Catalog:
         return Function(
             name=row.iloc[0],
             catalog=row.iloc[1],
-            namespace=row.iloc[2],  # TODO: Namespace handling
+            # If empty or None, returns None.
+            namespace=None if row.iloc[2] is None else list(row.iloc[2]) or None,
             description=row.iloc[3],
             className=row.iloc[4],
             isTemporary=row.iloc[5],

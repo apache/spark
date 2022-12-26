@@ -121,6 +121,11 @@ class SparkSession(object):
         # Parse the connection string.
         self._client = SparkConnectClient(connectionString)
 
+    def table(self, tableName: str) -> DataFrame:
+        return self.read.table(tableName)
+
+    table.__doc__ = PySparkSession.table.__doc__
+
     @property
     def read(self) -> "DataFrameReader":
         return DataFrameReader(self)

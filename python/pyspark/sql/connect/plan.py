@@ -1948,7 +1948,8 @@ class CreateExternalTable(LogicalPlan):
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         plan = proto.Relation()
         plan.create_external_table.table_name = self._table_name
-        plan.create_external_table.path = self._path
+        if self._path is not None:
+            plan.create_external_table.path = self._path
         if self._source is not None:
             plan.create_external_table.source = self._source
         if self._schema is not None:
@@ -2008,7 +2009,8 @@ class CreateTable(LogicalPlan):
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         plan = proto.Relation()
         plan.create_table.table_name = self._table_name
-        plan.create_table.path = self._path
+        if self._path is not None:
+            plan.create_table.path = self._path
         if self._source is not None:
             plan.create_table.source = self._source
         if self._description is not None:
