@@ -127,7 +127,7 @@ def _create_lambda(f: Callable) -> LambdaFunction:
     result = f(*arg_cols)
 
     if not isinstance(result, Column):
-        raise ValueError(f"Callable {f} should return Column, got {type(result)}")
+        raise ValueError(f"Callable {f.__name__} should return Column, got {type(result)}")
 
     return LambdaFunction(result._expr, arg_names)
 

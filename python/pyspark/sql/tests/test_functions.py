@@ -24,6 +24,7 @@ import unittest
 
 from py4j.protocol import Py4JJavaError
 from pyspark.errors import PySparkException
+from pyspark.sql.utils import is_remote
 from pyspark.sql import Row, Window, types
 from pyspark.sql.functions import (
     udf,
@@ -652,14 +653,21 @@ class FunctionsTestsMixin:
             )
         )
 
-        with self.assertRaises(PySparkException) as pe:
-            df.select(least(df.a).alias("least")).collect()
+        # TODO(SPARK-41712): Migrate the Spark Connect errors into error class.
+        if is_remote():
+            with self.assertRaises(ValueError) as ve:
+                df.select(least(df.a).alias("least")).collect()
 
-        self.check_error(
-            exception=pe,
-            error_class="PYSPARK.WRONG_NUM_COLUMNS",
-            message_parameters={"funcName": "least"},
-        )
+            self.assertEqual("least should take at least two columns", str(ve.exception))
+        else:
+            with self.assertRaises(PySparkException) as pe:
+                df.select(least(df.a).alias("least")).collect()
+
+            self.check_error(
+                exception=pe,
+                error_class="PYSPARK.WRONG_NUM_COLUMNS",
+                message_parameters={"funcName": "least"},
+            )
 
     def test_overlay(self):
         from pyspark.sql.functions import col, lit, overlay
@@ -795,54 +803,99 @@ class FunctionsTestsMixin:
         from pyspark.sql.functions import col, transform
 
         # Should fail with varargs
-        with self.assertRaises(PySparkException) as pe:
-            transform(col("foo"), lambda *x: lit(1))
+        # TODO(SPARK-41712): Migrate the Spark Connect errors into error class.
+        if is_remote():
+            with self.assertRaises(ValueError) as ve:
+                transform(col("foo"), lambda *x: lit(1))
 
-        self.check_error(
-            exception=pe,
-            error_class="PYSPARK.UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION",
-            message_parameters={"funcName": "<lambda>"},
-        )
+            self.assertEqual(
+                "All arguments of f must be usable as POSITIONAL arguments", str(ve.exception)
+            )
+        else:
+            with self.assertRaises(PySparkException) as pe:
+                transform(col("foo"), lambda *x: lit(1))
+
+            self.check_error(
+                exception=pe,
+                error_class="PYSPARK.UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION",
+                message_parameters={"funcName": "<lambda>"},
+            )
 
         # Should fail with kwargs
-        with self.assertRaises(PySparkException) as pe:
-            transform(col("foo"), lambda **x: lit(1))
+        # TODO(SPARK-41712): Migrate the Spark Connect errors into error class.
+        if is_remote():
+            with self.assertRaises(ValueError) as ve:
+                transform(col("foo"), lambda **x: lit(1))
 
-        self.check_error(
-            exception=pe,
-            error_class="PYSPARK.UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION",
-            message_parameters={"funcName": "<lambda>"},
-        )
+            self.assertEqual(
+                "All arguments of f must be usable as POSITIONAL arguments", str(ve.exception)
+            )
+        else:
+            with self.assertRaises(PySparkException) as pe:
+                transform(col("foo"), lambda **x: lit(1))
+
+            self.check_error(
+                exception=pe,
+                error_class="PYSPARK.UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION",
+                message_parameters={"funcName": "<lambda>"},
+            )
 
         # Should fail with nullary function
-        with self.assertRaises(PySparkException) as pe:
-            transform(col("foo"), lambda: lit(1))
+        # TODO(SPARK-41712): Migrate the Spark Connect errors into error class.
+        if is_remote():
+            with self.assertRaises(ValueError) as ve:
+                transform(col("foo"), lambda: lit(1))
 
-        self.check_error(
-            exception=pe,
-            error_class="PYSPARK.WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION",
-            message_parameters={"funcName": "<lambda>", "numArgs": "0"},
-        )
+            self.assertEqual(
+                "f should take between 1 and 3 arguments, but provided function takes 0",
+                str(ve.exception),
+            )
+        else:
+            with self.assertRaises(PySparkException) as pe:
+                transform(col("foo"), lambda: lit(1))
+
+            self.check_error(
+                exception=pe,
+                error_class="PYSPARK.WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION",
+                message_parameters={"funcName": "<lambda>", "numArgs": "0"},
+            )
 
         # Should fail with quaternary function
-        with self.assertRaises(PySparkException) as pe:
-            transform(col("foo"), lambda x1, x2, x3, x4: lit(1))
+        # TODO(SPARK-41712): Migrate the Spark Connect errors into error class.
+        if is_remote():
+            with self.assertRaises(ValueError) as ve:
+                transform(col("foo"), lambda x1, x2, x3, x4: lit(1))
 
-        self.check_error(
-            exception=pe,
-            error_class="PYSPARK.WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION",
-            message_parameters={"funcName": "<lambda>", "numArgs": "4"},
-        )
+            self.assertEqual(
+                "f should take between 1 and 3 arguments, but provided function takes 4",
+                str(ve.exception),
+            )
+        else:
+            with self.assertRaises(PySparkException) as pe:
+                transform(col("foo"), lambda x1, x2, x3, x4: lit(1))
+
+            self.check_error(
+                exception=pe,
+                error_class="PYSPARK.WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION",
+                message_parameters={"funcName": "<lambda>", "numArgs": "4"},
+            )
 
         # Should fail if function doesn't return Column
-        with self.assertRaises(PySparkException) as pe:
-            transform(col("foo"), lambda x: 1)
+        # TODO(SPARK-41712): Migrate the Spark Connect errors into error class.
+        if is_remote():
+            with self.assertRaises(ValueError) as ve:
+                transform(col("foo"), lambda x: 1)
 
-        self.check_error(
-            exception=pe,
-            error_class="PYSPARK.HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN",
-            message_parameters={"funcName": "<lambda>", "returnType": "int"},
-        )
+            self.assertEqual("Callable <lambda> should return Column, got int", str(ve.exception))
+        else:
+            with self.assertRaises(PySparkException) as pe:
+                transform(col("foo"), lambda x: 1)
+
+            self.check_error(
+                exception=pe,
+                error_class="PYSPARK.HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN",
+                message_parameters={"funcName": "<lambda>", "returnType": "int"},
+            )
 
     def test_nested_higher_order_function(self):
         # SPARK-35382: lambda vars must be resolved properly in nested higher order functions
@@ -1230,57 +1283,93 @@ class FunctionsTestsMixin:
         self.assertEqual(expected, actual["from_items"])
 
     def test_schema_of_json(self):
-        with self.assertRaises(PySparkException) as pe:
-            schema_of_json(1)
+        # TODO(SPARK-41712): Migrate the Spark Connect errors into error class.
+        if is_remote():
+            with self.assertRaises(TypeError) as te:
+                schema_of_json(1)
 
-        self.check_error(
-            exception=pe,
-            error_class="PYSPARK.NOT_COLUMN_OR_STRING",
-            message_parameters={"argName": "json", "argType": "int"},
-        )
+            self.assertEqual("json should be a Column or str, but got int", str(te.exception))
+        else:
+            with self.assertRaises(PySparkException) as pe:
+                schema_of_json(1)
+
+            self.check_error(
+                exception=pe,
+                error_class="PYSPARK.NOT_COLUMN_OR_STRING",
+                message_parameters={"argName": "json", "argType": "int"},
+            )
 
     def test_schema_of_csv(self):
-        with self.assertRaises(PySparkException) as pe:
-            schema_of_csv(1)
+        # TODO(SPARK-41712): Migrate the Spark Connect errors into error class.
+        if is_remote():
+            with self.assertRaises(TypeError) as te:
+                schema_of_csv(1)
 
-        self.check_error(
-            exception=pe,
-            error_class="PYSPARK.NOT_COLUMN_OR_STRING",
-            message_parameters={"argName": "csv", "argType": "int"},
-        )
+            self.assertEqual("csv should be a Column or str, but got int", str(te.exception))
+        else:
+            with self.assertRaises(PySparkException) as pe:
+                schema_of_csv(1)
+
+            self.check_error(
+                exception=pe,
+                error_class="PYSPARK.NOT_COLUMN_OR_STRING",
+                message_parameters={"argName": "csv", "argType": "int"},
+            )
 
     def test_from_csv(self):
         df = self.spark.range(10)
-        with self.assertRaises(PySparkException) as pe:
-            from_csv(df.id, 1)
+        # TODO(SPARK-41712): Migrate the Spark Connect errors into error class.
+        if is_remote():
+            with self.assertRaises(TypeError) as te:
+                from_csv(df.id, 1)
 
-        self.check_error(
-            exception=pe,
-            error_class="PYSPARK.NOT_COLUMN_OR_STRING",
-            message_parameters={"argName": "schema", "argType": "int"},
-        )
+            self.assertEqual("schema should be a Column or str, but got int", str(te.exception))
+        else:
+            with self.assertRaises(PySparkException) as pe:
+                from_csv(df.id, 1)
+
+            self.check_error(
+                exception=pe,
+                error_class="PYSPARK.NOT_COLUMN_OR_STRING",
+                message_parameters={"argName": "schema", "argType": "int"},
+            )
 
     def test_greatest(self):
         df = self.spark.range(10)
-        with self.assertRaises(PySparkException) as pe:
-            greatest(df.id)
+        # TODO(SPARK-41712): Migrate the Spark Connect errors into error class.
+        if is_remote():
+            with self.assertRaises(ValueError) as ve:
+                greatest(df.id)
 
-        self.check_error(
-            exception=pe,
-            error_class="PYSPARK.WRONG_NUM_COLUMNS",
-            message_parameters={"funcName": "greatest"},
-        )
+            self.assertEqual("greatest should take at least two columns", str(ve.exception))
+        else:
+            with self.assertRaises(PySparkException) as pe:
+                greatest(df.id)
+
+            self.check_error(
+                exception=pe,
+                error_class="PYSPARK.WRONG_NUM_COLUMNS",
+                message_parameters={"funcName": "greatest"},
+            )
 
     def test_when(self):
-        with self.assertRaises(PySparkException) as pe:
-            when("id", 1)
+        # TODO(SPARK-41712): Migrate the Spark Connect errors into error class.
+        if is_remote():
+            with self.assertRaises(TypeError) as te:
+                when("id", 1)
 
-        self.check_error(
-            exception=pe,
-            error_class="PYSPARK.NOT_A_COLUMN",
-            message_parameters={"argName": "condition", "argType": "str"},
-        )
+            self.assertEqual("condition should be a Column", str(te.exception))
+        else:
+            with self.assertRaises(PySparkException) as pe:
+                when("id", 1)
 
+            self.check_error(
+                exception=pe,
+                error_class="PYSPARK.NOT_A_COLUMN",
+                message_parameters={"argName": "condition", "argType": "str"},
+            )
+
+    @unittest.skipIf(is_remote(), "window is not added to Spark Connect yet")
     def test_window(self):
         with self.assertRaises(PySparkException) as pe:
             window("date", 5)
@@ -1291,7 +1380,9 @@ class FunctionsTestsMixin:
             message_parameters={"argName": "windowDuration", "argType": "int"},
         )
 
+    @unittest.skipIf(is_remote(), "session_window is not added to Spark Connect yet")
     def test_session_window(self):
+
         with self.assertRaises(PySparkException) as pe:
             session_window("date", 5)
 
@@ -1302,14 +1393,23 @@ class FunctionsTestsMixin:
         )
 
     def test_bucket(self):
-        with self.assertRaises(PySparkException) as pe:
-            bucket("5", "id")
+        # TODO(SPARK-41712): Migrate the Spark Connect errors into error class.
+        if is_remote():
+            with self.assertRaises(TypeError) as te:
+                bucket("5", "id")
 
-        self.check_error(
-            exception=pe,
-            error_class="PYSPARK.NOT_COLUMN_OR_INTEGER",
-            message_parameters={"argName": "numBuckets", "argType": "str"},
-        )
+            self.assertEqual(
+                "numBuckets should be a Column or an int, got <class 'str'>", str(te.exception)
+            )
+        else:
+            with self.assertRaises(PySparkException) as pe:
+                bucket("5", "id")
+
+            self.check_error(
+                exception=pe,
+                error_class="PYSPARK.NOT_COLUMN_OR_INTEGER",
+                message_parameters={"argName": "numBuckets", "argType": "str"},
+            )
 
 
 class FunctionsTests(ReusedSQLTestCase, FunctionsTestsMixin):
