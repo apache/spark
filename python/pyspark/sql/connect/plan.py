@@ -18,6 +18,7 @@
 from typing import Any, List, Optional, Sequence, Union, cast, TYPE_CHECKING, Mapping, Dict
 import functools
 import pyarrow as pa
+from inspect import signature, isclass
 
 from pyspark.sql.types import DataType
 
@@ -97,10 +98,58 @@ class LogicalPlan(object):
 
     # TODO(SPARK-41717): Implement the command logic for print and _repr_html_
     def print(self, indent: int = 0) -> str:
-        ...
+        parameters = signature(self.__init__).parameters
+        pretty_params = []
+        for name, tpe in parameters.items():
+            is_logical_plan = isclass(tpe.annotation) and isinstance(tpe.annotation, LogicalPlan)
+            # Optional or wrapped cases, it has __args__.
+            is_nested_logical_plan = any(
+                isclass(a) and issubclass(a, LogicalPlan)
+                for a in getattr(tpe.annotation, "__args__", ())
+            )
+            if not is_logical_plan and not is_nested_logical_plan:
+                try:
+                    pretty_params.append(
+                        f"{name}='{getattr(self, name, getattr(self, '_' + name))}'"
+                    )
+                except AttributeError:
+                    pass  # Simpy ignore
+        if len(pretty_params) == 0:
+            pretty_str = ""
+        else:
+            pretty_str = " " + ", ".join(pretty_params)
+        return f"{' ' * indent}<{self.__class__.__name__}{pretty_str}>\n"
 
     def _repr_html_(self) -> str:
-        ...
+        parameters = signature(self.__init__).parameters
+        pretty_params = []
+        for name, tpe in parameters.items():
+            is_logical_plan = isclass(tpe.annotation) and isinstance(tpe.annotation, LogicalPlan)
+            # Optional or wrapped cases, it has __args__.
+            is_nested_logical_plan = any(
+                isclass(a) and issubclass(a, LogicalPlan)
+                for a in getattr(tpe.annotation, "__args__", ())
+            )
+            if not is_logical_plan and not is_nested_logical_plan:
+                try:
+                    pretty_params.append(
+                        f"\n              {name}: "
+                        f"{getattr(self, name, getattr(self, '_' + name))} <br/>"
+                    )
+                except AttributeError:
+                    pass  # Simpy ignore
+        if len(pretty_params) == 0:
+            pretty_str = ""
+        else:
+            pretty_str = "".join(pretty_params)
+        return f"""
+        <ul>
+           <li>
+              <b>{self.__class__.__name__}</b><br/>{pretty_str}
+              {self._child_repr_()}
+           </li>
+        </ul>
+        """
 
     def _child_repr_(self) -> str:
         return self._child._repr_html_() if self._child is not None else ""
@@ -1026,27 +1075,6 @@ class Range(LogicalPlan):
         if self._num_partitions is not None:
             rel.range.num_partitions = self._num_partitions
         return rel
-
-    def print(self, indent: int = 0) -> str:
-        return (
-            f"{' ' * indent}"
-            f"<Range start={self._start}, end={self._end}, "
-            f"step={self._step}, num_partitions={self._num_partitions}>"
-        )
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-            <li>
-                <b>Range</b><br />
-                Start: {self._start} <br />
-                End: {self._end} <br />
-                Step: {self._step} <br />
-                NumPartitions: {self._num_partitions} <br />
-                {self._child_repr_()}
-            </li>
-        </uL>
-        """
 
 
 class ToSchema(LogicalPlan):
