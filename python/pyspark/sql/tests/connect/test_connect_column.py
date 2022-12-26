@@ -479,12 +479,70 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             sdf.select(sdf.a.isin(sdf.b, 4, 5, 6)).toPandas(),
         )
 
+    def test_between(self):
+        query = """
+            SELECT * FROM VALUES
+            (TIMESTAMP('2022-12-22 15:50:00'), DATE('2022-12-25'), 1.1),
+            (TIMESTAMP('2022-12-22 18:50:00'), NULL, 2.2),
+            (TIMESTAMP('2022-12-23 15:50:00'), DATE('2022-12-24'), 3.3),
+            (NULL, DATE('2022-12-22'), NULL)
+            AS tab(a, b, c)
+            """
+
+        # +-------------------+----------+----+
+        # |                  a|         b|   c|
+        # +-------------------+----------+----+
+        # |2022-12-22 15:50:00|2022-12-25| 1.1|
+        # |2022-12-22 18:50:00|      null| 2.2|
+        # |2022-12-23 15:50:00|2022-12-24| 3.3|
+        # |               null|2022-12-22|null|
+        # +-------------------+----------+----+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        self.assert_eq(
+            cdf.select(cdf.c.between(0, 2)).toPandas(),
+            sdf.select(sdf.c.between(0, 2)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.c.between(1.1, 2.2)).toPandas(),
+            sdf.select(sdf.c.between(1.1, 2.2)).toPandas(),
+        )
+
+        self.assert_eq(
+            cdf.select(cdf.c.between(decimal.Decimal(0), decimal.Decimal(2))).toPandas(),
+            sdf.select(sdf.c.between(decimal.Decimal(0), decimal.Decimal(2))).toPandas(),
+        )
+
+        self.assert_eq(
+            cdf.select(
+                cdf.a.between(
+                    datetime.datetime(2022, 12, 22, 17, 0, 0),
+                    datetime.datetime(2022, 12, 23, 6, 0, 0),
+                )
+            ).toPandas(),
+            sdf.select(
+                sdf.a.between(
+                    datetime.datetime(2022, 12, 22, 17, 0, 0),
+                    datetime.datetime(2022, 12, 23, 6, 0, 0),
+                )
+            ).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(
+                cdf.b.between(datetime.date(2022, 12, 23), datetime.date(2022, 12, 24))
+            ).toPandas(),
+            sdf.select(
+                sdf.b.between(datetime.date(2022, 12, 23), datetime.date(2022, 12, 24))
+            ).toPandas(),
+        )
+
     def test_unsupported_functions(self):
         # SPARK-41225: Disable unsupported functions.
         c = self.connect.range(1).id
         for f in (
             "getItem",
-            "between",
             "getField",
             "withField",
             "dropFields",
