@@ -28,7 +28,7 @@ class CatalogTestsMixin:
             spark.catalog.setCurrentDatabase("some_db")
             self.assertEqual(spark.catalog.currentDatabase(), "some_db")
             self.assertRaisesRegex(
-                # TODO(SPARK-XXXXX): Should catch specific exceptions for both
+                # TODO(SPARK-41715): Should catch specific exceptions for both
                 #  Spark Connect and PySpark
                 Exception,
                 "does_not_exist",

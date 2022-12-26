@@ -58,6 +58,7 @@ class LogicalPlan(object):
         else:
             return cast(Column, col).to_plan(session)
 
+    # TODO(SPARK-41717): Implement the command logic for print and _repr_html_
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         ...
 
@@ -2131,7 +2132,7 @@ class RecoverPartitions(LogicalPlan):
         """
 
 
-# TODO(SPARK-XXXXX): Catalog cache API
+# TODO(SPARK-41612): Support Catalog.isCached
 # class IsCached(LogicalPlan):
 #     def __init__(self, table_name: str) -> None:
 #         super().__init__(None)
@@ -2158,6 +2159,7 @@ class RecoverPartitions(LogicalPlan):
 #         """
 #
 #
+# TODO(SPARK-41600): Support Catalog.cacheTable
 # class CacheTable(LogicalPlan):
 #     def __init__(self, table_name: str) -> None:
 #         super().__init__(None)
@@ -2184,6 +2186,7 @@ class RecoverPartitions(LogicalPlan):
 #         """
 #
 #
+# TODO(SPARK-41623): Support Catalog.uncacheTable
 # class UncacheTable(LogicalPlan):
 #     def __init__(self, table_name: str) -> None:
 #         super().__init__(None)

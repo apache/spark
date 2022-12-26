@@ -128,9 +128,11 @@ class SparkConnectPlanner(session: SparkSession) {
         transformDropGlobalTempView(rel.getDropGlobalTempView)
       case proto.Relation.RelTypeCase.RECOVER_PARTITIONS =>
         transformRecoverPartitions(rel.getRecoverPartitions)
-// TODO(SPARK-XXXXX): Catalog cache API
+// TODO(SPARK-41612): Support Catalog.isCached
 //      case proto.Relation.RelTypeCase.IS_CACHED => transformIsCached(rel.getIsCached)
+// TODO(SPARK-41600): Support Catalog.cacheTable
 //      case proto.Relation.RelTypeCase.CACHE_TABLE => transformCacheTable(rel.getCacheTable)
+// TODO(SPARK-41623): Support Catalog.uncacheTable
 //      case proto.Relation.RelTypeCase.UNCACHE_TABLE => transformUncacheTable(rel.getUncacheTable)
       case proto.Relation.RelTypeCase.CLEAR_CACHE => transformClearCache(rel.getClearCache)
       case proto.Relation.RelTypeCase.REFRESH_TABLE => transformRefreshTable(rel.getRefreshTable)
@@ -1347,7 +1349,7 @@ class SparkConnectPlanner(session: SparkSession) {
     emptyLocalRelation
   }
 
-// TODO(SPARK-XXXXX): Catalog cache API
+// TODO(SPARK-41612): Support Catalog.isCached
 //  private def transformIsCached(getIsCached: proto.IsCached): LogicalPlan = {
 //    session
 //      .createDataset(session.catalog.isCached(getIsCached.getTableName) :: Nil)(
@@ -1355,11 +1357,13 @@ class SparkConnectPlanner(session: SparkSession) {
 //      .logicalPlan
 //  }
 //
+// TODO(SPARK-41600): Support Catalog.cacheTable
 //  private def transformCacheTable(getCacheTable: proto.CacheTable): LogicalPlan = {
 //    session.catalog.cacheTable(getCacheTable.getTableName)
 //    emptyLocalRelation
 //  }
 //
+// TODO(SPARK-41623): Support Catalog.uncacheTable
 //  private def transformUncacheTable(getUncacheTable: proto.UncacheTable): LogicalPlan = {
 //    session.catalog.uncacheTable(getUncacheTable.getTableName)
 //    emptyLocalRelation

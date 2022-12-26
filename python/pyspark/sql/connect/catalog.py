@@ -38,7 +38,7 @@ class Catalog:
     def __init__(self, sparkSession: "SparkSession") -> None:
         self._sparkSession = sparkSession
 
-    # TODO(SPARK-XXXXX): Probably should factor out to pyspark.sql.connect.client.
+    # TODO(SPARK-41716): Probably should factor out to pyspark.sql.connect.client.
     def _catalog_to_pandas(self, catalog: plan.LogicalPlan) -> pd.DataFrame:
         pdf = DataFrame.withPlan(catalog, session=self._sparkSession).toPandas()
         assert pdf is not None
@@ -145,7 +145,6 @@ class Catalog:
 
     def listFunctions(self, dbName: Optional[str] = None) -> List[Function]:
         pdf = self._catalog_to_pandas(plan.ListFunctions(db_name=dbName))
-        print(pdf)
         return [
             Function(
                 name=row.iloc[0],
@@ -267,7 +266,7 @@ class Catalog:
 
     dropGlobalTempView.__doc__ = PySparkCatalog.dropGlobalTempView.__doc__
 
-    # TODO(SPARK - XXXXX): Catalog cache API
+    # TODO(SPARK-41612): Support Catalog.isCached
     # def isCached(self, tableName: str) -> bool:
     #     pdf = self._catalog_to_pandas(plan.IsCached(table_name=tableName))
     #     assert pdf is not None
@@ -275,11 +274,13 @@ class Catalog:
     #
     # isCached.__doc__ = PySparkCatalog.isCached.__doc__
     #
+    # TODO(SPARK-41600): Support Catalog.cacheTable
     # def cacheTable(self, tableName: str) -> None:
     #     self._catalog_to_pandas(plan.CacheTable(table_name=tableName))
     #
     # cacheTable.__doc__ = PySparkCatalog.cacheTable.__doc__
     #
+    # TODO(SPARK-41623): Support Catalog.uncacheTable
     # def uncacheTable(self, tableName: str) -> None:
     #     self._catalog_to_pandas(plan.UncacheTable(table_name=tableName))
     #

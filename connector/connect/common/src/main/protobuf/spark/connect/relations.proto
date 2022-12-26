@@ -87,9 +87,11 @@ message Relation {
     DropTempView drop_temp_view = 215;
     DropGlobalTempView drop_global_temp_view = 216;
     RecoverPartitions recover_partitions = 217;
-// TODO(SPARK-XXXXX): Catalog cache API
+// TODO(SPARK-41612): Support Catalog.isCached
 //    IsCached is_cached = 218;
+// TODO(SPARK-41600): Support Catalog.cacheTable
 //    CacheTable cache_table = 219;
+// TODO(SPARK-41623): Support Catalog.uncacheTable
 //    UncacheTable uncache_table = 220;
     ClearCache clear_cache = 221;
     RefreshTable refresh_table = 222;

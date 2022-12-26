@@ -43,12 +43,14 @@ class CatalogParityTests(CatalogTestsMixin, ReusedSQLTestCase):
         super(CatalogParityTests, cls).tearDownClass()
         del os.environ["SPARK_REMOTE"]
 
-    # TODO(SPARK-XXXXX): Catalog cache API
+    # TODO(SPARK-41612): Support Catalog.isCached
+    # TODO(SPARK-41600): Support Catalog.cacheTable
+    # TODO(SPARK-41623): Support Catalog.uncacheTable
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_table_cache(self):
         super().test_table_cache()
 
-    # TODO(SPARK-XXXXX): Catalog cache API
+    # TODO(SPARK-41600): Support Catalog.cacheTable
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_refresh_table(self):
         super().test_refresh_table()
