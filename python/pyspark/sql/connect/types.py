@@ -57,7 +57,9 @@ JVM_LONG_MAX: int = (1 << 63) - 1
 
 def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
     ret = pb2.DataType()
-    if isinstance(data_type, StringType):
+    if isinstance(data_type, NullType):
+        ret.null.CopyFrom(pb2.DataType.NULL())
+    elif isinstance(data_type, StringType):
         ret.string.CopyFrom(pb2.DataType.String())
     elif isinstance(data_type, BooleanType):
         ret.boolean.CopyFrom(pb2.DataType.Boolean())

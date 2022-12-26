@@ -23,7 +23,7 @@ from pyspark.sql.types import DataType
 
 import pyspark.sql.connect.proto as proto
 from pyspark.sql.connect.column import Column
-from pyspark.sql.connect.expressions import SortOrder, ColumnReference
+from pyspark.sql.connect.expressions import SortOrder, ColumnReference, LiteralExpression
 from pyspark.sql.connect.types import pyspark_types_to_proto_types
 
 if TYPE_CHECKING:
@@ -349,20 +349,15 @@ class Hint(LogicalPlan):
 
     def __init__(self, child: Optional["LogicalPlan"], name: str, params: List[Any]) -> None:
         super().__init__(child)
-        self.name = name
-        self.params = params
 
-    def _convert_value(self, v: Any) -> proto.Expression.Literal:
-        value = proto.Expression.Literal()
-        if v is None:
-            value.null = True
-        elif isinstance(v, int):
-            value.integer = v
-        elif isinstance(v, str):
-            value.string = v
-        else:
-            raise ValueError(f"Could not convert literal for type {type(v)}")
-        return value
+        assert isinstance(name, str)
+
+        self.name = name
+
+        assert isinstance(params, list) and all(
+            p is None or isinstance(p, (int, str)) for p in params
+        )
+        self.params = params
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
@@ -370,7 +365,7 @@ class Hint(LogicalPlan):
         plan.hint.input.CopyFrom(self._child.plan(session))
         plan.hint.name = self.name
         for v in self.params:
-            plan.hint.parameters.append(self._convert_value(v))
+            plan.hint.parameters.append(LiteralExpression._from_value(v).to_plan(session).literal)
         return plan
 
     def print(self, indent: int = 0) -> str:
@@ -1285,17 +1280,12 @@ class NAReplace(LogicalPlan):
         self.cols = cols
         self.replacements = replacements
 
-    def _convert_value(self, v: Any) -> proto.Expression.Literal:
-        value = proto.Expression.Literal()
-        if v is None:
-            value.null = True
-        elif isinstance(v, bool):
-            value.boolean = v
-        elif isinstance(v, (int, float)):
-            value.double = float(v)
+    def _convert_int_to_float(self, v: Any) -> Any:
+        # a bool is also an int
+        if v is not None and not isinstance(v, bool) and isinstance(v, int):
+            return float(v)
         else:
-            value.string = v
-        return value
+            return v
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
@@ -1306,8 +1296,16 @@ class NAReplace(LogicalPlan):
         if len(self.replacements) > 0:
             for old_value, new_value in self.replacements.items():
                 replacement = proto.NAReplace.Replacement()
-                replacement.old_value.CopyFrom(self._convert_value(old_value))
-                replacement.new_value.CopyFrom(self._convert_value(new_value))
+                replacement.old_value.CopyFrom(
+                    LiteralExpression._from_value(self._convert_int_to_float(old_value))
+                    .to_plan(session)
+                    .literal
+                )
+                replacement.new_value.CopyFrom(
+                    LiteralExpression._from_value(self._convert_int_to_float(new_value))
+                    .to_plan(session)
+                    .literal
+                )
                 plan.replace.replacements.append(replacement)
         return plan
 
