@@ -349,7 +349,14 @@ class Hint(LogicalPlan):
 
     def __init__(self, child: Optional["LogicalPlan"], name: str, params: List[Any]) -> None:
         super().__init__(child)
+
+        assert isinstance(name, str)
+
         self.name = name
+
+        assert isinstance(params, list) and all(
+            p is None or isinstance(p, (int, str)) for p in params
+        )
         self.params = params
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
@@ -1273,6 +1280,12 @@ class NAReplace(LogicalPlan):
         self.cols = cols
         self.replacements = replacements
 
+    def _convert_int_to_float(self, v: Any) -> Any:
+        if v is not None and isinstance(v, int):
+            return float(v)
+        else:
+            return v
+
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
         plan = proto.Relation()
@@ -1283,10 +1296,14 @@ class NAReplace(LogicalPlan):
             for old_value, new_value in self.replacements.items():
                 replacement = proto.NAReplace.Replacement()
                 replacement.old_value.CopyFrom(
-                    LiteralExpression._from_value(old_value).to_plan(session).literal
+                    LiteralExpression._from_value(self._convert_int_to_float(old_value))
+                    .to_plan(session)
+                    .literal
                 )
                 replacement.new_value.CopyFrom(
-                    LiteralExpression._from_value(new_value).to_plan(session).literal
+                    LiteralExpression._from_value(self._convert_int_to_float(new_value))
+                    .to_plan(session)
+                    .literal
                 )
                 plan.replace.replacements.append(replacement)
         return plan
