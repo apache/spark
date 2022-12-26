@@ -2131,7 +2131,7 @@ class RecoverPartitions(LogicalPlan):
         """
 
 
-# TODO(SPARK-XXXXX): cache related API
+# TODO(SPARK-XXXXX): Catalog cache API
 # class IsCached(LogicalPlan):
 #     def __init__(self, table_name: str) -> None:
 #         super().__init__(None)

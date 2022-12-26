@@ -267,7 +267,7 @@ class Catalog:
 
     dropGlobalTempView.__doc__ = PySparkCatalog.dropGlobalTempView.__doc__
 
-    # TODO(SPARK-XXXXX): cache related API
+    # TODO(SPARK - XXXXX): Catalog cache API
     # def isCached(self, tableName: str) -> bool:
     #     pdf = self._catalog_to_pandas(plan.IsCached(table_name=tableName))
     #     assert pdf is not None

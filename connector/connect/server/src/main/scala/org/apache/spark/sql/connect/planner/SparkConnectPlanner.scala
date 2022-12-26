@@ -128,7 +128,7 @@ class SparkConnectPlanner(session: SparkSession) {
         transformDropGlobalTempView(rel.getDropGlobalTempView)
       case proto.Relation.RelTypeCase.RECOVER_PARTITIONS =>
         transformRecoverPartitions(rel.getRecoverPartitions)
-// TODO(SPARK-XXXXX): cache related API
+// TODO(SPARK-XXXXX): Catalog cache API
 //      case proto.Relation.RelTypeCase.IS_CACHED => transformIsCached(rel.getIsCached)
 //      case proto.Relation.RelTypeCase.CACHE_TABLE => transformCacheTable(rel.getCacheTable)
 //      case proto.Relation.RelTypeCase.UNCACHE_TABLE => transformUncacheTable(rel.getUncacheTable)
@@ -1347,7 +1347,7 @@ class SparkConnectPlanner(session: SparkSession) {
     emptyLocalRelation
   }
 
-// TODO(SPARK-XXXXX): cache related API
+// TODO(SPARK-XXXXX): Catalog cache API
 //  private def transformIsCached(getIsCached: proto.IsCached): LogicalPlan = {
 //    session
 //      .createDataset(session.catalog.isCached(getIsCached.getTableName) :: Nil)(
