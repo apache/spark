@@ -23,7 +23,6 @@ import "google/protobuf/any.proto";
 import "spark/connect/commands.proto";
 import "spark/connect/relations.proto";
 import "spark/connect/types.proto";
-import "spark/connect/catalog.proto";
 
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
@@ -32,13 +31,10 @@ option java_package = "org.apache.spark.connect.proto";
 // client to the server. A [[Plan]] can either be of the type [[Relation]] which is a reference
 // to the underlying logical plan or it can be of the [[Command]] type that is used to execute
 // commands on the server.
-//
-// [[Catalog]] is also included temporarily, which is only for internal purpose for now.
 message Plan {
   oneof op_type {
     Relation root = 1;
     Command command = 2;
-    Catalog catalog = 3;
   }
 }
 

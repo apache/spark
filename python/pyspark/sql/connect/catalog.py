@@ -18,6 +18,7 @@ from typing import List, Optional, TYPE_CHECKING
 
 import pandas as pd
 
+from pyspark.sql.types import StructType
 from pyspark.sql.connect import DataFrame
 from pyspark.sql.catalog import (
     Catalog as PySparkCatalog,
@@ -27,12 +28,10 @@ from pyspark.sql.catalog import (
     Function,
     Column,
 )
-import pyspark.sql.connect.proto as pb2
-
+from pyspark.sql.connect import plan
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.session import SparkSession
-    from pyspark.sql.types import StructType
 
 
 class Catalog:
@@ -40,25 +39,25 @@ class Catalog:
         self._sparkSession = sparkSession
 
     # TODO(SPARK-XXXXX): Probably should factor out to pyspark.sql.connect.client.
-    def _catalog_to_pandas(self, catalog: pb2.Catalog) -> pd.DataFrame:
+    def _catalog_to_pandas(self, catalog: plan.LogicalPlan) -> pd.DataFrame:
         pdf = DataFrame.withPlan(catalog, session=self._sparkSession).toPandas()
         assert pdf is not None
         return pdf
 
     def currentCatalog(self) -> str:
-        pdf = self._catalog_to_pandas(pb2.CurrentCatalog())
+        pdf = self._catalog_to_pandas(plan.CurrentCatalog())
         assert pdf is not None
         return pdf.iloc[0].iloc[0]
 
     currentCatalog.__doc__ = PySparkCatalog.currentCatalog.__doc__
 
     def setCurrentCatalog(self, catalogName: str) -> None:
-        self._catalog_to_pandas(pb2.SetCurrentCatalog(catalog_name=catalogName))
+        self._catalog_to_pandas(plan.SetCurrentCatalog(catalog_name=catalogName))
 
     setCurrentCatalog.__doc__ = PySparkCatalog.setCurrentCatalog.__doc__
 
     def listCatalogs(self) -> List[CatalogMetadata]:
-        pdf = self._catalog_to_pandas(pb2.ListCatalogs())
+        pdf = self._catalog_to_pandas(plan.ListCatalogs())
         return [
             CatalogMetadata(name=row.iloc[0], description=row.iloc[1]) for _, row in pdf.iterrows()
         ]
@@ -66,19 +65,19 @@ class Catalog:
     listCatalogs.__doc__ = PySparkCatalog.listCatalogs.__doc__
 
     def currentDatabase(self) -> str:
-        pdf = self._catalog_to_pandas(pb2.CurrentDatabase())
+        pdf = self._catalog_to_pandas(plan.CurrentDatabase())
         assert pdf is not None
         return pdf.iloc[0].iloc[0]
 
     currentDatabase.__doc__ = PySparkCatalog.currentDatabase.__doc__
 
     def setCurrentDatabase(self, dbName: str) -> None:
-        self._catalog_to_pandas(pb2.SetCurrentDatabase(db_name=dbName))
+        self._catalog_to_pandas(plan.SetCurrentDatabase(db_name=dbName))
 
     setCurrentDatabase.__doc__ = PySparkCatalog.setCurrentDatabase.__doc__
 
     def listDatabases(self) -> List[Database]:
-        pdf = self._catalog_to_pandas(pb2.ListDatabases())
+        pdf = self._catalog_to_pandas(plan.ListDatabases())
         return [
             Database(
                 name=row.iloc[0],
@@ -92,7 +91,7 @@ class Catalog:
     listDatabases.__doc__ = PySparkCatalog.listDatabases.__doc__
 
     def getDatabase(self, dbName: str) -> Database:
-        pdf = self._catalog_to_pandas(pb2.GetDatabase(db_name=dbName))
+        pdf = self._catalog_to_pandas(plan.GetDatabase(db_name=dbName))
         assert pdf is not None
         row = pdf.iloc[0]
         return Database(
@@ -105,14 +104,14 @@ class Catalog:
     getDatabase.__doc__ = PySparkCatalog.getDatabase.__doc__
 
     def databaseExists(self, dbName: str) -> bool:
-        pdf = self._catalog_to_pandas(pb2.DatabaseExists(db_name=dbName))
+        pdf = self._catalog_to_pandas(plan.DatabaseExists(db_name=dbName))
         assert pdf is not None
         return pdf.iloc[0].iloc[0]
 
     databaseExists.__doc__ = PySparkCatalog.databaseExists.__doc__
 
     def listTables(self, dbName: Optional[str] = None) -> List[Table]:
-        pdf = self._catalog_to_pandas(pb2.ListTables(db_name=dbName))
+        pdf = self._catalog_to_pandas(plan.ListTables(db_name=dbName))
         return [
             Table(
                 name=row.iloc[0],
@@ -128,7 +127,7 @@ class Catalog:
     listTables.__doc__ = PySparkCatalog.listTables.__doc__
 
     def getTable(self, tableName: str) -> Table:
-        pdf = self._catalog_to_pandas(pb2.GetTable(table_name=tableName))
+        pdf = self._catalog_to_pandas(plan.GetTable(table_name=tableName))
         assert pdf is not None
         row = pdf.iloc[0]
         return Table(
@@ -143,7 +142,7 @@ class Catalog:
     getTable.__doc__ = PySparkCatalog.getTable.__doc__
 
     def listFunctions(self, dbName: Optional[str] = None) -> List[Function]:
-        pdf = self._catalog_to_pandas(pb2.ListTables(db_name=dbName))
+        pdf = self._catalog_to_pandas(plan.ListTables(db_name=dbName))
         return [
             Function(
                 name=row.iloc[0],
@@ -160,7 +159,7 @@ class Catalog:
 
     def functionExists(self, functionName: str, dbName: Optional[str] = None) -> bool:
         pdf = self._catalog_to_pandas(
-            pb2.FunctionExists(function_name=functionName, db_name=dbName)
+            plan.FunctionExists(function_name=functionName, db_name=dbName)
         )
         assert pdf is not None
         return pdf.iloc[0].iloc[0]
@@ -168,7 +167,7 @@ class Catalog:
     functionExists.__doc__ = PySparkCatalog.functionExists.__doc__
 
     def getFunction(self, functionName: str) -> Function:
-        pdf = self._catalog_to_pandas(pb2.GetFunction(function_name=functionName))
+        pdf = self._catalog_to_pandas(plan.GetFunction(function_name=functionName))
         assert pdf is not None
         row = pdf.iloc[0]
         return Function(
@@ -183,7 +182,7 @@ class Catalog:
     getFunction.__doc__ = PySparkCatalog.getFunction.__doc__
 
     def listColumns(self, tableName: str, dbName: Optional[str] = None) -> List[Column]:
-        pdf = self._catalog_to_pandas(pb2.ListColumns(table_name=tableName, db_name=dbName))
+        pdf = self._catalog_to_pandas(plan.ListColumns(table_name=tableName, db_name=dbName))
         return [
             Column(
                 name=row.iloc[0],
@@ -199,7 +198,7 @@ class Catalog:
     listColumns.__doc__ = PySparkCatalog.listColumns.__doc__
 
     def tableExists(self, tableName: str, dbName: Optional[str] = None) -> bool:
-        pdf = self._catalog_to_pandas(pb2.TableExists(table_name=tableName, db_name=dbName))
+        pdf = self._catalog_to_pandas(plan.TableExists(table_name=tableName, db_name=dbName))
         assert pdf is not None
         return pdf.iloc[0].iloc[0]
 
@@ -213,8 +212,12 @@ class Catalog:
         schema: Optional[StructType] = None,
         **options: str,
     ) -> DataFrame:
-        catalog = pb2.CreateExternalTable(
-            table_name=tableName, path=path, source=source, schema=schema, options=options
+        catalog = plan.CreateExternalTable(
+            table_name=tableName,
+            path=path,  # type: ignore[arg-type]
+            source=source,
+            schema=schema,
+            options=options,
         )
         df = DataFrame.withPlan(catalog, session=self._sparkSession)
         df.toPandas()  # Eager execution.
@@ -231,9 +234,9 @@ class Catalog:
         description: Optional[str] = None,
         **options: str,
     ) -> DataFrame:
-        catalog = pb2.CreateTable(
+        catalog = plan.CreateTable(
             table_name=tableName,
-            path=path,
+            path=path,  # type: ignore[arg-type]
             source=source,
             schema=schema,
             description=description,
@@ -246,52 +249,52 @@ class Catalog:
     createTable.__doc__ = PySparkCatalog.createTable.__doc__
 
     def dropTempView(self, viewName: str) -> bool:
-        pdf = self._catalog_to_pandas(pb2.DropTempView(view_name=viewName))
+        pdf = self._catalog_to_pandas(plan.DropTempView(view_name=viewName))
         assert pdf is not None
         return pdf.iloc[0].iloc[0]
 
     dropTempView.__doc__ = PySparkCatalog.dropTempView.__doc__
 
     def dropGlobalTempView(self, viewName: str) -> bool:
-        pdf = self._catalog_to_pandas(pb2.DropGlobalTempView(view_name=viewName))
+        pdf = self._catalog_to_pandas(plan.DropGlobalTempView(view_name=viewName))
         assert pdf is not None
         return pdf.iloc[0].iloc[0]
 
     dropGlobalTempView.__doc__ = PySparkCatalog.dropGlobalTempView.__doc__
 
     def isCached(self, tableName: str) -> bool:
-        pdf = self._catalog_to_pandas(pb2.IsCached(table_name=tableName))
+        pdf = self._catalog_to_pandas(plan.IsCached(table_name=tableName))
         assert pdf is not None
         return pdf.iloc[0].iloc[0]
 
     isCached.__doc__ = PySparkCatalog.isCached.__doc__
 
     def cacheTable(self, tableName: str) -> None:
-        self._catalog_to_pandas(pb2.CacheTable(table_name=tableName))
+        self._catalog_to_pandas(plan.CacheTable(table_name=tableName))
 
     cacheTable.__doc__ = PySparkCatalog.cacheTable.__doc__
 
     def uncacheTable(self, tableName: str) -> None:
-        self._catalog_to_pandas(pb2.UncacheTable(table_name=tableName))
+        self._catalog_to_pandas(plan.UncacheTable(table_name=tableName))
 
     uncacheTable.__doc__ = PySparkCatalog.uncacheTable.__doc__
 
     def clearCache(self) -> None:
-        self._catalog_to_pandas(pb2.ClearCache())
+        self._catalog_to_pandas(plan.ClearCache())
 
     clearCache.__doc__ = PySparkCatalog.clearCache.__doc__
 
     def refreshTable(self, tableName: str) -> None:
-        self._catalog_to_pandas(pb2.RefreshTable(table_name=tableName))
+        self._catalog_to_pandas(plan.RefreshTable(table_name=tableName))
 
     refreshTable.__doc__ = PySparkCatalog.refreshTable.__doc__
 
     def recoverPartitions(self, tableName: str) -> None:
-        self._catalog_to_pandas(pb2.RecoverPartitions(table_name=tableName))
+        self._catalog_to_pandas(plan.RecoverPartitions(table_name=tableName))
 
     recoverPartitions.__doc__ = PySparkCatalog.recoverPartitions.__doc__
 
     def refreshByPath(self, path: str) -> None:
-        self._catalog_to_pandas(pb2.RefreshByPath(path=path))
+        self._catalog_to_pandas(plan.RefreshByPath(path=path))
 
     refreshByPath.__doc__ = PySparkCatalog.refreshByPath.__doc__

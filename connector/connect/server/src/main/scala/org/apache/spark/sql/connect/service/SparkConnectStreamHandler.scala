@@ -45,7 +45,6 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
       SparkConnectService.getOrCreateIsolatedSession(v.getUserContext.getUserId).session
     v.getPlan.getOpTypeCase match {
       case proto.Plan.OpTypeCase.COMMAND => handleCommand(session, v)
-      case proto.Plan.OpTypeCase.CATALOG => handleCatalog(session, v)
       case proto.Plan.OpTypeCase.ROOT => handlePlan(session, v)
       case _ =>
         throw new UnsupportedOperationException(s"${v.getPlan.getOpTypeCase} not supported.")
@@ -178,14 +177,6 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
       .setClientId(clientId)
       .setMetrics(MetricGenerator.buildMetrics(rows.queryExecution.executedPlan))
       .build()
-  }
-
-  def handleCatalog(session: SparkSession, request: ExecutePlanRequest): Unit = {
-    val catalog = request.getPlan.getCatalog
-    // Extract the plan from the request and convert it to a logical plan
-    val planner = new SparkConnectPlanner(session)
-    val dataframe = Dataset.ofRows(session, planner.transformCatalog(request.getPlan.getRoot))
-    processAsArrowBatches(request.getClientId, dataframe)
   }
 
   def handleCommand(session: SparkSession, request: ExecutePlanRequest): Unit = {

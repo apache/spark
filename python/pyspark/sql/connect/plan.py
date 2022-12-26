@@ -58,7 +58,7 @@ class LogicalPlan(object):
         else:
             return cast(Column, col).to_plan(session)
 
-    def plan(self, session: "SparkConnectClient") -> Union[proto.Relation, proto.Catalog]:
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
         ...
 
     def command(self, session: "SparkConnectClient") -> proto.Command:
@@ -1575,11 +1575,11 @@ class WriteOperation(LogicalPlan):
 
 
 class CurrentDatabase(LogicalPlan):
-    def __init__(self, child: Optional["LogicalPlan"]) -> None:
+    def __init__(self) -> None:
         super().__init__(None)
 
-    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
-        return proto.Catalog(current_catalog=proto.CurrentDatabase())
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        return proto.Relation(current_database=proto.CurrentDatabase())
 
     def print(self, indent: int = 0) -> str:
         i = " " * indent
@@ -1597,12 +1597,12 @@ class CurrentDatabase(LogicalPlan):
 
 
 class SetCurrentDatabase(LogicalPlan):
-    def __init__(self, child: Optional["LogicalPlan"], db_name: str) -> None:
+    def __init__(self, db_name: str) -> None:
         super().__init__(None)
         self._db_name = db_name
 
-    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
-        plan = proto.Catalog()
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = proto.Relation()
         plan.set_current_database.db_name = self._db_name
         return plan
 
@@ -1623,11 +1623,11 @@ class SetCurrentDatabase(LogicalPlan):
 
 
 class ListDatabases(LogicalPlan):
-    def __init__(self, child: Optional["LogicalPlan"]) -> None:
+    def __init__(self) -> None:
         super().__init__(None)
 
-    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
-        return proto.Catalog(current_catalog=proto.ListDatabases())
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        return proto.Relation(list_databases=proto.ListDatabases())
 
     def print(self, indent: int = 0) -> str:
         i = " " * indent
@@ -1645,16 +1645,16 @@ class ListDatabases(LogicalPlan):
 
 
 class ListTables(LogicalPlan):
-    def __init__(self, child: Optional["LogicalPlan"], db_name: Optional[str] = None) -> None:
+    def __init__(self, db_name: Optional[str] = None) -> None:
         super().__init__(None)
         self._db_name = db_name
 
-    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
-        plan = proto.Catalog()
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = proto.Relation()
         if self._db_name is not None:
             plan.list_tables.db_name = self._db_name
         else:
-            plan = proto.Catalog(list_tables=proto.ListTables())
+            plan = proto.Relation(list_tables=proto.ListTables())
         return plan
 
     def print(self, indent: int = 0) -> str:
@@ -1674,16 +1674,16 @@ class ListTables(LogicalPlan):
 
 
 class ListFunctions(LogicalPlan):
-    def __init__(self, child: Optional["LogicalPlan"], db_name: Optional[str] = None) -> None:
+    def __init__(self, db_name: Optional[str] = None) -> None:
         super().__init__(None)
         self._db_name = db_name
 
-    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
         if self._db_name is not None:
-            plan = proto.Catalog()
+            plan = proto.Relation()
             plan.list_functions.db_name = self._db_name
         else:
-            plan = proto.Catalog(list_functions=proto.ListFunctions())
+            plan = proto.Relation(list_functions=proto.ListFunctions())
         return plan
 
     def print(self, indent: int = 0) -> str:
@@ -1703,15 +1703,13 @@ class ListFunctions(LogicalPlan):
 
 
 class ListColumns(LogicalPlan):
-    def __init__(
-        self, child: Optional["LogicalPlan"], table_name: str, db_name: Optional[str] = None
-    ) -> None:
+    def __init__(self, table_name: str, db_name: Optional[str] = None) -> None:
         super().__init__(None)
         self._table_name = table_name
         self._db_name = db_name
 
-    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
-        plan = proto.Catalog()
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = proto.Relation()
         plan.list_columns.table_name = self._table_name
         if self._db_name is not None:
             plan.list_columns.db_name = self._db_name
@@ -1740,12 +1738,12 @@ class ListColumns(LogicalPlan):
 
 
 class GetDatabase(LogicalPlan):
-    def __init__(self, child: Optional["LogicalPlan"], db_name: str) -> None:
+    def __init__(self, db_name: str) -> None:
         super().__init__(None)
         self._db_name = db_name
 
-    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
-        plan = proto.Catalog()
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = proto.Relation()
         plan.get_database.db_name = self._db_name
         return plan
 
@@ -1766,15 +1764,13 @@ class GetDatabase(LogicalPlan):
 
 
 class GetTable(LogicalPlan):
-    def __init__(
-        self, child: Optional["LogicalPlan"], table_name: str, db_name: Optional[str] = None
-    ) -> None:
+    def __init__(self, table_name: str, db_name: Optional[str] = None) -> None:
         super().__init__(None)
         self._table_name = table_name
         self._db_name = db_name
 
-    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
-        plan = proto.Catalog()
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = proto.Relation()
         plan.get_table.table_name = self._table_name
         if self._db_name is not None:
             plan.get_table.db_name = self._db_name
@@ -1803,15 +1799,13 @@ class GetTable(LogicalPlan):
 
 
 class GetFunction(LogicalPlan):
-    def __init__(
-        self, child: Optional["LogicalPlan"], function_name: str, db_name: Optional[str] = None
-    ) -> None:
+    def __init__(self, function_name: str, db_name: Optional[str] = None) -> None:
         super().__init__(None)
         self._function_name = function_name
         self._db_name = db_name
 
-    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
-        plan = proto.Catalog()
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = proto.Relation()
         plan.get_function.function_name = self._function_name
         if self._db_name is not None:
             plan.get_function.db_name = self._db_name
@@ -1840,12 +1834,12 @@ class GetFunction(LogicalPlan):
 
 
 class DatabaseExists(LogicalPlan):
-    def __init__(self, child: Optional["LogicalPlan"], db_name: str) -> None:
+    def __init__(self, db_name: str) -> None:
         super().__init__(None)
         self._db_name = db_name
 
-    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
-        plan = proto.Catalog()
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = proto.Relation()
         plan.database_exists.db_name = self._db_name
         return plan
 
@@ -1866,15 +1860,13 @@ class DatabaseExists(LogicalPlan):
 
 
 class TableExists(LogicalPlan):
-    def __init__(
-        self, child: Optional["LogicalPlan"], table_name: str, db_name: Optional[str] = None
-    ) -> None:
+    def __init__(self, table_name: str, db_name: Optional[str] = None) -> None:
         super().__init__(None)
         self._table_name = table_name
         self._db_name = db_name
 
-    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
-        plan = proto.Catalog()
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = proto.Relation()
         plan.table_exists.table_name = self._table_name
         if self._db_name is not None:
             plan.table_exists.db_name = self._db_name
@@ -1903,15 +1895,13 @@ class TableExists(LogicalPlan):
 
 
 class FunctionExists(LogicalPlan):
-    def __init__(
-        self, child: Optional["LogicalPlan"], function_name: str, db_name: Optional[str] = None
-    ) -> None:
+    def __init__(self, function_name: str, db_name: Optional[str] = None) -> None:
         super().__init__(None)
         self._function_name = function_name
         self._db_name = db_name
 
-    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
-        plan = proto.Catalog()
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = proto.Relation()
         plan.function_exists.function_name = self._function_name
         if self._db_name is not None:
             plan.function_exists.db_name = self._db_name
@@ -1942,7 +1932,6 @@ class FunctionExists(LogicalPlan):
 class CreateExternalTable(LogicalPlan):
     def __init__(
         self,
-        child: Optional["LogicalPlan"],
         table_name: str,
         path: str,
         source: Optional[str] = None,
@@ -1950,15 +1939,14 @@ class CreateExternalTable(LogicalPlan):
         options: Mapping[str, str] = {},
     ) -> None:
         super().__init__(None)
-        self._child = child
         self._table_name = table_name
         self._path = path
         self._source = source
         self._schema = schema
         self._options = options
 
-    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
-        plan = proto.Catalog()
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = proto.Relation()
         plan.create_external_table.table_name = self._table_name
         plan.create_external_table.path = self._path
         if self._source is not None:
@@ -1968,7 +1956,7 @@ class CreateExternalTable(LogicalPlan):
         for k in self._options.keys():
             v = self._options.get(k)
             if v is not None:
-                plan.read.data_source.options[k] = v
+                plan.create_external_table.options[k] = v
         return plan
 
     def print(self, indent: int = 0) -> str:
@@ -2002,7 +1990,6 @@ class CreateExternalTable(LogicalPlan):
 class CreateTable(LogicalPlan):
     def __init__(
         self,
-        child: Optional["LogicalPlan"],
         table_name: str,
         path: str,
         source: Optional[str] = None,
@@ -2011,7 +1998,6 @@ class CreateTable(LogicalPlan):
         options: Mapping[str, str] = {},
     ) -> None:
         super().__init__(None)
-        self._child = child
         self._table_name = table_name
         self._path = path
         self._source = source
@@ -2019,20 +2005,20 @@ class CreateTable(LogicalPlan):
         self._schema = schema
         self._options = options
 
-    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
-        plan = proto.Catalog()
-        plan.create_external_table.table_name = self._table_name
-        plan.create_external_table.path = self._path
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = proto.Relation()
+        plan.create_table.table_name = self._table_name
+        plan.create_table.path = self._path
         if self._source is not None:
-            plan.create_external_table.source = self._source
+            plan.create_table.source = self._source
         if self._description is not None:
-            plan.create_external_table.description = self._description
+            plan.create_table.description = self._description
         if self._schema is not None:
-            plan.create_external_table.schema.CopyFrom(pyspark_types_to_proto_types(self._schema))
+            plan.create_table.schema.CopyFrom(pyspark_types_to_proto_types(self._schema))
         for k in self._options.keys():
             v = self._options.get(k)
             if v is not None:
-                plan.read.data_source.options[k] = v
+                plan.create_table.options[k] = v
         return plan
 
     def print(self, indent: int = 0) -> str:
@@ -2066,12 +2052,12 @@ class CreateTable(LogicalPlan):
 
 
 class DropTempView(LogicalPlan):
-    def __init__(self, child: Optional["LogicalPlan"], view_name: str) -> None:
+    def __init__(self, view_name: str) -> None:
         super().__init__(None)
         self._view_name = view_name
 
-    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
-        plan = proto.Catalog()
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = proto.Relation()
         plan.drop_temp_view.view_name = self._view_name
         return plan
 
@@ -2092,12 +2078,12 @@ class DropTempView(LogicalPlan):
 
 
 class DropGlobalTempView(LogicalPlan):
-    def __init__(self, child: Optional["LogicalPlan"], view_name: str) -> None:
+    def __init__(self, view_name: str) -> None:
         super().__init__(None)
         self._view_name = view_name
 
-    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
-        plan = proto.Catalog()
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = proto.Relation()
         plan.drop_global_temp_view.view_name = self._view_name
         return plan
 
@@ -2118,12 +2104,12 @@ class DropGlobalTempView(LogicalPlan):
 
 
 class RecoverPartitions(LogicalPlan):
-    def __init__(self, child: Optional["LogicalPlan"], table_name: str) -> None:
+    def __init__(self, table_name: str) -> None:
         super().__init__(None)
         self._table_name = table_name
 
-    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
-        plan = proto.Catalog()
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = proto.Relation()
         plan.recover_partitions.table_name = self._table_name
         return plan
 
@@ -2144,12 +2130,12 @@ class RecoverPartitions(LogicalPlan):
 
 
 class IsCached(LogicalPlan):
-    def __init__(self, child: Optional["LogicalPlan"], table_name: str) -> None:
+    def __init__(self, table_name: str) -> None:
         super().__init__(None)
         self._table_name = table_name
 
-    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
-        plan = proto.Catalog()
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = proto.Relation()
         plan.is_cached.table_name = self._table_name
         return plan
 
@@ -2170,12 +2156,12 @@ class IsCached(LogicalPlan):
 
 
 class CacheTable(LogicalPlan):
-    def __init__(self, child: Optional["LogicalPlan"], table_name: str) -> None:
+    def __init__(self, table_name: str) -> None:
         super().__init__(None)
         self._table_name = table_name
 
-    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
-        plan = proto.Catalog()
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = proto.Relation()
         plan.cache_table.table_name = self._table_name
         return plan
 
@@ -2196,12 +2182,12 @@ class CacheTable(LogicalPlan):
 
 
 class UncacheTable(LogicalPlan):
-    def __init__(self, child: Optional["LogicalPlan"], table_name: str) -> None:
+    def __init__(self, table_name: str) -> None:
         super().__init__(None)
         self._table_name = table_name
 
-    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
-        plan = proto.Catalog()
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = proto.Relation()
         plan.uncache_table.table_name = self._table_name
         return plan
 
@@ -2222,11 +2208,11 @@ class UncacheTable(LogicalPlan):
 
 
 class ClearCache(LogicalPlan):
-    def __init__(self, child: Optional["LogicalPlan"]) -> None:
+    def __init__(self) -> None:
         super().__init__(None)
 
-    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
-        return proto.Catalog(current_catalog=proto.ClearCache())
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        return proto.Relation(clear_cache=proto.ClearCache())
 
     def print(self, indent: int = 0) -> str:
         i = " " * indent
@@ -2244,13 +2230,13 @@ class ClearCache(LogicalPlan):
 
 
 class RefreshTable(LogicalPlan):
-    def __init__(self, child: Optional["LogicalPlan"], table_name: str) -> None:
+    def __init__(self, table_name: str) -> None:
         super().__init__(None)
         self._table_name = table_name
 
-    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
-        plan = proto.Catalog()
-        plan.refresh_table.db_name = self._table_name
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = proto.Relation()
+        plan.refresh_table.table_name = self._table_name
         return plan
 
     def print(self, indent: int = 0) -> str:
@@ -2270,12 +2256,12 @@ class RefreshTable(LogicalPlan):
 
 
 class RefreshByPath(LogicalPlan):
-    def __init__(self, child: Optional["LogicalPlan"], path: str) -> None:
+    def __init__(self, path: str) -> None:
         super().__init__(None)
         self._path = path
 
-    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
-        plan = proto.Catalog()
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = proto.Relation()
         plan.refresh_by_path.path = self._path
         return plan
 
@@ -2296,11 +2282,11 @@ class RefreshByPath(LogicalPlan):
 
 
 class CurrentCatalog(LogicalPlan):
-    def __init__(self, child: Optional["LogicalPlan"]) -> None:
+    def __init__(self) -> None:
         super().__init__(None)
 
-    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
-        return proto.Catalog(current_catalog=proto.CurrentCatalog())
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        return proto.Relation(current_catalog=proto.CurrentCatalog())
 
     def print(self, indent: int = 0) -> str:
         i = " " * indent
@@ -2318,12 +2304,12 @@ class CurrentCatalog(LogicalPlan):
 
 
 class SetCurrentCatalog(LogicalPlan):
-    def __init__(self, child: Optional["LogicalPlan"], catalog_name: str) -> None:
+    def __init__(self, catalog_name: str) -> None:
         super().__init__(None)
         self._catalog_name = catalog_name
 
-    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
-        plan = proto.Catalog()
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = proto.Relation()
         plan.set_current_catalog.catalog_name = self._catalog_name
         return plan
 
@@ -2344,11 +2330,11 @@ class SetCurrentCatalog(LogicalPlan):
 
 
 class ListCatalogs(LogicalPlan):
-    def __init__(self, child: Optional["LogicalPlan"]) -> None:
+    def __init__(self) -> None:
         super().__init__(None)
 
-    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
-        return proto.Catalog(current_catalog=proto.ListCatalogs())
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        return proto.Relation(list_catalogs=proto.ListCatalogs())
 
     def print(self, indent: int = 0) -> str:
         i = " " * indent

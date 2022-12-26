@@ -46,7 +46,7 @@ class CatalogParityTests(CatalogTestsMixin, ReusedSQLTestCase):
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.connect.test_parity_dataframe import *  # noqa: F401
+    from pyspark.sql.tests.connect.test_parity_catalog import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]
