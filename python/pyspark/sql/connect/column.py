@@ -354,15 +354,14 @@ class Column:
     def getItem(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("getItem() is not yet implemented.")
 
-    def between(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("between() is not yet implemented.")
-
     def between(
         self,
         lowerBound: Union["Column", "LiteralType", "DateTimeLiteral", "DecimalLiteral"],
         upperBound: Union["Column", "LiteralType", "DateTimeLiteral", "DecimalLiteral"],
     ) -> "Column":
         return (self >= lowerBound) & (self <= upperBound)
+
+    between.__doc__ = PySparkColumn.between.__doc__
 
     def getField(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("getField() is not yet implemented.")
