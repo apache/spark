@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import java.net.URI
+
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog._
