@@ -18,12 +18,12 @@
 package org.apache.spark.sql.execution.command
 
 import java.net.URI
-
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{CommandExecutionMode, SparkPlan}
@@ -202,8 +202,16 @@ case class CreateDataSourceTableAsSelectCommand(
       val result = saveDataIntoTable(
         sparkSession, table, tableLocation, child, SaveMode.Overwrite, tableExists = false)
       val tableSchema = CharVarcharUtils.getRawSchema(result.schema, sessionState.conf)
+      val bucketSpec = child.outputPartitioning match {
+        case h: HashPartitioning if h.expressions.forall(_.isInstanceOf[AttributeReference]) =>
+          val bs = BucketSpec(h.numPartitions,
+            h.expressions.map(_.asInstanceOf[AttributeReference].name), Nil)
+          Some(bs)
+        case _ => None
+      }
       val newTable = table.copy(
         storage = table.storage.copy(locationUri = tableLocation),
+        bucketSpec = bucketSpec,
         // We will use the schema of resolved.relation as the schema of the table (instead of
         // the schema of df). It is important since the nullability may be changed by the relation
         // provider (for example, see org.apache.spark.sql.parquet.DefaultSource).
