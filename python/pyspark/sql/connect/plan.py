@@ -58,7 +58,7 @@ class LogicalPlan(object):
         else:
             return cast(Column, col).to_plan(session)
 
-    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+    def plan(self, session: "SparkConnectClient") -> Union[proto.Relation, proto.Catalog]:
         ...
 
     def command(self, session: "SparkConnectClient") -> proto.Command:
@@ -95,6 +95,7 @@ class LogicalPlan(object):
 
         return plan
 
+    # TODO(SPARK-XXXXX): Implement the command logic for print and _repr_html_
     def print(self, indent: int = 0) -> str:
         ...
 
@@ -1571,3 +1572,794 @@ class WriteOperation(LogicalPlan):
             f"</li></ul>"
         )
         pass
+
+
+class CurrentDatabase(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"]) -> None:
+        super().__init__(None)
+
+    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
+        return proto.Catalog(current_catalog=proto.CurrentDatabase())
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return f"{i}" f"<{self.__class__.__name__}>"
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>{self.__class__.__name__}</b>
+            {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
+class SetCurrentDatabase(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], db_name: str) -> None:
+        super().__init__(None)
+        self._db_name = db_name
+
+    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
+        plan = proto.Catalog()
+        plan.set_current_database.db_name = self._db_name
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return f"{i}" f"<{self.__class__.__name__} db_name='{self._db_name}'>"
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>{self.__class__.__name__}</b><br />
+              db_name: {self._db_name} <br />
+            {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
+class ListDatabases(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"]) -> None:
+        super().__init__(None)
+
+    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
+        return proto.Catalog(current_catalog=proto.ListDatabases())
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return f"{i}" f"<{self.__class__.__name__}>"
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>{self.__class__.__name__}</b>
+            {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
+class ListTables(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], db_name: Optional[str] = None) -> None:
+        super().__init__(None)
+        self._db_name = db_name
+
+    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
+        plan = proto.Catalog()
+        if self._db_name is not None:
+            plan.list_tables.db_name = self._db_name
+        else:
+            plan = proto.Catalog(list_tables=proto.ListTables())
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return f"{i}" f"<{self.__class__.__name__} db_name='{self._db_name}'>"
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>{self.__class__.__name__}</b><br />
+              db_name: {self._db_name} <br />
+            {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
+class ListFunctions(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], db_name: Optional[str] = None) -> None:
+        super().__init__(None)
+        self._db_name = db_name
+
+    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
+        if self._db_name is not None:
+            plan = proto.Catalog()
+            plan.list_functions.db_name = self._db_name
+        else:
+            plan = proto.Catalog(list_functions=proto.ListFunctions())
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return f"{i}" f"<{self.__class__.__name__} db_name='{self._db_name}'>"
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>{self.__class__.__name__}</b><br />
+              db_name: {self._db_name} <br />
+            {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
+class ListColumns(LogicalPlan):
+    def __init__(
+        self, child: Optional["LogicalPlan"], table_name: str, db_name: Optional[str] = None
+    ) -> None:
+        super().__init__(None)
+        self._table_name = table_name
+        self._db_name = db_name
+
+    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
+        plan = proto.Catalog()
+        plan.list_columns.table_name = self._table_name
+        if self._db_name is not None:
+            plan.list_columns.db_name = self._db_name
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return (
+            f"{i}"
+            f"<{self.__class__.__name__}"
+            f"table_name='{self._table_name}' "
+            f"db_name='{self._db_name}'>"
+        )
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>{self.__class__.__name__}</b><br />
+              table_name: {self._table_name} <br />
+              db_name: {self._db_name} <br />
+            {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
+class GetDatabase(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], db_name: str) -> None:
+        super().__init__(None)
+        self._db_name = db_name
+
+    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
+        plan = proto.Catalog()
+        plan.get_database.db_name = self._db_name
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return f"{i}" f"<{self.__class__.__name__} db_name='{self._db_name}'>"
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>{self.__class__.__name__}</b><br />
+              db_name: {self._db_name} <br />
+            {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
+class GetTable(LogicalPlan):
+    def __init__(
+        self, child: Optional["LogicalPlan"], table_name: str, db_name: Optional[str] = None
+    ) -> None:
+        super().__init__(None)
+        self._table_name = table_name
+        self._db_name = db_name
+
+    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
+        plan = proto.Catalog()
+        plan.get_table.table_name = self._table_name
+        if self._db_name is not None:
+            plan.get_table.db_name = self._db_name
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return (
+            f"{i}"
+            f"<{self.__class__.__name__}"
+            f"table_name='{self._table_name}' "
+            f"db_name='{self._db_name}'>"
+        )
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>{self.__class__.__name__}</b><br />
+              table_name: {self._table_name} <br />
+              db_name: {self._db_name} <br />
+            {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
+class GetFunction(LogicalPlan):
+    def __init__(
+        self, child: Optional["LogicalPlan"], function_name: str, db_name: Optional[str] = None
+    ) -> None:
+        super().__init__(None)
+        self._function_name = function_name
+        self._db_name = db_name
+
+    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
+        plan = proto.Catalog()
+        plan.get_function.function_name = self._function_name
+        if self._db_name is not None:
+            plan.get_function.db_name = self._db_name
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return (
+            f"{i}"
+            f"<{self.__class__.__name__}"
+            f"function_name='{self._function_name}' "
+            f"db_name='{self._db_name}'>"
+        )
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>{self.__class__.__name__}</b><br />
+              function_name: {self._function_name} <br />
+              db_name: {self._db_name} <br />
+            {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
+class DatabaseExists(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], db_name: str) -> None:
+        super().__init__(None)
+        self._db_name = db_name
+
+    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
+        plan = proto.Catalog()
+        plan.database_exists.db_name = self._db_name
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return f"{i}" f"<{self.__class__.__name__} db_name='{self._db_name}'>"
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>{self.__class__.__name__}</b><br />
+              db_name: {self._db_name} <br />
+            {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
+class TableExists(LogicalPlan):
+    def __init__(
+        self, child: Optional["LogicalPlan"], table_name: str, db_name: Optional[str] = None
+    ) -> None:
+        super().__init__(None)
+        self._table_name = table_name
+        self._db_name = db_name
+
+    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
+        plan = proto.Catalog()
+        plan.table_exists.table_name = self._table_name
+        if self._db_name is not None:
+            plan.table_exists.db_name = self._db_name
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return (
+            f"{i}"
+            f"<{self.__class__.__name__}"
+            f"table_name='{self._table_name}' "
+            f"db_name='{self._db_name}'>"
+        )
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>{self.__class__.__name__}</b><br />
+              table_name: {self._table_name} <br />
+              db_name: {self._db_name} <br />
+            {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
+class FunctionExists(LogicalPlan):
+    def __init__(
+        self, child: Optional["LogicalPlan"], function_name: str, db_name: Optional[str] = None
+    ) -> None:
+        super().__init__(None)
+        self._function_name = function_name
+        self._db_name = db_name
+
+    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
+        plan = proto.Catalog()
+        plan.function_exists.function_name = self._function_name
+        if self._db_name is not None:
+            plan.function_exists.db_name = self._db_name
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return (
+            f"{i}"
+            f"<{self.__class__.__name__}"
+            f"function_name='{self._function_name}' "
+            f"db_name='{self._db_name}'>"
+        )
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>{self.__class__.__name__}</b><br />
+              function_name: {self._function_name} <br />
+              db_name: {self._db_name} <br />
+            {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
+class CreateExternalTable(LogicalPlan):
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        table_name: str,
+        path: str,
+        source: Optional[str] = None,
+        schema: Optional[DataType] = None,
+        options: Mapping[str, str] = {},
+    ) -> None:
+        super().__init__(None)
+        self._child = child
+        self._table_name = table_name
+        self._path = path
+        self._source = source
+        self._schema = schema
+        self._options = options
+
+    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
+        plan = proto.Catalog()
+        plan.create_external_table.table_name = self._table_name
+        plan.create_external_table.path = self._path
+        if self._source is not None:
+            plan.create_external_table.source = self._source
+        if self._schema is not None:
+            plan.create_external_table.schema.CopyFrom(pyspark_types_to_proto_types(self._schema))
+        for k in self._options.keys():
+            v = self._options.get(k)
+            if v is not None:
+                plan.read.data_source.options[k] = v
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return (
+            f"{i}"
+            f"<{self.__class__.__name__}"
+            f"table_name='{self._table_name}' "
+            f"path='{self._path}' "
+            f"source='{self._source}' "
+            f"schema='{self._schema}' "
+            f"options='{self._options}'>"
+        )
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>{self.__class__.__name__}</b><br />
+              table_name: {self._table_name} <br />
+              path: {self._path} <br />
+              source: {self._source} <br />
+              schema: {self._schema} <br />
+              options: {self._options} <br />
+            {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
+class CreateTable(LogicalPlan):
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        table_name: str,
+        path: str,
+        source: Optional[str] = None,
+        description: Optional[str] = None,
+        schema: Optional[DataType] = None,
+        options: Mapping[str, str] = {},
+    ) -> None:
+        super().__init__(None)
+        self._child = child
+        self._table_name = table_name
+        self._path = path
+        self._source = source
+        self._description = description
+        self._schema = schema
+        self._options = options
+
+    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
+        plan = proto.Catalog()
+        plan.create_external_table.table_name = self._table_name
+        plan.create_external_table.path = self._path
+        if self._source is not None:
+            plan.create_external_table.source = self._source
+        if self._description is not None:
+            plan.create_external_table.description = self._description
+        if self._schema is not None:
+            plan.create_external_table.schema.CopyFrom(pyspark_types_to_proto_types(self._schema))
+        for k in self._options.keys():
+            v = self._options.get(k)
+            if v is not None:
+                plan.read.data_source.options[k] = v
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return (
+            f"{i}"
+            f"<{self.__class__.__name__}"
+            f"table_name='{self._table_name}' "
+            f"path='{self._path}' "
+            f"source='{self._source}' "
+            f"description='{self._description}' "
+            f"schema='{self._schema}' "
+            f"options='{self._options}'>"
+        )
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>{self.__class__.__name__}</b><br />
+              table_name: {self._table_name} <br />
+              path: {self._path} <br />
+              source: {self._source} <br />
+              description: {self._description} <br />
+              schema: {self._schema} <br />
+              options: {self._options} <br />
+            {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
+class DropTempView(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], view_name: str) -> None:
+        super().__init__(None)
+        self._view_name = view_name
+
+    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
+        plan = proto.Catalog()
+        plan.drop_temp_view.view_name = self._view_name
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return f"{i}" f"<{self.__class__.__name__} view_name='{self._view_name}'>"
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>{self.__class__.__name__}</b><br />
+              view_name: {self._view_name} <br />
+            {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
+class DropGlobalTempView(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], view_name: str) -> None:
+        super().__init__(None)
+        self._view_name = view_name
+
+    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
+        plan = proto.Catalog()
+        plan.drop_global_temp_view.view_name = self._view_name
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return f"{i}" f"<{self.__class__.__name__} view_name='{self._view_name}'>"
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>{self.__class__.__name__}</b><br />
+              view_name: {self._view_name} <br />
+            {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
+class RecoverPartitions(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], table_name: str) -> None:
+        super().__init__(None)
+        self._table_name = table_name
+
+    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
+        plan = proto.Catalog()
+        plan.recover_partitions.table_name = self._table_name
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return f"{i}" f"<{self.__class__.__name__} table_name='{self._table_name}'>"
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>{self.__class__.__name__}</b><br />
+              table_name: {self._table_name} <br />
+            {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
+class IsCached(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], table_name: str) -> None:
+        super().__init__(None)
+        self._table_name = table_name
+
+    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
+        plan = proto.Catalog()
+        plan.is_cached.table_name = self._table_name
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return f"{i}" f"<{self.__class__.__name__} table_name='{self._table_name}'>"
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>{self.__class__.__name__}</b><br />
+              table_name: {self._table_name} <br />
+            {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
+class CacheTable(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], table_name: str) -> None:
+        super().__init__(None)
+        self._table_name = table_name
+
+    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
+        plan = proto.Catalog()
+        plan.cache_table.table_name = self._table_name
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return f"{i}" f"<{self.__class__.__name__} table_name='{self._table_name}'>"
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>{self.__class__.__name__}</b><br />
+              table_name: {self._table_name} <br />
+            {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
+class UncacheTable(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], table_name: str) -> None:
+        super().__init__(None)
+        self._table_name = table_name
+
+    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
+        plan = proto.Catalog()
+        plan.uncache_table.table_name = self._table_name
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return f"{i}" f"<{self.__class__.__name__} table_name='{self._table_name}'>"
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>{self.__class__.__name__}</b><br />
+              table_name: {self._table_name} <br />
+            {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
+class ClearCache(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"]) -> None:
+        super().__init__(None)
+
+    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
+        return proto.Catalog(current_catalog=proto.ClearCache())
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return f"{i}" f"<{self.__class__.__name__}>"
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>{self.__class__.__name__}</b>
+            {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
+class RefreshTable(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], table_name: str) -> None:
+        super().__init__(None)
+        self._table_name = table_name
+
+    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
+        plan = proto.Catalog()
+        plan.refresh_table.db_name = self._table_name
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return f"{i}" f"<{self.__class__.__name__} table_name='{self._table_name}'>"
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>{self.__class__.__name__}</b><br />
+              table_name: {self._table_name} <br />
+            {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
+class RefreshByPath(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], path: str) -> None:
+        super().__init__(None)
+        self._path = path
+
+    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
+        plan = proto.Catalog()
+        plan.refresh_by_path.path = self._path
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return f"{i}" f"<{self.__class__.__name__} path='{self._path}'>"
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>{self.__class__.__name__}</b><br />
+              db_name: {self._path} <br />
+            {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
+class CurrentCatalog(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"]) -> None:
+        super().__init__(None)
+
+    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
+        return proto.Catalog(current_catalog=proto.CurrentCatalog())
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return f"{i}" f"<{self.__class__.__name__}>"
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>{self.__class__.__name__}</b>
+            {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
+class SetCurrentCatalog(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], catalog_name: str) -> None:
+        super().__init__(None)
+        self._catalog_name = catalog_name
+
+    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
+        plan = proto.Catalog()
+        plan.set_current_catalog.catalog_name = self._catalog_name
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return f"{i}" f"<{self.__class__.__name__} catalog_name='{self._catalog_name}'>"
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>{self.__class__.__name__}</b><br />
+              catalog_name: {self._catalog_name} <br />
+            {self._child_repr_()}
+           </li>
+        </ul>
+        """
+
+
+class ListCatalogs(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"]) -> None:
+        super().__init__(None)
+
+    def plan(self, session: "SparkConnectClient") -> proto.Catalog:
+        return proto.Catalog(current_catalog=proto.ListCatalogs())
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        return f"{i}" f"<{self.__class__.__name__}>"
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+           <li>
+              <b>{self.__class__.__name__}</b>
+            {self._child_repr_()}
+           </li>
+        </ul>
+        """

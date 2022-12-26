@@ -20,7 +20,7 @@ from pyspark.sql.utils import AnalysisException
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
-class CatalogTests(ReusedSQLTestCase):
+class CatalogTestsMixin:
     def test_current_database(self):
         spark = self.spark
         with self.database("some_db"):
@@ -391,6 +391,10 @@ class CatalogTests(ReusedSQLTestCase):
 
                 spark.catalog.refreshTable("spark_catalog.default.my_tab")
                 self.assertEqual(spark.table("my_tab").count(), 0)
+
+
+class CatalogTests(ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":

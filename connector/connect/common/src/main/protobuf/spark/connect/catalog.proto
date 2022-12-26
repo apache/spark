@@ -51,7 +51,7 @@ message Catalog {
     RefreshTable refresh_table = 22;
     RefreshByPath refresh_by_path = 23;
     CurrentCatalog current_catalog = 24;
-    SetCurrentCatalog set_current_Catalog = 25;
+    SetCurrentCatalog set_current_catalog = 25;
     ListCatalogs list_catalogs = 26;
   }
 }

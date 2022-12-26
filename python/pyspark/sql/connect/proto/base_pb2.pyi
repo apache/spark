@@ -40,6 +40,7 @@ import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
+import pyspark.sql.connect.proto.catalog_pb2
 import pyspark.sql.connect.proto.commands_pb2
 import pyspark.sql.connect.proto.relations_pb2
 import pyspark.sql.connect.proto.types_pb2
@@ -58,37 +59,43 @@ class Plan(google.protobuf.message.Message):
     client to the server. A [[Plan]] can either be of the type [[Relation]] which is a reference
     to the underlying logical plan or it can be of the [[Command]] type that is used to execute
     commands on the server.
+
+    [[Catalog]] is also included temporarily, which is only for internal purpose for now.
     """
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     ROOT_FIELD_NUMBER: builtins.int
     COMMAND_FIELD_NUMBER: builtins.int
+    CATALOG_FIELD_NUMBER: builtins.int
     @property
     def root(self) -> pyspark.sql.connect.proto.relations_pb2.Relation: ...
     @property
     def command(self) -> pyspark.sql.connect.proto.commands_pb2.Command: ...
+    @property
+    def catalog(self) -> pyspark.sql.connect.proto.catalog_pb2.Catalog: ...
     def __init__(
         self,
         *,
         root: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
         command: pyspark.sql.connect.proto.commands_pb2.Command | None = ...,
+        catalog: pyspark.sql.connect.proto.catalog_pb2.Catalog | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "command", b"command", "op_type", b"op_type", "root", b"root"
+            "catalog", b"catalog", "command", b"command", "op_type", b"op_type", "root", b"root"
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "command", b"command", "op_type", b"op_type", "root", b"root"
+            "catalog", b"catalog", "command", b"command", "op_type", b"op_type", "root", b"root"
         ],
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["op_type", b"op_type"]
-    ) -> typing_extensions.Literal["root", "command"] | None: ...
+    ) -> typing_extensions.Literal["root", "command", "catalog"] | None: ...
 
 global___Plan = Plan
 
