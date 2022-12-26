@@ -1281,7 +1281,8 @@ class NAReplace(LogicalPlan):
         self.replacements = replacements
 
     def _convert_int_to_float(self, v: Any) -> Any:
-        if v is not None and isinstance(v, int):
+        # a bool is also an int
+        if v is not None and not isinstance(v, bool) and isinstance(v, int):
             return float(v)
         else:
             return v
