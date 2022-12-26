@@ -222,9 +222,12 @@ class Relation(google.protobuf.message.Message):
     def recover_partitions(self) -> pyspark.sql.connect.proto.catalog_pb2.RecoverPartitions: ...
     @property
     def clear_cache(self) -> pyspark.sql.connect.proto.catalog_pb2.ClearCache:
-        """IsCached is_cached = 218;
-        CacheTable cache_table = 219;
-        UncacheTable uncache_table = 220;
+        """TODO(SPARK-41612): Support Catalog.isCached
+           IsCached is_cached = 218;
+        TODO(SPARK-41600): Support Catalog.cacheTable
+           CacheTable cache_table = 219;
+        TODO(SPARK-41623): Support Catalog.uncacheTable
+           UncacheTable uncache_table = 220;
         """
     @property
     def refresh_table(self) -> pyspark.sql.connect.proto.catalog_pb2.RefreshTable: ...

@@ -58,7 +58,6 @@ class LogicalPlan(object):
         else:
             return cast(Column, col).to_plan(session)
 
-    # TODO(SPARK-41717): Implement the command logic for print and _repr_html_
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         ...
 
@@ -96,7 +95,7 @@ class LogicalPlan(object):
 
         return plan
 
-    # TODO(SPARK-XXXXX): Implement the command logic for print and _repr_html_
+    # TODO(SPARK-41717): Implement the command logic for print and _repr_html_
     def print(self, indent: int = 0) -> str:
         ...
 

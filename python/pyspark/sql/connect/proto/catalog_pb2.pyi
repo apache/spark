@@ -612,18 +612,21 @@ class RecoverPartitions(google.protobuf.message.Message):
 global___RecoverPartitions = RecoverPartitions
 
 class ClearCache(google.protobuf.message.Message):
-    """// See `spark.catalog.isCached`
+    """TODO(SPARK-41612): Support Catalog.isCached
+    // See `spark.catalog.isCached`
     message IsCached {
      // (Required)
      string table_name = 1;
     }
 
+    TODO(SPARK-41600): Support Catalog.cacheTable
     // See `spark.catalog.cacheTable`
     message CacheTable {
      // (Required)
      string table_name = 1;
     }
 
+    TODO(SPARK-41623): Support Catalog.uncacheTable
     // See `spark.catalog.uncacheTable`
     message UncacheTable {
      // (Required)
