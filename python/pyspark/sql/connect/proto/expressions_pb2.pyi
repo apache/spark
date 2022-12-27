@@ -456,10 +456,8 @@ class Expression(google.protobuf.message.Message):
         CALENDAR_INTERVAL_FIELD_NUMBER: builtins.int
         YEAR_MONTH_INTERVAL_FIELD_NUMBER: builtins.int
         DAY_TIME_INTERVAL_FIELD_NUMBER: builtins.int
-        TYPED_NULL_FIELD_NUMBER: builtins.int
-        NULLABLE_FIELD_NUMBER: builtins.int
-        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
-        null: builtins.bool
+        @property
+        def null(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
         binary: builtins.bytes
         boolean: builtins.bool
         byte: builtins.int
@@ -481,22 +479,10 @@ class Expression(google.protobuf.message.Message):
         def calendar_interval(self) -> global___Expression.Literal.CalendarInterval: ...
         year_month_interval: builtins.int
         day_time_interval: builtins.int
-        @property
-        def typed_null(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
-        nullable: builtins.bool
-        """whether the literal type should be treated as a nullable type. Applies to
-        all members of union other than the Typed null (which should directly
-        declare nullability).
-        """
-        type_variation_reference: builtins.int
-        """optionally points to a type_variation_anchor defined in this plan.
-        Applies to all members of union other than the Typed null (which should
-        directly declare the type variation).
-        """
         def __init__(
             self,
             *,
-            null: builtins.bool = ...,
+            null: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
             binary: builtins.bytes = ...,
             boolean: builtins.bool = ...,
             byte: builtins.int = ...,
@@ -513,9 +499,6 @@ class Expression(google.protobuf.message.Message):
             calendar_interval: global___Expression.Literal.CalendarInterval | None = ...,
             year_month_interval: builtins.int = ...,
             day_time_interval: builtins.int = ...,
-            typed_null: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
-            nullable: builtins.bool = ...,
-            type_variation_reference: builtins.int = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -554,8 +537,6 @@ class Expression(google.protobuf.message.Message):
                 b"timestamp",
                 "timestamp_ntz",
                 b"timestamp_ntz",
-                "typed_null",
-                b"typed_null",
                 "year_month_interval",
                 b"year_month_interval",
             ],
@@ -589,8 +570,6 @@ class Expression(google.protobuf.message.Message):
                 b"long",
                 "null",
                 b"null",
-                "nullable",
-                b"nullable",
                 "short",
                 b"short",
                 "string",
@@ -599,10 +578,6 @@ class Expression(google.protobuf.message.Message):
                 b"timestamp",
                 "timestamp_ntz",
                 b"timestamp_ntz",
-                "type_variation_reference",
-                b"type_variation_reference",
-                "typed_null",
-                b"typed_null",
                 "year_month_interval",
                 b"year_month_interval",
             ],
@@ -627,7 +602,6 @@ class Expression(google.protobuf.message.Message):
             "calendar_interval",
             "year_month_interval",
             "day_time_interval",
-            "typed_null",
         ] | None: ...
 
     class UnresolvedAttribute(google.protobuf.message.Message):
@@ -760,6 +734,38 @@ class Expression(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["col_name", b"col_name"]
         ) -> None: ...
 
+    class UnresolvedExtractValue(google.protobuf.message.Message):
+        """Extracts a value or values from an Expression"""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        CHILD_FIELD_NUMBER: builtins.int
+        EXTRACTION_FIELD_NUMBER: builtins.int
+        @property
+        def child(self) -> global___Expression:
+            """(Required) The expression to extract value from, can be
+            Map, Array, Struct or array of Structs.
+            """
+        @property
+        def extraction(self) -> global___Expression:
+            """(Required) The expression to describe the extraction, can be
+            key of Map, index of Array, field name of Struct.
+            """
+        def __init__(
+            self,
+            *,
+            child: global___Expression | None = ...,
+            extraction: global___Expression | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal["child", b"child", "extraction", b"extraction"],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal["child", b"child", "extraction", b"extraction"],
+        ) -> None: ...
+
     class Alias(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -846,6 +852,7 @@ class Expression(google.protobuf.message.Message):
     SORT_ORDER_FIELD_NUMBER: builtins.int
     LAMBDA_FUNCTION_FIELD_NUMBER: builtins.int
     WINDOW_FIELD_NUMBER: builtins.int
+    UNRESOLVED_EXTRACT_VALUE_FIELD_NUMBER: builtins.int
     @property
     def literal(self) -> global___Expression.Literal: ...
     @property
@@ -868,6 +875,8 @@ class Expression(google.protobuf.message.Message):
     def lambda_function(self) -> global___Expression.LambdaFunction: ...
     @property
     def window(self) -> global___Expression.Window: ...
+    @property
+    def unresolved_extract_value(self) -> global___Expression.UnresolvedExtractValue: ...
     def __init__(
         self,
         *,
@@ -882,6 +891,7 @@ class Expression(google.protobuf.message.Message):
         sort_order: global___Expression.SortOrder | None = ...,
         lambda_function: global___Expression.LambdaFunction | None = ...,
         window: global___Expression.Window | None = ...,
+        unresolved_extract_value: global___Expression.UnresolvedExtractValue | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -902,6 +912,8 @@ class Expression(google.protobuf.message.Message):
             b"sort_order",
             "unresolved_attribute",
             b"unresolved_attribute",
+            "unresolved_extract_value",
+            b"unresolved_extract_value",
             "unresolved_function",
             b"unresolved_function",
             "unresolved_regex",
@@ -931,6 +943,8 @@ class Expression(google.protobuf.message.Message):
             b"sort_order",
             "unresolved_attribute",
             b"unresolved_attribute",
+            "unresolved_extract_value",
+            b"unresolved_extract_value",
             "unresolved_function",
             b"unresolved_function",
             "unresolved_regex",
@@ -955,6 +969,7 @@ class Expression(google.protobuf.message.Message):
         "sort_order",
         "lambda_function",
         "window",
+        "unresolved_extract_value",
     ] | None: ...
 
 global___Expression = Expression

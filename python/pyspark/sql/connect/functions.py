@@ -1414,6 +1414,18 @@ def reverse(col: "ColumnOrName") -> Column:
 reverse.__doc__ = pysparkfuncs.reverse.__doc__
 
 
+def sequence(
+    start: "ColumnOrName", stop: "ColumnOrName", step: Optional["ColumnOrName"] = None
+) -> Column:
+    if step is None:
+        return _invoke_function_over_columns("sequence", start, stop)
+    else:
+        return _invoke_function_over_columns("sequence", start, stop, step)
+
+
+sequence.__doc__ = pysparkfuncs.sequence.__doc__
+
+
 # TODO(SPARK-41493): Support options
 def schema_of_csv(csv: "ColumnOrName") -> Column:
     if isinstance(csv, Column):
@@ -1629,11 +1641,11 @@ def encode(col: "ColumnOrName", charset: str) -> Column:
 encode.__doc__ = pysparkfuncs.encode.__doc__
 
 
-# TODO(SPARK-41473): Resolve the data type mismatch issue and enable the function
-# def format_number(col: "ColumnOrName", d: int) -> Column:
-#     return _invoke_function("format_number", _to_col(col), lit(d))
-#
-# format_number.__doc__ = pysparkfuncs.format_number.__doc__
+def format_number(col: "ColumnOrName", d: int) -> Column:
+    return _invoke_function("format_number", _to_col(col), lit(d))
+
+
+format_number.__doc__ = pysparkfuncs.format_number.__doc__
 
 
 def format_string(format: str, *cols: "ColumnOrName") -> Column:
@@ -2070,6 +2082,73 @@ def timestamp_seconds(col: "ColumnOrName") -> Column:
 timestamp_seconds.__doc__ = pysparkfuncs.timestamp_seconds.__doc__
 
 
+def window(
+    timeColumn: "ColumnOrName",
+    windowDuration: str,
+    slideDuration: Optional[str] = None,
+    startTime: Optional[str] = None,
+) -> Column:
+    if windowDuration is None or not isinstance(windowDuration, str):
+        raise TypeError(
+            f"windowDuration should be as a string, "
+            f"but got {type(windowDuration).__name__} {windowDuration}"
+        )
+    if slideDuration is not None and not isinstance(slideDuration, str):
+        raise TypeError(
+            f"slideDuration should be as a string, "
+            f"but got {type(slideDuration).__name__} {slideDuration}"
+        )
+    if startTime is not None and not isinstance(startTime, str):
+        raise TypeError(
+            f"startTime should be as a string, " f"but got {type(startTime).__name__} {startTime}"
+        )
+
+    time_col = _to_col(timeColumn)
+
+    if slideDuration is not None and startTime is not None:
+        return _invoke_function(
+            "window", time_col, lit(windowDuration), lit(slideDuration), lit(startTime)
+        )
+    elif slideDuration is not None:
+        return _invoke_function("window", time_col, lit(windowDuration), lit(slideDuration))
+    elif startTime is not None:
+        return _invoke_function(
+            "window", time_col, lit(windowDuration), lit(windowDuration), lit(startTime)
+        )
+    else:
+        return _invoke_function("window", time_col, lit(windowDuration))
+
+
+window.__doc__ = pysparkfuncs.window.__doc__
+
+
+def window_time(
+    windowColumn: "ColumnOrName",
+) -> Column:
+    return _invoke_function("window_time", _to_col(windowColumn))
+
+
+window_time.__doc__ = pysparkfuncs.window_time.__doc__
+
+
+def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) -> Column:
+    if gapDuration is None or not isinstance(gapDuration, (Column, str)):
+        raise TypeError(
+            f"gapDuration should be as a string or Column, "
+            f"but got {type(gapDuration).__name__} {gapDuration}"
+        )
+
+    time_col = _to_col(timeColumn)
+
+    if isinstance(gapDuration, Column):
+        return _invoke_function("session_window", time_col, gapDuration)
+    else:
+        return _invoke_function("session_window", time_col, lit(gapDuration))
+
+
+session_window.__doc__ = pysparkfuncs.session_window.__doc__
+
+
 # Partition Transformation Functions
 
 
@@ -2179,3 +2258,20 @@ def sha2(col: "ColumnOrName", numBits: int) -> Column:
 
 
 sha2.__doc__ = pysparkfuncs.sha2.__doc__
+
+
+# User Defined Function
+
+
+def call_udf(udfName: str, *cols: "ColumnOrName") -> Column:
+    return _invoke_function(udfName, *[_to_col(c) for c in cols])
+
+
+call_udf.__doc__ = pysparkfuncs.call_udf.__doc__
+
+
+def unwrap_udt(col: "ColumnOrName") -> Column:
+    return _invoke_function("unwrap_udt", _to_col(col))
+
+
+unwrap_udt.__doc__ = pysparkfuncs.unwrap_udt.__doc__

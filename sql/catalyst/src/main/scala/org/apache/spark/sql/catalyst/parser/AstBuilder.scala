@@ -4709,7 +4709,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         Seq(describeFuncName.getText)
       }
     DescribeFunction(
-      UnresolvedFunc(
+      UnresolvedFunctionName(
         functionName,
         "DESCRIBE FUNCTION",
         requirePersistent = false,
@@ -4747,7 +4747,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
 
   override def visitRefreshFunction(ctx: RefreshFunctionContext): LogicalPlan = withOrigin(ctx) {
     val functionIdentifier = visitMultipartIdentifier(ctx.multipartIdentifier)
-    RefreshFunction(UnresolvedFunc(
+    RefreshFunction(UnresolvedFunctionName(
       functionIdentifier,
       "REFRESH FUNCTION",
       requirePersistent = true,

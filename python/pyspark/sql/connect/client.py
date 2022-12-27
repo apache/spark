@@ -362,6 +362,9 @@ class SparkConnectClient(object):
         self._execute(req)
         return
 
+    def close(self) -> None:
+        self._channel.close()
+
     def _execute_plan_request_with_metadata(self) -> pb2.ExecutePlanRequest:
         req = pb2.ExecutePlanRequest()
         req.client_type = "_SPARK_CONNECT_PYTHON"

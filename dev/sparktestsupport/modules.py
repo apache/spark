@@ -504,6 +504,7 @@ pyspark_connect = Module(
     source_file_regexes=["python/pyspark/sql/connect"],
     python_test_goals=[
         # doctests
+        "pyspark.sql.connect.catalog",
         "pyspark.sql.connect.window",
         # unittests
         "pyspark.sql.tests.connect.test_connect_column_expressions",
@@ -512,6 +513,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_connect_basic",
         "pyspark.sql.tests.connect.test_connect_function",
         "pyspark.sql.tests.connect.test_connect_column",
+        "pyspark.sql.tests.connect.test_parity_catalog",
         "pyspark.sql.tests.connect.test_parity_functions",
         "pyspark.sql.tests.connect.test_parity_dataframe",
     ],

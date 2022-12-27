@@ -21,6 +21,7 @@ package spark.connect;
 
 import "spark/connect/expressions.proto";
 import "spark/connect/types.proto";
+import "spark/connect/catalog.proto";
 
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
@@ -67,6 +68,37 @@ message Relation {
     StatSummary summary = 100;
     StatCrosstab crosstab = 101;
     StatDescribe describe = 102;
+
+    // Catalog API (internal-only)
+    CurrentDatabase current_database = 201;
+    SetCurrentDatabase set_current_database = 202;
+    ListDatabases list_databases = 203;
+    ListTables list_tables = 204;
+    ListFunctions list_functions = 205;
+    ListColumns list_columns = 206;
+    GetDatabase get_database = 207;
+    GetTable get_table = 208;
+    GetFunction get_function = 209;
+    DatabaseExists database_exists = 210;
+    TableExists table_exists = 211;
+    FunctionExists function_exists = 212;
+    CreateExternalTable create_external_table = 213;
+    CreateTable create_table = 214;
+    DropTempView drop_temp_view = 215;
+    DropGlobalTempView drop_global_temp_view = 216;
+    RecoverPartitions recover_partitions = 217;
+// TODO(SPARK-41612): Support Catalog.isCached
+//    IsCached is_cached = 218;
+// TODO(SPARK-41600): Support Catalog.cacheTable
+//    CacheTable cache_table = 219;
+// TODO(SPARK-41623): Support Catalog.uncacheTable
+//    UncacheTable uncache_table = 220;
+    ClearCache clear_cache = 221;
+    RefreshTable refresh_table = 222;
+    RefreshByPath refresh_by_path = 223;
+    CurrentCatalog current_catalog = 224;
+    SetCurrentCatalog set_current_catalog = 225;
+    ListCatalogs list_catalogs = 226;
 
     Unknown unknown = 999;
   }

@@ -20,7 +20,7 @@ import tempfile
 
 from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.sql import SparkSession, Row
-from pyspark.sql.types import StructType, StructField, LongType, StringType, IntegerType
+from pyspark.sql.types import StructType, StructField, LongType, StringType, IntegerType, MapType
 import pyspark.sql.functions
 from pyspark.testing.utils import ReusedPySparkTestCase
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
@@ -58,6 +58,7 @@ class SparkConnectSQLTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLT
         cls.tbl_name = "test_connect_basic_table_1"
         cls.tbl_name2 = "test_connect_basic_table_2"
         cls.tbl_name3 = "test_connect_basic_table_3"
+        cls.tbl_name4 = "test_connect_basic_table_4"
         cls.tbl_name_empty = "test_connect_basic_table_empty"
 
         # Cleanup test data
@@ -82,6 +83,8 @@ class SparkConnectSQLTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLT
         df2.write.saveAsTable(cls.tbl_name2)
         df3 = cls.spark.createDataFrame([(x, f"{x}") for x in range(100)], ["id", "test\n_column"])
         df3.write.saveAsTable(cls.tbl_name3)
+        df4 = cls.spark.createDataFrame([(x, {"a": x}) for x in range(100)], ["id", "map_column"])
+        df4.write.saveAsTable(cls.tbl_name4)
         empty_table_schema = StructType(
             [
                 StructField("firstname", StringType(), True),
@@ -448,6 +451,19 @@ class SparkConnectTests(SparkConnectSQLTestCase):
                 """Column or field `name` is of type "STRING" while it's required to be "INT".""",
                 str(context.exception),
             )
+
+        # Test map type
+        schema = StructType(
+            [
+                StructField("id", StringType(), True),
+                StructField("my_map", MapType(StringType(), IntegerType(), False), True),
+            ]
+        )
+        cdf = self.connect.read.table(self.tbl_name4).to(schema)
+        df = self.spark.read.table(self.tbl_name4).to(schema)
+
+        self.assertEqual(cdf.schema, df.schema)
+        self.assert_eq(cdf.toPandas(), df.toPandas())
 
     def test_toDF(self):
         # SPARK-41310: test DataFrame.toDF()
@@ -932,7 +948,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             self.connect.read.table(self.tbl_name).hint("REPARTITION", "id+1").toPandas()
 
         # Hint with unsupported parameter types
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             self.connect.read.table(self.tbl_name).hint("REPARTITION", 1.1).toPandas()
 
         # Hint with wrong combination

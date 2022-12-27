@@ -2353,7 +2353,7 @@ class Analyzer(override val catalogManager: CatalogManager)
   }
 
   /**
-   * Replaces [[UnresolvedFunc]]s with concrete [[LogicalPlan]]s.
+   * Replaces [[UnresolvedFunctionName]]s with concrete [[LogicalPlan]]s.
    * Replaces [[UnresolvedFunction]]s with concrete [[Expression]]s.
    * Replaces [[UnresolvedGenerator]]s with concrete [[Expression]]s.
    * Replaces [[UnresolvedTableValuedFunction]]s with concrete [[LogicalPlan]]s.
@@ -2365,7 +2365,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       _.containsAnyPattern(UNRESOLVED_FUNC, UNRESOLVED_FUNCTION, GENERATOR,
         UNRESOLVED_TABLE_VALUED_FUNCTION), ruleId) {
       // Resolve functions with concrete relations from v2 catalog.
-      case u @ UnresolvedFunc(nameParts, cmd, requirePersistentFunc, mismatchHint, _) =>
+      case u @ UnresolvedFunctionName(nameParts, cmd, requirePersistentFunc, mismatchHint, _) =>
         lookupBuiltinOrTempFunction(nameParts)
           .orElse(lookupBuiltinOrTempTableFunction(nameParts)).map { info =>
           if (requirePersistentFunc) {
