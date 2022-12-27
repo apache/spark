@@ -272,8 +272,8 @@ def _test() -> None:
             | doctest.NORMALIZE_WHITESPACE
             | doctest.IGNORE_EXCEPTION_DETAIL,
         )
-        # TODO(SPARK-41529): Implement stop in RemoteSparkSession.
-        #   Stop the regular Spark session (server) too.
+
+        globs["spark"].stop()
         globs["_spark"].stop()
         if failure_count:
             sys.exit(-1)
