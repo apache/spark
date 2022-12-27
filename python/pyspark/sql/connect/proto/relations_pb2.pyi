@@ -1306,8 +1306,9 @@ class Sample(google.protobuf.message.Message):
     seed: builtins.int
     """(Optional) The random seed."""
     deterministic_order: builtins.bool
-    """(Optional) Explicitly sort the underlying plan to make the ordering deterministic.
-    This flag is only used to randomly splits DataFrame with the provided weights.
+    """(Required) Explicitly sort the underlying plan to make the ordering deterministic.
+    This flag is true when invoking `dataframe.randomSplit` to randomly splits DataFrame with the
+    provided weights. Otherwise, it is false.
     """
     def __init__(
         self,
@@ -1317,19 +1318,15 @@ class Sample(google.protobuf.message.Message):
         upper_bound: builtins.float = ...,
         with_replacement: builtins.bool | None = ...,
         seed: builtins.int | None = ...,
-        deterministic_order: builtins.bool | None = ...,
+        deterministic_order: builtins.bool = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "_deterministic_order",
-            b"_deterministic_order",
             "_seed",
             b"_seed",
             "_with_replacement",
             b"_with_replacement",
-            "deterministic_order",
-            b"deterministic_order",
             "input",
             b"input",
             "seed",
@@ -1341,8 +1338,6 @@ class Sample(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "_deterministic_order",
-            b"_deterministic_order",
             "_seed",
             b"_seed",
             "_with_replacement",
@@ -1361,11 +1356,6 @@ class Sample(google.protobuf.message.Message):
             b"with_replacement",
         ],
     ) -> None: ...
-    @typing.overload
-    def WhichOneof(
-        self,
-        oneof_group: typing_extensions.Literal["_deterministic_order", b"_deterministic_order"],
-    ) -> typing_extensions.Literal["deterministic_order"] | None: ...
     @typing.overload
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["_seed", b"_seed"]
