@@ -260,9 +260,7 @@ def _test() -> None:
         globs = pyspark.sql.window.__dict__.copy()
         # Works around to create a regular Spark session
         sc = SparkContext("local[4]", "sql.connect.window tests", conf=SparkConf())
-        globs["_spark"] = PySparkSession(
-            sc, options={"spark.app.name": "sql.connect.window tests"}
-        )
+        globs["_spark"] = PySparkSession(sc, options={"spark.app.name": "sql.connect.window tests"})
 
         # Creates a remote Spark session.
         globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
