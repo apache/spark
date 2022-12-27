@@ -619,9 +619,9 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertEqual(col_plan.unresolved_regex.col_name, "col_name")
 
     def test_print(self):
-        # SPARK-41717: test colRegex
+        # SPARK-41717: test print
         self.assertEqual(
-            self.connect.sql("SELECT 1")._plan.print().strip(), "<SQL query='SELECT 1...'>"
+            self.connect.sql("SELECT 1")._plan.print().strip(), "<SQL query='SELECT 1'>"
         )
         self.assertEqual(
             self.connect.range(1, 10)._plan.print().strip(),
@@ -629,25 +629,19 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         )
 
     def test_repr(self):
-        # SPARK-41717: test colRegex
-        expected = """<ul>
-           <li>
-              <b>SQL</b><br />
-              Statement: <pre>SELECT 1</pre>
-           </li>
-        </ul>"""
-        self.assertEqual(self.connect.sql("SELECT 1")._plan._repr_html_().strip(), expected.strip())
-        expected = """<ul>
-           <li>
-              <b>Range</b><br/>
-              start: 1 <br/>
-              end: 10 <br/>
-              step: 1 <br/>
-              num_partitions: None <br/>
-              
-           </li>
-        </ul>"""
-        self.assertEqual(self.connect.range(1, 10)._plan._repr_html_().strip(), expected.strip())
+        # SPARK-41717: test __repr_html__
+        self.assertIn("query: SELECT 1", self.connect.sql("SELECT 1")._plan._repr_html_().strip())
+
+        expected = (
+            "<b>Range</b><br/>",
+            "start: 1 <br/>",
+            "end: 10 <br/>",
+            "step: 1 <br/>",
+            "num_partitions: None <br/>",
+        )
+        actual = self.connect.range(1, 10)._plan._repr_html_().strip()
+        for line in expected:
+            self.assertIn(line, actual)
 
 
 if __name__ == "__main__":
