@@ -23,9 +23,16 @@ import java.util.Date
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.status.JobDataWrapper
 import org.apache.spark.status.api.v1.JobData
+import org.apache.spark.status.protobuf.Utils.getOptional
 
-object JobDataWrapperSerializer {
-  def serialize(j: JobDataWrapper): Array[Byte] = {
+class JobDataWrapperSerializer extends ProtobufSerDe {
+
+  override val supportClass: Class[_] = classOf[JobDataWrapper]
+
+  override def serialize(input: Any): Array[Byte] =
+    serialize(input.asInstanceOf[JobDataWrapper])
+
+  private def serialize(j: JobDataWrapper): Array[Byte] = {
     val jobData = serializeJobData(j.info)
     val builder = StoreTypes.JobDataWrapper.newBuilder()
     builder.setInfo(jobData)
@@ -42,12 +49,6 @@ object JobDataWrapperSerializer {
       wrapper.getSkippedStagesList.asScala.map(_.toInt).toSet,
       sqlExecutionId
     )
-  }
-
-  private def getOptional[T](condition: Boolean, result: () => T): Option[T] = if (condition) {
-    Some(result())
-  } else {
-    None
   }
 
   private def serializeJobData(jobData: JobData): StoreTypes.JobData = {

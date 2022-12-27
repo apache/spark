@@ -15,11 +15,34 @@
 # limitations under the License.
 #
 
+import decimal
+import datetime
+
 from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
-from pyspark.sql.types import StringType
-from pyspark.testing.sqlutils import have_pandas
+from pyspark.sql.connect.column import Column
+from pyspark.sql.connect.expressions import LiteralExpression
+from pyspark.sql.connect.types import (
+    JVM_BYTE_MIN,
+    JVM_BYTE_MAX,
+    JVM_SHORT_MIN,
+    JVM_SHORT_MAX,
+    JVM_INT_MIN,
+    JVM_INT_MAX,
+    JVM_LONG_MIN,
+    JVM_LONG_MAX,
+)
+
 from pyspark.sql.types import (
+    StructField,
+    StructType,
+    ArrayType,
+    MapType,
+    NullType,
+    DateType,
+    TimestampType,
+    TimestampNTZType,
     ByteType,
+    BinaryType,
     ShortType,
     IntegerType,
     FloatType,
@@ -28,13 +51,13 @@ from pyspark.sql.types import (
     DoubleType,
     LongType,
     DecimalType,
-    BinaryType,
     BooleanType,
 )
+from pyspark.testing.connectutils import should_test_connect
 
-if have_pandas:
+if should_test_connect:
+    import pandas as pd
     from pyspark.sql.connect.functions import lit
-    import pandas
 
 
 class SparkConnectTests(SparkConnectSQLTestCase):
@@ -85,26 +108,311 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             df4.filter(df4.name.isNotNull()).toPandas(),
         )
 
+    def test_invalid_ops(self):
+        query = """
+            SELECT * FROM VALUES
+            (1, 1, 0, NULL), (2, NULL, 1, 2.0), (3, 3, 4, 3.5)
+            AS tab(a, b, c, d)
+            """
+        cdf = self.connect.sql(query)
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Cannot apply 'in' operator against a column",
+        ):
+            1 in cdf.a
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Cannot convert column into bool",
+        ):
+            cdf.a > 2 and cdf.b < 1
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Cannot convert column into bool",
+        ):
+            cdf.a > 2 or cdf.b < 1
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Cannot convert column into bool",
+        ):
+            not (cdf.a > 2)
+
+    def test_datetime(self):
+        query = """
+            SELECT * FROM VALUES
+            (TIMESTAMP('2022-12-22 15:50:00'), DATE('2022-12-25'), 1.1),
+            (TIMESTAMP('2022-12-22 18:50:00'), NULL, 2.2),
+            (TIMESTAMP('2022-12-23 15:50:00'), DATE('2022-12-24'), 3.3),
+            (NULL, DATE('2022-12-22'), NULL)
+            AS tab(a, b, c)
+            """
+        # +-------------------+----------+----+
+        # |                  a|         b|   c|
+        # +-------------------+----------+----+
+        # |2022-12-22 15:50:00|2022-12-25| 1.1|
+        # |2022-12-22 18:50:00|      null| 2.2|
+        # |2022-12-23 15:50:00|2022-12-24| 3.3|
+        # |               null|2022-12-22|null|
+        # +-------------------+----------+----+
+
+        cdf = self.spark.sql(query)
+        sdf = self.connect.sql(query)
+
+        # datetime.date
+        self.assert_eq(
+            cdf.select(cdf.a < datetime.date(2022, 12, 23)).toPandas(),
+            sdf.select(sdf.a < datetime.date(2022, 12, 23)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.a != datetime.date(2022, 12, 23)).toPandas(),
+            sdf.select(sdf.a != datetime.date(2022, 12, 23)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.a == datetime.date(2022, 12, 22)).toPandas(),
+            sdf.select(sdf.a == datetime.date(2022, 12, 22)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.b < datetime.date(2022, 12, 23)).toPandas(),
+            sdf.select(sdf.b < datetime.date(2022, 12, 23)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.b >= datetime.date(2022, 12, 23)).toPandas(),
+            sdf.select(sdf.b >= datetime.date(2022, 12, 23)).toPandas(),
+        )
+
+        # datetime.datetime
+        self.assert_eq(
+            cdf.select(cdf.a < datetime.datetime(2022, 12, 22, 17, 0, 0)).toPandas(),
+            sdf.select(sdf.a < datetime.datetime(2022, 12, 22, 17, 0, 0)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.a > datetime.datetime(2022, 12, 22, 17, 0, 0)).toPandas(),
+            sdf.select(sdf.a > datetime.datetime(2022, 12, 22, 17, 0, 0)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.b >= datetime.datetime(2022, 12, 23, 17, 0, 0)).toPandas(),
+            sdf.select(sdf.b >= datetime.datetime(2022, 12, 23, 17, 0, 0)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.b < datetime.datetime(2022, 12, 23, 17, 0, 0)).toPandas(),
+            sdf.select(sdf.b < datetime.datetime(2022, 12, 23, 17, 0, 0)).toPandas(),
+        )
+
+    def test_decimal(self):
+        # SPARK-41701: test decimal
+        query = """
+            SELECT * FROM VALUES
+            (1, 1, 0, NULL), (2, NULL, 1, 2.0), (3, 3, 4, 3.5)
+            AS tab(a, b, c, d)
+            """
+        # +---+----+---+----+
+        # |  a|   b|  c|   d|
+        # +---+----+---+----+
+        # |  1|   1|  0|null|
+        # |  2|null|  1| 2.0|
+        # |  3|   3|  4| 3.5|
+        # +---+----+---+----+
+
+        cdf = self.spark.sql(query)
+        sdf = self.connect.sql(query)
+
+        self.assert_eq(
+            cdf.select(cdf.a < decimal.Decimal(3)).toPandas(),
+            sdf.select(sdf.a < decimal.Decimal(3)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.a != decimal.Decimal(2)).toPandas(),
+            sdf.select(sdf.a != decimal.Decimal(2)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.a == decimal.Decimal(2)).toPandas(),
+            sdf.select(sdf.a == decimal.Decimal(2)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.b < decimal.Decimal(2.5)).toPandas(),
+            sdf.select(sdf.b < decimal.Decimal(2.5)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.d >= decimal.Decimal(3.0)).toPandas(),
+            sdf.select(sdf.d >= decimal.Decimal(3.0)).toPandas(),
+        )
+
     def test_simple_binary_expressions(self):
         """Test complex expression"""
         df = self.connect.read.table(self.tbl_name)
-        pd = df.select(df.id).where(df.id % lit(30) == lit(0)).sort(df.id.asc()).toPandas()
-        self.assertEqual(len(pd.index), 4)
+        pdf = df.select(df.id).where(df.id % lit(30) == lit(0)).sort(df.id.asc()).toPandas()
+        self.assertEqual(len(pdf.index), 4)
 
-        res = pandas.DataFrame(data={"id": [0, 30, 60, 90]})
-        self.assert_(pd.equals(res), f"{pd.to_string()} != {res.to_string()}")
+        res = pd.DataFrame(data={"id": [0, 30, 60, 90]})
+        self.assert_(pdf.equals(res), f"{pdf.to_string()} != {res.to_string()}")
+
+    def test_literal_with_acceptable_type(self):
+        for value, dataType in [
+            (b"binary\0\0asas", BinaryType()),
+            (True, BooleanType()),
+            (False, BooleanType()),
+            (0, ByteType()),
+            (JVM_BYTE_MIN, ByteType()),
+            (JVM_BYTE_MAX, ByteType()),
+            (0, ShortType()),
+            (JVM_SHORT_MIN, ShortType()),
+            (JVM_SHORT_MAX, ShortType()),
+            (0, IntegerType()),
+            (JVM_INT_MIN, IntegerType()),
+            (JVM_INT_MAX, IntegerType()),
+            (0, LongType()),
+            (JVM_LONG_MIN, LongType()),
+            (JVM_LONG_MAX, LongType()),
+            (0.0, FloatType()),
+            (1.234567, FloatType()),
+            (float("nan"), FloatType()),
+            (float("inf"), FloatType()),
+            (float("-inf"), FloatType()),
+            (0.0, DoubleType()),
+            (1.234567, DoubleType()),
+            (float("nan"), DoubleType()),
+            (float("inf"), DoubleType()),
+            (float("-inf"), DoubleType()),
+            (decimal.Decimal(0.0), DecimalType()),
+            (decimal.Decimal(1.234567), DecimalType()),
+            ("sss", StringType()),
+            (datetime.date(2022, 12, 13), DateType()),
+            (datetime.datetime.now(), DateType()),
+            (datetime.datetime.now(), TimestampType()),
+            (datetime.datetime.now(), TimestampNTZType()),
+            (datetime.timedelta(1, 2, 3), DayTimeIntervalType()),
+        ]:
+            lit = LiteralExpression(value=value, dataType=dataType)
+            self.assertEqual(dataType, lit._dataType)
+
+    def test_literal_with_unsupported_type(self):
+        for value, dataType in [
+            (b"binary\0\0asas", BooleanType()),
+            (True, StringType()),
+            (False, DoubleType()),
+            (JVM_BYTE_MIN - 1, ByteType()),
+            (JVM_BYTE_MAX + 1, ByteType()),
+            (JVM_SHORT_MIN - 1, ShortType()),
+            (JVM_SHORT_MAX + 1, ShortType()),
+            (JVM_INT_MIN - 1, IntegerType()),
+            (JVM_INT_MAX + 1, IntegerType()),
+            (JVM_LONG_MIN - 1, LongType()),
+            (JVM_LONG_MAX + 1, LongType()),
+            (0.1, DecimalType()),
+            (datetime.date(2022, 12, 13), TimestampType()),
+            (datetime.timedelta(1, 2, 3), DateType()),
+            ([1, 2, 3], ArrayType(IntegerType())),
+            ({1: 2}, MapType(IntegerType(), IntegerType())),
+            (
+                {"a": "xyz", "b": 1},
+                StructType([StructField("a", StringType()), StructField("b", IntegerType())]),
+            ),
+        ]:
+            with self.assertRaises(AssertionError):
+                LiteralExpression(value=value, dataType=dataType)
+
+    def test_literal_null(self):
+        for dataType in [
+            NullType(),
+            BinaryType(),
+            BooleanType(),
+            ByteType(),
+            ShortType(),
+            IntegerType(),
+            LongType(),
+            FloatType(),
+            DoubleType(),
+            DecimalType(),
+            DateType(),
+            TimestampType(),
+            TimestampNTZType(),
+            DayTimeIntervalType(),
+        ]:
+            lit_null = LiteralExpression(value=None, dataType=dataType)
+            self.assertTrue(lit_null._value is None)
+            self.assertEqual(dataType, lit_null._dataType)
+
+            cdf = self.connect.range(0, 1).select(Column(lit_null))
+            self.assertEqual(dataType, cdf.schema.fields[0].dataType)
+
+        for value, dataType in [
+            ("123", NullType()),
+            (123, NullType()),
+            (None, ArrayType(IntegerType())),
+            (None, MapType(IntegerType(), IntegerType())),
+            (None, StructType([StructField("a", StringType())])),
+        ]:
+            with self.assertRaises(AssertionError):
+                LiteralExpression(value=value, dataType=dataType)
+
+    def test_literal_integers(self):
+        cdf = self.connect.range(0, 1)
+        sdf = self.spark.range(0, 1)
+
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        cdf1 = cdf.select(
+            CF.lit(0),
+            CF.lit(1),
+            CF.lit(-1),
+            CF.lit(JVM_INT_MAX),
+            CF.lit(JVM_INT_MIN),
+            CF.lit(JVM_INT_MAX + 1),
+            CF.lit(JVM_INT_MIN - 1),
+            CF.lit(JVM_LONG_MAX),
+            CF.lit(JVM_LONG_MIN),
+            CF.lit(JVM_LONG_MAX - 1),
+            CF.lit(JVM_LONG_MIN + 1),
+        )
+
+        sdf1 = sdf.select(
+            SF.lit(0),
+            SF.lit(1),
+            SF.lit(-1),
+            SF.lit(JVM_INT_MAX),
+            SF.lit(JVM_INT_MIN),
+            SF.lit(JVM_INT_MAX + 1),
+            SF.lit(JVM_INT_MIN - 1),
+            SF.lit(JVM_LONG_MAX),
+            SF.lit(JVM_LONG_MIN),
+            SF.lit(JVM_LONG_MAX - 1),
+            SF.lit(JVM_LONG_MIN + 1),
+        )
+
+        self.assertEqual(cdf1.schema, sdf1.schema)
+        self.assert_eq(cdf1.toPandas(), sdf1.toPandas())
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "integer 9223372036854775808 out of bounds",
+        ):
+            cdf.select(CF.lit(JVM_LONG_MAX + 1)).show()
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "integer -9223372036854775809 out of bounds",
+        ):
+            cdf.select(CF.lit(JVM_LONG_MIN - 1)).show()
 
     def test_cast(self):
+        # SPARK-41412: test basic Column.cast
         df = self.connect.read.table(self.tbl_name)
         df2 = self.spark.read.table(self.tbl_name)
 
         self.assert_eq(
             df.select(df.id.cast("string")).toPandas(), df2.select(df2.id.cast("string")).toPandas()
         )
+        self.assert_eq(
+            df.select(df.id.astype("string")).toPandas(),
+            df2.select(df2.id.astype("string")).toPandas(),
+        )
 
         for x in [
             StringType(),
-            BinaryType(),
             ShortType(),
             IntegerType(),
             LongType(),
@@ -119,13 +427,143 @@ class SparkConnectTests(SparkConnectSQLTestCase):
                 df.select(df.id.cast(x)).toPandas(), df2.select(df2.id.cast(x)).toPandas()
             )
 
+    def test_isin(self):
+        # SPARK-41526: test Column.isin
+        query = """
+            SELECT * FROM VALUES
+            (1, 1, 0, NULL), (2, NULL, 1, 2.0), (3, 3, 4, 3.5)
+            AS tab(a, b, c, d)
+            """
+        # +---+----+---+----+
+        # |  a|   b|  c|   d|
+        # +---+----+---+----+
+        # |  1|   1|  0|null|
+        # |  2|null|  1| 2.0|
+        # |  3|   3|  4| 3.5|
+        # +---+----+---+----+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        # test literals
+        self.assert_eq(
+            cdf.select(cdf.b.isin(1, 2, 3)).toPandas(),
+            sdf.select(sdf.b.isin(1, 2, 3)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.b.isin([1, 2, 3])).toPandas(),
+            sdf.select(sdf.b.isin([1, 2, 3])).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.b.isin(set([1, 2, 3]))).toPandas(),
+            sdf.select(sdf.b.isin(set([1, 2, 3]))).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.d.isin([1.0, None, 3.5])).toPandas(),
+            sdf.select(sdf.d.isin([1.0, None, 3.5])).toPandas(),
+        )
+
+        # test columns
+        self.assert_eq(
+            cdf.select(cdf.a.isin(cdf.b)).toPandas(),
+            sdf.select(sdf.a.isin(sdf.b)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.a.isin(cdf.b, cdf.c)).toPandas(),
+            sdf.select(sdf.a.isin(sdf.b, sdf.c)).toPandas(),
+        )
+
+        # test columns mixed with literals
+        self.assert_eq(
+            cdf.select(cdf.a.isin(cdf.b, 4, 5, 6)).toPandas(),
+            sdf.select(sdf.a.isin(sdf.b, 4, 5, 6)).toPandas(),
+        )
+
+    def test_between(self):
+        query = """
+            SELECT * FROM VALUES
+            (TIMESTAMP('2022-12-22 15:50:00'), DATE('2022-12-25'), 1.1),
+            (TIMESTAMP('2022-12-22 18:50:00'), NULL, 2.2),
+            (TIMESTAMP('2022-12-23 15:50:00'), DATE('2022-12-24'), 3.3),
+            (NULL, DATE('2022-12-22'), NULL)
+            AS tab(a, b, c)
+            """
+
+        # +-------------------+----------+----+
+        # |                  a|         b|   c|
+        # +-------------------+----------+----+
+        # |2022-12-22 15:50:00|2022-12-25| 1.1|
+        # |2022-12-22 18:50:00|      null| 2.2|
+        # |2022-12-23 15:50:00|2022-12-24| 3.3|
+        # |               null|2022-12-22|null|
+        # +-------------------+----------+----+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        self.assert_eq(
+            cdf.select(cdf.c.between(0, 2)).toPandas(),
+            sdf.select(sdf.c.between(0, 2)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.c.between(1.1, 2.2)).toPandas(),
+            sdf.select(sdf.c.between(1.1, 2.2)).toPandas(),
+        )
+
+        self.assert_eq(
+            cdf.select(cdf.c.between(decimal.Decimal(0), decimal.Decimal(2))).toPandas(),
+            sdf.select(sdf.c.between(decimal.Decimal(0), decimal.Decimal(2))).toPandas(),
+        )
+
+        self.assert_eq(
+            cdf.select(
+                cdf.a.between(
+                    datetime.datetime(2022, 12, 22, 17, 0, 0),
+                    datetime.datetime(2022, 12, 23, 6, 0, 0),
+                )
+            ).toPandas(),
+            sdf.select(
+                sdf.a.between(
+                    datetime.datetime(2022, 12, 22, 17, 0, 0),
+                    datetime.datetime(2022, 12, 23, 6, 0, 0),
+                )
+            ).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(
+                cdf.b.between(datetime.date(2022, 12, 23), datetime.date(2022, 12, 24))
+            ).toPandas(),
+            sdf.select(
+                sdf.b.between(datetime.date(2022, 12, 23), datetime.date(2022, 12, 24))
+            ).toPandas(),
+        )
+
+    def test_unsupported_functions(self):
+        # SPARK-41225: Disable unsupported functions.
+        c = self.connect.range(1).id
+        for f in (
+            "getItem",
+            "getField",
+            "withField",
+            "dropFields",
+        ):
+            with self.assertRaises(NotImplementedError):
+                getattr(c, f)()
+
+        with self.assertRaises(NotImplementedError):
+            c["a"]
+
+        with self.assertRaises(TypeError):
+            for x in c:
+                pass
+
 
 if __name__ == "__main__":
     import unittest
     from pyspark.sql.tests.connect.test_connect_column import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

@@ -822,6 +822,7 @@ private[spark] class ApplicationMaster(
       case Shutdown(code) =>
         exitCode = code
         shutdown = true
+        allocator.setShutdown(true)
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {

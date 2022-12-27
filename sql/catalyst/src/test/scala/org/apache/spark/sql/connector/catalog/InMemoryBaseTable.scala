@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector.catalog
 import java.time.{Instant, ZoneId}
 import java.time.temporal.ChronoUnit
 import java.util
-import java.util.{Optional, OptionalLong}
+import java.util.OptionalLong
 
 import scala.collection.mutable
 
@@ -71,7 +71,7 @@ abstract class InMemoryBaseTable(
 
   // purposely exposes a metadata column that conflicts with a data column in some tests
   override val metadataColumns: Array[MetadataColumn] = Array(IndexColumn, PartitionKeyColumn)
-  private val metadataColumnNames = metadataColumns.map(_.name).toSet -- schema.map(_.name)
+  private lazy val metadataColumnNames = metadataColumns.map(_.name).toSet -- schema.map(_.name)
 
   private val allowUnsupportedTransforms =
     properties.getOrDefault("allow-unsupported-transforms", "false").toBoolean
@@ -277,7 +277,7 @@ abstract class InMemoryBaseTable(
   case class InMemoryStats(
       sizeInBytes: OptionalLong,
       numRows: OptionalLong,
-      override val columnStats: Optional[util.Map[NamedReference, ColumnStatistics]])
+      override val columnStats: util.Map[NamedReference, ColumnStatistics])
     extends Statistics
 
   case class InMemoryColumnStats(
@@ -298,7 +298,7 @@ abstract class InMemoryBaseTable(
 
     override def estimateStatistics(): Statistics = {
       if (data.isEmpty) {
-        return InMemoryStats(OptionalLong.of(0L), OptionalLong.of(0L), Optional.empty())
+        return InMemoryStats(OptionalLong.of(0L), OptionalLong.of(0L), new util.HashMap())
       }
 
       val inputPartitions = data.map(_.asInstanceOf[BufferedRows])
@@ -331,7 +331,7 @@ abstract class InMemoryBaseTable(
       val colNames = tableSchema.fields.map(_.name)
       var i = 0
       for (col <- colNames) {
-        val fieldReference = FieldReference(col)
+        val fieldReference = FieldReference.column(col)
         val colStats = InMemoryColumnStats(
           OptionalLong.of(colValueSets(i).size()),
           OptionalLong.of(numOfNulls(i)))
@@ -339,7 +339,7 @@ abstract class InMemoryBaseTable(
         i = i + 1
       }
 
-      InMemoryStats(OptionalLong.of(sizeInBytes), OptionalLong.of(numRows), Optional.of(map))
+      InMemoryStats(OptionalLong.of(sizeInBytes), OptionalLong.of(numRows), map)
     }
 
     override def outputPartitioning(): Partitioning = {

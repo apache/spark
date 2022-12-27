@@ -223,8 +223,8 @@ object DataSourceV2Relation {
     }
 
     var colStats: Seq[(Attribute, ColumnStat)] = Seq.empty[(Attribute, ColumnStat)]
-    if (v2Statistics.columnStats().isPresent) {
-      val v2ColumnStat = v2Statistics.columnStats().get()
+    if (!v2Statistics.columnStats().isEmpty) {
+      val v2ColumnStat = v2Statistics.columnStats()
       val keys = v2ColumnStat.keySet()
 
       keys.forEach(key => {

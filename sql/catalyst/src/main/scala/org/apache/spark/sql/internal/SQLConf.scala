@@ -1405,6 +1405,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val V2_BUCKETING_PUSH_PART_VALUES_ENABLED =
+    buildConf("spark.sql.sources.v2.bucketing.pushPartValues.enabled")
+      .doc(s"Whether to pushdown common partition values when ${V2_BUCKETING_ENABLED.key} is " +
+        "enabled. When turned on, if both sides of a join are of KeyGroupedPartitioning and if " +
+        "they share compatible partition keys, even if they don't have the exact same partition " +
+        "values, Spark will calculate a superset of partition values and pushdown that info to " +
+        "scan nodes, which will use empty partitions for the missing partition values on either " +
+        "side. This could help to eliminate unnecessary shuffles")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val BUCKETING_MAX_BUCKETS = buildConf("spark.sql.sources.bucketing.maxBuckets")
     .doc("The maximum number of buckets allowed.")
     .version("2.4.0")
@@ -3629,6 +3641,15 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val JSON_ENABLE_PARTIAL_RESULTS =
+    buildConf("spark.sql.json.enablePartialResults")
+      .internal()
+      .doc("When set to true, enables partial results for structs, maps, and arrays in JSON " +
+        "when one or more fields do not match the schema")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val LEGACY_CSV_ENABLE_DATE_TIME_PARSING_FALLBACK =
     buildConf("spark.sql.legacy.csv.enableDateTimeParsingFallback")
       .internal()
@@ -4026,6 +4047,17 @@ object SQLConf {
     .stringConf.transform(_.toUpperCase(Locale.ROOT))
     .checkValues(ErrorMessageFormat.values.map(_.toString))
     .createWithDefault(ErrorMessageFormat.PRETTY.toString)
+
+  val LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED =
+    buildConf("spark.sql.lateralColumnAlias.enableImplicitResolution")
+      .internal()
+      .doc("Enable resolving implicit lateral column alias defined in the same SELECT list. For " +
+        "example, with this conf turned on, for query `SELECT 1 AS a, a + 1` the `a` in `a + 1` " +
+        "can be resolved as the previously defined `1 AS a`. But note that table column has " +
+        "higher resolution priority than the lateral column alias.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
 
   /**
    * Holds information about keys that have been deprecated.
@@ -4514,6 +4546,9 @@ class SQLConf extends Serializable with Logging {
 
   def v2BucketingEnabled: Boolean = getConf(SQLConf.V2_BUCKETING_ENABLED)
 
+  def v2BucketingPushPartValuesEnabled: Boolean =
+    getConf(SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED)
+
   def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)
 
@@ -4771,6 +4806,8 @@ class SQLConf extends Serializable with Logging {
   def jsonFilterPushDown: Boolean = getConf(JSON_FILTER_PUSHDOWN_ENABLED)
 
   def avroFilterPushDown: Boolean = getConf(AVRO_FILTER_PUSHDOWN_ENABLED)
+
+  def jsonEnablePartialResults: Boolean = getConf(JSON_ENABLE_PARTIAL_RESULTS)
 
   def jsonEnableDateTimeParsingFallback: Option[Boolean] =
     getConf(LEGACY_JSON_ENABLE_DATE_TIME_PARSING_FALLBACK)

@@ -2,6 +2,7 @@
 
 CREATE VIEW t1(c1, c2) AS VALUES (0, 1), (1, 2);
 CREATE VIEW t2(c1, c2) AS VALUES (0, 2), (0, 3);
+CREATE VIEW t3(c1, c2) AS VALUES (0, ARRAY(0, 1)), (1, ARRAY(2)), (2, ARRAY()), (null, ARRAY(4));
 
 -- lateral join with single column select
 SELECT * FROM t1, LATERAL (SELECT c1);
@@ -170,6 +171,13 @@ WITH cte1 AS (
 )
 SELECT * FROM cte2;
 
+-- SPARK-41441: lateral join with outer references in Generate
+SELECT * FROM t3 JOIN LATERAL (SELECT EXPLODE(c2));
+SELECT * FROM t3 JOIN LATERAL (SELECT EXPLODE_OUTER(c2));
+SELECT * FROM t3 JOIN LATERAL (SELECT EXPLODE(c2)) t(c3) ON c1 = c3;
+SELECT * FROM t3 LEFT JOIN LATERAL (SELECT EXPLODE(c2)) t(c3) ON c1 = c3;
+
 -- clean up
 DROP VIEW t1;
 DROP VIEW t2;
+DROP VIEW t3;

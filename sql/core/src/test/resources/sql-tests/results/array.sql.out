@@ -377,3 +377,68 @@ select get(array(1, 2, 3), -1)
 struct<get(array(1, 2, 3), -1):int>
 -- !query output
 NULL
+
+
+-- !query
+select array_compact(id) from values (1) as t(id)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "messageParameters" : {
+    "inputSql" : "\"id\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"ARRAY\"",
+    "sqlExpr" : "\"array_compact(id)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "array_compact(id)"
+  } ]
+}
+
+
+-- !query
+select array_compact(array("1", null, "2", null))
+-- !query schema
+struct<array_compact(array(1, NULL, 2, NULL)):array<string>>
+-- !query output
+["1","2"]
+
+
+-- !query
+select array_compact(array("a", "b", "c"))
+-- !query schema
+struct<array_compact(array(a, b, c)):array<string>>
+-- !query output
+["a","b","c"]
+
+
+-- !query
+select array_compact(array(1D, null, 2D, null))
+-- !query schema
+struct<array_compact(array(1.0, NULL, 2.0, NULL)):array<double>>
+-- !query output
+[1.0,2.0]
+
+
+-- !query
+select array_compact(array(array(1, 2, 3, null), null, array(4, null, 6)))
+-- !query schema
+struct<array_compact(array(array(1, 2, 3, NULL), NULL, array(4, NULL, 6))):array<array<int>>>
+-- !query output
+[[1,2,3,null],[4,null,6]]
+
+
+-- !query
+select array_compact(array(null))
+-- !query schema
+struct<array_compact(array(NULL)):array<void>>
+-- !query output
+[]

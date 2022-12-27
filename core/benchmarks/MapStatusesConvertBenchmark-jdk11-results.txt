@@ -2,12 +2,12 @@
 MapStatuses Convert Benchmark
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.16.1+1 on Linux 5.15.0-1022-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 MapStatuses Convert:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Num Maps: 50000 Fetch partitions:500               1227           1262          47          0.0  1226744907.0       1.0X
-Num Maps: 50000 Fetch partitions:1000              2620           2637          15          0.0  2620288061.0       0.5X
-Num Maps: 50000 Fetch partitions:1500              3975           3990          17          0.0  3974979610.0       0.3X
+Num Maps: 50000 Fetch partitions:500               1235           1258          27          0.0  1234875264.0       1.0X
+Num Maps: 50000 Fetch partitions:1000              2545           2614          68          0.0  2545036966.0       0.5X
+Num Maps: 50000 Fetch partitions:1500              3861           3907          57          0.0  3860813519.0       0.3X
 
 

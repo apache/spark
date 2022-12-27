@@ -374,6 +374,93 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Ascii(Literal.create(null, StringType)), null, create_row("abdef"))
   }
 
+  test("Mask") {
+    def getExpectedValue(expected: String): String =
+      if ("null".equals(expected)) null else expected
+
+    val inputString1 = Literal("AbCD123-@$#")
+    val inputString2 = Literal("abcd-EFGH-8765-4321")
+    val inputString3 = Literal.create(null, StringType)
+    val firstItem = (
+      inputString1,
+      Array(
+        "XxXXnnn-@$#",
+        "QxQQnnn-@$#",
+        "QqQQnnn-@$#",
+        "QqQQddd-@$#",
+        "QqQQddd****",
+        "AqCDddd****",
+        "AbCDddd****",
+        "AbCD123****",
+        "AbCD123-@$#"))
+    val secondItem = (
+      inputString2,
+      Array(
+        "xxxx-XXXX-nnnn-nnnn",
+        "xxxx-QQQQ-nnnn-nnnn",
+        "qqqq-QQQQ-nnnn-nnnn",
+        "qqqq-QQQQ-dddd-dddd",
+        "qqqq*QQQQ*dddd*dddd",
+        "qqqq*EFGH*dddd*dddd",
+        "abcd*EFGH*dddd*dddd",
+        "abcd*EFGH*8765*4321",
+        "abcd-EFGH-8765-4321"))
+    val thirdItem = (
+      inputString3,
+      Array("null", "null", "null", "null", "null", "null", "null", "null", "null"))
+
+    Seq(firstItem, secondItem, thirdItem).foreach {
+      case (input: Literal, expectedList: Array[String]) =>
+        checkEvaluation(new Mask(input), getExpectedValue(expectedList(0)))
+        checkEvaluation(new Mask(input, Literal('Q')), getExpectedValue(expectedList(1)))
+        checkEvaluation(
+          new Mask(input, Literal('Q'), Literal('q')),
+          getExpectedValue(expectedList(2)))
+        checkEvaluation(
+          new Mask(input, Literal('Q'), Literal('q'), Literal('d')),
+          getExpectedValue(expectedList(3)))
+        checkEvaluation(
+          new Mask(input, Literal('Q'), Literal('q'), Literal('d'), Literal('*')),
+          getExpectedValue(expectedList(4)))
+        checkEvaluation(
+          new Mask(input, Literal("-1"), Literal('q'), Literal('d'), Literal('*')),
+          getExpectedValue(expectedList(5)))
+        checkEvaluation(
+          new Mask(input, Literal("-1"), Literal("-1"), Literal('d'), Literal('*')),
+          getExpectedValue(expectedList(6)))
+        checkEvaluation(
+          new Mask(input, Literal("-1"), Literal("-1"), Literal("-1"), Literal('*')),
+          getExpectedValue(expectedList(7)))
+        checkEvaluation(
+          new Mask(input, Literal("-1"), Literal("-1"), Literal("-1"), Literal("-1")),
+          getExpectedValue(expectedList(8)))
+        assert(
+          new Mask(input, Literal("-1"), Literal('q'), Literal('d'), Literal('*'))
+            .checkInputDataTypes()
+            .isSuccess)
+        assert(
+          new Mask(input, Literal(null), Literal("-1"), Literal("-1"), Literal("-1"))
+            .checkInputDataTypes()
+            .isFailure)
+        assert(
+          new Mask(input, Literal("Q"), Literal(null), Literal("-1"), Literal("-1"))
+            .checkInputDataTypes()
+            .isFailure)
+        assert(
+          new Mask(input, Literal("Q"), Literal("q"), Literal(null), Literal("-1"))
+            .checkInputDataTypes()
+            .isFailure)
+        assert(
+          new Mask(input, Literal("Q"), Literal("q"), Literal("n"), Literal(null))
+            .checkInputDataTypes()
+            .isFailure)
+        assert(
+          new Mask(input, Literal(null), Literal(null), Literal(null), Literal(null))
+            .checkInputDataTypes()
+            .isFailure)
+    }
+  }
+
   test("string for ascii") {
     val a = $"a".long.at(0)
     checkEvaluation(Chr(Literal(48L)), "0", create_row("abdef"))

@@ -179,6 +179,10 @@ class SparkContext:
         udf_profiler_cls: Type[UDFBasicProfiler] = UDFBasicProfiler,
         memory_profiler_cls: Type[MemoryProfiler] = MemoryProfiler,
     ):
+        if "SPARK_REMOTE" in os.environ and "SPARK_TESTING" not in os.environ:
+            raise RuntimeError(
+                "Remote client cannot create a SparkContext. Create SparkSession instead."
+            )
 
         if conf is None or conf.get("spark.executor.allowSparkContext", "false").lower() != "true":
             # In order to prevent SparkContext from being created in executors.

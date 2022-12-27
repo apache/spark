@@ -753,7 +753,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS",
+  "errorClass" : "WRONG_NUM_ARGS.WITH_SUGGESTION",
   "messageParameters" : {
     "actualNum" : "0",
     "expectedNum" : "2",
@@ -776,7 +776,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS",
+  "errorClass" : "WRONG_NUM_ARGS.WITH_SUGGESTION",
   "messageParameters" : {
     "actualNum" : "1",
     "expectedNum" : "2",
@@ -838,6 +838,22 @@ select decode(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattl
 struct<decode(6, 1, Southlake, 2, San Francisco, 3, New Jersey, 4, Seattle):string>
 -- !query output
 NULL
+
+
+-- !query
+select decode(null, 6, 'Spark', NULL, 'SQL', 4, 'rocks')
+-- !query schema
+struct<decode(NULL, 6, Spark, NULL, SQL, 4, rocks):string>
+-- !query output
+SQL
+
+
+-- !query
+select decode(null, 6, 'Spark', NULL, 'SQL', 4, 'rocks', NULL, '.')
+-- !query schema
+struct<decode(NULL, 6, Spark, NULL, SQL, 4, rocks, NULL, .):string>
+-- !query output
+SQL
 
 
 -- !query

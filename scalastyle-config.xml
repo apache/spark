@@ -135,9 +135,9 @@ This file is divided into 3 sections:
   <!-- ??? usually shouldn't be checked into the code base. -->
   <check level="error" class="org.scalastyle.scalariform.NotImplementedErrorUsage" enabled="true"></check>
 
-  <!-- As of SPARK-7558, all tests in Spark should extend o.a.s.SparkFunSuite instead of FunSuite directly -->
+  <!-- As of SPARK-7558, all tests in Spark should extend o.a.s.SparkFunSuite instead of AnyFunSuite directly -->
   <check customId="funsuite" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
-    <parameters><parameter name="regex">^FunSuite[A-Za-z]*$</parameter></parameters>
+    <parameters><parameter name="regex">^AnyFunSuite[A-Za-z]*$</parameter></parameters>
     <customMessage>Tests must extend org.apache.spark.SparkFunSuite instead.</customMessage>
   </check>
 
