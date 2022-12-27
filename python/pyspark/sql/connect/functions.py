@@ -1414,6 +1414,18 @@ def reverse(col: "ColumnOrName") -> Column:
 reverse.__doc__ = pysparkfuncs.reverse.__doc__
 
 
+def sequence(
+    start: "ColumnOrName", stop: "ColumnOrName", step: Optional["ColumnOrName"] = None
+) -> Column:
+    if step is None:
+        return _invoke_function_over_columns("sequence", start, stop)
+    else:
+        return _invoke_function_over_columns("sequence", start, stop, step)
+
+
+sequence.__doc__ = pysparkfuncs.sequence.__doc__
+
+
 # TODO(SPARK-41493): Support options
 def schema_of_csv(csv: "ColumnOrName") -> Column:
     if isinstance(csv, Column):
