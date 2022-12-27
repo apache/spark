@@ -161,6 +161,7 @@ Collection Functions
     array_intersect
     array_union
     array_except
+    array_compact
     transform
     exists
     forall
