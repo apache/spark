@@ -33,7 +33,7 @@ class RDDOperationGraphWrapperSerializer extends ProtobufSerDe {
 
   private def serialize(input: RDDOperationGraphWrapper): Array[Byte] = {
     val builder = StoreTypes.RDDOperationGraphWrapper.newBuilder()
-    builder.setStageId(input.stageId)
+    builder.setStageId(input.stageId.toLong)
     input.edges.foreach { e =>
       builder.addEdges(serializeRDDOperationEdge(e))
     }
@@ -50,7 +50,7 @@ class RDDOperationGraphWrapperSerializer extends ProtobufSerDe {
   def deserialize(bytes: Array[Byte]): RDDOperationGraphWrapper = {
     val wrapper = StoreTypes.RDDOperationGraphWrapper.parseFrom(bytes)
     new RDDOperationGraphWrapper(
-      stageId = wrapper.getStageId,
+      stageId = wrapper.getStageId.toInt,
       edges = wrapper.getEdgesList.asScala.map(deserializeRDDOperationEdge).toSeq,
       outgoingEdges = wrapper.getOutgoingEdgesList.asScala.map(deserializeRDDOperationEdge).toSeq,
       incomingEdges = wrapper.getIncomingEdgesList.asScala.map(deserializeRDDOperationEdge).toSeq,
