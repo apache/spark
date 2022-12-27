@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.{JobExecutionStatus, SparkConf, SparkContext}
-import org.apache.spark.internal.config.Status.LIVE_UI_LOCAL_STORE_DIR
+import org.apache.spark.internal.config.Status.{LIVE_UI_LOCAL_STORE_DIR, LIVE_UI_LOCAL_STORE_DIR_AUTO_CLEANUP_ENABLED}
 import org.apache.spark.status.api.v1
 import org.apache.spark.storage.FallbackStorage.FALLBACK_BLOCK_MANAGER_ID
 import org.apache.spark.ui.scope._
@@ -36,7 +36,8 @@ import org.apache.spark.util.kvstore.KVStore
  */
 private[spark] class AppStatusStore(
     val store: KVStore,
-    val listener: Option[AppStatusListener] = None) {
+    val listener: Option[AppStatusListener] = None,
+    val storePath: Option[File] = None) {
 
   def applicationInfo(): v1.ApplicationInfo = {
     try {
@@ -733,6 +734,15 @@ private[spark] class AppStatusStore(
 
   def close(): Unit = {
     store.close()
+    cleanUpStorePath()
+  }
+
+  private def cleanUpStorePath(): Unit = {
+    storePath.foreach { p =>
+      if (p.exists()) {
+        p.listFiles().foreach(Utils.deleteRecursively)
+      }
+    }
   }
 
   def constructTaskDataList(taskDataWrapperIter: Iterable[TaskDataWrapper]): Seq[v1.TaskData] = {
@@ -775,6 +785,10 @@ private[spark] object AppStatusStore {
     val kvStore = KVUtils.createKVStore(storePath, live = true, conf)
     val store = new ElementTrackingStore(kvStore, conf)
     val listener = new AppStatusListener(store, conf, true, appStatusSource)
-    new AppStatusStore(store, listener = Some(listener))
+    if (conf.get(LIVE_UI_LOCAL_STORE_DIR_AUTO_CLEANUP_ENABLED)) {
+      new AppStatusStore(store, listener = Some(listener), storePath)
+    } else {
+      new AppStatusStore(store, listener = Some(listener))
+    }
   }
 }
