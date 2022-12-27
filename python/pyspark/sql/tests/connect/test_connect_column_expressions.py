@@ -56,7 +56,7 @@ class SparkConnectColumnExpressionSuite(PlanOnlyTestFixture):
     def test_null_literal(self):
         null_lit = fun.lit(None)
         null_lit_p = null_lit.to_plan(None)
-        self.assertEqual(null_lit_p.literal.null, True)
+        self.assertEqual(null_lit_p.literal.HasField("null"), True)
 
     def test_binary_literal(self):
         val = b"binary\0\0asas"

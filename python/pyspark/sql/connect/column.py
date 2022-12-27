@@ -16,6 +16,8 @@
 #
 
 import datetime
+import decimal
+import warnings
 
 from typing import (
     TYPE_CHECKING,
@@ -33,6 +35,7 @@ import pyspark.sql.connect.proto as proto
 from pyspark.sql.connect.expressions import (
     Expression,
     UnresolvedFunction,
+    UnresolvedExtractValue,
     SQLExpression,
     LiteralExpression,
     CaseWhen,
@@ -43,6 +46,11 @@ from pyspark.sql.connect.expressions import (
 
 
 if TYPE_CHECKING:
+    from pyspark.sql.connect._typing import (
+        LiteralType,
+        DateTimeLiteral,
+        DecimalLiteral,
+    )
     from pyspark.sql.connect.client import SparkConnectClient
     from pyspark.sql.connect.window import WindowSpec
 
@@ -61,7 +69,9 @@ def _bin_op(
     def wrapped(self: "Column", other: Any) -> "Column":
         from pyspark.sql.connect.functions import lit
 
-        if isinstance(other, (bool, float, int, str, datetime.datetime, datetime.date)):
+        if isinstance(
+            other, (bool, float, int, str, datetime.datetime, datetime.date, decimal.Decimal)
+        ):
             other = lit(other)
         if not reverse:
             return scalar_function(name, self, other)
@@ -125,6 +135,13 @@ class Column:
     __invert__ = _func_op("not")
     __rand__ = _bin_op("and")
     __ror__ = _bin_op("or")
+
+    # container operators
+    def __contains__(self, item: Any) -> None:
+        raise ValueError(
+            "Cannot apply 'in' operator against a column: please use 'contains' "
+            "in a string column or 'array_contains' function for an array column."
+        )
 
     # bitwise operators
     bitwiseOR = _bin_op("bitwiseOR", PySparkColumn.bitwiseOR.__doc__)
@@ -202,9 +219,6 @@ class Column:
         ...
 
     def substr(self, startPos: Union[int, "Column"], length: Union[int, "Column"]) -> "Column":
-        from pyspark.sql.connect.function_builder import functions as F
-        from pyspark.sql.connect.functions import lit
-
         if type(startPos) != type(length):
             raise TypeError(
                 "startPos and length must be the same type. "
@@ -214,19 +228,21 @@ class Column:
                 )
             )
 
-        if isinstance(length, int):
-            length_exp = lit(length)
-        elif isinstance(length, Column):
-            length_exp = length
+        if isinstance(length, Column):
+            length_expr = length._expr
+        elif isinstance(length, int):
+            length_expr = LiteralExpression._from_value(length)
         else:
             raise TypeError("Unsupported type for substr().")
 
-        if isinstance(startPos, int):
-            start_exp = lit(startPos)
+        if isinstance(startPos, Column):
+            start_expr = startPos._expr
+        elif isinstance(startPos, int):
+            start_expr = LiteralExpression._from_value(startPos)
         else:
-            start_exp = startPos
+            raise TypeError("Unsupported type for substr().")
 
-        return F.substr(self, start_exp, length_exp)
+        return Column(UnresolvedFunction("substring", [self._expr, start_expr, length_expr]))
 
     substr.__doc__ = PySparkColumn.substr.__doc__
 
@@ -236,7 +252,9 @@ class Column:
         """
         from pyspark.sql.connect.functions import lit
 
-        if isinstance(other, (bool, float, int, str, datetime.datetime, datetime.date)):
+        if isinstance(
+            other, (bool, float, int, str, datetime.datetime, datetime.date, decimal.Decimal)
+        ):
             other = lit(other)
         return scalar_function("==", self, other)
 
@@ -283,37 +301,6 @@ class Column:
         return "Column<'%s'>" % self._expr.__repr__()
 
     def over(self, window: "WindowSpec") -> "Column":
-        """
-        Define a windowing column.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        window : :class:`WindowSpec`
-
-        Returns
-        -------
-        :class:`Column`
-
-        Examples
-        --------
-        >>> from pyspark.sql import Window
-        >>> window = Window.partitionBy("name").orderBy("age") \
-                .rowsBetween(Window.unboundedPreceding, Window.currentRow)
-        >>> from pyspark.sql.functions import rank, min
-        >>> from pyspark.sql.functions import desc
-        >>> df = spark.createDataFrame(
-        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
-        >>> df.withColumn("rank", rank().over(window)) \
-                .withColumn("min", min('age').over(window)).sort(desc("age")).show()
-        +---+-----+----+---+
-        |age| name|rank|min|
-        +---+-----+----+---+
-        |  5|  Bob|   1|  5|
-        |  2|Alice|   1|  2|
-        +---+-----+----+---+
-        """
         from pyspark.sql.connect.window import WindowSpec
 
         if not isinstance(window, WindowSpec):
@@ -322,6 +309,8 @@ class Column:
             )
 
         return Column(WindowExpression(windowFunction=self._expr, windowSpec=window))
+
+    over.__doc__ = PySparkColumn.over.__doc__
 
     def isin(self, *cols: Any) -> "Column":
         from pyspark.sql.connect.functions import lit
@@ -335,14 +324,38 @@ class Column:
 
     isin.__doc__ = PySparkColumn.isin.__doc__
 
-    def getItem(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("getItem() is not yet implemented.")
+    def between(
+        self,
+        lowerBound: Union["Column", "LiteralType", "DateTimeLiteral", "DecimalLiteral"],
+        upperBound: Union["Column", "LiteralType", "DateTimeLiteral", "DecimalLiteral"],
+    ) -> "Column":
+        return (self >= lowerBound) & (self <= upperBound)
 
-    def between(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("between() is not yet implemented.")
+    between.__doc__ = PySparkColumn.between.__doc__
 
-    def getField(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("getField() is not yet implemented.")
+    def getItem(self, key: Any) -> "Column":
+        if isinstance(key, Column):
+            warnings.warn(
+                "A column as 'key' in getItem is deprecated as of Spark 3.0, and will not "
+                "be supported in the future release. Use `column[key]` or `column.key` syntax "
+                "instead.",
+                FutureWarning,
+            )
+        return self[key]
+
+    getItem.__doc__ = PySparkColumn.getItem.__doc__
+
+    def getField(self, name: Any) -> "Column":
+        if isinstance(name, Column):
+            warnings.warn(
+                "A column as 'name' in getField is deprecated as of Spark 3.0, and will not "
+                "be supported in the future release. Use `column[name]` or `column.name` syntax "
+                "instead.",
+                FutureWarning,
+            )
+        return self[name]
+
+    getField.__doc__ = PySparkColumn.getField.__doc__
 
     def withField(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("withField() is not yet implemented.")
@@ -350,11 +363,29 @@ class Column:
     def dropFields(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("dropFields() is not yet implemented.")
 
-    def __getitem__(self, k: Any) -> None:
-        raise NotImplementedError("apply() - __getitem__ is not yet implemented.")
+    def __getattr__(self, item: Any) -> "Column":
+        if item.startswith("__"):
+            raise AttributeError(item)
+        return self[item]
+
+    def __getitem__(self, k: Any) -> "Column":
+        if isinstance(k, slice):
+            if k.step is not None:
+                raise ValueError("slice with step is not supported.")
+            return self.substr(k.start, k.stop)
+        else:
+            return Column(UnresolvedExtractValue(self._expr, LiteralExpression._from_value(k)))
 
     def __iter__(self) -> None:
         raise TypeError("Column is not iterable")
+
+    def __nonzero__(self) -> None:
+        raise ValueError(
+            "Cannot convert column into bool: please use '&' for 'and', '|' for 'or', "
+            "'~' for 'not' when building DataFrame boolean expressions."
+        )
+
+    __bool__ = __nonzero__
 
 
 Column.__doc__ = PySparkColumn.__doc__

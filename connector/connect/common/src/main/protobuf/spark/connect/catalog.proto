@@ -1,0 +1,199 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = 'proto3';
+
+package spark.connect;
+
+import "spark/connect/types.proto";
+
+option java_multiple_files = true;
+option java_package = "org.apache.spark.connect.proto";
+
+// See `spark.catalog.currentDatabase`
+message CurrentDatabase { }
+
+// See `spark.catalog.setCurrentDatabase`
+message SetCurrentDatabase {
+  // (Required)
+  string db_name = 1;
+}
+
+// See `spark.catalog.listDatabases`
+message ListDatabases { }
+
+// See `spark.catalog.listTables`
+message ListTables {
+  // (Optional)
+  optional string db_name = 1;
+}
+
+// See `spark.catalog.listFunctions`
+message ListFunctions {
+  // (Optional)
+  optional string db_name = 1;
+}
+
+// See `spark.catalog.listColumns`
+message ListColumns {
+  // (Required)
+  string table_name = 1;
+  // (Optional)
+  optional string db_name = 2;
+}
+
+// See `spark.catalog.getDatabase`
+message GetDatabase {
+  // (Required)
+  string db_name = 1;
+}
+
+// See `spark.catalog.getTable`
+message GetTable {
+  // (Required)
+  string table_name = 1;
+  // (Optional)
+  optional string db_name = 2;
+}
+
+// See `spark.catalog.getFunction`
+message GetFunction {
+  // (Required)
+  string function_name = 1;
+  // (Optional)
+  optional string db_name = 2;
+}
+
+// See `spark.catalog.databaseExists`
+message DatabaseExists {
+  // (Required)
+  string db_name = 1;
+}
+
+// See `spark.catalog.tableExists`
+message TableExists {
+  // (Required)
+  string table_name = 1;
+  // (Optional)
+  optional string db_name = 2;
+}
+
+// See `spark.catalog.functionExists`
+message FunctionExists {
+  // (Required)
+  string function_name = 1;
+  // (Optional)
+  optional string db_name = 2;
+}
+
+// See `spark.catalog.createExternalTable`
+message CreateExternalTable {
+  // (Required)
+  string table_name = 1;
+  // (Optional)
+  optional string path = 2;
+  // (Optional)
+  optional string source = 3;
+  // (Optional)
+  optional DataType schema = 4;
+  // Options could be empty for valid data source format.
+  // The map key is case insensitive.
+  map<string, string> options = 5;
+}
+
+// See `spark.catalog.createTable`
+message CreateTable {
+  // (Required)
+  string table_name = 1;
+  // (Optional)
+  optional string path = 2;
+  // (Optional)
+  optional string source = 3;
+  // (Optional)
+  optional string description = 4;
+  // (Optional)
+  optional DataType schema = 5;
+  // Options could be empty for valid data source format.
+  // The map key is case insensitive.
+  map<string, string> options = 6;
+}
+
+// See `spark.catalog.dropTempView`
+message DropTempView {
+  // (Required)
+  string view_name = 1;
+}
+
+// See `spark.catalog.dropGlobalTempView`
+message DropGlobalTempView {
+  // (Required)
+  string view_name = 1;
+}
+
+// See `spark.catalog.recoverPartitions`
+message RecoverPartitions {
+  // (Required)
+  string table_name = 1;
+}
+
+// TODO(SPARK-41612): Support Catalog.isCached
+//// See `spark.catalog.isCached`
+//message IsCached {
+//  // (Required)
+//  string table_name = 1;
+//}
+//
+// TODO(SPARK-41600): Support Catalog.cacheTable
+//// See `spark.catalog.cacheTable`
+//message CacheTable {
+//  // (Required)
+//  string table_name = 1;
+//}
+//
+// TODO(SPARK-41623): Support Catalog.uncacheTable
+//// See `spark.catalog.uncacheTable`
+//message UncacheTable {
+//  // (Required)
+//  string table_name = 1;
+//}
+
+// See `spark.catalog.clearCache`
+message ClearCache { }
+
+// See `spark.catalog.refreshTable`
+message RefreshTable {
+  // (Required)
+  string table_name = 1;
+}
+
+// See `spark.catalog.refreshByPath`
+message RefreshByPath {
+  // (Required)
+  string path = 1;
+}
+
+// See `spark.catalog.currentCatalog`
+message CurrentCatalog { }
+
+// See `spark.catalog.setCurrentCatalog`
+message SetCurrentCatalog {
+  // (Required)
+  string catalog_name = 1;
+}
+
+// See `spark.catalog.listCatalogs`
+message ListCatalogs { }
