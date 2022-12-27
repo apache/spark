@@ -1049,6 +1049,24 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             sdf.select(SF.struct(sdf.a, "d", "e", sdf.f)),
         )
 
+        # test sequence
+        self.assert_eq(
+            cdf.select(CF.sequence(CF.lit(1), CF.lit(5))).toPandas(),
+            sdf.select(SF.sequence(SF.lit(1), SF.lit(5))).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.sequence(CF.lit(1), CF.lit(5), CF.lit(1))).toPandas(),
+            sdf.select(SF.sequence(SF.lit(1), SF.lit(5), SF.lit(1))).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.sequence(cdf.d, "e")).toPandas(),
+            sdf.select(SF.sequence(sdf.d, "e")).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.sequence(cdf.d, "e", CF.lit(1))).toPandas(),
+            sdf.select(SF.sequence(sdf.d, "e", SF.lit(1))).toPandas(),
+        )
+
     def test_map_collection_functions(self):
         from pyspark.sql import functions as SF
         from pyspark.sql.connect import functions as CF
