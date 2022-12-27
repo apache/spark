@@ -1089,7 +1089,6 @@ class StatCov(LogicalPlan):
                <b>Cov</b><br />
                Col1: {self._col1} <br />
                Col2: {self._col2} <br />
-               {self._child_repr_()}
             </li>
          </ul>
          """
