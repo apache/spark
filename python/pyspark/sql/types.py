@@ -276,7 +276,15 @@ class TimestampType(AtomicType, metaclass=DataTypeSingleton):
     def fromInternal(self, ts: int) -> datetime.datetime:
         if ts is not None:
             # using int to avoid precision loss in float
-            return datetime.datetime.fromtimestamp(ts // 1000000).replace(microsecond=ts % 1000000)
+            return (
+                datetime.datetime
+                # Set the time zone to UTC because the TIMESTAMP type stores timestamps
+                # as the number of microseconds from the epoch of 1970-01-01T00:00:00.000000Z
+                # in the UTC time zone.
+                .fromtimestamp(ts // 1000000, tz=datetime.timezone.utc).replace(
+                    microsecond=ts % 1000000
+                )
+            )
 
 
 class TimestampNTZType(AtomicType, metaclass=DataTypeSingleton):
