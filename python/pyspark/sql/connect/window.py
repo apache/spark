@@ -32,6 +32,7 @@ from pyspark.sql.window import Window as PySparkWindow, WindowSpec as PySparkWin
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName
+    from pyspark.sql.connect.session import SparkSession
 
 __all__ = ["Window", "WindowSpec"]
 
@@ -218,6 +219,38 @@ class Window:
 
     @staticmethod
     def partitionBy(*cols: Union["ColumnOrName", List["ColumnOrName"]]) -> "WindowSpec":
+        """
+        >>> from pyspark.sql.connect.window import Window
+        >>> from pyspark.sql.connect.functions import row_number
+        >>> df = spark.createDataFrame(
+        ...      [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")], ["id", "category"])
+        >>> df.show()
+        +---+--------+
+        | id|category|
+        +---+--------+
+        |  1|       a|
+        |  1|       a|
+        |  2|       a|
+        |  1|       b|
+        |  2|       b|
+        |  3|       b|
+        +---+--------+
+
+        Show row number order by ``id`` in partition ``category``.
+
+        >>> window = Window.partitionBy("category").orderBy("id")
+        >>> df.withColumn("row_number", row_number().over(window)).show()
+        +---+--------+----------+
+        | id|category|row_number|
+        +---+--------+----------+
+        |  1|       a|         1|
+        |  1|       a|         2|
+        |  2|       a|         3|
+        |  1|       b|         1|
+        |  2|       b|         2|
+        |  3|       b|         3|
+        +---+--------+----------+
+        """
         return Window._spec.partitionBy(*cols)
 
     partitionBy.__doc__ = PySparkWindow.partitionBy.__doc__
@@ -242,3 +275,40 @@ class Window:
 
 
 Window.__doc__ = Window.__doc__
+
+def _test() -> None:
+    import os
+    import sys
+    import doctest
+    from pyspark.sql import SparkSession
+    from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+    import pyspark.sql.connect.window
+
+    if should_test_connect:
+        globs = pyspark.sql.window.__dict__.copy()
+        globs["_spark"] = (
+            SparkSession.builder.master("local[4]")
+            .appName("sql.connect.window tests")
+            .getOrCreate()
+        )
+
+        os.environ["SPARK_REMOTE"] = "sc://localhost"
+        globs["spark"] = SparkSession.builder.remote("sc://localhost").getOrCreate()
+
+        (failure_count, test_count) = doctest.testmod(
+            pyspark.sql.connect.window, globs=globs, optionflags=doctest.NORMALIZE_WHITESPACE
+        )
+        # TODO(SPARK-41529): Implement stop in RemoteSparkSession.
+        #   Stop the regular Spark session (server) too.
+        globs["_spark"].stop()
+        if failure_count:
+            sys.exit(-1)
+    else:
+        print(
+            f"Skipping pyspark.sql.connect.window doctests: {connect_requirement_message}",
+            file=sys.stderr,
+        )
+
+
+if __name__ == "__main__":
+    _test()
