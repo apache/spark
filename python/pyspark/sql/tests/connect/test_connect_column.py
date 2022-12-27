@@ -538,20 +538,86 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             ).toPandas(),
         )
 
+    def test_column_accessor(self):
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        query = """
+            SELECT STRUCT(a, b, c) AS x, y, z, c FROM VALUES
+            (float(1.0), double(1.0), '2022', MAP('b', '123', 'a', 'kk'), ARRAY(1, 2, 3)),
+            (float(2.0), double(2.0), '2018', MAP('a', 'xy'), ARRAY(-1, -2, -3)),
+            (float(3.0), double(3.0), NULL, MAP('a', 'ab'), ARRAY(-1, 0, 1))
+            AS tab(a, b, c, y, z)
+            """
+
+        # +----------------+-------------------+------------+----+
+        # |               x|                  y|           z|   c|
+        # +----------------+-------------------+------------+----+
+        # |{1.0, 1.0, 2022}|{b -> 123, a -> kk}|   [1, 2, 3]|2022|
+        # |{2.0, 2.0, 2018}|          {a -> xy}|[-1, -2, -3]|2018|
+        # |{3.0, 3.0, null}|          {a -> ab}|  [-1, 0, 1]|null|
+        # +----------------+-------------------+------------+----+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        # test struct
+        self.assert_eq(
+            cdf.select(cdf.x.a, cdf.x["b"], cdf["x"].c).toPandas(),
+            sdf.select(sdf.x.a, sdf.x["b"], sdf["x"].c).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.col("x").a, cdf.x.b, CF.col("x")["c"]).toPandas(),
+            sdf.select(SF.col("x").a, sdf.x.b, SF.col("x")["c"]).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.x.getItem("a"), cdf.x.getItem("b"), cdf["x"].getField("c")).toPandas(),
+            sdf.select(sdf.x.getItem("a"), sdf.x.getItem("b"), sdf["x"].getField("c")).toPandas(),
+        )
+
+        # test map
+        self.assert_eq(
+            cdf.select(cdf.y.a, cdf.y["b"], cdf["y"].c).toPandas(),
+            sdf.select(sdf.y.a, sdf.y["b"], sdf["y"].c).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.col("y").a, cdf.y.b, CF.col("y")["c"]).toPandas(),
+            sdf.select(SF.col("y").a, sdf.y.b, SF.col("y")["c"]).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.y.getItem("a"), cdf.y.getItem("b"), cdf["y"].getField("c")).toPandas(),
+            sdf.select(sdf.y.getItem("a"), sdf.y.getItem("b"), sdf["y"].getField("c")).toPandas(),
+        )
+
+        # test array
+        self.assert_eq(
+            cdf.select(cdf.z[0], cdf.z[1], cdf["z"][2]).toPandas(),
+            sdf.select(sdf.z[0], sdf.z[1], sdf["z"][2]).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.col("z")[0], cdf.z[10], CF.col("z")[-10]).toPandas(),
+            sdf.select(SF.col("z")[0], sdf.z[10], SF.col("z")[-10]).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.z.getItem(0), cdf.z.getItem(1), cdf["z"].getField(2)).toPandas(),
+            sdf.select(sdf.z.getItem(0), sdf.z.getItem(1), sdf["z"].getField(2)).toPandas(),
+        )
+
+        # test string with slice
+        self.assert_eq(
+            cdf.select(cdf.c[0:1], cdf["c"][2:10]).toPandas(),
+            sdf.select(sdf.c[0:1], sdf["c"][2:10]).toPandas(),
+        )
+
     def test_unsupported_functions(self):
         # SPARK-41225: Disable unsupported functions.
         c = self.connect.range(1).id
         for f in (
-            "getItem",
-            "getField",
             "withField",
             "dropFields",
         ):
             with self.assertRaises(NotImplementedError):
                 getattr(c, f)()
-
-        with self.assertRaises(NotImplementedError):
-            c["a"]
 
         with self.assertRaises(TypeError):
             for x in c:

@@ -420,6 +420,30 @@ class UnresolvedFunction(Expression):
             return f"{self._name}({', '.join([str(arg) for arg in self._args])})"
 
 
+class UnresolvedExtractValue(Expression):
+    def __init__(
+        self,
+        child: Expression,
+        extraction: Expression,
+    ) -> None:
+        super().__init__()
+
+        assert isinstance(child, Expression)
+        self._child = child
+
+        assert isinstance(extraction, Expression)
+        self._extraction = extraction
+
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
+        expr = proto.Expression()
+        expr.unresolved_extract_value.child.CopyFrom(self._child.to_plan(session))
+        expr.unresolved_extract_value.extraction.CopyFrom(self._extraction.to_plan(session))
+        return expr
+
+    def __repr__(self) -> str:
+        return f"UnresolvedExtractValue({str(self._child)}, {str(self._extraction)})"
+
+
 class UnresolvedRegex(Expression):
     def __init__(
         self,

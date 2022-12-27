@@ -17,6 +17,7 @@
 
 import datetime
 import decimal
+import warnings
 
 from typing import (
     TYPE_CHECKING,
@@ -34,6 +35,7 @@ import pyspark.sql.connect.proto as proto
 from pyspark.sql.connect.expressions import (
     Expression,
     UnresolvedFunction,
+    UnresolvedExtractValue,
     SQLExpression,
     LiteralExpression,
     CaseWhen,
@@ -351,9 +353,6 @@ class Column:
 
     isin.__doc__ = PySparkColumn.isin.__doc__
 
-    def getItem(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("getItem() is not yet implemented.")
-
     def between(
         self,
         lowerBound: Union["Column", "LiteralType", "DateTimeLiteral", "DecimalLiteral"],
@@ -363,8 +362,29 @@ class Column:
 
     between.__doc__ = PySparkColumn.between.__doc__
 
-    def getField(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("getField() is not yet implemented.")
+    def getItem(self, key: Any) -> "Column":
+        if isinstance(key, Column):
+            warnings.warn(
+                "A column as 'key' in getItem is deprecated as of Spark 3.0, and will not "
+                "be supported in the future release. Use `column[key]` or `column.key` syntax "
+                "instead.",
+                FutureWarning,
+            )
+        return self[key]
+
+    getItem.__doc__ = PySparkColumn.getItem.__doc__
+
+    def getField(self, name: Any) -> "Column":
+        if isinstance(name, Column):
+            warnings.warn(
+                "A column as 'name' in getField is deprecated as of Spark 3.0, and will not "
+                "be supported in the future release. Use `column[name]` or `column.name` syntax "
+                "instead.",
+                FutureWarning,
+            )
+        return self[name]
+
+    getField.__doc__ = PySparkColumn.getField.__doc__
 
     def withField(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("withField() is not yet implemented.")
@@ -372,8 +392,18 @@ class Column:
     def dropFields(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("dropFields() is not yet implemented.")
 
-    def __getitem__(self, k: Any) -> None:
-        raise NotImplementedError("apply() - __getitem__ is not yet implemented.")
+    def __getattr__(self, item: Any) -> "Column":
+        if item.startswith("__"):
+            raise AttributeError(item)
+        return self[item]
+
+    def __getitem__(self, k: Any) -> "Column":
+        if isinstance(k, slice):
+            if k.step is not None:
+                raise ValueError("slice with step is not supported.")
+            return self.substr(k.start, k.stop)
+        else:
+            return Column(UnresolvedExtractValue(self._expr, LiteralExpression._from_value(k)))
 
     def __iter__(self) -> None:
         raise TypeError("Column is not iterable")
