@@ -201,7 +201,7 @@ case class CurrentCatalog() extends LeafExpression with Unevaluable {
   since = "2.3.0",
   group = "misc_funcs")
 // scalastyle:on line.size.limit
-case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Stateful
+case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Nondeterministic
     with ExpressionWithRandomSeed {
 
   def this() = this(None)
@@ -215,6 +215,8 @@ case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Sta
   override def nullable: Boolean = false
 
   override def dataType: DataType = StringType
+
+  override def stateful: Boolean = true
 
   @transient private[this] var randomGenerator: RandomUUIDGenerator = _
 
@@ -235,8 +237,6 @@ case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Sta
     ev.copy(code = code"final UTF8String ${ev.value} = $randomGen.getNextUUIDUTF8String();",
       isNull = FalseLiteral)
   }
-
-  override def freshCopy(): Uuid = Uuid(randomSeed)
 }
 
 // scalastyle:off line.size.limit

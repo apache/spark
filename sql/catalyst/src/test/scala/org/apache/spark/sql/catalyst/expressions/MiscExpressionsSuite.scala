@@ -74,7 +74,6 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val uuid = Uuid(seed1)
     assert(uuid.fastEquals(uuid))
     assert(!uuid.fastEquals(Uuid(seed1)))
-    assert(!uuid.fastEquals(uuid.freshCopy()))
     assert(!uuid.fastEquals(Uuid(seed2)))
   }
 

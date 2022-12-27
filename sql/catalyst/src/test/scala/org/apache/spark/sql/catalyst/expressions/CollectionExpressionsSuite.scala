@@ -2107,7 +2107,6 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val shuffle = Shuffle(ai0, seed1)
     assert(shuffle.fastEquals(shuffle))
     assert(!shuffle.fastEquals(Shuffle(ai0, seed1)))
-    assert(!shuffle.fastEquals(shuffle.freshCopy()))
     assert(!shuffle.fastEquals(Shuffle(ai0, seed2)))
   }
 
