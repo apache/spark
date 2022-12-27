@@ -32,7 +32,6 @@ from pyspark.sql.window import Window as PySparkWindow, WindowSpec as PySparkWin
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName
-    from pyspark.sql.connect.session import SparkSession
 
 __all__ = ["Window", "WindowSpec"]
 
@@ -202,7 +201,7 @@ class WindowSpec:
         return "WindowSpec(" + ", ".join(strs) + ")"
 
 
-WindowSpec.__doc__ = PySparkWindow.__doc__
+# WindowSpec.__doc__ = PySparkWindow.__doc__
 
 
 class Window:
@@ -220,6 +219,8 @@ class Window:
     @staticmethod
     def partitionBy(*cols: Union["ColumnOrName", List["ColumnOrName"]]) -> "WindowSpec":
         """
+        Examples
+        --------
         >>> from pyspark.sql.connect.window import Window
         >>> from pyspark.sql.connect.functions import row_number
         >>> df = spark.createDataFrame(
@@ -257,18 +258,122 @@ class Window:
 
     @staticmethod
     def orderBy(*cols: Union["ColumnOrName", List["ColumnOrName"]]) -> "WindowSpec":
+        """
+        Examples
+        --------
+        >>> from pyspark.sql.connect.window import Window
+        >>> from pyspark.sql.connect.functions import row_number
+        >>> df = spark.createDataFrame(
+        ...      [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")], ["id", "category"])
+        >>> df.show()
+        +---+--------+
+        | id|category|
+        +---+--------+
+        |  1|       a|
+        |  1|       a|
+        |  2|       a|
+        |  1|       b|
+        |  2|       b|
+        |  3|       b|
+        +---+--------+
+
+        Show row number order by ``category`` in partition ``id``.
+
+        >>> window = Window.partitionBy("id").orderBy("category")
+        >>> df.withColumn("row_number", row_number().over(window)).show()
+        +---+--------+----------+
+        | id|category|row_number|
+        +---+--------+----------+
+        |  1|       a|         1|
+        |  1|       a|         2|
+        |  1|       b|         3|
+        |  2|       a|         1|
+        |  2|       b|         2|
+        |  3|       b|         1|
+        +---+--------+----------+
+        """
         return Window._spec.orderBy(*cols)
 
     orderBy.__doc__ = PySparkWindow.orderBy.__doc__
 
     @staticmethod
     def rowsBetween(start: int, end: int) -> "WindowSpec":
+        """
+        Examples
+        --------
+        >>> from pyspark.sql.connect.window import Window
+        >>> from pyspark.sql.connect import functions as func
+        >>> df = spark.createDataFrame(
+        ...      [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")], ["id", "category"])
+        >>> df.show()
+        +---+--------+
+        | id|category|
+        +---+--------+
+        |  1|       a|
+        |  1|       a|
+        |  2|       a|
+        |  1|       b|
+        |  2|       b|
+        |  3|       b|
+        +---+--------+
+
+        Calculate sum of ``id`` in the range from currentRow to currentRow + 1
+        in partition ``category``
+
+        >>> window = Window.partitionBy("category").orderBy("id").rowsBetween(Window.currentRow, 1)
+        >>> df.withColumn("sum", func.sum("id").over(window)).sort("id", "category", "sum").show()
+        +---+--------+---+
+        | id|category|sum|
+        +---+--------+---+
+        |  1|       a|  2|
+        |  1|       a|  3|
+        |  1|       b|  3|
+        |  2|       a|  2|
+        |  2|       b|  5|
+        |  3|       b|  3|
+        +---+--------+---+
+
+        """
         return Window._spec.rowsBetween(start, end)
 
     rowsBetween.__doc__ = PySparkWindow.rowsBetween.__doc__
 
     @staticmethod
     def rangeBetween(start: int, end: int) -> "WindowSpec":
+        """
+        >>> from pyspark.sql.connect.window import Window
+        >>> from pyspark.sql.connect import functions as func
+        >>> df = spark.createDataFrame(
+        ...      [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")], ["id", "category"])
+        >>> df.show()
+        +---+--------+
+        | id|category|
+        +---+--------+
+        |  1|       a|
+        |  1|       a|
+        |  2|       a|
+        |  1|       b|
+        |  2|       b|
+        |  3|       b|
+        +---+--------+
+
+        Calculate sum of ``id`` in the range from ``id`` of currentRow to ``id`` of currentRow + 1
+        in partition ``category``
+
+        >>> window = Window.partitionBy("category").orderBy("id").rangeBetween(Window.currentRow, 1)
+        >>> df.withColumn("sum", func.sum("id").over(window)).sort("id", "category").show()
+        +---+--------+---+
+        | id|category|sum|
+        +---+--------+---+
+        |  1|       a|  4|
+        |  1|       a|  4|
+        |  1|       b|  3|
+        |  2|       a|  2|
+        |  2|       b|  5|
+        |  3|       b|  3|
+        +---+--------+---+
+
+        """
         return Window._spec.rangeBetween(start, end)
 
     rangeBetween.__doc__ = PySparkWindow.rangeBetween.__doc__
@@ -276,21 +381,20 @@ class Window:
 
 Window.__doc__ = Window.__doc__
 
+
 def _test() -> None:
     import os
     import sys
     import doctest
+    from pyspark import SparkContext
     from pyspark.sql import SparkSession
     from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
     import pyspark.sql.connect.window
 
     if should_test_connect:
         globs = pyspark.sql.window.__dict__.copy()
-        globs["_spark"] = (
-            SparkSession.builder.master("local[4]")
-            .appName("sql.connect.window tests")
-            .getOrCreate()
-        )
+        sc = SparkContext("local[4]", "sql.connect.window tests")
+        globs["_spark"] = SparkSession(sc)
 
         os.environ["SPARK_REMOTE"] = "sc://localhost"
         globs["spark"] = SparkSession.builder.remote("sc://localhost").getOrCreate()
