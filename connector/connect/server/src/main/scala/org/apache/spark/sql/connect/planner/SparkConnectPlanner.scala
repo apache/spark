@@ -88,6 +88,7 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Relation.RelTypeCase.REPLACE => transformReplace(rel.getReplace)
       case proto.Relation.RelTypeCase.SUMMARY => transformStatSummary(rel.getSummary)
       case proto.Relation.RelTypeCase.DESCRIBE => transformStatDescribe(rel.getDescribe)
+      case proto.Relation.RelTypeCase.COV => transformStatCov(rel.getCov)
       case proto.Relation.RelTypeCase.CROSSTAB =>
         transformStatCrosstab(rel.getCrosstab)
       case proto.Relation.RelTypeCase.TO_SCHEMA => transformToSchema(rel.getToSchema)
@@ -337,6 +338,16 @@ class SparkConnectPlanner(session: SparkSession) {
       .ofRows(session, transformRelation(rel.getInput))
       .describe(rel.getColsList.asScala.toSeq: _*)
       .logicalPlan
+  }
+
+  private def transformStatCov(rel: proto.StatCov): LogicalPlan = {
+    val cov = Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .stat
+      .cov(rel.getCol1, rel.getCol2)
+    LocalRelation.fromProduct(
+      output = AttributeReference("cov", DoubleType, true)() :: Nil,
+      data = Tuple1.apply(cov) :: Nil)
   }
 
   private def transformStatCrosstab(rel: proto.StatCrosstab): LogicalPlan = {

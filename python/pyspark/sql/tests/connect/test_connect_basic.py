@@ -87,7 +87,9 @@ class SparkConnectSQLTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLT
         # Since we might create multiple Spark sessions, we need to create global temporary view
         # that is specifically maintained in the "global_temp" schema.
         df.write.saveAsTable(cls.tbl_name)
-        df2 = cls.spark.createDataFrame([(x, f"{x}") for x in range(100)], ["col1", "col2"])
+        df2 = cls.spark.createDataFrame(
+            [(x, f"{x}", 2 * x) for x in range(100)], ["col1", "col2", "col3"]
+        )
         df2.write.saveAsTable(cls.tbl_name2)
         df3 = cls.spark.createDataFrame([(x, f"{x}") for x in range(100)], ["id", "test\n_column"])
         df3.write.saveAsTable(cls.tbl_name3)
@@ -996,6 +998,13 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         # +---+---+
         expected = "+---+---+\n|  X|  Y|\n+---+---+\n|  1|  2|\n+---+---+\n"
         self.assertEqual(show_str, expected)
+
+    def test_stat_cov(self):
+        # SPARK-41067: Test the stat.cov method
+        self.assertEqual(
+            self.connect.read.table(self.tbl_name2).stat.cov("col1", "col3"),
+            self.spark.read.table(self.tbl_name2).stat.cov("col1", "col3"),
+        )
 
     def test_repr(self):
         # SPARK-41213: Test the __repr__ method

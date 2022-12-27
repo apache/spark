@@ -362,6 +362,19 @@ package object dsl {
     }
 
     implicit class DslStatFunctions(val logicalPlan: Relation) {
+      def cov(col1: String, col2: String): Relation = {
+        Relation
+          .newBuilder()
+          .setCov(
+            proto.StatCov
+              .newBuilder()
+              .setInput(logicalPlan)
+              .setCol1(col1)
+              .setCol2(col2)
+              .build())
+          .build()
+      }
+
       def crosstab(col1: String, col2: String): Relation = {
         Relation
           .newBuilder()
