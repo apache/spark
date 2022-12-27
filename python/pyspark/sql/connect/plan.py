@@ -1078,21 +1078,6 @@ class StatCov(LogicalPlan):
         plan.cov.col2 = self._col2
         return plan
 
-    def print(self, indent: int = 0) -> str:
-        i = " " * indent
-        return f"""{i}<Cov col1='{self._col1}' col2='{self._col2}'>"""
-
-    def _repr_html_(self) -> str:
-        return f"""
-         <ul>
-            <li>
-               <b>Cov</b><br />
-               Col1: {self._col1} <br />
-               Col2: {self._col2} <br />
-            </li>
-         </ul>
-         """
-
 
 class StatCrosstab(LogicalPlan):
     def __init__(self, child: Optional["LogicalPlan"], col1: str, col2: str) -> None:
