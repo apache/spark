@@ -22,7 +22,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.utils import ReusedPySparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
-from pyspark.sql.connect.client import SparkConnectClientException
+from pyspark.sql.connect.client import SparkConnectException
 
 if should_test_connect:
     from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
@@ -818,7 +818,7 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             cdf.select(CF.rank().over(cdf.a))
 
         # invalid window function
-        with self.assertRaises(SparkConnectClientException):
+        with self.assertRaises(SparkConnectException):
             cdf.select(cdf.b.over(CW.orderBy("b"))).show()
 
         # invalid window frame
@@ -832,34 +832,34 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             CF.lead("c", 1),
             CF.ntile(1),
         ]:
-            with self.assertRaises(SparkConnectClientException):
+            with self.assertRaises(SparkConnectException):
                 cdf.select(
                     ccol.over(CW.orderBy("b").rowsBetween(CW.currentRow, CW.currentRow + 123))
                 ).show()
 
-            with self.assertRaises(SparkConnectClientException):
+            with self.assertRaises(SparkConnectException):
                 cdf.select(
                     ccol.over(CW.orderBy("b").rangeBetween(CW.currentRow, CW.currentRow + 123))
                 ).show()
 
-            with self.assertRaises(SparkConnectClientException):
+            with self.assertRaises(SparkConnectException):
                 cdf.select(
                     ccol.over(CW.orderBy("b").rangeBetween(CW.unboundedPreceding, CW.currentRow))
                 ).show()
 
         # Function 'cume_dist' requires Windowframe(RangeFrame, UnboundedPreceding, CurrentRow)
         ccol = CF.cume_dist()
-        with self.assertRaises(SparkConnectClientException):
+        with self.assertRaises(SparkConnectException):
             cdf.select(
                 ccol.over(CW.orderBy("b").rangeBetween(CW.currentRow, CW.currentRow + 123))
             ).show()
 
-        with self.assertRaises(SparkConnectClientException):
+        with self.assertRaises(SparkConnectException):
             cdf.select(
                 ccol.over(CW.orderBy("b").rowsBetween(CW.currentRow, CW.currentRow + 123))
             ).show()
 
-        with self.assertRaises(SparkConnectClientException):
+        with self.assertRaises(SparkConnectException):
             cdf.select(
                 ccol.over(CW.orderBy("b").rowsBetween(CW.unboundedPreceding, CW.currentRow))
             ).show()
@@ -1946,11 +1946,11 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
         sdf = self.spark.sql(query)
 
         # test assert_true
-        with self.assertRaises(SparkConnectClientException):
+        with self.assertRaises(SparkConnectException):
             cdf.select(CF.assert_true(cdf.a > 0, "a should be positive!")).show()
 
         # test raise_error
-        with self.assertRaises(SparkConnectClientException):
+        with self.assertRaises(SparkConnectException):
             cdf.select(CF.raise_error("a should be positive!")).show()
 
         # test crc32

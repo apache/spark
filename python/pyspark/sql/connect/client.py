@@ -43,7 +43,7 @@ from pyspark.sql.types import (
 
 def _configure_logging() -> logging.Logger:
     """Configure logging for the Spark Connect clients."""
-    logger = logging.getLogger("pyspark.sql.connect.client")
+    logger = logging.getLogger(__name__)
     handler = logging.StreamHandler()
     handler.setFormatter(
         logging.Formatter(fmt="%(asctime)s %(process)d %(levelname)s %(funcName)s %(message)s")
@@ -51,30 +51,28 @@ def _configure_logging() -> logging.Logger:
     logger.addHandler(handler)
 
     # Check the environment variables for log levels:
-    level = os.getenv("SPARK_CONNECT_LOG_LEVEL", "none").lower()
-    if level == "info":
-        logger.setLevel(logging.INFO)
-    elif level == "warn":
-        logger.setLevel(logging.WARNING)
-    elif level == "error":
-        logger.setLevel(logging.ERROR)
-    elif level == "debug":
-        logger.setLevel(logging.DEBUG)
+    if "SPARK_CONNECT_LOG_LEVEL" in os.environ:
+        logger.setLevel(os.getenv("SPARK_CONNECT_LOG_LEVEL", "error").upper())
     else:
         logger.disabled = True
     return logger
 
 
 # Instantiate the logger based on the environment configuration.
-_logger = _configure_logging()
+logger = _configure_logging()
 
 
-class SparkConnectClientException(Exception):
-    def __init__(self, message: str) -> None:
-        super(SparkConnectClientException, self).__init__(message)
+class SparkConnectException(Exception):
+    def __init__(self, message: str, reason: Optional[str] = None) -> None:
+        super(SparkConnectException, self).__init__(message)
+        self._reason = reason
+        self._message = message
+
+    def __str__(self) -> str:
+        return f"({self._reason}) {self._message}"
 
 
-class SparkConnectAnalysisException(SparkConnectClientException):
+class SparkConnectAnalysisException(SparkConnectException):
     def __init__(self, reason: str, message: str, plan: str) -> None:
         self._reason = reason
         self._message = message
@@ -117,7 +115,7 @@ class ChannelBuilder:
         ----------
         url : str
             Spark Connect connection string
-        channelOptions: Optional[List[tuple]]
+        channelOptions: list of tuple, optional
             Additional options that can be passed to the GRPC channel construction.
         """
         # Explicitly check the scheme of the URL.
@@ -381,7 +379,7 @@ class SparkConnectClient(object):
         name = f"fun_{uuid.uuid4().hex}"
         fun = pb2.CreateScalarFunction()
         fun.parts.append(name)
-        _logger.info(f"Registering UDF: {self._proto_to_string(fun)}")
+        logger.info(f"Registering UDF: {self._proto_to_string(fun)}")
         fun.serialized_function = cloudpickle.dumps((function, return_type))
 
         req = self._execute_plan_request_with_metadata()
@@ -402,7 +400,7 @@ class SparkConnectClient(object):
         ]
 
     def to_pandas(self, plan: pb2.Plan) -> "pandas.DataFrame":
-        _logger.info(f"Executing plan {self._proto_to_string(plan)}")
+        logger.info(f"Executing plan {self._proto_to_string(plan)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
         return self._execute_and_fetch(req)
@@ -425,7 +423,7 @@ class SparkConnectClient(object):
         return text_format.MessageToString(p, as_one_line=True)
 
     def schema(self, plan: pb2.Plan) -> StructType:
-        _logger.info(f"Schema for plan: {self._proto_to_string(plan)}")
+        logger.info(f"Schema for plan: {self._proto_to_string(plan)}")
         proto_schema = self._analyze(plan).schema
         # Server side should populate the struct field which is the schema.
         assert proto_schema.HasField("struct")
@@ -441,12 +439,12 @@ class SparkConnectClient(object):
         return StructType(fields)
 
     def explain_string(self, plan: pb2.Plan, explain_mode: str = "extended") -> str:
-        _logger.info(f"Explain (mode={explain_mode}) for plan {self._proto_to_string(plan)}")
+        logger.info(f"Explain (mode={explain_mode}) for plan {self._proto_to_string(plan)}")
         result = self._analyze(plan, explain_mode)
         return result.explain_string
 
     def execute_command(self, command: pb2.Command) -> None:
-        _logger.info(f"Execute command for command {self._proto_to_string(command)}")
+        logger.info(f"Execute command for command {self._proto_to_string(command)}")
         req = self._execute_plan_request_with_metadata()
         if self._user_id:
             req.user_context.user_id = self._user_id
@@ -471,11 +469,12 @@ class SparkConnectClient(object):
     def _analyze(self, plan: pb2.Plan, explain_mode: str = "extended") -> AnalyzeResult:
         """
         Call the analyze RPC of Spark Connect.
+
         Parameters
         ----------
-        plan: pb2.Plan
+        plan : :class:`pyspark.sql.connect.proto.Plan`
            Proto representation of the plan.
-        explain_mode: str
+        explain_mode : str
            Explain mode
 
         Returns
@@ -521,11 +520,8 @@ class SparkConnectClient(object):
         req : pb2.ExecutePlanRequest
             Proto representation of the plan.
 
-        Returns
-        -------
-
         """
-        _logger.info("Execute")
+        logger.info("Execute")
         try:
             for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
                 continue
@@ -533,7 +529,7 @@ class SparkConnectClient(object):
             self._handle_error(rpc_error)
 
     def _execute_and_fetch(self, req: pb2.ExecutePlanRequest) -> "pandas.DataFrame":
-        _logger.info("ExecuteAndFetch")
+        logger.info("ExecuteAndFetch")
         import pandas as pd
 
         m: Optional[pb2.ExecutePlanResponse.Metrics] = None
@@ -542,10 +538,10 @@ class SparkConnectClient(object):
         try:
             for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
                 if b.metrics is not None:
-                    _logger.debug("Received metric batch.")
+                    logger.debug("Received metric batch.")
                     m = b.metrics
                 if b.HasField("arrow_batch"):
-                    _logger.debug(
+                    logger.debug(
                         f"Received arrow batch rows={b.arrow_batch.row_count} "
                         f"size={len(b.arrow_batch.data)}"
                     )
@@ -588,7 +584,7 @@ class SparkConnectClient(object):
         -------
         Throws the appropriate internal Python exception.
         """
-        _logger.exception("GRPC Error received")
+        logger.exception("GRPC Error received")
         # We have to cast the value here because, a RpcError is a Call as well.
         # https://grpc.github.io/grpc/python/grpc.html#grpc.UnaryUnaryMultiCallable.__call__
         status = rpc_status.from_call(cast(grpc.Call, rpc_error))
@@ -597,10 +593,21 @@ class SparkConnectClient(object):
                 if d.Is(error_details_pb2.ErrorInfo.DESCRIPTOR):
                     info = error_details_pb2.ErrorInfo()
                     d.Unpack(info)
-                    if info.reason == "AnalysisExceptionE":
+                    if info.reason == "org.apache.spark.sql.AnalysisException":
                         raise SparkConnectAnalysisException(
                             info.reason, info.metadata["message"], info.metadata["plan"]
                         ) from None
-            raise SparkConnectClientException(status.message) from None
+                    else:
+                        raise SparkConnectException(status.message, info.reason) from None
+
+            raise SparkConnectException(status.message) from None
         else:
-            raise SparkConnectClientException(str(rpc_error)) from None
+            raise SparkConnectException(str(rpc_error)) from None
+
+
+__all__ = [
+    "ChannelBuilder",
+    "SparkConnectClient",
+    "SparkConnectException",
+    "SparkConnectAnalysisException",
+]

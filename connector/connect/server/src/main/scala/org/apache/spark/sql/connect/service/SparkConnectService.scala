@@ -32,7 +32,7 @@ import io.grpc.protobuf.StatusProto
 import io.grpc.protobuf.services.ProtoReflectionService
 import io.grpc.stub.StreamObserver
 
-import org.apache.spark.{SparkEnv, SparkException}
+import org.apache.spark.{SparkEnv, SparkThrowable}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AnalyzePlanRequest, AnalyzePlanResponse, ExecutePlanRequest, ExecutePlanResponse, SparkConnectServiceGrpc}
 import org.apache.spark.internal.Logging
@@ -52,6 +52,22 @@ import org.apache.spark.sql.execution.{CodegenMode, CostMode, ExplainMode, Exten
 class SparkConnectService(debug: Boolean)
     extends SparkConnectServiceGrpc.SparkConnectServiceImplBase
     with Logging {
+
+  private def buildStatusFromThrowable[A <: Throwable with SparkThrowable](st: A): RPCStatus = {
+    val t = Option(st.getCause).getOrElse(st)
+    RPCStatus
+      .newBuilder()
+      .setCode(RPCCode.INTERNAL_VALUE)
+      .addDetails(
+        ProtoAny.pack(
+          ErrorInfo
+            .newBuilder()
+            .setReason(t.getClass.getName)
+            .setDomain("org.apache.spark")
+            .build()))
+      .setMessage(t.getLocalizedMessage)
+      .build()
+  }
 
   /**
    * Common exception handling function for the Analysis and Execution methods. Closes the stream
@@ -84,21 +100,9 @@ class SparkConnectService(debug: Boolean)
         .setMessage(ae.getLocalizedMessage)
         .build()
       observer.onError(StatusProto.toStatusRuntimeException(status))
-    case se: SparkException =>
-      logError(s"Error during: $opType", se)
-      val status = RPCStatus
-        .newBuilder()
-        .setCode(RPCCode.INTERNAL_VALUE)
-        .addDetails(
-          ProtoAny.pack(
-            ErrorInfo
-              .newBuilder()
-              .setReason(se.getClass.getSimpleName)
-              .setDomain("org.apache.spark")
-              .putMetadata("message", se.getMessage)
-              .build()))
-        .setMessage(se.getLocalizedMessage)
-        .build()
+    case st: SparkThrowable =>
+      logError(s"Error during: $opType", st)
+      val status = buildStatusFromThrowable(st)
       observer.onError(StatusProto.toStatusRuntimeException(status))
     case NonFatal(nf) =>
       logError(s"Error during: $opType", nf)
