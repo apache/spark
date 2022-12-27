@@ -91,7 +91,7 @@ class SparkPlanGraphWrapperSerializer extends ProtobufSerDe {
     builder.setName(node.name)
     builder.setDesc(node.desc)
     node.metrics.foreach { metric =>
-      builder.addMetrics(serializeSQLPlanMetric(metric))
+      builder.addMetrics(SQLPlanMetricSerializer.serialize(metric))
     }
     builder.build()
   }
@@ -103,7 +103,7 @@ class SparkPlanGraphWrapperSerializer extends ProtobufSerDe {
       id = node.getId,
       name = node.getName,
       desc = node.getDesc,
-      metrics = node.getMetricsList.asScala.map(deserializeSQLPlanMetric).toSeq
+      metrics = node.getMetricsList.asScala.map(SQLPlanMetricSerializer.deserialize).toSeq
     )
   }
 
@@ -117,7 +117,7 @@ class SparkPlanGraphWrapperSerializer extends ProtobufSerDe {
       builder.addNodes(serializeSparkPlanGraphNodeWrapper(node))
     }
     cluster.metrics.foreach { metric =>
-      builder.addMetrics(serializeSQLPlanMetric(metric))
+      builder.addMetrics(SQLPlanMetricSerializer.serialize(metric))
     }
     builder.build()
   }
@@ -130,23 +130,7 @@ class SparkPlanGraphWrapperSerializer extends ProtobufSerDe {
       name = cluster.getName,
       desc = cluster.getDesc,
       nodes = cluster.getNodesList.asScala.map(deserializeSparkPlanGraphNodeWrapper).toSeq,
-      metrics = cluster.getMetricsList.asScala.map(deserializeSQLPlanMetric).toSeq
-    )
-  }
-
-  private def serializeSQLPlanMetric(metric: SQLPlanMetric): StoreTypes.SQLPlanMetric = {
-    val builder = StoreTypes.SQLPlanMetric.newBuilder()
-    builder.setName(metric.name)
-    builder.setAccumulatorId(metric.accumulatorId)
-    builder.setMetricType(metric.metricType)
-    builder.build()
-  }
-
-  private def deserializeSQLPlanMetric(metric: StoreTypes.SQLPlanMetric): SQLPlanMetric = {
-    SQLPlanMetric(
-      name = metric.getName,
-      accumulatorId = metric.getAccumulatorId,
-      metricType = metric.getMetricType
+      metrics = cluster.getMetricsList.asScala.map(SQLPlanMetricSerializer.deserialize).toSeq
     )
   }
 }
