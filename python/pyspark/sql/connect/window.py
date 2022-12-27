@@ -268,6 +268,9 @@ def _test() -> None:
         globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
 
         del pyspark.sql.connect.window.Window.partitionBy.__doc__
+        del pyspark.sql.connect.window.Window.orderBy.__doc__
+        del pyspark.sql.connect.window.Window.rowsBetween.__doc__
+        del pyspark.sql.connect.window.Window.rangeBetween.__doc__
 
         (failure_count, test_count) = doctest.testmod(
             pyspark.sql.connect.window, globs=globs, optionflags=doctest.NORMALIZE_WHITESPACE
