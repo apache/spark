@@ -523,7 +523,7 @@ class DataFrame:
                     upper_bound=upperBound,
                     with_replacement=False,
                     seed=int(seed),
-                    force_stable_sort=True,
+                    deterministic_order=True,
                 ),
                 session=self._session,
             )

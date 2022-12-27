@@ -211,8 +211,9 @@ class SparkConnectPlanner(session: SparkSession) {
    * wrap such fields into proto messages.
    */
   private def transformSample(rel: proto.Sample): LogicalPlan = {
-    val input = Dataset.ofRows(session, transformRelation(rel.getInput))
-    val plan = if (rel.getForceStableSort) {
+    val plan = if (rel.getDeterministicOrder) {
+      val input = Dataset.ofRows(session, transformRelation(rel.getInput))
+
       // It is possible that the underlying dataframe doesn't guarantee the ordering of rows in its
       // constituent partitions each time a split is materialized which could result in
       // overlapping splits. To prevent this, we explicitly sort each input partition to make the
@@ -224,11 +225,11 @@ class SparkConnectPlanner(session: SparkSession) {
       if (sortOrder.nonEmpty) {
         Sort(sortOrder, global = false, input.logicalPlan)
       } else {
+        input.cache()
         input.logicalPlan
       }
     } else {
-      input.cache()
-      input.logicalPlan
+      transformRelation(rel.getInput)
     }
 
     Sample(
