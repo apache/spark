@@ -1124,7 +1124,6 @@ class StatCorr(LogicalPlan):
               Col1: {self._col1} <br />
               Col2: {self._col2} <br />
               Method: {self._method} <br />
-              {self._child_repr_()}
            </li>
         </ul>
         """
