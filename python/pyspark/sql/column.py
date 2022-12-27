@@ -1242,6 +1242,9 @@ class Column:
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         window : :class:`WindowSpec`
