@@ -390,3 +390,13 @@ message SQLExecutionUIData {
   repeated int64 stages = 11;
   map<int64, string> metric_values = 12;
 }
+
+message StreamingQueryData {
+  string name = 1;
+  string id = 2;
+  string run_id = 3;
+  bool is_active = 4;
+  optional string exception = 5;
+  int64 start_timestamp = 6;
+  optional int64 end_timestamp = 7;
+}
