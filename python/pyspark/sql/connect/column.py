@@ -299,37 +299,6 @@ class Column:
         return "Column<'%s'>" % self._expr.__repr__()
 
     def over(self, window: "WindowSpec") -> "Column":
-        """
-        Define a windowing column.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        window : :class:`WindowSpec`
-
-        Returns
-        -------
-        :class:`Column`
-
-        Examples
-        --------
-        >>> from pyspark.sql import Window
-        >>> window = Window.partitionBy("name").orderBy("age") \
-                .rowsBetween(Window.unboundedPreceding, Window.currentRow)
-        >>> from pyspark.sql.functions import rank, min
-        >>> from pyspark.sql.functions import desc
-        >>> df = spark.createDataFrame(
-        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
-        >>> df.withColumn("rank", rank().over(window)) \
-                .withColumn("min", min('age').over(window)).sort(desc("age")).show()
-        +---+-----+----+---+
-        |age| name|rank|min|
-        +---+-----+----+---+
-        |  5|  Bob|   1|  5|
-        |  2|Alice|   1|  2|
-        +---+-----+----+---+
-        """
         from pyspark.sql.connect.window import WindowSpec
 
         if not isinstance(window, WindowSpec):
@@ -338,6 +307,8 @@ class Column:
             )
 
         return Column(WindowExpression(windowFunction=self._expr, windowSpec=window))
+
+    over.__doc__ = PySparkColumn.over.__doc__
 
     def isin(self, *cols: Any) -> "Column":
         from pyspark.sql.connect.functions import lit
