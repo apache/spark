@@ -129,7 +129,16 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.storage.BlockManagerMessages#RegisterBlockManager.copy"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.storage.BlockManagerMessages#RegisterBlockManager.this"),
     ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.storage.BlockManagerMessages$RegisterBlockManager$"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.storage.BlockManagerMessages#RegisterBlockManager.apply")
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.storage.BlockManagerMessages#RegisterBlockManager.apply"),
+
+    // [SPARK-41709][CORE][SQL][UI] Explicitly define Seq as collection.Seq to avoid toSeq when create ui objects from protobuf objects for Scala 2.13
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.ApplicationEnvironmentInfo.resourceProfiles"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.ApplicationInfo.apply"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.ApplicationInfo.attempts"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.ApplicationInfo.copy"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.ApplicationInfo.copy$default$7"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.ApplicationInfo.this"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.ApplicationInfo.apply")
   )
 
   // Defulat exclude rules
