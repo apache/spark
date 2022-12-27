@@ -1903,6 +1903,37 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             sdf.select(SF.sha2(sdf.c, 256), SF.sha2("d", 512)).toPandas(),
         )
 
+    def test_call_udf(self):
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        query = """
+            SELECT a, b, c, BINARY(c) as d FROM VALUES
+            (-1.0, float("NAN"), 'x'), (-2.1, NULL, 'y'), (1, 2.1, 'z'), (0, 0.5, NULL)
+            AS tab(a, b, c)
+            """
+
+        # +----+----+----+----+
+        # |   a|   b|   c|   d|
+        # +----+----+----+----+
+        # |-1.0| NaN|   x|[78]|
+        # |-2.1|null|   y|[79]|
+        # | 1.0| 2.1|   z|[7A]|
+        # | 0.0| 0.5|null|null|
+        # +----+----+----+----+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        self.assert_eq(
+            cdf.select(
+                CF.call_udf("abs", cdf.a), CF.call_udf("xxhash64", "b", cdf.c, "d")
+            ).toPandas(),
+            sdf.select(
+                SF.call_udf("abs", sdf.a), SF.call_udf("xxhash64", "b", sdf.c, "d")
+            ).toPandas(),
+        )
+
 
 if __name__ == "__main__":
     import os
