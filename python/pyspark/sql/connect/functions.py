@@ -1641,11 +1641,11 @@ def encode(col: "ColumnOrName", charset: str) -> Column:
 encode.__doc__ = pysparkfuncs.encode.__doc__
 
 
-# TODO(SPARK-41473): Resolve the data type mismatch issue and enable the function
-# def format_number(col: "ColumnOrName", d: int) -> Column:
-#     return _invoke_function("format_number", _to_col(col), lit(d))
-#
-# format_number.__doc__ = pysparkfuncs.format_number.__doc__
+def format_number(col: "ColumnOrName", d: int) -> Column:
+    return _invoke_function("format_number", _to_col(col), lit(d))
+
+
+format_number.__doc__ = pysparkfuncs.format_number.__doc__
 
 
 def format_string(format: str, *cols: "ColumnOrName") -> Column:
