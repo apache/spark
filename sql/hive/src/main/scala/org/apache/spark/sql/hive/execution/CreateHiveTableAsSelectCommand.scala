@@ -35,6 +35,7 @@ trait CreateHiveTableAsSelectBase extends LeafRunnableCommand {
   val outputColumnNames: Seq[String]
   val mode: SaveMode
 
+  assert(query.resolved)
   protected val tableIdentifier = tableDesc.identifier
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
