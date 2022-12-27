@@ -964,7 +964,7 @@ package object dsl {
                   .setUpperBound(x(1))
                   .setWithReplacement(false)
                   .setSeed(seed)
-                  .setDeterministicOrder(true)
+//                  .setDeterministicOrder(true)
                   .build())
               .build()
           }
