@@ -1611,14 +1611,14 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
         cdf = self.connect.sql(query)
         sdf = self.spark.sql(query)
 
-        # TODO(SPARK-41473): Resolve the data type mismatch issue and enable the
-        # Disable the test because:
-        # Cannot resolve "format_number(a, 2)" due to data type mismatch:
-        # Parameter 2 requires the ("INT" or "STRING") type, however "2" has the type "BIGINT"
-        # self.assert_eq(
-        #     cdf.select(CF.format_number(cdf.a, 2)).toPandas(),
-        #     sdf.select(SF.format_number(sdf.a, 2)).toPandas(),
-        # )
+        self.assert_eq(
+            cdf.select(CF.format_number(cdf.a, 2)).toPandas(),
+            sdf.select(SF.format_number(sdf.a, 2)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.format_number("a", 5)).toPandas(),
+            sdf.select(SF.format_number("a", 5)).toPandas(),
+        )
 
         self.assert_eq(
             cdf.select(CF.concat_ws("-", cdf.b, "c")).toPandas(),
