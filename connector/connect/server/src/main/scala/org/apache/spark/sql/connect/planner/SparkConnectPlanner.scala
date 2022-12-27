@@ -89,6 +89,7 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Relation.RelTypeCase.SUMMARY => transformStatSummary(rel.getSummary)
       case proto.Relation.RelTypeCase.DESCRIBE => transformStatDescribe(rel.getDescribe)
       case proto.Relation.RelTypeCase.COV => transformStatCov(rel.getCov)
+      case proto.Relation.RelTypeCase.CORR => transformStatCorr(rel.getCorr)
       case proto.Relation.RelTypeCase.CROSSTAB =>
         transformStatCrosstab(rel.getCrosstab)
       case proto.Relation.RelTypeCase.TO_SCHEMA => transformToSchema(rel.getToSchema)
@@ -350,6 +351,16 @@ class SparkConnectPlanner(session: SparkSession) {
     LocalRelation.fromProduct(
       output = AttributeReference("cov", DoubleType, false)() :: Nil,
       data = Tuple1.apply(cov) :: Nil)
+  }
+
+  private def transformStatCorr(rel: proto.StatCorr): LogicalPlan = {
+    val corr = Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .stat
+      .corr(rel.getCol1, rel.getCol2, rel.getMethod)
+    LocalRelation.fromProduct(
+      output = AttributeReference("corr", DoubleType, true)() :: Nil,
+      data = Tuple1.apply(corr) :: Nil)
   }
 
   private def transformStatCrosstab(rel: proto.StatCrosstab): LogicalPlan = {
