@@ -389,3 +389,46 @@ class Column:
 
 
 Column.__doc__ = PySparkColumn.__doc__
+
+
+def _test() -> None:
+    import os
+    import sys
+    import doctest
+    from pyspark.sql import SparkSession as PySparkSession
+    from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    if should_test_connect:
+        import pyspark.sql.connect.column
+
+        globs = pyspark.sql.column.__dict__.copy()
+        # Works around to create a regular Spark session
+        sc = SparkContext("local[4]", "sql.connect.column tests", conf=SparkConf())
+        globs["_spark"] = PySparkSession(sc, options={"spark.app.name": "sql.connect.column tests"})
+
+        # Creates a remote Spark session.
+        globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
+
+        (failure_count, test_count) = doctest.testmod(
+            pyspark.sql.connect.column,
+            globs=globs,
+            optionflags=doctest.ELLIPSIS
+                        | doctest.NORMALIZE_WHITESPACE
+                        | doctest.IGNORE_EXCEPTION_DETAIL,
+        )
+
+        globs["spark"].stop()
+        globs["_spark"].stop()
+        if failure_count:
+            sys.exit(-1)
+    else:
+        print(
+            f"Skipping pyspark.sql.connect.column doctests: {connect_requirement_message}",
+            file=sys.stderr,
+        )
+
+
+if __name__ == "__main__":
+    _test()
