@@ -2258,3 +2258,10 @@ def sha2(col: "ColumnOrName", numBits: int) -> Column:
 
 
 sha2.__doc__ = pysparkfuncs.sha2.__doc__
+
+
+def call_udf(udfName: str, *cols: "ColumnOrName") -> Column:
+    return _invoke_function(udfName, *[_to_col(c) for c in cols])
+
+
+call_udf.__doc__ = pysparkfuncs.call_udf.__doc__
