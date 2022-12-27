@@ -346,7 +346,7 @@ class SparkConnectPlanner(session: SparkSession) {
       .stat
       .cov(rel.getCol1, rel.getCol2)
     LocalRelation.fromProduct(
-      output = AttributeReference("cov", DoubleType, true)() :: Nil,
+      output = AttributeReference("cov", DoubleType, false)() :: Nil,
       data = Tuple1.apply(cov) :: Nil)
   }
 
