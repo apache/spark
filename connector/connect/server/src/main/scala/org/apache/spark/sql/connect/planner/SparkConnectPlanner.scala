@@ -691,6 +691,46 @@ class SparkConnectPlanner(session: SparkSession) {
         }
         Some(NthValue(children(0), children(1), ignoreNulls))
 
+      case "window" if 2 <= fun.getArgumentsCount && fun.getArgumentsCount <= 4 =>
+        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
+        val timeCol = children.head
+        val args = children.tail.map {
+          case Literal(s, StringType) if s != null => s.toString
+          case other =>
+            throw InvalidPlanInput(
+              s"windowDuration,slideDuration,startTime should be literal strings, but got $other")
+        }
+        var windowDuration: String = null
+        var slideDuration: String = null
+        var startTime: String = null
+        if (args.length == 3) {
+          windowDuration = args(0)
+          slideDuration = args(1)
+          startTime = args(2)
+        } else if (args.length == 2) {
+          windowDuration = args(0)
+          slideDuration = args(1)
+          startTime = "0 second"
+        } else {
+          windowDuration = args(0)
+          slideDuration = args(0)
+          startTime = "0 second"
+        }
+        Some(
+          Alias(TimeWindow(timeCol, windowDuration, slideDuration, startTime), "window")(
+            nonInheritableMetadataKeys = Seq(Dataset.DATASET_ID_KEY, Dataset.COL_POS_KEY)))
+
+      case "session_window" if fun.getArgumentsCount == 2 =>
+        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
+        val timeCol = children.head
+        val sessionWindow = children.last match {
+          case Literal(s, StringType) if s != null => SessionWindow(timeCol, s.toString)
+          case other => SessionWindow(timeCol, other)
+        }
+        Some(
+          Alias(sessionWindow, "session_window")(nonInheritableMetadataKeys =
+            Seq(Dataset.DATASET_ID_KEY, Dataset.COL_POS_KEY)))
+
       case "bucket" if fun.getArgumentsCount == 2 =>
         val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
         (children.head, children.last) match {
