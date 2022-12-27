@@ -228,7 +228,7 @@ class SparkSession(object):
             Range(start=start, end=actual_end, step=step, num_partitions=numPartitions), self
         )
 
-    range.__doc__ = PySparkSession.__doc__
+    range.__doc__ = PySparkSession.range.__doc__
 
     @property
     def catalog(self) -> "Catalog":
@@ -238,7 +238,12 @@ class SparkSession(object):
             self._catalog = Catalog(self)
         return self._catalog
 
-    catalog.__doc__ = PySparkSession.__doc__
+    catalog.__doc__ = PySparkSession.catalog.__doc__
+
+    def stop(self) -> None:
+        self.client.close()
+
+    stop.__doc__ = PySparkSession.stop.__doc__
 
     # SparkConnect-specific API
     @property
