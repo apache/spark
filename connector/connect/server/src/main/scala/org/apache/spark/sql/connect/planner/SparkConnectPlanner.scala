@@ -752,6 +752,9 @@ class SparkConnectPlanner(session: SparkSession) {
       case "hours" if fun.getArgumentsCount == 1 =>
         Some(Hours(transformExpression(fun.getArguments(0))))
 
+      case "unwrap_udt" if fun.getArgumentsCount == 1 =>
+        Some(UnwrapUDT(transformExpression(fun.getArguments(0))))
+
       case _ => None
     }
   }

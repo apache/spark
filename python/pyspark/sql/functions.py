@@ -9939,6 +9939,8 @@ def unwrap_udt(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.4.0
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
     """
     return _invoke_function("unwrap_udt", _to_java_column(col))
 
