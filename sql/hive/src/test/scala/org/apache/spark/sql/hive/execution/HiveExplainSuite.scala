@@ -102,10 +102,7 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
   test("explain create table command") {
     checkKeywordsExist(sql("explain create table temp__b using hive as select * from src limit 2"),
-                   "== Physical Plan ==",
-                   "InsertIntoHiveTable",
-                   "Limit",
-                   "src")
+                   "== Physical Plan ==")
 
     checkKeywordsExist(
       sql("explain extended create table temp__b using hive as select * from src limit 2"),
@@ -113,10 +110,7 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       "== Analyzed Logical Plan ==",
       "== Optimized Logical Plan ==",
       "== Physical Plan ==",
-      "CreateHiveTableAsSelect",
-      "InsertIntoHiveTable",
-      "Limit",
-      "src")
+      "CreateHiveTableAsSelect")
 
     checkKeywordsExist(sql(
       """
@@ -131,10 +125,7 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       "== Analyzed Logical Plan ==",
       "== Optimized Logical Plan ==",
       "== Physical Plan ==",
-      "CreateHiveTableAsSelect",
-      "InsertIntoHiveTable",
-      "Limit",
-      "src")
+      "CreateHiveTableAsSelect")
   }
 
   test("explain output of physical plan should contain proper codegen stage ID",
