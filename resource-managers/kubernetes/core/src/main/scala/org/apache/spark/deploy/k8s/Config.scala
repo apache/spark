@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{ConfigBuilder, DYN_ALLOCATION_MAX_EXECUTORS, EXECUTOR_INSTANCES, PYSPARK_DRIVER_PYTHON, PYSPARK_PYTHON}
+import org.apache.spark.internal.config.{ConfigBuilder, PYSPARK_DRIVER_PYTHON, PYSPARK_PYTHON}
 
 private[spark] object Config extends Logging {
 
@@ -101,12 +101,11 @@ private[spark] object Config extends Logging {
       .createWithDefault(true)
 
   val KUBERNETES_DRIVER_WAIT_TO_REUSE_PVC =
-    ConfigBuilder("spark.kubernetes.driver.waitToReusePersistentVolumeClaims")
+    ConfigBuilder("spark.kubernetes.driver.waitToReusePersistentVolumeClaim")
       .doc("If true, driver pod counts the number of created on-demand persistent volume claims " +
-        s"and wait if the number is greater than or equal to the maximum which is " +
-        s"${EXECUTOR_INSTANCES.key} or ${DYN_ALLOCATION_MAX_EXECUTORS.key}. " +
-        s"This config requires both ${KUBERNETES_DRIVER_OWN_PVC.key}=true and " +
-        s"${KUBERNETES_DRIVER_REUSE_PVC.key}=true.")
+        "and wait if the number is greater than or equal to the total number of volumes which " +
+        "the Spark job is able to have. This config requires both " +
+        s"${KUBERNETES_DRIVER_OWN_PVC.key}=true and ${KUBERNETES_DRIVER_REUSE_PVC.key}=true.")
       .version("3.4.0")
       .booleanConf
       .createWithDefault(false)
@@ -174,7 +173,8 @@ private[spark] object Config extends Logging {
 
   object ExecutorRollPolicy extends Enumeration {
     val ID, ADD_TIME, TOTAL_GC_TIME, TOTAL_DURATION, AVERAGE_DURATION, FAILED_TASKS,
-      PEAK_JVM_ONHEAP_MEMORY, PEAK_JVM_OFFHEAP_MEMORY, OUTLIER, OUTLIER_NO_FALLBACK = Value
+      PEAK_JVM_ONHEAP_MEMORY, PEAK_JVM_OFFHEAP_MEMORY, TOTAL_SHUFFLE_WRITE, DISK_USED,
+      OUTLIER, OUTLIER_NO_FALLBACK = Value
   }
 
   val EXECUTOR_ROLL_POLICY =
@@ -193,6 +193,8 @@ private[spark] object Config extends Logging {
         "PEAK_JVM_ONHEAP_MEMORY policy chooses an executor with the biggest peak JVM on-heap " +
         "memory. PEAK_JVM_OFFHEAP_MEMORY policy chooses an executor with the biggest peak JVM " +
         "off-heap memory. " +
+        "TOTAL_SHUFFLE_WRITE policy chooses an executor with the biggest total shuffle write. " +
+        "DISK_USED policy chooses an executor with the biggest used disk size. " +
         "OUTLIER policy chooses an executor with outstanding statistics which is bigger than" +
         "at least two standard deviation from the mean in average task time, " +
         "total task time, total task GC time, and the number of failed tasks if exists. " +

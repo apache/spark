@@ -162,6 +162,14 @@ case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Un
   override def toString: String = s"'$name"
 
   override def sql: String = nameParts.map(quoteIfNeeded(_)).mkString(".")
+
+  /**
+   * Returns true if this matches the token. This requires the attribute to only have one part in
+   * its name and that matches the given token in a case insensitive way.
+   */
+  def equalsIgnoreCase(token: String): Boolean = {
+    nameParts.length == 1 && nameParts.head.equalsIgnoreCase(token)
+  }
 }
 
 object UnresolvedAttribute {
@@ -261,6 +269,11 @@ case class UnresolvedGenerator(name: FunctionIdentifier, children: Seq[Expressio
     newChildren: IndexedSeq[Expression]): UnresolvedGenerator = copy(children = newChildren)
 }
 
+/**
+ * Represents an unresolved function that is being invoked. The analyzer will resolve the function
+ * arguments first, then look up the function by name and arguments, and return an expression that
+ * can be evaluated to get the result of this function invocation.
+ */
 case class UnresolvedFunction(
     nameParts: Seq[String],
     arguments: Seq[Expression],

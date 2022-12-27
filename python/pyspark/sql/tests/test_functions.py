@@ -72,7 +72,7 @@ from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
 from pyspark.testing.utils import have_numpy
 
 
-class FunctionsTests(ReusedSQLTestCase):
+class FunctionsTestsMixin:
     def test_function_parity(self):
         # This test compares the available list of functions in pyspark.sql.functions with those
         # available in the Scala/Java DataFrame API in org.apache.spark.sql.functions.
@@ -130,8 +130,7 @@ class FunctionsTests(ReusedSQLTestCase):
             Row(a=1, intlist=[], mapfield={}),
             Row(a=1, intlist=None, mapfield=None),
         ]
-        rdd = self.sc.parallelize(d)
-        data = self.spark.createDataFrame(rdd)
+        data = self.spark.createDataFrame(d)
 
         result = data.select(explode(data.intlist).alias("a")).select("a").collect()
         self.assertEqual(result[0][0], 1)
@@ -194,22 +193,22 @@ class FunctionsTests(ReusedSQLTestCase):
     def test_corr(self):
         import math
 
-        df = self.sc.parallelize([Row(a=i, b=math.sqrt(i)) for i in range(10)]).toDF()
+        df = self.spark.createDataFrame([Row(a=i, b=math.sqrt(i)) for i in range(10)])
         corr = df.stat.corr("a", "b")
         self.assertTrue(abs(corr - 0.95734012) < 1e-6)
 
     def test_sampleby(self):
-        df = self.sc.parallelize([Row(a=i, b=(i % 3)) for i in range(100)]).toDF()
+        df = self.spark.createDataFrame([Row(a=i, b=(i % 3)) for i in range(100)])
         sampled = df.stat.sampleBy("b", fractions={0: 0.5, 1: 0.5}, seed=0)
         self.assertTrue(sampled.count() == 35)
 
     def test_cov(self):
-        df = self.sc.parallelize([Row(a=i, b=2 * i) for i in range(10)]).toDF()
+        df = self.spark.createDataFrame([Row(a=i, b=2 * i) for i in range(10)])
         cov = df.stat.cov("a", "b")
         self.assertTrue(abs(cov - 55.0 / 3) < 1e-6)
 
     def test_crosstab(self):
-        df = self.sc.parallelize([Row(a=i % 3, b=i % 2) for i in range(1, 7)]).toDF()
+        df = self.spark.createDataFrame([Row(a=i % 3, b=i % 2) for i in range(1, 7)])
         ct = df.stat.crosstab("a", "b").collect()
         ct = sorted(ct, key=lambda x: x[0])
         for i, row in enumerate(ct):
@@ -218,7 +217,7 @@ class FunctionsTests(ReusedSQLTestCase):
             self.assertTrue(row[2], 1)
 
     def test_math_functions(self):
-        df = self.sc.parallelize([Row(a=i, b=2 * i) for i in range(10)]).toDF()
+        df = self.spark.createDataFrame([Row(a=i, b=2 * i) for i in range(10)])
         from pyspark.sql import functions
 
         SQLTestUtils.assert_close(
@@ -361,9 +360,9 @@ class FunctionsTests(ReusedSQLTestCase):
         self.assertEqual([Row(b=True), Row(b=False)], actual)
 
     def test_between_function(self):
-        df = self.sc.parallelize(
+        df = self.spark.createDataFrame(
             [Row(a=1, b=2, c=3), Row(a=2, b=1, c=3), Row(a=4, b=1, c=4)]
-        ).toDF()
+        )
         self.assertEqual(
             [Row(a=2, b=1, c=3), Row(a=4, b=1, c=4)], df.filter(df.a.between(df.b, df.c)).collect()
         )
@@ -478,7 +477,7 @@ class FunctionsTests(ReusedSQLTestCase):
         self.assertEqual([Row(a=None, b=1, c=None, d=98)], df3.collect())
 
     def test_approxQuantile(self):
-        df = self.sc.parallelize([Row(a=i, b=i + 10) for i in range(10)]).toDF()
+        df = self.spark.createDataFrame([Row(a=i, b=i + 10) for i in range(10)])
         for f in ["a", "a"]:
             aq = df.stat.approxQuantile(f, [0.1, 0.5, 0.9], 0.1)
             self.assertTrue(isinstance(aq, list))
@@ -1149,6 +1148,10 @@ class FunctionsTests(ReusedSQLTestCase):
         self.assertEqual(expected, dict(actual["items"]))
         self.assertEqual({**expected, **expected2}, dict(actual["merged"]))
         self.assertEqual(expected, actual["from_items"])
+
+
+class FunctionsTests(ReusedSQLTestCase, FunctionsTestsMixin):
+    pass
 
 
 if __name__ == "__main__":

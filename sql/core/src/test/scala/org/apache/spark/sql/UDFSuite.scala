@@ -105,7 +105,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.selectExpr("substr('abcd', 2, 3, 4)")
       },
-      errorClass = "WRONG_NUM_ARGS",
+      errorClass = "WRONG_NUM_ARGS.WITH_SUGGESTION",
       parameters = Map(
         "functionName" -> toSQLId("substr"),
         "expectedNum" -> "[2, 3]",
@@ -125,7 +125,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
         spark.udf.register("foo", (_: String).length)
         df.selectExpr("foo(2, 3, 4)")
       },
-      errorClass = "WRONG_NUM_ARGS",
+      errorClass = "WRONG_NUM_ARGS.WITH_SUGGESTION",
       parameters = Map(
         "functionName" -> toSQLId("foo"),
         "expectedNum" -> "1",
@@ -139,12 +139,19 @@ class UDFSuite extends QueryTest with SharedSparkSession {
   }
 
   test("error reporting for undefined functions") {
-    val df = spark.emptyDataFrame
-    val e = intercept[AnalysisException] {
-      df.selectExpr("a_function_that_does_not_exist()")
-    }
-    assert(e.getMessage.contains("Undefined function"))
-    assert(e.getMessage.contains("a_function_that_does_not_exist"))
+    val sqlText = "a_function_that_does_not_exist()"
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.emptyDataFrame.selectExpr(sqlText)
+      },
+      errorClass = "UNRESOLVED_ROUTINE",
+      parameters = Map(
+        "routineName" -> "`a_function_that_does_not_exist`",
+        "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
+      context = ExpectedContext(
+        fragment = sqlText,
+        start = 0,
+        stop = 31))
   }
 
   test("Simple UDF") {
@@ -635,13 +642,6 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       }, IntegerType).asNondeterministic()
 
     assert(spark.range(2).select(nonDeterministicJavaUDF()).distinct().count() == 2)
-  }
-
-  test("SPARK-28521 error message for CAST(parameter types contains DataType)") {
-    val e = intercept[AnalysisException] {
-      spark.sql("SELECT CAST(1)")
-    }
-    assert(e.getMessage.contains("Invalid arguments for function cast"))
   }
 
   test("only one case class parameter") {

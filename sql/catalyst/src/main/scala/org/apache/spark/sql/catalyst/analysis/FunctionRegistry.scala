@@ -227,7 +227,7 @@ trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging
   override def lookupFunction(name: FunctionIdentifier, children: Seq[Expression]): T = {
     val func = synchronized {
       functionBuilders.get(normalizeFuncName(name)).map(_._2).getOrElse {
-        throw QueryCompilationErrors.functionUndefinedError(name)
+        throw QueryCompilationErrors.unresolvedRoutineError(name, Seq("system.builtin"))
       }
     }
     func(children)
@@ -668,6 +668,7 @@ object FunctionRegistry {
     expression[ArraySort]("array_sort"),
     expression[ArrayExcept]("array_except"),
     expression[ArrayUnion]("array_union"),
+    expression[ArrayCompact]("array_compact"),
     expression[CreateMap]("map"),
     expression[CreateNamedStruct]("named_struct"),
     expression[ElementAt]("element_at"),
@@ -801,6 +802,9 @@ object FunctionRegistry {
     castAlias("timestamp", TimestampType),
     castAlias("binary", BinaryType),
     castAlias("string", StringType),
+
+    // mask functions
+    expression[Mask]("mask"),
 
     // csv
     expression[CsvToStructs]("from_csv"),
@@ -954,17 +958,7 @@ object TableFunctionRegistry {
   private def logicalPlan[T <: LogicalPlan : ClassTag](name: String)
       : (String, (ExpressionInfo, TableFunctionBuilder)) = {
     val (info, builder) = FunctionRegistryBase.build[T](name, since = None)
-    val newBuilder = (expressions: Seq[Expression]) => {
-      try {
-        builder(expressions)
-      } catch {
-        case e: AnalysisException =>
-          val argTypes = expressions.map(_.dataType.typeName).mkString(", ")
-          throw QueryCompilationErrors.cannotApplyTableValuedFunctionError(
-            name, argTypes, info.getUsage, e.getMessage)
-      }
-    }
-    (name, (info, newBuilder))
+    (name, (info, (expressions: Seq[Expression]) => builder(expressions)))
   }
 
   val logicalPlans: Map[String, (ExpressionInfo, TableFunctionBuilder)] = Map(

@@ -785,7 +785,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def taskFailedWhileWritingRowsError(cause: Throwable): Throwable = {
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_2054",
-      messageParameters = Map.empty,
+      messageParameters = Map("message" -> cause.getMessage),
       cause = cause)
   }
 

@@ -384,7 +384,7 @@ def run_python_tests(test_modules, parallelism, with_coverage=False):
         # Coverage makes the PySpark tests flaky due to heavy parallelism.
         # When we run PySpark tests with coverage, it uses 4 for now as
         # workaround.
-        parallelism = 4
+        parallelism = 1
         script = "run-tests-with-coverage"
     else:
         script = "run-tests"

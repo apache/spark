@@ -36,6 +36,7 @@ See also :class:`SparkSession`.
     SparkSession.builder.enableHiveSupport
     SparkSession.builder.getOrCreate
     SparkSession.builder.master
+    SparkSession.builder.remote
     SparkSession.catalog
     SparkSession.conf
     SparkSession.createDataFrame
