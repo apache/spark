@@ -3032,10 +3032,12 @@ abstract class JsonSuite
             checkAnswer(readback.filter($"AAA" === 0 && $"bbb" === 1), Seq(Row(0, 1)))
             checkAnswer(readback.filter($"AAA" === 2 && $"bbb" === 3), Seq())
             // Schema inferring
-            val errorMsg = intercept[AnalysisException] {
-              spark.read.json(path.getCanonicalPath).collect()
-            }.getMessage
-            assert(errorMsg.contains("Found duplicate column(s) in the data schema"))
+            checkError(
+              exception = intercept[AnalysisException] {
+                spark.read.json(path.getCanonicalPath).collect()
+              },
+              errorClass = "COLUMN_ALREADY_EXISTS",
+              parameters = Map("columnName" -> "`aaa`"))
           }
           withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
             val readback = spark.read.schema("aaa integer, BBB integer")
@@ -3379,6 +3381,75 @@ abstract class JsonSuite
         }
       }
     }
+  }
+
+  test("SPARK-40646: parse subsequent fields if the first JSON field does not match schema") {
+    // In this example, the first record has "a.y" as boolean but it needs to be an object.
+    // We should parse "a" as null but continue parsing "b" correctly as it is valid.
+    withTempPath { path =>
+      Seq(
+        """{"a": {"x": 1, "y": true}, "b": {"x": 1}}""",
+        """{"a": {"x": 2}, "b": {"x": 2}}"""").toDF()
+        .repartition(1)
+        .write.text(path.getAbsolutePath)
+
+      for (enablePartialResults <- Seq(true, false)) {
+        withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> s"$enablePartialResults") {
+          val df = spark.read
+            .schema("a struct<x: int, y: struct<x: int>>, b struct<x: int>")
+            .json(path.getAbsolutePath)
+
+          if (enablePartialResults) {
+            checkAnswer(
+              df,
+              Seq(Row(null, Row(1)), Row(Row(2, null), Row(2)))
+            )
+          } else {
+            checkAnswer(
+              df,
+              Seq(Row(null, null), Row(Row(2, null), Row(2)))
+            )
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-40667: validate JSON Options") {
+    assert(JSONOptions.getAllOptions.size == 28)
+    // Please add validation on any new Json options here
+    assert(JSONOptions.isValidOption("samplingRatio"))
+    assert(JSONOptions.isValidOption("primitivesAsString"))
+    assert(JSONOptions.isValidOption("prefersDecimal"))
+    assert(JSONOptions.isValidOption("allowComments"))
+    assert(JSONOptions.isValidOption("allowUnquotedFieldNames"))
+    assert(JSONOptions.isValidOption("allowSingleQuotes"))
+    assert(JSONOptions.isValidOption("allowNumericLeadingZeros"))
+    assert(JSONOptions.isValidOption("allowNonNumericNumbers"))
+    assert(JSONOptions.isValidOption("allowBackslashEscapingAnyCharacter"))
+    assert(JSONOptions.isValidOption("allowUnquotedControlChars"))
+    assert(JSONOptions.isValidOption("compression"))
+    assert(JSONOptions.isValidOption("mode"))
+    assert(JSONOptions.isValidOption("dropFieldIfAllNull"))
+    assert(JSONOptions.isValidOption("ignoreNullFields"))
+    assert(JSONOptions.isValidOption("locale"))
+    assert(JSONOptions.isValidOption("dateFormat"))
+    assert(JSONOptions.isValidOption("timestampFormat"))
+    assert(JSONOptions.isValidOption("timestampNTZFormat"))
+    assert(JSONOptions.isValidOption("enableDateTimeParsingFallback"))
+    assert(JSONOptions.isValidOption("multiLine"))
+    assert(JSONOptions.isValidOption("lineSep"))
+    assert(JSONOptions.isValidOption("pretty"))
+    assert(JSONOptions.isValidOption("inferTimestamp"))
+    assert(JSONOptions.isValidOption("columnNameOfCorruptRecord"))
+    assert(JSONOptions.isValidOption("timeZone"))
+    assert(JSONOptions.isValidOption("writeNonAsciiCharacterAsCodePoint"))
+    assert(JSONOptions.isValidOption("encoding"))
+    assert(JSONOptions.isValidOption("charset"))
+    // Please add validation on any new Json options with alternative here
+    assert(JSONOptions.getAlternativeOption("encoding").contains("charset"))
+    assert(JSONOptions.getAlternativeOption("charset").contains("encoding"))
+    assert(JSONOptions.getAlternativeOption("dateFormat").isEmpty)
   }
 }
 

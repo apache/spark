@@ -145,6 +145,12 @@ case class CreateDataSourceTableAsSelectCommand(
     outputColumnNames: Seq[String])
   extends V1WriteCommand {
 
+  override def fileFormatProvider: Boolean = {
+    table.provider.forall { provider =>
+      classOf[FileFormat].isAssignableFrom(DataSource.providingClass(provider, conf))
+    }
+  }
+
   override lazy val partitionColumns: Seq[Attribute] = {
     val unresolvedPartitionColumns = table.partitionColumnNames.map(UnresolvedAttribute.quoted)
     DataSource.resolvePartitionColumns(
@@ -173,8 +179,7 @@ case class CreateDataSourceTableAsSelectCommand(
         s"Expect the table $tableName has been dropped when the save mode is Overwrite")
 
       if (mode == SaveMode.ErrorIfExists) {
-        throw QueryCompilationErrors.tableAlreadyExistsError(
-          tableName, " You need to drop it first.")
+        throw QueryCompilationErrors.tableAlreadyExistsError(tableName)
       }
       if (mode == SaveMode.Ignore) {
         // Since the table already exists and the save mode is Ignore, we will just return.

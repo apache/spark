@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdenti
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, RecoverPartitions, ShowFunctions, ShowNamespaces, ShowTables, SubqueryAlias, TableSpec, View}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, LogicalPlan, RecoverPartitions, ShowFunctions, ShowNamespaces, ShowTables, TableSpec, View}
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, FunctionCatalog, Identifier, SupportsNamespaces, Table => V2Table, TableCatalog, V1Table}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{CatalogHelper, MultipartIdentifierHelper, TransformHelper}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -246,7 +246,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   private def makeFunction(ident: Seq[String]): Function = {
-    val plan = UnresolvedFunc(ident, "Catalog.makeFunction", false, None)
+    val plan = UnresolvedFunctionName(ident, "Catalog.makeFunction", false, None)
     sparkSession.sessionState.executePlan(plan).analyzed match {
       case f: ResolvedPersistentFunc =>
         val className = f.func match {
@@ -274,7 +274,10 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
           className = className,
           isTemporary = true)
 
-      case _ => throw QueryCompilationErrors.noSuchFunctionError(ident, plan)
+      case _ =>
+        val catalogPath = (currentCatalog +:
+          sparkSession.sessionState.catalogManager.currentNamespace).mkString(".")
+        throw QueryCompilationErrors.unresolvedRoutineError(ident, Seq(catalogPath), plan.origin)
     }
   }
 
@@ -801,29 +804,24 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
     // Temporary and global temporary views are not supposed to be put into the relation cache
     // since they are tracked separately. V1 and V2 plans are cache invalidated accordingly.
-    relation match {
-      case SubqueryAlias(_, v: View) if !v.isTempView =>
-        sessionCatalog.invalidateCachedTable(v.desc.identifier)
-      case SubqueryAlias(_, r: LogicalRelation) =>
+    def invalidateCache(plan: LogicalPlan): Unit = plan match {
+      case v: View =>
+        if (!v.isTempView) sessionCatalog.invalidateCachedTable(v.desc.identifier)
+      case r: LogicalRelation =>
         sessionCatalog.invalidateCachedTable(r.catalogTable.get.identifier)
-      case SubqueryAlias(_, h: HiveTableRelation) =>
+      case h: HiveTableRelation =>
         sessionCatalog.invalidateCachedTable(h.tableMeta.identifier)
-      case SubqueryAlias(_, r: DataSourceV2Relation) =>
+      case r: DataSourceV2Relation =>
         r.catalog.get.asTableCatalog.invalidateTable(r.identifier.get)
-      case SubqueryAlias(_, v: View) if v.isTempView =>
-      case _ =>
-        throw QueryCompilationErrors.unexpectedTypeOfRelationError(relation, tableName)
+      case _ => plan.children.foreach(invalidateCache)
     }
+    invalidateCache(relation)
+
     // Re-caches the logical plan of the relation.
     // Note this is a no-op for the relation itself if it's not cached, but will clear all
     // caches referencing this relation. If this relation is cached as an InMemoryRelation,
     // this will clear the relation cache and caches of all its dependents.
-    relation match {
-      case SubqueryAlias(_, relationPlan) =>
-        sparkSession.sharedState.cacheManager.recacheByPlan(sparkSession, relationPlan)
-      case _ =>
-        throw QueryCompilationErrors.unexpectedTypeOfRelationError(relation, tableName)
-    }
+    sparkSession.sharedState.cacheManager.recacheByPlan(sparkSession, relation)
   }
 
   /**

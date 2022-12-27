@@ -67,10 +67,6 @@
       <artifactId>netty-transport-native-kqueue</artifactId>
       <classifier>osx-x86_64</classifier>
     </dependency>
-    <dependency>
-      <groupId>io.netty</groupId>
-      <artifactId>netty-tcnative-classes</artifactId>
-    </dependency>
     <!-- Netty End -->
 
     <dependency>

@@ -62,7 +62,8 @@ private[v2] trait V2JDBCNamespaceTest extends SharedSparkSession with DockerInte
         Map.empty[String, String]
       }
       catalog.createNamespace(Array("foo"), commentMap.asJava)
-      assert(catalog.listNamespaces() === listNamespaces(Array("foo")))
+      assert(catalog.listNamespaces().map(_.toSet).toSet ===
+        listNamespaces(Array("foo")).map(_.toSet).toSet)
       assert(catalog.listNamespaces(Array("foo")) === Array())
       assert(catalog.namespaceExists(Array("foo")) === true)
 
@@ -87,10 +88,12 @@ private[v2] trait V2JDBCNamespaceTest extends SharedSparkSession with DockerInte
       }
       assert(catalog.namespaceExists(Array("foo")) === false)
       assert(catalog.listNamespaces() === builtinNamespaces)
-      val msg = intercept[AnalysisException] {
+      val e = intercept[AnalysisException] {
         catalog.listNamespaces(Array("foo"))
-      }.getMessage
-      assert(msg.contains("Namespace 'foo' not found"))
+      }
+      checkError(e,
+        errorClass = "SCHEMA_NOT_FOUND",
+        parameters = Map("schemaName" -> "`foo`"))
     }
   }
 

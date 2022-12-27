@@ -183,7 +183,7 @@ class StreamingQuery:
         >>> sdf = spark.readStream.format("rate").load()
         >>> sq = sdf.writeStream.format('memory').queryName('query_awaitTermination').start()
 
-        Return wheter the query has terminated or not within 5 seconds
+        Return whether the query has terminated or not within 5 seconds
 
         >>> sq.awaitTermination(5)
         False
@@ -517,7 +517,7 @@ class StreamingQueryManager:
         >>> sdf = spark.readStream.format("rate").load()
         >>> sq = sdf.writeStream.format('memory').queryName('this_query').start()
 
-        Return wheter any of the query on the associated SparkSession
+        Return whether any of the query on the associated SparkSession
         has terminated or not within 5 seconds
 
         >>> spark.streams.awaitAnyTermination(5)

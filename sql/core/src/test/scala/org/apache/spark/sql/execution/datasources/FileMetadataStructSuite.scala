@@ -223,10 +223,12 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
     )
 
     // select metadata will fail when analysis
-    val ex = intercept[AnalysisException] {
-      df.select("name", METADATA_FILE_NAME).collect()
-    }
-    assert(ex.getMessage.contains("No such struct field file_name in id, university"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select("name", METADATA_FILE_NAME).collect()
+      },
+      errorClass = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`file_name`", "fields" -> "`id`, `university`"))
   }
 
   metadataColumnsTest("select only metadata", schema) { (df, f0, f1) =>
@@ -275,8 +277,8 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
     val expectedSchema = new StructType()
       .add(StructField("myName", StringType))
       .add(StructField("myAge", IntegerType))
-      .add(StructField("myFileName", StringType))
-      .add(StructField("myFileSize", LongType))
+      .add(StructField("myFileName", StringType, nullable = false))
+      .add(StructField("myFileSize", LongType, nullable = false))
 
     assert(aliasDF.schema.fields.toSet == expectedSchema.fields.toSet)
 
@@ -379,15 +381,19 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
           )
 
           // select metadata will fail when analysis - metadata cannot overwrite user data
-          val ex = intercept[AnalysisException] {
-            df.select("name", "_metadata.file_name").collect()
-          }
-          assert(ex.getMessage.contains("No such struct field file_name in id, university"))
+          checkError(
+            exception = intercept[AnalysisException] {
+              df.select("name", "_metadata.file_name").collect()
+            },
+            errorClass = "FIELD_NOT_FOUND",
+            parameters = Map("fieldName" -> "`file_name`", "fields" -> "`id`, `university`"))
 
-          val ex1 = intercept[AnalysisException] {
-            df.select("name", "_METADATA.file_NAME").collect()
-          }
-          assert(ex1.getMessage.contains("No such struct field file_NAME in id, university"))
+          checkError(
+            exception = intercept[AnalysisException] {
+              df.select("name", "_METADATA.file_NAME").collect()
+            },
+            errorClass = "FIELD_NOT_FOUND",
+            parameters = Map("fieldName" -> "`file_NAME`", "fields" -> "`id`, `university`"))
         }
       }
     }
@@ -594,7 +600,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       val df2 = spark.read.format("json")
         .load(dir.getCanonicalPath + "/target/new-streaming-data-join")
       // Verify self-join results
-      assert(streamQuery2.lastProgress.numInputRows == 4L)
+      assert(streamQuery2.lastProgress.numInputRows == 2L)
       assert(df2.count() == 2L)
       assert(df2.select("*").columns.toSet == Set("name", "age", "info", "_metadata"))
     }
@@ -621,5 +627,54 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
         }
       }
     }
+  }
+
+  Seq("parquet", "orc").foreach { format =>
+    test(s"SPARK-40918: Output cols around WSCG.isTooManyFields limit in $format") {
+      // The issue was that ParquetFileFormat would not count the _metadata columns towards
+      // the WholeStageCodegenExec.isTooManyFields limit, while FileSourceScanExec would,
+      // resulting in Parquet reader returning columnar output, while scan expected row.
+      withTempPath { dir =>
+        sql(s"SELECT ${(1 to 100).map(i => s"id+$i as c$i").mkString(", ")} FROM RANGE(100)")
+          .write.format(format).save(dir.getAbsolutePath)
+        (98 to 102).foreach { wscgCols =>
+          withSQLConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> wscgCols.toString) {
+            // Would fail with
+            // java.lang.ClassCastException: org.apache.spark.sql.vectorized.ColumnarBatch
+            // cannot be cast to org.apache.spark.sql.catalyst.InternalRow
+            sql(
+              s"""
+                 |SELECT
+                 |  ${(1 to 100).map(i => s"sum(c$i)").mkString(", ")},
+                 |  max(_metadata.file_path)
+                 |FROM $format.`$dir`""".stripMargin
+            ).collect()
+          }
+        }
+      }
+    }
+  }
+
+  metadataColumnsTest("SPARK-41151: consistent _metadata nullability " +
+    "between analyzed and executed", schema) { (df, _, _) =>
+    val queryExecution = df.select("_metadata").queryExecution
+    val analyzedSchema = queryExecution.analyzed.schema
+    val executedSchema = queryExecution.executedPlan.schema
+    // For stateful streaming, we store the schema in the state store
+    // and check consistency across batches.
+    // To avoid state schema compatibility mismatched,
+    // we should keep nullability consistent for _metadata struct
+    assert(analyzedSchema.fields.head.name == "_metadata")
+    assert(executedSchema.fields.head.name == "_metadata")
+
+    // Metadata struct is not nullable
+    assert(!analyzedSchema.fields.head.nullable)
+    assert(analyzedSchema.fields.head.nullable == executedSchema.fields.head.nullable)
+
+    // All sub-fields all not nullable
+    val analyzedStruct = analyzedSchema.fields.head.dataType.asInstanceOf[StructType]
+    val executedStruct = executedSchema.fields.head.dataType.asInstanceOf[StructType]
+    assert(analyzedStruct.fields.forall(!_.nullable))
+    assert(executedStruct.fields.forall(!_.nullable))
   }
 }

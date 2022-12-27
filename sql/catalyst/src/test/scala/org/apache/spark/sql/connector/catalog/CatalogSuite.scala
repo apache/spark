@@ -26,6 +26,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions
 import org.apache.spark.sql.internal.SQLConf
@@ -48,7 +49,12 @@ class CatalogSuite extends SparkFunSuite {
 
   private val testNs = Array("`", ".")
   private val testIdent = Identifier.of(testNs, "test_table")
+  private val testIdentQuoted = testIdent.asMultipartIdentifier
+    .map(part => quoteIdentifier(part)).mkString(".")
+
   private val testIdentNew = Identifier.of(testNs, "test_table_new")
+  private val testIdentNewQuoted = testIdentNew.asMultipartIdentifier
+    .map(part => quoteIdentifier(part)).mkString(".")
 
   test("Catalogs can load the catalog") {
     val catalog = newCatalog()
@@ -133,8 +139,7 @@ class CatalogSuite extends SparkFunSuite {
       catalog.createTable(testIdent, schema, Array.empty, emptyProps)
     }
 
-    assert(exc.message.contains(testIdent.quoted))
-    assert(exc.message.contains("already exists"))
+    checkErrorTableAlreadyExists(exc, testIdentQuoted)
 
     assert(catalog.tableExists(testIdent))
   }
@@ -171,8 +176,7 @@ class CatalogSuite extends SparkFunSuite {
       catalog.loadTable(testIdent)
     }
 
-    assert(exc.message.contains(testIdent.quoted))
-    assert(exc.message.contains("not found"))
+    checkErrorTableNotFound(exc, testIdentQuoted)
   }
 
   test("invalidateTable") {
@@ -623,8 +627,7 @@ class CatalogSuite extends SparkFunSuite {
       catalog.alterTable(testIdent, TableChange.setProperty("prop", "val"))
     }
 
-    assert(exc.message.contains(testIdent.quoted))
-    assert(exc.message.contains("not found"))
+    checkErrorTableNotFound(exc, testIdentQuoted)
   }
 
   test("dropTable") {
@@ -680,8 +683,7 @@ class CatalogSuite extends SparkFunSuite {
       catalog.renameTable(testIdent, testIdentNew)
     }
 
-    assert(exc.message.contains(testIdent.quoted))
-    assert(exc.message.contains("not found"))
+    checkErrorTableNotFound(exc, testIdentQuoted)
   }
 
   test("renameTable: fail if new table name already exists") {
@@ -700,8 +702,7 @@ class CatalogSuite extends SparkFunSuite {
       catalog.renameTable(testIdent, testIdentNew)
     }
 
-    assert(exc.message.contains(testIdentNew.quoted))
-    assert(exc.message.contains("already exists"))
+    checkErrorTableAlreadyExists(exc, testIdentNewQuoted)
   }
 
   test("listNamespaces: list namespaces from metadata") {

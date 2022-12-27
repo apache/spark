@@ -19,6 +19,8 @@ package org.apache.spark
 
 import scala.collection.JavaConverters._
 
+import com.fasterxml.jackson.core.util.MinimalPrettyPrinter
+
 import org.apache.spark.util.JsonProtocol.toJsonString
 import org.apache.spark.util.Utils
 
@@ -117,6 +119,18 @@ private[spark] object SparkThrowableHelper {
           }
           g.writeEndObject()
         }
+    }
+  }
+
+  def getMessage(throwable: Throwable): String = {
+    toJsonString { generator =>
+      val g = generator.setPrettyPrinter(new MinimalPrettyPrinter)
+      g.writeStartObject()
+      g.writeStringField("errorClass", throwable.getClass.getCanonicalName)
+      g.writeObjectFieldStart("messageParameters")
+      g.writeStringField("message", throwable.getMessage)
+      g.writeEndObject()
+      g.writeEndObject()
     }
   }
 }

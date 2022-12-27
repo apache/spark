@@ -21,6 +21,7 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.attribute.PosixFilePermission
 
+import scala.collection
 import scala.concurrent.Promise
 import scala.concurrent.duration.Duration
 
@@ -201,7 +202,7 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
           .getOrElse(fail("No host local dir manager"))
 
         val promises = mapOutputs.map { case (bmid, blocks) =>
-          val promise = Promise[Seq[File]]()
+          val promise = Promise[collection.Seq[File]]()
           dirManager.getHostLocalDirs(bmid.host, bmid.port, Seq(bmid.executorId).toArray) {
             case scala.util.Success(res) => res.foreach { case (eid, dirs) =>
               val files = blocks.flatMap { case (blockId, _, _) =>

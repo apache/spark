@@ -227,7 +227,7 @@ class QueryCompilationErrorsSuite
       parameters = Map[String, String]())
   }
 
-  test("NO_UDF_INTERFACE_ERROR: java udf class does not implement any udf interface") {
+  test("NO_UDF_INTERFACE: java udf class does not implement any udf interface") {
     val className = "org.apache.spark.sql.errors.MyCastToString"
     val e = intercept[AnalysisException](
       spark.udf.registerJava(
@@ -237,7 +237,7 @@ class QueryCompilationErrorsSuite
     )
     checkError(
       exception = e,
-      errorClass = "NO_UDF_INTERFACE_ERROR",
+      errorClass = "NO_UDF_INTERFACE",
       parameters = Map("className" -> className))
   }
 
@@ -412,6 +412,22 @@ class QueryCompilationErrorsSuite
       parameters = Map("objectName" -> "`a`",
         "proposal" ->
           "`__auto_generated_subquery_name`.`m`, `__auto_generated_subquery_name`.`aa`"),
+      context = ExpectedContext(
+        fragment = "a",
+        start = 9,
+        stop = 9)
+    )
+  }
+
+  test("UNRESOLVED_MAP_KEY: proposal columns containing quoted dots") {
+    val query = "select m[a] from (select map('a', 'b') as m, 'aa' as `a.a`)"
+    checkError(
+      exception = intercept[AnalysisException] {sql(query)},
+      errorClass = "UNRESOLVED_MAP_KEY.WITH_SUGGESTION",
+      sqlState = None,
+      parameters = Map("objectName" -> "`a`",
+        "proposal" ->
+          "`__auto_generated_subquery_name`.`m`, `__auto_generated_subquery_name`.`a.a`"),
       context = ExpectedContext(
         fragment = "a",
         start = 9,
@@ -650,6 +666,19 @@ class QueryCompilationErrorsSuite
       },
       errorClass = "DATATYPE_MISMATCH.INVALID_JSON_SCHEMA",
       parameters = Map("schema" -> "\"INT\"", "sqlExpr" -> "\"from_json(a)\""))
+  }
+
+  test("WRONG_NUM_ARGS.WITHOUT_SUGGESTION: wrong args of CAST(parameter types contains DataType)") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT CAST(1)")
+      },
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "functionName" -> "`cast`"
+      ),
+      context = ExpectedContext("", "", 7, 13, "CAST(1)")
+    )
   }
 }
 

@@ -65,7 +65,12 @@ trait V1WriteCommandSuiteBase extends SQLTestUtils {
       override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
         qe.optimizedPlan match {
           case w: V1WriteCommand =>
-            optimizedPlan = w.query
+            if (hasLogicalSort) {
+              assert(w.query.isInstanceOf[WriteFiles])
+              optimizedPlan = w.query.asInstanceOf[WriteFiles].child
+            } else {
+              optimizedPlan = w.query
+            }
           case _ =>
         }
       }

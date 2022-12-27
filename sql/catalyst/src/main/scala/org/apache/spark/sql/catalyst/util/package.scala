@@ -130,6 +130,10 @@ package object util extends Logging {
     "`" + name.replace("`", "``") + "`"
   }
 
+  def quoteNameParts(name: Seq[String]): String = {
+    name.map(part => quoteIdentifier(part)).mkString(".")
+  }
+
   def quoteIfNeeded(part: String): String = {
     if (part.matches("[a-zA-Z0-9_]+") && !part.matches("\\d+")) {
       part
@@ -206,6 +210,13 @@ package object util extends Logging {
         .withMetadata(attr.metadata)
         .putBoolean(METADATA_COL_ATTR_KEY, true)
         .putBoolean(QUALIFIED_ACCESS_ONLY, true)
+        .build()
+    )
+
+    def markAsAllowAnyAccess(): Attribute = attr.withMetadata(
+      new MetadataBuilder()
+        .withMetadata(attr.metadata)
+        .remove(QUALIFIED_ACCESS_ONLY)
         .build()
     )
   }

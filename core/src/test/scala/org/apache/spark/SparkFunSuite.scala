@@ -32,7 +32,7 @@ import org.apache.logging.log4j.core.{LogEvent, Logger, LoggerContext}
 import org.apache.logging.log4j.core.appender.AbstractAppender
 import org.apache.logging.log4j.core.config.Property
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, BeforeAndAfterEach, Failed, Outcome}
-import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 import org.apache.spark.deploy.LocalSparkCluster
 import org.apache.spark.internal.Logging
@@ -64,7 +64,7 @@ import org.apache.spark.util.{AccumulatorContext, Utils}
  * }
  */
 abstract class SparkFunSuite
-  extends AnyFunSuite
+  extends AnyFunSuite // scalastyle:ignore funsuite
   with BeforeAndAfterAll
   with BeforeAndAfterEach
   with ThreadAudit
@@ -319,11 +319,16 @@ abstract class SparkFunSuite
     val actualQueryContext = exception.getQueryContext()
     assert(actualQueryContext.length === queryContext.length, "Invalid length of the query context")
     actualQueryContext.zip(queryContext).foreach { case (actual, expected) =>
-      assert(actual.objectType() === expected.objectType(), "Invalid objectType of a query context")
-      assert(actual.objectName() === expected.objectName(), "Invalid objectName of a query context")
-      assert(actual.startIndex() === expected.startIndex(), "Invalid startIndex of a query context")
-      assert(actual.stopIndex() === expected.stopIndex(), "Invalid stopIndex of a query context")
-      assert(actual.fragment() === expected.fragment(), "Invalid fragment of a query context")
+      assert(actual.objectType() === expected.objectType(),
+        "Invalid objectType of a query context Actual:" + actual.toString)
+      assert(actual.objectName() === expected.objectName(),
+        "Invalid objectName of a query context. Actual:" + actual.toString)
+      assert(actual.startIndex() === expected.startIndex(),
+        "Invalid startIndex of a query context. Actual:" + actual.toString)
+      assert(actual.stopIndex() === expected.stopIndex(),
+        "Invalid stopIndex of a query context. Actual:" + actual.toString)
+      assert(actual.fragment() === expected.fragment(),
+        "Invalid fragment of a query context. Actual:" + actual.toString)
     }
   }
 
@@ -368,11 +373,39 @@ abstract class SparkFunSuite
   protected def checkErrorMatchPVals(
       exception: SparkThrowable,
       errorClass: String,
+      parameters: Map[String, String]): Unit =
+    checkError(exception, errorClass, None, parameters, matchPVals = true)
+
+  protected def checkErrorMatchPVals(
+      exception: SparkThrowable,
+      errorClass: String,
       sqlState: Option[String],
       parameters: Map[String, String],
       context: QueryContext): Unit =
     checkError(exception, errorClass, sqlState, parameters,
       matchPVals = true, Array(context))
+
+  protected def checkErrorTableNotFound(
+      exception: SparkThrowable,
+      tableName: String,
+      queryContext: ExpectedContext): Unit =
+    checkError(exception = exception,
+      errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+      parameters = Map("relationName" -> tableName),
+      queryContext = Array(queryContext))
+
+  protected def checkErrorTableNotFound(
+      exception: SparkThrowable,
+      tableName: String): Unit =
+    checkError(exception = exception,
+      errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+      parameters = Map("relationName" -> tableName))
+
+  protected def checkErrorTableAlreadyExists(exception: SparkThrowable,
+                                             tableName: String): Unit =
+    checkError(exception = exception,
+      errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
+      parameters = Map("relationName" -> tableName))
 
   case class ExpectedContext(
       objectType: String,

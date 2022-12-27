@@ -1493,13 +1493,35 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             self.psdf.groupby("B").nth("x")
 
     def test_prod(self):
+        pdf = pd.DataFrame(
+            {
+                "A": [1, 2, 1, 2, 1],
+                "B": [3.1, 4.1, 4.1, 3.1, 0.1],
+                "C": ["a", "b", "b", "a", "c"],
+                "D": [True, False, False, True, False],
+                "E": [-1, -2, 3, -4, -2],
+                "F": [-1.5, np.nan, -3.2, 0.1, 0],
+                "G": [np.nan, np.nan, np.nan, np.nan, np.nan],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+
         for n in [0, 1, 2, 128, -1, -2, -128]:
-            self._test_stat_func(lambda groupby_obj: groupby_obj.prod(min_count=n))
             self._test_stat_func(
-                lambda groupby_obj: groupby_obj.prod(numeric_only=None, min_count=n)
+                lambda groupby_obj: groupby_obj.prod(min_count=n), check_exact=False
             )
             self._test_stat_func(
-                lambda groupby_obj: groupby_obj.prod(numeric_only=True, min_count=n)
+                lambda groupby_obj: groupby_obj.prod(numeric_only=None, min_count=n),
+                check_exact=False,
+            )
+            self._test_stat_func(
+                lambda groupby_obj: groupby_obj.prod(numeric_only=True, min_count=n),
+                check_exact=False,
+            )
+            self.assert_eq(
+                pdf.groupby("A").prod(min_count=n).sort_index(),
+                psdf.groupby("A").prod(min_count=n).sort_index(),
+                almost=True,
             )
 
     def test_cumcount(self):
@@ -2312,7 +2334,7 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
 
     def test_apply_negative(self):
         def func(_) -> ps.Series[int]:
-            return pd.Series([1])  # type: ignore[return-value]
+            return pd.Series([1])
 
         with self.assertRaisesRegex(TypeError, "Series as a return type hint at frame groupby"):
             ps.range(10).groupby("id").apply(func)
@@ -3220,7 +3242,7 @@ if __name__ == "__main__":
     from pyspark.pandas.tests.test_groupby import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

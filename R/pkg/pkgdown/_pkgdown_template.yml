@@ -117,6 +117,7 @@ reference:
   - unionAll
   - unionByName
   - unpersist
+  - unpivot
   - with
   - withColumn
 

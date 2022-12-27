@@ -1075,7 +1075,7 @@ abstract class AvroSuite
           .save(s"$tempDir/${UUID.randomUUID()}")
       }.getMessage
       assert(message.contains("Caused by: java.lang.NullPointerException: "))
-      assert(message.contains("null in string in field Name"))
+      assert(message.contains("null value for (non-nullable) string at test_schema.Name"))
     }
   }
 
@@ -1804,13 +1804,13 @@ abstract class AvroSuite
         spark
           .read
           .format("avro")
-          .option(AvroOptions.ignoreExtensionKey, false)
+          .option(AvroOptions.IGNORE_EXTENSION, false)
           .load(dir.getCanonicalPath)
           .count()
       }
       val deprecatedEvents = logAppender.loggingEvents
         .filter(_.getMessage.getFormattedMessage.contains(
-          s"Option ${AvroOptions.ignoreExtensionKey} is deprecated"))
+          s"Option ${AvroOptions.IGNORE_EXTENSION} is deprecated"))
       assert(deprecatedEvents.size === 1)
     }
   }
@@ -2272,6 +2272,20 @@ abstract class AvroSuite
       checkAnswer(df2, df.collect().toSeq)
     }
   }
+
+  test("SPARK-40667: validate Avro Options") {
+    assert(AvroOptions.getAllOptions.size == 9)
+    // Please add validation on any new Avro options here
+    assert(AvroOptions.isValidOption("ignoreExtension"))
+    assert(AvroOptions.isValidOption("mode"))
+    assert(AvroOptions.isValidOption("recordName"))
+    assert(AvroOptions.isValidOption("compression"))
+    assert(AvroOptions.isValidOption("avroSchema"))
+    assert(AvroOptions.isValidOption("avroSchemaUrl"))
+    assert(AvroOptions.isValidOption("recordNamespace"))
+    assert(AvroOptions.isValidOption("positionalFieldMatching"))
+    assert(AvroOptions.isValidOption("datetimeRebaseMode"))
+  }
 }
 
 class AvroV1Suite extends AvroSuite {
@@ -2336,7 +2350,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
       })
 
       val fileScan = df.queryExecution.executedPlan collectFirst {
-        case BatchScanExec(_, f: AvroScan, _, _, _, _) => f
+        case BatchScanExec(_, f: AvroScan, _, _, _, _, _) => f
       }
       assert(fileScan.nonEmpty)
       assert(fileScan.get.partitionFilters.nonEmpty)
@@ -2369,7 +2383,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
       assert(filterCondition.isDefined)
 
       val fileScan = df.queryExecution.executedPlan collectFirst {
-        case BatchScanExec(_, f: AvroScan, _, _, _, _) => f
+        case BatchScanExec(_, f: AvroScan, _, _, _, _, _) => f
       }
       assert(fileScan.nonEmpty)
       assert(fileScan.get.partitionFilters.isEmpty)
@@ -2450,7 +2464,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
             .where("value = 'a'")
 
           val fileScan = df.queryExecution.executedPlan collectFirst {
-            case BatchScanExec(_, f: AvroScan, _, _, _, _) => f
+            case BatchScanExec(_, f: AvroScan, _, _, _, _, _) => f
           }
           assert(fileScan.nonEmpty)
           if (filtersPushdown) {

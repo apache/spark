@@ -51,11 +51,14 @@ class ResolveSubquerySuite extends AnalysisTest {
   test("SPARK-17251 Improve `OuterReference` to be `NamedExpression`") {
     val expr = Filter(
       InSubquery(Seq(a), ListQuery(Project(Seq(UnresolvedAttribute("a")), t2))), t1)
-    val m = intercept[AnalysisException] {
-      SimpleAnalyzer.checkAnalysis(SimpleAnalyzer.ResolveSubquery(expr))
-    }.getMessage
-    assert(m.contains(
-      "Expressions referencing the outer query are not supported outside of WHERE/HAVING clauses"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        SimpleAnalyzer.checkAnalysis(SimpleAnalyzer.ResolveSubquery(expr))
+      },
+      errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+      parameters = Map("sqlExprs" -> "\"a\""),
+      matchPVals = true
+    )
   }
 
   test("SPARK-29145 Support subquery in join condition") {
@@ -81,7 +84,9 @@ class ResolveSubquerySuite extends AnalysisTest {
 
   test("lateral join with ambiguous join conditions") {
     val plan = lateralJoin(t1, t0.select($"b"), condition = Some($"b" ===  1))
-    assertAnalysisError(plan, "Reference 'b' is ambiguous, could be: b, b." :: Nil)
+    assertAnalysisErrorClass(plan,
+      "AMBIGUOUS_REFERENCE", Map("name" -> "`b`", "referenceNames" -> "[`b`, `b`]")
+    )
   }
 
   test("prefer resolving lateral subquery attributes from the inner query") {
@@ -134,8 +139,8 @@ class ResolveSubquerySuite extends AnalysisTest {
     assertAnalysisErrorClass(
       lateralJoin(t1, lateralJoin(t2, t0.select($"a", $"b", $"c"))),
       "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-      Map("objectName" -> "`a`"),
-      caseSensitive = true)
+      Map("objectName" -> "`a`")
+    )
   }
 
   test("lateral subquery with unresolvable attributes") {
@@ -143,26 +148,26 @@ class ResolveSubquerySuite extends AnalysisTest {
     assertAnalysisErrorClass(
       lateralJoin(t1, t0.select($"a", $"c")),
       "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-      Map("objectName" -> "`c`"),
-      caseSensitive = true)
+      Map("objectName" -> "`c`")
+    )
     // SELECT * FROM t1, LATERAL (SELECT a, b, c, d FROM t2)
     assertAnalysisErrorClass(
       lateralJoin(t1, t2.select($"a", $"b", $"c", $"d")),
       "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-      Map("objectName" -> "`d`", "proposal" -> "`b`, `c`"),
-      caseSensitive = true)
+      Map("objectName" -> "`d`", "proposal" -> "`b`, `c`")
+    )
     // SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT t1.a))
     assertAnalysisErrorClass(
       lateralJoin(t1, lateralJoin(t2, t0.select($"t1.a"))),
       "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-      Map("objectName" -> "`t1`.`a`"),
-      caseSensitive = true)
+      Map("objectName" -> "`t1`.`a`")
+    )
     // SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT a, b))
     assertAnalysisErrorClass(
       lateralJoin(t1, lateralJoin(t2, t0.select($"a", $"b"))),
       "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-      Map("objectName" -> "`a`"),
-      caseSensitive = true)
+      Map("objectName" -> "`a`")
+    )
   }
 
   test("lateral subquery with struct type") {
@@ -173,10 +178,10 @@ class ResolveSubquerySuite extends AnalysisTest {
       LateralJoin(t4, LateralSubquery(Project(Seq(xa, ya), t0), Seq(x, y)), Inner, None)
     )
     // Analyzer will try to resolve struct first before subquery alias.
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       lateralJoin(t1.as("x"), t4.select($"x.a", $"x.b")),
-      Seq("No such struct field b in a")
-    )
+      "FIELD_NOT_FOUND",
+      Map("fieldName" -> "`b`", "fields" -> "`a`"))
   }
 
   test("lateral join with unsupported expressions") {

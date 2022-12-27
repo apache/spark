@@ -575,4 +575,80 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
       validateWindowColumnInSchema(schema2, "window")
     }
   }
+
+  test("window_time function on raw window column") {
+    val df = Seq(
+      ("2016-03-27 19:38:18"), ("2016-03-27 19:39:25")
+    ).toDF("time")
+
+    checkAnswer(
+      df.select(window($"time", "10 seconds").as("window"))
+        .select(
+          $"window.end".cast("string"),
+          window_time($"window").cast("string")
+        ),
+      Seq(
+        Row("2016-03-27 19:38:20", "2016-03-27 19:38:19.999999"),
+        Row("2016-03-27 19:39:30", "2016-03-27 19:39:29.999999")
+      )
+    )
+  }
+
+  test("2 window_time functions on raw window column") {
+    val df = Seq(
+      ("2016-03-27 19:38:18"), ("2016-03-27 19:39:25")
+    ).toDF("time")
+
+    val df2 = df
+      .withColumn("time2", expr("time - INTERVAL 15 minutes"))
+      .select(window($"time", "10 seconds").as("window1"), $"time2")
+      .select($"window1", window($"time2", "10 seconds").as("window2"))
+
+    checkAnswer(
+      df2.select(
+        $"window1.end".cast("string"),
+        window_time($"window1").cast("string"),
+        $"window2.end".cast("string"),
+        window_time($"window2").cast("string")),
+      Seq(
+        Row("2016-03-27 19:38:20", "2016-03-27 19:38:19.999999",
+            "2016-03-27 19:23:20", "2016-03-27 19:23:19.999999"),
+        Row("2016-03-27 19:39:30", "2016-03-27 19:39:29.999999",
+            "2016-03-27 19:24:30", "2016-03-27 19:24:29.999999"))
+    )
+
+    // check column names
+    val df3 = df2
+      .select(
+        window_time($"window1").cast("string"),
+        window_time($"window2").cast("string"),
+        window_time($"window2").as("wt2_aliased").cast("string")
+      )
+
+    val schema = df3.schema
+
+    assert(schema.fields.exists(_.name == "window_time(window1)"))
+    assert(schema.fields.exists(_.name == "window_time(window2)"))
+    assert(schema.fields.exists(_.name == "wt2_aliased"))
+  }
+
+  test("window_time function on agg output") {
+    val df = Seq(
+      ("2016-03-27 19:38:19", 1), ("2016-03-27 19:39:25", 2)
+    ).toDF("time", "value")
+    checkAnswer(
+      df.groupBy(window($"time", "10 seconds"))
+        .agg(count("*").as("counts"))
+        .orderBy($"window.start".asc)
+        .select(
+          $"window.start".cast("string"),
+          $"window.end".cast("string"),
+          window_time($"window").cast("string"),
+          $"counts"),
+      Seq(
+        Row("2016-03-27 19:38:10", "2016-03-27 19:38:20", "2016-03-27 19:38:19.999999", 1),
+        Row("2016-03-27 19:39:20", "2016-03-27 19:39:30", "2016-03-27 19:39:29.999999", 1)
+      )
+    )
+  }
 }

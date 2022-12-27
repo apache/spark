@@ -63,6 +63,9 @@ class PandasConversionMixin:
 
         .. versionadded:: 1.3.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Notes
         -----
         This method should only be used if the resulting Pandas ``pandas.DataFrame`` is

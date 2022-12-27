@@ -91,6 +91,9 @@ class Catalog:
 
         .. versionadded:: 3.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Examples
         --------
         >>> spark.catalog.currentCatalog()
@@ -102,6 +105,9 @@ class Catalog:
         """Sets the current default catalog in this session.
 
         .. versionadded:: 3.4.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -118,6 +124,9 @@ class Catalog:
         """Returns a list of catalogs in this session.
 
         .. versionadded:: 3.4.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Returns
         -------
@@ -137,6 +146,9 @@ class Catalog:
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Returns
         -------
         str
@@ -155,6 +167,9 @@ class Catalog:
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Examples
         --------
         >>> spark.catalog.setCurrentDatabase("default")
@@ -166,6 +181,9 @@ class Catalog:
         Returns a list of databases available across all sessions.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Returns
         -------
@@ -196,6 +214,9 @@ class Catalog:
         This throws an :class:`AnalysisException` when the database cannot be found.
 
         .. versionadded:: 3.4.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -229,6 +250,9 @@ class Catalog:
         """Check if the database with the specified name exists.
 
         .. versionadded:: 3.3.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -265,6 +289,9 @@ class Catalog:
         """Returns a list of tables/views in the specified database.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -325,6 +352,9 @@ class Catalog:
 
         .. versionadded:: 3.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         tableName : str
@@ -353,7 +383,7 @@ class Catalog:
         Table(name='tbl1', catalog='spark_catalog', namespace=['default'], ...
         >>> _ = spark.sql("DROP TABLE tbl1")
 
-        Throw an analysis exception when the table does not exists.
+        Throw an analysis exception when the table does not exist.
 
         >>> spark.catalog.getTable("tbl1")
         Traceback (most recent call last):
@@ -380,6 +410,9 @@ class Catalog:
         Returns a list of functions registered in the specified database.
 
         .. versionadded:: 3.4.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -432,6 +465,9 @@ class Catalog:
 
         .. versionadded:: 3.3.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         functionName : str
@@ -480,6 +516,9 @@ class Catalog:
         function. This throws an :class:`AnalysisException` when the function cannot be found.
 
         .. versionadded:: 3.4.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -530,6 +569,9 @@ class Catalog:
         """Returns a list of columns for the given table/view in the specified database.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -594,13 +636,16 @@ class Catalog:
 
         .. versionadded:: 3.3.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         tableName : str
             name of the table to check existence.
             If no database is specified, first try to treat ``tableName`` as a
-            multi-layer-namespace identifier, then try to ``tableName`` as a normal table
-            name in current database if necessary.
+            multi-layer-namespace identifier, then try ``tableName`` as a normal table
+            name in the current database if necessary.
 
             .. versionchanged:: 3.4.0
                Allow ``tableName`` to be qualified with catalog name when ``dbName`` is None.
@@ -692,6 +737,9 @@ class Catalog:
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Returns
         -------
         :class:`DataFrame`
@@ -714,6 +762,9 @@ class Catalog:
         """Creates a table based on the dataset in a data source.
 
         .. versionadded:: 2.2.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -785,6 +836,9 @@ class Catalog:
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         viewName : str
@@ -803,7 +857,7 @@ class Catalog:
         --------
         >>> spark.createDataFrame([(1, 1)]).createTempView("my_table")
 
-        Droppping the temporary view.
+        Dropping the temporary view.
 
         >>> spark.catalog.dropTempView("my_table")
         True
@@ -821,6 +875,9 @@ class Catalog:
         """Drops the global temporary view with the given view name in the catalog.
 
         .. versionadded:: 2.1.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -840,7 +897,7 @@ class Catalog:
         --------
         >>> spark.createDataFrame([(1, 1)]).createGlobalTempView("my_table")
 
-        Droppping the global view.
+        Dropping the global view.
 
         >>> spark.catalog.dropGlobalTempView("my_table")
         True
@@ -894,7 +951,7 @@ class Catalog:
         >>> spark.catalog.isCached("tbl1")
         True
 
-        Throw an analysis exception when the table does not exists.
+        Throw an analysis exception when the table does not exist.
 
         >>> spark.catalog.isCached("not_existing_table")
         Traceback (most recent call last):
@@ -987,6 +1044,9 @@ class Catalog:
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Examples
         --------
         >>> _ = spark.sql("DROP TABLE IF EXISTS tbl1")
@@ -1002,6 +1062,9 @@ class Catalog:
         """Invalidates and refreshes all the cached data and metadata of the given table.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -1047,9 +1110,12 @@ class Catalog:
         self._jcatalog.refreshTable(tableName)
 
     def recoverPartitions(self, tableName: str) -> None:
-        """Recovers all the partitions of the given table and update the catalog.
+        """Recovers all the partitions of the given table and updates the catalog.
 
         .. versionadded:: 2.1.1
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -1094,6 +1160,9 @@ class Catalog:
         DataFrame that contains the given data source path.
 
         .. versionadded:: 2.2.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------

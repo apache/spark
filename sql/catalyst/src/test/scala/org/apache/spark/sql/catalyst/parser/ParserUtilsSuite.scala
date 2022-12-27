@@ -142,11 +142,12 @@ class ParserUtilsSuite extends SparkFunSuite {
 
   test("operationNotAllowed") {
     val errorMessage = "parse.fail.operation.not.allowed.error.message"
-    val e = intercept[ParseException] {
-      operationNotAllowed(errorMessage, showFuncContext)
-    }.getMessage
-    assert(e.contains("Operation not allowed"))
-    assert(e.contains(errorMessage))
+    checkError(
+      exception = intercept[ParseException] {
+        operationNotAllowed(errorMessage, showFuncContext)
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> errorMessage))
   }
 
   test("checkDuplicateKeys") {
@@ -154,10 +155,12 @@ class ParserUtilsSuite extends SparkFunSuite {
     checkDuplicateKeys[String](properties, createDbContext)
 
     val properties2 = Seq(("a", "a"), ("b", "b"), ("a", "c"))
-    val e = intercept[ParseException] {
-      checkDuplicateKeys(properties2, createDbContext)
-    }.getMessage
-    assert(e.contains("Found duplicate keys"))
+    checkError(
+      exception = intercept[ParseException] {
+        checkDuplicateKeys(properties2, createDbContext)
+      },
+      errorClass = "DUPLICATE_KEY",
+      parameters = Map("keyColumn" -> "`a`"))
   }
 
   test("source") {
@@ -201,10 +204,12 @@ class ParserUtilsSuite extends SparkFunSuite {
     val message = "ParserRuleContext should not be empty."
     validate(f1(showFuncContext), message, showFuncContext)
 
-    val e = intercept[ParseException] {
-      validate(f1(emptyContext), message, emptyContext)
-    }.getMessage
-    assert(e.contains(message))
+    checkError(
+      exception = intercept[ParseException] {
+        validate(f1(emptyContext), message, emptyContext)
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_0064",
+      parameters = Map("msg" -> message))
   }
 
   test("withOrigin") {

@@ -57,11 +57,12 @@ object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
     case rd @ ReplaceData(_, cond, _, _, _) => rd.copy(condition = replaceNullWithFalse(cond))
     case d @ DeleteFromTable(_, cond) => d.copy(condition = replaceNullWithFalse(cond))
     case u @ UpdateTable(_, _, Some(cond)) => u.copy(condition = Some(replaceNullWithFalse(cond)))
-    case m @ MergeIntoTable(_, _, mergeCond, matchedActions, notMatchedActions) =>
+    case m: MergeIntoTable =>
       m.copy(
-        mergeCondition = replaceNullWithFalse(mergeCond),
-        matchedActions = replaceNullWithFalse(matchedActions),
-        notMatchedActions = replaceNullWithFalse(notMatchedActions))
+        mergeCondition = replaceNullWithFalse(m.mergeCondition),
+        matchedActions = replaceNullWithFalse(m.matchedActions),
+        notMatchedActions = replaceNullWithFalse(m.notMatchedActions),
+        notMatchedBySourceActions = replaceNullWithFalse(m.notMatchedBySourceActions))
     case p: LogicalPlan => p.transformExpressionsWithPruning(
       _.containsAnyPattern(NULL_LITERAL, TRUE_OR_FALSE_LITERAL), ruleId) {
       // For `EqualNullSafe` with a `TrueLiteral`, whether the other side is null or false has no

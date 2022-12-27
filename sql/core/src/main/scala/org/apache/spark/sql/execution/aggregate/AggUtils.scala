@@ -219,14 +219,17 @@ object AggUtils {
     }
 
     // 3. Create an Aggregate operator for partial aggregation (for distinct)
-    val distinctColumnAttributeLookup = CUtils.toMap(distinctExpressions, distinctAttributes)
+    val distinctColumnAttributeLookup = CUtils.toMap(distinctExpressions.map(_.canonicalized),
+      distinctAttributes)
     val rewrittenDistinctFunctions = functionsWithDistinct.map {
       // Children of an AggregateFunction with DISTINCT keyword has already
       // been evaluated. At here, we need to replace original children
       // to AttributeReferences.
       case agg @ AggregateExpression(aggregateFunction, mode, true, _, _) =>
-        aggregateFunction.transformDown(distinctColumnAttributeLookup)
-          .asInstanceOf[AggregateFunction]
+        aggregateFunction.transformDown {
+          case e: Expression if distinctColumnAttributeLookup.contains(e.canonicalized) =>
+            distinctColumnAttributeLookup(e.canonicalized)
+        }.asInstanceOf[AggregateFunction]
       case agg =>
         throw new IllegalArgumentException(
           "Non-distinct aggregate is found in functionsWithDistinct " +
@@ -366,7 +369,8 @@ object AggUtils {
         groupingAttributes,
         stateInfo = None,
         outputMode = None,
-        eventTimeWatermark = None,
+        eventTimeWatermarkForLateEvents = None,
+        eventTimeWatermarkForEviction = None,
         stateFormatVersion = stateFormatVersion,
         partialMerged2)
 
@@ -469,7 +473,8 @@ object AggUtils {
 
     // shuffle & sort happens here: most of details are also handled in this physical plan
     val restored = SessionWindowStateStoreRestoreExec(groupingWithoutSessionAttributes,
-      sessionExpression.toAttribute, stateInfo = None, eventTimeWatermark = None,
+      sessionExpression.toAttribute, stateInfo = None,
+      eventTimeWatermarkForLateEvents = None, eventTimeWatermarkForEviction = None,
       stateFormatVersion, partialMerged1)
 
     val mergedSessions = {
@@ -498,7 +503,8 @@ object AggUtils {
       sessionExpression.toAttribute,
       stateInfo = None,
       outputMode = None,
-      eventTimeWatermark = None,
+      eventTimeWatermarkForLateEvents = None,
+      eventTimeWatermarkForEviction = None,
       stateFormatVersion, mergedSessions)
 
     val finalAndCompleteAggregate: SparkPlan = {

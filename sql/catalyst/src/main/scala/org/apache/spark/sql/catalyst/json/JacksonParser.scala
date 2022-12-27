@@ -96,6 +96,8 @@ class JacksonParser(
           options.dateFormatInRead.isEmpty
       }
 
+  private val enablePartialResults = SQLConf.get.jsonEnablePartialResults
+
   /**
    * Create a converter which converts the JSON documents held by the `JsonParser`
    * to a value according to a desired schema. This is a wrapper for the method
@@ -456,7 +458,7 @@ class JacksonParser(
             schema.existenceDefaultsBitmask(index) = false
           } catch {
             case e: SparkUpgradeException => throw e
-            case NonFatal(e) if isRoot =>
+            case NonFatal(e) if isRoot || enablePartialResults =>
               badRecordException = badRecordException.orElse(Some(e))
               parser.skipChildren()
           }
@@ -482,14 +484,31 @@ class JacksonParser(
       fieldConverter: ValueConverter): MapData = {
     val keys = ArrayBuffer.empty[UTF8String]
     val values = ArrayBuffer.empty[Any]
+    var badRecordException: Option[Throwable] = None
+
     while (nextUntil(parser, JsonToken.END_OBJECT)) {
       keys += UTF8String.fromString(parser.getCurrentName)
-      values += fieldConverter.apply(parser)
+      try {
+        values += fieldConverter.apply(parser)
+      } catch {
+        case PartialResultException(row, cause) if enablePartialResults =>
+          badRecordException = badRecordException.orElse(Some(cause))
+          values += row
+        case NonFatal(e) if enablePartialResults =>
+          badRecordException = badRecordException.orElse(Some(e))
+          parser.skipChildren()
+      }
     }
 
     // The JSON map will never have null or duplicated map keys, it's safe to create a
     // ArrayBasedMapData directly here.
-    ArrayBasedMapData(keys.toArray, values.toArray)
+    val mapData = ArrayBasedMapData(keys.toArray, values.toArray)
+
+    if (badRecordException.isEmpty) {
+      mapData
+    } else {
+      throw PartialResultException(InternalRow(mapData), badRecordException.get)
+    }
   }
 
   /**
@@ -500,13 +519,27 @@ class JacksonParser(
       fieldConverter: ValueConverter,
       isRoot: Boolean = false): ArrayData = {
     val values = ArrayBuffer.empty[Any]
+    var badRecordException: Option[Throwable] = None
+
     while (nextUntil(parser, JsonToken.END_ARRAY)) {
-      val v = fieldConverter.apply(parser)
-      if (isRoot && v == null) throw QueryExecutionErrors.rootConverterReturnNullError()
-      values += v
+      try {
+        val v = fieldConverter.apply(parser)
+        if (isRoot && v == null) throw QueryExecutionErrors.rootConverterReturnNullError()
+        values += v
+      } catch {
+        case PartialResultException(row, cause) if enablePartialResults =>
+          badRecordException = badRecordException.orElse(Some(cause))
+          values += row
+      }
     }
 
-    new GenericArrayData(values.toArray)
+    val arrayData = new GenericArrayData(values.toArray)
+
+    if (badRecordException.isEmpty) {
+      arrayData
+    } else {
+      throw PartialResultException(InternalRow(arrayData), badRecordException.get)
+    }
   }
 
   /**

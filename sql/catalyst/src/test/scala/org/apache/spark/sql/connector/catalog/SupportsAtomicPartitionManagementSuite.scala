@@ -163,10 +163,13 @@ class SupportsAtomicPartitionManagementSuite extends SparkFunSuite {
     assert(partTable.rows === InternalRow(2, "zyx", "5") :: Nil)
 
     // Truncate non-existing partition
-    val errMsg = intercept[NoSuchPartitionException] {
+    val e = intercept[NoSuchPartitionException] {
       partTable.truncatePartitions(Array(InternalRow("5"), InternalRow("6")))
-    }.getMessage
-    assert(errMsg.contains("Partition not found in table test.ns.test_table: 6 -> dt"))
+    }
+    checkError(e,
+      errorClass = "PARTITIONS_NOT_FOUND",
+      parameters = Map("partitionList" -> "PARTITION (`dt` = 6)",
+      "tableName" -> "`test`.`ns`.`test_table`"))
     assert(partTable.rows === InternalRow(2, "zyx", "5") :: Nil)
   }
 }

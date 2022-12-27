@@ -1,0 +1,27 @@
+
+²
+Fconnector/protobuf/src/test/resources/protobuf/proto_serde_suite.protoorg.apache.spark.sql.protobuf"D
+BasicMessage4
+foo (2".org.apache.spark.sql.protobuf.FooRfoo"
+Foo
+bar (Rbar"'
+MissMatchTypeInRoot
+foo (Rfoo"T
+FieldMissingInProto=
+foo (2+.org.apache.spark.sql.protobuf.MissingFieldRfoo"&
+MissingField
+barFoo (RbarFoo"\
+MissMatchTypeInDeepNested?
+top (2-.org.apache.spark.sql.protobuf.TypeMissNestedRtop"K
+TypeMissNested9
+foo (2'.org.apache.spark.sql.protobuf.TypeMissRfoo"
+TypeMiss
+bar (Rbar"_
+FieldMissingInSQLRoot4
+foo (2".org.apache.spark.sql.protobuf.FooRfoo
+boo (Rboo"O
+FieldMissingInSQLNested4
+foo (2".org.apache.spark.sql.protobuf.BazRfoo")
+Baz
+bar (Rbar
+baz (RbazBBSimpleMessageProtosbproto3

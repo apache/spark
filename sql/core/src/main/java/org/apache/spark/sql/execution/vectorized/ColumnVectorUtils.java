@@ -20,6 +20,8 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.sql.Date;
+import java.sql.Timestamp;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -28,6 +30,7 @@ import java.util.Map;
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.types.*;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.vectorized.ColumnarArray;
@@ -48,31 +51,32 @@ public class ColumnVectorUtils {
    */
   public static void populate(ConstantColumnVector col, InternalRow row, int fieldIdx) {
     DataType t = col.dataType();
+    PhysicalDataType pdt = t.physicalDataType();
 
     if (row.isNullAt(fieldIdx)) {
       col.setNull();
     } else {
-      if (t == DataTypes.BooleanType) {
+      if (pdt instanceof PhysicalBooleanType) {
         col.setBoolean(row.getBoolean(fieldIdx));
-      } else if (t == DataTypes.BinaryType) {
+      } else if (pdt instanceof PhysicalBinaryType) {
         col.setBinary(row.getBinary(fieldIdx));
-      } else if (t == DataTypes.ByteType) {
+      } else if (pdt instanceof PhysicalByteType) {
         col.setByte(row.getByte(fieldIdx));
-      } else if (t == DataTypes.ShortType) {
+      } else if (pdt instanceof PhysicalShortType) {
         col.setShort(row.getShort(fieldIdx));
-      } else if (t == DataTypes.IntegerType) {
+      } else if (pdt instanceof PhysicalIntegerType) {
         col.setInt(row.getInt(fieldIdx));
-      } else if (t == DataTypes.LongType) {
+      } else if (pdt instanceof PhysicalLongType) {
         col.setLong(row.getLong(fieldIdx));
-      } else if (t == DataTypes.FloatType) {
+      } else if (pdt instanceof PhysicalFloatType) {
         col.setFloat(row.getFloat(fieldIdx));
-      } else if (t == DataTypes.DoubleType) {
+      } else if (pdt instanceof PhysicalDoubleType) {
         col.setDouble(row.getDouble(fieldIdx));
-      } else if (t == DataTypes.StringType) {
+      } else if (pdt instanceof PhysicalStringType) {
         UTF8String v = row.getUTF8String(fieldIdx);
         col.setUtf8String(v);
-      } else if (t instanceof DecimalType) {
-        DecimalType dt = (DecimalType) t;
+      } else if (pdt instanceof PhysicalDecimalType) {
+        PhysicalDecimalType dt = (PhysicalDecimalType) pdt;
         Decimal d = row.getDecimal(fieldIdx, dt.precision(), dt.scale());
         if (dt.precision() <= Decimal.MAX_INT_DIGITS()) {
           col.setInt((int)d.toUnscaledLong());
@@ -83,14 +87,9 @@ public class ColumnVectorUtils {
           byte[] bytes = integer.toByteArray();
           col.setBinary(bytes);
         }
-      } else if (t instanceof CalendarIntervalType) {
+      } else if (pdt instanceof PhysicalCalendarIntervalType) {
         // The value of `numRows` is irrelevant.
         col.setCalendarInterval((CalendarInterval) row.get(fieldIdx, t));
-      } else if (t instanceof DateType || t instanceof YearMonthIntervalType) {
-        col.setInt(row.getInt(fieldIdx));
-      } else if (t instanceof TimestampType || t instanceof TimestampNTZType ||
-        t instanceof DayTimeIntervalType) {
-        col.setLong(row.getLong(fieldIdx));
       } else {
         throw new RuntimeException(String.format("DataType %s is not supported" +
             " in column vectorized reader.", t.sql()));
@@ -149,6 +148,9 @@ public class ColumnVectorUtils {
       } else if (t == DataTypes.StringType) {
         byte[] b =((String)o).getBytes(StandardCharsets.UTF_8);
         dst.appendByteArray(b, 0, b.length);
+      } else if (t == DataTypes.BinaryType) {
+        byte[] b = (byte[]) o;
+        dst.appendByteArray(b, 0, b.length);
       } else if (t instanceof DecimalType) {
         DecimalType dt = (DecimalType) t;
         Decimal d = Decimal.apply((BigDecimal) o, dt.precision(), dt.scale());
@@ -168,7 +170,11 @@ public class ColumnVectorUtils {
         dst.getChild(1).appendInt(c.days);
         dst.getChild(2).appendLong(c.microseconds);
       } else if (t instanceof DateType) {
-        dst.appendInt(DateTimeUtils.fromJavaDate((Date)o));
+        dst.appendInt(DateTimeUtils.fromJavaDate((Date) o));
+      } else if (t instanceof TimestampType) {
+        dst.appendLong(DateTimeUtils.fromJavaTimestamp((Timestamp) o));
+      } else if (t instanceof TimestampNTZType) {
+        dst.appendLong(DateTimeUtils.localDateTimeToMicros((LocalDateTime) o));
       } else {
         throw new UnsupportedOperationException("Type " + t);
       }

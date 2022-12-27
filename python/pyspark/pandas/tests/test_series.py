@@ -3240,7 +3240,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self._test_autocorr(pdf)
 
         psser = ps.from_pandas(pdf["s1"])
-        with self.assertRaisesRegex(TypeError, r"periods should be an int; however, got"):
+        with self.assertRaisesRegex(TypeError, r"lag should be an int; however, got"):
             psser.autocorr(1.0)
 
     def _test_autocorr(self, pdf):
@@ -3392,7 +3392,7 @@ if __name__ == "__main__":
     from pyspark.pandas.tests.test_series import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

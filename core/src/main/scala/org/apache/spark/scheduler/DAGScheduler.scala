@@ -383,8 +383,8 @@ private[spark] class DAGScheduler(
   /**
    * Called by the TaskSetManager when it decides a speculative task is needed.
    */
-  def speculativeTaskSubmitted(task: Task[_]): Unit = {
-    eventProcessLoop.post(SpeculativeTaskSubmitted(task))
+  def speculativeTaskSubmitted(task: Task[_], taskIndex: Int): Unit = {
+    eventProcessLoop.post(SpeculativeTaskSubmitted(task, taskIndex))
   }
 
   /**
@@ -1178,8 +1178,10 @@ private[spark] class DAGScheduler(
     listenerBus.post(SparkListenerTaskStart(task.stageId, stageAttemptId, taskInfo))
   }
 
-  private[scheduler] def handleSpeculativeTaskSubmitted(task: Task[_]): Unit = {
-    listenerBus.post(SparkListenerSpeculativeTaskSubmitted(task.stageId, task.stageAttemptId))
+  private[scheduler] def handleSpeculativeTaskSubmitted(task: Task[_], taskIndex: Int): Unit = {
+    val speculativeTaskSubmittedEvent = new SparkListenerSpeculativeTaskSubmitted(
+      task.stageId, task.stageAttemptId, taskIndex, task.partitionId)
+    listenerBus.post(speculativeTaskSubmittedEvent)
   }
 
   private[scheduler] def handleUnschedulableTaskSetAdded(
@@ -1881,9 +1883,9 @@ private[spark] class DAGScheduler(
           val ignoreStageFailure = ignoreDecommissionFetchFailure &&
             isExecutorDecommissioningOrDecommissioned(taskScheduler, bmAddress)
           if (ignoreStageFailure) {
-            logInfo("Ignoring fetch failure from $task of $failedStage attempt " +
+            logInfo(s"Ignoring fetch failure from $task of $failedStage attempt " +
               s"${task.stageAttemptId} when count spark.stage.maxConsecutiveAttempts " +
-              "as executor ${bmAddress.executorId} is decommissioned and " +
+              s"as executor ${bmAddress.executorId} is decommissioned and " +
               s" ${config.STAGE_IGNORE_DECOMMISSION_FETCH_FAILURE.key}=true")
           } else {
             failedStage.failedAttemptIds.add(task.stageAttemptId)
@@ -2193,9 +2195,11 @@ private[spark] class DAGScheduler(
    * Return true when:
    *  1. Waiting for decommission start
    *  2. Under decommission process
-   * Return false when:
-   *  1. Stopped or terminated after finishing decommission
-   *  2. Under decommission process, then removed by driver with other reasons
+   *  3. Stopped or terminated after finishing decommission
+   *  4. Under decommission process, then removed by driver with other reasons
+   * Return false in case 3 and 4 when removed executors info are not retained.
+   * The max size of removed executors is controlled by
+   * spark.scheduler.maxRetainedRemovedExecutors
    */
   private[scheduler] def isExecutorDecommissioningOrDecommissioned(
       taskScheduler: TaskScheduler, bmAddress: BlockManagerId): Boolean = {
@@ -2889,7 +2893,7 @@ private[spark] class DAGScheduler(
     listenerBus.post(SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobSucceeded))
   }
 
-  def stop(): Unit = {
+  def stop(exitCode: Int = 0): Unit = {
     Utils.tryLogNonFatalError {
       messageScheduler.shutdownNow()
     }
@@ -2900,7 +2904,7 @@ private[spark] class DAGScheduler(
       eventProcessLoop.stop()
     }
     Utils.tryLogNonFatalError {
-      taskScheduler.stop()
+      taskScheduler.stop(exitCode)
     }
   }
 
@@ -2949,7 +2953,7 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
     case ExecutorLost(execId, reason) =>
       val workerHost = reason match {
         case ExecutorProcessLost(_, workerHost, _) => workerHost
-        case ExecutorDecommission(workerHost) => workerHost
+        case ExecutorDecommission(workerHost, _) => workerHost
         case _ => None
       }
       dagScheduler.handleExecutorLost(execId, workerHost)
@@ -2960,8 +2964,8 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
     case BeginEvent(task, taskInfo) =>
       dagScheduler.handleBeginEvent(task, taskInfo)
 
-    case SpeculativeTaskSubmitted(task) =>
-      dagScheduler.handleSpeculativeTaskSubmitted(task)
+    case SpeculativeTaskSubmitted(task, taskIndex) =>
+      dagScheduler.handleSpeculativeTaskSubmitted(task, taskIndex)
 
     case UnschedulableTaskSetAdded(stageId, stageAttemptId) =>
       dagScheduler.handleUnschedulableTaskSetAdded(stageId, stageAttemptId)

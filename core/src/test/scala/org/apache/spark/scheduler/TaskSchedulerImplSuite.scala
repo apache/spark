@@ -761,11 +761,13 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
         }
         // End the other task of the taskset, doesn't matter whether it succeeds or fails.
         val otherTask = tasks(1)
-        val result = new DirectTaskResult[Int](valueSer.serialize(otherTask.taskId), Seq(), Array())
+        val result = new DirectTaskResult[Int](valueSer.serialize(otherTask.taskId), Seq(),
+          Array[Long]())
         tsm.handleSuccessfulTask(otherTask.taskId, result)
       } else {
         tasks.foreach { task =>
-          val result = new DirectTaskResult[Int](valueSer.serialize(task.taskId), Seq(), Array())
+          val result = new DirectTaskResult[Int](valueSer.serialize(task.taskId), Seq(),
+            Array[Long]())
           tsm.handleSuccessfulTask(task.taskId, result)
         }
       }
@@ -1928,13 +1930,15 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     assert(taskSlotsForRp === 4)
   }
 
-  private def setupSchedulerForDecommissionTests(clock: Clock, numTasks: Int): TaskSchedulerImpl = {
+  private def setupSchedulerForDecommissionTests(clock: Clock, numTasks: Int,
+    extraConf: Map[String, String] = Map.empty): TaskSchedulerImpl = {
     // one task per host
     val numHosts = numTasks
     val conf = new SparkConf()
       .setMaster(s"local[$numHosts]")
       .setAppName("TaskSchedulerImplSuite")
       .set(config.CPUS_PER_TASK.key, "1")
+      .setAll(extraConf)
     sc = new SparkContext(conf)
     val maxTaskFailures = sc.conf.get(config.TASK_MAX_FAILURES)
     taskScheduler = new TaskSchedulerImpl(sc, maxTaskFailures, clock = clock) {
@@ -2008,6 +2012,38 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     // So now both the tasks are no longer running
     assert(manager.copiesRunning.take(2) === Array(0, 0))
     clock.advance(2000)
+
+    // Now give it some resources and both tasks should be rerun
+    val taskDescriptions = taskScheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("executor2", "host2", 1), WorkerOffer("executor3", "host3", 1))).flatten
+    assert(taskDescriptions.size === 2)
+    assert(taskDescriptions.map(_.index).sorted == Seq(0, 1))
+    assert(manager.copiesRunning.take(2) === Array(1, 1))
+  }
+
+  test("SPARK-40979: Keep removed executor info due to decommission") {
+    val clock = new ManualClock(10000L)
+    val scheduler = setupSchedulerForDecommissionTests(clock, 2,
+      Map(config.SCHEDULER_MAX_RETAINED_REMOVED_EXECUTORS.key -> "1"))
+    val manager = stageToMockTaskSetManager(0)
+    // The task started should be running.
+    assert(manager.copiesRunning.take(2) === Array(1, 1))
+
+    // executor 1 is decommissioned before loosing
+    scheduler.executorDecommission("executor1", ExecutorDecommissionInfo("", None))
+    assert(scheduler.getExecutorDecommissionState("executor1").isDefined)
+
+    // executor1 is eventually lost
+    scheduler.executorLost("executor1", ExecutorExited(0, false, "normal"))
+    assert(scheduler.getExecutorDecommissionState("executor1").isDefined)
+
+    // executor 0 is decommissioned before loosing
+    scheduler.executorDecommission("executor0", ExecutorDecommissionInfo("", None))
+    scheduler.executorLost("executor0", ExecutorExited(0, false, "normal"))
+
+    // Only last removed executor is kept as size of removed decommission executors is 1
+    assert(scheduler.getExecutorDecommissionState("executor0").isDefined)
+    assert(scheduler.getExecutorDecommissionState("executor1").isEmpty)
 
     // Now give it some resources and both tasks should be rerun
     val taskDescriptions = taskScheduler.resourceOffers(IndexedSeq(
@@ -2131,7 +2167,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     assert(2 === taskDescriptions.length)
 
     val ser = sc.env.serializer.newInstance()
-    val directResult = new DirectTaskResult[Int](ser.serialize(1), Seq(), Array.empty)
+    val directResult = new DirectTaskResult[Int](ser.serialize(1), Seq(), Array.empty[Long])
     val resultBytes = ser.serialize(directResult)
 
     val busyTask = new Runnable {

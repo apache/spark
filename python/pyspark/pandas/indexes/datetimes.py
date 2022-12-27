@@ -284,8 +284,8 @@ class DatetimeIndex(Index):
         Examples
         --------
         >>> idx = ps.date_range("2018-02-27", periods=3)
-        >>> idx.is_month_start
-        Index([False, False, True], dtype='object')
+        >>> idx.is_month_start  # doctest: +SKIP
+        Index([False, False, True], dtype='bool')
         """
         return Index(self.to_series().dt.is_month_start)
 
@@ -297,7 +297,7 @@ class DatetimeIndex(Index):
         Returns
         -------
         Index
-            Returns a Index with boolean values.
+            Returns an Index with boolean values.
 
         See Also
         --------
@@ -307,8 +307,8 @@ class DatetimeIndex(Index):
         Examples
         --------
         >>> idx = ps.date_range("2018-02-27", periods=3)
-        >>> idx.is_month_end
-        Index([False, True, False], dtype='object')
+        >>> idx.is_month_end  # doctest: +SKIP
+        Index([False, True, False], dtype='bool')
         """
         return Index(self.to_series().dt.is_month_end)
 
@@ -330,8 +330,8 @@ class DatetimeIndex(Index):
         Examples
         --------
         >>> idx = ps.date_range('2017-03-30', periods=4)
-        >>> idx.is_quarter_start
-        Index([False, False, True, False], dtype='object')
+        >>> idx.is_quarter_start  # doctest: +SKIP
+        Index([False, False, True, False], dtype='bool')
         """
         return Index(self.to_series().dt.is_quarter_start)
 
@@ -353,8 +353,8 @@ class DatetimeIndex(Index):
         Examples
         --------
         >>> idx = ps.date_range('2017-03-30', periods=4)
-        >>> idx.is_quarter_end
-        Index([False, True, False, False], dtype='object')
+        >>> idx.is_quarter_end  # doctest: +SKIP
+        Index([False, True, False, False], dtype='bool')
         """
         return Index(self.to_series().dt.is_quarter_end)
 
@@ -375,8 +375,8 @@ class DatetimeIndex(Index):
         Examples
         --------
         >>> idx = ps.date_range("2017-12-30", periods=3)
-        >>> idx.is_year_start
-        Index([False, False, True], dtype='object')
+        >>> idx.is_year_start  # doctest: +SKIP
+        Index([False, False, True], dtype='bool')
         """
         return Index(self.to_series().dt.is_year_start)
 
@@ -397,8 +397,8 @@ class DatetimeIndex(Index):
         Examples
         --------
         >>> idx = ps.date_range("2017-12-30", periods=3)
-        >>> idx.is_year_end
-        Index([False, True, False], dtype='object')
+        >>> idx.is_year_end  # doctest: +SKIP
+        Index([False, True, False], dtype='bool')
         """
         return Index(self.to_series().dt.is_year_end)
 
@@ -420,8 +420,8 @@ class DatetimeIndex(Index):
         Examples
         --------
         >>> idx = ps.date_range("2012-01-01", "2015-01-01", freq="Y")
-        >>> idx.is_leap_year
-        Index([True, False, False], dtype='object')
+        >>> idx.is_leap_year  # doctest: +SKIP
+        Index([True, False, False], dtype='bool')
         """
         return Index(self.to_series().dt.is_leap_year)
 
@@ -581,7 +581,7 @@ class DatetimeIndex(Index):
 
         The time component of the date-time is converted to midnight i.e.
         00:00:00. This is useful in cases, when the time does not matter.
-        Length is unaltered. The timezones are unaffected.
+        Length is unaltered. The time zones are unaffected.
 
         This method is available on Series with datetime values under
         the ``.dt`` accessor.
@@ -611,7 +611,7 @@ class DatetimeIndex(Index):
 
         Return an Index of formatted strings specified by date_format, which
         supports the same string format as the python standard library. Details
-        of the string format can be found in python string format
+        of the string format can be found in the python string format
         doc.
 
         Parameters
