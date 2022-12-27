@@ -2260,8 +2260,18 @@ def sha2(col: "ColumnOrName", numBits: int) -> Column:
 sha2.__doc__ = pysparkfuncs.sha2.__doc__
 
 
+# User Defined Function
+
+
 def call_udf(udfName: str, *cols: "ColumnOrName") -> Column:
     return _invoke_function(udfName, *[_to_col(c) for c in cols])
 
 
 call_udf.__doc__ = pysparkfuncs.call_udf.__doc__
+
+
+def unwrap_udt(col: "ColumnOrName") -> Column:
+    return _invoke_function("unwrap_udt", _to_col(col))
+
+
+unwrap_udt.__doc__ = pysparkfuncs.unwrap_udt.__doc__
