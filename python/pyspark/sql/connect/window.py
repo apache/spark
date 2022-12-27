@@ -267,13 +267,12 @@ def _test() -> None:
         # Creates a remote Spark session.
         globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
 
-        del pyspark.sql.connect.window.Window.partitionBy.__doc__
-        del pyspark.sql.connect.window.Window.orderBy.__doc__
-        del pyspark.sql.connect.window.Window.rowsBetween.__doc__
-        del pyspark.sql.connect.window.Window.rangeBetween.__doc__
-
         (failure_count, test_count) = doctest.testmod(
-            pyspark.sql.connect.window, globs=globs, optionflags=doctest.NORMALIZE_WHITESPACE
+            pyspark.sql.connect.window,
+            globs=globs,
+            optionflags=doctest.ELLIPSIS
+            | doctest.NORMALIZE_WHITESPACE
+            | doctest.IGNORE_EXCEPTION_DETAIL,
         )
         # TODO(SPARK-41529): Implement stop in RemoteSparkSession.
         #   Stop the regular Spark session (server) too.
