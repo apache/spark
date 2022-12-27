@@ -456,11 +456,11 @@ class VersionInfo private[spark](
 // REST call, they are not stored with it.
 class ApplicationEnvironmentInfo private[spark] (
     val runtime: RuntimeInfo,
-    val sparkProperties: Seq[(String, String)],
-    val hadoopProperties: Seq[(String, String)],
-    val systemProperties: Seq[(String, String)],
-    val metricsProperties: Seq[(String, String)],
-    val classpathEntries: Seq[(String, String)],
+    val sparkProperties: collection.Seq[(String, String)],
+    val hadoopProperties: collection.Seq[(String, String)],
+    val systemProperties: collection.Seq[(String, String)],
+    val metricsProperties: collection.Seq[(String, String)],
+    val classpathEntries: collection.Seq[(String, String)],
     val resourceProfiles: collection.Seq[ResourceProfileInfo])
 
 class RuntimeInfo private[spark](
