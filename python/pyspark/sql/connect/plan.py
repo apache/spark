@@ -1112,22 +1112,6 @@ class StatCorr(LogicalPlan):
         plan.corr.method = self._method
         return plan
 
-    def print(self, indent: int = 0) -> str:
-        i = " " * indent
-        return f"""{i}<Corr col1='{self._col1}' col2='{self._col2}' method='{self._method}'>"""
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>Corr</b><br />
-              Col1: {self._col1} <br />
-              Col2: {self._col2} <br />
-              Method: {self._method} <br />
-           </li>
-        </ul>
-        """
-
 
 class RenameColumns(LogicalPlan):
     def __init__(self, child: Optional["LogicalPlan"], cols: Sequence[str]) -> None:
