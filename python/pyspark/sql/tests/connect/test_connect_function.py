@@ -52,21 +52,21 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
     """These test cases exercise the interface to the proto plan
     generation but do not call Spark."""
 
-    def compare_by_show(self, df1, df2):
+    def compare_by_show(self, df1, df2, n: int = 20, truncate: int = 20):
         from pyspark.sql.dataframe import DataFrame as SDF
         from pyspark.sql.connect.dataframe import DataFrame as CDF
 
         assert isinstance(df1, (SDF, CDF))
         if isinstance(df1, SDF):
-            str1 = df1._jdf.showString(20, 20, False)
+            str1 = df1._jdf.showString(n, truncate, False)
         else:
-            str1 = df1._show_string(20, 20, False)
+            str1 = df1._show_string(n, truncate, False)
 
         assert isinstance(df2, (SDF, CDF))
         if isinstance(df2, SDF):
-            str2 = df2._jdf.showString(20, 20, False)
+            str2 = df2._jdf.showString(n, truncate, False)
         else:
-            str2 = df2._show_string(20, 20, False)
+            str2 = df2._show_string(n, truncate, False)
 
         self.assertEqual(str1, str2)
 
@@ -1836,6 +1836,92 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
         self.assert_eq(
             cdf.select(CF.next_day(cdf.ts1, "Mon")).toPandas(),
             sdf.select(SF.next_day(sdf.ts1, "Mon")).toPandas(),
+        )
+
+    def test_time_window_functions(self):
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        query = """
+            SELECT * FROM VALUES
+            (TIMESTAMP('2022-12-25 10:30:00'), 1),
+            (TIMESTAMP('2022-12-25 10:31:00'), 2),
+            (TIMESTAMP('2022-12-25 10:32:00'), 1),
+            (TIMESTAMP('2022-12-25 10:33:00'), 2),
+            (TIMESTAMP('2022-12-26 09:30:00'), 1),
+            (TIMESTAMP('2022-12-26 09:35:00'), 3)
+            AS tab(date, val)
+            """
+
+        # +-------------------+---+
+        # |               date|val|
+        # +-------------------+---+
+        # |2022-12-25 10:30:00|  1|
+        # |2022-12-25 10:31:00|  2|
+        # |2022-12-25 10:32:00|  1|
+        # |2022-12-25 10:33:00|  2|
+        # |2022-12-26 09:30:00|  1|
+        # |2022-12-26 09:35:00|  3|
+        # +-------------------+---+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        # test window
+        self.compare_by_show(
+            cdf.select(CF.window("date", "15 seconds")),
+            sdf.select(SF.window("date", "15 seconds")),
+            truncate=100,
+        )
+        self.compare_by_show(
+            cdf.select(CF.window(cdf.date, "1 minute")),
+            sdf.select(SF.window(sdf.date, "1 minute")),
+            truncate=100,
+        )
+
+        self.compare_by_show(
+            cdf.select(CF.window("date", "15 seconds", "5 seconds")),
+            sdf.select(SF.window("date", "15 seconds", "5 seconds")),
+            truncate=100,
+        )
+        self.compare_by_show(
+            cdf.select(CF.window(cdf.date, "1 minute", "10 seconds")),
+            sdf.select(SF.window(sdf.date, "1 minute", "10 seconds")),
+            truncate=100,
+        )
+
+        self.compare_by_show(
+            cdf.select(CF.window("date", "15 seconds", "10 seconds", "5 seconds")),
+            sdf.select(SF.window("date", "15 seconds", "10 seconds", "5 seconds")),
+            truncate=100,
+        )
+        self.compare_by_show(
+            cdf.select(CF.window(cdf.date, "1 minute", "10 seconds", "5 seconds")),
+            sdf.select(SF.window(sdf.date, "1 minute", "10 seconds", "5 seconds")),
+            truncate=100,
+        )
+
+        # test session_window
+        self.compare_by_show(
+            cdf.select(CF.session_window("date", "15 seconds")),
+            sdf.select(SF.session_window("date", "15 seconds")),
+            truncate=100,
+        )
+        self.compare_by_show(
+            cdf.select(CF.session_window(cdf.date, "1 minute")),
+            sdf.select(SF.session_window(sdf.date, "1 minute")),
+            truncate=100,
+        )
+
+        # test window_time
+        self.compare_by_show(
+            cdf.groupBy(CF.window("date", "5 seconds"))
+            .agg(CF.sum("val").alias("sum"))
+            .select(CF.window_time("window")),
+            sdf.groupBy(SF.window("date", "5 seconds"))
+            .agg(SF.sum("val").alias("sum"))
+            .select(SF.window_time("window")),
+            truncate=100,
         )
 
     def test_misc_functions(self):

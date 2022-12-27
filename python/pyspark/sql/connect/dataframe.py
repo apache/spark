@@ -481,6 +481,12 @@ class DataFrame:
     melt = unpivot
 
     def hint(self, name: str, *params: Any) -> "DataFrame":
+        for param in params:
+            if param is not None and not isinstance(param, (int, str)):
+                raise TypeError(
+                    f"param should be a int or str, but got {type(param).__name__} {param}"
+                )
+
         return DataFrame.withPlan(
             plan.Hint(self._plan, name, list(params)),
             session=self._session,

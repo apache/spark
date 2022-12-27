@@ -46,6 +46,7 @@ from typing import (
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import OptionalPrimitiveType
+    from pyspark.sql.connect.catalog import Catalog
 
 
 class SparkSession(object):
@@ -119,6 +120,11 @@ class SparkSession(object):
         """
         # Parse the connection string.
         self._client = SparkConnectClient(connectionString)
+
+    def table(self, tableName: str) -> DataFrame:
+        return self.read.table(tableName)
+
+    table.__doc__ = PySparkSession.table.__doc__
 
     @property
     def read(self) -> "DataFrameReader":
@@ -223,6 +229,16 @@ class SparkSession(object):
         )
 
     range.__doc__ = PySparkSession.__doc__
+
+    @property
+    def catalog(self) -> "Catalog":
+        from pyspark.sql.connect.catalog import Catalog
+
+        if not hasattr(self, "_catalog"):
+            self._catalog = Catalog(self)
+        return self._catalog
+
+    catalog.__doc__ = PySparkSession.__doc__
 
     # SparkConnect-specific API
     @property
