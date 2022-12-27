@@ -112,7 +112,7 @@ private[spark] object KVUtils extends Logging {
   def serializerForHistoryServer(conf: SparkConf): KVStoreScalaSerializer = {
     History.LocalStoreSerializer.withName(conf.get(History.LOCAL_STORE_SERIALIZER)) match {
       case History.LocalStoreSerializer.JSON =>
-        new KVStoreScalaSerializer
+        new KVStoreScalaSerializer()
       case History.LocalStoreSerializer.PROTOBUF =>
         new KVStoreProtobufSerializer()
       case other =>
