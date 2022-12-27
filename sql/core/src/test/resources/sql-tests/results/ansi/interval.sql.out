@@ -1682,10 +1682,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1242",
+  "errorClass" : "UNRESOLVED_ROUTINE",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "fullName" : "spark_catalog.default.interval",
-    "rawName" : "interval"
+    "routineName" : "`interval`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1704,10 +1705,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1242",
+  "errorClass" : "UNRESOLVED_ROUTINE",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "fullName" : "spark_catalog.default.interval",
-    "rawName" : "interval"
+    "routineName" : "`interval`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1742,10 +1744,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1242",
+  "errorClass" : "UNRESOLVED_ROUTINE",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "fullName" : "spark_catalog.default.interval",
-    "rawName" : "interval"
+    "routineName" : "`interval`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1764,10 +1767,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1242",
+  "errorClass" : "UNRESOLVED_ROUTINE",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "fullName" : "spark_catalog.default.interval",
-    "rawName" : "interval"
+    "routineName" : "`interval`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",

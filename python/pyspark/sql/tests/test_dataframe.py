@@ -53,7 +53,7 @@ from pyspark.testing.sqlutils import (
 from pyspark.testing.utils import QuietTest
 
 
-class DataFrameTests(ReusedSQLTestCase):
+class DataFrameTestsMixin:
     def test_range(self):
         self.assertEqual(self.spark.range(1, 1).count(), 0)
         self.assertEqual(self.spark.range(1, 0, -1).count(), 1)
@@ -1566,6 +1566,10 @@ class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
                 self.spark._jvm.OnSuccessCall.isCalled(),
                 "The callback from the query execution listener should be called after 'toPandas'",
             )
+
+
+class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":

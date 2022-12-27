@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils, StringUtils}
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, CaseInsensitiveMap, CharVarcharUtils, StringUtils}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.connector.catalog.{View => _, _}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -297,6 +297,8 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveGroupingAnalytics ::
       ResolvePivot ::
       ResolveUnpivot ::
+      ResolveOrderByAll ::
+      ResolveGroupByAll ::
       ResolveOrdinalInOrderByAndGroupBy ::
       ResolveAggAliasInGroupBy ::
       ResolveMissingReferences ::
@@ -978,7 +980,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         if (metaCols.isEmpty) {
           node
         } else {
-          val newNode = addMetadataCol(node)
+          val newNode = addMetadataCol(node, metaCols.map(_.exprId).toSet)
           // We should not change the output schema of the plan. We should project away the extra
           // metadata columns if necessary.
           if (newNode.sameOutput(node)) {
@@ -1012,15 +1014,26 @@ class Analyzer(override val catalogManager: CatalogManager)
       })
     }
 
-    private def addMetadataCol(plan: LogicalPlan): LogicalPlan = plan match {
-      case s: ExposesMetadataColumns => s.withMetadataColumns()
-      case p: Project =>
+    private def addMetadataCol(
+        plan: LogicalPlan,
+        requiredAttrIds: Set[ExprId]): LogicalPlan = plan match {
+      case s: ExposesMetadataColumns if s.metadataOutput.exists( a =>
+        requiredAttrIds.contains(a.exprId)) =>
+        s.withMetadataColumns()
+      case p: Project if p.metadataOutput.exists(a => requiredAttrIds.contains(a.exprId)) =>
         val newProj = p.copy(
-          projectList = p.metadataOutput ++ p.projectList,
-          child = addMetadataCol(p.child))
+          projectList = p.projectList ++ p.metadataOutput,
+          child = addMetadataCol(p.child, requiredAttrIds))
         newProj.copyTagsFrom(p)
         newProj
-      case _ => plan.withNewChildren(plan.children.map(addMetadataCol))
+      case u: Union if u.metadataOutput.exists(a => requiredAttrIds.contains(a.exprId)) =>
+        u.withNewChildren(u.children.map { child =>
+          // The children of a Union will have the same attributes with different expression IDs
+          val exprIdMap = u.metadataOutput.map(_.exprId)
+            .zip(child.metadataOutput.map(_.exprId)).toMap
+          addMetadataCol(child, requiredAttrIds.map(a => exprIdMap.getOrElse(a, a)))
+        })
+      case _ => plan.withNewChildren(plan.children.map(addMetadataCol(_, requiredAttrIds)))
     }
   }
 
@@ -1763,6 +1776,141 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
   }
 
+  /**
+   * The first phase to resolve lateral column alias. See comments in
+   * [[ResolveLateralColumnAliasReference]] for more detailed explanation.
+   */
+  object WrapLateralColumnAliasReference extends Rule[LogicalPlan] {
+    import ResolveLateralColumnAliasReference.AliasEntry
+
+    private def insertIntoAliasMap(
+        a: Alias,
+        idx: Int,
+        aliasMap: CaseInsensitiveMap[Seq[AliasEntry]]): CaseInsensitiveMap[Seq[AliasEntry]] = {
+      val prevAliases = aliasMap.getOrElse(a.name, Seq.empty[AliasEntry])
+      aliasMap + (a.name -> (prevAliases :+ AliasEntry(a, idx)))
+    }
+
+    /**
+     * Use the given lateral alias to resolve the unresolved attribute with the name parts.
+     *
+     * Construct a dummy plan with the given lateral alias as project list, use the output of the
+     * plan to resolve.
+     * @return The resolved [[LateralColumnAliasReference]] if succeeds. None if fails to resolve.
+     */
+    private def resolveByLateralAlias(
+        nameParts: Seq[String], lateralAlias: Alias): Option[LateralColumnAliasReference] = {
+      val resolvedAttr = resolveExpressionByPlanOutput(
+        expr = UnresolvedAttribute(nameParts),
+        plan = LocalRelation(Seq(lateralAlias.toAttribute)),
+        throws = false
+      ).asInstanceOf[NamedExpression]
+      if (resolvedAttr.resolved) {
+        Some(LateralColumnAliasReference(resolvedAttr, nameParts, lateralAlias.toAttribute))
+      } else {
+        None
+      }
+    }
+
+    /**
+     * Recognize all the attributes in the given expression that reference lateral column aliases
+     * by looking up the alias map. Resolve these attributes and replace by wrapping with
+     * [[LateralColumnAliasReference]].
+     *
+     * @param currentPlan Because lateral alias has lower resolution priority than table columns,
+     *                    the current plan is needed to first try resolving the attribute by its
+     *                    children
+     */
+    private def wrapLCARef(
+        e: NamedExpression,
+        currentPlan: LogicalPlan,
+        aliasMap: CaseInsensitiveMap[Seq[AliasEntry]]): NamedExpression = {
+      e.transformWithPruning(_.containsAnyPattern(UNRESOLVED_ATTRIBUTE, OUTER_REFERENCE)) {
+        case u: UnresolvedAttribute if aliasMap.contains(u.nameParts.head) &&
+          resolveExpressionByPlanChildren(u, currentPlan).isInstanceOf[UnresolvedAttribute] =>
+          val aliases = aliasMap.get(u.nameParts.head).get
+          aliases.size match {
+            case n if n > 1 =>
+              throw QueryCompilationErrors.ambiguousLateralColumnAliasError(u.name, n)
+            case n if n == 1 && aliases.head.alias.resolved =>
+              // Only resolved alias can be the lateral column alias
+              // The lateral alias can be a struct and have nested field, need to construct
+              // a dummy plan to resolve the expression
+              resolveByLateralAlias(u.nameParts, aliases.head.alias).getOrElse(u)
+            case _ => u
+          }
+        case o: OuterReference
+          if aliasMap.contains(
+            o.getTagValue(ResolveLateralColumnAliasReference.NAME_PARTS_FROM_UNRESOLVED_ATTR)
+              .map(_.head)
+              .getOrElse(o.name)) =>
+          // handle OuterReference exactly same as UnresolvedAttribute
+          val nameParts = o
+            .getTagValue(ResolveLateralColumnAliasReference.NAME_PARTS_FROM_UNRESOLVED_ATTR)
+            .getOrElse(Seq(o.name))
+          val aliases = aliasMap.get(nameParts.head).get
+          aliases.size match {
+            case n if n > 1 =>
+              throw QueryCompilationErrors.ambiguousLateralColumnAliasError(nameParts, n)
+            case n if n == 1 && aliases.head.alias.resolved =>
+              resolveByLateralAlias(nameParts, aliases.head.alias).getOrElse(o)
+            case _ => o
+          }
+      }.asInstanceOf[NamedExpression]
+    }
+
+    override def apply(plan: LogicalPlan): LogicalPlan = {
+      if (!conf.getConf(SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED)) {
+        plan
+      } else {
+        plan.resolveOperatorsUpWithPruning(
+          _.containsAnyPattern(UNRESOLVED_ATTRIBUTE, OUTER_REFERENCE), ruleId) {
+          case p @ Project(projectList, _) if p.childrenResolved
+              && !ResolveReferences.containsStar(projectList)
+              && projectList.exists(_.containsAnyPattern(UNRESOLVED_ATTRIBUTE, OUTER_REFERENCE)) =>
+            var aliasMap = CaseInsensitiveMap(Map[String, Seq[AliasEntry]]())
+            val newProjectList = projectList.zipWithIndex.map {
+              case (a: Alias, idx) =>
+                val lcaWrapped = wrapLCARef(a, p, aliasMap).asInstanceOf[Alias]
+                // Insert the LCA-resolved alias instead of the unresolved one into map. If it is
+                // resolved, it can be referenced as LCA by later expressions (chaining).
+                // Unresolved Alias is also added to the map to perform ambiguous name check, but
+                // only resolved alias can be LCA.
+                aliasMap = insertIntoAliasMap(lcaWrapped, idx, aliasMap)
+                lcaWrapped
+              case (e, _) =>
+                wrapLCARef(e, p, aliasMap)
+            }
+            p.copy(projectList = newProjectList)
+
+          // Implementation notes:
+          // In Aggregate, introducing and wrapping this resolved leaf expression
+          // LateralColumnAliasReference is especially needed because it needs an accurate condition
+          // to trigger adding a Project above and extracting and pushing down aggregate functions
+          // or grouping expressions. Such operation can only be done once. With this
+          // LateralColumnAliasReference, that condition can simply be when the whole Aggregate is
+          // resolved. Otherwise, it can't tell if all aggregate functions are created and
+          // resolved so that it can start the extraction, because the lateral alias reference is
+          // unresolved and can be the argument to functions, blocking the resolution of functions.
+          case agg @ Aggregate(_, aggExprs, _) if agg.childrenResolved
+              && !ResolveReferences.containsStar(aggExprs)
+              && aggExprs.exists(_.containsAnyPattern(UNRESOLVED_ATTRIBUTE, OUTER_REFERENCE)) =>
+
+            var aliasMap = CaseInsensitiveMap(Map[String, Seq[AliasEntry]]())
+            val newAggExprs = aggExprs.zipWithIndex.map {
+              case (a: Alias, idx) =>
+                val lcaWrapped = wrapLCARef(a, agg, aliasMap).asInstanceOf[Alias]
+                aliasMap = insertIntoAliasMap(lcaWrapped, idx, aliasMap)
+                lcaWrapped
+              case (e, _) =>
+                wrapLCARef(e, agg, aliasMap)
+            }
+            agg.copy(aggregateExpressions = newAggExprs)
+        }
+      }
+    }
+  }
+
   private def containsDeserializer(exprs: Seq[Expression]): Boolean = {
     exprs.exists(_.exists(_.isInstanceOf[UnresolvedDeserializer]))
   }
@@ -2185,7 +2333,11 @@ class Analyzer(override val catalogManager: CatalogManager)
               externalFunctionNameSet.add(fullName)
               f
             } else {
-              throw QueryCompilationErrors.noSuchFunctionError(nameParts, f, Some(fullName))
+              val catalogPath = (catalog.name() +: catalogManager.currentNamespace).mkString(".")
+              throw QueryCompilationErrors.unresolvedRoutineError(
+                nameParts,
+                Seq("system.builtin", "system.session", catalogPath),
+                f.origin)
             }
           }
       }
@@ -2201,7 +2353,7 @@ class Analyzer(override val catalogManager: CatalogManager)
   }
 
   /**
-   * Replaces [[UnresolvedFunc]]s with concrete [[LogicalPlan]]s.
+   * Replaces [[UnresolvedFunctionName]]s with concrete [[LogicalPlan]]s.
    * Replaces [[UnresolvedFunction]]s with concrete [[Expression]]s.
    * Replaces [[UnresolvedGenerator]]s with concrete [[Expression]]s.
    * Replaces [[UnresolvedTableValuedFunction]]s with concrete [[LogicalPlan]]s.
@@ -2213,7 +2365,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       _.containsAnyPattern(UNRESOLVED_FUNC, UNRESOLVED_FUNCTION, GENERATOR,
         UNRESOLVED_TABLE_VALUED_FUNCTION), ruleId) {
       // Resolve functions with concrete relations from v2 catalog.
-      case u @ UnresolvedFunc(nameParts, cmd, requirePersistentFunc, mismatchHint, _) =>
+      case u @ UnresolvedFunctionName(nameParts, cmd, requirePersistentFunc, mismatchHint, _) =>
         lookupBuiltinOrTempFunction(nameParts)
           .orElse(lookupBuiltinOrTempTableFunction(nameParts)).map { info =>
           if (requirePersistentFunc) {
@@ -2282,8 +2434,13 @@ class Analyzer(override val catalogManager: CatalogManager)
                 errorClass = "_LEGACY_ERROR_TEMP_2306",
                 messageParameters = Map(
                   "class" -> other.getClass.getCanonicalName))
-              // We don't support persistent high-order functions yet.
-            }.getOrElse(throw QueryCompilationErrors.noSuchFunctionError(nameParts, u))
+            }.getOrElse {
+              throw QueryCompilationErrors.unresolvedRoutineError(
+                nameParts,
+                // We don't support persistent high-order functions yet.
+                Seq("system.builtin", "system.session"),
+                u.origin)
+            }
           }
 
           case u if !u.childrenResolved => u // Skip until children are resolved.

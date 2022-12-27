@@ -37,6 +37,93 @@ message Expression {
     Alias alias = 6;
     Cast cast = 7;
     UnresolvedRegex unresolved_regex = 8;
+    SortOrder sort_order = 9;
+    LambdaFunction lambda_function = 10;
+    Window window = 11;
+    UnresolvedExtractValue unresolved_extract_value = 12;
+  }
+
+
+  // Expression for the OVER clause or WINDOW clause.
+  message Window {
+
+    // (Required) The window function.
+    Expression window_function = 1;
+
+    // (Optional) The way that input rows are partitioned.
+    repeated Expression partition_spec = 2;
+
+    // (Optional) Ordering of rows in a partition.
+    repeated SortOrder order_spec = 3;
+
+    // (Optional) Window frame in a partition.
+    //
+    // If not set, it will be treated as 'UnspecifiedFrame'.
+    WindowFrame frame_spec = 4;
+
+    // The window frame
+    message WindowFrame {
+
+      // (Required) The type of the frame.
+      FrameType frame_type = 1;
+
+      // (Required) The lower bound of the frame.
+      FrameBoundary lower = 2;
+
+      // (Required) The upper bound of the frame.
+      FrameBoundary upper = 3;
+
+      enum FrameType {
+        FRAME_TYPE_UNDEFINED = 0;
+
+        // RowFrame treats rows in a partition individually.
+        FRAME_TYPE_ROW = 1;
+
+        // RangeFrame treats rows in a partition as groups of peers.
+        // All rows having the same 'ORDER BY' ordering are considered as peers.
+        FRAME_TYPE_RANGE = 2;
+      }
+
+      message FrameBoundary {
+        oneof boundary {
+          // CURRENT ROW boundary
+          bool current_row = 1;
+
+          // UNBOUNDED boundary.
+          // For lower bound, it will be converted to 'UnboundedPreceding'.
+          // for upper bound, it will be converted to 'UnboundedFollowing'.
+          bool unbounded = 2;
+
+          // This is an expression for future proofing. We are expecting literals on the server side.
+          Expression value = 3;
+        }
+      }
+    }
+  }
+
+  // SortOrder is used to specify the  data ordering, it is normally used in Sort and Window.
+  // It is an unevaluable expression and cannot be evaluated, so can not be used in Projection.
+  message SortOrder {
+    // (Required) The expression to be sorted.
+    Expression child = 1;
+
+    // (Required) The sort direction, should be ASCENDING or DESCENDING.
+    SortDirection direction = 2;
+
+    // (Required) How to deal with NULLs, should be NULLS_FIRST or NULLS_LAST.
+    NullOrdering null_ordering = 3;
+
+    enum SortDirection {
+      SORT_DIRECTION_UNSPECIFIED = 0;
+      SORT_DIRECTION_ASCENDING = 1;
+      SORT_DIRECTION_DESCENDING = 2;
+    }
+
+    enum NullOrdering {
+      SORT_NULLS_UNSPECIFIED = 0;
+      SORT_NULLS_FIRST = 1;
+      SORT_NULLS_LAST = 2;
+    }
   }
 
   message Cast {
@@ -53,7 +140,7 @@ message Expression {
 
   message Literal {
     oneof literal_type {
-      bool null = 1;
+      DataType null = 1;
       bytes binary = 2;
       bool boolean = 3;
 
@@ -77,19 +164,7 @@ message Expression {
       CalendarInterval calendar_interval = 19;
       int32 year_month_interval = 20;
       int64 day_time_interval = 21;
-
-      DataType typed_null = 22;
     }
-
-    // whether the literal type should be treated as a nullable type. Applies to
-    // all members of union other than the Typed null (which should directly
-    // declare nullability).
-    bool nullable = 50;
-
-    // optionally points to a type_variation_anchor defined in this plan.
-    // Applies to all members of union other than the Typed null (which should
-    // directly declare the type variation).
-    uint32 type_variation_reference = 51;
 
     message Decimal {
       // the string representation.
@@ -155,6 +230,17 @@ message Expression {
     string col_name = 1;
   }
 
+  // Extracts a value or values from an Expression
+  message UnresolvedExtractValue {
+    // (Required) The expression to extract value from, can be
+    // Map, Array, Struct or array of Structs.
+    Expression child = 1;
+
+    // (Required) The expression to describe the extraction, can be
+    // key of Map, index of Array, field name of Struct.
+    Expression extraction = 2;
+  }
+
   message Alias {
     // (Required) The expression that alias will be added on.
     Expression expr = 1;
@@ -166,5 +252,16 @@ message Expression {
 
     // (Optional) Alias metadata expressed as a JSON map.
     optional string metadata = 3;
+  }
+
+  message LambdaFunction {
+    // (Required) The lambda function.
+    //
+    // The function body should use 'UnresolvedAttribute' as arguments, the sever side will
+    // replace 'UnresolvedAttribute' with 'UnresolvedNamedLambdaVariable'.
+    Expression function = 1;
+
+    // (Required) Function variable names. Must contains 1 ~ 3 variables.
+    repeated string arguments = 2;
   }
 }

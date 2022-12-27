@@ -11,6 +11,7 @@
 | org.apache.spark.sql.catalyst.expressions.AesEncrypt | aes_encrypt | SELECT hex(aes_encrypt('Spark', '0000111122223333')) | struct<hex(aes_encrypt(Spark, 0000111122223333, GCM, DEFAULT)):string> |
 | org.apache.spark.sql.catalyst.expressions.And | and | SELECT true and true | struct<(true AND true):boolean> |
 | org.apache.spark.sql.catalyst.expressions.ArrayAggregate | aggregate | SELECT aggregate(array(1, 2, 3), 0, (acc, x) -> acc + x) | struct<aggregate(array(1, 2, 3), 0, lambdafunction((namedlambdavariable() + namedlambdavariable()), namedlambdavariable(), namedlambdavariable()), lambdafunction(namedlambdavariable(), namedlambdavariable())):int> |
+| org.apache.spark.sql.catalyst.expressions.ArrayCompact | array_compact | SELECT array_compact(array(1, 2, 3, null)) | struct<array_compact(array(1, 2, 3, NULL)):array<int>> |
 | org.apache.spark.sql.catalyst.expressions.ArrayContains | array_contains | SELECT array_contains(array(1, 2, 3), 2) | struct<array_contains(array(1, 2, 3), 2):boolean> |
 | org.apache.spark.sql.catalyst.expressions.ArrayDistinct | array_distinct | SELECT array_distinct(array(1, 2, 3, null, 3)) | struct<array_distinct(array(1, 2, 3, NULL, 3)):array<int>> |
 | org.apache.spark.sql.catalyst.expressions.ArrayExcept | array_except | SELECT array_except(array(1, 2, 3), array(1, 3, 5)) | struct<array_except(array(1, 2, 3), array(1, 3, 5)):array<int>> |

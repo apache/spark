@@ -1,6 +1,7 @@
 {
   "devDependencies": {
     "eslint": "^7.25.0",
-    "ansi-regex": "^5.0.1"
+    "ansi-regex": "^5.0.1",
+    "minimatch": "^3.1.2"
   }
 }

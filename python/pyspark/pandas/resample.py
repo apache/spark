@@ -16,7 +16,7 @@
 #
 
 """
-A wrapper for ResampledData to behave similar to pandas Resampler.
+A wrapper for ResampledData to behave like pandas Resampler.
 """
 from abc import ABCMeta, abstractmethod
 from distutils.version import LooseVersion

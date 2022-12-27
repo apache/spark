@@ -21,46 +21,67 @@ import java.util.NoSuchElementException
 
 import org.apache.spark.SparkFunSuite
 
-class MedianHeapSuite extends SparkFunSuite {
+class PercentileHeapSuite extends SparkFunSuite {
 
-  test("If no numbers in MedianHeap, NoSuchElementException is thrown.") {
-    val medianHeap = new MedianHeap()
+  test("If no numbers in PercentileHeap, NoSuchElementException is thrown.") {
+    val medianHeap = new PercentileHeap()
     intercept[NoSuchElementException] {
-      medianHeap.median
+      medianHeap.percentile
     }
   }
 
-  test("Median should be correct when size of MedianHeap is even") {
+  test("Median should be correct when size of PercentileHeap is even") {
     val array = Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
-    val medianHeap = new MedianHeap()
+    val medianHeap = new PercentileHeap()
     array.foreach(medianHeap.insert(_))
     assert(medianHeap.size() === 10)
-    assert(medianHeap.median === 4.5)
+    assert(medianHeap.smallerSize() === 5)
+    assert(medianHeap.percentile === 4.5)
   }
 
-  test("Median should be correct when size of MedianHeap is odd") {
+  test("Median should be correct when size of PercentileHeap is odd") {
     val array = Array(0, 1, 2, 3, 4, 5, 6, 7, 8)
-    val medianHeap = new MedianHeap()
+    val medianHeap = new PercentileHeap()
     array.foreach(medianHeap.insert(_))
     assert(medianHeap.size() === 9)
-    assert(medianHeap.median === 4)
+    assert(medianHeap.smallerSize() === 4)
+    assert(medianHeap.percentile === 4)
   }
 
   test("Median should be correct though there are duplicated numbers inside.") {
     val array = Array(0, 0, 1, 1, 2, 3, 4)
-    val medianHeap = new MedianHeap()
+    val medianHeap = new PercentileHeap()
     array.foreach(medianHeap.insert(_))
     assert(medianHeap.size === 7)
-    assert(medianHeap.median === 1)
+    assert(medianHeap.smallerSize() === 3)
+    assert(medianHeap.percentile === 1)
   }
 
   test("Median should be correct when input data is skewed.") {
-    val medianHeap = new MedianHeap()
+    val medianHeap = new PercentileHeap()
     (0 until 10).foreach(_ => medianHeap.insert(5))
-    assert(medianHeap.median === 5)
+    assert(medianHeap.percentile === 5)
     (0 until 100).foreach(_ => medianHeap.insert(10))
-    assert(medianHeap.median === 10)
+    assert(medianHeap.percentile === 10)
     (0 until 1000).foreach(_ => medianHeap.insert(0))
-    assert(medianHeap.median === 0)
+    assert(medianHeap.percentile === 0)
+  }
+
+  test("Percentile should be correct when size of PercentileHeap is even") {
+    val array = Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
+    val percentileMap = new PercentileHeap(0.7)
+    array.foreach(percentileMap.insert(_))
+    assert(percentileMap.size() === 10)
+    assert(percentileMap.smallerSize() == 7)
+    assert(percentileMap.percentile === 6.5)
+  }
+
+  test("Percentile should be correct when size of PercentileHeap is odd") {
+    val array = Array(0, 1, 2, 3, 4, 5, 6, 7, 8)
+    val percentileMap = new PercentileHeap(0.7)
+    array.foreach(percentileMap.insert(_))
+    assert(percentileMap.size() === 9)
+    assert(percentileMap.smallerSize() == 6)
+    assert(percentileMap.percentile === 6)
   }
 }

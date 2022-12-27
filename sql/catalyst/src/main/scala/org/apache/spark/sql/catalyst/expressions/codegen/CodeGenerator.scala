@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.util.{ArrayData, MapData, SQLOrderingUtil}
+import org.apache.spark.sql.catalyst.util.{ArrayData, MapData, SQLOrderingUtil, UnsafeRowUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -1726,8 +1726,7 @@ object CodeGenerator extends Logging {
     if (nullable) {
       // Can't call setNullAt on DecimalType/CalendarIntervalType, because we need to keep the
       // offset
-      if (!isVectorized && (dataType.isInstanceOf[DecimalType] ||
-        dataType.isInstanceOf[CalendarIntervalType])) {
+      if (!isVectorized && UnsafeRowUtils.avoidSetNullAt(dataType)) {
         s"""
            |if (!${ev.isNull}) {
            |  ${setColumn(row, dataType, ordinal, ev.value)};

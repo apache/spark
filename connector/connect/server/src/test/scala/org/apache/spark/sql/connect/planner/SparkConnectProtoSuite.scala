@@ -33,9 +33,10 @@ import org.apache.spark.sql.connect.dsl.MockRemoteSession
 import org.apache.spark.sql.connect.dsl.commands._
 import org.apache.spark.sql.connect.dsl.expressions._
 import org.apache.spark.sql.connect.dsl.plans._
+import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.toConnectProtoValue
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{IntegerType, MapType, Metadata, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, ByteType, DataType, DateType, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, Metadata, ShortType, StringType, StructField, StructType}
 
 /**
  * This suite is based on connect DSL and test that given same dataframe operations, whether
@@ -222,6 +223,82 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(connectPlan2, sparkPlan2)
   }
 
+  test("Rollup expressions") {
+    val connectPlan1 =
+      connectTestRelation.rollup("id".protoAttr)(proto_min("name".protoAttr))
+    val sparkPlan1 =
+      sparkTestRelation.rollup(Column("id")).agg(min(Column("name")))
+    comparePlans(connectPlan1, sparkPlan1)
+
+    val connectPlan2 =
+      connectTestRelation.rollup("id".protoAttr)(proto_min("name".protoAttr).as("agg1"))
+    val sparkPlan2 =
+      sparkTestRelation.rollup(Column("id")).agg(min(Column("name")).as("agg1"))
+    comparePlans(connectPlan2, sparkPlan2)
+
+    val connectPlan3 =
+      connectTestRelation.rollup("id".protoAttr, "name".protoAttr)(
+        proto_min(proto.Expression.newBuilder().setLiteral(toConnectProtoValue(1)).build())
+          .as("agg1"))
+    val sparkPlan3 =
+      sparkTestRelation
+        .rollup(Column("id"), Column("name"))
+        .agg(min(lit(1)).as("agg1"))
+    comparePlans(connectPlan3, sparkPlan3)
+  }
+
+  test("Cube expressions") {
+    val connectPlan1 =
+      connectTestRelation.cube("id".protoAttr)(proto_min("name".protoAttr))
+    val sparkPlan1 =
+      sparkTestRelation.cube(Column("id")).agg(min(Column("name")))
+    comparePlans(connectPlan1, sparkPlan1)
+
+    val connectPlan2 =
+      connectTestRelation.cube("id".protoAttr)(proto_min("name".protoAttr).as("agg1"))
+    val sparkPlan2 =
+      sparkTestRelation.cube(Column("id")).agg(min(Column("name")).as("agg1"))
+    comparePlans(connectPlan2, sparkPlan2)
+
+    val connectPlan3 =
+      connectTestRelation.cube("id".protoAttr, "name".protoAttr)(
+        proto_min(proto.Expression.newBuilder().setLiteral(toConnectProtoValue(1)).build())
+          .as("agg1"))
+    val sparkPlan3 =
+      sparkTestRelation
+        .cube(Column("id"), Column("name"))
+        .agg(min(lit(1)).as("agg1"))
+    comparePlans(connectPlan3, sparkPlan3)
+  }
+
+  test("Pivot expressions") {
+    val connectPlan1 =
+      connectTestRelation.pivot("id".protoAttr)(
+        "name".protoAttr,
+        Seq("a", "b", "c").map(toConnectProtoValue))(
+        proto_min(proto.Expression.newBuilder().setLiteral(toConnectProtoValue(1)).build())
+          .as("agg1"))
+    val sparkPlan1 =
+      sparkTestRelation
+        .groupBy(Column("id"))
+        .pivot(Column("name"), Seq("a", "b", "c"))
+        .agg(min(lit(1)).as("agg1"))
+    comparePlans(connectPlan1, sparkPlan1)
+
+    val connectPlan2 =
+      connectTestRelation.pivot("name".protoAttr)(
+        "id".protoAttr,
+        Seq(1, 2, 3).map(toConnectProtoValue))(
+        proto_min(proto.Expression.newBuilder().setLiteral(toConnectProtoValue(1)).build())
+          .as("agg1"))
+    val sparkPlan2 =
+      sparkTestRelation
+        .groupBy(Column("name"))
+        .pivot(Column("id"), Seq(1, 2, 3))
+        .agg(min(lit(1)).as("agg1"))
+    comparePlans(connectPlan2, sparkPlan2)
+  }
+
   test("Test as(alias: String)") {
     val connectPlan = connectTestRelation.as("target_table")
     val sparkPlan = sparkTestRelation.as("target_table")
@@ -385,6 +462,27 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(
       connectTestRelation.stat.crosstab("id", "name"),
       sparkTestRelation.stat.crosstab("id", "name"))
+  }
+
+  test("Test to") {
+    val dataTypes: Seq[DataType] = Seq(
+      StringType,
+      DateType,
+      BooleanType,
+      ByteType,
+      ShortType,
+      IntegerType,
+      LongType,
+      FloatType,
+      DoubleType,
+      DecimalType.SYSTEM_DEFAULT,
+      DecimalType.USER_DEFAULT,
+      ArrayType(IntegerType, true),
+      MapType(StringType, IntegerType, false),
+      new StructType().add("f1", IntegerType))
+
+    val schema = StructType(dataTypes.map(t => StructField(t.getClass.getName, t)))
+    comparePlans(connectTestRelation.to(schema), sparkTestRelation.to(schema))
   }
 
   test("Test toDF") {
@@ -596,6 +694,22 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     val sparkPlan1 =
       sparkTestRelation.melt(Array(Column("id")), "variable", "value")
     comparePlans(connectPlan1, sparkPlan1)
+  }
+
+  test("Test RandomSplit") {
+    val splitRelations0 = connectTestRelation.randomSplit(Array[Double](1, 2, 3), 1)
+    val splits0 = sparkTestRelation.randomSplit(Array[Double](1, 2, 3), 1)
+    assert(splitRelations0.length == splits0.length)
+    splitRelations0.zip(splits0).foreach { case (connectPlan, sparkPlan) =>
+      comparePlans(connectPlan, sparkPlan)
+    }
+
+    val splitRelations1 = connectTestRelation.randomSplit(Array[Double](1, 2, 3))
+    val splits1 = sparkTestRelation.randomSplit(Array[Double](1, 2, 3))
+    assert(splitRelations1.length == splits1.length)
+    splitRelations1.zip(splits1).foreach { case (connectPlan, sparkPlan) =>
+      comparePlans(connectPlan, sparkPlan)
+    }
   }
 
   private def createLocalRelationProtoByAttributeReferences(

@@ -813,7 +813,7 @@
   },
   "INVALID_SQL_ARG" : {
     "message" : [
-      "The argument <name> of `sql()` is invalid. Consider to replace it by a SQL literal statement."
+      "The argument <name> of `sql()` is invalid. Consider to replace it by a SQL literal."
     ]
   },
   "INVALID_SQL_SYNTAX" : {
@@ -1048,7 +1048,7 @@
   },
   "RECURSIVE_PROTOBUF_SCHEMA" : {
     "message" : [
-      "Found recursive reference in Protobuf schema, which can not be processed by Spark: <fieldDescriptor>"
+      "Found recursive reference in Protobuf schema, which can not be processed by Spark by default: <fieldDescriptor>. try setting the option `recursive.fields.max.depth` 0 to 10. Going beyond 10 levels of recursion is not allowed."
     ]
   },
   "RENAME_SRC_PATH_NOT_FOUND" : {
@@ -1164,7 +1164,7 @@
   },
   "UNBOUND_SQL_PARAMETER" : {
     "message" : [
-      "Found the unbound parameter: <name>. Please, fix `args` and provide a mapping of the parameter to a SQL literal statement."
+      "Found the unbound parameter: <name>. Please, fix `args` and provide a mapping of the parameter to a SQL literal."
     ]
   },
   "UNCLOSED_BRACKETED_COMMENT" : {
@@ -1209,6 +1209,12 @@
   "UNRECOGNIZED_SQL_TYPE" : {
     "message" : [
       "Unrecognized SQL type <typeName>"
+    ],
+    "sqlState" : "42000"
+  },
+  "UNRESOLVED_ALL_IN_GROUP_BY" : {
+    "message" : [
+      "Cannot infer grouping columns for GROUP BY ALL based on the select clause. Please explicitly specify the grouping columns."
     ],
     "sqlState" : "42000"
   },
@@ -1266,6 +1272,12 @@
     },
     "sqlState" : "42000"
   },
+  "UNRESOLVED_ROUTINE" : {
+    "message" : [
+      "Cannot resolve function <routineName> on search path <searchPath>."
+    ],
+    "sqlState" : "42000"
+  },
   "UNSUPPORTED_DATATYPE" : {
     "message" : [
       "Unsupported data type <typeName>"
@@ -1309,6 +1321,11 @@
           "The ANALYZE TABLE FOR COLUMNS command does not support the type <columnType> of the column <columnName> in the table <tableName>."
         ]
       },
+      "ANALYZE_VIEW" : {
+        "message" : [
+          "The ANALYZE TABLE command does not support views."
+        ]
+      },
       "CATALOG_OPERATION" : {
         "message" : [
           "Catalog <catalogName> does not support <operation>."
@@ -1332,6 +1349,11 @@
       "JDBC_TRANSACTION" : {
         "message" : [
           "The target JDBC server does not support transactions and can only support ALTER TABLE with a single action."
+        ]
+      },
+      "LATERAL_COLUMN_ALIAS_IN_AGGREGATE_FUNC" : {
+        "message" : [
+          "Referencing a lateral column alias <lca> in the aggregate function <aggFunc>."
         ]
       },
       "LATERAL_JOIN_USING" : {
@@ -1661,11 +1683,6 @@
   "_LEGACY_ERROR_TEMP_0018" : {
     "message" : [
       "Function trim doesn't support with type <trimOption>. Please use BOTH, LEADING or TRAILING as trim type."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0022" : {
-    "message" : [
-      "<msg>."
     ]
   },
   "_LEGACY_ERROR_TEMP_0023" : {
@@ -2053,11 +2070,6 @@
   "_LEGACY_ERROR_TEMP_1040" : {
     "message" : [
       "Gap duration expression used in session window must be CalendarIntervalType, but got <dt>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1041" : {
-    "message" : [
-      "Undefined function <name>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1045" : {
@@ -2900,11 +2912,6 @@
       "Partition spec is invalid. The spec (<specKeys>) must match the partition spec (<partitionColumnNames>) defined in table '<tableName>'."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1236" : {
-    "message" : [
-      "ANALYZE TABLE is not supported on views."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1237" : {
     "message" : [
       "The list of partition columns with values in partition specification for table '<table>' in database '<database>' is not a prefix of the list of partition columns defined in the table schema. Expected a prefix of [<schemaColumns>], but got [<specColumns>]."
@@ -2918,16 +2925,6 @@
   "_LEGACY_ERROR_TEMP_1241" : {
     "message" : [
       "CREATE-TABLE-AS-SELECT cannot create table with location to a non-empty directory <tablePath>. To allow overwriting the existing non-empty directory, set '<config>' to true."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1242" : {
-    "message" : [
-      "Undefined function: <rawName>. This function is neither a built-in/temporary function, nor a persistent function that is qualified as <fullName>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1243" : {
-    "message" : [
-      "Undefined function: <rawName>"
     ]
   },
   "_LEGACY_ERROR_TEMP_1244" : {
@@ -3696,7 +3693,7 @@
   },
   "_LEGACY_ERROR_TEMP_2054" : {
     "message" : [
-      "Task failed while writing rows."
+      "Task failed while writing rows. <message>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2055" : {
@@ -4298,7 +4295,7 @@
   },
   "_LEGACY_ERROR_TEMP_2175" : {
     "message" : [
-      "Rule id not found for <ruleName>"
+      "Rule id not found for <ruleName>. Please modify RuleIdCollection.scala if you are adding a new rule."
     ]
   },
   "_LEGACY_ERROR_TEMP_2176" : {

@@ -231,15 +231,6 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
       ctx)
   }
 
-  def parsingValueTypeError(
-      e: IllegalArgumentException, valueType: String, ctx: TypeConstructorContext): Throwable = {
-    val message = Option(e.getMessage).getOrElse(s"Exception parsing $valueType")
-    new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0022",
-      messageParameters = Map("msg" -> message),
-      ctx)
-  }
-
   def invalidNumericLiteralRangeError(rawStrippedQualifier: String, minValue: BigDecimal,
       maxValue: BigDecimal, typeName: String, ctx: NumberContext): Throwable = {
     new ParseException(

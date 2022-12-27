@@ -97,19 +97,8 @@ case class DataSource(
 
   case class SourceInfo(name: String, schema: StructType, partitionColumns: Seq[String])
 
-  lazy val providingClass: Class[_] = {
-    val cls = DataSource.lookupDataSource(className, sparkSession.sessionState.conf)
-    // `providingClass` is used for resolving data source relation for catalog tables.
-    // As now catalog for data source V2 is under development, here we fall back all the
-    // [[FileDataSourceV2]] to [[FileFormat]] to guarantee the current catalog works.
-    // [[FileDataSourceV2]] will still be used if we call the load()/save() method in
-    // [[DataFrameReader]]/[[DataFrameWriter]], since they use method `lookupDataSource`
-    // instead of `providingClass`.
-    cls.newInstance() match {
-      case f: FileDataSourceV2 => f.fallbackFileFormat
-      case _ => cls
-    }
-  }
+  lazy val providingClass: Class[_] =
+    DataSource.providingClass(className, sparkSession.sessionState.conf)
 
   private[sql] def providingInstance(): Any = providingClass.getConstructor().newInstance()
 
@@ -841,6 +830,20 @@ object DataSource extends Logging {
         throw QueryCompilationErrors.cannotResolveAttributeError(
           name, plan.output.map(_.name).mkString(", "))
       }
+    }
+  }
+
+  def providingClass(className: String, conf: SQLConf): Class[_] = {
+    val cls = DataSource.lookupDataSource(className, conf)
+    // `providingClass` is used for resolving data source relation for catalog tables.
+    // As now catalog for data source V2 is under development, here we fall back all the
+    // [[FileDataSourceV2]] to [[FileFormat]] to guarantee the current catalog works.
+    // [[FileDataSourceV2]] will still be used if we call the load()/save() method in
+    // [[DataFrameReader]]/[[DataFrameWriter]], since they use method `lookupDataSource`
+    // instead of `providingClass`.
+    cls.newInstance() match {
+      case f: FileDataSourceV2 => f.fallbackFileFormat
+      case _ => cls
     }
   }
 }

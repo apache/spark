@@ -50,6 +50,8 @@ If you want to install extra dependencies for a specific component, you can inst
     pip install pyspark[sql]
     # pandas API on Spark
     pip install pyspark[pandas_on_spark] plotly  # to plot your data, you can install plotly together.
+    # Spark Connect
+    pip install pyspark[connect]
 
 For PySpark with/without a specific Hadoop version, you can install it by using ``PYSPARK_HADOOP_VERSION`` environment variables as below:
 
@@ -58,7 +60,7 @@ For PySpark with/without a specific Hadoop version, you can install it by using 
     PYSPARK_HADOOP_VERSION=2 pip install pyspark
 
 The default distribution uses Hadoop 3.3 and Hive 2.3. If users specify different versions of Hadoop, the pip installation automatically
-downloads a different version and use it in PySpark. Downloading it can take a while depending on
+downloads a different version and uses it in PySpark. Downloading it can take a while depending on
 the network and the mirror chosen. ``PYSPARK_RELEASE_MIRROR`` can be set to manually choose the mirror for faster downloading.
 
 .. code-block:: bash
@@ -77,7 +79,7 @@ Supported values in ``PYSPARK_HADOOP_VERSION`` are:
 - ``2``: Spark pre-built for Apache Hadoop 2.7
 - ``3``: Spark pre-built for Apache Hadoop 3.3 and later (default)
 
-Note that this installation way of PySpark with/without a specific Hadoop version is experimental. It can change or be removed between minor releases.
+Note that this installation of PySpark with/without a specific Hadoop version is experimental. It can change or be removed between minor releases.
 
 
 Using Conda
@@ -151,16 +153,15 @@ To install PySpark from source, refer to |building_spark|_.
 
 Dependencies
 ------------
-============= ========================= ======================================
+============= ========================= ======================================================================================
 Package       Minimum supported version Note
-============= ========================= ======================================
-`pandas`      1.0.5                     Optional for Spark SQL
-`pyarrow`     1.0.0                     Optional for Spark SQL
+============= ========================= ======================================================================================
 `py4j`        0.10.9.7                  Required
-`pandas`      1.0.5                     Required for pandas API on Spark
-`pyarrow`     1.0.0                     Required for pandas API on Spark
+`pandas`      1.0.5                     Required for pandas API on Spark and Spark Connect; Optional for Spark SQL
+`pyarrow`     1.0.0                     Required for pandas API on Spark and Spark Connect; Optional for Spark SQL
 `numpy`       1.15                      Required for pandas API on Spark and MLLib DataFrame-based API; Optional for Spark SQL
-============= ========================= ======================================
+`grpc`        1.48.1                    Required for Spark Connect
+============= ========================= ======================================================================================
 
 Note that PySpark requires Java 8 or later with ``JAVA_HOME`` properly set.  
 If using JDK 11, set ``-Dio.netty.tryReflectionSetAccessible=true`` for Arrow related features and refer
