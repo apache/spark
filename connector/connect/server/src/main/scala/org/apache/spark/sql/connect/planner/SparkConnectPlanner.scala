@@ -359,7 +359,7 @@ class SparkConnectPlanner(session: SparkSession) {
       .stat
       .corr(rel.getCol1, rel.getCol2, rel.getMethod)
     LocalRelation.fromProduct(
-      output = AttributeReference("corr", DoubleType, true)() :: Nil,
+      output = AttributeReference("corr", DoubleType, false)() :: Nil,
       data = Tuple1.apply(corr) :: Nil)
   }
 

@@ -483,7 +483,8 @@ message StatCov {
 }
 
 // Calculates the correlation of two columns of a DataFrame. Currently only supports the Pearson
-// Correlation Coefficient.
+// Correlation Coefficient. It will invoke 'Dataset.stat.corr' (same as
+// 'StatFunctions.pearsonCorrelation') to compute the results.
 message StatCorr {
   // (Required) The input relation.
   Relation input = 1;
