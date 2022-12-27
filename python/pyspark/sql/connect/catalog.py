@@ -305,3 +305,45 @@ class Catalog:
         self._catalog_to_pandas(plan.RefreshByPath(path=path))
 
     refreshByPath.__doc__ = PySparkCatalog.refreshByPath.__doc__
+
+
+def _test() -> None:
+    import os
+    import sys
+    import doctest
+    from pyspark.sql import SparkSession
+    from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+    import pyspark.sql.connect.catalog
+
+    if should_test_connect:
+        globs = pyspark.sql.catalog.__dict__.copy()
+        globs["_spark"] = (
+            SparkSession.builder.master("local[4]")
+            .appName("sql.connect.catalog tests")
+            .getOrCreate()
+        )
+
+        os.environ["SPARK_REMOTE"] = "sc://localhost"
+        globs["spark"] = SparkSession.builder.remote("sc://localhost").getOrCreate()
+
+        (failure_count, test_count) = doctest.testmod(
+            pyspark.sql.connect.catalog,
+            globs=globs,
+            optionflags=doctest.ELLIPSIS
+            | doctest.NORMALIZE_WHITESPACE
+            | doctest.IGNORE_EXCEPTION_DETAIL,
+        )
+        # TODO(SPARK-41529): Implement stop in RemoteSparkSession.
+        #  Stop the regular Spark session (server) too.
+        globs["_spark"].stop()
+        if failure_count:
+            sys.exit(-1)
+    else:
+        print(
+            f"Skipping pyspark.sql.connect.catalog doctests: {connect_requirement_message}",
+            file=sys.stderr,
+        )
+
+
+if __name__ == "__main__":
+    _test()
