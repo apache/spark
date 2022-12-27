@@ -97,16 +97,57 @@ class LogicalPlan(object):
         return plan
 
     def _parameters_to_print(self, parameters: Mapping[str, Any]) -> Mapping[str, Any]:
+        """
+        Extracts the parameters that are able to be printed. It looks up the signature
+        in the constructor of this :class:`LogicalPlan`, and retrieves the variables
+        from this instance by the same name (or the name with prefix `_`)  defined
+        in the constructor.
+
+        Parameters
+        ----------
+        parameters : map
+            Parameter mapping from ``inspect.signature(...).parameters``
+
+        Returns
+        -------
+        dict
+            A dictionary consisting of a string name and variable found in this
+            :class:`LogicalPlan`.
+
+        Notes
+        -----
+        :class:`LogicalPlan` itself is filtered out and considered as a non-printable
+        parameter.
+
+        Examples
+        --------
+        The example below returns a dictionary from `self._start`, `self._end`,
+        `self._num_partitions`.
+
+        >>> rg = Range(0, 10, 1)
+        >>> rg._parameters_to_print(signature(rg.__class__.__init__).parameters)
+        {'start': 0, 'end': 10, 'step': 1, 'num_partitions': None}
+
+        If the child is defined, it is not considered as a printable instance
+
+        >>> project = Project(rg, "value")
+        >>> project._parameters_to_print(signature(project.__class__.__init__).parameters)
+        {'columns': ['value']}
+        """
         params = {}
         for name, tpe in parameters.items():
+            # LogicalPlan is not to print, e.g., LogicalPlan
             is_logical_plan = isclass(tpe.annotation) and isinstance(tpe.annotation, LogicalPlan)
+            # Look up the string argument defined as a forward reference e.g., "LogicalPlan"
             is_forwardref_logical_plan = getattr(tpe.annotation, "__forward_arg__", "").endswith(
                 "LogicalPlan"
             )
+            # Wrapped LogicalPlan, e.g., Optional[LogicalPlan]
             is_nested_logical_plan = any(
                 isclass(a) and issubclass(a, LogicalPlan)
                 for a in getattr(tpe.annotation, "__args__", ())
             )
+            # Wrapped forward reference of LogicalPlan, e.g., Optional["LogicalPlan"].
             is_nested_forwardref_logical_plan = any(
                 getattr(a, "__forward_arg__", "").endswith("LogicalPlan")
                 for a in getattr(tpe.annotation, "__args__", ())
@@ -128,6 +169,19 @@ class LogicalPlan(object):
         return params
 
     def print(self, indent: int = 0) -> str:
+        """
+        Print the simple string representation of the current :class:`LogicalPlan`.
+
+        Parameters
+        ----------
+        indent : int
+            The number of leading spaces for the output string.
+
+        Returns
+        -------
+        str
+            Simple string representation of this :class:`LogicalPlan`.
+        """
         params = self._parameters_to_print(signature(self.__class__.__init__).parameters)
         pretty_params = [f"{name}='{param}'" for name, param in params.items()]
         if len(pretty_params) == 0:
@@ -137,6 +191,14 @@ class LogicalPlan(object):
         return f"{' ' * indent}<{self.__class__.__name__}{pretty_str}>\n{self._child_print(indent)}"
 
     def _repr_html_(self) -> str:
+        """Returns a  :class:`LogicalPlan` with HTML code. This is generally called in third-party
+        systems such as Jupyter.
+
+        Returns
+        -------
+        str
+            HTML representation of this :class:`LogicalPlan`.
+        """
         params = self._parameters_to_print(signature(self.__class__.__init__).parameters)
         pretty_params = [
             f"\n              {name}: " f"{param} <br/>" for name, param in params.items()
