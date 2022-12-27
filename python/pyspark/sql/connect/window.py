@@ -241,4 +241,4 @@ class Window:
     rangeBetween.__doc__ = PySparkWindow.rangeBetween.__doc__
 
 
-Window.__doc__ = Window.__doc__
+Window.__doc__ = PySparkWindowSpec.Window.__doc__
