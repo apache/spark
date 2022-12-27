@@ -146,13 +146,17 @@ abstract class WindowIterator extends Iterator[InternalRow] {
       def hasNext: Boolean = {
         if (nextRowAvailable) {
           if (rank >= limit && nextGroup == currentGroup) {
+            // Skip all the remaining rows in this group
             do {
               fetchNextRow()
             } while (nextRowAvailable && nextGroup == currentGroup)
+            false
+          } else {
+            // Returns true if there are more rows in this group.
+            nextGroup == currentGroup
           }
-          nextRowAvailable && nextGroup == currentGroup
         } else {
-          nextRowAvailable
+          false
         }
       }
 
