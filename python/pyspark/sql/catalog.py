@@ -246,6 +246,8 @@ class Catalog:
             locationUri=jdb.locationUri(),
         )
 
+    # TODO(SPARK-41725): we don't have to `collect` for every `sql` but
+    #  Spark Connect requires it. We should remove them out.
     def databaseExists(self, dbName: str) -> bool:
         """Check if the database with the specified name exists.
 
