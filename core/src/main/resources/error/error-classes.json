@@ -1331,6 +1331,11 @@
           "Catalog <catalogName> does not support <operation>."
         ]
       },
+      "COMBINATION_QUERY_RESULT_CLAUSES" : {
+        "message" : [
+          "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY."
+        ]
+      },
       "DESC_TABLE_COLUMN_PARTITION" : {
         "message" : [
           "DESC TABLE COLUMN for a specific partition."
