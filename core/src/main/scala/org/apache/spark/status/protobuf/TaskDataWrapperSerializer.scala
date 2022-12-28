@@ -71,14 +71,15 @@ class TaskDataWrapperSerializer extends ProtobufSerDe {
       .setStageAttemptId(input.stageAttemptId)
     input.errorMessage.foreach(builder.setErrorMessage)
     input.accumulatorUpdates.foreach { update =>
-      builder.addAccumulatorUpdates(Utils.serializeAccumulableInfo(update))
+      builder.addAccumulatorUpdates(AccumulableInfoSerializer.serializeAccumulableInfo(update))
     }
     builder.build().toByteArray
   }
 
   def deserialize(bytes: Array[Byte]): TaskDataWrapper = {
     val binary = StoreTypes.TaskDataWrapper.parseFrom(bytes)
-    val accumulatorUpdates = Utils.deserializeAccumulableInfos(binary.getAccumulatorUpdatesList)
+    val accumulatorUpdates = AccumulableInfoSerializer.deserializeAccumulableInfos(
+      binary.getAccumulatorUpdatesList)
     new TaskDataWrapper(
       taskId = binary.getTaskId,
       index = binary.getIndex,

@@ -102,7 +102,8 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
     }
     stageData.rddIds.foreach(id => stageDataBuilder.addRddIds(id.toLong))
     stageData.accumulatorUpdates.foreach { update =>
-      stageDataBuilder.addAccumulatorUpdates(Utils.serializeAccumulableInfo(update))
+      stageDataBuilder.addAccumulatorUpdates(
+        AccumulableInfoSerializer.serializeAccumulableInfo(update))
     }
     stageData.tasks.foreach { t =>
       t.foreach { entry =>
@@ -111,7 +112,8 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
     }
     stageData.executorSummary.foreach { es =>
       es.foreach { entry =>
-        stageDataBuilder.putExecutorSummary(entry._1, Utils.serializeExecutorStageSummary(entry._2))
+        stageDataBuilder.putExecutorSummary(entry._1,
+          ExecutorStageSummarySerializer.serializeExecutorStageSummary(entry._2))
       }
     }
     stageData.speculationSummary.foreach { ss =>
@@ -158,7 +160,8 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
       taskDataBuilder.setDuration(d)
     }
     t.accumulatorUpdates.foreach { update =>
-      taskDataBuilder.addAccumulatorUpdates(Utils.serializeAccumulableInfo(update))
+      taskDataBuilder.addAccumulatorUpdates(
+        AccumulableInfoSerializer.serializeAccumulableInfo(update))
     }
     t.errorMessage.foreach { em =>
       taskDataBuilder.setErrorMessage(em)
@@ -356,7 +359,8 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
       getOptional(binary.hasFailureReason, () => weakIntern(binary.getFailureReason))
     val description =
       getOptional(binary.hasDescription, () => weakIntern(binary.getDescription))
-    val accumulatorUpdates = Utils.deserializeAccumulableInfos(binary.getAccumulatorUpdatesList)
+    val accumulatorUpdates = AccumulableInfoSerializer.deserializeAccumulableInfos(
+      binary.getAccumulatorUpdatesList)
     val tasks = MapUtils.isEmpty(binary.getTasksMap) match {
       case true => None
       case _ => Some(binary.getTasksMap.asScala.map(
@@ -365,7 +369,7 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
     val executorSummary = MapUtils.isEmpty(binary.getExecutorSummaryMap) match {
       case true => None
       case _ => Some(binary.getExecutorSummaryMap.asScala.mapValues(
-          Utils.deserializeExecutorStageSummary(_)).toMap
+          ExecutorStageSummarySerializer.deserializeExecutorStageSummary(_)).toMap
       )
     }
     val speculationSummary =
@@ -550,7 +554,8 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
     val resultFetchStart = getOptional(binary.hasResultFetchStart,
       () => new Date(binary.getResultFetchStart))
     val duration = getOptional(binary.hasDuration, () => binary.getDuration)
-    val accumulatorUpdates = Utils.deserializeAccumulableInfos(binary.getAccumulatorUpdatesList)
+    val accumulatorUpdates = AccumulableInfoSerializer.deserializeAccumulableInfos(
+      binary.getAccumulatorUpdatesList)
     val taskMetrics = getOptional(binary.hasTaskMetrics,
       () => deserializeTaskMetrics(binary.getTaskMetrics))
     new TaskData(

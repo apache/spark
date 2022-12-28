@@ -27,7 +27,7 @@ class ExecutorStageSummaryWrapperSerializer extends ProtobufSerDe {
     serialize(input.asInstanceOf[ExecutorStageSummaryWrapper])
 
   private def serialize(input: ExecutorStageSummaryWrapper): Array[Byte] = {
-    val info = Utils.serializeExecutorStageSummary(input.info)
+    val info = ExecutorStageSummarySerializer.serializeExecutorStageSummary(input.info)
     val builder = StoreTypes.ExecutorStageSummaryWrapper.newBuilder()
       .setStageId(input.stageId.toLong)
       .setStageAttemptId(input.stageAttemptId)
@@ -38,7 +38,7 @@ class ExecutorStageSummaryWrapperSerializer extends ProtobufSerDe {
 
   def deserialize(bytes: Array[Byte]): ExecutorStageSummaryWrapper = {
     val binary = StoreTypes.ExecutorStageSummaryWrapper.parseFrom(bytes)
-    val info = Utils.deserializeExecutorStageSummary(binary.getInfo)
+    val info = ExecutorStageSummarySerializer.deserializeExecutorStageSummary(binary.getInfo)
     new ExecutorStageSummaryWrapper(
       stageId = binary.getStageId.toInt,
       stageAttemptId = binary.getStageAttemptId,
