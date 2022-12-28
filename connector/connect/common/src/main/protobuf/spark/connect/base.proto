@@ -21,6 +21,7 @@ package spark.connect;
 
 import "google/protobuf/any.proto";
 import "spark/connect/commands.proto";
+import "spark/connect/expressions.proto";
 import "spark/connect/relations.proto";
 import "spark/connect/types.proto";
 
@@ -276,8 +277,7 @@ message ExecutePlanResponse {
 
     message ObservedMetricsObject {
       string name = 1;
-      DataType schema = 2;
-      repeated string values = 3;
+      repeated Expression.Literal values = 2;
     }
   }
 }

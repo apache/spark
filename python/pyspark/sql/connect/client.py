@@ -374,21 +374,16 @@ class PlanMetrics:
 
 
 class PlanObservedMetrics:
-    def __init__(self, name: str, schema: DataType, metrics: List[str]):
+    def __init__(self, name: str, metrics: List[pb2.Expression]):
         self._name = name
-        self._schema = schema
         self._metrics = metrics
 
     def __repr__(self) -> str:
-        return f"Plan observed({self._name})=(schema={self._schema}, values={self._metrics})"
+        return f"Plan observed({self._name}={self._metrics})"
 
     @property
     def name(self) -> str:
         return self._name
-
-    @property
-    def schema(self) -> DataType:
-        return self._schema
 
     @property
     def metrics(self) -> List[str]:
@@ -589,7 +584,6 @@ class SparkConnectClient(object):
         return [
             PlanObservedMetrics(
                 x.name,
-                x.schema,
                 [x.values],
             )
             for x in metrics.metrics_objects

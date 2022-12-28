@@ -59,6 +59,7 @@ if should_test_connect:
     import grpc
     import pandas as pd
     import numpy as np
+    from pyspark.sql.connect.proto import Expression as ProtoExpression
     from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
     from pyspark.sql.connect.client import ChannelBuilder
     from pyspark.sql.connect.column import Column
@@ -1656,12 +1657,17 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         observed_metrics = cdf.attrs["observed_metrics"]
         self.assert_eq(len(observed_metrics), 1)
         self.assert_eq(observed_metrics[0].name, observation_name)
-        struct_fields = observed_metrics[0].schema.struct.fields
-        self.assert_eq(len(struct_fields), 3)
-        self.assert_eq(struct_fields[0].name, "min(id)")
-        self.assert_eq(struct_fields[1].name, "max(id)")
-        self.assert_eq(struct_fields[2].name, "sum(id)")
-        self.assert_eq(observed_metrics[0].metrics, [["4", "99", "4944"]])
+        self.assert_eq(len(observed_metrics[0].metrics), 1)
+        self.assert_eq(len(observed_metrics[0].metrics[0]), 3)
+        for metric in observed_metrics[0].metrics[0]:
+            self.assertIsInstance(metric, ProtoExpression.Literal)
+        values = list(map(lambda metric: metric.long, observed_metrics[0].metrics[0]))
+        self.assert_eq(values, [4, 99, 4944])
+
+        with self.assertRaisesRegex(ValueError, "'exprs' should not be empty"):
+            self.connect.read.table(self.tbl_name).observe(observation_name)
+        with self.assertRaisesRegex(ValueError, "all 'exprs' should be Column"):
+            self.connect.read.table(self.tbl_name).observe(observation_name, lit(1), "id")
 
     def test_with_columns(self):
         # SPARK-41256: test withColumn(s).

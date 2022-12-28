@@ -358,15 +358,10 @@ class SparkConnectServiceSuite extends SharedSparkSession {
       val metricsObjectsList = observedMetrics.getMetricsObjectsList.asScala
       val metricsObject = metricsObjectsList.head
       assert(metricsObject.getName == "my_metric")
-      assert(metricsObject.getSchema.hasStruct)
-      assert(metricsObject.getSchema.getStruct.getFieldsCount == 2)
-      val fieldsList = metricsObject.getSchema.getStruct.getFieldsList.asScala
-      assert(fieldsList.head.getName == "min_val")
-      assert(fieldsList.last.getName == "max_val")
       assert(metricsObject.getValuesCount == 2)
       val valuesList = metricsObject.getValuesList.asScala
-      assert(valuesList.head == "0")
-      assert(valuesList.last == "99")
+      assert(valuesList.head.hasLong && valuesList.head.getLong == 0)
+      assert(valuesList.last.hasLong && valuesList.last.getLong == 99)
     }
   }
 }
