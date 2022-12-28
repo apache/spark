@@ -163,7 +163,7 @@ class Relation(google.protobuf.message.Message):
     def describe(self) -> global___StatDescribe: ...
     @property
     def catalog(self) -> pyspark.sql.connect.proto.catalog_pb2.Catalog:
-        """Catalog API (internal-only)"""
+        """Catalog API (experimental / unstable)"""
     @property
     def unknown(self) -> global___Unknown: ...
     def __init__(
