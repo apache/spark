@@ -1545,7 +1545,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def malformedCSVRecordError(): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2149",
+      errorClass = "MALFORMED_CSV_RECORD",
       messageParameters = Map.empty)
   }
 

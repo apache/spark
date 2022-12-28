@@ -851,6 +851,11 @@
       "Cannot name the managed table as <identifier>, as its associated location <location> already exists. Please pick a different table name, or remove the existing location first."
     ]
   },
+  "MALFORMED_CSV_RECORD" : {
+    "message" : [
+      "Malformed CSV record"
+    ]
+  },
   "MALFORMED_PROTOBUF_MESSAGE" : {
     "message" : [
       "Malformed Protobuf messages are detected in message deserialization. Parse Mode: <failFastMode>. To process malformed protobuf message as null result, try setting the option 'mode' as 'PERMISSIVE'."
@@ -4155,11 +4160,6 @@
   "_LEGACY_ERROR_TEMP_2148" : {
     "message" : [
       "null value found but field <name> is not nullable."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2149" : {
-    "message" : [
-      "Malformed CSV record"
     ]
   },
   "_LEGACY_ERROR_TEMP_2150" : {

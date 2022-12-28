@@ -36,7 +36,7 @@ import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.logging.log4j.Level
 
-import org.apache.spark.{SparkConf, SparkException, SparkUpgradeException, TestUtils}
+import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkUpgradeException, TestUtils}
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Encoders, QueryTest, Row}
 import org.apache.spark.sql.catalyst.csv.CSVOptions
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
@@ -370,8 +370,11 @@ abstract class CSVSuite
           .load(testFile(carsFile)).collect()
       }
 
-      assert(exception.getMessage.contains("Malformed CSV record"))
-      assert(ExceptionUtils.getRootCause(exception).isInstanceOf[RuntimeException])
+      checkError(
+        exception = ExceptionUtils.getRootCause(exception).asInstanceOf[SparkRuntimeException],
+        errorClass = "MALFORMED_CSV_RECORD",
+        parameters = Map.empty
+      )
     }
   }
 
