@@ -30,7 +30,14 @@ if should_test_connect:
     from pyspark.sql.connect.readwriter import DataFrameReader
     from pyspark.sql.connect.function_builder import UserDefinedFunction, udf
     from pyspark.sql.connect.types import pyspark_types_to_proto_types
-    from pyspark.sql.types import StringType, StructType, StructField, IntegerType, MapType
+    from pyspark.sql.types import (
+        StringType,
+        StructType,
+        StructField,
+        IntegerType,
+        MapType,
+        ArrayType,
+    )
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
@@ -547,6 +554,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
                 StructField("col1", IntegerType(), True),
                 StructField("col2", StringType(), True),
                 StructField("map1", MapType(StringType(), IntegerType(), True), True),
+                StructField("array1", ArrayType(IntegerType(), True), True),
             ]
         )
         new_plan = df.to(schema)._plan.to_proto(self.connect)

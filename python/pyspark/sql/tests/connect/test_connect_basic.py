@@ -20,7 +20,15 @@ import tempfile
 
 from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.sql import SparkSession, Row
-from pyspark.sql.types import StructType, StructField, LongType, StringType, IntegerType, MapType
+from pyspark.sql.types import (
+    StructType,
+    StructField,
+    LongType,
+    StringType,
+    IntegerType,
+    MapType,
+    ArrayType,
+)
 import pyspark.sql.functions
 from pyspark.testing.utils import ReusedPySparkTestCase
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
@@ -83,7 +91,9 @@ class SparkConnectSQLTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLT
         df2.write.saveAsTable(cls.tbl_name2)
         df3 = cls.spark.createDataFrame([(x, f"{x}") for x in range(100)], ["id", "test\n_column"])
         df3.write.saveAsTable(cls.tbl_name3)
-        df4 = cls.spark.createDataFrame([(x, {"a": x}) for x in range(100)], ["id", "map_column"])
+        df4 = cls.spark.createDataFrame(
+            [(x, {"a": x}, [x, x * 2]) for x in range(100)], ["id", "map_column", "array_column"]
+        )
         df4.write.saveAsTable(cls.tbl_name4)
         empty_table_schema = StructType(
             [
@@ -452,11 +462,12 @@ class SparkConnectTests(SparkConnectSQLTestCase):
                 str(context.exception),
             )
 
-        # Test map type
+        # Test map type and array type
         schema = StructType(
             [
                 StructField("id", StringType(), True),
                 StructField("my_map", MapType(StringType(), IntegerType(), False), True),
+                StructField("my_array", ArrayType(IntegerType(), False), True),
             ]
         )
         cdf = self.connect.read.table(self.tbl_name4).to(schema)

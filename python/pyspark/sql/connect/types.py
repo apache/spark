@@ -99,6 +99,9 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
         ret.map.key_type.CopyFrom(pyspark_types_to_proto_types(data_type.keyType))
         ret.map.value_type.CopyFrom(pyspark_types_to_proto_types(data_type.valueType))
         ret.map.value_contains_null = data_type.valueContainsNull
+    elif isinstance(data_type, ArrayType):
+        ret.array.element_type.CopyFrom(pyspark_types_to_proto_types(data_type.elementType))
+        ret.array.contains_null = data_type.containsNull
     else:
         raise Exception(f"Unsupported data type {data_type}")
     return ret
