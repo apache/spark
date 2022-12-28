@@ -1306,7 +1306,7 @@ class Sample(google.protobuf.message.Message):
     seed: builtins.int
     """(Optional) The random seed."""
     deterministic_order: builtins.bool
-    """(Required) Explicitly sort the underlying plan to make the ordering deterministic.
+    """(Required) Explicitly sort the underlying plan to make the ordering deterministic or cache it.
     This flag is true when invoking `dataframe.randomSplit` to randomly splits DataFrame with the
     provided weights. Otherwise, it is false.
     """

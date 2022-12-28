@@ -358,7 +358,7 @@ message Sample {
   // (Optional) The random seed.
   optional int64 seed = 5;
 
-  // (Required) Explicitly sort the underlying plan to make the ordering deterministic.
+  // (Required) Explicitly sort the underlying plan to make the ordering deterministic or cache it.
   // This flag is true when invoking `dataframe.randomSplit` to randomly splits DataFrame with the
   // provided weights. Otherwise, it is false.
   bool deterministic_order = 6;
