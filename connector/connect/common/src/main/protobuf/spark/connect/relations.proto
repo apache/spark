@@ -68,6 +68,7 @@ message Relation {
     StatSummary summary = 100;
     StatCrosstab crosstab = 101;
     StatDescribe describe = 102;
+    StatCov cov = 103;
 
     // Catalog API (experimental / unstable)
     Catalog catalog = 200;
@@ -463,6 +464,19 @@ message StatCrosstab {
   // (Required) The name of the second column.
   //
   // Distinct items will make the column names of the DataFrame.
+  string col2 = 3;
+}
+
+// Calculate the sample covariance of two numerical columns of a DataFrame.
+// It will invoke 'Dataset.stat.cov' (same as 'StatFunctions.calculateCov') to compute the results.
+message StatCov {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) The name of the first column.
+  string col1 = 2;
+
+  // (Required) The name of the second column.
   string col2 = 3;
 }
 

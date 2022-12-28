@@ -1063,6 +1063,22 @@ class StatDescribe(LogicalPlan):
         return plan
 
 
+class StatCov(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], col1: str, col2: str) -> None:
+        super().__init__(child)
+        self._col1 = col1
+        self._col2 = col2
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+
+        plan = proto.Relation()
+        plan.cov.input.CopyFrom(self._child.plan(session))
+        plan.cov.col1 = self._col1
+        plan.cov.col2 = self._col2
+        return plan
+
+
 class StatCrosstab(LogicalPlan):
     def __init__(self, child: Optional["LogicalPlan"], col1: str, col2: str) -> None:
         super().__init__(child)
