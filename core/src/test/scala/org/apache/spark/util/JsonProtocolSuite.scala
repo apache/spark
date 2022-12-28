@@ -19,7 +19,6 @@ package org.apache.spark.util
 
 import java.util.Properties
 
-import scala.collection
 import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.language.implicitConversions
@@ -1091,10 +1090,11 @@ private[spark] object JsonProtocolSuite extends Assertions {
   }
 
   private def assertEquals(
-      details1: Map[String, collection.Seq[(String, String)]],
-      details2: Map[String, collection.Seq[(String, String)]]): Unit = {
+      details1: Map[String, scala.collection.Seq[(String, String)]],
+      details2: Map[String, scala.collection.Seq[(String, String)]]): Unit = {
     details1.zip(details2).foreach {
-      case ((key1, values1: Seq[(String, String)]), (key2, values2: Seq[(String, String)])) =>
+      case ((key1, values1: scala.collection.Seq[(String, String)]),
+        (key2, values2: scala.collection.Seq[(String, String)])) =>
         assert(key1 === key2)
         values1.zip(values2).foreach { case (v1, v2) => assert(v1 === v2) }
     }
@@ -1132,7 +1132,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
   }
 
   private def assertSeqEquals[T](
-      seq1: collection.Seq[T], seq2: collection.Seq[T], assertEquals: (T, T) => Unit): Unit = {
+      seq1: scala.collection.Seq[T],
+      seq2: scala.collection.Seq[T],
+      assertEquals: (T, T) => Unit): Unit = {
     assert(seq1.length === seq2.length)
     seq1.zip(seq2).foreach { case (t1, t2) =>
       assertEquals(t1, t2)
