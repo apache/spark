@@ -26,7 +26,7 @@ import org.apache.spark.status.protobuf.Utils.getOptional
 
 object AccumulableInfoSerializer {
 
-  private[protobuf] def serializeAccumulableInfo(
+  private[protobuf] def serialize(
       input: AccumulableInfo): StoreTypes.AccumulableInfo = {
     val builder = StoreTypes.AccumulableInfo.newBuilder()
       .setId(input.id)
@@ -36,9 +36,9 @@ object AccumulableInfoSerializer {
     builder.build()
   }
 
-  private[protobuf] def deserializeAccumulableInfos(
+  private[protobuf] def deserialize(
       updates: JList[StoreTypes.AccumulableInfo]): ArrayBuffer[AccumulableInfo] = {
-    val accumulatorUpdates = new ArrayBuffer[AccumulableInfo]()
+    val accumulatorUpdates = new ArrayBuffer[AccumulableInfo](updates.size())
     updates.forEach { update =>
       accumulatorUpdates.append(new AccumulableInfo(
         id = update.getId,

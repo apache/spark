@@ -31,10 +31,8 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
 
   override val supportClass: Class[_] = classOf[StageDataWrapper]
 
-  override def serialize(input: Any): Array[Byte] =
-    serialize(input.asInstanceOf[StageDataWrapper])
-
-  private def serialize(s: StageDataWrapper): Array[Byte] = {
+  override def serialize(input: Any): Array[Byte] = {
+    val s = input.asInstanceOf[StageDataWrapper]
     val builder = StoreTypes.StageDataWrapper.newBuilder()
     builder.setInfo(serializeStageData(s.info))
     s.jobIds.foreach(id => builder.addJobIds(id.toLong))
@@ -103,7 +101,7 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
     stageData.rddIds.foreach(id => stageDataBuilder.addRddIds(id.toLong))
     stageData.accumulatorUpdates.foreach { update =>
       stageDataBuilder.addAccumulatorUpdates(
-        AccumulableInfoSerializer.serializeAccumulableInfo(update))
+        AccumulableInfoSerializer.serialize(update))
     }
     stageData.tasks.foreach { t =>
       t.foreach { entry =>
@@ -113,7 +111,7 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
     stageData.executorSummary.foreach { es =>
       es.foreach { entry =>
         stageDataBuilder.putExecutorSummary(entry._1,
-          ExecutorStageSummarySerializer.serializeExecutorStageSummary(entry._2))
+          ExecutorStageSummarySerializer.serialize(entry._2))
       }
     }
     stageData.speculationSummary.foreach { ss =>
@@ -161,7 +159,7 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
     }
     t.accumulatorUpdates.foreach { update =>
       taskDataBuilder.addAccumulatorUpdates(
-        AccumulableInfoSerializer.serializeAccumulableInfo(update))
+        AccumulableInfoSerializer.serialize(update))
     }
     t.errorMessage.foreach { em =>
       taskDataBuilder.setErrorMessage(em)
@@ -359,19 +357,15 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
       getOptional(binary.hasFailureReason, () => weakIntern(binary.getFailureReason))
     val description =
       getOptional(binary.hasDescription, () => weakIntern(binary.getDescription))
-    val accumulatorUpdates = AccumulableInfoSerializer.deserializeAccumulableInfos(
-      binary.getAccumulatorUpdatesList)
-    val tasks = MapUtils.isEmpty(binary.getTasksMap) match {
-      case true => None
-      case _ => Some(binary.getTasksMap.asScala.map(
+    val accumulatorUpdates = AccumulableInfoSerializer.deserialize(binary.getAccumulatorUpdatesList)
+    val tasks = if (MapUtils.isNotEmpty(binary.getTasksMap)) {
+      Some(binary.getTasksMap.asScala.map(
         entry => (entry._1.toLong, deserializeTaskData(entry._2))).toMap)
-    }
-    val executorSummary = MapUtils.isEmpty(binary.getExecutorSummaryMap) match {
-      case true => None
-      case _ => Some(binary.getExecutorSummaryMap.asScala.mapValues(
-          ExecutorStageSummarySerializer.deserializeExecutorStageSummary(_)).toMap
-      )
-    }
+    } else None
+    val executorSummary = if (MapUtils.isNotEmpty(binary.getExecutorSummaryMap)) {
+      Some(binary.getExecutorSummaryMap.asScala.mapValues(
+        ExecutorStageSummarySerializer.deserialize).toMap)
+    } else None
     val speculationSummary =
       getOptional(binary.hasSpeculationSummary,
         () => deserializeSpeculationStageSummary(binary.getSpeculationSummary))
@@ -546,7 +540,7 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
     new ExecutorPeakMetricsDistributions(
       quantiles = binary.getQuantilesList.asScala.map(_.toDouble).toIndexedSeq,
       executorMetrics = binary.getExecutorMetricsList.asScala.map(
-        ExecutorMetricsSerializer.deserialize(_)).toIndexedSeq
+        ExecutorMetricsSerializer.deserialize).toIndexedSeq
     )
   }
 
@@ -554,8 +548,7 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
     val resultFetchStart = getOptional(binary.hasResultFetchStart,
       () => new Date(binary.getResultFetchStart))
     val duration = getOptional(binary.hasDuration, () => binary.getDuration)
-    val accumulatorUpdates = AccumulableInfoSerializer.deserializeAccumulableInfos(
-      binary.getAccumulatorUpdatesList)
+    val accumulatorUpdates = AccumulableInfoSerializer.deserialize(binary.getAccumulatorUpdatesList)
     val taskMetrics = getOptional(binary.hasTaskMetrics,
       () => deserializeTaskMetrics(binary.getTaskMetrics))
     new TaskData(
