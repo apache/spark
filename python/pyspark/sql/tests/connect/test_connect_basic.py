@@ -33,7 +33,7 @@ import pyspark.sql.functions
 from pyspark.testing.utils import ReusedPySparkTestCase
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.sql.connect.client import SparkConnectException
+from pyspark.sql.connect.client import SparkConnectException, SparkConnectAnalysisException
 
 if should_test_connect:
     import grpc
@@ -117,6 +117,12 @@ class SparkConnectSQLTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLT
 
 
 class SparkConnectTests(SparkConnectSQLTestCase):
+    def test_error_handling(self):
+        # SPARK-41533 Proper error handling for Spark Connect
+        df = self.connect.range(10).select("id2")
+        with self.assertRaises(SparkConnectAnalysisException):
+            df.collect()
+
     def test_simple_read(self):
         df = self.connect.read.table(self.tbl_name)
         data = df.limit(10).toPandas()

@@ -92,7 +92,7 @@ class SparkConnectService(debug: Boolean)
           ProtoAny.pack(
             ErrorInfo
               .newBuilder()
-              .setReason(ae.getClass.getSimpleName)
+              .setReason(ae.getClass.getName)
               .setDomain("org.apache.spark")
               .putMetadata("message", ae.getSimpleMessage)
               .putMetadata("plan", Option(ae.plan).flatten.map(p => s"$p").getOrElse(""))

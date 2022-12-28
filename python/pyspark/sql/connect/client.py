@@ -69,7 +69,10 @@ class SparkConnectException(Exception):
         self._message = message
 
     def __str__(self) -> str:
-        return f"({self._reason}) {self._message}"
+        if self._reason is not None:
+            return f"({self._reason}) {self._message}"
+        else:
+            return self._message
 
 
 class SparkConnectAnalysisException(SparkConnectException):
@@ -513,7 +516,7 @@ class SparkConnectClient(object):
         try:
             resp = self._stub.AnalyzePlan(req, metadata=self._builder.metadata())
             if resp.client_id != self._session_id:
-                raise ValueError("Received incorrect session identifier for request.")
+                raise SparkConnectException("Received incorrect session identifier for request.")
             return AnalyzeResult.fromProto(resp)
         except grpc.RpcError as rpc_error:
             self._handle_error(rpc_error)
@@ -536,7 +539,9 @@ class SparkConnectClient(object):
         try:
             for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
                 if b.client_id != self._session_id:
-                    raise ValueError("Received incorrect session identifier for request.")
+                    raise SparkConnectException(
+                        "Received incorrect session identifier for request."
+                    )
                 continue
         except grpc.RpcError as rpc_error:
             self._handle_error(rpc_error)
@@ -551,7 +556,9 @@ class SparkConnectClient(object):
         try:
             for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
                 if b.client_id != self._session_id:
-                    raise ValueError("Received incorrect session identifier for request.")
+                    raise SparkConnectException(
+                        "Received incorrect session identifier for request."
+                    )
                 if b.metrics is not None:
                     logger.debug("Received metric batch.")
                     m = b.metrics
