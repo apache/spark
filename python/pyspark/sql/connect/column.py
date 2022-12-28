@@ -409,6 +409,7 @@ def _test() -> None:
         globs["_spark"] = PySparkSession(sc, options={"spark.app.name": "sql.connect.column tests"})
 
         # Creates a remote Spark session.
+        os.environ["SPARK_REMOTE"] = "sc://localhost"
         globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
 
         (failure_count, test_count) = doctest.testmod(
