@@ -254,14 +254,6 @@ message Aggregate {
   // (Optional) Pivots a column of the current `DataFrame` and performs the specified aggregation.
   Pivot pivot = 5;
 
-  // (Optional) Whether this aggregation should be treated as a numeric one for backwards compatibility:
-  //
-  // If set true, the expressions in aggregate_expressions must be all literal strings:
-  // The first string is the numeric function, should be one of: min, max, avg, sum;
-  // The follow strings are the column names. If no column is provided, it will automatically choose
-  // all type-compatible columns.
-  optional bool is_numeric = 6;
-
   enum GroupType {
     GROUP_TYPE_UNSPECIFIED = 0;
     GROUP_TYPE_GROUPBY = 1;

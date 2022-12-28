@@ -1319,6 +1319,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             cdf.groupBy("name").pivot("department", ["Sales", b"Marketing"]).agg(CF.sum(cdf.salary))
 
     def test_numeric_aggregation(self):
+        # SPARK-41737: test numeric aggregation
         query = """
                 SELECT * FROM VALUES
                     ('James', 'Sales', 3000, 2020),
@@ -1488,28 +1489,52 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         )
 
         # check error
-        with self.assertRaises(grpc.RpcError):
+        with self.assertRaisesRegex(
+            TypeError,
+            "Numeric aggregation function can only be applied on numeric columns",
+        ):
             cdf.groupBy("name").min("department").show()
 
-        with self.assertRaises(grpc.RpcError):
+        with self.assertRaisesRegex(
+            TypeError,
+            "Numeric aggregation function can only be applied on numeric columns",
+        ):
             cdf.groupBy("name").max("salary", "department").show()
 
-        with self.assertRaises(grpc.RpcError):
+        with self.assertRaisesRegex(
+            TypeError,
+            "Numeric aggregation function can only be applied on numeric columns",
+        ):
             cdf.rollup("name").avg("department").show()
 
-        with self.assertRaises(grpc.RpcError):
+        with self.assertRaisesRegex(
+            TypeError,
+            "Numeric aggregation function can only be applied on numeric columns",
+        ):
             cdf.rollup("name").sum("salary", "department").show()
 
-        with self.assertRaises(grpc.RpcError):
+        with self.assertRaisesRegex(
+            TypeError,
+            "Numeric aggregation function can only be applied on numeric columns",
+        ):
             cdf.cube("name").min("department").show()
 
-        with self.assertRaises(grpc.RpcError):
+        with self.assertRaisesRegex(
+            TypeError,
+            "Numeric aggregation function can only be applied on numeric columns",
+        ):
             cdf.cube("name").max("salary", "department").show()
 
-        with self.assertRaises(grpc.RpcError):
+        with self.assertRaisesRegex(
+            TypeError,
+            "Numeric aggregation function can only be applied on numeric columns",
+        ):
             cdf.groupBy("name").pivot("department").avg("department").show()
 
-        with self.assertRaises(grpc.RpcError):
+        with self.assertRaisesRegex(
+            TypeError,
+            "Numeric aggregation function can only be applied on numeric columns",
+        ):
             cdf.groupBy("name").pivot("department").sum("salary", "department").show()
 
 

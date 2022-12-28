@@ -25,7 +25,7 @@ import com.google.common.collect.{Lists, Maps}
 import org.apache.spark.TaskContext
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
-import org.apache.spark.sql.{Column, Dataset, Encoders, RelationalGroupedDataset, SparkSession}
+import org.apache.spark.sql.{Column, Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.expressions._
@@ -74,13 +74,7 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Relation.RelTypeCase.SET_OP => transformSetOperation(rel.getSetOp)
       case proto.Relation.RelTypeCase.SORT => transformSort(rel.getSort)
       case proto.Relation.RelTypeCase.DROP => transformDrop(rel.getDrop)
-      case proto.Relation.RelTypeCase.AGGREGATE =>
-        val agg = rel.getAggregate
-        if (agg.hasIsNumeric && agg.getIsNumeric) {
-          transformNumericAggregate(agg)
-        } else {
-          transformAggregate(agg)
-        }
+      case proto.Relation.RelTypeCase.AGGREGATE => transformAggregate(rel.getAggregate)
       case proto.Relation.RelTypeCase.SQL => transformSql(rel.getSql)
       case proto.Relation.RelTypeCase.LOCAL_RELATION =>
         transformLocalRelation(rel.getLocalRelation)
@@ -588,11 +582,10 @@ class SparkConnectPlanner(session: SparkSession) {
 
   /**
    * Transforms the protocol buffers literals into the appropriate Catalyst literal expression.
-   *
    * @return
    *   Expression
    */
-  private def transformLiteral(lit: proto.Expression.Literal): Literal = {
+  private def transformLiteral(lit: proto.Expression.Literal): Expression = {
     toCatalystExpression(lit)
   }
 
@@ -1076,81 +1069,6 @@ class SparkConnectPlanner(session: SparkSession) {
           child = input)
 
       case other => throw InvalidPlanInput(s"Unknown Group Type $other")
-    }
-  }
-
-  private def transformNumericAggregate(agg: proto.Aggregate): LogicalPlan = {
-    if (!agg.hasInput) {
-      throw InvalidPlanInput("Aggregate needs a plan input")
-    }
-    if (agg.getAggregateExpressionsCount == 0) {
-      throw InvalidPlanInput(
-        "Numeric aggregate requires at least 1 aggregation expressions: " +
-          "function name, [column names]")
-    }
-
-    val input = transformRelation(agg.getInput)
-    val dataset = Dataset.ofRows(session, input)
-
-    val groupingExprs = agg.getGroupingExpressionsList.asScala.toSeq.map(transformExpression)
-
-    val aggStrings = agg.getAggregateExpressionsList.asScala.toSeq.map(transformExpression).map {
-      case Literal(s, StringType) if s != null => s.toString
-      case other =>
-        throw InvalidPlanInput(
-          s"All expressions for numeric aggregate must be literal strings, but got $other")
-    }
-    val aggFunc = aggStrings.head
-    if (!Seq("min", "max", "avg", "sum").contains(aggFunc)) {
-      throw InvalidPlanInput(
-        s"Unknown numeric aggregate function, must be one of (min, max, avg, sum), " +
-          s"but got $aggFunc")
-    }
-    val aggCols = aggStrings.tail
-
-    val groupedData = agg.getGroupType match {
-      case proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY =>
-        RelationalGroupedDataset(dataset, groupingExprs, RelationalGroupedDataset.GroupByType)
-
-      case proto.Aggregate.GroupType.GROUP_TYPE_ROLLUP =>
-        RelationalGroupedDataset(dataset, groupingExprs, RelationalGroupedDataset.RollupType)
-
-      case proto.Aggregate.GroupType.GROUP_TYPE_CUBE =>
-        RelationalGroupedDataset(dataset, groupingExprs, RelationalGroupedDataset.CubeType)
-
-      case proto.Aggregate.GroupType.GROUP_TYPE_PIVOT =>
-        if (!agg.hasPivot) {
-          throw InvalidPlanInput("Aggregate with GROUP_TYPE_PIVOT requires a Pivot")
-        }
-        val pivotCol = Column(transformExpression(agg.getPivot.getCol))
-        if (agg.getPivot.getValuesCount > 0) {
-          val values = agg.getPivot.getValuesList.asScala.toSeq.map(transformLiteral).map {
-            case Literal(s, StringType) if s != null => s.toString
-            case literal => literal.value
-          }
-          RelationalGroupedDataset(dataset, groupingExprs, RelationalGroupedDataset.GroupByType)
-            .pivot(pivotColumn = pivotCol, values = values)
-        } else {
-          RelationalGroupedDataset(dataset, groupingExprs, RelationalGroupedDataset.GroupByType)
-            .pivot(pivotColumn = pivotCol)
-        }
-
-      case other => throw InvalidPlanInput(s"Unknown Group Type $other")
-    }
-
-    aggFunc match {
-      case "min" => groupedData.min(aggCols: _*).logicalPlan
-
-      case "max" => groupedData.max(aggCols: _*).logicalPlan
-
-      case "avg" => groupedData.avg(aggCols: _*).logicalPlan
-
-      case "sum" => groupedData.sum(aggCols: _*).logicalPlan
-
-      case other =>
-        throw InvalidPlanInput(
-          s"Unknown numeric aggregate function, must be one of (min, max, avg, sum), " +
-            s"but got $other")
     }
   }
 

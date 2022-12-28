@@ -28,6 +28,7 @@ from typing import (
 )
 
 from pyspark.sql.group import GroupedData as PySparkGroupedData
+from pyspark.sql.types import NumericType
 
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.column import Column, scalar_function
@@ -107,15 +108,34 @@ class GroupedData:
 
         assert isinstance(cols, list) and all(isinstance(c, str) for c in cols)
 
+        schema = self._df.schema
+
+        numerical_cols: List[str] = [
+            field.name for field in schema.fields if isinstance(field.dataType, NumericType)
+        ]
+
+        agg_cols: List[str] = []
+
+        if len(cols) > 0:
+            invalid_cols = [c for c in cols if c not in numerical_cols]
+            if len(invalid_cols) > 0:
+                raise TypeError(
+                    f"{invalid_cols} are not numeric columns. "
+                    f"Numeric aggregation function can only be applied on numeric columns."
+                )
+            agg_cols = cols
+        else:
+            # if no column is provided, then all numerical columns are selected
+            agg_cols = numerical_cols
+
         return DataFrame.withPlan(
             plan.Aggregate(
                 child=self._df._plan,
                 group_type=self._group_type,
                 grouping_cols=self._grouping_cols,
-                aggregate_cols=[lit(c) for c in [function] + cols],
+                aggregate_cols=[scalar_function(function, col(c)) for c in agg_cols],
                 pivot_col=self._pivot_col,
                 pivot_values=self._pivot_values,
-                is_numeric=True,
             ),
             session=self._df._session,
         )
