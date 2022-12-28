@@ -874,6 +874,51 @@ class DataFrame:
 
     corr.__doc__ = PySparkDataFrame.corr.__doc__
 
+    def approxQuantile(
+        self,
+        col: Union[str, List[str], Tuple[str]],
+        probabilities: Union[List[float], Tuple[float]],
+        relativeError: float,
+    ) -> Union[List[float], List[List[float]]]:
+        if not isinstance(col, (str, list, tuple)):
+            raise TypeError("col should be a string, list or tuple, but got %r" % type(col))
+
+        isStr = isinstance(col, str)
+
+        if isinstance(col, tuple):
+            col = list(col)
+        elif isStr:
+            col = [cast(str, col)]
+
+        for c in col:
+            if not isinstance(c, str):
+                raise TypeError("columns should be strings, but got %r" % type(c))
+
+        if not isinstance(probabilities, (list, tuple)):
+            raise TypeError("probabilities should be a list or tuple")
+        if isinstance(probabilities, tuple):
+            probabilities = list(probabilities)
+        for p in probabilities:
+            if not isinstance(p, (float, int)) or p < 0 or p > 1:
+                raise ValueError("probabilities should be numerical (float, int) in [0,1].")
+
+        if not isinstance(relativeError, (float, int)):
+            raise TypeError("relativeError should be numerical (float, int)")
+        if relativeError < 0:
+            raise ValueError("relativeError should be >= 0.")
+        relativeError = float(relativeError)
+        pdf = DataFrame.withPlan(
+            plan.StatApproxQuantile(child=self._plan, cols=list(col), probabilities=probabilities, relativeError=relativeError),
+            session=self._session,
+        ).toPandas()
+
+        assert pdf is not None
+        jaq = pdf["approx_quantile"][0]
+        jaq_list = [list(j) for j in jaq]
+        return jaq_list[0] if isStr else jaq_list
+
+    approxQuantile.__doc__ = PySparkDataFrame.approxQuantile.__doc__
+
     def crosstab(self, col1: str, col2: str) -> "DataFrame":
         if not isinstance(col1, str):
             raise TypeError(f"'col1' must be str, but got {type(col1).__name__}")
@@ -1255,6 +1300,16 @@ class DataFrameStatFunctions:
         return self.df.corr(col1, col2, method)
 
     corr.__doc__ = DataFrame.corr.__doc__
+
+    def approxQuantile(
+        self,
+        col: Union[str, List[str], Tuple[str]],
+        probabilities: Union[List[float], Tuple[float]],
+        relativeError: float,
+    ) -> Union[List[float], List[List[float]]]:
+        return self.df.approxQuantile(col, probabilities, relativeError)
+
+    approxQuantile.__doc__ = DataFrame.approxQuantile.__doc__
 
     def crosstab(self, col1: str, col2: str) -> DataFrame:
         return self.df.crosstab(col1, col2)
