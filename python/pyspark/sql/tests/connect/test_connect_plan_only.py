@@ -30,7 +30,7 @@ if should_test_connect:
     from pyspark.sql.connect.readwriter import DataFrameReader
     from pyspark.sql.connect.function_builder import UserDefinedFunction, udf
     from pyspark.sql.connect.types import pyspark_types_to_proto_types
-    from pyspark.sql.types import StringType, StructType, StructField, IntegerType
+    from pyspark.sql.types import StringType, StructType, StructField, IntegerType, MapType
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
@@ -546,6 +546,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
             [
                 StructField("col1", IntegerType(), True),
                 StructField("col2", StringType(), True),
+                StructField("map1", MapType(StringType(), IntegerType(), True), True),
             ]
         )
         new_plan = df.to(schema)._plan.to_proto(self.connect)
@@ -617,6 +618,31 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         col_plan = col.to_plan(self.session.client)
         self.assertIsNotNone(col_plan)
         self.assertEqual(col_plan.unresolved_regex.col_name, "col_name")
+
+    def test_print(self):
+        # SPARK-41717: test print
+        self.assertEqual(
+            self.connect.sql("SELECT 1")._plan.print().strip(), "<SQL query='SELECT 1'>"
+        )
+        self.assertEqual(
+            self.connect.range(1, 10)._plan.print().strip(),
+            "<Range start='1', end='10', step='1', num_partitions='None'>",
+        )
+
+    def test_repr(self):
+        # SPARK-41717: test __repr_html__
+        self.assertIn("query: SELECT 1", self.connect.sql("SELECT 1")._plan._repr_html_().strip())
+
+        expected = (
+            "<b>Range</b><br/>",
+            "start: 1 <br/>",
+            "end: 10 <br/>",
+            "step: 1 <br/>",
+            "num_partitions: None <br/>",
+        )
+        actual = self.connect.range(1, 10)._plan._repr_html_().strip()
+        for line in expected:
+            self.assertIn(line, actual)
 
 
 if __name__ == "__main__":

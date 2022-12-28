@@ -18,16 +18,17 @@
 import functools
 from typing import TYPE_CHECKING, Optional, Any, Iterable, Union
 
-import pyspark.sql.connect.proto as proto
 import pyspark.sql.types
-from pyspark.sql.connect.column import Expression, UnresolvedFunction, Column
+
+import pyspark.sql.connect.proto as proto
+from pyspark.sql.connect.column import Column
+from pyspark.sql.connect.expressions import Expression, UnresolvedFunction
 from pyspark.sql.connect.functions import col
 
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import (
         ColumnOrName,
-        FunctionBuilderCallable,
         UserDefinedFunctionCallable,
     )
     from pyspark.sql.connect.client import SparkConnectClient
@@ -47,20 +48,6 @@ def _build(name: str, *args: "ColumnOrName") -> Column:
     """
     cols = [arg if isinstance(arg, Column) else col(arg) for arg in args]
     return Column(UnresolvedFunction(name, [col._expr for col in cols]))
-
-
-class FunctionBuilder:
-    """This class is used to build arbitrary functions used in expressions"""
-
-    def __getattr__(self, name: str) -> "FunctionBuilderCallable":
-        def _(*args: "ColumnOrName") -> Column:
-            return _build(name, *args)
-
-        _.__doc__ = f"""Function to apply {name}"""
-        return _
-
-
-functions = FunctionBuilder()
 
 
 class UserDefinedFunction(Expression):

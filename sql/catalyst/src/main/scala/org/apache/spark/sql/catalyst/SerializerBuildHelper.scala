@@ -74,6 +74,15 @@ object SerializerBuildHelper {
       returnNullable = false)
   }
 
+  def createSerializerForScalaEnum(inputObject: Expression): Expression = {
+    createSerializerForString(
+      Invoke(
+        inputObject,
+        "toString",
+        ObjectType(classOf[String]),
+        returnNullable = false))
+  }
+
   def createSerializerForJavaEnum(inputObject: Expression): Expression =
     createSerializerForString(Invoke(inputObject, "name", ObjectType(classOf[String])))
 

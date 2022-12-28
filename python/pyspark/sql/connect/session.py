@@ -24,12 +24,12 @@ import pyarrow as pa
 
 from pyspark.sql.session import classproperty, SparkSession as PySparkSession
 from pyspark.sql.types import DataType, StructType
+from pyspark.sql.utils import to_str
 
 from pyspark.sql.connect.client import SparkConnectClient
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.connect.plan import SQL, Range, LocalRelation
 from pyspark.sql.connect.readwriter import DataFrameReader
-from pyspark.sql.utils import to_str
 
 from typing import (
     Optional,
@@ -46,6 +46,7 @@ from typing import (
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import OptionalPrimitiveType
+    from pyspark.sql.connect.catalog import Catalog
 
 
 class SparkSession(object):
@@ -119,6 +120,11 @@ class SparkSession(object):
         """
         # Parse the connection string.
         self._client = SparkConnectClient(connectionString)
+
+    def table(self, tableName: str) -> DataFrame:
+        return self.read.table(tableName)
+
+    table.__doc__ = PySparkSession.table.__doc__
 
     @property
     def read(self) -> "DataFrameReader":
@@ -222,7 +228,22 @@ class SparkSession(object):
             Range(start=start, end=actual_end, step=step, num_partitions=numPartitions), self
         )
 
-    range.__doc__ = PySparkSession.__doc__
+    range.__doc__ = PySparkSession.range.__doc__
+
+    @property
+    def catalog(self) -> "Catalog":
+        from pyspark.sql.connect.catalog import Catalog
+
+        if not hasattr(self, "_catalog"):
+            self._catalog = Catalog(self)
+        return self._catalog
+
+    catalog.__doc__ = PySparkSession.catalog.__doc__
+
+    def stop(self) -> None:
+        self.client.close()
+
+    stop.__doc__ = PySparkSession.stop.__doc__
 
     # SparkConnect-specific API
     @property

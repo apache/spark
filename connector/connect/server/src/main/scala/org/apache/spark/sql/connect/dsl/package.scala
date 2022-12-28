@@ -601,13 +601,61 @@ package object dsl {
       def groupBy(groupingExprs: Expression*)(aggregateExprs: Expression*): Relation = {
         val agg = Aggregate.newBuilder()
         agg.setInput(logicalPlan)
+        agg.setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
 
         for (groupingExpr <- groupingExprs) {
           agg.addGroupingExpressions(groupingExpr)
         }
         for (aggregateExpr <- aggregateExprs) {
-          agg.addResultExpressions(aggregateExpr)
+          agg.addAggregateExpressions(aggregateExpr)
         }
+        Relation.newBuilder().setAggregate(agg.build()).build()
+      }
+
+      def rollup(groupingExprs: Expression*)(aggregateExprs: Expression*): Relation = {
+        val agg = Aggregate.newBuilder()
+        agg.setInput(logicalPlan)
+        agg.setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_ROLLUP)
+
+        for (groupingExpr <- groupingExprs) {
+          agg.addGroupingExpressions(groupingExpr)
+        }
+        for (aggregateExpr <- aggregateExprs) {
+          agg.addAggregateExpressions(aggregateExpr)
+        }
+        Relation.newBuilder().setAggregate(agg.build()).build()
+      }
+
+      def cube(groupingExprs: Expression*)(aggregateExprs: Expression*): Relation = {
+        val agg = Aggregate.newBuilder()
+        agg.setInput(logicalPlan)
+        agg.setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_CUBE)
+
+        for (groupingExpr <- groupingExprs) {
+          agg.addGroupingExpressions(groupingExpr)
+        }
+        for (aggregateExpr <- aggregateExprs) {
+          agg.addAggregateExpressions(aggregateExpr)
+        }
+        Relation.newBuilder().setAggregate(agg.build()).build()
+      }
+
+      def pivot(groupingExprs: Expression*)(
+          pivotCol: Expression,
+          pivotValues: Seq[proto.Expression.Literal])(aggregateExprs: Expression*): Relation = {
+        val agg = Aggregate.newBuilder()
+        agg.setInput(logicalPlan)
+        agg.setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_PIVOT)
+
+        for (groupingExpr <- groupingExprs) {
+          agg.addGroupingExpressions(groupingExpr)
+        }
+        for (aggregateExpr <- aggregateExprs) {
+          agg.addAggregateExpressions(aggregateExpr)
+        }
+        agg.setPivot(
+          Aggregate.Pivot.newBuilder().setCol(pivotCol).addAllValues(pivotValues.asJava).build())
+
         Relation.newBuilder().setAggregate(agg.build()).build()
       }
 

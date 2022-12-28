@@ -39,6 +39,7 @@ import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
+import pyspark.sql.connect.proto.catalog_pb2
 import pyspark.sql.connect.proto.expressions_pb2
 import pyspark.sql.connect.proto.types_pb2
 import sys
@@ -92,6 +93,29 @@ class Relation(google.protobuf.message.Message):
     SUMMARY_FIELD_NUMBER: builtins.int
     CROSSTAB_FIELD_NUMBER: builtins.int
     DESCRIBE_FIELD_NUMBER: builtins.int
+    CURRENT_DATABASE_FIELD_NUMBER: builtins.int
+    SET_CURRENT_DATABASE_FIELD_NUMBER: builtins.int
+    LIST_DATABASES_FIELD_NUMBER: builtins.int
+    LIST_TABLES_FIELD_NUMBER: builtins.int
+    LIST_FUNCTIONS_FIELD_NUMBER: builtins.int
+    LIST_COLUMNS_FIELD_NUMBER: builtins.int
+    GET_DATABASE_FIELD_NUMBER: builtins.int
+    GET_TABLE_FIELD_NUMBER: builtins.int
+    GET_FUNCTION_FIELD_NUMBER: builtins.int
+    DATABASE_EXISTS_FIELD_NUMBER: builtins.int
+    TABLE_EXISTS_FIELD_NUMBER: builtins.int
+    FUNCTION_EXISTS_FIELD_NUMBER: builtins.int
+    CREATE_EXTERNAL_TABLE_FIELD_NUMBER: builtins.int
+    CREATE_TABLE_FIELD_NUMBER: builtins.int
+    DROP_TEMP_VIEW_FIELD_NUMBER: builtins.int
+    DROP_GLOBAL_TEMP_VIEW_FIELD_NUMBER: builtins.int
+    RECOVER_PARTITIONS_FIELD_NUMBER: builtins.int
+    CLEAR_CACHE_FIELD_NUMBER: builtins.int
+    REFRESH_TABLE_FIELD_NUMBER: builtins.int
+    REFRESH_BY_PATH_FIELD_NUMBER: builtins.int
+    CURRENT_CATALOG_FIELD_NUMBER: builtins.int
+    SET_CURRENT_CATALOG_FIELD_NUMBER: builtins.int
+    LIST_CATALOGS_FIELD_NUMBER: builtins.int
     UNKNOWN_FIELD_NUMBER: builtins.int
     @property
     def common(self) -> global___RelationCommon: ...
@@ -160,6 +184,62 @@ class Relation(google.protobuf.message.Message):
     @property
     def describe(self) -> global___StatDescribe: ...
     @property
+    def current_database(self) -> pyspark.sql.connect.proto.catalog_pb2.CurrentDatabase:
+        """Catalog API (internal-only)"""
+    @property
+    def set_current_database(self) -> pyspark.sql.connect.proto.catalog_pb2.SetCurrentDatabase: ...
+    @property
+    def list_databases(self) -> pyspark.sql.connect.proto.catalog_pb2.ListDatabases: ...
+    @property
+    def list_tables(self) -> pyspark.sql.connect.proto.catalog_pb2.ListTables: ...
+    @property
+    def list_functions(self) -> pyspark.sql.connect.proto.catalog_pb2.ListFunctions: ...
+    @property
+    def list_columns(self) -> pyspark.sql.connect.proto.catalog_pb2.ListColumns: ...
+    @property
+    def get_database(self) -> pyspark.sql.connect.proto.catalog_pb2.GetDatabase: ...
+    @property
+    def get_table(self) -> pyspark.sql.connect.proto.catalog_pb2.GetTable: ...
+    @property
+    def get_function(self) -> pyspark.sql.connect.proto.catalog_pb2.GetFunction: ...
+    @property
+    def database_exists(self) -> pyspark.sql.connect.proto.catalog_pb2.DatabaseExists: ...
+    @property
+    def table_exists(self) -> pyspark.sql.connect.proto.catalog_pb2.TableExists: ...
+    @property
+    def function_exists(self) -> pyspark.sql.connect.proto.catalog_pb2.FunctionExists: ...
+    @property
+    def create_external_table(
+        self,
+    ) -> pyspark.sql.connect.proto.catalog_pb2.CreateExternalTable: ...
+    @property
+    def create_table(self) -> pyspark.sql.connect.proto.catalog_pb2.CreateTable: ...
+    @property
+    def drop_temp_view(self) -> pyspark.sql.connect.proto.catalog_pb2.DropTempView: ...
+    @property
+    def drop_global_temp_view(self) -> pyspark.sql.connect.proto.catalog_pb2.DropGlobalTempView: ...
+    @property
+    def recover_partitions(self) -> pyspark.sql.connect.proto.catalog_pb2.RecoverPartitions: ...
+    @property
+    def clear_cache(self) -> pyspark.sql.connect.proto.catalog_pb2.ClearCache:
+        """TODO(SPARK-41612): Support Catalog.isCached
+           IsCached is_cached = 218;
+        TODO(SPARK-41600): Support Catalog.cacheTable
+           CacheTable cache_table = 219;
+        TODO(SPARK-41623): Support Catalog.uncacheTable
+           UncacheTable uncache_table = 220;
+        """
+    @property
+    def refresh_table(self) -> pyspark.sql.connect.proto.catalog_pb2.RefreshTable: ...
+    @property
+    def refresh_by_path(self) -> pyspark.sql.connect.proto.catalog_pb2.RefreshByPath: ...
+    @property
+    def current_catalog(self) -> pyspark.sql.connect.proto.catalog_pb2.CurrentCatalog: ...
+    @property
+    def set_current_catalog(self) -> pyspark.sql.connect.proto.catalog_pb2.SetCurrentCatalog: ...
+    @property
+    def list_catalogs(self) -> pyspark.sql.connect.proto.catalog_pb2.ListCatalogs: ...
+    @property
     def unknown(self) -> global___Unknown: ...
     def __init__(
         self,
@@ -196,6 +276,31 @@ class Relation(google.protobuf.message.Message):
         summary: global___StatSummary | None = ...,
         crosstab: global___StatCrosstab | None = ...,
         describe: global___StatDescribe | None = ...,
+        current_database: pyspark.sql.connect.proto.catalog_pb2.CurrentDatabase | None = ...,
+        set_current_database: pyspark.sql.connect.proto.catalog_pb2.SetCurrentDatabase | None = ...,
+        list_databases: pyspark.sql.connect.proto.catalog_pb2.ListDatabases | None = ...,
+        list_tables: pyspark.sql.connect.proto.catalog_pb2.ListTables | None = ...,
+        list_functions: pyspark.sql.connect.proto.catalog_pb2.ListFunctions | None = ...,
+        list_columns: pyspark.sql.connect.proto.catalog_pb2.ListColumns | None = ...,
+        get_database: pyspark.sql.connect.proto.catalog_pb2.GetDatabase | None = ...,
+        get_table: pyspark.sql.connect.proto.catalog_pb2.GetTable | None = ...,
+        get_function: pyspark.sql.connect.proto.catalog_pb2.GetFunction | None = ...,
+        database_exists: pyspark.sql.connect.proto.catalog_pb2.DatabaseExists | None = ...,
+        table_exists: pyspark.sql.connect.proto.catalog_pb2.TableExists | None = ...,
+        function_exists: pyspark.sql.connect.proto.catalog_pb2.FunctionExists | None = ...,
+        create_external_table: pyspark.sql.connect.proto.catalog_pb2.CreateExternalTable
+        | None = ...,
+        create_table: pyspark.sql.connect.proto.catalog_pb2.CreateTable | None = ...,
+        drop_temp_view: pyspark.sql.connect.proto.catalog_pb2.DropTempView | None = ...,
+        drop_global_temp_view: pyspark.sql.connect.proto.catalog_pb2.DropGlobalTempView
+        | None = ...,
+        recover_partitions: pyspark.sql.connect.proto.catalog_pb2.RecoverPartitions | None = ...,
+        clear_cache: pyspark.sql.connect.proto.catalog_pb2.ClearCache | None = ...,
+        refresh_table: pyspark.sql.connect.proto.catalog_pb2.RefreshTable | None = ...,
+        refresh_by_path: pyspark.sql.connect.proto.catalog_pb2.RefreshByPath | None = ...,
+        current_catalog: pyspark.sql.connect.proto.catalog_pb2.CurrentCatalog | None = ...,
+        set_current_catalog: pyspark.sql.connect.proto.catalog_pb2.SetCurrentCatalog | None = ...,
+        list_catalogs: pyspark.sql.connect.proto.catalog_pb2.ListCatalogs | None = ...,
         unknown: global___Unknown | None = ...,
     ) -> None: ...
     def HasField(
@@ -203,28 +308,62 @@ class Relation(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "aggregate",
             b"aggregate",
+            "clear_cache",
+            b"clear_cache",
             "common",
             b"common",
+            "create_external_table",
+            b"create_external_table",
+            "create_table",
+            b"create_table",
             "crosstab",
             b"crosstab",
+            "current_catalog",
+            b"current_catalog",
+            "current_database",
+            b"current_database",
+            "database_exists",
+            b"database_exists",
             "deduplicate",
             b"deduplicate",
             "describe",
             b"describe",
             "drop",
             b"drop",
+            "drop_global_temp_view",
+            b"drop_global_temp_view",
             "drop_na",
             b"drop_na",
+            "drop_temp_view",
+            b"drop_temp_view",
             "fill_na",
             b"fill_na",
             "filter",
             b"filter",
+            "function_exists",
+            b"function_exists",
+            "get_database",
+            b"get_database",
+            "get_function",
+            b"get_function",
+            "get_table",
+            b"get_table",
             "hint",
             b"hint",
             "join",
             b"join",
             "limit",
             b"limit",
+            "list_catalogs",
+            b"list_catalogs",
+            "list_columns",
+            b"list_columns",
+            "list_databases",
+            b"list_databases",
+            "list_functions",
+            b"list_functions",
+            "list_tables",
+            b"list_tables",
             "local_relation",
             b"local_relation",
             "offset",
@@ -235,6 +374,12 @@ class Relation(google.protobuf.message.Message):
             b"range",
             "read",
             b"read",
+            "recover_partitions",
+            b"recover_partitions",
+            "refresh_by_path",
+            b"refresh_by_path",
+            "refresh_table",
+            b"refresh_table",
             "rel_type",
             b"rel_type",
             "rename_columns_by_name_to_name_map",
@@ -247,6 +392,10 @@ class Relation(google.protobuf.message.Message):
             b"replace",
             "sample",
             b"sample",
+            "set_current_catalog",
+            b"set_current_catalog",
+            "set_current_database",
+            b"set_current_database",
             "set_op",
             b"set_op",
             "show_string",
@@ -259,6 +408,8 @@ class Relation(google.protobuf.message.Message):
             b"subquery_alias",
             "summary",
             b"summary",
+            "table_exists",
+            b"table_exists",
             "tail",
             b"tail",
             "to_schema",
@@ -276,28 +427,62 @@ class Relation(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "aggregate",
             b"aggregate",
+            "clear_cache",
+            b"clear_cache",
             "common",
             b"common",
+            "create_external_table",
+            b"create_external_table",
+            "create_table",
+            b"create_table",
             "crosstab",
             b"crosstab",
+            "current_catalog",
+            b"current_catalog",
+            "current_database",
+            b"current_database",
+            "database_exists",
+            b"database_exists",
             "deduplicate",
             b"deduplicate",
             "describe",
             b"describe",
             "drop",
             b"drop",
+            "drop_global_temp_view",
+            b"drop_global_temp_view",
             "drop_na",
             b"drop_na",
+            "drop_temp_view",
+            b"drop_temp_view",
             "fill_na",
             b"fill_na",
             "filter",
             b"filter",
+            "function_exists",
+            b"function_exists",
+            "get_database",
+            b"get_database",
+            "get_function",
+            b"get_function",
+            "get_table",
+            b"get_table",
             "hint",
             b"hint",
             "join",
             b"join",
             "limit",
             b"limit",
+            "list_catalogs",
+            b"list_catalogs",
+            "list_columns",
+            b"list_columns",
+            "list_databases",
+            b"list_databases",
+            "list_functions",
+            b"list_functions",
+            "list_tables",
+            b"list_tables",
             "local_relation",
             b"local_relation",
             "offset",
@@ -308,6 +493,12 @@ class Relation(google.protobuf.message.Message):
             b"range",
             "read",
             b"read",
+            "recover_partitions",
+            b"recover_partitions",
+            "refresh_by_path",
+            b"refresh_by_path",
+            "refresh_table",
+            b"refresh_table",
             "rel_type",
             b"rel_type",
             "rename_columns_by_name_to_name_map",
@@ -320,6 +511,10 @@ class Relation(google.protobuf.message.Message):
             b"replace",
             "sample",
             b"sample",
+            "set_current_catalog",
+            b"set_current_catalog",
+            "set_current_database",
+            b"set_current_database",
             "set_op",
             b"set_op",
             "show_string",
@@ -332,6 +527,8 @@ class Relation(google.protobuf.message.Message):
             b"subquery_alias",
             "summary",
             b"summary",
+            "table_exists",
+            b"table_exists",
             "tail",
             b"tail",
             "to_schema",
@@ -378,6 +575,29 @@ class Relation(google.protobuf.message.Message):
         "summary",
         "crosstab",
         "describe",
+        "current_database",
+        "set_current_database",
+        "list_databases",
+        "list_tables",
+        "list_functions",
+        "list_columns",
+        "get_database",
+        "get_table",
+        "get_function",
+        "database_exists",
+        "table_exists",
+        "function_exists",
+        "create_external_table",
+        "create_table",
+        "drop_temp_view",
+        "drop_global_temp_view",
+        "recover_partitions",
+        "clear_cache",
+        "refresh_table",
+        "refresh_by_path",
+        "current_catalog",
+        "set_current_catalog",
+        "list_catalogs",
         "unknown",
     ] | None: ...
 
@@ -909,49 +1129,121 @@ class Aggregate(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    class _GroupType:
+        ValueType = typing.NewType("ValueType", builtins.int)
+        V: typing_extensions.TypeAlias = ValueType
+
+    class _GroupTypeEnumTypeWrapper(
+        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[Aggregate._GroupType.ValueType],
+        builtins.type,
+    ):  # noqa: F821
+        DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+        GROUP_TYPE_UNSPECIFIED: Aggregate._GroupType.ValueType  # 0
+        GROUP_TYPE_GROUPBY: Aggregate._GroupType.ValueType  # 1
+        GROUP_TYPE_ROLLUP: Aggregate._GroupType.ValueType  # 2
+        GROUP_TYPE_CUBE: Aggregate._GroupType.ValueType  # 3
+        GROUP_TYPE_PIVOT: Aggregate._GroupType.ValueType  # 4
+
+    class GroupType(_GroupType, metaclass=_GroupTypeEnumTypeWrapper): ...
+    GROUP_TYPE_UNSPECIFIED: Aggregate.GroupType.ValueType  # 0
+    GROUP_TYPE_GROUPBY: Aggregate.GroupType.ValueType  # 1
+    GROUP_TYPE_ROLLUP: Aggregate.GroupType.ValueType  # 2
+    GROUP_TYPE_CUBE: Aggregate.GroupType.ValueType  # 3
+    GROUP_TYPE_PIVOT: Aggregate.GroupType.ValueType  # 4
+
+    class Pivot(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        COL_FIELD_NUMBER: builtins.int
+        VALUES_FIELD_NUMBER: builtins.int
+        @property
+        def col(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
+            """(Required) The column to pivot"""
+        @property
+        def values(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
+        ]:
+            """(Optional) List of values that will be translated to columns in the output DataFrame.
+
+            Note that if it is empty, the server side will immediately trigger a job to collect
+            the distinct values of the column.
+            """
+        def __init__(
+            self,
+            *,
+            col: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
+            values: collections.abc.Iterable[
+                pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
+            ]
+            | None = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["col", b"col"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["col", b"col", "values", b"values"]
+        ) -> None: ...
+
     INPUT_FIELD_NUMBER: builtins.int
+    GROUP_TYPE_FIELD_NUMBER: builtins.int
     GROUPING_EXPRESSIONS_FIELD_NUMBER: builtins.int
-    RESULT_EXPRESSIONS_FIELD_NUMBER: builtins.int
+    AGGREGATE_EXPRESSIONS_FIELD_NUMBER: builtins.int
+    PIVOT_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
-        """(Required) Input relation for a Aggregate."""
+        """(Required) Input relation for a RelationalGroupedDataset."""
+    group_type: global___Aggregate.GroupType.ValueType
+    """(Required) How the RelationalGroupedDataset was built."""
     @property
     def grouping_expressions(
         self,
     ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
         pyspark.sql.connect.proto.expressions_pb2.Expression
-    ]: ...
+    ]:
+        """(Required) Expressions for grouping keys"""
     @property
-    def result_expressions(
+    def aggregate_expressions(
         self,
     ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
         pyspark.sql.connect.proto.expressions_pb2.Expression
-    ]: ...
+    ]:
+        """(Required) List of values that will be translated to columns in the output DataFrame."""
+    @property
+    def pivot(self) -> global___Aggregate.Pivot:
+        """(Optional) Pivots a column of the current `DataFrame` and performs the specified aggregation."""
     def __init__(
         self,
         *,
         input: global___Relation | None = ...,
+        group_type: global___Aggregate.GroupType.ValueType = ...,
         grouping_expressions: collections.abc.Iterable[
             pyspark.sql.connect.proto.expressions_pb2.Expression
         ]
         | None = ...,
-        result_expressions: collections.abc.Iterable[
+        aggregate_expressions: collections.abc.Iterable[
             pyspark.sql.connect.proto.expressions_pb2.Expression
         ]
         | None = ...,
+        pivot: global___Aggregate.Pivot | None = ...,
     ) -> None: ...
     def HasField(
-        self, field_name: typing_extensions.Literal["input", b"input"]
+        self, field_name: typing_extensions.Literal["input", b"input", "pivot", b"pivot"]
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "aggregate_expressions",
+            b"aggregate_expressions",
+            "group_type",
+            b"group_type",
             "grouping_expressions",
             b"grouping_expressions",
             "input",
             b"input",
-            "result_expressions",
-            b"result_expressions",
+            "pivot",
+            b"pivot",
         ],
     ) -> None: ...
 
@@ -1413,13 +1705,13 @@ class ShowString(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
-    NUMROWS_FIELD_NUMBER: builtins.int
+    NUM_ROWS_FIELD_NUMBER: builtins.int
     TRUNCATE_FIELD_NUMBER: builtins.int
     VERTICAL_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
         """(Required) The input relation."""
-    numRows: builtins.int
+    num_rows: builtins.int
     """(Required) Number of rows to show."""
     truncate: builtins.int
     """(Required) If set to more than 0, truncates strings to
@@ -1431,7 +1723,7 @@ class ShowString(google.protobuf.message.Message):
         self,
         *,
         input: global___Relation | None = ...,
-        numRows: builtins.int = ...,
+        num_rows: builtins.int = ...,
         truncate: builtins.int = ...,
         vertical: builtins.bool = ...,
     ) -> None: ...
@@ -1443,8 +1735,8 @@ class ShowString(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "input",
             b"input",
-            "numRows",
-            b"numRows",
+            "num_rows",
+            b"num_rows",
             "truncate",
             b"truncate",
             "vertical",

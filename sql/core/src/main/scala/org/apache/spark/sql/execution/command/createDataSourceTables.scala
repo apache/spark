@@ -145,6 +145,12 @@ case class CreateDataSourceTableAsSelectCommand(
     outputColumnNames: Seq[String])
   extends V1WriteCommand {
 
+  override def fileFormatProvider: Boolean = {
+    table.provider.forall { provider =>
+      classOf[FileFormat].isAssignableFrom(DataSource.providingClass(provider, conf))
+    }
+  }
+
   override lazy val partitionColumns: Seq[Attribute] = {
     val unresolvedPartitionColumns = table.partitionColumnNames.map(UnresolvedAttribute.quoted)
     DataSource.resolvePartitionColumns(

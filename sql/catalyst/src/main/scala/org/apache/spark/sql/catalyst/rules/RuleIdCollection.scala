@@ -87,11 +87,14 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.ResolveExpressionsWithNamePlaceholders" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveHints$ResolveCoalesceHints" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveHints$ResolveJoinStrategyHints" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveGroupByAll" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveInlineTables" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveLambdaVariables" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveLateralColumnAliasReference" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveOrderByAll" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveTimeZone" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveUnion" ::
+      "org.apache.spark.sql.catalyst.analysis.SessionWindowing" ::
       "org.apache.spark.sql.catalyst.analysis.SubstituteUnresolvedOrdinals" ::
       "org.apache.spark.sql.catalyst.analysis.TimeWindowing" ::
       "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$CombinedTypeCoercionRule" ::
