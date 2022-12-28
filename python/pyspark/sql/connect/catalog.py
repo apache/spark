@@ -323,7 +323,7 @@ def _test() -> None:
     if should_test_connect:
         import pyspark.sql.connect.catalog
 
-        globs = pyspark.sql.catalog.__dict__.copy()
+        globs = pyspark.sql.connect.catalog.__dict__.copy()
         # Works around to create a regular Spark session
         sc = SparkContext("local[4]", "sql.connect.catalog tests", conf=SparkConf())
         globs["_spark"] = PySparkSession(
@@ -331,6 +331,7 @@ def _test() -> None:
         )
 
         # Creates a remote Spark session.
+        os.environ["SPARK_REMOTE"] = "sc://localhost"
         globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
 
         # TODO(SPARK-41612): Support Catalog.isCached
@@ -347,9 +348,8 @@ def _test() -> None:
             | doctest.NORMALIZE_WHITESPACE
             | doctest.IGNORE_EXCEPTION_DETAIL,
         )
-        # TODO(SPARK-41529): Implement stop in RemoteSparkSession.
-        #  Stop the regular Spark session (server) too.
         globs["_spark"].stop()
+        globs["spark"].stop()
         if failure_count:
             sys.exit(-1)
     else:

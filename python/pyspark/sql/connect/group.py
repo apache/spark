@@ -170,3 +170,45 @@ class GroupedData:
 
 
 GroupedData.__doc__ = PySparkGroupedData.__doc__
+
+
+def _test() -> None:
+    import os
+    import sys
+    import doctest
+    from pyspark import SparkContext, SparkConf
+    from pyspark.sql import SparkSession as PySparkSession
+    from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    if should_test_connect:
+        import pyspark.sql.connect.group
+
+        globs = pyspark.sql.connect.group.__dict__.copy()
+        # Works around to create a regular Spark session
+        sc = SparkContext("local[4]", "sql.connect.group tests", conf=SparkConf())
+        globs["_spark"] = PySparkSession(sc, options={"spark.app.name": "sql.connect.group tests"})
+
+        # Creates a remote Spark session.
+        os.environ["SPARK_REMOTE"] = "sc://localhost"
+        globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
+
+        (failure_count, test_count) = doctest.testmod(
+            pyspark.sql.connect.group,
+            globs=globs,
+            optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
+        )
+        globs["_spark"].stop()
+        globs["spark"].stop()
+        if failure_count:
+            sys.exit(-1)
+    else:
+        print(
+            f"Skipping pyspark.sql.connect.group doctests: {connect_requirement_message}",
+            file=sys.stderr,
+        )
+
+
+if __name__ == "__main__":
+    _test()

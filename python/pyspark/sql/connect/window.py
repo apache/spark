@@ -257,12 +257,13 @@ def _test() -> None:
     if should_test_connect:
         import pyspark.sql.connect.window
 
-        globs = pyspark.sql.window.__dict__.copy()
+        globs = pyspark.sql.connect.window.__dict__.copy()
         # Works around to create a regular Spark session
         sc = SparkContext("local[4]", "sql.connect.window tests", conf=SparkConf())
         globs["_spark"] = PySparkSession(sc, options={"spark.app.name": "sql.connect.window tests"})
 
         # Creates a remote Spark session.
+        os.environ["SPARK_REMOTE"] = "sc://localhost"
         globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
 
         (failure_count, test_count) = doctest.testmod(
