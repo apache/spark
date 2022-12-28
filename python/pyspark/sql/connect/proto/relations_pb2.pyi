@@ -982,6 +982,7 @@ class Aggregate(google.protobuf.message.Message):
     GROUPING_EXPRESSIONS_FIELD_NUMBER: builtins.int
     AGGREGATE_EXPRESSIONS_FIELD_NUMBER: builtins.int
     PIVOT_FIELD_NUMBER: builtins.int
+    IS_NUMERIC_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
         """(Required) Input relation for a RelationalGroupedDataset."""
@@ -1004,6 +1005,14 @@ class Aggregate(google.protobuf.message.Message):
     @property
     def pivot(self) -> global___Aggregate.Pivot:
         """(Optional) Pivots a column of the current `DataFrame` and performs the specified aggregation."""
+    is_numeric: builtins.bool
+    """(Optional) Whether this aggregation should be treated as a numeric one for backwards compatibility:
+
+    If set true, the expressions in aggregate_expressions must be all literal strings:
+    The first string is the numeric function, should be one of: min, max, avg, sum;
+    The follow strings are the column names. If no column is provided, it will automatically choose
+    all type-compatible columns.
+    """
     def __init__(
         self,
         *,
@@ -1018,13 +1027,26 @@ class Aggregate(google.protobuf.message.Message):
         ]
         | None = ...,
         pivot: global___Aggregate.Pivot | None = ...,
+        is_numeric: builtins.bool | None = ...,
     ) -> None: ...
     def HasField(
-        self, field_name: typing_extensions.Literal["input", b"input", "pivot", b"pivot"]
+        self,
+        field_name: typing_extensions.Literal[
+            "_is_numeric",
+            b"_is_numeric",
+            "input",
+            b"input",
+            "is_numeric",
+            b"is_numeric",
+            "pivot",
+            b"pivot",
+        ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "_is_numeric",
+            b"_is_numeric",
             "aggregate_expressions",
             b"aggregate_expressions",
             "group_type",
@@ -1033,10 +1055,15 @@ class Aggregate(google.protobuf.message.Message):
             b"grouping_expressions",
             "input",
             b"input",
+            "is_numeric",
+            b"is_numeric",
             "pivot",
             b"pivot",
         ],
     ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_is_numeric", b"_is_numeric"]
+    ) -> typing_extensions.Literal["is_numeric"] | None: ...
 
 global___Aggregate = Aggregate
 

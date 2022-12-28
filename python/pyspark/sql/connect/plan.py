@@ -589,6 +589,7 @@ class Aggregate(LogicalPlan):
         aggregate_cols: Sequence[Column],
         pivot_col: Optional[Column],
         pivot_values: Optional[Sequence[Any]],
+        is_numeric: Optional[bool] = None,
     ) -> None:
         super().__init__(child)
 
@@ -612,6 +613,9 @@ class Aggregate(LogicalPlan):
 
         self._pivot_col = pivot_col
         self._pivot_values = pivot_values
+
+        assert is_numeric is None or isinstance(is_numeric, bool)
+        self._is_numeric = is_numeric
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         from pyspark.sql.connect.functions import lit
@@ -641,6 +645,9 @@ class Aggregate(LogicalPlan):
                 agg.aggregate.pivot.values.extend(
                     [lit(v).to_plan(session).literal for v in self._pivot_values]
                 )
+
+        if self._is_numeric is not None:
+            agg.aggregate.is_numeric = self._is_numeric
 
         return agg
 

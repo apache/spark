@@ -86,7 +86,7 @@ class GroupedData:
             assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
             aggregate_cols = cast(List[Column], list(exprs))
 
-        res = DataFrame.withPlan(
+        return DataFrame.withPlan(
             plan.Aggregate(
                 child=self._df._plan,
                 group_type=self._group_type,
@@ -97,36 +97,46 @@ class GroupedData:
             ),
             session=self._df._session,
         )
-        return res
 
     agg.__doc__ = PySparkGroupedData.agg.__doc__
 
-    def _map_cols_to_expression(self, fun: str, param: Union[Column, str]) -> Sequence[Column]:
-        return [
-            scalar_function(fun, col(param)) if isinstance(param, str) else param,
-        ]
+    def _numeric_agg(self, function: str, cols: Sequence[str]) -> "DataFrame":
+        from pyspark.sql.connect.dataframe import DataFrame
 
-    def min(self, col: Union[Column, str]) -> "DataFrame":
-        expr = self._map_cols_to_expression("min", col)
-        return self.agg(*expr)
+        assert isinstance(function, str) and function in ["min", "max", "avg", "sum"]
+
+        assert isinstance(cols, list) and all(isinstance(c, str) for c in cols)
+
+        return DataFrame.withPlan(
+            plan.Aggregate(
+                child=self._df._plan,
+                group_type=self._group_type,
+                grouping_cols=self._grouping_cols,
+                aggregate_cols=[lit(c) for c in [function] + cols],
+                pivot_col=self._pivot_col,
+                pivot_values=self._pivot_values,
+                is_numeric=True,
+            ),
+            session=self._df._session,
+        )
+
+    def min(self, *cols: str) -> "DataFrame":
+        return self._numeric_agg("min", list(cols))
 
     min.__doc__ = PySparkGroupedData.min.__doc__
 
-    def max(self, col: Union[Column, str]) -> "DataFrame":
-        expr = self._map_cols_to_expression("max", col)
-        return self.agg(*expr)
+    def max(self, *cols: str) -> "DataFrame":
+        return self._numeric_agg("max", list(cols))
 
     max.__doc__ = PySparkGroupedData.max.__doc__
 
-    def sum(self, col: Union[Column, str]) -> "DataFrame":
-        expr = self._map_cols_to_expression("sum", col)
-        return self.agg(*expr)
+    def sum(self, *cols: str) -> "DataFrame":
+        return self._numeric_agg("sum", list(cols))
 
     sum.__doc__ = PySparkGroupedData.sum.__doc__
 
-    def avg(self, col: Union[Column, str]) -> "DataFrame":
-        expr = self._map_cols_to_expression("avg", col)
-        return self.agg(*expr)
+    def avg(self, *cols: str) -> "DataFrame":
+        return self._numeric_agg("avg", list(cols))
 
     avg.__doc__ = PySparkGroupedData.avg.__doc__
 
