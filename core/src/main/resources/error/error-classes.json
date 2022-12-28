@@ -1650,11 +1650,6 @@
       "There must be at least one WHEN clause in a MERGE statement."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0011" : {
-    "message" : [
-      "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY is not supported."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0012" : {
     "message" : [
       "DISTRIBUTE BY is not supported."
