@@ -485,7 +485,7 @@ def read_json(
     >>> df = ps.DataFrame([['a', 'b'], ['c', 'd']],
     ...                   columns=['col 1', 'col 2'])
 
-    >>> df.to_json(path=r'%s/read_json/foo.json' % path, repartition=1)
+    >>> df.to_json(path=r'%s/read_json/foo.json' % path, num_files=1)
     >>> ps.read_json(
     ...     path=r'%s/read_json/foo.json' % path
     ... ).sort_values(by="col 1")
@@ -493,7 +493,7 @@ def read_json(
     0     a     b
     1     c     d
 
-    >>> df.to_json(path=r'%s/read_json/foo.json' % path, repartition=1, lineSep='___')
+    >>> df.to_json(path=r'%s/read_json/foo.json' % path, num_files=1, lineSep='___')
     >>> ps.read_json(
     ...     path=r'%s/read_json/foo.json' % path, lineSep='___'
     ... ).sort_values(by="col 1")
@@ -503,7 +503,7 @@ def read_json(
 
     You can preserve the index in the roundtrip as below.
 
-    >>> df.to_json(path=r'%s/read_json/bar.json' % path, repartition=1, index_col="index")
+    >>> df.to_json(path=r'%s/read_json/bar.json' % path, num_files=1, index_col="index")
     >>> ps.read_json(
     ...     path=r'%s/read_json/bar.json' % path, index_col="index"
     ... ).sort_values(by="col 1")  # doctest: +NORMALIZE_WHITESPACE
