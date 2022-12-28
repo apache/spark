@@ -257,7 +257,7 @@ def _test() -> None:
     if should_test_connect:
         import pyspark.sql.connect.window
 
-        globs = pyspark.sql.window.__dict__.copy()
+        globs = pyspark.sql.connect.window.__dict__.copy()
         # Works around to create a regular Spark session
         sc = SparkContext("local[4]", "sql.connect.window tests", conf=SparkConf())
         globs["_spark"] = PySparkSession(sc, options={"spark.app.name": "sql.connect.window tests"})
