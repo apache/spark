@@ -201,16 +201,16 @@ class Column:
 
     Select a column out of a DataFrame
 
-    >>> df.name
+    >>> df.name   # doctest: +SKIP
     Column<'name'>
-    >>> df["name"]
+    >>> df["name"]  # doctest: +SKIP
     Column<'name'>
 
     Create from an expression
 
-    >>> df.age + 1
+    >>> df.age + 1  # doctest: +SKIP
     Column<'(age + 1)'>
-    >>> 1 / df.age
+    >>> 1 / df.age  # doctest: +SKIP
     Column<'(1 / age)'>
     """
 
