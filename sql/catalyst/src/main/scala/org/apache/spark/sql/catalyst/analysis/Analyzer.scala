@@ -1048,7 +1048,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         }
         // Fail the analysis eagerly because outside AnalysisContext, the unresolved operators
         // inside a view maybe resolved incorrectly.
-        checkAnalysis(newChild)
+        checkAnalysis(newChild, false)
         view.copy(child = newChild)
       case p @ SubqueryAlias(_, view: View) =>
         p.copy(child = resolveViews(view))
