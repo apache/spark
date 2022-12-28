@@ -188,19 +188,16 @@ def _test() -> None:
         globs = pyspark.sql.connect.group.__dict__.copy()
         # Works around to create a regular Spark session
         sc = SparkContext("local[4]", "sql.connect.group tests", conf=SparkConf())
-        globs["_spark"] = PySparkSession(
-            sc, options={"spark.app.name": "sql.connect.group tests"}
-        )
+        globs["_spark"] = PySparkSession(sc, options={"spark.app.name": "sql.connect.group tests"})
 
         # Creates a remote Spark session.
+        os.environ["SPARK_REMOTE"] = "sc://localhost"
         globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
 
         (failure_count, test_count) = doctest.testmod(
             pyspark.sql.connect.group,
             globs=globs,
-            optionflags=doctest.ELLIPSIS
-            | doctest.NORMALIZE_WHITESPACE
-            | doctest.IGNORE_EXCEPTION_DETAIL,
+            optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
         )
         globs["_spark"].stop()
         globs["spark"].stop()

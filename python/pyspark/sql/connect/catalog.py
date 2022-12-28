@@ -331,6 +331,7 @@ def _test() -> None:
         )
 
         # Creates a remote Spark session.
+        os.environ["SPARK_REMOTE"] = "sc://localhost"
         globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
 
         # TODO(SPARK-41612): Support Catalog.isCached
