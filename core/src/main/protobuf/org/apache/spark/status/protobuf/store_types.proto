@@ -396,19 +396,13 @@ message RDDOperationEdge {
   int32 to_id = 2;
 }
 
-enum DeterministicLevel {
-  DETERMINATE = 0;
-  UNORDERED = 1;
-  INDETERMINATE = 2;
-}
-
 message RDDOperationNode {
   int32 id = 1;
   string name = 2;
   bool cached = 3;
   bool barrier = 4;
   string callsite = 5;
-  DeterministicLevel output_deterministic_level = 6;
+  RDDOperationGraphWrapper.DeterministicLevel output_deterministic_level = 6;
 }
 
 message RDDOperationClusterWrapper {
@@ -424,4 +418,10 @@ message RDDOperationGraphWrapper {
   repeated RDDOperationEdge outgoing_edges = 3;
   repeated RDDOperationEdge incoming_edges = 4;
   RDDOperationClusterWrapper root_cluster = 5;
+  enum DeterministicLevel {
+    UNSPECIFIED = 0;
+    DETERMINATE = 1;
+    UNORDERED = 2;
+    INDETERMINATE = 3;
+  }
 }

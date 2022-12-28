@@ -28,22 +28,19 @@ class RDDOperationGraphWrapperSerializer extends ProtobufSerDe {
   override val supportClass: Class[_] = classOf[RDDOperationGraphWrapper]
 
   override def serialize(input: Any): Array[Byte] = {
-    serialize(input.asInstanceOf[RDDOperationGraphWrapper])
-  }
-
-  private def serialize(input: RDDOperationGraphWrapper): Array[Byte] = {
+    val op = input.asInstanceOf[RDDOperationGraphWrapper]
     val builder = StoreTypes.RDDOperationGraphWrapper.newBuilder()
-    builder.setStageId(input.stageId.toLong)
-    input.edges.foreach { e =>
+    builder.setStageId(op.stageId.toLong)
+    op.edges.foreach { e =>
       builder.addEdges(serializeRDDOperationEdge(e))
     }
-    input.outgoingEdges.foreach { e =>
+    op.outgoingEdges.foreach { e =>
       builder.addOutgoingEdges(serializeRDDOperationEdge(e))
     }
-    input.incomingEdges.foreach { e =>
+    op.incomingEdges.foreach { e =>
       builder.addIncomingEdges(serializeRDDOperationEdge(e))
     }
-    builder.setRootCluster(serializeRDDOperationClusterWrapper(input.rootCluster))
+    builder.setRootCluster(serializeRDDOperationClusterWrapper(op.rootCluster))
     builder.build().toByteArray
   }
 
@@ -84,13 +81,15 @@ class RDDOperationGraphWrapperSerializer extends ProtobufSerDe {
   }
 
   private def serializeRDDOperationNode(node: RDDOperationNode): StoreTypes.RDDOperationNode = {
+    val outputDeterministicLevel = StoreTypes.RDDOperationGraphWrapper.DeterministicLevel
+      .valueOf(node.outputDeterministicLevel.toString)
     val builder = StoreTypes.RDDOperationNode.newBuilder()
     builder.setId(node.id)
     builder.setName(node.name)
     builder.setCached(node.cached)
     builder.setBarrier(node.barrier)
     builder.setCallsite(node.callsite)
-    builder.setOutputDeterministicLevel(serializeDeterministicLevel(node.outputDeterministicLevel))
+    builder.setOutputDeterministicLevel(outputDeterministicLevel)
     builder.build()
   }
 
@@ -101,7 +100,8 @@ class RDDOperationGraphWrapperSerializer extends ProtobufSerDe {
       cached = node.getCached,
       barrier = node.getBarrier,
       callsite = node.getCallsite,
-      outputDeterministicLevel = DeterministicLevel(node.getOutputDeterministicLevel.getNumber)
+      outputDeterministicLevel =
+        DeterministicLevel.withName(node.getOutputDeterministicLevel.toString)
     )
   }
 
@@ -116,10 +116,5 @@ class RDDOperationGraphWrapperSerializer extends ProtobufSerDe {
     RDDOperationEdge(
       fromId = edge.getFromId,
       toId = edge.getToId)
-  }
-
-  private def serializeDeterministicLevel(d: DeterministicLevel.Value):
-    StoreTypes.DeterministicLevel = {
-    StoreTypes.DeterministicLevel.valueOf(d.toString)
   }
 }
