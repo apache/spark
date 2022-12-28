@@ -42,7 +42,9 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
 
   def handle(v: ExecutePlanRequest): Unit = {
     val session =
-      SparkConnectService.getOrCreateIsolatedSession(v.getUserContext.getUserId).session
+      SparkConnectService
+        .getOrCreateIsolatedSession(v.getUserContext.getUserId, v.getClientId)
+        .session
     v.getPlan.getOpTypeCase match {
       case proto.Plan.OpTypeCase.COMMAND => handleCommand(session, v)
       case proto.Plan.OpTypeCase.ROOT => handlePlan(session, v)

@@ -32,11 +32,6 @@ import org.apache.spark.unsafe.types.UTF8String
 
 trait V1WriteCommand extends DataWritingCommand {
   /**
-   * Return if the provider is [[FileFormat]]
-   */
-  def fileFormatProvider: Boolean = true
-
-  /**
    * Specify the partition columns of the V1 write command.
    */
   def partitionColumns: Seq[Attribute]
@@ -58,8 +53,7 @@ object V1Writes extends Rule[LogicalPlan] with SQLConfHelper {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (conf.plannedWriteEnabled) {
       plan.transformUp {
-        case write: V1WriteCommand if write.fileFormatProvider &&
-          !write.child.isInstanceOf[WriteFiles] =>
+        case write: V1WriteCommand if !write.child.isInstanceOf[WriteFiles] =>
           val newQuery = prepareQuery(write, write.query)
           val attrMap = AttributeMap(write.query.output.zip(newQuery.output))
           val newChild = WriteFiles(newQuery)

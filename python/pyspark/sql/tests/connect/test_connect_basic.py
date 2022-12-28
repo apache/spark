@@ -20,7 +20,15 @@ import tempfile
 
 from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.sql import SparkSession, Row
-from pyspark.sql.types import StructType, StructField, LongType, StringType, IntegerType, MapType
+from pyspark.sql.types import (
+    StructType,
+    StructField,
+    LongType,
+    StringType,
+    IntegerType,
+    MapType,
+    ArrayType,
+)
 import pyspark.sql.functions
 from pyspark.testing.utils import ReusedPySparkTestCase
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
@@ -79,11 +87,15 @@ class SparkConnectSQLTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLT
         # Since we might create multiple Spark sessions, we need to create global temporary view
         # that is specifically maintained in the "global_temp" schema.
         df.write.saveAsTable(cls.tbl_name)
-        df2 = cls.spark.createDataFrame([(x, f"{x}") for x in range(100)], ["col1", "col2"])
+        df2 = cls.spark.createDataFrame(
+            [(x, f"{x}", 2 * x) for x in range(100)], ["col1", "col2", "col3"]
+        )
         df2.write.saveAsTable(cls.tbl_name2)
         df3 = cls.spark.createDataFrame([(x, f"{x}") for x in range(100)], ["id", "test\n_column"])
         df3.write.saveAsTable(cls.tbl_name3)
-        df4 = cls.spark.createDataFrame([(x, {"a": x}) for x in range(100)], ["id", "map_column"])
+        df4 = cls.spark.createDataFrame(
+            [(x, {"a": x}, [x, x * 2]) for x in range(100)], ["id", "map_column", "array_column"]
+        )
         df4.write.saveAsTable(cls.tbl_name4)
         empty_table_schema = StructType(
             [
@@ -452,11 +464,12 @@ class SparkConnectTests(SparkConnectSQLTestCase):
                 str(context.exception),
             )
 
-        # Test map type
+        # Test map type and array type
         schema = StructType(
             [
                 StructField("id", StringType(), True),
                 StructField("my_map", MapType(StringType(), IntegerType(), False), True),
+                StructField("my_array", ArrayType(IntegerType(), False), True),
             ]
         )
         cdf = self.connect.read.table(self.tbl_name4).to(schema)
@@ -985,6 +998,13 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         # +---+---+
         expected = "+---+---+\n|  X|  Y|\n+---+---+\n|  1|  2|\n+---+---+\n"
         self.assertEqual(show_str, expected)
+
+    def test_stat_cov(self):
+        # SPARK-41067: Test the stat.cov method
+        self.assertEqual(
+            self.connect.read.table(self.tbl_name2).stat.cov("col1", "col3"),
+            self.spark.read.table(self.tbl_name2).stat.cov("col1", "col3"),
+        )
 
     def test_repr(self):
         # SPARK-41213: Test the __repr__ method
