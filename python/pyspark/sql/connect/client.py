@@ -290,9 +290,9 @@ class SparkConnectClient(object):
         # Parse the connection string.
         self._builder = ChannelBuilder(connectionString)
         self._user_id = None
-        # Generate a unique session ID for this client. This UUID must be unique to allow concurrent
-        # Spark sessions of the same user. If the channel is closed, creating a new client will create
-        # a new session ID.
+        # Generate a unique session ID for this client. This UUID must be unique to allow
+        # concurrent Spark sessions of the same user. If the channel is closed, creating
+        # a new client will create a new session ID.
         self._session_id = str(uuid.uuid4())
         if self._builder.userId is not None:
             self._user_id = self._builder.userId

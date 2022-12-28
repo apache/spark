@@ -93,7 +93,7 @@ class SparkConnectService(debug: Boolean)
           new UnsupportedOperationException(
             s"${request.getPlan.getOpTypeCase} not supported for analysis."))
       }
-        val session =
+      val session =
         SparkConnectService
           .getOrCreateIsolatedSession(request.getUserContext.getUserId, request.getClientId)
           .session
