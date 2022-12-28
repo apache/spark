@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.{JobExecutionStatus, SparkConf, SparkContext}
-import org.apache.spark.internal.config.Status.{LIVE_UI_LOCAL_STORE_DIR, LIVE_UI_LOCAL_STORE_DIR_AUTO_CLEANUP_ENABLED}
+import org.apache.spark.internal.config.Status.{LIVE_UI_LOCAL_STORE_DIR, LIVE_UI_LOCAL_STORE_CLEANUP_ENABLED}
 import org.apache.spark.status.api.v1
 import org.apache.spark.storage.FallbackStorage.FALLBACK_BLOCK_MANAGER_ID
 import org.apache.spark.ui.scope._
@@ -785,7 +785,7 @@ private[spark] object AppStatusStore {
     val kvStore = KVUtils.createKVStore(storePath, live = true, conf)
     val store = new ElementTrackingStore(kvStore, conf)
     val listener = new AppStatusListener(store, conf, true, appStatusSource)
-    if (conf.get(LIVE_UI_LOCAL_STORE_DIR_AUTO_CLEANUP_ENABLED)) {
+    if (conf.get(LIVE_UI_LOCAL_STORE_CLEANUP_ENABLED)) {
       new AppStatusStore(store, listener = Some(listener), storePath)
     } else {
       new AppStatusStore(store, listener = Some(listener))

@@ -18,7 +18,7 @@
 package org.apache.spark.status
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
-import org.apache.spark.internal.config.Status.{LIVE_UI_LOCAL_STORE_DIR, LIVE_UI_LOCAL_STORE_DIR_AUTO_CLEANUP_ENABLED}
+import org.apache.spark.internal.config.Status.{LIVE_UI_LOCAL_STORE_DIR, LIVE_UI_LOCAL_STORE_CLEANUP_ENABLED}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
 
@@ -30,7 +30,7 @@ class AutoCleanupLiveUIDirSuite extends SparkFunSuite {
       try {
         val conf = new SparkConf().setAppName("ui-dir-cleanup").setMaster("local")
           .set(LIVE_UI_LOCAL_STORE_DIR, testDir.getCanonicalPath)
-          .set(LIVE_UI_LOCAL_STORE_DIR_AUTO_CLEANUP_ENABLED, autoCleanup)
+          .set(LIVE_UI_LOCAL_STORE_CLEANUP_ENABLED, autoCleanup)
         val sc = new SparkContext(conf)
         sc.parallelize(0 until 100, 10)
           .map { x => (x % 10) -> x }
