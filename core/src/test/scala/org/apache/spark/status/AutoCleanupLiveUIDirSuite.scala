@@ -26,26 +26,29 @@ class AutoCleanupLiveUIDirSuite extends SparkFunSuite {
 
   Seq(true, false).foreach { autoCleanup =>
     test(s"with auto cleanup $autoCleanup") {
-      val testDir = Utils.createTempDir()
+      val storePath = Utils.createTempDir()
       try {
         val conf = new SparkConf().setAppName("ui-dir-cleanup").setMaster("local")
-          .set(LIVE_UI_LOCAL_STORE_DIR, testDir.getCanonicalPath)
+          .set(LIVE_UI_LOCAL_STORE_DIR, storePath.getCanonicalPath)
           .set(LIVE_UI_LOCAL_STORE_CLEANUP_ENABLED, autoCleanup)
         val sc = new SparkContext(conf)
         sc.parallelize(0 until 100, 10)
           .map { x => (x % 10) -> x }
           .reduceByKey {_ + _}
           .collect()
+        // `storePath` should exists and not emtpy before SparkContext stop.
+        assert(storePath.exists())
+        assert(storePath.listFiles().nonEmpty)
         sc.stop()
         if(autoCleanup) {
-          assert(!testDir.exists())
+          assert(!storePath.exists())
         } else {
-          assert(testDir.exists())
-          assert(testDir.listFiles().nonEmpty)
+          assert(storePath.exists())
+          assert(storePath.listFiles().nonEmpty)
         }
       } finally {
-        JavaUtils.deleteRecursively(testDir)
-        assert(!testDir.exists())
+        JavaUtils.deleteRecursively(storePath)
+        assert(!storePath.exists())
       }
     }
   }
