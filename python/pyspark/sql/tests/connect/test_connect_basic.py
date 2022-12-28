@@ -1137,10 +1137,12 @@ class SparkConnectTests(SparkConnectSQLTestCase):
 
     def test_stat_approx_quantile(self):
         # SPARK-41069: Test the stat.approxQuantile method
-        self.assertEqual(
-            self.connect.read.table(self.tbl_name2).stat.approxQuantile(["col1", "col3"], [0.1, 0.5, 0.9], 0.1),
-            self.spark.read.table(self.tbl_name2).stat.approxQuantile(["col1", "col3"], [0.1, 0.5, 0.9], 0.1),
+        result = self.connect.read.table(self.tbl_name2).stat.approxQuantile(
+            ["col1", "col3"], [0.1, 0.5, 0.9], 0.1
         )
+        self.assertEqual(len(result), 2)
+        self.assertEqual(len(result[0]), 3)
+        self.assertEqual(len(result[1]), 3)
 
     def test_repr(self):
         # SPARK-41213: Test the __repr__ method

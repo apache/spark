@@ -908,7 +908,12 @@ class DataFrame:
             raise ValueError("relativeError should be >= 0.")
         relativeError = float(relativeError)
         pdf = DataFrame.withPlan(
-            plan.StatApproxQuantile(child=self._plan, cols=list(col), probabilities=probabilities, relativeError=relativeError),
+            plan.StatApproxQuantile(
+                child=self._plan,
+                cols=col,
+                probabilities=probabilities,
+                relativeError=relativeError,
+            ),
             session=self._session,
         ).toPandas()
 

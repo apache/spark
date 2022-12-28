@@ -1080,7 +1080,13 @@ class StatCov(LogicalPlan):
 
 
 class StatApproxQuantile(LogicalPlan):
-    def __init__(self, child: Optional["LogicalPlan"], cols: List[str], probabilities: List[float], relativeError: float) -> None:
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        cols: List[str],
+        probabilities: List[float],
+        relativeError: float,
+    ) -> None:
         super().__init__(child)
         self._cols = cols
         self._probabilities = probabilities
