@@ -143,6 +143,7 @@ case class CreateDataSourceTableAsSelectCommand(
     outputColumnNames: Seq[String])
   extends LeafRunnableCommand {
   assert(query.resolved)
+  override def innerChildren: Seq[LogicalPlan] = query :: Nil
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     assert(table.tableType != CatalogTableType.VIEW)

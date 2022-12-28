@@ -217,6 +217,10 @@ class DataFrameCallbackSuite extends QueryTest
     withTable("tab") {
       spark.range(10).select($"id", $"id" % 5 as "p").write.partitionBy("p").saveAsTable("tab")
       sparkContext.listenerBus.waitUntilEmpty()
+      // CTAS would derive 3 query executions
+      // 1. CreateDataSourceTableAsSelectCommand
+      // 2. InsertIntoHadoopFsRelationCommand
+      // 3. CommandResultExec
       assert(commands.length == 6)
       assert(commands(5)._1 == "command")
       assert(commands(5)._2.isInstanceOf[CreateDataSourceTableAsSelectCommand])

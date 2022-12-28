@@ -102,7 +102,8 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
   test("explain create table command") {
     checkKeywordsExist(sql("explain create table temp__b using hive as select * from src limit 2"),
-                   "== Physical Plan ==")
+      "== Physical Plan ==",
+      "CreateHiveTableAsSelect")
 
     checkKeywordsExist(
       sql("explain extended create table temp__b using hive as select * from src limit 2"),
