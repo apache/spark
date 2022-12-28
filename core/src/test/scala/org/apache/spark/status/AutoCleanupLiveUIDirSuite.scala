@@ -18,7 +18,7 @@
 package org.apache.spark.status
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
-import org.apache.spark.internal.config.Status.{LIVE_UI_LOCAL_STORE_DIR, LIVE_UI_LOCAL_STORE_CLEANUP_ENABLED}
+import org.apache.spark.internal.config.Status.{LIVE_UI_LOCAL_STORE_CLEANUP_ENABLED, LIVE_UI_LOCAL_STORE_DIR}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
 
@@ -37,8 +37,12 @@ class AutoCleanupLiveUIDirSuite extends SparkFunSuite {
           .reduceByKey {_ + _}
           .collect()
         sc.stop()
-        assert(testDir.exists())
-        assert(testDir.listFiles().isEmpty == autoCleanup)
+        if(autoCleanup) {
+          assert(!testDir.exists())
+        } else {
+          assert(testDir.exists())
+          assert(testDir.listFiles().nonEmpty)
+        }
       } finally {
         JavaUtils.deleteRecursively(testDir)
         assert(!testDir.exists())

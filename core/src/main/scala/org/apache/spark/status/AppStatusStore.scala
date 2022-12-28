@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.{JobExecutionStatus, SparkConf, SparkContext}
-import org.apache.spark.internal.config.Status.{LIVE_UI_LOCAL_STORE_DIR, LIVE_UI_LOCAL_STORE_CLEANUP_ENABLED}
+import org.apache.spark.internal.config.Status.{LIVE_UI_LOCAL_STORE_CLEANUP_ENABLED, LIVE_UI_LOCAL_STORE_DIR}
 import org.apache.spark.status.api.v1
 import org.apache.spark.storage.FallbackStorage.FALLBACK_BLOCK_MANAGER_ID
 import org.apache.spark.ui.scope._
@@ -738,11 +738,7 @@ private[spark] class AppStatusStore(
   }
 
   private def cleanUpStorePath(): Unit = {
-    storePath.foreach { p =>
-      if (p.exists()) {
-        p.listFiles().foreach(Utils.deleteRecursively)
-      }
-    }
+    storePath.foreach(Utils.deleteRecursively)
   }
 
   def constructTaskDataList(taskDataWrapperIter: Iterable[TaskDataWrapper]): Seq[v1.TaskData] = {
