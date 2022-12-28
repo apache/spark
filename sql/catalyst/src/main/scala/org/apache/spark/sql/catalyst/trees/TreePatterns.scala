@@ -76,6 +76,7 @@ object TreePattern extends Enumeration  {
   val RUNTIME_REPLACEABLE: Value = Value
   val SCALAR_SUBQUERY: Value = Value
   val SCALA_UDF: Value = Value
+  val SESSION_WINDOW: Value = Value
   val SORT: Value = Value
   val SUBQUERY_ALIAS: Value = Value
   val SUM: Value = Value
