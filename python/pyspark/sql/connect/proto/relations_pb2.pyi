@@ -93,6 +93,7 @@ class Relation(google.protobuf.message.Message):
     SUMMARY_FIELD_NUMBER: builtins.int
     CROSSTAB_FIELD_NUMBER: builtins.int
     DESCRIBE_FIELD_NUMBER: builtins.int
+    COV_FIELD_NUMBER: builtins.int
     CATALOG_FIELD_NUMBER: builtins.int
     UNKNOWN_FIELD_NUMBER: builtins.int
     @property
@@ -162,6 +163,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def describe(self) -> global___StatDescribe: ...
     @property
+    def cov(self) -> global___StatCov: ...
+    @property
     def catalog(self) -> pyspark.sql.connect.proto.catalog_pb2.Catalog:
         """Catalog API (experimental / unstable)"""
     @property
@@ -201,6 +204,7 @@ class Relation(google.protobuf.message.Message):
         summary: global___StatSummary | None = ...,
         crosstab: global___StatCrosstab | None = ...,
         describe: global___StatDescribe | None = ...,
+        cov: global___StatCov | None = ...,
         catalog: pyspark.sql.connect.proto.catalog_pb2.Catalog | None = ...,
         unknown: global___Unknown | None = ...,
     ) -> None: ...
@@ -213,6 +217,8 @@ class Relation(google.protobuf.message.Message):
             b"catalog",
             "common",
             b"common",
+            "cov",
+            b"cov",
             "crosstab",
             b"crosstab",
             "deduplicate",
@@ -288,6 +294,8 @@ class Relation(google.protobuf.message.Message):
             b"catalog",
             "common",
             b"common",
+            "cov",
+            b"cov",
             "crosstab",
             b"crosstab",
             "deduplicate",
@@ -388,6 +396,7 @@ class Relation(google.protobuf.message.Message):
         "summary",
         "crosstab",
         "describe",
+        "cov",
         "catalog",
         "unknown",
     ] | None: ...
@@ -1657,6 +1666,40 @@ class StatCrosstab(google.protobuf.message.Message):
     ) -> None: ...
 
 global___StatCrosstab = StatCrosstab
+
+class StatCov(google.protobuf.message.Message):
+    """Calculate the sample covariance of two numerical columns of a DataFrame.
+    It will invoke 'Dataset.stat.cov' (same as 'StatFunctions.calculateCov') to compute the results.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    COL1_FIELD_NUMBER: builtins.int
+    COL2_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    col1: builtins.str
+    """(Required) The name of the first column."""
+    col2: builtins.str
+    """(Required) The name of the second column."""
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        col1: builtins.str = ...,
+        col2: builtins.str = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal["col1", b"col1", "col2", b"col2", "input", b"input"],
+    ) -> None: ...
+
+global___StatCov = StatCov
 
 class NAFill(google.protobuf.message.Message):
     """Replaces null values.
