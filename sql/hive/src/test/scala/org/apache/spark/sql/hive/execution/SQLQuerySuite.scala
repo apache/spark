@@ -27,6 +27,7 @@ import com.google.common.io.Files
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.{SparkException, TestUtils}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
@@ -34,10 +35,11 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, CatalogUtils, Hi
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
-import org.apache.spark.sql.execution.TestUncaughtExceptionHandler
+import org.apache.spark.sql.execution.{SparkPlanInfo, TestUncaughtExceptionHandler}
 import org.apache.spark.sql.execution.adaptive.{DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.command.{InsertIntoDataSourceDirCommand, LoadDataCommand}
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.test.{HiveTestJars, TestHiveSingleton}
@@ -2310,23 +2312,33 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
 
                 val targetTable = "targetTable"
                 withTable(targetTable) {
-                  val df = sql(s"CREATE TABLE $targetTable STORED AS $format AS SELECT id FROM p")
-                  checkAnswer(sql(s"SELECT id FROM $targetTable"),
-                    Row(1) :: Row(2) :: Row(3) :: Nil)
+                  var commands: Seq[SparkPlanInfo] = Seq.empty
+                  val listener = new SparkListener {
+                    override def onOtherEvent(event: SparkListenerEvent): Unit = {
+                      event match {
+                        case start: SparkListenerSQLExecutionStart =>
+                          commands = commands ++ Seq(start.sparkPlanInfo)
+                        case _ => // ignore other events
+                      }
+                    }
+                  }
+                  spark.sparkContext.addSparkListener(listener)
+                  try {
+                    sql(s"CREATE TABLE $targetTable STORED AS $format AS SELECT id FROM p")
+                    checkAnswer(sql(s"SELECT id FROM $targetTable"),
+                      Row(1) :: Row(2) :: Row(3) :: Nil)
+                    spark.sparkContext.listenerBus.waitUntilEmpty()
+                    assert(commands.size == 3)
+                    assert(commands.head.nodeName == "Execute CreateHiveTableAsSelectCommand")
 
-                  val ctasDSCommand = df.queryExecution.analyzed.collect {
-                    case _: OptimizedCreateHiveTableAsSelectCommand => true
-                  }.headOption
-                  val ctasCommand = df.queryExecution.analyzed.collect {
-                    case _: CreateHiveTableAsSelectCommand => true
-                  }.headOption
-
-                  if (isConverted && isConvertedCtas) {
-                    assert(ctasDSCommand.nonEmpty)
-                    assert(ctasCommand.isEmpty)
-                  } else {
-                    assert(ctasDSCommand.isEmpty)
-                    assert(ctasCommand.nonEmpty)
+                    val v1WriteCommand = commands(1)
+                    if (isConverted && isConvertedCtas) {
+                      assert(v1WriteCommand.nodeName == "Execute InsertIntoHadoopFsRelationCommand")
+                    } else {
+                      assert(v1WriteCommand.nodeName == "Execute InsertIntoHiveTable")
+                    }
+                  } finally {
+                    spark.sparkContext.removeSparkListener(listener)
                   }
                 }
               }
