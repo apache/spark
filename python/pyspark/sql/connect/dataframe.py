@@ -910,7 +910,7 @@ class DataFrame:
         pdf = DataFrame.withPlan(
             plan.StatApproxQuantile(
                 child=self._plan,
-                cols=col,
+                cols=list(col),
                 probabilities=probabilities,
                 relativeError=relativeError,
             ),
