@@ -403,7 +403,7 @@ def _test() -> None:
     if should_test_connect:
         import pyspark.sql.connect.column
 
-        globs = pyspark.sql.column.__dict__.copy()
+        globs = pyspark.sql.connect.column.__dict__.copy()
         # Works around to create a regular Spark session
         sc = SparkContext("local[4]", "sql.connect.column tests", conf=SparkConf())
         globs["_spark"] = PySparkSession(sc, options={"spark.app.name": "sql.connect.column tests"})
