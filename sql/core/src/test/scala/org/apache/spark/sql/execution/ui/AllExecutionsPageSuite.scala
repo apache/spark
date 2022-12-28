@@ -27,6 +27,7 @@ import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkConf
+import org.apache.spark.internal.config.UI.UI_SQL_GROUP_SUB_EXECUTION_ENABLED
 import org.apache.spark.scheduler.{JobFailed, SparkListenerJobEnd, SparkListenerJobStart}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.execution.{SparkPlanInfo, SQLExecution}
@@ -119,6 +120,50 @@ class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndAfter {
     assert(html.contains("duration"))
   }
 
+  test("group sub executions") {
+    val statusStore = createStatusStore
+    val tab = mock(classOf[SQLTab], RETURNS_SMART_NULLS)
+    val request = mock(classOf[HttpServletRequest])
+
+    val sparkConf = new SparkConf(false).set(UI_SQL_GROUP_SUB_EXECUTION_ENABLED, true)
+    when(tab.conf).thenReturn(sparkConf)
+    when(tab.sqlStore).thenReturn(statusStore)
+    when(tab.appName).thenReturn("testing")
+    when(tab.headerTabs).thenReturn(Seq.empty)
+
+    val listener = statusStore.listener.get
+    val page = new AllExecutionsPage(tab)
+    val df = createTestDataFrame
+    listener.onOtherEvent(SparkListenerSQLExecutionStart(
+      0,
+      0,
+      "test",
+      "test",
+      df.queryExecution.toString,
+      SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
+      System.currentTimeMillis()))
+    listener.onOtherEvent(SparkListenerSQLExecutionStart(
+      1,
+      0,
+      "test",
+      "test",
+      df.queryExecution.toString,
+      SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
+      System.currentTimeMillis()))
+    // sub execution has a missing root execution
+    listener.onOtherEvent(SparkListenerSQLExecutionStart(
+      2,
+      100,
+      "test",
+      "test",
+      df.queryExecution.toString,
+      SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
+      System.currentTimeMillis()))
+    val html = page.render(request).toString().toLowerCase(Locale.ROOT)
+    assert(html.contains("sub execution ids") && html.contains("sub-execution-list"))
+    // sub execution should still be displayed if the root execution is missing
+    assert(html.contains("id=2"))
+  }
 
   private def createStatusStore: SQLAppStatusStore = {
     val conf = sparkContext.conf
