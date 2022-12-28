@@ -318,7 +318,7 @@ class TaskData private[spark](
     val status: String,
     val taskLocality: String,
     val speculative: Boolean,
-    val accumulatorUpdates: Seq[AccumulableInfo],
+    val accumulatorUpdates: collection.Seq[AccumulableInfo],
     val errorMessage: Option[String] = None,
     val taskMetrics: Option[TaskMetrics] = None,
     val executorLogs: Map[String, String],
