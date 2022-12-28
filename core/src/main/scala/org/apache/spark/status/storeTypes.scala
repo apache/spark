@@ -180,7 +180,7 @@ private[spark] class TaskDataWrapper(
     @KVIndexParam(value = TaskIndexNames.LOCALITY, parent = TaskIndexNames.STAGE)
     val taskLocality: String,
     val speculative: Boolean,
-    val accumulatorUpdates: Seq[AccumulableInfo],
+    val accumulatorUpdates: collection.Seq[AccumulableInfo],
     val errorMessage: Option[String],
 
     val hasMetrics: Boolean,

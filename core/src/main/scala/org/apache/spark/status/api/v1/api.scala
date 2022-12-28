@@ -196,7 +196,7 @@ class JobData private[spark](
     val description: Option[String],
     val submissionTime: Option[Date],
     val completionTime: Option[Date],
-    val stageIds: Seq[Int],
+    val stageIds: collection.Seq[Int],
     val jobGroup: Option[String],
     val status: JobExecutionStatus,
     val numTasks: Int,
@@ -221,7 +221,7 @@ class RDDStorageInfo private[spark](
     val memoryUsed: Long,
     val diskUsed: Long,
     val dataDistribution: Option[collection.Seq[RDDDataDistribution]],
-    val partitions: Option[Seq[RDDPartitionInfo]])
+    val partitions: Option[collection.Seq[RDDPartitionInfo]])
 
 class RDDDataDistribution private[spark](
     val address: String,
@@ -242,7 +242,7 @@ class RDDPartitionInfo private[spark](
     val storageLevel: String,
     val memoryUsed: Long,
     val diskUsed: Long,
-    val executors: Seq[String])
+    val executors: collection.Seq[String])
 
 class StageData private[spark](
     val status: StageStatus,
