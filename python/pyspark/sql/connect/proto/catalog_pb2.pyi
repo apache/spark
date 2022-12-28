@@ -50,7 +50,7 @@ else:
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
 class Catalog(google.protobuf.message.Message):
-    """Catalog messages are all meant to be internal."""
+    """Catalog messages are marked as unstable."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
