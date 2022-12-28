@@ -24,7 +24,7 @@ import "spark/connect/types.proto";
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
 
-// Catalog messages are all meant to be internal.
+// Catalog messages are marked as unstable.
 message Catalog {
   oneof cat_type {
     CurrentDatabase current_database = 1;

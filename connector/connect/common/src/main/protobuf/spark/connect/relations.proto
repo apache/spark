@@ -69,7 +69,7 @@ message Relation {
     StatCrosstab crosstab = 101;
     StatDescribe describe = 102;
 
-    // Catalog API (internal-only)
+    // Catalog API (experimental / unstable)
     Catalog catalog = 200;
 
     Unknown unknown = 999;
