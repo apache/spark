@@ -35,12 +35,14 @@ except ImportError as e:
 have_grpc = grpc_requirement_message is None
 
 
+grpc_status_requirement_message = None
 try:
     import grpc_status
 except ImportError as e:
     grpc_status_requirement_message = str(e)
 have_grpc_status = grpc_status_requirement_message is None
 
+googleapis_common_protos_requirement_message = None
 try:
     from google.rpc import error_details_pb2
 except ImportError as e:
