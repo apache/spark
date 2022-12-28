@@ -18,6 +18,7 @@
 import sys
 from typing import TYPE_CHECKING, Union, Sequence, List, Optional
 
+from pyspark import SparkContext, SparkConf
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import (
     ColumnReference,
@@ -201,7 +202,7 @@ class WindowSpec:
         return "WindowSpec(" + ", ".join(strs) + ")"
 
 
-WindowSpec.__doc__ = PySparkWindow.__doc__
+WindowSpec.__doc__ = PySparkWindowSpec.__doc__
 
 
 class Window:
@@ -241,4 +242,47 @@ class Window:
     rangeBetween.__doc__ = PySparkWindow.rangeBetween.__doc__
 
 
-Window.__doc__ = Window.__doc__
+Window.__doc__ = PySparkWindow.__doc__
+
+
+def _test() -> None:
+    import os
+    import sys
+    import doctest
+    from pyspark.sql import SparkSession as PySparkSession
+    from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    if should_test_connect:
+        import pyspark.sql.connect.window
+
+        globs = pyspark.sql.window.__dict__.copy()
+        # Works around to create a regular Spark session
+        sc = SparkContext("local[4]", "sql.connect.window tests", conf=SparkConf())
+        globs["_spark"] = PySparkSession(sc, options={"spark.app.name": "sql.connect.window tests"})
+
+        # Creates a remote Spark session.
+        globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
+
+        (failure_count, test_count) = doctest.testmod(
+            pyspark.sql.connect.window,
+            globs=globs,
+            optionflags=doctest.ELLIPSIS
+            | doctest.NORMALIZE_WHITESPACE
+            | doctest.IGNORE_EXCEPTION_DETAIL,
+        )
+
+        globs["spark"].stop()
+        globs["_spark"].stop()
+        if failure_count:
+            sys.exit(-1)
+    else:
+        print(
+            f"Skipping pyspark.sql.connect.window doctests: {connect_requirement_message}",
+            file=sys.stderr,
+        )
+
+
+if __name__ == "__main__":
+    _test()

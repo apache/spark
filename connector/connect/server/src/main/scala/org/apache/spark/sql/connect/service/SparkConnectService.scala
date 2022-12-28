@@ -158,7 +158,9 @@ class SparkConnectService(debug: Boolean)
             s"${request.getPlan.getOpTypeCase} not supported for analysis."))
       }
       val session =
-        SparkConnectService.getOrCreateIsolatedSession(request.getUserContext.getUserId).session
+        SparkConnectService
+          .getOrCreateIsolatedSession(request.getUserContext.getUserId, request.getClientId)
+          .session
 
       val explainMode = request.getExplain.getExplainMode match {
         case proto.Explain.ExplainMode.SIMPLE => SimpleMode
@@ -204,7 +206,7 @@ class SparkConnectService(debug: Boolean)
  * @param userId
  * @param session
  */
-case class SessionHolder(userId: String, session: SparkSession)
+case class SessionHolder(userId: String, sessionId: String, session: SparkSession)
 
 /**
  * Static instance of the SparkConnectService.
@@ -220,7 +222,7 @@ object SparkConnectService {
 
   // Type alias for the SessionCacheKey. Right now this is a String but allows us to switch to a
   // different or complex type easily.
-  private type SessionCacheKey = String;
+  private type SessionCacheKey = (String, String);
 
   private var server: Server = _
 
@@ -242,11 +244,11 @@ object SparkConnectService {
   /**
    * Based on the `key` find or create a new SparkSession.
    */
-  def getOrCreateIsolatedSession(key: SessionCacheKey): SessionHolder = {
+  def getOrCreateIsolatedSession(userId: String, sessionId: String): SessionHolder = {
     userSessionMapping.get(
-      key,
+      (userId, sessionId),
       () => {
-        SessionHolder(key, newIsolatedSession())
+        SessionHolder(userId, sessionId, newIsolatedSession())
       })
   }
 

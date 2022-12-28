@@ -1414,6 +1414,18 @@ def reverse(col: "ColumnOrName") -> Column:
 reverse.__doc__ = pysparkfuncs.reverse.__doc__
 
 
+def sequence(
+    start: "ColumnOrName", stop: "ColumnOrName", step: Optional["ColumnOrName"] = None
+) -> Column:
+    if step is None:
+        return _invoke_function_over_columns("sequence", start, stop)
+    else:
+        return _invoke_function_over_columns("sequence", start, stop, step)
+
+
+sequence.__doc__ = pysparkfuncs.sequence.__doc__
+
+
 # TODO(SPARK-41493): Support options
 def schema_of_csv(csv: "ColumnOrName") -> Column:
     if isinstance(csv, Column):
@@ -1629,11 +1641,11 @@ def encode(col: "ColumnOrName", charset: str) -> Column:
 encode.__doc__ = pysparkfuncs.encode.__doc__
 
 
-# TODO(SPARK-41473): Resolve the data type mismatch issue and enable the function
-# def format_number(col: "ColumnOrName", d: int) -> Column:
-#     return _invoke_function("format_number", _to_col(col), lit(d))
-#
-# format_number.__doc__ = pysparkfuncs.format_number.__doc__
+def format_number(col: "ColumnOrName", d: int) -> Column:
+    return _invoke_function("format_number", _to_col(col), lit(d))
+
+
+format_number.__doc__ = pysparkfuncs.format_number.__doc__
 
 
 def format_string(format: str, *cols: "ColumnOrName") -> Column:
@@ -2246,3 +2258,20 @@ def sha2(col: "ColumnOrName", numBits: int) -> Column:
 
 
 sha2.__doc__ = pysparkfuncs.sha2.__doc__
+
+
+# User Defined Function
+
+
+def call_udf(udfName: str, *cols: "ColumnOrName") -> Column:
+    return _invoke_function(udfName, *[_to_col(c) for c in cols])
+
+
+call_udf.__doc__ = pysparkfuncs.call_udf.__doc__
+
+
+def unwrap_udt(col: "ColumnOrName") -> Column:
+    return _invoke_function("unwrap_udt", _to_col(col))
+
+
+unwrap_udt.__doc__ = pysparkfuncs.unwrap_udt.__doc__

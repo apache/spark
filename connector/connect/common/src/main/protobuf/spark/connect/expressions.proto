@@ -40,6 +40,7 @@ message Expression {
     SortOrder sort_order = 9;
     LambdaFunction lambda_function = 10;
     Window window = 11;
+    UnresolvedExtractValue unresolved_extract_value = 12;
   }
 
 
@@ -227,6 +228,17 @@ message Expression {
   message UnresolvedRegex {
     // (Required) The column name used to extract column with regex.
     string col_name = 1;
+  }
+
+  // Extracts a value or values from an Expression
+  message UnresolvedExtractValue {
+    // (Required) The expression to extract value from, can be
+    // Map, Array, Struct or array of Structs.
+    Expression child = 1;
+
+    // (Required) The expression to describe the extraction, can be
+    // key of Map, index of Array, field name of Struct.
+    Expression extraction = 2;
   }
 
   message Alias {

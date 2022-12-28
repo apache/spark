@@ -18,6 +18,7 @@ from typing import List, Optional, TYPE_CHECKING
 
 import pandas as pd
 
+from pyspark import SparkContext, SparkConf
 from pyspark.sql.types import StructType
 from pyspark.sql.connect import DataFrame
 from pyspark.sql.catalog import (
@@ -116,8 +117,8 @@ class Catalog:
             Table(
                 name=row.iloc[0],
                 catalog=row.iloc[1],
-                # If empty or None, returns None.
-                namespace=None if row.iloc[2] is None else list(row.iloc[2]) or None,
+                # If None, returns None.
+                namespace=None if row.iloc[2] is None else list(row.iloc[2]),
                 description=row.iloc[3],
                 tableType=row.iloc[4],
                 isTemporary=row.iloc[5],
@@ -134,8 +135,8 @@ class Catalog:
         return Table(
             name=row.iloc[0],
             catalog=row.iloc[1],
-            # If empty or None, returns None.
-            namespace=None if row.iloc[2] is None else list(row.iloc[2]) or None,
+            # If None, returns None.
+            namespace=None if row.iloc[2] is None else list(row.iloc[2]),
             description=row.iloc[3],
             tableType=row.iloc[4],
             isTemporary=row.iloc[5],
@@ -149,8 +150,8 @@ class Catalog:
             Function(
                 name=row.iloc[0],
                 catalog=row.iloc[1],
-                # If empty or None, returns None.
-                namespace=None if row.iloc[2] is None else list(row.iloc[2]) or None,
+                # If None, returns None.
+                namespace=None if row.iloc[2] is None else list(row.iloc[2]),
                 description=row.iloc[3],
                 className=row.iloc[4],
                 isTemporary=row.iloc[5],
@@ -176,8 +177,8 @@ class Catalog:
         return Function(
             name=row.iloc[0],
             catalog=row.iloc[1],
-            # If empty or None, returns None.
-            namespace=None if row.iloc[2] is None else list(row.iloc[2]) or None,
+            # If None, returns None.
+            namespace=None if row.iloc[2] is None else list(row.iloc[2]),
             description=row.iloc[3],
             className=row.iloc[4],
             isTemporary=row.iloc[5],
@@ -305,3 +306,58 @@ class Catalog:
         self._catalog_to_pandas(plan.RefreshByPath(path=path))
 
     refreshByPath.__doc__ = PySparkCatalog.refreshByPath.__doc__
+
+
+Catalog.__doc__ = PySparkCatalog.__doc__
+
+
+def _test() -> None:
+    import os
+    import sys
+    import doctest
+    from pyspark.sql import SparkSession as PySparkSession
+    from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    if should_test_connect:
+        import pyspark.sql.connect.catalog
+
+        globs = pyspark.sql.catalog.__dict__.copy()
+        # Works around to create a regular Spark session
+        sc = SparkContext("local[4]", "sql.connect.catalog tests", conf=SparkConf())
+        globs["_spark"] = PySparkSession(
+            sc, options={"spark.app.name": "sql.connect.catalog tests"}
+        )
+
+        # Creates a remote Spark session.
+        globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
+
+        # TODO(SPARK-41612): Support Catalog.isCached
+        # TODO(SPARK-41600): Support Catalog.cacheTable
+        del pyspark.sql.connect.catalog.Catalog.clearCache.__doc__
+        del pyspark.sql.connect.catalog.Catalog.refreshTable.__doc__
+        del pyspark.sql.connect.catalog.Catalog.refreshByPath.__doc__
+        del pyspark.sql.connect.catalog.Catalog.recoverPartitions.__doc__
+
+        (failure_count, test_count) = doctest.testmod(
+            pyspark.sql.connect.catalog,
+            globs=globs,
+            optionflags=doctest.ELLIPSIS
+            | doctest.NORMALIZE_WHITESPACE
+            | doctest.IGNORE_EXCEPTION_DETAIL,
+        )
+        # TODO(SPARK-41529): Implement stop in RemoteSparkSession.
+        #  Stop the regular Spark session (server) too.
+        globs["_spark"].stop()
+        if failure_count:
+            sys.exit(-1)
+    else:
+        print(
+            f"Skipping pyspark.sql.connect.catalog doctests: {connect_requirement_message}",
+            file=sys.stderr,
+        )
+
+
+if __name__ == "__main__":
+    _test()

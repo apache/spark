@@ -17,6 +17,7 @@
 
 import datetime
 import decimal
+import warnings
 
 from typing import (
     TYPE_CHECKING,
@@ -34,6 +35,7 @@ import pyspark.sql.connect.proto as proto
 from pyspark.sql.connect.expressions import (
     Expression,
     UnresolvedFunction,
+    UnresolvedExtractValue,
     SQLExpression,
     LiteralExpression,
     CaseWhen,
@@ -264,6 +266,10 @@ class Column:
 
     alias.__doc__ = PySparkColumn.alias.__doc__
 
+    name = alias
+
+    name.__doc__ = PySparkColumn.name.__doc__
+
     def asc(self) -> "Column":
         return self.asc_nulls_first()
 
@@ -282,9 +288,6 @@ class Column:
     def desc_nulls_last(self) -> "Column":
         return Column(SortOrder(self._expr, ascending=False, nullsFirst=False))
 
-    def name(self) -> str:
-        return self._expr.name()
-
     def cast(self, dataType: Union[DataType, str]) -> "Column":
         if isinstance(dataType, (DataType, str)):
             return Column(CastExpression(expr=self._expr, data_type=dataType))
@@ -299,37 +302,6 @@ class Column:
         return "Column<'%s'>" % self._expr.__repr__()
 
     def over(self, window: "WindowSpec") -> "Column":
-        """
-        Define a windowing column.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        window : :class:`WindowSpec`
-
-        Returns
-        -------
-        :class:`Column`
-
-        Examples
-        --------
-        >>> from pyspark.sql import Window
-        >>> window = Window.partitionBy("name").orderBy("age") \
-                .rowsBetween(Window.unboundedPreceding, Window.currentRow)
-        >>> from pyspark.sql.functions import rank, min
-        >>> from pyspark.sql.functions import desc
-        >>> df = spark.createDataFrame(
-        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
-        >>> df.withColumn("rank", rank().over(window)) \
-                .withColumn("min", min('age').over(window)).sort(desc("age")).show()
-        +---+-----+----+---+
-        |age| name|rank|min|
-        +---+-----+----+---+
-        |  5|  Bob|   1|  5|
-        |  2|Alice|   1|  2|
-        +---+-----+----+---+
-        """
         from pyspark.sql.connect.window import WindowSpec
 
         if not isinstance(window, WindowSpec):
@@ -338,6 +310,8 @@ class Column:
             )
 
         return Column(WindowExpression(windowFunction=self._expr, windowSpec=window))
+
+    over.__doc__ = PySparkColumn.over.__doc__
 
     def isin(self, *cols: Any) -> "Column":
         from pyspark.sql.connect.functions import lit
@@ -351,9 +325,6 @@ class Column:
 
     isin.__doc__ = PySparkColumn.isin.__doc__
 
-    def getItem(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("getItem() is not yet implemented.")
-
     def between(
         self,
         lowerBound: Union["Column", "LiteralType", "DateTimeLiteral", "DecimalLiteral"],
@@ -363,8 +334,29 @@ class Column:
 
     between.__doc__ = PySparkColumn.between.__doc__
 
-    def getField(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("getField() is not yet implemented.")
+    def getItem(self, key: Any) -> "Column":
+        if isinstance(key, Column):
+            warnings.warn(
+                "A column as 'key' in getItem is deprecated as of Spark 3.0, and will not "
+                "be supported in the future release. Use `column[key]` or `column.key` syntax "
+                "instead.",
+                FutureWarning,
+            )
+        return self[key]
+
+    getItem.__doc__ = PySparkColumn.getItem.__doc__
+
+    def getField(self, name: Any) -> "Column":
+        if isinstance(name, Column):
+            warnings.warn(
+                "A column as 'name' in getField is deprecated as of Spark 3.0, and will not "
+                "be supported in the future release. Use `column[name]` or `column.name` syntax "
+                "instead.",
+                FutureWarning,
+            )
+        return self[name]
+
+    getField.__doc__ = PySparkColumn.getField.__doc__
 
     def withField(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("withField() is not yet implemented.")
@@ -372,8 +364,18 @@ class Column:
     def dropFields(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("dropFields() is not yet implemented.")
 
-    def __getitem__(self, k: Any) -> None:
-        raise NotImplementedError("apply() - __getitem__ is not yet implemented.")
+    def __getattr__(self, item: Any) -> "Column":
+        if item.startswith("__"):
+            raise AttributeError(item)
+        return self[item]
+
+    def __getitem__(self, k: Any) -> "Column":
+        if isinstance(k, slice):
+            if k.step is not None:
+                raise ValueError("slice with step is not supported.")
+            return self.substr(k.start, k.stop)
+        else:
+            return Column(UnresolvedExtractValue(self._expr, LiteralExpression._from_value(k)))
 
     def __iter__(self) -> None:
         raise TypeError("Column is not iterable")
