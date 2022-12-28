@@ -929,6 +929,11 @@
       "UDF class <className> doesn't implement any UDF interface"
     ]
   },
+  "NOT_A_PARTITIONED_TABLE" : {
+    "message" : [
+      "Operation <operation> is not allowed for <tableName> because it is not a partitioned table."
+    ]
+  },
   "NULLABLE_ARRAY_OR_MAP_ELEMENT" : {
     "message" : [
       "Array or map at <columnPath> contains nullable element while it's required to be non-nullable."
@@ -2950,11 +2955,6 @@
   "_LEGACY_ERROR_TEMP_1248" : {
     "message" : [
       "Operation not allowed: ALTER TABLE SET SERDE is not supported for tables created with the datasource API."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1249" : {
-    "message" : [
-      "Operation not allowed: <cmd> only works on partitioned tables: <tableIdentWithDB>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1250" : {

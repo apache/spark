@@ -2405,22 +2405,24 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map.empty)
   }
 
-  def cmdOnlyWorksOnPartitionedTablesError(cmd: String, tableIdentWithDB: String): Throwable = {
+  def cmdOnlyWorksOnPartitionedTablesError(
+      operation: String,
+      tableIdentWithDB: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1249",
+      errorClass = "NOT_A_PARTITIONED_TABLE",
       messageParameters = Map(
-        "cmd" -> cmd,
+        "operation" -> operation,
         "tableIdentWithDB" -> tableIdentWithDB))
   }
 
-  def cmdOnlyWorksOnTableWithLocationError(cmd: String, tableIdentWithDB: String): Throwable = {
+  def cmdOnlyWorksOnTableWithLocationError(
+      operation: String,
+      tableIdentWithDB: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1249",
+      errorClass = "NOT_A_PARTITIONED_TABLE",
       messageParameters = Map(
-        "cmd" -> cmd,
+        "operation" -> operation,
         "tableIdentWithDB" -> tableIdentWithDB))
-    new AnalysisException(s"Operation not allowed: $cmd only works on table with " +
-      s"location provided: $tableIdentWithDB")
   }
 
   def actionNotAllowedOnTableWithFilesourcePartitionManagementDisabledError(
