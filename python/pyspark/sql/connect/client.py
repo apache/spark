@@ -290,6 +290,10 @@ class SparkConnectClient(object):
         # Parse the connection string.
         self._builder = ChannelBuilder(connectionString)
         self._user_id = None
+        # Generate a unique session ID for this client. This UUID must be unique to allow
+        # concurrent Spark sessions of the same user. If the channel is closed, creating
+        # a new client will create a new session ID.
+        self._session_id = str(uuid.uuid4())
         if self._builder.userId is not None:
             self._user_id = self._builder.userId
         elif userId is not None:
@@ -367,6 +371,7 @@ class SparkConnectClient(object):
 
     def _execute_plan_request_with_metadata(self) -> pb2.ExecutePlanRequest:
         req = pb2.ExecutePlanRequest()
+        req.client_id = self._session_id
         req.client_type = "_SPARK_CONNECT_PYTHON"
         if self._user_id:
             req.user_context.user_id = self._user_id
@@ -374,6 +379,7 @@ class SparkConnectClient(object):
 
     def _analyze_plan_request_with_metadata(self) -> pb2.AnalyzePlanRequest:
         req = pb2.AnalyzePlanRequest()
+        req.client_id = self._session_id
         req.client_type = "_SPARK_CONNECT_PYTHON"
         if self._user_id:
             req.user_context.user_id = self._user_id
@@ -401,6 +407,8 @@ class SparkConnectClient(object):
             req.explain.explain_mode = pb2.Explain.ExplainMode.FORMATTED
 
         resp = self._stub.AnalyzePlan(req, metadata=self._builder.metadata())
+        if resp.client_id != self._session_id:
+            raise ValueError("Received incorrect session identifier for request.")
         return AnalyzeResult.fromProto(resp)
 
     def _process_batch(self, arrow_batch: pb2.ExecutePlanResponse.ArrowBatch) -> "pandas.DataFrame":
@@ -409,6 +417,8 @@ class SparkConnectClient(object):
 
     def _execute(self, req: pb2.ExecutePlanRequest) -> None:
         for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
+            if b.client_id != self._session_id:
+                raise ValueError("Received incorrect session identifier for request.")
             continue
         return
 
@@ -419,6 +429,8 @@ class SparkConnectClient(object):
         result_dfs = []
 
         for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
+            if b.client_id != self._session_id:
+                raise ValueError("Received incorrect session identifier for request.")
             if b.metrics is not None:
                 m = b.metrics
             if b.HasField("arrow_batch"):

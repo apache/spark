@@ -153,7 +153,7 @@ class SparkConnectServiceSuite extends SharedSparkSession {
     val instance = new SparkConnectService(false)
 
     // Add an always crashing UDF
-    val session = SparkConnectService.getOrCreateIsolatedSession("c1").session
+    val session = SparkConnectService.getOrCreateIsolatedSession("c1", "session").session
     val instaKill: Long => Long = { _ =>
       throw new Exception("Kaboom")
     }
@@ -172,6 +172,7 @@ class SparkConnectServiceSuite extends SharedSparkSession {
       .newBuilder()
       .setPlan(plan)
       .setUserContext(context)
+      .setClientId("session")
       .build()
 
     // The observer is executed inside this thread. So
