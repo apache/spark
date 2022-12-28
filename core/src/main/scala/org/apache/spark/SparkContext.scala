@@ -20,10 +20,9 @@ package org.apache.spark
 import java.io._
 import java.net.URI
 import java.util.{Arrays, Locale, Properties, ServiceLoader, UUID}
-import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, TimeUnit}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
 import javax.ws.rs.core.UriBuilder
-
 import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.collection.immutable
@@ -31,9 +30,8 @@ import scala.collection.mutable.HashMap
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 import scala.language.implicitConversions
-import scala.reflect.{classTag, ClassTag}
+import scala.reflect.{ClassTag, classTag}
 import scala.util.control.NonFatal
-
 import com.google.common.collect.MapMaker
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -42,7 +40,6 @@ import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, Sequence
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHadoopJob}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.logging.log4j.Level
-
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
@@ -2141,7 +2138,7 @@ class SparkContext(config: SparkConf) extends Logging {
         val metricsReportFuture = Future {
           env.metricsSystem.report()
         } (SparkContext.executionContext)
-        ThreadUtils.awaitResult(metricsReportFuture, Duration.create("1s"))
+        ThreadUtils.awaitResult(metricsReportFuture, Duration.create(2000, TimeUnit.MILLISECONDS))
       }
     }
     Utils.tryLogNonFatalError {
@@ -2677,9 +2674,6 @@ object SparkContext extends Logging {
   private val activeContext: AtomicReference[SparkContext] =
     new AtomicReference[SparkContext](null)
 
-  private val executionContext = ExecutionContext.fromExecutorService(
-    ThreadUtils.newDaemonCachedThreadPool("spark-context", 1))
-
   /**
    * Points to a partially-constructed SparkContext if another thread is in the SparkContext
    * constructor, or `None` if no SparkContext is being constructed.
@@ -2687,6 +2681,12 @@ object SparkContext extends Logging {
    * Access to this field is guarded by `SPARK_CONTEXT_CONSTRUCTOR_LOCK`.
    */
   private var contextBeingConstructed: Option[SparkContext] = None
+
+  /**
+   * A daemon thread pool used for SparkContext#stop().
+   */
+  private val executionContext = ExecutionContext.fromExecutorService(
+    ThreadUtils.newDaemonCachedThreadPool("spark-context", 1))
 
   /**
    * Called to ensure that no other SparkContext is running in this JVM.
