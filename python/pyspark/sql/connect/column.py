@@ -28,6 +28,7 @@ from typing import (
     Optional,
 )
 
+from pyspark import SparkContext, SparkConf
 from pyspark.sql.types import DataType
 from pyspark.sql.column import Column as PySparkColumn
 
@@ -413,12 +414,26 @@ def _test() -> None:
         os.environ["SPARK_REMOTE"] = "sc://localhost"
         globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
 
+        # TODO(SPARK-41751): Support bitwiseAND
+        del pyspark.sql.connect.column.Column.bitwiseAND.__doc__
+        del pyspark.sql.connect.column.Column.bitwiseOR.__doc__
+        del pyspark.sql.connect.column.Column.bitwiseXOR.__doc__
+        del pyspark.sql.connect.column.Column.eqNullSafe.__doc__
+        del pyspark.sql.connect.column.Column.isNotNull.__doc__
+        del pyspark.sql.connect.column.Column.isNull.__doc__
+        del pyspark.sql.connect.column.Column.isin.__doc__
+        # TODO: Fix createDataFrame
+        del pyspark.sql.connect.column.Column.getField.__doc__
+        del pyspark.sql.connect.column.Column.getItem.__doc__
+        # TODO(SPARK-41292): Support Window functions
+        del pyspark.sql.connect.column.Column.over.__doc__
+
         (failure_count, test_count) = doctest.testmod(
             pyspark.sql.connect.column,
             globs=globs,
             optionflags=doctest.ELLIPSIS
-                        | doctest.NORMALIZE_WHITESPACE
-                        | doctest.IGNORE_EXCEPTION_DETAIL,
+            | doctest.NORMALIZE_WHITESPACE
+            | doctest.IGNORE_EXCEPTION_DETAIL,
         )
 
         globs["spark"].stop()
