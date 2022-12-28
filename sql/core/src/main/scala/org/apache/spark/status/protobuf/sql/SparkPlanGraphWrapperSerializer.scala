@@ -27,10 +27,8 @@ class SparkPlanGraphWrapperSerializer extends ProtobufSerDe {
 
   override val supportClass: Class[_] = classOf[SparkPlanGraphWrapper]
 
-  override def serialize(input: Any): Array[Byte] =
-    serialize(input.asInstanceOf[SparkPlanGraphWrapper])
-
-  private def serialize(plan: SparkPlanGraphWrapper): Array[Byte] = {
+  override def serialize(input: Any): Array[Byte] = {
+    val plan = input.asInstanceOf[SparkPlanGraphWrapper]
     val builder = StoreTypes.SparkPlanGraphWrapper.newBuilder()
     builder.setExecutionId(plan.executionId)
     plan.nodes.foreach { node =>
