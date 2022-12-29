@@ -1657,11 +1657,10 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         observed_metrics = cdf.attrs["observed_metrics"]
         self.assert_eq(len(observed_metrics), 1)
         self.assert_eq(observed_metrics[0].name, observation_name)
-        self.assert_eq(len(observed_metrics[0].metrics), 1)
-        self.assert_eq(len(observed_metrics[0].metrics[0]), 3)
-        for metric in observed_metrics[0].metrics[0]:
+        self.assert_eq(len(observed_metrics[0].metrics), 3)
+        for metric in observed_metrics[0].metrics:
             self.assertIsInstance(metric, ProtoExpression.Literal)
-        values = list(map(lambda metric: metric.long, observed_metrics[0].metrics[0]))
+        values = list(map(lambda metric: metric.long, observed_metrics[0].metrics))
         self.assert_eq(values, [4, 99, 4944])
 
         with self.assertRaisesRegex(ValueError, "'exprs' should not be empty"):
