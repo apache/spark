@@ -69,11 +69,9 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
       }
       // group the sub execution only if the root execution will be displayed (i.e. not missing)
       if (groupSubExecutionEnabled &&
-        e.executionId != e.rootExecutionId &&
-        executionIdToSubExecutions.contains(e.rootExecutionId)) {
-        executionIdToSubExecutions.get(e.rootExecutionId).foreach { executions =>
-          executions += e
-        }
+          e.executionId != e.rootExecutionId &&
+          executionIdToSubExecutions.contains(e.rootExecutionId)) {
+        executionIdToSubExecutions(e.rootExecutionId) += e
       } else {
         if (groupSubExecutionEnabled) {
           // add the execution id to indicate it'll be displayed as root, so the executions with
@@ -93,8 +91,8 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
 
       if (running.nonEmpty) {
         val runningPageTable =
-          executionsTable(request, "running", running.toSeq, executionIdToSubExecutions.toMap,
-            currentTime, true, true, true)
+          executionsTable(request, "running", running.toSeq,
+            executionIdToSubExecutions.mapValues(_.toSeq).toMap, currentTime, true, true, true)
 
         _content ++=
           <span id="running" class="collapse-aggregated-runningExecutions collapse-table"
@@ -112,8 +110,8 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
 
       if (completed.nonEmpty) {
         val completedPageTable =
-          executionsTable(request, "completed", completed.toSeq, executionIdToSubExecutions.toMap,
-            currentTime, false, true, false)
+          executionsTable(request, "completed", completed.toSeq,
+            executionIdToSubExecutions.mapValues(_.toSeq).toMap, currentTime, false, true, false)
 
         _content ++=
           <span id="completed" class="collapse-aggregated-completedExecutions collapse-table"
@@ -131,8 +129,8 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
 
       if (failed.nonEmpty) {
         val failedPageTable =
-          executionsTable(request, "failed", failed.toSeq, executionIdToSubExecutions.toMap,
-            currentTime, false, true, true)
+          executionsTable(request, "failed", failed.toSeq,
+            executionIdToSubExecutions.mapValues(_.toSeq).toMap, currentTime, false, true, true)
 
         _content ++=
           <span id="failed" class="collapse-aggregated-failedExecutions collapse-table"

@@ -166,7 +166,7 @@ object SQLExecution {
     } finally {
       executionIdToQueryExecution.remove(executionId)
       sc.setLocalProperty(EXECUTION_ID_KEY, oldExecutionId)
-      unsetRootExecutionId(sc, oldExecutionId)
+      unsetRootExecutionId(sc, executionId.toString)
     }
   }
 
