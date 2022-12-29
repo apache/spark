@@ -99,6 +99,8 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Relation.RelTypeCase.WITH_COLUMNS => transformWithColumns(rel.getWithColumns)
       case proto.Relation.RelTypeCase.HINT => transformHint(rel.getHint)
       case proto.Relation.RelTypeCase.UNPIVOT => transformUnpivot(rel.getUnpivot)
+      case proto.Relation.RelTypeCase.REPARTITION_BY_EXPRESSION =>
+        transformRepartitionByExpression(rel.getRepartitionByExpression)
       case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
         throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
 
@@ -439,6 +441,20 @@ class SparkConnectPlanner(session: SparkSession) {
     }
   }
 
+  private def transformRepartitionByExpression(
+      rel: proto.RepartitionByExpression): LogicalPlan = {
+    val numPartitionsOpt = if (rel.hasNumPartitions) {
+      Some(rel.getNumPartitions)
+    } else {
+      None
+    }
+    val partitionExpressions = rel.getPartitionExprsList.asScala.map(transformExpression).toSeq
+    logical.RepartitionByExpression(
+      partitionExpressions,
+      transformRelation(rel.getInput),
+      numPartitionsOpt)
+  }
+
   private def transformDeduplicate(rel: proto.Deduplicate): LogicalPlan = {
     if (!rel.hasInput) {
       throw InvalidPlanInput("Deduplicate needs a plan input")
@@ -580,6 +596,8 @@ class SparkConnectPlanner(session: SparkSession) {
         transformUnresolvedRegex(exp.getUnresolvedRegex)
       case proto.Expression.ExprTypeCase.UNRESOLVED_EXTRACT_VALUE =>
         transformUnresolvedExtractValue(exp.getUnresolvedExtractValue)
+      case proto.Expression.ExprTypeCase.UPDATE_FIELDS =>
+        transformUpdateFields(exp.getUpdateFields)
       case proto.Expression.ExprTypeCase.SORT_ORDER => transformSortOrder(exp.getSortOrder)
       case proto.Expression.ExprTypeCase.LAMBDA_FUNCTION =>
         transformLambdaFunction(exp.getLambdaFunction)
@@ -842,6 +860,21 @@ class SparkConnectPlanner(session: SparkSession) {
     UnresolvedExtractValue(
       transformExpression(extract.getChild),
       transformExpression(extract.getExtraction))
+  }
+
+  private def transformUpdateFields(update: proto.Expression.UpdateFields): UpdateFields = {
+    if (update.hasValueExpression) {
+      // add or replace a field
+      UpdateFields.apply(
+        col = transformExpression(update.getStructExpression),
+        fieldName = update.getFieldName,
+        expr = transformExpression(update.getValueExpression))
+    } else {
+      // drop a field
+      UpdateFields.apply(
+        col = transformExpression(update.getStructExpression),
+        fieldName = update.getFieldName)
+    }
   }
 
   private def transformWindowExpression(window: proto.Expression.Window) = {

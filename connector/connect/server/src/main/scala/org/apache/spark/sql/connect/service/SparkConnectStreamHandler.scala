@@ -18,7 +18,6 @@
 package org.apache.spark.sql.connect.service
 
 import scala.collection.JavaConverters._
-import scala.util.control.NonFatal
 
 import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver
@@ -128,12 +127,8 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
             }
             partitions(currentPartitionId) = null
 
-            error.foreach {
-              case NonFatal(e) =>
-                responseObserver.onError(e)
-                logError("Error while processing query.", e)
-                return
-              case other => throw other
+            error.foreach { case other =>
+              throw other
             }
             part
           }
