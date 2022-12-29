@@ -1334,6 +1334,225 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         ):
             cdf.groupBy("name").pivot("department", ["Sales", b"Marketing"]).agg(CF.sum(cdf.salary))
 
+    def test_numeric_aggregation(self):
+        # SPARK-41737: test numeric aggregation
+        query = """
+                SELECT * FROM VALUES
+                    ('James', 'Sales', 3000, 2020),
+                    ('Michael', 'Sales', 4600, 2020),
+                    ('Robert', 'Sales', 4100, 2020),
+                    ('Maria', 'Finance', 3000, 2020),
+                    ('James', 'Sales', 3000, 2019),
+                    ('Scott', 'Finance', 3300, 2020),
+                    ('Jen', 'Finance', 3900, 2020),
+                    ('Jeff', 'Marketing', 3000, 2020),
+                    ('Kumar', 'Marketing', 2000, 2020),
+                    ('Saif', 'Sales', 4100, 2020)
+                AS T(name, department, salary, year)
+                """
+
+        # +-------+----------+------+----+
+        # |   name|department|salary|year|
+        # +-------+----------+------+----+
+        # |  James|     Sales|  3000|2020|
+        # |Michael|     Sales|  4600|2020|
+        # | Robert|     Sales|  4100|2020|
+        # |  Maria|   Finance|  3000|2020|
+        # |  James|     Sales|  3000|2019|
+        # |  Scott|   Finance|  3300|2020|
+        # |    Jen|   Finance|  3900|2020|
+        # |   Jeff| Marketing|  3000|2020|
+        # |  Kumar| Marketing|  2000|2020|
+        # |   Saif|     Sales|  4100|2020|
+        # +-------+----------+------+----+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        # test groupby
+        self.assert_eq(
+            cdf.groupBy("name").min().toPandas(),
+            sdf.groupBy("name").min().toPandas(),
+        )
+        self.assert_eq(
+            cdf.groupBy("name").min("salary").toPandas(),
+            sdf.groupBy("name").min("salary").toPandas(),
+        )
+        self.assert_eq(
+            cdf.groupBy("name").max("salary").toPandas(),
+            sdf.groupBy("name").max("salary").toPandas(),
+        )
+        self.assert_eq(
+            cdf.groupBy("name", cdf.department).avg("salary", "year").toPandas(),
+            sdf.groupBy("name", sdf.department).avg("salary", "year").toPandas(),
+        )
+        self.assert_eq(
+            cdf.groupBy("name", cdf.department).sum("salary", "year").toPandas(),
+            sdf.groupBy("name", sdf.department).sum("salary", "year").toPandas(),
+        )
+
+        # test rollup
+        self.assert_eq(
+            cdf.rollup("name").max().toPandas(),
+            sdf.rollup("name").max().toPandas(),
+        )
+        self.assert_eq(
+            cdf.rollup("name").min("salary").toPandas(),
+            sdf.rollup("name").min("salary").toPandas(),
+        )
+        self.assert_eq(
+            cdf.rollup("name").max("salary").toPandas(),
+            sdf.rollup("name").max("salary").toPandas(),
+        )
+        self.assert_eq(
+            cdf.rollup("name", cdf.department).avg("salary", "year").toPandas(),
+            sdf.rollup("name", sdf.department).avg("salary", "year").toPandas(),
+        )
+        self.assert_eq(
+            cdf.rollup("name", cdf.department).sum("salary", "year").toPandas(),
+            sdf.rollup("name", sdf.department).sum("salary", "year").toPandas(),
+        )
+
+        # test cube
+        self.assert_eq(
+            cdf.cube("name").avg().toPandas(),
+            sdf.cube("name").avg().toPandas(),
+        )
+        self.assert_eq(
+            cdf.cube("name").min("salary").toPandas(),
+            sdf.cube("name").min("salary").toPandas(),
+        )
+        self.assert_eq(
+            cdf.cube("name").max("salary").toPandas(),
+            sdf.cube("name").max("salary").toPandas(),
+        )
+        self.assert_eq(
+            cdf.cube("name", cdf.department).avg("salary", "year").toPandas(),
+            sdf.cube("name", sdf.department).avg("salary", "year").toPandas(),
+        )
+        self.assert_eq(
+            cdf.cube("name", cdf.department).sum("salary", "year").toPandas(),
+            sdf.cube("name", sdf.department).sum("salary", "year").toPandas(),
+        )
+
+        # test pivot
+        # pivot with values
+        self.assert_eq(
+            cdf.groupBy("name").pivot("department", ["Sales", "Marketing"]).sum().toPandas(),
+            sdf.groupBy("name").pivot("department", ["Sales", "Marketing"]).sum().toPandas(),
+        )
+        self.assert_eq(
+            cdf.groupBy("name")
+            .pivot("department", ["Sales", "Marketing"])
+            .min("salary")
+            .toPandas(),
+            sdf.groupBy("name")
+            .pivot("department", ["Sales", "Marketing"])
+            .min("salary")
+            .toPandas(),
+        )
+        self.assert_eq(
+            cdf.groupBy("name")
+            .pivot("department", ["Sales", "Marketing"])
+            .max("salary")
+            .toPandas(),
+            sdf.groupBy("name")
+            .pivot("department", ["Sales", "Marketing"])
+            .max("salary")
+            .toPandas(),
+        )
+        self.assert_eq(
+            cdf.groupBy(cdf.name)
+            .pivot("department", ["Sales", "Finance", "Unknown"])
+            .avg("salary", "year")
+            .toPandas(),
+            sdf.groupBy(sdf.name)
+            .pivot("department", ["Sales", "Finance", "Unknown"])
+            .avg("salary", "year")
+            .toPandas(),
+        )
+        self.assert_eq(
+            cdf.groupBy(cdf.name)
+            .pivot("department", ["Sales", "Finance", "Unknown"])
+            .sum("salary", "year")
+            .toPandas(),
+            sdf.groupBy(sdf.name)
+            .pivot("department", ["Sales", "Finance", "Unknown"])
+            .sum("salary", "year")
+            .toPandas(),
+        )
+
+        # pivot without values
+        self.assert_eq(
+            cdf.groupBy("name").pivot("department").min().toPandas(),
+            sdf.groupBy("name").pivot("department").min().toPandas(),
+        )
+        self.assert_eq(
+            cdf.groupBy("name").pivot("department").min("salary").toPandas(),
+            sdf.groupBy("name").pivot("department").min("salary").toPandas(),
+        )
+        self.assert_eq(
+            cdf.groupBy("name").pivot("department").max("salary").toPandas(),
+            sdf.groupBy("name").pivot("department").max("salary").toPandas(),
+        )
+        self.assert_eq(
+            cdf.groupBy(cdf.name).pivot("department").avg("salary", "year").toPandas(),
+            sdf.groupBy(sdf.name).pivot("department").avg("salary", "year").toPandas(),
+        )
+        self.assert_eq(
+            cdf.groupBy(cdf.name).pivot("department").sum("salary", "year").toPandas(),
+            sdf.groupBy(sdf.name).pivot("department").sum("salary", "year").toPandas(),
+        )
+
+        # check error
+        with self.assertRaisesRegex(
+            TypeError,
+            "Numeric aggregation function can only be applied on numeric columns",
+        ):
+            cdf.groupBy("name").min("department").show()
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "Numeric aggregation function can only be applied on numeric columns",
+        ):
+            cdf.groupBy("name").max("salary", "department").show()
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "Numeric aggregation function can only be applied on numeric columns",
+        ):
+            cdf.rollup("name").avg("department").show()
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "Numeric aggregation function can only be applied on numeric columns",
+        ):
+            cdf.rollup("name").sum("salary", "department").show()
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "Numeric aggregation function can only be applied on numeric columns",
+        ):
+            cdf.cube("name").min("department").show()
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "Numeric aggregation function can only be applied on numeric columns",
+        ):
+            cdf.cube("name").max("salary", "department").show()
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "Numeric aggregation function can only be applied on numeric columns",
+        ):
+            cdf.groupBy("name").pivot("department").avg("department").show()
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "Numeric aggregation function can only be applied on numeric columns",
+        ):
+            cdf.groupBy("name").pivot("department").sum("salary", "department").show()
+
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
 class ChannelBuilderTests(ReusedPySparkTestCase):
