@@ -914,6 +914,11 @@
     ],
     "sqlState" : "42000"
   },
+  "NOT_A_PARTITIONED_TABLE" : {
+    "message" : [
+      "Operation <operation> is not allowed for <tableName> because it is not a partitioned table."
+    ]
+  },
   "NO_HANDLER_FOR_UDAF" : {
     "message" : [
       "No handler for UDAF '<functionName>'. Use sparkSession.udf.register(...) instead."
@@ -922,11 +927,6 @@
   "NO_SQL_TYPE_IN_PROTOBUF_SCHEMA" : {
     "message" : [
       "Cannot find <catalystFieldPath> in Protobuf schema"
-    ]
-  },
-  "NOT_A_PARTITIONED_TABLE" : {
-    "message" : [
-      "Operation <operation> is not allowed for <tableName> because it is not a partitioned table."
     ]
   },
   "NO_UDF_INTERFACE" : {
