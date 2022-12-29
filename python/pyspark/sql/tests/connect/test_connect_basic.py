@@ -1025,6 +1025,10 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             self.spark.read.table(self.tbl_name2).stat.corr("col1", "col3", "pearson"),
         )
 
+        with self.assertRaisesRegex(TypeError, "col1 should be a string."):
+            self.connect.read.table(self.tbl_name2).stat.corr(1, "col3", "pearson")
+        with self.assertRaisesRegex(TypeError, "col2 should be a string."):
+            self.connect.read.table(self.tbl_name).stat.corr("col1", 1, "pearson")
         with self.assertRaises(ValueError) as context:
             self.connect.read.table(self.tbl_name2).stat.corr("col1", "col3", "spearman"),
             self.assertTrue(
