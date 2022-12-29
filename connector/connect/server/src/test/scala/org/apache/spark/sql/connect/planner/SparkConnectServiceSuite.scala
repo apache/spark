@@ -18,12 +18,12 @@ package org.apache.spark.sql.connect.planner
 
 import scala.collection.mutable
 
+import io.grpc.StatusRuntimeException
 import io.grpc.stub.StreamObserver
 import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.{BigIntVector, Float8Vector}
 import org.apache.arrow.vector.ipc.ArrowStreamReader
 
-import org.apache.spark.SparkException
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.dsl.MockRemoteSession
 import org.apache.spark.sql.connect.dsl.plans._
@@ -185,7 +185,7 @@ class SparkConnectServiceSuite extends SharedSparkSession {
         }
 
         override def onError(throwable: Throwable): Unit = {
-          assert(throwable.isInstanceOf[SparkException])
+          assert(throwable.isInstanceOf[StatusRuntimeException])
         }
 
         override def onCompleted(): Unit = {

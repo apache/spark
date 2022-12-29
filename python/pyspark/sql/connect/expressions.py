@@ -420,6 +420,59 @@ class UnresolvedFunction(Expression):
             return f"{self._name}({', '.join([str(arg) for arg in self._args])})"
 
 
+class WithField(Expression):
+    def __init__(
+        self,
+        structExpr: Expression,
+        fieldName: str,
+        valueExpr: Expression,
+    ) -> None:
+        super().__init__()
+
+        assert isinstance(structExpr, Expression)
+        self._structExpr = structExpr
+
+        assert isinstance(fieldName, str)
+        self._fieldName = fieldName
+
+        assert isinstance(valueExpr, Expression)
+        self._valueExpr = valueExpr
+
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
+        expr = proto.Expression()
+        expr.update_fields.struct_expression.CopyFrom(self._structExpr.to_plan(session))
+        expr.update_fields.field_name = self._fieldName
+        expr.update_fields.value_expression.CopyFrom(self._valueExpr.to_plan(session))
+        return expr
+
+    def __repr__(self) -> str:
+        return f"WithField({self._structExpr}, {self._fieldName}, {self._valueExpr})"
+
+
+class DropField(Expression):
+    def __init__(
+        self,
+        structExpr: Expression,
+        fieldName: str,
+    ) -> None:
+        super().__init__()
+
+        assert isinstance(structExpr, Expression)
+        self._structExpr = structExpr
+
+        assert isinstance(fieldName, str)
+        self._fieldName = fieldName
+
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
+        expr = proto.Expression()
+        expr.update_fields.struct_expression.CopyFrom(self._structExpr.to_plan(session))
+        expr.update_fields.field_name = self._fieldName
+        return expr
+
+    def __repr__(self) -> str:
+        return f"DropField({self._structExpr}, {self._fieldName})"
+
+
 class UnresolvedExtractValue(Expression):
     def __init__(
         self,

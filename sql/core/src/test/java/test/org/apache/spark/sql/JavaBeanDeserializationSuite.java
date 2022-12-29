@@ -590,9 +590,9 @@ public class JavaBeanDeserializationSuite implements Serializable {
             .reduceGroups(rf);
 
     List<Tuple2<String, Item>> expectedRecords = Arrays.asList(
-            new Tuple2("a", new Item("a", 8)),
-            new Tuple2("b", new Item("b", 3)),
-            new Tuple2("c", new Item("c", 2)));
+            new Tuple2<>("a", new Item("a", 8)),
+            new Tuple2<>("b", new Item("b", 3)),
+            new Tuple2<>("c", new Item("c", 2)));
 
     List<Tuple2<String, Item>> result = finalDs.collectAsList();
 

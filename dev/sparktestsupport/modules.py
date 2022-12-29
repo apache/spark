@@ -505,7 +505,9 @@ pyspark_connect = Module(
     python_test_goals=[
         # doctests
         "pyspark.sql.connect.catalog",
+        "pyspark.sql.connect.group",
         "pyspark.sql.connect.window",
+        "pyspark.sql.connect.column",
         # unittests
         "pyspark.sql.tests.connect.test_connect_column_expressions",
         "pyspark.sql.tests.connect.test_connect_plan_only",

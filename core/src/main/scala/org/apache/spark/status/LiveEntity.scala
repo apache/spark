@@ -543,14 +543,14 @@ private class LiveRDDPartition(val blockName: String, rddLevel: StorageLevel) {
 
   var value: v1.RDDPartitionInfo = null
 
-  def executors: Seq[String] = value.executors
+  def executors: collection.Seq[String] = value.executors
 
   def memoryUsed: Long = value.memoryUsed
 
   def diskUsed: Long = value.diskUsed
 
   def update(
-      executors: Seq[String],
+      executors: collection.Seq[String],
       memoryUsed: Long,
       diskUsed: Long): Unit = {
     val level = StorageLevel(diskUsed > 0, memoryUsed > 0, rddLevel.useOffHeap,
