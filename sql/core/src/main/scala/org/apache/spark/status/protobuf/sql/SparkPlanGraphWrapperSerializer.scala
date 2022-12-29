@@ -100,8 +100,8 @@ class SparkPlanGraphWrapperSerializer extends ProtobufSerDe {
 
     new SparkPlanGraphNode(
       id = node.getId,
-      name =  weakIntern(node.getName),
-      desc =  weakIntern(node.getDesc),
+      name = weakIntern(node.getName),
+      desc = weakIntern(node.getDesc),
       metrics = node.getMetricsList.asScala.map(SQLPlanMetricSerializer.deserialize).toSeq
     )
   }

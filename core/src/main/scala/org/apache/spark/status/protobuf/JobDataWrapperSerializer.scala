@@ -17,8 +17,10 @@
 
 package org.apache.spark.status.protobuf
 
-import collection.JavaConverters._
 import java.util.Date
+
+import collection.JavaConverters._
+
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.status.JobDataWrapper
 import org.apache.spark.status.api.v1.JobData
