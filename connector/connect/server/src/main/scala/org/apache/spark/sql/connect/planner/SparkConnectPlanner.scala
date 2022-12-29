@@ -99,6 +99,8 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Relation.RelTypeCase.WITH_COLUMNS => transformWithColumns(rel.getWithColumns)
       case proto.Relation.RelTypeCase.HINT => transformHint(rel.getHint)
       case proto.Relation.RelTypeCase.UNPIVOT => transformUnpivot(rel.getUnpivot)
+      case proto.Relation.RelTypeCase.REPARTITION_BY_EXPRESSION =>
+        transformRepartitionByExpression(rel.getRepartitionByExpression)
       case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
         throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
 
@@ -437,6 +439,20 @@ class SparkConnectPlanner(session: SparkSession) {
         Seq(rel.getValueColumnName),
         transformRelation(rel.getInput))
     }
+  }
+
+  private def transformRepartitionByExpression(
+      rel: proto.RepartitionByExpression): LogicalPlan = {
+    val numPartitionsOpt = if (rel.hasNumPartitions) {
+      Some(rel.getNumPartitions)
+    } else {
+      None
+    }
+    val partitionExpressions = rel.getPartitionExprsList.asScala.map(transformExpression).toSeq
+    logical.RepartitionByExpression(
+      partitionExpressions,
+      transformRelation(rel.getInput),
+      numPartitionsOpt)
   }
 
   private def transformDeduplicate(rel: proto.Deduplicate): LogicalPlan = {
