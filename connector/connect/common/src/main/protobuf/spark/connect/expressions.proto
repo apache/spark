@@ -242,12 +242,12 @@ message Expression {
     Expression extraction = 2;
   }
 
-  // Add, replace or drop field of `StructType` into `col` expression by name.
+  // Add, replace or drop a field of `StructType` expression by name.
   message UpdateFields {
-    // (Required) The struct expression
+    // (Required) The struct expression.
     Expression struct_expression = 1;
 
-    // (Required) The field name
+    // (Required) The field name.
     string field_name = 2;
 
     // (Optional) The expression to add or replace.

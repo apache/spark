@@ -203,7 +203,10 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         ):
             not (cdf.a > 2)
 
-        with self.assertRaises(TypeError):
+        with self.assertRaisesRegex(
+            TypeError,
+            "Column is not iterable",
+        ):
             for x in cdf.a:
                 pass
 

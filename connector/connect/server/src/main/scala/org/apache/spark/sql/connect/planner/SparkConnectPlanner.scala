@@ -864,14 +864,16 @@ class SparkConnectPlanner(session: SparkSession) {
 
   private def transformUpdateFields(update: proto.Expression.UpdateFields): UpdateFields = {
     if (update.hasValueExpression) {
-      // add or replace field
+      // add or replace a field
       UpdateFields.apply(
-        transformExpression(update.getStructExpression),
-        update.getFieldName,
-        transformExpression(update.getValueExpression))
+        col = transformExpression(update.getStructExpression),
+        fieldName = update.getFieldName,
+        expr = transformExpression(update.getValueExpression))
     } else {
-      // drop field
-      UpdateFields.apply(transformExpression(update.getStructExpression), update.getFieldName)
+      // drop a field
+      UpdateFields.apply(
+        col = transformExpression(update.getStructExpression),
+        fieldName = update.getFieldName)
     }
   }
 

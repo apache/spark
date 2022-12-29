@@ -767,7 +767,7 @@ class Expression(google.protobuf.message.Message):
         ) -> None: ...
 
     class UpdateFields(google.protobuf.message.Message):
-        """Add, replace or drop field of `StructType` into `col` expression by name."""
+        """Add, replace or drop a field of `StructType` expression by name."""
 
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -776,9 +776,9 @@ class Expression(google.protobuf.message.Message):
         VALUE_EXPRESSION_FIELD_NUMBER: builtins.int
         @property
         def struct_expression(self) -> global___Expression:
-            """(Required) The struct expression"""
+            """(Required) The struct expression."""
         field_name: builtins.str
-        """(Required) The field name"""
+        """(Required) The field name."""
         @property
         def value_expression(self) -> global___Expression:
             """(Optional) The expression to add or replace.
