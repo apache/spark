@@ -369,4 +369,16 @@ class DSV2SQLInsertTestSuite extends SQLInsertTestSuite with SharedSparkSession 
       .set("spark.sql.catalog.testcat", classOf[InMemoryPartitionTableCatalog].getName)
       .set(SQLConf.DEFAULT_CATALOG.key, "testcat")
   }
+
+  test("static partition column name should not be used in the column list") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(i STRING, c string) USING PARQUET PARTITIONED BY (c)")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("INSERT OVERWRITE t PARTITION (c='1') (c) VALUES ('2')")
+        },
+        errorClass = "STATIC_PARTITION_COLUMN_IN_COLUMN_LIST",
+        parameters = Map("staticName" -> "c"))
+    }
+  }
 }
