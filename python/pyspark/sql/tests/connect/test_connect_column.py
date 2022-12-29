@@ -693,6 +693,56 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             sdf.select(sdf.c[0:1], sdf["c"][2:10]).toPandas(),
         )
 
+    def test_column_arithmetic_ops(self):
+        # SPARK-41761: test arithmetic ops
+        query = """
+            SELECT * FROM VALUES
+            (1, 1, 0, NULL), (2, NULL, 1, 2.0), (3, 3, 4, 3.5)
+            AS tab(a, b, c, d)
+            """
+        # +---+----+---+----+
+        # |  a|   b|  c|   d|
+        # +---+----+---+----+
+        # |  1|   1|  0|null|
+        # |  2|null|  1| 2.0|
+        # |  3|   3|  4| 3.5|
+        # +---+----+---+----+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        self.assert_eq(
+            cdf.select(
+                cdf.a + cdf["b"] - 1, cdf.a - cdf["b"] * cdf["c"] / 2, cdf.d / cdf.b / 3
+            ).toPandas(),
+            sdf.select(
+                sdf.a + sdf["b"] - 1, sdf.a - sdf["b"] * sdf["c"] / 2, sdf.d / sdf.b / 3
+            ).toPandas(),
+        )
+
+        # TODO(SPARK-41762): make __neg__ return the correct column name
+        # [left]:  Index(['negative(a)'], dtype='object')
+        # [right]: Index(['(- a)'], dtype='object')
+        self.assert_eq(
+            cdf.select((-cdf.a).alias("x")).toPandas(),
+            sdf.select((-sdf.a).alias("x")).toPandas(),
+        )
+
+        self.assert_eq(
+            cdf.select(3 - cdf.a + cdf["b"] * cdf["c"] - cdf.d / cdf.b).toPandas(),
+            sdf.select(3 - sdf.a + sdf["b"] * sdf["c"] - sdf.d / sdf.b).toPandas(),
+        )
+
+        self.assert_eq(
+            cdf.select(cdf.a % cdf["b"], cdf["a"] % 2).toPandas(),
+            sdf.select(sdf.a % sdf["b"], sdf["a"] % 2).toPandas(),
+        )
+
+        self.assert_eq(
+            cdf.select(cdf.a ** cdf["b"], cdf.d**2, 2**cdf.c).toPandas(),
+            sdf.select(sdf.a ** sdf["b"], sdf.d**2, 2**sdf.c).toPandas(),
+        )
+
     def test_unsupported_functions(self):
         # SPARK-41225: Disable unsupported functions.
         c = self.connect.range(1).id
