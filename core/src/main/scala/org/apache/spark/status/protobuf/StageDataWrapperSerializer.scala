@@ -23,7 +23,7 @@ import collection.JavaConverters._
 import org.apache.commons.collections4.MapUtils
 
 import org.apache.spark.status.StageDataWrapper
-import org.apache.spark.status.api.v1.{ExecutorMetricsDistributions, ExecutorPeakMetricsDistributions, InputMetricDistributions, InputMetrics, OutputMetricDistributions, OutputMetrics, ShuffleReadMetricDistributions, ShuffleReadMetrics, ShuffleWriteMetricDistributions, ShuffleWriteMetrics, SpeculationStageSummary, StageData, StageStatus, TaskData, TaskMetricDistributions, TaskMetrics}
+import org.apache.spark.status.api.v1.{ExecutorMetricsDistributions, ExecutorPeakMetricsDistributions, InputMetricDistributions, InputMetrics, OutputMetricDistributions, OutputMetrics, ShuffleReadMetricDistributions, ShuffleReadMetrics, ShuffleWriteMetricDistributions, ShuffleWriteMetrics, SpeculationStageSummary, StageData, TaskData, TaskMetricDistributions, TaskMetrics}
 import org.apache.spark.status.protobuf.Utils.getOptional
 import org.apache.spark.util.Utils.weakIntern
 
@@ -45,7 +45,7 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
   private def serializeStageData(stageData: StageData): StoreTypes.StageData = {
     val stageDataBuilder = StoreTypes.StageData.newBuilder()
     stageDataBuilder
-      .setStatus(serializeStageStatus(stageData.status))
+      .setStatus(StageStatusSerializer.serialize(stageData.status))
       .setStageId(stageData.stageId.toLong)
       .setAttemptId(stageData.attemptId)
       .setNumTasks(stageData.numTasks)
@@ -130,10 +130,6 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
       stageDataBuilder.setExecutorMetricsDistributions(serializeExecutorMetricsDistributions(emd))
     }
     stageDataBuilder.build()
-  }
-
-  private def serializeStageStatus(s: StageStatus): StoreTypes.StageData.StageStatus = {
-    StoreTypes.StageData.StageStatus.valueOf(s.toString)
   }
 
   private def serializeTaskData(t: TaskData): StoreTypes.TaskData = {
@@ -346,7 +342,7 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
   }
 
   private def deserializeStageData(binary: StoreTypes.StageData): StageData = {
-    val status = StageStatus.valueOf(binary.getStatus.toString)
+    val status = StageStatusSerializer.deserialize(binary.getStatus)
     val submissionTime =
       getOptional(binary.hasSubmissionTime, () => new Date(binary.getSubmissionTime))
     val firstTaskLaunchedTime =
