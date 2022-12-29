@@ -447,16 +447,19 @@ def _test() -> None:
         del pyspark.sql.connect.column.Column.dropFields.__doc__
         # TODO(SPARK-41772): Enable pyspark.sql.connect.column.Column.withField doctest
         del pyspark.sql.connect.column.Column.withField.__doc__
-        # TODO(SPARK-41751): Support Column.bitwiseAND,bitwiseOR,bitwiseXOR,eqNullSafe,isNotNull,
-        # isNull,isin
+        # TODO(SPARK-41745): SparkSession.createDataFrame does not respect the column names in
+        #  the row
         del pyspark.sql.connect.column.Column.bitwiseAND.__doc__
         del pyspark.sql.connect.column.Column.bitwiseOR.__doc__
         del pyspark.sql.connect.column.Column.bitwiseXOR.__doc__
+        # TODO(SPARK-41770): eqNullSafe does not support None as its argument
         del pyspark.sql.connect.column.Column.eqNullSafe.__doc__
+        # TODO(SPARK-41745): SparkSession.createDataFrame does not respect the column names in
+        #  the row
         del pyspark.sql.connect.column.Column.isNotNull.__doc__
         del pyspark.sql.connect.column.Column.isNull.__doc__
         del pyspark.sql.connect.column.Column.isin.__doc__
-        # TODO(SPARK-41756): Fix createDataFrame
+        # TODO(SPARK-41771): __getitem__ does not work with Column.isin
         del pyspark.sql.connect.column.Column.getField.__doc__
         del pyspark.sql.connect.column.Column.getItem.__doc__
         # TODO(SPARK-41758): Support Window functions
