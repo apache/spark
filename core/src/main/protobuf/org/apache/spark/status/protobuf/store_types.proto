@@ -18,8 +18,15 @@
 syntax = "proto3";
 package org.apache.spark.status.protobuf;
 
+/**
+ * Developer guides:
+ *   - Coding style: https://developers.google.com/protocol-buffers/docs/style
+ *   - Use int64 for job/stage IDs, in case of future extension in Spark core.
+ *   - Use `weakIntern` on string values in create new objects during serialization.
+ */
+
 enum JobExecutionStatus {
-  UNSPECIFIED = 0;
+  JOB_EXECUTION_STATUS_UNSPECIFIED = 0;
   RUNNING = 1;
   SUCCEEDED = 2;
   FAILED = 3;
