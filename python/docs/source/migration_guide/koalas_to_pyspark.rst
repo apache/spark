@@ -27,13 +27,13 @@ Migrating from Koalas to pandas API on Spark
       # import databricks.koalas as ks
       import pyspark.pandas as ps
 
-* ``DataFrame.koalas`` in Koalas DataFrame was renamed to ``DataFrame.pandas_on_spark`` in pandas-on-Spark DataFrame. ``DataFrame.koalas`` was kept for compatibility reason but deprecated as of Spark 3.2.
+* ``DataFrame.koalas`` in Koalas DataFrame was renamed to ``DataFrame.pandas_on_spark`` in pandas-on-Spark DataFrame. ``DataFrame.koalas`` was kept for compatibility reasons but deprecated as of Spark 3.2.
   ``DataFrame.koalas`` will be removed in the future releases.
 
-* Monkey-patched ``DataFrame.to_koalas`` in PySpark DataFrame was renamed to ``DataFrame.pandas_api`` in PySpark DataFrame. ``DataFrame.to_koalas`` was kept for compatibility reason.
+* Monkey-patched ``DataFrame.to_koalas`` in PySpark DataFrame was renamed to ``DataFrame.pandas_api`` in PySpark DataFrame. ``DataFrame.to_koalas`` was kept for compatibility reasons.
   ``DataFrame.to_koalas`` will be removed in the future releases.
 
-* Monkey-patched ``DataFrame.to_pandas_on_spark`` in PySpark DataFrame was renamed to ``DataFrame.pandas_api`` in PySpark DataFrame. ``DataFrame.to_pandas_on_spark`` was kept for compatibility reason but deprecated as of Spark 3.3.
+* Monkey-patched ``DataFrame.to_pandas_on_spark`` in PySpark DataFrame was renamed to ``DataFrame.pandas_api`` in PySpark DataFrame. ``DataFrame.to_pandas_on_spark`` was kept for compatibility reasons but deprecated as of Spark 3.3.
   ``DataFrame.to_pandas_on_spark`` will be removed in the future releases.
 
 * ``databricks.koalas.__version__`` was removed. ``pyspark.__version__`` should be used instead.

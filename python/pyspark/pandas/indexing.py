@@ -96,7 +96,7 @@ class AtIndexer(IndexerLike):
     """
     Access a single value for a row/column label pair.
     If the index is not unique, all matching pairs are returned as an array.
-    Similar to ``loc``, in that both provide label-based lookups. Use ``at`` if you only need to
+    Like ``loc``, in that both provide label-based lookups. Use ``at`` if you only need to
     get a single value in a DataFrame or Series.
 
     .. note:: Unlike pandas, pandas-on-Spark only allows using ``at`` to get values but not to
@@ -181,7 +181,7 @@ class iAtIndexer(IndexerLike):
     """
     Access a single value for a row/column pair by integer position.
 
-    Similar to ``iloc``, in that both provide integer-based lookups. Use
+    Like ``iloc``, in that both provide integer-based lookups. Use
     ``iat`` if you only need to get or set a single value in a DataFrame
     or Series.
 
@@ -872,8 +872,8 @@ class LocIndexer(LocIndexerLike):
            shield
     cobra       2
 
-    Slice with labels for row and single label for column. As mentioned
-    above, note that both the start and stop of the slice are included.
+    Slice with labels for row and single label for column.
+    Note that both the start and stop of the slice are included.
 
     >>> df.loc['cobra':'viper', 'max_speed']
     cobra    1
@@ -968,7 +968,7 @@ class LocIndexer(LocIndexerLike):
     8          4       5
     9          7       8
 
-    Slice with integer labels for rows. As mentioned above, note that both
+    Slice with integer labels for rows. Note that both
     the start and stop of the slice are included.
 
     >>> df.loc[7:9]
@@ -1402,8 +1402,8 @@ class iLocIndexer(LocIndexerLike):
     - A boolean array for row selection.
     - A ``callable`` function with one argument (the calling Series, DataFrame
       or Panel) and that returns valid output for indexing (one of the above).
-      This is useful in method chains, when you don't have a reference to the
-      calling object, but would like to base your selection on some value.
+      This is useful in method chains when you don't have a reference to the
+      calling object but would like to base your selection on some value.
 
     ``.iloc`` will raise ``IndexError`` if a requested indexer is
     out-of-bounds, except *slice* indexers which allow out-of-bounds
@@ -1662,7 +1662,7 @@ class iLocIndexer(LocIndexerLike):
         if len(new_rows_sel) != len(set(new_rows_sel)):
             raise NotImplementedError(
                 "Duplicated row selection is not currently supported; "
-                "however, normalised index was [%s]" % new_rows_sel
+                "however, normalized index was [%s]" % new_rows_sel
             )
 
         if len(new_rows_sel) == 0:

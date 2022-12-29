@@ -68,7 +68,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
   }
 
   protected val metadataCacheEnabled: Boolean
-  = sparkSession.sessionState.conf.getConf(SQLConf.STREAMING_METADATA_CACHE_ENABLED)
+    = sparkSession.sessionState.conf.getConf(SQLConf.STREAMING_METADATA_CACHE_ENABLED)
 
   /**
    * Cache the latest two batches. [[StreamExecution]] usually just accesses the latest two batches
@@ -149,6 +149,24 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
   }
 
   /**
+   * Get the id of the previous batch from storage
+   * @param batchId get the previous batch id of this batch with batchId
+   * @return
+   */
+  def getPrevBatchFromStorage(batchId: Long): Option[Long] = {
+    val batchFiles = listBatchesOnDisk
+
+    var prev: Option[Long] = None
+    for (file <- batchFiles.sorted) {
+      if (file >= batchId) {
+        return prev
+      }
+      prev = Some(file)
+    }
+    None
+  }
+
+  /**
    * Apply provided function to each entry in the specific batch metadata log.
    *
    * Unlike get which will materialize all entries into memory, this method streamlines the process
@@ -177,6 +195,25 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
     }
   }
 
+  protected def write(batchMetadataFile: Path,
+                      fn: OutputStream => Unit): Unit = {
+    // Only write metadata when the batch has not yet been written
+    val output = fileManager.createAtomic(batchMetadataFile, overwriteIfPossible = false)
+    try {
+      fn(output)
+      output.close()
+    } catch {
+      case e: FileAlreadyExistsException =>
+        output.cancel()
+        // If next batch file already exists, then another concurrently running query has
+        // written it.
+        throw QueryExecutionErrors.multiStreamingQueriesUsingPathConcurrentlyError(path, e)
+      case e: Throwable =>
+        output.cancel()
+        throw e
+    }
+  }
+
   /**
    * Store the metadata for the specified batchId and return `true` if successful. This method
    * fills the content of metadata via executing function. If the function throws an exception,
@@ -191,28 +228,13 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
    * valid behavior, we still need to prevent it from destroying the files.
    */
   def addNewBatchByStream(batchId: Long)(fn: OutputStream => Unit): Boolean = {
-
     val batchMetadataFile = batchIdToPath(batchId)
 
     if ((metadataCacheEnabled && batchCache.containsKey(batchId))
       || fileManager.exists(batchMetadataFile)) {
       false
     } else {
-      // Only write metadata when the batch has not yet been written
-      val output = fileManager.createAtomic(batchIdToPath(batchId), overwriteIfPossible = false)
-      try {
-        fn(output)
-        output.close()
-      } catch {
-        case e: FileAlreadyExistsException =>
-          output.cancel()
-          // If next batch file already exists, then another concurrently running query has
-          // written it.
-          throw QueryExecutionErrors.multiStreamingQueriesUsingPathConcurrentlyError(path, e)
-        case e: Throwable =>
-          output.cancel()
-          throw e
-      }
+      write(batchMetadataFile, fn)
       true
     }
   }
@@ -300,11 +322,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
     }
   }
 
-
-  /**
-   * List the available batches on file system. As a workaround for S3 inconsistent list, it also
-   * tries to take `batchCache` into consideration to infer a better answer.
-   */
+  /** List the available batches on file system. */
   protected def listBatches: Array[Long] = {
     val batchIds = fileManager.list(metadataPath, batchFilesFilter)
       .map(f => pathToBatchId(f.getPath)) ++
@@ -321,6 +339,15 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
       // Assume batch ids are continuous
       (batchIds.min to batchIds.max).toArray
     }
+  }
+
+  /**
+   * List the batches persisted to storage
+   * @return array of batches ids
+   */
+  def listBatchesOnDisk: Array[Long] = {
+    fileManager.list(metadataPath, batchFilesFilter)
+      .map(f => pathToBatchId(f.getPath)).sorted
   }
 
   private[sql] def validateVersion(text: String, maxSupportedVersion: Int): Int =

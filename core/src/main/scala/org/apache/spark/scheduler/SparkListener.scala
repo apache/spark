@@ -56,7 +56,21 @@ case class SparkListenerTaskGettingResult(taskInfo: TaskInfo) extends SparkListe
 case class SparkListenerSpeculativeTaskSubmitted(
     stageId: Int,
     stageAttemptId: Int = 0)
-  extends SparkListenerEvent
+  extends SparkListenerEvent {
+  // Note: this is here for backwards-compatibility with older versions of this event which
+  // didn't stored taskIndex
+  private var _taskIndex: Int = -1
+  private var _partitionId: Int = -1
+
+  def taskIndex: Int = _taskIndex
+  def partitionId: Int = _partitionId
+
+  def this(stageId: Int, stageAttemptId: Int, taskIndex: Int, partitionId: Int) = {
+    this(stageId, stageAttemptId)
+    _partitionId = partitionId
+    _taskIndex = taskIndex
+  }
+}
 
 @DeveloperApi
 case class SparkListenerTaskEnd(

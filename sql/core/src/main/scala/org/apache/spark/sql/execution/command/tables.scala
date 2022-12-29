@@ -764,7 +764,7 @@ case class DescribeColumnCommand(
     val colName = UnresolvedAttribute(colNameParts).name
     val field = {
       relation.resolve(colNameParts, resolver).getOrElse {
-        throw QueryCompilationErrors.columnDoesNotExistError(colName)
+        throw QueryCompilationErrors.columnNotFoundError(colName)
       }
     }
     if (!field.isInstanceOf[Attribute]) {

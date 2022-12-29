@@ -37,6 +37,7 @@ import org.scalatest.concurrent.Eventually
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.features.VolcanoFeatureStep
+import org.apache.spark.deploy.k8s.integrationtest.TestConstants.{CONFIG_DRIVER_REQUEST_CORES, CONFIG_EXECUTOR_REQUEST_CORES, CONFIG_KEY_VOLCANO_MAX_JOB_NUM}
 import org.apache.spark.internal.config.NETWORK_AUTH_ENABLED
 
 private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: KubernetesSuite =>
@@ -51,6 +52,9 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
   private val testGroups: mutable.Set[String] = mutable.Set.empty
   private val testYAMLPaths: mutable.Set[String] = mutable.Set.empty
   private val testResources: mutable.Set[HasMetadata] = mutable.Set.empty
+  private val driverCores = java.lang.Double.parseDouble(DRIVER_REQUEST_CORES)
+  private val executorCores = java.lang.Double.parseDouble(EXECUTOR_REQUEST_CORES)
+  private val maxConcurrencyJobNum = VOLCANO_MAX_JOB_NUM.toInt
 
   private def deletePodInTestGroup(): Unit = {
     testGroups.foreach { g =>
@@ -252,6 +256,12 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
       .set(KUBERNETES_SCHEDULER_NAME.key, "volcano")
       .set(KUBERNETES_DRIVER_POD_FEATURE_STEPS.key, VOLCANO_FEATURE_STEP)
       .set(KUBERNETES_EXECUTOR_POD_FEATURE_STEPS.key, VOLCANO_FEATURE_STEP)
+    sys.props.get(CONFIG_DRIVER_REQUEST_CORES).foreach { cpu =>
+      conf.set("spark.kubernetes.driver.request.cores", cpu)
+    }
+    sys.props.get(CONFIG_EXECUTOR_REQUEST_CORES).foreach { cpu =>
+      conf.set("spark.kubernetes.executor.request.cores", cpu)
+    }
     queue.foreach { q =>
       conf.set(VolcanoFeatureStep.POD_GROUP_TEMPLATE_FILE_KEY,
         new File(
@@ -303,8 +313,22 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
 
   test("SPARK-38187: Run SparkPi Jobs with minCPU", k8sTestTag, volcanoTag) {
     val groupName = generateGroupName("min-cpu")
-    // Create a queue with 2 CPU capacity
-    createOrReplaceQueue(name = "queue-2u", cpu = Some("2"))
+    // Create a queue with driver + executor CPU capacity
+    val jobCores = driverCores + executorCores
+    val queueName = s"queue-$jobCores"
+    createOrReplaceQueue(name = queueName, cpu = Some(s"$jobCores"))
+    val testContent =
+      s"""
+         |apiVersion: scheduling.volcano.sh/v1beta1
+         |kind: PodGroup
+         |spec:
+         |  queue: $queueName
+         |  minMember: 1
+         |  minResources:
+         |    cpu: $jobCores
+         |""".stripMargin
+    val file = Utils.createTempFile(testContent, TEMP_DIR)
+    val path = TEMP_DIR + file
     // Submit 3 jobs with minCPU = 2
     val jobNum = 3
     (1 to jobNum).map { i =>
@@ -312,7 +336,7 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
         runJobAndVerify(
           i.toString,
           groupLoc = Option(groupName),
-          driverPodGroupTemplate = Option(DRIVER_PG_TEMPLATE_CPU_2U))
+          driverPodGroupTemplate = Option(path))
       }
     }
     verifyJobsSucceededOneByOne(jobNum, groupName)
@@ -339,8 +363,10 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     // Disabled queue0 and enabled queue1
     createOrReplaceQueue(name = "queue0", cpu = Some("0.001"))
     createOrReplaceQueue(name = "queue1")
+    val QUEUE_NUMBER = 2
     // Submit jobs into disabled queue0 and enabled queue1
-    val jobNum = 4
+    // By default is 4 (2 jobs in each queue)
+    val jobNum = maxConcurrencyJobNum * QUEUE_NUMBER
     (1 to jobNum).foreach { i =>
       Future {
         val queueName = s"queue${i % 2}"
@@ -351,9 +377,9 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     // There are two `Succeeded` jobs and two `Pending` jobs
     Eventually.eventually(TIMEOUT, INTERVAL) {
       val completedPods = getPods("driver", s"${GROUP_PREFIX}queue1", "Succeeded")
-      assert(completedPods.size === 2)
+      assert(completedPods.size === jobNum/2)
       val pendingPods = getPods("driver", s"${GROUP_PREFIX}queue0", "Pending")
-      assert(pendingPods.size === 2)
+      assert(pendingPods.size === jobNum/2)
     }
   }
 
@@ -362,7 +388,10 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     // Enable all queues
     createOrReplaceQueue(name = "queue1")
     createOrReplaceQueue(name = "queue0")
-    val jobNum = 4
+    val QUEUE_NUMBER = 2
+    // Submit jobs into disabled queue0 and enabled queue1
+    // By default is 4 (2 jobs in each queue)
+    val jobNum = maxConcurrencyJobNum * QUEUE_NUMBER
     // Submit jobs into these two queues
     (1 to jobNum).foreach { i =>
       Future {
@@ -410,7 +439,7 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     }
 
     // Enable queue to let jobs running one by one
-    createOrReplaceQueue(name = "queue", cpu = Some("1"))
+    createOrReplaceQueue(name = "queue", cpu = Some(s"$driverCores"))
 
     // Verify scheduling order follow the specified priority
     Eventually.eventually(TIMEOUT, INTERVAL) {
@@ -435,10 +464,11 @@ private[spark] object VolcanoTestsSuite extends SparkFunSuite {
   val GROUP_PREFIX = "volcano-test" + UUID.randomUUID().toString.replaceAll("-", "") + "-"
   val VOLCANO_PRIORITY_YAML
     = new File(getClass.getResource("/volcano/priorityClasses.yml").getFile).getAbsolutePath
-  val DRIVER_PG_TEMPLATE_CPU_2U = new File(
-    getClass.getResource("/volcano/driver-podgroup-template-cpu-2u.yml").getFile
-  ).getAbsolutePath
   val DRIVER_PG_TEMPLATE_MEMORY_3G = new File(
     getClass.getResource("/volcano/driver-podgroup-template-memory-3g.yml").getFile
   ).getAbsolutePath
+  val DRIVER_REQUEST_CORES = sys.props.get(CONFIG_DRIVER_REQUEST_CORES).getOrElse("1")
+  val EXECUTOR_REQUEST_CORES = sys.props.get(CONFIG_EXECUTOR_REQUEST_CORES).getOrElse("1")
+  val VOLCANO_MAX_JOB_NUM = sys.props.get(CONFIG_KEY_VOLCANO_MAX_JOB_NUM).getOrElse("2")
+  val TEMP_DIR = "/tmp/"
 }

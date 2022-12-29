@@ -36,7 +36,7 @@ should be installed.
 If you install PySpark using pip, then PyArrow can be brought in as an extra dependency of the
 SQL module with the command ``pip install pyspark[sql]``. Otherwise, you must ensure that PyArrow
 is installed and available on all cluster nodes.
-You can install using pip or conda from the conda-forge channel. See PyArrow
+You can install it using pip or conda from the conda-forge channel. See PyArrow
 `installation <https://arrow.apache.org/docs/python/install.html>`_ for details.
 
 Enabling for Conversion to/from Pandas
@@ -143,7 +143,7 @@ identically as Series to Series case. The pseudocode below illustrates the examp
         # Do some expensive initialization with a state
         state = very_expensive_initialization()
         for x in iterator:
-            # Use that state for whole iterator.
+            # Use that state for the whole iterator.
             yield calculate_with_state(x, state)
 
     df.select(calculate("value")).show()
@@ -167,7 +167,7 @@ The type hint can be expressed as ``Iterator[Tuple[pandas.Series, ...]]`` -> ``I
 By using :func:`pandas_udf` with the function having such type hints above, it creates a Pandas UDF where the
 given function takes an iterator of a tuple of multiple ``pandas.Series`` and outputs an iterator of ``pandas.Series``.
 In this case, the created pandas UDF requires multiple input columns as many as the series in the tuple
-when the Pandas UDF is called. Otherwise, it has the same characteristics and restrictions as Iterator of Series
+when the Pandas UDF is called. Otherwise, it has the same characteristics and restrictions as the Iterator of Series
 to Iterator of Series case.
 
 The following example shows how to create this Pandas UDF:
@@ -381,7 +381,7 @@ expected format, so it is not necessary to do any of these conversions yourself.
 values will be truncated.
 
 Note that a standard UDF (non-Pandas) will load timestamp data as Python datetime objects, which is
-different than a Pandas timestamp. It is recommended to use Pandas time series functionality when
+different from a Pandas timestamp. It is recommended to use Pandas time series functionality when
 working with timestamps in ``pandas_udf``\s to get the best performance, see
 `here <https://pandas.pydata.org/pandas-docs/stable/timeseries.html>`_ for details.
 

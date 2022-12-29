@@ -18,16 +18,17 @@
 import functools
 from typing import TYPE_CHECKING, Optional, Any, Iterable, Union
 
-import pyspark.sql.connect.proto as proto
 import pyspark.sql.types
-from pyspark.sql.connect.column import Expression, ScalarFunctionExpression, Column
+
+import pyspark.sql.connect.proto as proto
+from pyspark.sql.connect.column import Column
+from pyspark.sql.connect.expressions import Expression, UnresolvedFunction
 from pyspark.sql.connect.functions import col
 
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import (
         ColumnOrName,
-        FunctionBuilderCallable,
         UserDefinedFunctionCallable,
     )
     from pyspark.sql.connect.client import SparkConnectClient
@@ -43,28 +44,14 @@ def _build(name: str, *args: "ColumnOrName") -> Column:
 
     Returns
     -------
-    :class:`ScalarFunctionExpression`
+    :class:`UnresolvedFunction`
     """
-    cols = [x if isinstance(x, Column) else col(x) for x in args]
-    return Column(ScalarFunctionExpression(name, *cols))
-
-
-class FunctionBuilder:
-    """This class is used to build arbitrary functions used in expressions"""
-
-    def __getattr__(self, name: str) -> "FunctionBuilderCallable":
-        def _(*args: "ColumnOrName") -> Column:
-            return _build(name, *args)
-
-        _.__doc__ = f"""Function to apply {name}"""
-        return _
-
-
-functions = FunctionBuilder()
+    cols = [arg if isinstance(arg, Column) else col(arg) for arg in args]
+    return Column(UnresolvedFunction(name, [col._expr for col in cols]))
 
 
 class UserDefinedFunction(Expression):
-    """A user defied function is an expresison that has a reference to the actual
+    """A user defied function is an expression that has a reference to the actual
     Python callable attached. During plan generation, the client sends a command to
     the server to register the UDF before execution. The expression object can be
     reused and is not attached to a specific execution. If the internal name of

@@ -59,10 +59,16 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         |CREATE TABLE $tbl
         |(key int COMMENT 'column_comment', col struct<x:int, y:string>)
         |$defaultUsing""".stripMargin)
-      val errMsg = intercept[AnalysisException] {
-        sql(s"DESC $tbl key1").collect()
-      }.getMessage
-      assert(errMsg === "Column key1 does not exist.")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"DESC $tbl key1").collect()
+        },
+        errorClass = "COLUMN_NOT_FOUND",
+        parameters = Map(
+          "colName" -> "`key1`",
+          "caseSensitiveConfig" -> "\"spark.sql.caseSensitive\""
+        )
+      )
     }
   }
 
@@ -79,10 +85,16 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       withNamespaceAndTable("ns", "tbl") { tbl =>
         sql(s"CREATE TABLE $tbl (key int COMMENT 'comment1') $defaultUsing")
-        val errMsg = intercept[AnalysisException] {
-          sql(s"DESC $tbl KEY").collect()
-        }.getMessage
-        assert(errMsg === "Column KEY does not exist.")
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"DESC $tbl KEY").collect()
+          },
+          errorClass = "COLUMN_NOT_FOUND",
+          parameters = Map(
+            "colName" -> "`KEY`",
+            "caseSensitiveConfig" -> "\"spark.sql.caseSensitive\""
+          )
+        )
       }
     }
   }

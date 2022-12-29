@@ -979,6 +979,94 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-41413: check compatibility when partition values mismatch") {
+    withSQLConf(SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true") {
+      val leftPartValues = Seq(Array[Any](1, 1), Array[Any](2, 2)).map(new GenericInternalRow(_))
+      val rightPartValues = Seq(Array[Any](1, 1), Array[Any](2, 2), Array[Any](3, 3))
+          .map(new GenericInternalRow(_))
+
+      var plan1 = DummySparkPlan(
+        outputPartitioning = KeyGroupedPartitioning(bucket(4, exprB) :: bucket(8, exprC) :: Nil,
+          leftPartValues.length, Some(leftPartValues))
+      )
+      var plan2 = DummySparkPlan(
+        outputPartitioning = KeyGroupedPartitioning(bucket(4, exprC) :: bucket(8, exprB) :: Nil,
+          rightPartValues.length, Some(rightPartValues))
+      )
+
+      // simple case
+      var smjExec = SortMergeJoinExec(
+        exprA :: exprB :: exprC :: Nil, exprA :: exprC :: exprB :: Nil, Inner, None, plan1, plan2)
+      applyEnsureRequirementsWithSubsetKeys(smjExec) match {
+        case SortMergeJoinExec(_, _, _, _,
+        SortExec(_, _, DummySparkPlan(_, _, left: KeyGroupedPartitioning, _, _), _),
+        SortExec(_, _, DummySparkPlan(_, _, right: KeyGroupedPartitioning, _, _), _), _) =>
+          assert(left.expressions === Seq(bucket(4, exprB), bucket(8, exprC)))
+          assert(right.expressions === Seq(bucket(4, exprC), bucket(8, exprB)))
+        case other => fail(other.toString)
+      }
+
+      // With partition collections
+      plan1 = DummySparkPlan(outputPartitioning =
+        PartitioningCollection(
+          Seq(KeyGroupedPartitioning(bucket(4, exprB) :: bucket(8, exprC) :: Nil,
+            leftPartValues.length, Some(leftPartValues)),
+            KeyGroupedPartitioning(bucket(4, exprB) :: bucket(8, exprC) :: Nil,
+              leftPartValues.length, Some(leftPartValues)))
+        )
+      )
+
+      smjExec = SortMergeJoinExec(
+        exprA :: exprB :: exprC :: Nil, exprA :: exprC :: exprB :: Nil, Inner, None, plan1, plan2)
+      applyEnsureRequirementsWithSubsetKeys(smjExec) match {
+        case SortMergeJoinExec(_, _, _, _,
+        SortExec(_, _, DummySparkPlan(_, _, left: PartitioningCollection, _, _), _),
+        SortExec(_, _, DummySparkPlan(_, _, right: KeyGroupedPartitioning, _, _), _), _) =>
+          assert(left.partitionings.length == 2)
+          assert(left.partitionings.head.isInstanceOf[KeyGroupedPartitioning])
+          assert(left.partitionings.head.asInstanceOf[KeyGroupedPartitioning].expressions ==
+            Seq(bucket(4, exprB), bucket(8, exprC)))
+          assert(right.expressions === Seq(bucket(4, exprC), bucket(8, exprB)))
+        case other => fail(other.toString)
+      }
+
+      // Nested partition collections
+      plan2 = DummySparkPlan(outputPartitioning =
+        PartitioningCollection(
+          Seq(
+            PartitioningCollection(
+              Seq(
+                KeyGroupedPartitioning(bucket(4, exprC) :: bucket(8, exprB) :: Nil,
+                  rightPartValues.length, Some(rightPartValues)),
+                KeyGroupedPartitioning(bucket(4, exprC) :: bucket(8, exprB) :: Nil,
+                  rightPartValues.length, Some(rightPartValues)))),
+              PartitioningCollection(
+                Seq(
+                  KeyGroupedPartitioning(bucket(4, exprC) :: bucket(8, exprB) :: Nil,
+                    rightPartValues.length, Some(rightPartValues)),
+                  KeyGroupedPartitioning(bucket(4, exprC) :: bucket(8, exprB) :: Nil,
+                    rightPartValues.length, Some(rightPartValues))))
+          )
+        )
+      )
+
+      smjExec = SortMergeJoinExec(
+        exprA :: exprB :: exprC :: Nil, exprA :: exprC :: exprB :: Nil, Inner, None, plan1, plan2)
+      applyEnsureRequirementsWithSubsetKeys(smjExec) match {
+        case SortMergeJoinExec(_, _, _, _,
+        SortExec(_, _, DummySparkPlan(_, _, left: PartitioningCollection, _, _), _),
+        SortExec(_, _, DummySparkPlan(_, _, right: PartitioningCollection, _, _), _), _) =>
+          assert(left.partitionings.length == 2)
+          assert(left.partitionings.head.isInstanceOf[KeyGroupedPartitioning])
+          assert(left.partitionings.head.asInstanceOf[KeyGroupedPartitioning].expressions ==
+              Seq(bucket(4, exprB), bucket(8, exprC)))
+          assert(right.partitionings.length == 2)
+          assert(right.partitionings.head.isInstanceOf[PartitioningCollection])
+        case other => fail(other.toString)
+      }
+    }
+  }
+
   def bucket(numBuckets: Int, expr: Expression): TransformExpression = {
     TransformExpression(BucketFunction, Seq(expr), Some(numBuckets))
   }
