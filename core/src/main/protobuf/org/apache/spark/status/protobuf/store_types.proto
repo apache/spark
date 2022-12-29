@@ -19,11 +19,11 @@ syntax = "proto3";
 package org.apache.spark.status.protobuf;
 
 enum JobExecutionStatus {
-  UNSPECIFIED = 0;
-  RUNNING = 1;
-  SUCCEEDED = 2;
-  FAILED = 3;
-  UNKNOWN = 4;
+  JOB_EXECUTION_STATUS_UNSPECIFIED = 0;
+  JOB_EXECUTION_STATUS_RUNNING = 1;
+  JOB_EXECUTION_STATUS_SUCCEEDED = 2;
+  JOB_EXECUTION_STATUS_FAILED = 3;
+  JOB_EXECUTION_STATUS_UNKNOWN = 4;
 }
 
 message JobData {
