@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import com.google.common.collect.{Lists, Maps}
+import com.google.protobuf.{Any => ProtoAny}
 
 import org.apache.spark.TaskContext
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
@@ -31,10 +32,12 @@ import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, Mu
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserUtils}
-import org.apache.spark.sql.catalyst.plans.{logical, Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
+import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
+import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, Sort, SubqueryAlias, Union, Unpivot, UnresolvedHint}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.{toCatalystExpression, toCatalystValue}
+import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.arrow.ArrowConverters
@@ -105,8 +108,23 @@ class SparkConnectPlanner(session: SparkSession) {
       // Catalog API (internal-only)
       case proto.Relation.RelTypeCase.CATALOG => transformCatalog(rel.getCatalog)
 
+      // Handle plugins for Spark Connect Relation types.
+      case proto.Relation.RelTypeCase.EXTENSION =>
+        transformRelationPlugin(rel.getExtension)
       case _ => throw InvalidPlanInput(s"${rel.getUnknown} not supported.")
     }
+  }
+
+  def transformRelationPlugin(extension: ProtoAny): LogicalPlan = {
+    SparkConnectPluginRegistry.relationRegistry
+      // Lazily traverse the collection.
+      .view
+      // Apply the transformation.
+      .map(p => p.transform(extension, this))
+      // Find the first non-empty transformation or throw.
+      .find(_.nonEmpty)
+      .flatten
+      .getOrElse(throw InvalidPlanInput("No handler found for extension"))
   }
 
   private def transformCatalog(catalog: proto.Catalog): LogicalPlan = {
@@ -562,7 +580,17 @@ class SparkConnectPlanner(session: SparkSession) {
     UnresolvedAttribute.quotedString(exp.getUnresolvedAttribute.getUnparsedIdentifier)
   }
 
-  private def transformExpression(exp: proto.Expression): Expression = {
+  /**
+   * Transforms an input protobuf expression into the Catalyst expression. This is usually not
+   * called directly. Typically the planner will traverse the expressions automatically, only
+   * plugins are expected to manually perform expression transformations.
+   *
+   * @param exp
+   *   the input expression
+   * @return
+   *   Catalyst expression
+   */
+  def transformExpression(exp: proto.Expression): Expression = {
     exp.getExprTypeCase match {
       case proto.Expression.ExprTypeCase.LITERAL => transformLiteral(exp.getLiteral)
       case proto.Expression.ExprTypeCase.UNRESOLVED_ATTRIBUTE =>
@@ -585,10 +613,24 @@ class SparkConnectPlanner(session: SparkSession) {
         transformLambdaFunction(exp.getLambdaFunction)
       case proto.Expression.ExprTypeCase.WINDOW =>
         transformWindowExpression(exp.getWindow)
+      case proto.Expression.ExprTypeCase.EXTENSION =>
+        transformExpressionPlugin(exp.getExtension)
       case _ =>
         throw InvalidPlanInput(
           s"Expression with ID: ${exp.getExprTypeCase.getNumber} is not supported")
     }
+  }
+
+  def transformExpressionPlugin(extension: ProtoAny): Expression = {
+    SparkConnectPluginRegistry.expressionRegistry
+      // Lazily traverse the collection.
+      .view
+      // Apply the transformation.
+      .map(p => p.transform(extension, this))
+      // Find the first non-empty transformation or throw.
+      .find(_.nonEmpty)
+      .flatten
+      .getOrElse(throw InvalidPlanInput("No handler found for extension"))
   }
 
   /**

@@ -19,6 +19,7 @@ syntax = 'proto3';
 
 package spark.connect;
 
+import "google/protobuf/any.proto";
 import "spark/connect/expressions.proto";
 import "spark/connect/types.proto";
 import "spark/connect/catalog.proto";
@@ -73,6 +74,9 @@ message Relation {
     // Catalog API (experimental / unstable)
     Catalog catalog = 200;
 
+    // This field is used to mark extensions to the protocol. When plugins generate arbitrary
+    // relations they can add them here. During the planning the correct resolution is done.
+    google.protobuf.Any extension = 998;
     Unknown unknown = 999;
   }
 }

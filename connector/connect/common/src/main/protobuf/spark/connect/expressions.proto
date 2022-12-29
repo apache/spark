@@ -17,6 +17,7 @@
 
 syntax = 'proto3';
 
+import "google/protobuf/any.proto";
 import "spark/connect/types.proto";
 
 package spark.connect;
@@ -41,6 +42,10 @@ message Expression {
     LambdaFunction lambda_function = 10;
     Window window = 11;
     UnresolvedExtractValue unresolved_extract_value = 12;
+
+    // This field is used to mark extensions to the protocol. When plugins generate arbitrary
+    // relations they can add them here. During the planning the correct resolution is done.
+    google.protobuf.Any extension = 999;
   }
 
 
