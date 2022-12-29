@@ -563,6 +563,9 @@ class TorchDistributor(Distributor):
         self.logger.info(
             f"Finished distributed training with {self.num_processes} executor proceses"
         )
+        self.logger.info(
+            f"Finished distributed training with {self.num_processes} executor proceses"
+        )
         return result
 
     @staticmethod
