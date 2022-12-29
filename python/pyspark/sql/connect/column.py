@@ -443,6 +443,10 @@ def _test() -> None:
         os.environ["SPARK_REMOTE"] = "sc://localhost"
         globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
 
+        # TODO(SPARK-41746): SparkSession.createDataFrame does not support nested datatypes
+        del pyspark.sql.connect.column.Column.dropFields.__doc__
+        # TODO(SPARK-41772): Enable pyspark.sql.connect.column.Column.withField doctest
+        del pyspark.sql.connect.column.Column.withField.__doc__
         # TODO(SPARK-41751): Support Column.bitwiseAND,bitwiseOR,bitwiseXOR,eqNullSafe,isNotNull,
         # isNull,isin
         del pyspark.sql.connect.column.Column.bitwiseAND.__doc__
