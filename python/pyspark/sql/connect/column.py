@@ -119,14 +119,14 @@ class Column:
     __rmul__ = _bin_op("*", reverse=True)
     __rdiv__ = _bin_op("/", reverse=True)
     __rtruediv__ = _bin_op("/", reverse=True)
-    __pow__ = _bin_op("pow")
-    __rpow__ = _bin_op("pow", reverse=True)
+    __pow__ = _bin_op("power")
+    __rpow__ = _bin_op("power", reverse=True)
     __ge__ = _bin_op(">=")
     __le__ = _bin_op("<=")
 
     eqNullSafe = _bin_op("eqNullSafe", PySparkColumn.eqNullSafe.__doc__)
 
-    __neg__ = _func_op("negate")
+    __neg__ = _func_op("negative")
 
     # `and`, `or`, `not` cannot be overloaded in Python,
     # so use bitwise operators as boolean operators
