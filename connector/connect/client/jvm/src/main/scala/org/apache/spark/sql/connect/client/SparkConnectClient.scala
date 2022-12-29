@@ -46,6 +46,7 @@ object SparkConnectClient {
     private var _host: String = "localhost"
     // TODO: pull out config from server
     private var _port: Int = 15002
+    private var _connectionString: Option[String] = None
 
     def userId(id: String): Builder = {
       userContextBuilder.setUserId(id)
@@ -63,9 +64,22 @@ object SparkConnectClient {
       this
     }
 
+    /**
+     * Creates the channel with a target connection string, which can be either a valid
+     * NameResolver-compliant URI, or an authority string.
+     * Note: The connection string, if used, will override any host/port settings.
+     */
+    def connectionString(connectionString: String): Builder = {
+      _connectionString = Some(connectionString)
+      this
+    }
+
     def build(): SparkConnectClient = {
-      // TODO: connection string
-      val channelBuilder = ManagedChannelBuilder.forAddress(_host, _port).usePlaintext()
+      val channelBuilder = if (_connectionString.isDefined) {
+        ManagedChannelBuilder.forTarget(_connectionString.get).usePlaintext()
+      } else {
+        ManagedChannelBuilder.forAddress(_host, _port).usePlaintext()
+      }
       new SparkConnectClient(userContextBuilder.build(), channelBuilder.build())
     }
   }
