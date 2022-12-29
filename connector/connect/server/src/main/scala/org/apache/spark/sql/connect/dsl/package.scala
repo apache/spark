@@ -60,6 +60,18 @@ package object dsl {
               .newBuilder()
               .setColName(s))
           .build()
+
+      def asc: Expression =
+        Expression
+          .newBuilder()
+          .setSortOrder(
+            Expression.SortOrder
+              .newBuilder()
+              .setChild(protoAttr)
+              .setDirectionValue(
+                proto.Expression.SortOrder.SortDirection.SORT_DIRECTION_ASCENDING_VALUE)
+              .setNullOrdering(proto.Expression.SortOrder.NullOrdering.SORT_NULLS_FIRST))
+          .build()
     }
 
     implicit class DslExpression(val expr: Expression) {
@@ -362,6 +374,19 @@ package object dsl {
     }
 
     implicit class DslStatFunctions(val logicalPlan: Relation) {
+      def cov(col1: String, col2: String): Relation = {
+        Relation
+          .newBuilder()
+          .setCov(
+            proto.StatCov
+              .newBuilder()
+              .setInput(logicalPlan)
+              .setCol1(col1)
+              .setCol2(col2)
+              .build())
+          .build()
+      }
+
       def crosstab(col1: String, col2: String): Relation = {
         Relation
           .newBuilder()
@@ -697,12 +722,76 @@ package object dsl {
               .setShuffle(false))
           .build()
 
-      def repartition(num: Integer): Relation =
+      def repartition(num: Int): Relation =
         Relation
           .newBuilder()
           .setRepartition(
             Repartition.newBuilder().setInput(logicalPlan).setNumPartitions(num).setShuffle(true))
           .build()
+
+      @scala.annotation.varargs
+      def repartition(partitionExprs: Expression*): Relation = {
+        repartition(None, partitionExprs)
+      }
+
+      @scala.annotation.varargs
+      def repartition(num: Int, partitionExprs: Expression*): Relation = {
+        repartition(Some(num), partitionExprs)
+      }
+
+      private def repartition(numOpt: Option[Int], partitionExprs: Seq[Expression]): Relation = {
+        val expressions = RepartitionByExpression
+          .newBuilder()
+          .setInput(logicalPlan)
+        numOpt.foreach(expressions.setNumPartitions)
+        for (expr <- partitionExprs) {
+          expressions.addPartitionExprs(expr)
+        }
+        Relation
+          .newBuilder()
+          .setRepartitionByExpression(expressions)
+          .build()
+      }
+
+      @scala.annotation.varargs
+      def repartitionByRange(partitionExprs: Expression*): Relation = {
+        repartitionByRange(None, partitionExprs)
+      }
+
+      @scala.annotation.varargs
+      def repartitionByRange(num: Int, partitionExprs: Expression*): Relation = {
+        repartitionByRange(Some(num), partitionExprs)
+      }
+
+      private def repartitionByRange(
+          numOpt: Option[Int],
+          partitionExprs: Seq[Expression]): Relation = {
+        val expressions = RepartitionByExpression
+          .newBuilder()
+          .setInput(logicalPlan)
+        numOpt.foreach(expressions.setNumPartitions)
+        partitionExprs
+          .map(expr =>
+            expr.getExprTypeCase match {
+              case Expression.ExprTypeCase.SORT_ORDER => expr
+              case _ =>
+                Expression
+                  .newBuilder()
+                  .setSortOrder(
+                    Expression.SortOrder
+                      .newBuilder()
+                      .setChild(expr)
+                      .setDirectionValue(
+                        proto.Expression.SortOrder.SortDirection.SORT_DIRECTION_ASCENDING_VALUE)
+                      .setNullOrdering(proto.Expression.SortOrder.NullOrdering.SORT_NULLS_FIRST))
+                  .build()
+            })
+          .foreach(order => expressions.addPartitionExprs(order))
+        Relation
+          .newBuilder()
+          .setRepartitionByExpression(expressions)
+          .build()
+      }
 
       def na: DslNAFunctions = new DslNAFunctions(logicalPlan)
 

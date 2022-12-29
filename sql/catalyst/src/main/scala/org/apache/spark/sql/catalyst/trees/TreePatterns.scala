@@ -82,6 +82,7 @@ object TreePattern extends Enumeration  {
   val SCALAR_SUBQUERY: Value = Value
   val SCALAR_SUBQUERY_REFERENCE: Value = Value
   val SCALA_UDF: Value = Value
+  val SESSION_WINDOW: Value = Value
   val SORT: Value = Value
   val SUBQUERY_ALIAS: Value = Value
   val SUM: Value = Value
@@ -89,6 +90,7 @@ object TreePattern extends Enumeration  {
   val TIME_ZONE_AWARE_EXPRESSION: Value = Value
   val TRUE_OR_FALSE_LITERAL: Value = Value
   val WINDOW_EXPRESSION: Value = Value
+  val WINDOW_TIME: Value = Value
   val UNARY_POSITIVE: Value = Value
   val UNPIVOT: Value = Value
   val UPDATE_FIELDS: Value = Value

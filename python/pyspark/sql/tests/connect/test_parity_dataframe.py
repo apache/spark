@@ -37,10 +37,8 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedSQLTestCase):
 
     @classmethod
     def tearDownClass(cls):
-        # TODO(SPARK-41529): Implement stop in RemoteSparkSession.
-        #  Stop the regular Spark session (server) too.
-        cls.spark = cls._spark
         super(DataFrameParityTests, cls).tearDownClass()
+        cls._spark.stop()
         del os.environ["SPARK_REMOTE"]
 
     @unittest.skip("Fails in Spark Connect, should enable.")
@@ -72,20 +70,8 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedSQLTestCase):
         super().test_create_nan_decimal_dataframe()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_df_show(self):
-        super().test_df_show()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_drop(self):
-        super().test_drop()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_drop_duplicates(self):
         super().test_drop_duplicates()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_dropna(self):
-        super().test_dropna()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_duplicated_column_names(self):
@@ -218,10 +204,6 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedSQLTestCase):
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_unpivot(self):
         super().test_unpivot()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_with_columns_renamed(self):
-        super().test_with_columns_renamed()
 
 
 if __name__ == "__main__":

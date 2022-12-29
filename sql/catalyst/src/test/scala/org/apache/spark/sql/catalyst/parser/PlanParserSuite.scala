@@ -376,7 +376,7 @@ class PlanParserSuite extends AnalysisTest {
     val sql1 = s"$baseSql order by a sort by a"
     checkError(
       exception = parseException(sql1),
-      errorClass = "_LEGACY_ERROR_TEMP_0011",
+      errorClass = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = "order by a sort by a",
@@ -386,7 +386,7 @@ class PlanParserSuite extends AnalysisTest {
     val sql2 = s"$baseSql cluster by a distribute by a"
     checkError(
       exception = parseException(sql2),
-      errorClass = "_LEGACY_ERROR_TEMP_0011",
+      errorClass = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = "cluster by a distribute by a",
@@ -396,7 +396,7 @@ class PlanParserSuite extends AnalysisTest {
     val sql3 = s"$baseSql order by a cluster by a"
     checkError(
       exception = parseException(sql3),
-      errorClass = "_LEGACY_ERROR_TEMP_0011",
+      errorClass = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = "order by a cluster by a",
@@ -406,7 +406,7 @@ class PlanParserSuite extends AnalysisTest {
     val sql4 = s"$baseSql order by a distribute by a"
     checkError(
       exception = parseException(sql4),
-      errorClass = "_LEGACY_ERROR_TEMP_0011",
+      errorClass = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = "order by a distribute by a",

@@ -169,7 +169,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       case u: UnresolvedRelation =>
         u.tableNotFound(u.multipartIdentifier)
 
-      case u: UnresolvedFunc =>
+      case u: UnresolvedFunctionName =>
         val catalogPath = (currentCatalog.name +: catalogManager.currentNamespace).mkString(".")
         throw QueryCompilationErrors.unresolvedRoutineError(
           u.multipartIdentifier,
