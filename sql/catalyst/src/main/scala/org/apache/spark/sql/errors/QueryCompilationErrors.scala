@@ -2253,10 +2253,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def negativeScaleNotAllowedError(scale: Int): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1230",
+      errorClass = "NEGATIVE_SCALE_NOT_ALLOWED",
       messageParameters = Map(
         "scale" -> scale.toString,
-        "config" -> LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key))
+        "allowNegativeConf" -> LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key))
   }
 
   def invalidPartitionColumnKeyInTableError(key: String, tblName: String): Throwable = {
