@@ -65,6 +65,10 @@ case class MonotonicallyIncreasingID() extends LeafExpression with Nondeterminis
     partitionMask = partitionIndex.toLong << 33
   }
 
+  override def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression = {
+    MonotonicallyIncreasingID()
+  }
+
   override def nullable: Boolean = false
 
   override def dataType: DataType = LongType

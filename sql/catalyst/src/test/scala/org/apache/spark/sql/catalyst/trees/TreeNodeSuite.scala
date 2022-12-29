@@ -859,7 +859,7 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     genericAssertions(withNestedStatefulBefore, withNestedStatefulAfter)
     assert(withNestedStatefulBefore ne withNestedStatefulAfter)
     def getStateful(e: Expression): Expression = {
-      e.collectLeaves().collect { case e if e.stateful => e }.head
+      e.collect { case e if e.stateful => e }.head
     }
     assert(getStateful(withNestedStatefulBefore) ne getStateful(withNestedStatefulAfter))
   }
