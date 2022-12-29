@@ -40,26 +40,37 @@ object SparkConnectPluginRegistry {
     // expression[DummyExpressionPlugin](classOf[DummyExpressionPlugin])
   )
 
+  private lazy val commandPluginChain: Seq[commandPluginBuilder] = Seq(
+    // Adding a new plugin at compile time works like the example below:
+    // expression[DummyExpressionPlugin](classOf[DummyExpressionPlugin])
+  )
+
   private var initialized = false
   private var relationRegistryCache: Seq[RelationPlugin] = Seq.empty
-  private var expresionRegistryCache: Seq[ExpressionPlugin] = Seq.empty
+  private var expressionRegistryCache: Seq[ExpressionPlugin] = Seq.empty
+  private var commandRegistryCache: Seq[CommandPlugin] = Seq.empty
 
   // Type used to identify the closure responsible to instantiate a ServerInterceptor.
   type relationPluginBuilder = () => RelationPlugin
   type expressionPluginBuilder = () => ExpressionPlugin
+  type commandPluginBuilder = () => CommandPlugin
 
   def relationRegistry: Seq[RelationPlugin] = withInitialize {
     relationRegistryCache
   }
   def expressionRegistry: Seq[ExpressionPlugin] = withInitialize {
-    expresionRegistryCache
+    expressionRegistryCache
+  }
+  def commandRegistry: Seq[CommandPlugin] = withInitialize {
+    commandRegistryCache
   }
 
   private def withInitialize[T](f: => Seq[T]): Seq[T] = {
     synchronized {
       if (!initialized) {
         relationRegistryCache = loadRelationPlugins()
-        expresionRegistryCache = loadExpressionPlugins()
+        expressionRegistryCache = loadExpressionPlugins()
+        commandRegistryCache = loadCommandPlugins()
         initialized = true
       }
     }
@@ -89,6 +100,11 @@ object SparkConnectPluginRegistry {
   private[connect] def loadExpressionPlugins(): Seq[ExpressionPlugin] = {
     expressionPluginChain.map(x => x()) ++ createConfiguredPlugins(
       SparkEnv.get.conf.get(Connect.CONNECT_EXTENSIONS_EXPRESSION_CLASSES))
+  }
+
+  private[connect] def loadCommandPlugins(): Seq[CommandPlugin] = {
+    commandPluginChain.map(x => x()) ++ createConfiguredPlugins(
+      SparkEnv.get.conf.get(Connect.CONNECT_EXTENSIONS_COMMAND_CLASSES))
   }
 
   /**
@@ -152,4 +168,12 @@ object SparkConnectPluginRegistry {
    */
   def expression[T <: ExpressionPlugin](cls: Class[T]): expressionPluginBuilder =
     () => createInstance[ExpressionPlugin, T](cls)
+
+  /**
+   * Creates a callable expression that instantiates the configured Command plugin.
+   *
+   * Visible for testing only.
+   */
+  def command[T <: CommandPlugin](cls: Class[T]): commandPluginBuilder =
+    () => createInstance[CommandPlugin, T](cls)
 }

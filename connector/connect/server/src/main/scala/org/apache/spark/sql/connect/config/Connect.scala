@@ -69,4 +69,16 @@ private[spark] object Connect {
       .stringConf
       .toSequence
       .createWithDefault(Nil)
+
+  val CONNECT_EXTENSIONS_COMMAND_CLASSES =
+    ConfigBuilder("spark.connect.extensions.command.classes")
+      .doc("""
+             |Comma separated list of classes that implement the trait
+             |org.apache.spark.sql.connect.plugin.CommandPlugin to support custom
+             |Command types in proto.
+             |""".stripMargin)
+      .version("3.4.0")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
 }

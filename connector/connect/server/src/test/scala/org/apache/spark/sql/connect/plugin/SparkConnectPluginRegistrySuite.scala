@@ -19,7 +19,7 @@ package org.apache.spark.sql.connect.plugin
 
 import com.google.protobuf
 
-import org.apache.spark.{SparkEnv, SparkException}
+import org.apache.spark.{SparkContext, SparkEnv, SparkException}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Relation
 import org.apache.spark.sql.Dataset
@@ -83,6 +83,17 @@ class ExampleExpressionPlugin extends ExpressionPlugin {
   }
 }
 
+class ExampleCommandPlugin extends CommandPlugin {
+  override def process(command: protobuf.Any, planner: SparkConnectPlanner): Option[Unit] = {
+    if (!command.is(classOf[proto.ExamplePluginCommand])) {
+      return None
+    }
+    val cmd = command.unpack(classOf[proto.ExamplePluginCommand])
+    SparkContext.getActive.get.setLocalProperty("testingProperty", cmd.getCustomField)
+    Some()
+  }
+}
+
 class SparkConnectPluginRegistrySuite extends SharedSparkSession with SparkConnectPlanTest {
 
   override def beforeEach(): Unit = {
@@ -91,6 +102,9 @@ class SparkConnectPluginRegistrySuite extends SharedSparkSession with SparkConne
     }
     if (SparkEnv.get.conf.contains(Connect.CONNECT_EXTENSIONS_RELATION_CLASSES)) {
       SparkEnv.get.conf.remove(Connect.CONNECT_EXTENSIONS_RELATION_CLASSES)
+    }
+    if (SparkEnv.get.conf.contains(Connect.CONNECT_EXTENSIONS_COMMAND_CLASSES)) {
+      SparkEnv.get.conf.remove(Connect.CONNECT_EXTENSIONS_COMMAND_CLASSES)
     }
     SparkConnectPluginRegistry.reset()
   }
@@ -164,6 +178,26 @@ class SparkConnectPluginRegistrySuite extends SharedSparkSession with SparkConne
     }
   }
 
+  test("End to end Command test") {
+    withSparkConf(
+      Connect.CONNECT_EXTENSIONS_COMMAND_CLASSES.key ->
+        "org.apache.spark.sql.connect.plugin.ExampleCommandPlugin") {
+      spark.sparkContext.setLocalProperty("testingProperty", "notset")
+      val plan = proto.Command
+        .newBuilder()
+        .setExtension(
+          protobuf.Any.pack(
+            proto.ExamplePluginCommand
+              .newBuilder()
+              .setCustomField("Martin")
+              .build()))
+        .build()
+
+      new SparkConnectPlanner(spark).process(plan)
+      assert(spark.sparkContext.getLocalProperty("testingProperty").equals("Martin"))
+    }
+  }
+
   test("Exception handling for plugin classes") {
     withSparkConf(
       Connect.CONNECT_EXTENSIONS_RELATION_CLASSES.key ->
@@ -191,6 +225,7 @@ class SparkConnectPluginRegistrySuite extends SharedSparkSession with SparkConne
   test("Emtpy registries are really empty and work") {
     assert(SparkConnectPluginRegistry.loadRelationPlugins().isEmpty)
     assert(SparkConnectPluginRegistry.loadExpressionPlugins().isEmpty)
+    assert(SparkConnectPluginRegistry.loadCommandPlugins().isEmpty)
   }
 
   test("Building builders using factory methods") {

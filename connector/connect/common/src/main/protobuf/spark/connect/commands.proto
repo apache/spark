@@ -17,6 +17,7 @@
 
 syntax = 'proto3';
 
+import "google/protobuf/any.proto";
 import "spark/connect/relations.proto";
 import "spark/connect/types.proto";
 
@@ -32,6 +33,11 @@ message Command {
     CreateScalarFunction create_function = 1;
     WriteOperation write_operation = 2;
     CreateDataFrameViewCommand create_dataframe_view = 3;
+
+    // This field is used to mark extensions to the protocol. When plugins generate arbitrary
+    // Commands they can add them here. During the planning the correct resolution is done.
+    google.protobuf.Any extension = 999;
+
   }
 }
 

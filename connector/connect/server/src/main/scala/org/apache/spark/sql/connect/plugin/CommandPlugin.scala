@@ -15,27 +15,20 @@
  * limitations under the License.
  */
 
-syntax = 'proto3';
+package org.apache.spark.sql.connect.plugin
 
-import "spark/connect/relations.proto";
-import "spark/connect/expressions.proto";
+import com.google.protobuf
 
-package spark.connect;
+import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 
-option java_multiple_files = true;
-option java_package = "org.apache.spark.connect.proto";
-
-message ExamplePluginRelation {
-  Relation input = 1;
-  string custom_field = 2;
-
-}
-
-message ExamplePluginExpression {
-  Expression child = 1;
-  string custom_field = 2;
-}
-
-message ExamplePluginCommand {
-  string custom_field = 1;
+/**
+ * Behavior trait for supporting extension mechanisms for the Spark Connect planner.
+ *
+ * Classes implementing the trait must be trivially constructable and should not rely on internal
+ * state. Every registered extension will be passed the Any instance. If the plugin supports
+ * handling this type it is responsible of constructing the logical expression from this object
+ * and if necessary traverse it's children.
+ */
+trait CommandPlugin {
+  def process(command: protobuf.Any, planner: SparkConnectPlanner): Option[Unit]
 }

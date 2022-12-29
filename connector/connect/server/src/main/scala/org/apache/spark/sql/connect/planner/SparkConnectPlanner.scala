@@ -1166,8 +1166,22 @@ class SparkConnectPlanner(session: SparkSession) {
         handleWriteOperation(command.getWriteOperation)
       case proto.Command.CommandTypeCase.CREATE_DATAFRAME_VIEW =>
         handleCreateViewCommand(command.getCreateDataframeView)
+      case proto.Command.CommandTypeCase.EXTENSION =>
+        handleCommandPlugin(command.getExtension)
       case _ => throw new UnsupportedOperationException(s"$command not supported.")
     }
+  }
+
+  private def handleCommandPlugin(extension: ProtoAny): Unit = {
+    SparkConnectPluginRegistry.commandRegistry
+      // Lazily traverse the collection.
+      .view
+      // Apply the transformation.
+      .map(p => p.process(extension, this))
+      // Find the first non-empty transformation or throw.
+      .find(_.nonEmpty)
+      .flatten
+      .getOrElse(throw InvalidPlanInput("No handler found for extension"))
   }
 
   /**
