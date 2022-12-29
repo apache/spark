@@ -498,7 +498,7 @@ jobs:
   proto-breaking-changes-check:
     needs: [precondition, infra-image]
     if: always() && fromJson(needs.precondition.outputs.required).lint == 'true'
-    name: Linters, licenses, dependencies and documentation generation
+    name: Spark Connect Proto Backwards Compat Check
     runs-on: ubuntu-20.04
     env:
       LC_ALL: C.UTF-8
