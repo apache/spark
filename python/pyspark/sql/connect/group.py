@@ -28,6 +28,7 @@ from typing import (
 )
 
 from pyspark.sql.group import GroupedData as PySparkGroupedData
+from pyspark.sql.types import NumericType
 
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.column import Column, scalar_function
@@ -86,7 +87,7 @@ class GroupedData:
             assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
             aggregate_cols = cast(List[Column], list(exprs))
 
-        res = DataFrame.withPlan(
+        return DataFrame.withPlan(
             plan.Aggregate(
                 child=self._df._plan,
                 group_type=self._group_type,
@@ -97,36 +98,65 @@ class GroupedData:
             ),
             session=self._df._session,
         )
-        return res
 
     agg.__doc__ = PySparkGroupedData.agg.__doc__
 
-    def _map_cols_to_expression(self, fun: str, param: Union[Column, str]) -> Sequence[Column]:
-        return [
-            scalar_function(fun, col(param)) if isinstance(param, str) else param,
+    def _numeric_agg(self, function: str, cols: Sequence[str]) -> "DataFrame":
+        from pyspark.sql.connect.dataframe import DataFrame
+
+        assert isinstance(function, str) and function in ["min", "max", "avg", "sum"]
+
+        assert isinstance(cols, list) and all(isinstance(c, str) for c in cols)
+
+        schema = self._df.schema
+
+        numerical_cols: List[str] = [
+            field.name for field in schema.fields if isinstance(field.dataType, NumericType)
         ]
 
-    def min(self, col: Union[Column, str]) -> "DataFrame":
-        expr = self._map_cols_to_expression("min", col)
-        return self.agg(*expr)
+        agg_cols: List[str] = []
+
+        if len(cols) > 0:
+            invalid_cols = [c for c in cols if c not in numerical_cols]
+            if len(invalid_cols) > 0:
+                raise TypeError(
+                    f"{invalid_cols} are not numeric columns. "
+                    f"Numeric aggregation function can only be applied on numeric columns."
+                )
+            agg_cols = cols
+        else:
+            # if no column is provided, then all numerical columns are selected
+            agg_cols = numerical_cols
+
+        return DataFrame.withPlan(
+            plan.Aggregate(
+                child=self._df._plan,
+                group_type=self._group_type,
+                grouping_cols=self._grouping_cols,
+                aggregate_cols=[scalar_function(function, col(c)) for c in agg_cols],
+                pivot_col=self._pivot_col,
+                pivot_values=self._pivot_values,
+            ),
+            session=self._df._session,
+        )
+
+    def min(self, *cols: str) -> "DataFrame":
+        return self._numeric_agg("min", list(cols))
 
     min.__doc__ = PySparkGroupedData.min.__doc__
 
-    def max(self, col: Union[Column, str]) -> "DataFrame":
-        expr = self._map_cols_to_expression("max", col)
-        return self.agg(*expr)
+    def max(self, *cols: str) -> "DataFrame":
+        return self._numeric_agg("max", list(cols))
 
     max.__doc__ = PySparkGroupedData.max.__doc__
 
-    def sum(self, col: Union[Column, str]) -> "DataFrame":
-        expr = self._map_cols_to_expression("sum", col)
-        return self.agg(*expr)
+    def sum(self, *cols: str) -> "DataFrame":
+        return self._numeric_agg("sum", list(cols))
 
     sum.__doc__ = PySparkGroupedData.sum.__doc__
 
-    def avg(self, col: Union[Column, str]) -> "DataFrame":
-        expr = self._map_cols_to_expression("avg", col)
-        return self.agg(*expr)
+    def avg(self, *cols: str) -> "DataFrame":
+        return self._numeric_agg("avg", list(cols))
 
     avg.__doc__ = PySparkGroupedData.avg.__doc__
 
@@ -170,3 +200,45 @@ class GroupedData:
 
 
 GroupedData.__doc__ = PySparkGroupedData.__doc__
+
+
+def _test() -> None:
+    import os
+    import sys
+    import doctest
+    from pyspark import SparkContext, SparkConf
+    from pyspark.sql import SparkSession as PySparkSession
+    from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    if should_test_connect:
+        import pyspark.sql.connect.group
+
+        globs = pyspark.sql.connect.group.__dict__.copy()
+        # Works around to create a regular Spark session
+        sc = SparkContext("local[4]", "sql.connect.group tests", conf=SparkConf())
+        globs["_spark"] = PySparkSession(sc, options={"spark.app.name": "sql.connect.group tests"})
+
+        # Creates a remote Spark session.
+        os.environ["SPARK_REMOTE"] = "sc://localhost"
+        globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
+
+        (failure_count, test_count) = doctest.testmod(
+            pyspark.sql.connect.group,
+            globs=globs,
+            optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
+        )
+        globs["_spark"].stop()
+        globs["spark"].stop()
+        if failure_count:
+            sys.exit(-1)
+    else:
+        print(
+            f"Skipping pyspark.sql.connect.group doctests: {connect_requirement_message}",
+            file=sys.stderr,
+        )
+
+
+if __name__ == "__main__":
+    _test()

@@ -4023,6 +4023,16 @@ object functions {
   }
 
   /**
+   * Remove all null elements from the given array.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def array_compact(column: Column): Column = withExpr {
+    ArrayCompact(column.expr)
+  }
+
+  /**
    * Removes duplicate values from the array.
    * @group collection_funcs
    * @since 2.4.0

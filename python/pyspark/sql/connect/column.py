@@ -17,6 +17,7 @@
 
 import datetime
 import decimal
+import warnings
 
 from typing import (
     TYPE_CHECKING,
@@ -27,6 +28,7 @@ from typing import (
     Optional,
 )
 
+from pyspark import SparkContext, SparkConf
 from pyspark.sql.types import DataType
 from pyspark.sql.column import Column as PySparkColumn
 
@@ -34,12 +36,15 @@ import pyspark.sql.connect.proto as proto
 from pyspark.sql.connect.expressions import (
     Expression,
     UnresolvedFunction,
+    UnresolvedExtractValue,
     SQLExpression,
     LiteralExpression,
     CaseWhen,
     SortOrder,
     CastExpression,
     WindowExpression,
+    WithField,
+    DropField,
 )
 
 
@@ -117,14 +122,14 @@ class Column:
     __rmul__ = _bin_op("*", reverse=True)
     __rdiv__ = _bin_op("/", reverse=True)
     __rtruediv__ = _bin_op("/", reverse=True)
-    __pow__ = _bin_op("pow")
-    __rpow__ = _bin_op("pow", reverse=True)
+    __pow__ = _bin_op("power")
+    __rpow__ = _bin_op("power", reverse=True)
     __ge__ = _bin_op(">=")
     __le__ = _bin_op("<=")
 
-    eqNullSafe = _bin_op("eqNullSafe", PySparkColumn.eqNullSafe.__doc__)
+    eqNullSafe = _bin_op("<=>", PySparkColumn.eqNullSafe.__doc__)
 
-    __neg__ = _func_op("negate")
+    __neg__ = _func_op("negative")
 
     # `and`, `or`, `not` cannot be overloaded in Python,
     # so use bitwise operators as boolean operators
@@ -142,12 +147,12 @@ class Column:
         )
 
     # bitwise operators
-    bitwiseOR = _bin_op("bitwiseOR", PySparkColumn.bitwiseOR.__doc__)
-    bitwiseAND = _bin_op("bitwiseAND", PySparkColumn.bitwiseAND.__doc__)
-    bitwiseXOR = _bin_op("bitwiseXOR", PySparkColumn.bitwiseXOR.__doc__)
+    bitwiseOR = _bin_op("|", PySparkColumn.bitwiseOR.__doc__)
+    bitwiseAND = _bin_op("&", PySparkColumn.bitwiseAND.__doc__)
+    bitwiseXOR = _bin_op("^", PySparkColumn.bitwiseXOR.__doc__)
 
-    isNull = _unary_op("isNull", PySparkColumn.isNull.__doc__)
-    isNotNull = _unary_op("isNotNull", PySparkColumn.isNotNull.__doc__)
+    isNull = _unary_op("isnull", PySparkColumn.isNull.__doc__)
+    isNotNull = _unary_op("isnotnull", PySparkColumn.isNotNull.__doc__)
 
     def __ne__(  # type: ignore[override]
         self,
@@ -158,8 +163,8 @@ class Column:
 
     # string methods
     contains = _bin_op("contains", PySparkColumn.contains.__doc__)
-    startswith = _bin_op("startsWith", PySparkColumn.startswith.__doc__)
-    endswith = _bin_op("endsWith", PySparkColumn.endswith.__doc__)
+    startswith = _bin_op("startswith", PySparkColumn.startswith.__doc__)
+    endswith = _bin_op("endswith", PySparkColumn.endswith.__doc__)
 
     def when(self, condition: "Column", value: Any) -> "Column":
         if not isinstance(condition, Column):
@@ -264,6 +269,10 @@ class Column:
 
     alias.__doc__ = PySparkColumn.alias.__doc__
 
+    name = alias
+
+    name.__doc__ = PySparkColumn.name.__doc__
+
     def asc(self) -> "Column":
         return self.asc_nulls_first()
 
@@ -282,9 +291,6 @@ class Column:
     def desc_nulls_last(self) -> "Column":
         return Column(SortOrder(self._expr, ascending=False, nullsFirst=False))
 
-    def name(self) -> str:
-        return self._expr.name()
-
     def cast(self, dataType: Union[DataType, str]) -> "Column":
         if isinstance(dataType, (DataType, str)):
             return Column(CastExpression(expr=self._expr, data_type=dataType))
@@ -299,37 +305,6 @@ class Column:
         return "Column<'%s'>" % self._expr.__repr__()
 
     def over(self, window: "WindowSpec") -> "Column":
-        """
-        Define a windowing column.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        window : :class:`WindowSpec`
-
-        Returns
-        -------
-        :class:`Column`
-
-        Examples
-        --------
-        >>> from pyspark.sql import Window
-        >>> window = Window.partitionBy("name").orderBy("age") \
-                .rowsBetween(Window.unboundedPreceding, Window.currentRow)
-        >>> from pyspark.sql.functions import rank, min
-        >>> from pyspark.sql.functions import desc
-        >>> df = spark.createDataFrame(
-        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
-        >>> df.withColumn("rank", rank().over(window)) \
-                .withColumn("min", min('age').over(window)).sort(desc("age")).show()
-        +---+-----+----+---+
-        |age| name|rank|min|
-        +---+-----+----+---+
-        |  5|  Bob|   1|  5|
-        |  2|Alice|   1|  2|
-        +---+-----+----+---+
-        """
         from pyspark.sql.connect.window import WindowSpec
 
         if not isinstance(window, WindowSpec):
@@ -338,6 +313,8 @@ class Column:
             )
 
         return Column(WindowExpression(windowFunction=self._expr, windowSpec=window))
+
+    over.__doc__ = PySparkColumn.over.__doc__
 
     def isin(self, *cols: Any) -> "Column":
         from pyspark.sql.connect.functions import lit
@@ -351,9 +328,6 @@ class Column:
 
     isin.__doc__ = PySparkColumn.isin.__doc__
 
-    def getItem(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("getItem() is not yet implemented.")
-
     def between(
         self,
         lowerBound: Union["Column", "LiteralType", "DateTimeLiteral", "DecimalLiteral"],
@@ -363,17 +337,75 @@ class Column:
 
     between.__doc__ = PySparkColumn.between.__doc__
 
-    def getField(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("getField() is not yet implemented.")
+    def getItem(self, key: Any) -> "Column":
+        if isinstance(key, Column):
+            warnings.warn(
+                "A column as 'key' in getItem is deprecated as of Spark 3.0, and will not "
+                "be supported in the future release. Use `column[key]` or `column.key` syntax "
+                "instead.",
+                FutureWarning,
+            )
+        return self[key]
 
-    def withField(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("withField() is not yet implemented.")
+    getItem.__doc__ = PySparkColumn.getItem.__doc__
 
-    def dropFields(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("dropFields() is not yet implemented.")
+    def getField(self, name: Any) -> "Column":
+        if isinstance(name, Column):
+            warnings.warn(
+                "A column as 'name' in getField is deprecated as of Spark 3.0, and will not "
+                "be supported in the future release. Use `column[name]` or `column.name` syntax "
+                "instead.",
+                FutureWarning,
+            )
+        return self[name]
 
-    def __getitem__(self, k: Any) -> None:
-        raise NotImplementedError("apply() - __getitem__ is not yet implemented.")
+    getField.__doc__ = PySparkColumn.getField.__doc__
+
+    def withField(self, fieldName: str, col: "Column") -> "Column":
+        if not isinstance(fieldName, str):
+            raise TypeError(
+                f"fieldName should be a string, but got {type(fieldName).__name__} {fieldName}"
+            )
+
+        if not isinstance(col, Column):
+            raise TypeError(f"col should be a Column, but got {type(col).__name__} {col}")
+
+        return Column(WithField(self._expr, fieldName, col._expr))
+
+    withField.__doc__ = PySparkColumn.withField.__doc__
+
+    def dropFields(self, *fieldNames: str) -> "Column":
+        dropField: Optional[DropField] = None
+        for fieldName in fieldNames:
+            if not isinstance(fieldName, str):
+                raise TypeError(
+                    f"fieldName should be a string, but got {type(fieldName).__name__} {fieldName}"
+                )
+
+            if dropField is None:
+                dropField = DropField(self._expr, fieldName)
+            else:
+                dropField = DropField(dropField, fieldName)
+
+        if dropField is None:
+            raise ValueError("dropFields requires at least 1 field")
+
+        return Column(dropField)
+
+    dropFields.__doc__ = PySparkColumn.dropFields.__doc__
+
+    def __getattr__(self, item: Any) -> "Column":
+        if item.startswith("__"):
+            raise AttributeError(item)
+        return self[item]
+
+    def __getitem__(self, k: Any) -> "Column":
+        if isinstance(k, slice):
+            if k.step is not None:
+                raise ValueError("slice with step is not supported.")
+            return self.substr(k.start, k.stop)
+        else:
+            return Column(UnresolvedExtractValue(self._expr, LiteralExpression._from_value(k)))
 
     def __iter__(self) -> None:
         raise TypeError("Column is not iterable")
@@ -388,3 +420,69 @@ class Column:
 
 
 Column.__doc__ = PySparkColumn.__doc__
+
+
+def _test() -> None:
+    import os
+    import sys
+    import doctest
+    from pyspark.sql import SparkSession as PySparkSession
+    from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    if should_test_connect:
+        import pyspark.sql.connect.column
+
+        globs = pyspark.sql.connect.column.__dict__.copy()
+        # Works around to create a regular Spark session
+        sc = SparkContext("local[4]", "sql.connect.column tests", conf=SparkConf())
+        globs["_spark"] = PySparkSession(sc, options={"spark.app.name": "sql.connect.column tests"})
+
+        # Creates a remote Spark session.
+        os.environ["SPARK_REMOTE"] = "sc://localhost"
+        globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
+
+        # TODO(SPARK-41746): SparkSession.createDataFrame does not support nested datatypes
+        del pyspark.sql.connect.column.Column.dropFields.__doc__
+        # TODO(SPARK-41772): Enable pyspark.sql.connect.column.Column.withField doctest
+        del pyspark.sql.connect.column.Column.withField.__doc__
+        # TODO(SPARK-41745): SparkSession.createDataFrame does not respect the column names in
+        #  the row
+        del pyspark.sql.connect.column.Column.bitwiseAND.__doc__
+        del pyspark.sql.connect.column.Column.bitwiseOR.__doc__
+        del pyspark.sql.connect.column.Column.bitwiseXOR.__doc__
+        # TODO(SPARK-41770): eqNullSafe does not support None as its argument
+        del pyspark.sql.connect.column.Column.eqNullSafe.__doc__
+        # TODO(SPARK-41745): SparkSession.createDataFrame does not respect the column names in
+        #  the row
+        del pyspark.sql.connect.column.Column.isNotNull.__doc__
+        del pyspark.sql.connect.column.Column.isNull.__doc__
+        del pyspark.sql.connect.column.Column.isin.__doc__
+        # TODO(SPARK-41771): __getitem__ does not work with Column.isin
+        del pyspark.sql.connect.column.Column.getField.__doc__
+        del pyspark.sql.connect.column.Column.getItem.__doc__
+        # TODO(SPARK-41758): Support Window functions
+        del pyspark.sql.connect.column.Column.over.__doc__
+
+        (failure_count, test_count) = doctest.testmod(
+            pyspark.sql.connect.column,
+            globs=globs,
+            optionflags=doctest.ELLIPSIS
+            | doctest.NORMALIZE_WHITESPACE
+            | doctest.IGNORE_EXCEPTION_DETAIL,
+        )
+
+        globs["spark"].stop()
+        globs["_spark"].stop()
+        if failure_count:
+            sys.exit(-1)
+    else:
+        print(
+            f"Skipping pyspark.sql.connect.column doctests: {connect_requirement_message}",
+            file=sys.stderr,
+        )
+
+
+if __name__ == "__main__":
+    _test()

@@ -114,6 +114,16 @@ select array_size(array(2, 1));
 select array_size(NULL);
 select array_size(map('a', 1, 'b', 2));
 
+-- size(arrays_zip)
+select size(arrays_zip(array(1, 2, 3), array(4), array(7, 8, 9, 10)));
+select size(arrays_zip(array(), array(1, 2, 3), array(4), array(7, 8, 9, 10)));
+select size(arrays_zip(array(1, 2, 3), array(4), null, array(7, 8, 9, 10)));
+
+-- isnotnull(arrays_zip)
+select isnotnull(arrays_zip(array(), array(4), array(7, 8, 9, 10)));
+select isnotnull(arrays_zip(array(1, 2, 3), array(4), array(7, 8, 9, 10)));
+select isnotnull(arrays_zip(array(1, 2, 3), NULL, array(4), array(7, 8, 9, 10)));
+
 -- function get()
 select get(array(1, 2, 3), 0);
 select get(array(1, 2, 3), 3);
@@ -131,3 +141,11 @@ select array_insert(array(1, 2, 3), cast(NULL as INT), 4);
 select array_insert(array(1, 2, 3), 4, cast(NULL as INT));
 select array_insert(array(2, 3, 4), 5, 1);
 select array_insert(array(2, 3, 4), -4, 1);
+
+-- function array_compact
+select array_compact(id) from values (1) as t(id);
+select array_compact(array("1", null, "2", null));
+select array_compact(array("a", "b", "c"));
+select array_compact(array(1D, null, 2D, null));
+select array_compact(array(array(1, 2, 3, null), null, array(4, null, 6)));
+select array_compact(array(null));

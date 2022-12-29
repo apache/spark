@@ -18,6 +18,7 @@
 from typing import Any, List, Optional, Sequence, Union, cast, TYPE_CHECKING, Mapping, Dict
 import functools
 import pyarrow as pa
+from inspect import signature, isclass
 
 from pyspark.sql.types import DataType
 
@@ -95,14 +96,130 @@ class LogicalPlan(object):
 
         return plan
 
-    # TODO(SPARK-41717): Implement the command logic for print and _repr_html_
+    def _parameters_to_print(self, parameters: Mapping[str, Any]) -> Mapping[str, Any]:
+        """
+        Extracts the parameters that are able to be printed. It looks up the signature
+        in the constructor of this :class:`LogicalPlan`, and retrieves the variables
+        from this instance by the same name (or the name with prefix `_`)  defined
+        in the constructor.
+
+        Parameters
+        ----------
+        parameters : map
+            Parameter mapping from ``inspect.signature(...).parameters``
+
+        Returns
+        -------
+        dict
+            A dictionary consisting of a string name and variable found in this
+            :class:`LogicalPlan`.
+
+        Notes
+        -----
+        :class:`LogicalPlan` itself is filtered out and considered as a non-printable
+        parameter.
+
+        Examples
+        --------
+        The example below returns a dictionary from `self._start`, `self._end`,
+        `self._num_partitions`.
+
+        >>> rg = Range(0, 10, 1)
+        >>> rg._parameters_to_print(signature(rg.__class__.__init__).parameters)
+        {'start': 0, 'end': 10, 'step': 1, 'num_partitions': None}
+
+        If the child is defined, it is not considered as a printable instance
+
+        >>> project = Project(rg, "value")
+        >>> project._parameters_to_print(signature(project.__class__.__init__).parameters)
+        {'columns': ['value']}
+        """
+        params = {}
+        for name, tpe in parameters.items():
+            # LogicalPlan is not to print, e.g., LogicalPlan
+            is_logical_plan = isclass(tpe.annotation) and isinstance(tpe.annotation, LogicalPlan)
+            # Look up the string argument defined as a forward reference e.g., "LogicalPlan"
+            is_forwardref_logical_plan = getattr(tpe.annotation, "__forward_arg__", "").endswith(
+                "LogicalPlan"
+            )
+            # Wrapped LogicalPlan, e.g., Optional[LogicalPlan]
+            is_nested_logical_plan = any(
+                isclass(a) and issubclass(a, LogicalPlan)
+                for a in getattr(tpe.annotation, "__args__", ())
+            )
+            # Wrapped forward reference of LogicalPlan, e.g., Optional["LogicalPlan"].
+            is_nested_forwardref_logical_plan = any(
+                getattr(a, "__forward_arg__", "").endswith("LogicalPlan")
+                for a in getattr(tpe.annotation, "__args__", ())
+            )
+            if (
+                not is_logical_plan
+                and not is_forwardref_logical_plan
+                and not is_nested_logical_plan
+                and not is_nested_forwardref_logical_plan
+            ):
+                # Searches self.name or self._name
+                try:
+                    params[name] = getattr(self, name)
+                except AttributeError:
+                    try:
+                        params[name] = getattr(self, "_" + name)
+                    except AttributeError:
+                        pass  # Simpy ignore
+        return params
+
     def print(self, indent: int = 0) -> str:
-        ...
+        """
+        Print the simple string representation of the current :class:`LogicalPlan`.
+
+        Parameters
+        ----------
+        indent : int
+            The number of leading spaces for the output string.
+
+        Returns
+        -------
+        str
+            Simple string representation of this :class:`LogicalPlan`.
+        """
+        params = self._parameters_to_print(signature(self.__class__.__init__).parameters)
+        pretty_params = [f"{name}='{param}'" for name, param in params.items()]
+        if len(pretty_params) == 0:
+            pretty_str = ""
+        else:
+            pretty_str = " " + ", ".join(pretty_params)
+        return f"{' ' * indent}<{self.__class__.__name__}{pretty_str}>\n{self._child_print(indent)}"
 
     def _repr_html_(self) -> str:
-        ...
+        """Returns a  :class:`LogicalPlan` with HTML code. This is generally called in third-party
+        systems such as Jupyter.
 
-    def _child_repr_(self) -> str:
+        Returns
+        -------
+        str
+            HTML representation of this :class:`LogicalPlan`.
+        """
+        params = self._parameters_to_print(signature(self.__class__.__init__).parameters)
+        pretty_params = [
+            f"\n              {name}: " f"{param} <br/>" for name, param in params.items()
+        ]
+        if len(pretty_params) == 0:
+            pretty_str = ""
+        else:
+            pretty_str = "".join(pretty_params)
+        return f"""
+        <ul>
+           <li>
+              <b>{self.__class__.__name__}</b><br/>{pretty_str}
+              {self._child_repr()}
+           </li>
+        </ul>
+        """
+
+    def _child_print(self, indent: int) -> str:
+        return self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
+
+    def _child_repr(self) -> str:
         return self._child._repr_html_() if self._child is not None else ""
 
 
@@ -133,18 +250,6 @@ class DataSource(LogicalPlan):
                     plan.read.data_source.options[k] = v
         return plan
 
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-            <li>
-                <b>DataSource</b><br />
-                format: {self.format}
-                schema: {self.schema}
-                options: {self.options}
-            </li>
-        </ul>
-        """
-
 
 class Read(LogicalPlan):
     def __init__(self, table_name: str) -> None:
@@ -158,16 +263,6 @@ class Read(LogicalPlan):
 
     def print(self, indent: int = 0) -> str:
         return f"{' ' * indent}<Read table_name={self.table_name}>\n"
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-            <li>
-                <b>Read</b><br />
-                table name: {self.table_name}
-            </li>
-        </ul>
-        """
 
 
 class LocalRelation(LogicalPlan):
@@ -207,7 +302,7 @@ class LocalRelation(LogicalPlan):
     def _repr_html_(self) -> str:
         return """
         <ul>
-            <li>LocalRelation</li>
+            <li><b>LocalRelation</b></li>
         </ul>
         """
 
@@ -230,27 +325,6 @@ class ShowString(LogicalPlan):
         plan.show_string.vertical = self.vertical
         return plan
 
-    def print(self, indent: int = 0) -> str:
-        return (
-            f"{' ' * indent}"
-            f"<ShowString numRows='{self.num_rows}', "
-            f"truncate='{self.truncate}', "
-            f"vertical='{self.vertical}'>"
-        )
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>ShowString</b><br />
-              NumRows: {self.num_rows} <br />
-              Truncate: {self.truncate} <br />
-              Vertical: {self.vertical} <br />
-              {self._child_repr_()}
-           </li>
-        </ul>
-        """
-
 
 class Project(LogicalPlan):
     """Logical plan object for a projection.
@@ -265,13 +339,13 @@ class Project(LogicalPlan):
 
     def __init__(self, child: Optional["LogicalPlan"], *columns: "ColumnOrName") -> None:
         super().__init__(child)
-        self._raw_columns = list(columns)
+        self._columns = list(columns)
         self.alias: Optional[str] = None
         self._verify_expressions()
 
     def _verify_expressions(self) -> None:
         """Ensures that all input arguments are instances of Expression or String."""
-        for c in self._raw_columns:
+        for c in self._columns:
             if not isinstance(c, (Column, str)):
                 raise InputValidationError(
                     f"Only Column or String can be used for projections: '{c}'."
@@ -280,7 +354,7 @@ class Project(LogicalPlan):
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
         proj_exprs = []
-        for c in self._raw_columns:
+        for c in self._columns:
             if isinstance(c, Column):
                 proj_exprs.append(c.to_plan(session))
             elif c == "*":
@@ -294,21 +368,6 @@ class Project(LogicalPlan):
         plan.project.input.CopyFrom(self._child.plan(session))
         plan.project.expressions.extend(proj_exprs)
         return plan
-
-    def print(self, indent: int = 0) -> str:
-        c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
-        return f"{' ' * indent}<Project cols={self._raw_columns}>\n{c_buf}"
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-            <li>
-                <b>Project</b><br />
-                Columns: {",".join([str(c) for c in self._raw_columns])}
-                {self._child._repr_html_() if self._child is not None else ""}
-            </li>
-        </uL>
-        """
 
 
 class WithColumns(LogicalPlan):
@@ -328,21 +387,6 @@ class WithColumns(LogicalPlan):
             name_expr.expr.CopyFrom(v.to_plan(session))
             plan.with_columns.name_expr_list.append(name_expr)
         return plan
-
-    def print(self, indent: int = 0) -> str:
-        c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
-        return f"{' ' * indent}<WithColumns cols={self._cols_map}>\n{c_buf}"
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-            <li>
-                <b>WithColumns</b><br />
-                Column Map: {self._cols_map}
-                {self._child._repr_html_() if self._child is not None else ""}
-            </li>
-        </uL>
-        """
 
 
 class Hint(LogicalPlan):
@@ -369,21 +413,6 @@ class Hint(LogicalPlan):
             plan.hint.parameters.append(LiteralExpression._from_value(v).to_plan(session).literal)
         return plan
 
-    def print(self, indent: int = 0) -> str:
-        return f"""{" " * indent}<Hint name='{self.name}', parameters='{self.params}'>"""
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>Hint</b><br />
-              name: {self.name} <br />
-              parameters: {self.params} <br />
-              {self._child_repr_()}
-           </li>
-        </ul>
-        """
-
 
 class Filter(LogicalPlan):
     def __init__(self, child: Optional["LogicalPlan"], filter: Column) -> None:
@@ -396,21 +425,6 @@ class Filter(LogicalPlan):
         plan.filter.input.CopyFrom(self._child.plan(session))
         plan.filter.condition.CopyFrom(self.filter.to_plan(session))
         return plan
-
-    def print(self, indent: int = 0) -> str:
-        c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
-        return f"{' ' * indent}<Filter filter={self.filter}>\n{c_buf}"
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-            <li>
-                <b>Filter</b><br />
-                Condition: {self.filter}
-                {self._child_repr_()}
-            </li>
-        </uL>
-        """
 
 
 class Limit(LogicalPlan):
@@ -425,21 +439,6 @@ class Limit(LogicalPlan):
         plan.limit.limit = self.limit
         return plan
 
-    def print(self, indent: int = 0) -> str:
-        c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
-        return f"{' ' * indent}<Limit limit={self.limit}>\n{c_buf}"
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-            <li>
-                <b>Limit</b><br />
-                Limit: {self.limit} <br />
-                {self._child_repr_()}
-            </li>
-        </uL>
-        """
-
 
 class Tail(LogicalPlan):
     def __init__(self, child: Optional["LogicalPlan"], limit: int) -> None:
@@ -453,21 +452,6 @@ class Tail(LogicalPlan):
         plan.tail.limit = self.limit
         return plan
 
-    def print(self, indent: int = 0) -> str:
-        c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
-        return f"{' ' * indent}<Tail limit={self.limit}>\n{c_buf}"
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-            <li>
-                <b>Tail</b><br />
-                Limit: {self.limit} <br />
-                {self._child_repr_()}
-            </li>
-        </uL>
-        """
-
 
 class Offset(LogicalPlan):
     def __init__(self, child: Optional["LogicalPlan"], offset: int = 0) -> None:
@@ -480,21 +464,6 @@ class Offset(LogicalPlan):
         plan.offset.input.CopyFrom(self._child.plan(session))
         plan.offset.offset = self.offset
         return plan
-
-    def print(self, indent: int = 0) -> str:
-        c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
-        return f"{' ' * indent}<Offset={self.offset}>\n{c_buf}"
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-            <li>
-                <b>Limit</b><br />
-                Offset: {self.offset} <br />
-                {self._child_repr_()}
-            </li>
-        </uL>
-        """
 
 
 class Deduplicate(LogicalPlan):
@@ -516,25 +485,6 @@ class Deduplicate(LogicalPlan):
         if self.column_names is not None:
             plan.deduplicate.column_names.extend(self.column_names)
         return plan
-
-    def print(self, indent: int = 0) -> str:
-        c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
-        return (
-            f"{' ' * indent}<all_columns_as_keys={self.all_columns_as_keys} "
-            f"column_names={self.column_names}>\n{c_buf}"
-        )
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-            <li>
-                <b></b>Deduplicate<br />
-                all_columns_as_keys: {self.all_columns_as_keys} <br />
-                column_names: {self.column_names} <br />
-                {self._child_repr_()}
-            </li>
-        </uL>
-        """
 
 
 class Sort(LogicalPlan):
@@ -571,22 +521,6 @@ class Sort(LogicalPlan):
         plan.sort.is_global = self.is_global
         return plan
 
-    def print(self, indent: int = 0) -> str:
-        c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
-        return f"{' ' * indent}<Sort columns={self.columns}, global={self.is_global}>\n{c_buf}"
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-            <li>
-                <b>Sort</b><br />
-                {", ".join([str(c) for c in self.columns])}
-                global: {self.is_global} <br />
-                {self._child_repr_()}
-            </li>
-        </uL>
-        """
-
 
 class Drop(LogicalPlan):
     def __init__(
@@ -614,21 +548,6 @@ class Drop(LogicalPlan):
         plan.drop.input.CopyFrom(self._child.plan(session))
         plan.drop.cols.extend([self._convert_to_expr(c, session) for c in self.columns])
         return plan
-
-    def print(self, indent: int = 0) -> str:
-        c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
-        return f"{' ' * indent}<Drop columns={self.columns}>\n{c_buf}"
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-            <li>
-                <b>Drop</b><br />
-                columns: {self.columns} <br />
-                {self._child_repr_()}
-            </li>
-        </uL>
-        """
 
 
 class Sample(LogicalPlan):
@@ -659,29 +578,6 @@ class Sample(LogicalPlan):
             plan.sample.seed = self.seed
         plan.sample.force_stable_sort = self.force_stable_sort
         return plan
-
-    def print(self, indent: int = 0) -> str:
-        c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
-        return (
-            f"{' ' * indent}"
-            f"<Sample lowerBound={self.lower_bound}, upperBound={self.upper_bound}, "
-            f"withReplacement={self.with_replacement}, seed={self.seed}>"
-            f"\n{c_buf}"
-        )
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-            <li>
-                <b>Sample</b><br />
-                LowerBound: {self.lower_bound} <br />
-                UpperBound: {self.upper_bound} <br />
-                WithReplacement: {self.with_replacement} <br />
-                Seed: {self.seed} <br />
-                {self._child_repr_()}
-            </li>
-        </uL>
-        """
 
 
 class Aggregate(LogicalPlan):
@@ -747,23 +643,6 @@ class Aggregate(LogicalPlan):
                 )
 
         return agg
-
-    def print(self, indent: int = 0) -> str:
-        c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
-        return (
-            f"{' ' * indent}<Groupby={self._grouping_cols}"
-            f"Aggregate={self._aggregate_cols}>\n{c_buf}"
-        )
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-            <li>
-                <b>Aggregation</b><br />
-                {self._child_repr_()}
-            </li>
-        </uL>
-        """
 
 
 class Join(LogicalPlan):
@@ -930,23 +809,6 @@ class Repartition(LogicalPlan):
         rel.repartition.num_partitions = self._num_partitions
         return rel
 
-    def print(self, indent: int = 0) -> str:
-        plan_name = "repartition" if self._shuffle else "coalesce"
-        c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
-        return f"{' ' * indent}<{plan_name} num_partitions={self._num_partitions}>\n{c_buf}"
-
-    def _repr_html_(self) -> str:
-        plan_name = "repartition" if self._shuffle else "coalesce"
-        return f"""
-        <ul>
-           <li>
-              <b>{plan_name}</b><br />
-              Child: {self._child_repr_()}
-              num_partitions: {self._num_partitions}
-           </li>
-        </ul>
-        """
-
 
 class SubqueryAlias(LogicalPlan):
     """Alias for a relation."""
@@ -962,21 +824,6 @@ class SubqueryAlias(LogicalPlan):
         rel.subquery_alias.alias = self._alias
         return rel
 
-    def print(self, indent: int = 0) -> str:
-        c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
-        return f"{' ' * indent}<SubqueryAlias alias={self._alias}>\n{c_buf}"
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>SubqueryAlias</b><br />
-              Child: {self._child_repr_()}
-              Alias: {self._alias}
-           </li>
-        </ul>
-        """
-
 
 class SQL(LogicalPlan):
     def __init__(self, query: str) -> None:
@@ -987,21 +834,6 @@ class SQL(LogicalPlan):
         rel = proto.Relation()
         rel.sql.query = self._query
         return rel
-
-    def print(self, indent: int = 0) -> str:
-        i = " " * indent
-        sub_query = self._query.replace("\n", "")[:50]
-        return f"""{i}<SQL query='{sub_query}...'>"""
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>SQL</b><br />
-              Statement: <pre>{self._query}</pre>
-           </li>
-        </ul>
-        """
 
 
 class Range(LogicalPlan):
@@ -1027,27 +859,6 @@ class Range(LogicalPlan):
             rel.range.num_partitions = self._num_partitions
         return rel
 
-    def print(self, indent: int = 0) -> str:
-        return (
-            f"{' ' * indent}"
-            f"<Range start={self._start}, end={self._end}, "
-            f"step={self._step}, num_partitions={self._num_partitions}>"
-        )
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-            <li>
-                <b>Range</b><br />
-                Start: {self._start} <br />
-                End: {self._end} <br />
-                Step: {self._step} <br />
-                NumPartitions: {self._num_partitions} <br />
-                {self._child_repr_()}
-            </li>
-        </uL>
-        """
-
 
 class ToSchema(LogicalPlan):
     def __init__(self, child: Optional["LogicalPlan"], schema: DataType) -> None:
@@ -1061,21 +872,6 @@ class ToSchema(LogicalPlan):
         plan.to_schema.input.CopyFrom(self._child.plan(session))
         plan.to_schema.schema.CopyFrom(pyspark_types_to_proto_types(self._schema))
         return plan
-
-    def print(self, indent: int = 0) -> str:
-        i = " " * indent
-        return f"""{i}<ToSchema schema='{self._schema}'>"""
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>ToSchema</b><br />
-              schema: {self._schema} <br />
-              {self._child_repr_()}
-           </li>
-        </ul>
-        """
 
 
 class RenameColumnsNameByName(LogicalPlan):
@@ -1091,21 +887,6 @@ class RenameColumnsNameByName(LogicalPlan):
         for k, v in self._colsMap.items():
             plan.rename_columns_by_name_to_name_map.rename_columns_map[k] = v
         return plan
-
-    def print(self, indent: int = 0) -> str:
-        i = " " * indent
-        return f"""{i}<RenameColumnsNameByName ColsMap='{self._colsMap}'>"""
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>RenameColumns</b><br />
-              ColsMap: {self._colsMap} <br />
-              {self._child_repr_()}
-           </li>
-        </ul>
-        """
 
 
 class Unpivot(LogicalPlan):
@@ -1141,30 +922,6 @@ class Unpivot(LogicalPlan):
         plan.unpivot.variable_column_name = self.variable_column_name
         plan.unpivot.value_column_name = self.value_column_name
         return plan
-
-    def print(self, indent: int = 0) -> str:
-        c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
-        return (
-            f"{' ' * indent}"
-            f"<Unpivot ids={self.ids}, values={self.values}, "
-            f"variable_column_name={self.variable_column_name}, "
-            f"value_column_name={self.value_column_name}>"
-            f"\n{c_buf}"
-        )
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-            <li>
-                <b>Unpivot</b><br />
-                ids: {self.ids}
-                values: {self.values}
-                variable_column_name: {self.variable_column_name}
-                value_column_name: {self.value_column_name}
-                {self._child._repr_html_() if self._child is not None else ""}
-            </li>
-        </uL>
-        """
 
 
 class NAFill(LogicalPlan):
@@ -1208,21 +965,6 @@ class NAFill(LogicalPlan):
         plan.fill_na.values.extend([self._convert_value(v) for v in self.values])
         return plan
 
-    def print(self, indent: int = 0) -> str:
-        return f"""{" " * indent}<NAFill cols='{self.cols}', values='{self.values}'>"""
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>NAFill</b><br />
-              Cols: {self.cols} <br />
-              Values: {self.values} <br />
-              {self._child_repr_()}
-           </li>
-        </ul>
-        """
-
 
 class NADrop(LogicalPlan):
     def __init__(
@@ -1245,22 +987,6 @@ class NADrop(LogicalPlan):
         if self.min_non_nulls is not None:
             plan.drop_na.min_non_nulls = self.min_non_nulls
         return plan
-
-    def print(self, indent: int = 0) -> str:
-        i = " " * indent
-        return f"{i}" f"<NADrop cols='{self.cols}' " f"min_non_nulls='{self.min_non_nulls}'>"
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>NADrop</b><br />
-              Cols: {self.cols} <br />
-              Min_non_nulls: {self.min_non_nulls} <br />
-              {self._child_repr_()}
-           </li>
-        </ul>
-        """
 
 
 class NAReplace(LogicalPlan):
@@ -1310,22 +1036,6 @@ class NAReplace(LogicalPlan):
                 plan.replace.replacements.append(replacement)
         return plan
 
-    def print(self, indent: int = 0) -> str:
-        i = " " * indent
-        return f"{i}" f"<NAReplace cols='{self.cols}' " f"replacements='{self.replacements}'>"
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>NADrop</b><br />
-              Cols: {self.cols} <br />
-              Replacements: {self.replacements} <br />
-              {self._child_repr_()}
-           </li>
-        </ul>
-        """
-
 
 class StatSummary(LogicalPlan):
     def __init__(self, child: Optional["LogicalPlan"], statistics: List[str]) -> None:
@@ -1338,21 +1048,6 @@ class StatSummary(LogicalPlan):
         plan.summary.input.CopyFrom(self._child.plan(session))
         plan.summary.statistics.extend(self.statistics)
         return plan
-
-    def print(self, indent: int = 0) -> str:
-        i = " " * indent
-        return f"""{i}<Summary statistics='{self.statistics}'>"""
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>Summary</b><br />
-              Statistics: {self.statistics} <br />
-              {self._child_repr_()}
-           </li>
-        </ul>
-        """
 
 
 class StatDescribe(LogicalPlan):
@@ -1367,20 +1062,21 @@ class StatDescribe(LogicalPlan):
         plan.describe.cols.extend(self.cols)
         return plan
 
-    def print(self, indent: int = 0) -> str:
-        i = " " * indent
-        return f"""{i}<Describe cols='{self.cols}'>"""
 
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>Describe</b><br />
-              Cols: {self.cols} <br />
-              {self._child_repr_()}
-           </li>
-        </ul>
-        """
+class StatCov(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], col1: str, col2: str) -> None:
+        super().__init__(child)
+        self._col1 = col1
+        self._col2 = col2
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+
+        plan = proto.Relation()
+        plan.cov.input.CopyFrom(self._child.plan(session))
+        plan.cov.col1 = self._col1
+        plan.cov.col2 = self._col2
+        return plan
 
 
 class StatCrosstab(LogicalPlan):
@@ -1398,22 +1094,6 @@ class StatCrosstab(LogicalPlan):
         plan.crosstab.col2 = self.col2
         return plan
 
-    def print(self, indent: int = 0) -> str:
-        i = " " * indent
-        return f"""{i}<Crosstab col1='{self.col1}' col2='{self.col2}'>"""
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>Crosstab</b><br />
-              Col1: {self.col1} <br />
-              Col2: {self.col2} <br />
-              {self._child_repr_()}
-           </li>
-        </ul>
-        """
-
 
 class RenameColumns(LogicalPlan):
     def __init__(self, child: Optional["LogicalPlan"], cols: Sequence[str]) -> None:
@@ -1427,21 +1107,6 @@ class RenameColumns(LogicalPlan):
         plan.rename_columns_by_same_length_names.input.CopyFrom(self._child.plan(session))
         plan.rename_columns_by_same_length_names.column_names.extend(self._cols)
         return plan
-
-    def print(self, indent: int = 0) -> str:
-        i = " " * indent
-        return f"""{i}<RenameColumns cols='{self._cols}'>"""
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>RenameColumns</b><br />
-              cols: {self._cols} <br />
-              {self._child_repr_()}
-           </li>
-        </ul>
-        """
 
 
 class CreateView(LogicalPlan):
@@ -1462,28 +1127,6 @@ class CreateView(LogicalPlan):
         plan.create_dataframe_view.name = self._name
         plan.create_dataframe_view.input.CopyFrom(self._child.plan(session))
         return plan
-
-    def print(self, indent: int = 0) -> str:
-        i = " " * indent
-        return (
-            f"{i}"
-            f"<CreateView name='{self._name}' "
-            f"is_global='{self._is_gloal} "
-            f"replace='{self._replace}'>"
-        )
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>CreateView</b><br />
-              name: {self._name} <br />
-              is_global: {self._is_gloal} <br />
-              replace: {self._replace} <br />
-            {self._child_repr_()}
-           </li>
-        </ul>
-        """
 
 
 class WriteOperation(LogicalPlan):
@@ -1572,26 +1215,15 @@ class WriteOperation(LogicalPlan):
         pass
 
 
+# Catalog API (internal-only)
+
+
 class CurrentDatabase(LogicalPlan):
     def __init__(self) -> None:
         super().__init__(None)
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        return proto.Relation(current_database=proto.CurrentDatabase())
-
-    def print(self, indent: int = 0) -> str:
-        i = " " * indent
-        return f"{i}" f"<{self.__class__.__name__}>"
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>{self.__class__.__name__}</b>
-            {self._child_repr_()}
-           </li>
-        </ul>
-        """
+        return proto.Relation(catalog=proto.Catalog(current_database=proto.CurrentDatabase()))
 
 
 class SetCurrentDatabase(LogicalPlan):
@@ -1601,23 +1233,8 @@ class SetCurrentDatabase(LogicalPlan):
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         plan = proto.Relation()
-        plan.set_current_database.db_name = self._db_name
+        plan.catalog.set_current_database.db_name = self._db_name
         return plan
-
-    def print(self, indent: int = 0) -> str:
-        i = " " * indent
-        return f"{i}" f"<{self.__class__.__name__} db_name='{self._db_name}'>"
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>{self.__class__.__name__}</b><br />
-              db_name: {self._db_name} <br />
-            {self._child_repr_()}
-           </li>
-        </ul>
-        """
 
 
 class ListDatabases(LogicalPlan):
@@ -1625,21 +1242,7 @@ class ListDatabases(LogicalPlan):
         super().__init__(None)
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        return proto.Relation(list_databases=proto.ListDatabases())
-
-    def print(self, indent: int = 0) -> str:
-        i = " " * indent
-        return f"{i}" f"<{self.__class__.__name__}>"
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>{self.__class__.__name__}</b>
-            {self._child_repr_()}
-           </li>
-        </ul>
-        """
+        return proto.Relation(catalog=proto.Catalog(list_databases=proto.ListDatabases()))
 
 
 class ListTables(LogicalPlan):
@@ -1648,27 +1251,10 @@ class ListTables(LogicalPlan):
         self._db_name = db_name
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation()
+        plan = proto.Relation(catalog=proto.Catalog(list_tables=proto.ListTables()))
         if self._db_name is not None:
-            plan.list_tables.db_name = self._db_name
-        else:
-            plan = proto.Relation(list_tables=proto.ListTables())
+            plan.catalog.list_tables.db_name = self._db_name
         return plan
-
-    def print(self, indent: int = 0) -> str:
-        i = " " * indent
-        return f"{i}" f"<{self.__class__.__name__} db_name='{self._db_name}'>"
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>{self.__class__.__name__}</b><br />
-              db_name: {self._db_name} <br />
-            {self._child_repr_()}
-           </li>
-        </ul>
-        """
 
 
 class ListFunctions(LogicalPlan):
@@ -1677,27 +1263,10 @@ class ListFunctions(LogicalPlan):
         self._db_name = db_name
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = proto.Relation(catalog=proto.Catalog(list_functions=proto.ListFunctions()))
         if self._db_name is not None:
-            plan = proto.Relation()
-            plan.list_functions.db_name = self._db_name
-        else:
-            plan = proto.Relation(list_functions=proto.ListFunctions())
+            plan.catalog.list_functions.db_name = self._db_name
         return plan
-
-    def print(self, indent: int = 0) -> str:
-        i = " " * indent
-        return f"{i}" f"<{self.__class__.__name__} db_name='{self._db_name}'>"
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>{self.__class__.__name__}</b><br />
-              db_name: {self._db_name} <br />
-            {self._child_repr_()}
-           </li>
-        </ul>
-        """
 
 
 class ListColumns(LogicalPlan):
@@ -1707,32 +1276,11 @@ class ListColumns(LogicalPlan):
         self._db_name = db_name
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation()
-        plan.list_columns.table_name = self._table_name
+        plan = proto.Relation(catalog=proto.Catalog(list_columns=proto.ListColumns()))
+        plan.catalog.list_columns.table_name = self._table_name
         if self._db_name is not None:
-            plan.list_columns.db_name = self._db_name
+            plan.catalog.list_columns.db_name = self._db_name
         return plan
-
-    def print(self, indent: int = 0) -> str:
-        i = " " * indent
-        return (
-            f"{i}"
-            f"<{self.__class__.__name__}"
-            f"table_name='{self._table_name}' "
-            f"db_name='{self._db_name}'>"
-        )
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>{self.__class__.__name__}</b><br />
-              table_name: {self._table_name} <br />
-              db_name: {self._db_name} <br />
-            {self._child_repr_()}
-           </li>
-        </ul>
-        """
 
 
 class GetDatabase(LogicalPlan):
@@ -1741,24 +1289,9 @@ class GetDatabase(LogicalPlan):
         self._db_name = db_name
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation()
-        plan.get_database.db_name = self._db_name
+        plan = proto.Relation(catalog=proto.Catalog(get_database=proto.GetDatabase()))
+        plan.catalog.get_database.db_name = self._db_name
         return plan
-
-    def print(self, indent: int = 0) -> str:
-        i = " " * indent
-        return f"{i}" f"<{self.__class__.__name__} db_name='{self._db_name}'>"
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>{self.__class__.__name__}</b><br />
-              db_name: {self._db_name} <br />
-            {self._child_repr_()}
-           </li>
-        </ul>
-        """
 
 
 class GetTable(LogicalPlan):
@@ -1768,32 +1301,11 @@ class GetTable(LogicalPlan):
         self._db_name = db_name
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation()
-        plan.get_table.table_name = self._table_name
+        plan = proto.Relation(catalog=proto.Catalog(get_table=proto.GetTable()))
+        plan.catalog.get_table.table_name = self._table_name
         if self._db_name is not None:
-            plan.get_table.db_name = self._db_name
+            plan.catalog.get_table.db_name = self._db_name
         return plan
-
-    def print(self, indent: int = 0) -> str:
-        i = " " * indent
-        return (
-            f"{i}"
-            f"<{self.__class__.__name__}"
-            f"table_name='{self._table_name}' "
-            f"db_name='{self._db_name}'>"
-        )
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>{self.__class__.__name__}</b><br />
-              table_name: {self._table_name} <br />
-              db_name: {self._db_name} <br />
-            {self._child_repr_()}
-           </li>
-        </ul>
-        """
 
 
 class GetFunction(LogicalPlan):
@@ -1803,32 +1315,11 @@ class GetFunction(LogicalPlan):
         self._db_name = db_name
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation()
-        plan.get_function.function_name = self._function_name
+        plan = proto.Relation(catalog=proto.Catalog(get_function=proto.GetFunction()))
+        plan.catalog.get_function.function_name = self._function_name
         if self._db_name is not None:
-            plan.get_function.db_name = self._db_name
+            plan.catalog.get_function.db_name = self._db_name
         return plan
-
-    def print(self, indent: int = 0) -> str:
-        i = " " * indent
-        return (
-            f"{i}"
-            f"<{self.__class__.__name__}"
-            f"function_name='{self._function_name}' "
-            f"db_name='{self._db_name}'>"
-        )
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>{self.__class__.__name__}</b><br />
-              function_name: {self._function_name} <br />
-              db_name: {self._db_name} <br />
-            {self._child_repr_()}
-           </li>
-        </ul>
-        """
 
 
 class DatabaseExists(LogicalPlan):
@@ -1837,24 +1328,9 @@ class DatabaseExists(LogicalPlan):
         self._db_name = db_name
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation()
-        plan.database_exists.db_name = self._db_name
+        plan = proto.Relation(catalog=proto.Catalog(database_exists=proto.DatabaseExists()))
+        plan.catalog.database_exists.db_name = self._db_name
         return plan
-
-    def print(self, indent: int = 0) -> str:
-        i = " " * indent
-        return f"{i}" f"<{self.__class__.__name__} db_name='{self._db_name}'>"
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>{self.__class__.__name__}</b><br />
-              db_name: {self._db_name} <br />
-            {self._child_repr_()}
-           </li>
-        </ul>
-        """
 
 
 class TableExists(LogicalPlan):
@@ -1864,32 +1340,11 @@ class TableExists(LogicalPlan):
         self._db_name = db_name
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation()
-        plan.table_exists.table_name = self._table_name
+        plan = proto.Relation(catalog=proto.Catalog(table_exists=proto.TableExists()))
+        plan.catalog.table_exists.table_name = self._table_name
         if self._db_name is not None:
-            plan.table_exists.db_name = self._db_name
+            plan.catalog.table_exists.db_name = self._db_name
         return plan
-
-    def print(self, indent: int = 0) -> str:
-        i = " " * indent
-        return (
-            f"{i}"
-            f"<{self.__class__.__name__}"
-            f"table_name='{self._table_name}' "
-            f"db_name='{self._db_name}'>"
-        )
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>{self.__class__.__name__}</b><br />
-              table_name: {self._table_name} <br />
-              db_name: {self._db_name} <br />
-            {self._child_repr_()}
-           </li>
-        </ul>
-        """
 
 
 class FunctionExists(LogicalPlan):
@@ -1899,32 +1354,11 @@ class FunctionExists(LogicalPlan):
         self._db_name = db_name
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation()
-        plan.function_exists.function_name = self._function_name
+        plan = proto.Relation(catalog=proto.Catalog(function_exists=proto.FunctionExists()))
+        plan.catalog.function_exists.function_name = self._function_name
         if self._db_name is not None:
-            plan.function_exists.db_name = self._db_name
+            plan.catalog.function_exists.db_name = self._db_name
         return plan
-
-    def print(self, indent: int = 0) -> str:
-        i = " " * indent
-        return (
-            f"{i}"
-            f"<{self.__class__.__name__}"
-            f"function_name='{self._function_name}' "
-            f"db_name='{self._db_name}'>"
-        )
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>{self.__class__.__name__}</b><br />
-              function_name: {self._function_name} <br />
-              db_name: {self._db_name} <br />
-            {self._child_repr_()}
-           </li>
-        </ul>
-        """
 
 
 class CreateExternalTable(LogicalPlan):
@@ -1944,46 +1378,23 @@ class CreateExternalTable(LogicalPlan):
         self._options = options
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation()
-        plan.create_external_table.table_name = self._table_name
+        plan = proto.Relation(
+            catalog=proto.Catalog(create_external_table=proto.CreateExternalTable())
+        )
+        plan.catalog.create_external_table.table_name = self._table_name
         if self._path is not None:
-            plan.create_external_table.path = self._path
+            plan.catalog.create_external_table.path = self._path
         if self._source is not None:
-            plan.create_external_table.source = self._source
+            plan.catalog.create_external_table.source = self._source
         if self._schema is not None:
-            plan.create_external_table.schema.CopyFrom(pyspark_types_to_proto_types(self._schema))
+            plan.catalog.create_external_table.schema.CopyFrom(
+                pyspark_types_to_proto_types(self._schema)
+            )
         for k in self._options.keys():
             v = self._options.get(k)
             if v is not None:
-                plan.create_external_table.options[k] = v
+                plan.catalog.create_external_table.options[k] = v
         return plan
-
-    def print(self, indent: int = 0) -> str:
-        i = " " * indent
-        return (
-            f"{i}"
-            f"<{self.__class__.__name__}"
-            f"table_name='{self._table_name}' "
-            f"path='{self._path}' "
-            f"source='{self._source}' "
-            f"schema='{self._schema}' "
-            f"options='{self._options}'>"
-        )
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>{self.__class__.__name__}</b><br />
-              table_name: {self._table_name} <br />
-              path: {self._path} <br />
-              source: {self._source} <br />
-              schema: {self._schema} <br />
-              options: {self._options} <br />
-            {self._child_repr_()}
-           </li>
-        </ul>
-        """
 
 
 class CreateTable(LogicalPlan):
@@ -2005,50 +1416,21 @@ class CreateTable(LogicalPlan):
         self._options = options
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation()
-        plan.create_table.table_name = self._table_name
+        plan = proto.Relation(catalog=proto.Catalog(create_table=proto.CreateTable()))
+        plan.catalog.create_table.table_name = self._table_name
         if self._path is not None:
-            plan.create_table.path = self._path
+            plan.catalog.create_table.path = self._path
         if self._source is not None:
-            plan.create_table.source = self._source
+            plan.catalog.create_table.source = self._source
         if self._description is not None:
-            plan.create_table.description = self._description
+            plan.catalog.create_table.description = self._description
         if self._schema is not None:
-            plan.create_table.schema.CopyFrom(pyspark_types_to_proto_types(self._schema))
+            plan.catalog.create_table.schema.CopyFrom(pyspark_types_to_proto_types(self._schema))
         for k in self._options.keys():
             v = self._options.get(k)
             if v is not None:
-                plan.create_table.options[k] = v
+                plan.catalog.create_table.options[k] = v
         return plan
-
-    def print(self, indent: int = 0) -> str:
-        i = " " * indent
-        return (
-            f"{i}"
-            f"<{self.__class__.__name__}"
-            f"table_name='{self._table_name}' "
-            f"path='{self._path}' "
-            f"source='{self._source}' "
-            f"description='{self._description}' "
-            f"schema='{self._schema}' "
-            f"options='{self._options}'>"
-        )
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>{self.__class__.__name__}</b><br />
-              table_name: {self._table_name} <br />
-              path: {self._path} <br />
-              source: {self._source} <br />
-              description: {self._description} <br />
-              schema: {self._schema} <br />
-              options: {self._options} <br />
-            {self._child_repr_()}
-           </li>
-        </ul>
-        """
 
 
 class DropTempView(LogicalPlan):
@@ -2057,24 +1439,9 @@ class DropTempView(LogicalPlan):
         self._view_name = view_name
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation()
-        plan.drop_temp_view.view_name = self._view_name
+        plan = proto.Relation(catalog=proto.Catalog(drop_temp_view=proto.DropTempView()))
+        plan.catalog.drop_temp_view.view_name = self._view_name
         return plan
-
-    def print(self, indent: int = 0) -> str:
-        i = " " * indent
-        return f"{i}" f"<{self.__class__.__name__} view_name='{self._view_name}'>"
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>{self.__class__.__name__}</b><br />
-              view_name: {self._view_name} <br />
-            {self._child_repr_()}
-           </li>
-        </ul>
-        """
 
 
 class DropGlobalTempView(LogicalPlan):
@@ -2083,24 +1450,11 @@ class DropGlobalTempView(LogicalPlan):
         self._view_name = view_name
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation()
-        plan.drop_global_temp_view.view_name = self._view_name
+        plan = proto.Relation(
+            catalog=proto.Catalog(drop_global_temp_view=proto.DropGlobalTempView())
+        )
+        plan.catalog.drop_global_temp_view.view_name = self._view_name
         return plan
-
-    def print(self, indent: int = 0) -> str:
-        i = " " * indent
-        return f"{i}" f"<{self.__class__.__name__} view_name='{self._view_name}'>"
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>{self.__class__.__name__}</b><br />
-              view_name: {self._view_name} <br />
-            {self._child_repr_()}
-           </li>
-        </ul>
-        """
 
 
 class RecoverPartitions(LogicalPlan):
@@ -2109,24 +1463,9 @@ class RecoverPartitions(LogicalPlan):
         self._table_name = table_name
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation()
-        plan.recover_partitions.table_name = self._table_name
+        plan = proto.Relation(catalog=proto.Catalog(recover_partitions=proto.RecoverPartitions()))
+        plan.catalog.recover_partitions.table_name = self._table_name
         return plan
-
-    def print(self, indent: int = 0) -> str:
-        i = " " * indent
-        return f"{i}" f"<{self.__class__.__name__} table_name='{self._table_name}'>"
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>{self.__class__.__name__}</b><br />
-              table_name: {self._table_name} <br />
-            {self._child_repr_()}
-           </li>
-        </ul>
-        """
 
 
 # TODO(SPARK-41612): Support Catalog.isCached
@@ -2136,24 +1475,9 @@ class RecoverPartitions(LogicalPlan):
 #         self._table_name = table_name
 #
 #     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-#         plan = proto.Relation()
-#         plan.is_cached.table_name = self._table_name
+#         plan = proto.Relation(catalog=proto.Catalog(is_cached=proto.IsCahed()))
+#         plan.catalog.is_cached.table_name = self._table_name
 #         return plan
-#
-#     def print(self, indent: int = 0) -> str:
-#         i = " " * indent
-#         return f"{i}" f"<{self.__class__.__name__} table_name='{self._table_name}'>"
-#
-#     def _repr_html_(self) -> str:
-#         return f"""
-#         <ul>
-#            <li>
-#               <b>{self.__class__.__name__}</b><br />
-#               table_name: {self._table_name} <br />
-#             {self._child_repr_()}
-#            </li>
-#         </ul>
-#         """
 #
 #
 # TODO(SPARK-41600): Support Catalog.cacheTable
@@ -2163,24 +1487,9 @@ class RecoverPartitions(LogicalPlan):
 #         self._table_name = table_name
 #
 #     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-#         plan = proto.Relation()
-#         plan.cache_table.table_name = self._table_name
+#         plan = proto.Relation(catalog=proto.Catalog(cache_table=proto.CacheTable()))
+#         plan.catalog.cache_table.table_name = self._table_name
 #         return plan
-#
-#     def print(self, indent: int = 0) -> str:
-#         i = " " * indent
-#         return f"{i}" f"<{self.__class__.__name__} table_name='{self._table_name}'>"
-#
-#     def _repr_html_(self) -> str:
-#         return f"""
-#         <ul>
-#            <li>
-#               <b>{self.__class__.__name__}</b><br />
-#               table_name: {self._table_name} <br />
-#             {self._child_repr_()}
-#            </li>
-#         </ul>
-#         """
 #
 #
 # TODO(SPARK-41623): Support Catalog.uncacheTable
@@ -2190,24 +1499,9 @@ class RecoverPartitions(LogicalPlan):
 #         self._table_name = table_name
 #
 #     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-#         plan = proto.Relation()
-#         plan.uncache_table.table_name = self._table_name
+#         plan = proto.Relation(catalog=proto.Catalog(uncache_table=proto.UncacheTable()))
+#         plan.catalog.uncache_table.table_name = self._table_name
 #         return plan
-#
-#     def print(self, indent: int = 0) -> str:
-#         i = " " * indent
-#         return f"{i}" f"<{self.__class__.__name__} table_name='{self._table_name}'>"
-#
-#     def _repr_html_(self) -> str:
-#         return f"""
-#         <ul>
-#            <li>
-#               <b>{self.__class__.__name__}</b><br />
-#               table_name: {self._table_name} <br />
-#             {self._child_repr_()}
-#            </li>
-#         </ul>
-#         """
 
 
 class ClearCache(LogicalPlan):
@@ -2215,21 +1509,7 @@ class ClearCache(LogicalPlan):
         super().__init__(None)
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        return proto.Relation(clear_cache=proto.ClearCache())
-
-    def print(self, indent: int = 0) -> str:
-        i = " " * indent
-        return f"{i}" f"<{self.__class__.__name__}>"
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>{self.__class__.__name__}</b>
-            {self._child_repr_()}
-           </li>
-        </ul>
-        """
+        return proto.Relation(catalog=proto.Catalog(clear_cache=proto.ClearCache()))
 
 
 class RefreshTable(LogicalPlan):
@@ -2238,24 +1518,9 @@ class RefreshTable(LogicalPlan):
         self._table_name = table_name
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation()
-        plan.refresh_table.table_name = self._table_name
+        plan = proto.Relation(catalog=proto.Catalog(refresh_table=proto.RefreshTable()))
+        plan.catalog.refresh_table.table_name = self._table_name
         return plan
-
-    def print(self, indent: int = 0) -> str:
-        i = " " * indent
-        return f"{i}" f"<{self.__class__.__name__} table_name='{self._table_name}'>"
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>{self.__class__.__name__}</b><br />
-              table_name: {self._table_name} <br />
-            {self._child_repr_()}
-           </li>
-        </ul>
-        """
 
 
 class RefreshByPath(LogicalPlan):
@@ -2264,24 +1529,9 @@ class RefreshByPath(LogicalPlan):
         self._path = path
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation()
-        plan.refresh_by_path.path = self._path
+        plan = proto.Relation(catalog=proto.Catalog(refresh_by_path=proto.RefreshByPath()))
+        plan.catalog.refresh_by_path.path = self._path
         return plan
-
-    def print(self, indent: int = 0) -> str:
-        i = " " * indent
-        return f"{i}" f"<{self.__class__.__name__} path='{self._path}'>"
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>{self.__class__.__name__}</b><br />
-              db_name: {self._path} <br />
-            {self._child_repr_()}
-           </li>
-        </ul>
-        """
 
 
 class CurrentCatalog(LogicalPlan):
@@ -2289,21 +1539,7 @@ class CurrentCatalog(LogicalPlan):
         super().__init__(None)
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        return proto.Relation(current_catalog=proto.CurrentCatalog())
-
-    def print(self, indent: int = 0) -> str:
-        i = " " * indent
-        return f"{i}" f"<{self.__class__.__name__}>"
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>{self.__class__.__name__}</b>
-            {self._child_repr_()}
-           </li>
-        </ul>
-        """
+        return proto.Relation(catalog=proto.Catalog(current_catalog=proto.CurrentCatalog()))
 
 
 class SetCurrentCatalog(LogicalPlan):
@@ -2312,24 +1548,9 @@ class SetCurrentCatalog(LogicalPlan):
         self._catalog_name = catalog_name
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation()
-        plan.set_current_catalog.catalog_name = self._catalog_name
+        plan = proto.Relation(catalog=proto.Catalog(set_current_catalog=proto.SetCurrentCatalog()))
+        plan.catalog.set_current_catalog.catalog_name = self._catalog_name
         return plan
-
-    def print(self, indent: int = 0) -> str:
-        i = " " * indent
-        return f"{i}" f"<{self.__class__.__name__} catalog_name='{self._catalog_name}'>"
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>{self.__class__.__name__}</b><br />
-              catalog_name: {self._catalog_name} <br />
-            {self._child_repr_()}
-           </li>
-        </ul>
-        """
 
 
 class ListCatalogs(LogicalPlan):
@@ -2337,18 +1558,4 @@ class ListCatalogs(LogicalPlan):
         super().__init__(None)
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        return proto.Relation(list_catalogs=proto.ListCatalogs())
-
-    def print(self, indent: int = 0) -> str:
-        i = " " * indent
-        return f"{i}" f"<{self.__class__.__name__}>"
-
-    def _repr_html_(self) -> str:
-        return f"""
-        <ul>
-           <li>
-              <b>{self.__class__.__name__}</b>
-            {self._child_repr_()}
-           </li>
-        </ul>
-        """
+        return proto.Relation(catalog=proto.Catalog(list_catalogs=proto.ListCatalogs()))

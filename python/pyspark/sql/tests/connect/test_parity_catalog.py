@@ -37,10 +37,8 @@ class CatalogParityTests(CatalogTestsMixin, ReusedSQLTestCase):
 
     @classmethod
     def tearDownClass(cls):
-        # TODO(SPARK-41529): Implement stop in RemoteSparkSession.
-        #  Stop the regular Spark session (server) too.
-        cls.spark = cls._spark
         super(CatalogParityTests, cls).tearDownClass()
+        cls._spark.stop()
         del os.environ["SPARK_REMOTE"]
 
     # TODO(SPARK-41612): Support Catalog.isCached

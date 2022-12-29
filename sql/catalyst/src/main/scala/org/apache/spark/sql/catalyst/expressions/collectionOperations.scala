@@ -4805,44 +4805,6 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         $resultCode""", isNull = FalseLiteral)
     }
-
-//    nullSafeCodeGen(ctx, ev, (arr, pos, item) => {
-//      val posIdx = ctx.freshName("posIdx")
-//      val adjustedAllocIdx = ctx.freshName("adjustedAllocIdx")
-//      val resLength = ctx.freshName("resLength")
-//      val i = ctx.freshName("i")
-//      val values = ctx.freshName("values")
-//
-//      val allocation = CodeGenerator.createArrayData(
-//        values, elementType, resLength, s"$prettyName failed.")
-//      val assignment = CodeGenerator.createArrayAssignment(values, elementType, arr,
-//        adjustedAllocIdx, i, resultArrayElementNullable)
-//
-//      val defaultIntValue = CodeGenerator.defaultValue(CodeGenerator.JAVA_INT, false)
-//      s"""
-//         |${CodeGenerator.JAVA_INT} $posIdx = 0;
-//         |${CodeGenerator.JAVA_INT} $resLength = $defaultIntValue;
-//         |${CodeGenerator.JAVA_INT} $adjustedAllocIdx = $defaultIntValue;
-//         |if ($pos < 0) {
-//         |  $posIdx = $pos + $arr.numElements();
-//         |} else if ($pos > 0) {
-//         |  $posIdx = $pos - 1;
-//         |}
-//         |$resLength = $arr.numElements() + 1;
-//         |if ($posIdx < 0 || $posIdx > $arr.numElements()) {
-//         |  ${ev.isNull} = true;
-//         |  ${ev.value} = null;
-//         |} else {
-//         |  $allocation
-//         |  for (int $i = 0; $i < $arr.numElements(); $i ++) {
-//         |    $adjustedAllocIdx = $i >= $posIdx ? $i + 1 : $i;
-//         |    $assignment
-//         |  }
-//         |  ${CodeGenerator.setArrayElement(values, elementType, posIdx, item)}
-//         |  ${ev.value} = $values;
-//         |}
-//       """.stripMargin
-//    })
   }
 
   override def first: Expression = srcArrayExpr
@@ -4861,4 +4823,33 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
   override protected def withNewChildrenInternal(
       newSrcArrayExpr: Expression, newPosExpr: Expression, newItemExpr: Expression): ArrayInsert =
     copy(srcArrayExpr = newSrcArrayExpr, posExpr = newPosExpr, itemExpr = newItemExpr)
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(array) - Removes null values from the array.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 2, 3, null));
+       [1,2,3]
+      > SELECT _FUNC_(array("a", "b", "c"));
+       ["a","b","c"]
+  """,
+  group = "array_funcs",
+  since = "3.4.0")
+case class ArrayCompact(child: Expression)
+  extends RuntimeReplaceable with UnaryLike[Expression] with ImplicitCastInputTypes {
+
+  lazy val isNotNull: Expression => Expression = x => IsNotNull(x)
+  lazy val lv = NamedLambdaVariable("arg",
+    child.dataType.asInstanceOf[ArrayType].elementType, true)
+  lazy val lambda = LambdaFunction(isNotNull(lv), Seq(lv))
+
+  override lazy val replacement: Expression = ArrayFilter(child, lambda)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
+
+  override def prettyName: String = "array_compact"
+
+  override protected def withNewChildInternal(newChild: Expression): ArrayCompact =
+    copy(child = newChild)
 }

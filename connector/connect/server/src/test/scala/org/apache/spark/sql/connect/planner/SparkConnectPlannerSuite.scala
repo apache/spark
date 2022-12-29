@@ -706,4 +706,110 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       }
     }
   }
+
+  test("RepartitionByExpression") {
+    val input = proto.Relation
+      .newBuilder()
+      .setSql(
+        proto.SQL
+          .newBuilder()
+          .setQuery("select id from range(10)")
+          .build())
+
+    val logical = transform(
+      proto.Relation
+        .newBuilder()
+        .setRepartitionByExpression(
+          proto.RepartitionByExpression
+            .newBuilder()
+            .setInput(input)
+            .setNumPartitions(3)
+            .addPartitionExprs(proto.Expression.newBuilder
+              .setExpressionString(proto.Expression.ExpressionString.newBuilder
+                .setExpression("id % 2"))))
+        .build())
+
+    val df = Dataset.ofRows(spark, logical)
+    assert(df.rdd.partitions.length == 3)
+    val valueToPartition = df
+      .selectExpr("id", "spark_partition_id()")
+      .rdd
+      .map(row => (row.getLong(0), row.getInt(1)))
+      .collectAsMap()
+    for ((value, partition) <- valueToPartition) {
+      if (value % 2 == 0) {
+        assert(partition == valueToPartition(0), "dataframe is not partitioned by `id % 2`")
+      } else {
+        assert(partition == valueToPartition(1), "dataframe is not partitioned by `id % 2`")
+      }
+    }
+  }
+
+  test("Repartition by range") {
+    val input = proto.Relation
+      .newBuilder()
+      .setSql(
+        proto.SQL
+          .newBuilder()
+          .setQuery("select id from range(10)")
+          .build())
+
+    val logical = transform(
+      proto.Relation
+        .newBuilder()
+        .setRepartitionByExpression(
+          proto.RepartitionByExpression
+            .newBuilder()
+            .setInput(input)
+            .setNumPartitions(3)
+            .addPartitionExprs(
+              proto.Expression.newBuilder
+                .setSortOrder(
+                  proto.Expression.SortOrder.newBuilder
+                    .setDirectionValue(
+                      proto.Expression.SortOrder.SortDirection.SORT_DIRECTION_ASCENDING_VALUE)
+                    .setNullOrdering(proto.Expression.SortOrder.NullOrdering.SORT_NULLS_FIRST)
+                    .setChild(proto.Expression
+                      .newBuilder()
+                      .setExpressionString(
+                        proto.Expression.ExpressionString.newBuilder().setExpression("id"))))))
+        .build())
+
+    val df = Dataset.ofRows(spark, logical)
+    assert(df.rdd.partitions.length == 3)
+    df.rdd.foreachPartition { p =>
+      var previousValue = -1L
+      p.foreach { r =>
+        val v = r.getLong(0)
+        if (previousValue != -1L) {
+          assert(previousValue < v, "partition is not ordered.")
+        }
+        previousValue = v
+      }
+    }
+  }
+
+  test("RepartitionByExpression with wrong parameters") {
+    val input = proto.Relation
+      .newBuilder()
+      .setSql(
+        proto.SQL
+          .newBuilder()
+          .setQuery("select id from range(10)")
+          .build())
+
+    val logical = transform(
+      proto.Relation
+        .newBuilder()
+        .setRepartitionByExpression(
+          proto.RepartitionByExpression
+            .newBuilder()
+            .setInput(input)
+            .addPartitionExprs(proto.Expression.newBuilder
+              .setExpressionString(proto.Expression.ExpressionString.newBuilder
+                .setExpression("illegal"))))
+        .build())
+
+    intercept[AnalysisException](Dataset.ofRows(spark, logical))
+  }
 }
