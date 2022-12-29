@@ -757,6 +757,52 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             for x in c:
                 pass
 
+    def test_column_string_ops(self):
+        # SPARK-41764: test string ops
+        query = """
+            SELECT * FROM VALUES
+            (1, 'abcdef', 'ghij', 'hello world', 'a'),
+            (2, 'abcd', 'efghij', 'how are you', 'd')
+            AS tab(a, b, c, d, e)
+            """
+
+        # +---+------+------+-----------+---+
+        # |  a|     b|     c|          d|  e|
+        # +---+------+------+-----------+---+
+        # |  1|abcdef|  ghij|hello world|  a|
+        # |  2|  abcd|efghij|how are you|  d|
+        # +---+------+------+-----------+---+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        self.assert_eq(
+            cdf.select(
+                cdf.b.startswith("a"), cdf["c"].startswith("g"), cdf["b"].startswith(cdf.e)
+            ).toPandas(),
+            sdf.select(
+                sdf.b.startswith("a"), sdf["c"].startswith("g"), sdf["b"].startswith(sdf.e)
+            ).toPandas(),
+        )
+
+        self.assert_eq(
+            cdf.select(
+                cdf.b.endswith("a"), cdf["c"].endswith("j"), cdf["b"].endswith(cdf.e)
+            ).toPandas(),
+            sdf.select(
+                sdf.b.endswith("a"), sdf["c"].endswith("j"), sdf["b"].endswith(sdf.e)
+            ).toPandas(),
+        )
+
+        self.assert_eq(
+            cdf.select(
+                cdf.b.contains("a"), cdf["c"].contains("j"), cdf["b"].contains(cdf.e)
+            ).toPandas(),
+            sdf.select(
+                sdf.b.contains("a"), sdf["c"].contains("j"), sdf["b"].contains(sdf.e)
+            ).toPandas(),
+        )
+
 
 if __name__ == "__main__":
     import unittest

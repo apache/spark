@@ -160,8 +160,8 @@ class Column:
 
     # string methods
     contains = _bin_op("contains", PySparkColumn.contains.__doc__)
-    startswith = _bin_op("startsWith", PySparkColumn.startswith.__doc__)
-    endswith = _bin_op("endsWith", PySparkColumn.endswith.__doc__)
+    startswith = _bin_op("startswith", PySparkColumn.startswith.__doc__)
+    endswith = _bin_op("endswith", PySparkColumn.endswith.__doc__)
 
     def when(self, condition: "Column", value: Any) -> "Column":
         if not isinstance(condition, Column):
