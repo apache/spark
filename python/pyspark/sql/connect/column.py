@@ -28,6 +28,7 @@ from typing import (
     Optional,
 )
 
+from pyspark import SparkContext, SparkConf
 from pyspark.sql.types import DataType
 from pyspark.sql.column import Column as PySparkColumn
 
@@ -390,3 +391,62 @@ class Column:
 
 
 Column.__doc__ = PySparkColumn.__doc__
+
+
+def _test() -> None:
+    import os
+    import sys
+    import doctest
+    from pyspark.sql import SparkSession as PySparkSession
+    from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    if should_test_connect:
+        import pyspark.sql.connect.column
+
+        globs = pyspark.sql.connect.column.__dict__.copy()
+        # Works around to create a regular Spark session
+        sc = SparkContext("local[4]", "sql.connect.column tests", conf=SparkConf())
+        globs["_spark"] = PySparkSession(sc, options={"spark.app.name": "sql.connect.column tests"})
+
+        # Creates a remote Spark session.
+        os.environ["SPARK_REMOTE"] = "sc://localhost"
+        globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
+
+        # TODO(SPARK-41751): Support Column.bitwiseAND,bitwiseOR,bitwiseXOR,eqNullSafe,isNotNull,
+        # isNull,isin
+        del pyspark.sql.connect.column.Column.bitwiseAND.__doc__
+        del pyspark.sql.connect.column.Column.bitwiseOR.__doc__
+        del pyspark.sql.connect.column.Column.bitwiseXOR.__doc__
+        del pyspark.sql.connect.column.Column.eqNullSafe.__doc__
+        del pyspark.sql.connect.column.Column.isNotNull.__doc__
+        del pyspark.sql.connect.column.Column.isNull.__doc__
+        del pyspark.sql.connect.column.Column.isin.__doc__
+        # TODO(SPARK-41756): Fix createDataFrame
+        del pyspark.sql.connect.column.Column.getField.__doc__
+        del pyspark.sql.connect.column.Column.getItem.__doc__
+        # TODO(SPARK-41758): Support Window functions
+        del pyspark.sql.connect.column.Column.over.__doc__
+
+        (failure_count, test_count) = doctest.testmod(
+            pyspark.sql.connect.column,
+            globs=globs,
+            optionflags=doctest.ELLIPSIS
+            | doctest.NORMALIZE_WHITESPACE
+            | doctest.IGNORE_EXCEPTION_DETAIL,
+        )
+
+        globs["spark"].stop()
+        globs["_spark"].stop()
+        if failure_count:
+            sys.exit(-1)
+    else:
+        print(
+            f"Skipping pyspark.sql.connect.column doctests: {connect_requirement_message}",
+            file=sys.stderr,
+        )
+
+
+if __name__ == "__main__":
+    _test()
