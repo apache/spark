@@ -112,6 +112,46 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             df4.filter(df4.name.isNotNull()).toPandas(),
         )
 
+    def test_column_with_null(self):
+        # SPARK-41751: test isNull, isNotNull, eqNullSafe
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        query = """
+            SELECT * FROM VALUES
+            (1, 1, NULL), (2, NULL, NULL), (3, 3, 1)
+            AS tab(a, b, c)
+            """
+
+        # +---+----+----+
+        # |  a|   b|   c|
+        # +---+----+----+
+        # |  1|   1|null|
+        # |  2|null|null|
+        # |  3|   3|   1|
+        # +---+----+----+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        # test isNull
+        self.assert_eq(
+            cdf.select(cdf.a.isNull(), cdf["b"].isNull(), CF.col("c").isNull()).toPandas(),
+            sdf.select(sdf.a.isNull(), sdf["b"].isNull(), SF.col("c").isNull()).toPandas(),
+        )
+
+        # test isNotNull
+        self.assert_eq(
+            cdf.select(cdf.a.isNotNull(), cdf["b"].isNotNull(), CF.col("c").isNotNull()).toPandas(),
+            sdf.select(sdf.a.isNotNull(), sdf["b"].isNotNull(), SF.col("c").isNotNull()).toPandas(),
+        )
+
+        # test eqNullSafe
+        self.assert_eq(
+            cdf.select(cdf.a.eqNullSafe(cdf.b), cdf["b"].eqNullSafe(CF.col("c"))).toPandas(),
+            sdf.select(sdf.a.eqNullSafe(sdf.b), sdf["b"].eqNullSafe(SF.col("c"))).toPandas(),
+        )
+
     def test_invalid_ops(self):
         query = """
             SELECT * FROM VALUES

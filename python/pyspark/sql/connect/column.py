@@ -124,7 +124,7 @@ class Column:
     __ge__ = _bin_op(">=")
     __le__ = _bin_op("<=")
 
-    eqNullSafe = _bin_op("eqNullSafe", PySparkColumn.eqNullSafe.__doc__)
+    eqNullSafe = _bin_op("<=>", PySparkColumn.eqNullSafe.__doc__)
 
     __neg__ = _func_op("negate")
 
@@ -148,8 +148,8 @@ class Column:
     bitwiseAND = _bin_op("bitwiseAND", PySparkColumn.bitwiseAND.__doc__)
     bitwiseXOR = _bin_op("bitwiseXOR", PySparkColumn.bitwiseXOR.__doc__)
 
-    isNull = _unary_op("isNull", PySparkColumn.isNull.__doc__)
-    isNotNull = _unary_op("isNotNull", PySparkColumn.isNotNull.__doc__)
+    isNull = _unary_op("isnull", PySparkColumn.isNull.__doc__)
+    isNotNull = _unary_op("isnotnull", PySparkColumn.isNotNull.__doc__)
 
     def __ne__(  # type: ignore[override]
         self,
