@@ -414,7 +414,8 @@ def _test() -> None:
         os.environ["SPARK_REMOTE"] = "sc://localhost"
         globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
 
-        # TODO(SPARK-41751): Support Column.bitwiseAND,bitwiseOR,bitwiseXOR,eqNullSafe,isNotNull,isNull,isin
+        # TODO(SPARK-41751): Support Column.bitwiseAND,bitwiseOR,bitwiseXOR,eqNullSafe,isNotNull,
+        # isNull,isin
         del pyspark.sql.connect.column.Column.bitwiseAND.__doc__
         del pyspark.sql.connect.column.Column.bitwiseOR.__doc__
         del pyspark.sql.connect.column.Column.bitwiseXOR.__doc__
