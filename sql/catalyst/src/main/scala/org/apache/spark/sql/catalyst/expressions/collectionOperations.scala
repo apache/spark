@@ -4660,63 +4660,13 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
       val value2 = second.eval(input)
       if (value2 != null) {
         val value3 = third.eval(input)
-        if (value3 != null) {
-          return nonNullItemEval(value1, value2, value3)
-        } else {
-          return nullItemEval(value1, value2)
-        }
+        return maybeNullItemEval(value1, value2, value3)
       }
     }
     null
   }
 
-//  override def nullSafeEval(arr: Any, pos: Any, item: Any): Any = {
-//    val baseArr = arr.asInstanceOf[ArrayData]
-//    val posInt = pos.asInstanceOf[Int]
-//    val arrayElementType = dataType.asInstanceOf[ArrayType].elementType
-//
-//    val insertionIndex = if (posInt > 0) {
-//      posInt - 1
-//    } else if (posInt < 0) {
-//      posInt + baseArr.numElements()
-//    } else {
-//      posInt
-//    }
-//
-//    val newArrayLength = if (insertionIndex >= 0) {
-//      math.max(baseArr.numElements() + 1, insertionIndex + 1)
-//    } else {
-//      math.abs(insertionIndex) + baseArr.numElements() + 1
-//    }
-//
-//    val newArray = new Array[Any](newArrayLength)
-//    baseArr.foreach(arrayElementType, (i, v) => {
-//      var elementPosition = i
-//      if (insertionIndex < 0) {
-//        elementPosition = elementPosition + 1 + math.abs(insertionIndex)
-//      }
-//      if (i >= insertionIndex && insertionIndex >= 0) {
-//        elementPosition = elementPosition + 1
-//      }
-//      newArray(elementPosition) = v
-//    })
-//
-//    val newItemElemPosition = if (insertionIndex >= 0) {
-//      insertionIndex
-//    } else {
-//      0
-//    }
-//
-//    if (item == null) {
-//
-//    } else {
-//      newArray(newItemElemPosition) = item
-//    }
-//
-//    new GenericArrayData(newArray)
-//  }
-
-  def nonNullItemEval(arr: Any, pos: Any, item: Any): Any = {
+  def maybeNullItemEval(arr: Any, pos: Any, item: Any): Any = {
       val baseArr = arr.asInstanceOf[ArrayData]
       val posInt = pos.asInstanceOf[Int]
       val arrayElementType = dataType.asInstanceOf[ArrayType].elementType
@@ -4756,46 +4706,6 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
       newArray(newItemElemPosition) = item
 
       new GenericArrayData(newArray)
-  }
-
-  def nullItemEval(arr: Any, pos: Any): Any = {
-    val baseArr = arr.asInstanceOf[ArrayData]
-    val posInt = pos.asInstanceOf[Int]
-    val arrayElementType = dataType.asInstanceOf[ArrayType].elementType
-
-    val insertionIndex = if (posInt > 0) {
-      posInt - 1
-    } else if (posInt < 0) {
-      posInt + baseArr.numElements()
-    } else {
-      posInt
-    }
-
-    val newArrayLength = if (insertionIndex >= 0) {
-      math.max(baseArr.numElements() + 1, insertionIndex + 1)
-    } else {
-      math.abs(insertionIndex) + baseArr.numElements() + 1
-    }
-
-    val newArray = new Array[Any](newArrayLength)
-    baseArr.foreach(arrayElementType, (i, v) => {
-      var elementPosition = i
-      if (insertionIndex < 0) {
-        elementPosition = elementPosition + 1 + math.abs(insertionIndex)
-      }
-      if (i >= insertionIndex && insertionIndex >= 0) {
-        elementPosition = elementPosition + 1
-      }
-      newArray(elementPosition) = v
-    })
-
-    val newItemElemPosition = if (insertionIndex >= 0) {
-      insertionIndex
-    } else {
-      0
-    }
-
-    new GenericArrayData(newArray)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
