@@ -68,4 +68,4 @@ RUN pypy3 -m pip install numpy 'pandas<=1.5.2' scipy coverage matplotlib
 RUN python3.9 -m pip install numpy pyarrow 'pandas<=1.5.2' scipy unittest-xml-reporting plotly>=4.8 sklearn 'mlflow>=1.0' coverage matplotlib openpyxl 'memory-profiler==0.60.0'
 
 # Add Python deps for Spark Connect.
-RUN python3.9 -m pip install grpcio protobuf
+RUN python3.9 -m pip install grpcio protobuf googleapis-common-protos grpcio-status

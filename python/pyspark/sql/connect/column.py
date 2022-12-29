@@ -266,6 +266,10 @@ class Column:
 
     alias.__doc__ = PySparkColumn.alias.__doc__
 
+    name = alias
+
+    name.__doc__ = PySparkColumn.name.__doc__
+
     def asc(self) -> "Column":
         return self.asc_nulls_first()
 
@@ -283,9 +287,6 @@ class Column:
 
     def desc_nulls_last(self) -> "Column":
         return Column(SortOrder(self._expr, ascending=False, nullsFirst=False))
-
-    def name(self) -> str:
-        return self._expr.name()
 
     def cast(self, dataType: Union[DataType, str]) -> "Column":
         if isinstance(dataType, (DataType, str)):

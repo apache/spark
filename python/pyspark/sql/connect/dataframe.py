@@ -841,6 +841,21 @@ class DataFrame:
 
     describe.__doc__ = PySparkDataFrame.describe.__doc__
 
+    def cov(self, col1: str, col2: str) -> float:
+        if not isinstance(col1, str):
+            raise TypeError("col1 should be a string.")
+        if not isinstance(col2, str):
+            raise TypeError("col2 should be a string.")
+        pdf = DataFrame.withPlan(
+            plan.StatCov(child=self._plan, col1=col1, col2=col2),
+            session=self._session,
+        ).toPandas()
+
+        assert pdf is not None
+        return pdf["cov"][0]
+
+    cov.__doc__ = PySparkDataFrame.cov.__doc__
+
     def crosstab(self, col1: str, col2: str) -> "DataFrame":
         if not isinstance(col1, str):
             raise TypeError(f"'col1' must be str, but got {type(col1).__name__}")
@@ -892,7 +907,7 @@ class DataFrame:
         if self._session is None:
             raise Exception("Cannot collect on empty session.")
         query = self._plan.to_proto(self._session.client)
-        return self._session.client._to_pandas(query)
+        return self._session.client.to_pandas(query)
 
     toPandas.__doc__ = PySparkDataFrame.toPandas.__doc__
 
@@ -1195,6 +1210,11 @@ DataFrameNaFunctions.__doc__ = PySparkDataFrameNaFunctions.__doc__
 class DataFrameStatFunctions:
     def __init__(self, df: DataFrame):
         self.df = df
+
+    def cov(self, col1: str, col2: str) -> float:
+        return self.df.cov(col1, col2)
+
+    cov.__doc__ = DataFrame.cov.__doc__
 
     def crosstab(self, col1: str, col2: str) -> DataFrame:
         return self.df.crosstab(col1, col2)

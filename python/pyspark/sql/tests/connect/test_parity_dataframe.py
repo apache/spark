@@ -86,6 +86,10 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedSQLTestCase):
         super().test_fillna()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
+    def test_freqItems(self):
+        super().test_freqItems()
+
+    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_generic_hints(self):
         super().test_generic_hints()
 
@@ -144,6 +148,10 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedSQLTestCase):
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_to(self):
         super().test_to()
+
+    @unittest.skip("Fails in Spark Connect, should enable.")
+    def test_toDF_with_schema_string(self):
+        super().test_toDF_with_schema_string()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_to_local_iterator(self):

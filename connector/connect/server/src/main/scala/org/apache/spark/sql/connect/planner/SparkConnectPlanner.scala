@@ -88,6 +88,7 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Relation.RelTypeCase.REPLACE => transformReplace(rel.getReplace)
       case proto.Relation.RelTypeCase.SUMMARY => transformStatSummary(rel.getSummary)
       case proto.Relation.RelTypeCase.DESCRIBE => transformStatDescribe(rel.getDescribe)
+      case proto.Relation.RelTypeCase.COV => transformStatCov(rel.getCov)
       case proto.Relation.RelTypeCase.CROSSTAB =>
         transformStatCrosstab(rel.getCrosstab)
       case proto.Relation.RelTypeCase.TO_SCHEMA => transformToSchema(rel.getToSchema)
@@ -98,53 +99,66 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Relation.RelTypeCase.WITH_COLUMNS => transformWithColumns(rel.getWithColumns)
       case proto.Relation.RelTypeCase.HINT => transformHint(rel.getHint)
       case proto.Relation.RelTypeCase.UNPIVOT => transformUnpivot(rel.getUnpivot)
+      case proto.Relation.RelTypeCase.REPARTITION_BY_EXPRESSION =>
+        transformRepartitionByExpression(rel.getRepartitionByExpression)
       case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
         throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
 
       // Catalog API (internal-only)
-      case proto.Relation.RelTypeCase.CURRENT_DATABASE =>
-        transformCurrentDatabase(rel.getCurrentDatabase)
-      case proto.Relation.RelTypeCase.SET_CURRENT_DATABASE =>
-        transformSetCurrentDatabase(rel.getSetCurrentDatabase)
-      case proto.Relation.RelTypeCase.LIST_DATABASES =>
-        transformListDatabases(rel.getListDatabases)
-      case proto.Relation.RelTypeCase.LIST_TABLES => transformListTables(rel.getListTables)
-      case proto.Relation.RelTypeCase.LIST_FUNCTIONS =>
-        transformListFunctions(rel.getListFunctions)
-      case proto.Relation.RelTypeCase.LIST_COLUMNS => transformListColumns(rel.getListColumns)
-      case proto.Relation.RelTypeCase.GET_DATABASE => transformGetDatabase(rel.getGetDatabase)
-      case proto.Relation.RelTypeCase.GET_TABLE => transformGetTable(rel.getGetTable)
-      case proto.Relation.RelTypeCase.GET_FUNCTION => transformGetFunction(rel.getGetFunction)
-      case proto.Relation.RelTypeCase.DATABASE_EXISTS =>
-        transformDatabaseExists(rel.getDatabaseExists)
-      case proto.Relation.RelTypeCase.TABLE_EXISTS => transformTableExists(rel.getTableExists)
-      case proto.Relation.RelTypeCase.FUNCTION_EXISTS =>
-        transformFunctionExists(rel.getFunctionExists)
-      case proto.Relation.RelTypeCase.CREATE_EXTERNAL_TABLE =>
-        transformCreateExternalTable(rel.getCreateExternalTable)
-      case proto.Relation.RelTypeCase.CREATE_TABLE => transformCreateTable(rel.getCreateTable)
-      case proto.Relation.RelTypeCase.DROP_TEMP_VIEW => transformDropTempView(rel.getDropTempView)
-      case proto.Relation.RelTypeCase.DROP_GLOBAL_TEMP_VIEW =>
-        transformDropGlobalTempView(rel.getDropGlobalTempView)
-      case proto.Relation.RelTypeCase.RECOVER_PARTITIONS =>
-        transformRecoverPartitions(rel.getRecoverPartitions)
-// TODO(SPARK-41612): Support Catalog.isCached
-//      case proto.Relation.RelTypeCase.IS_CACHED => transformIsCached(rel.getIsCached)
-// TODO(SPARK-41600): Support Catalog.cacheTable
-//      case proto.Relation.RelTypeCase.CACHE_TABLE => transformCacheTable(rel.getCacheTable)
-// TODO(SPARK-41623): Support Catalog.uncacheTable
-//      case proto.Relation.RelTypeCase.UNCACHE_TABLE => transformUncacheTable(rel.getUncacheTable)
-      case proto.Relation.RelTypeCase.CLEAR_CACHE => transformClearCache(rel.getClearCache)
-      case proto.Relation.RelTypeCase.REFRESH_TABLE => transformRefreshTable(rel.getRefreshTable)
-      case proto.Relation.RelTypeCase.REFRESH_BY_PATH =>
-        transformRefreshByPath(rel.getRefreshByPath)
-      case proto.Relation.RelTypeCase.CURRENT_CATALOG =>
-        transformCurrentCatalog(rel.getCurrentCatalog)
-      case proto.Relation.RelTypeCase.SET_CURRENT_CATALOG =>
-        transformSetCurrentCatalog(rel.getSetCurrentCatalog)
-      case proto.Relation.RelTypeCase.LIST_CATALOGS => transformListCatalogs(rel.getListCatalogs)
+      case proto.Relation.RelTypeCase.CATALOG => transformCatalog(rel.getCatalog)
 
       case _ => throw InvalidPlanInput(s"${rel.getUnknown} not supported.")
+    }
+  }
+
+  private def transformCatalog(catalog: proto.Catalog): LogicalPlan = {
+    catalog.getCatTypeCase match {
+      case proto.Catalog.CatTypeCase.CURRENT_DATABASE =>
+        transformCurrentDatabase(catalog.getCurrentDatabase)
+      case proto.Catalog.CatTypeCase.SET_CURRENT_DATABASE =>
+        transformSetCurrentDatabase(catalog.getSetCurrentDatabase)
+      case proto.Catalog.CatTypeCase.LIST_DATABASES =>
+        transformListDatabases(catalog.getListDatabases)
+      case proto.Catalog.CatTypeCase.LIST_TABLES => transformListTables(catalog.getListTables)
+      case proto.Catalog.CatTypeCase.LIST_FUNCTIONS =>
+        transformListFunctions(catalog.getListFunctions)
+      case proto.Catalog.CatTypeCase.LIST_COLUMNS => transformListColumns(catalog.getListColumns)
+      case proto.Catalog.CatTypeCase.GET_DATABASE => transformGetDatabase(catalog.getGetDatabase)
+      case proto.Catalog.CatTypeCase.GET_TABLE => transformGetTable(catalog.getGetTable)
+      case proto.Catalog.CatTypeCase.GET_FUNCTION => transformGetFunction(catalog.getGetFunction)
+      case proto.Catalog.CatTypeCase.DATABASE_EXISTS =>
+        transformDatabaseExists(catalog.getDatabaseExists)
+      case proto.Catalog.CatTypeCase.TABLE_EXISTS => transformTableExists(catalog.getTableExists)
+      case proto.Catalog.CatTypeCase.FUNCTION_EXISTS =>
+        transformFunctionExists(catalog.getFunctionExists)
+      case proto.Catalog.CatTypeCase.CREATE_EXTERNAL_TABLE =>
+        transformCreateExternalTable(catalog.getCreateExternalTable)
+      case proto.Catalog.CatTypeCase.CREATE_TABLE => transformCreateTable(catalog.getCreateTable)
+      case proto.Catalog.CatTypeCase.DROP_TEMP_VIEW =>
+        transformDropTempView(catalog.getDropTempView)
+      case proto.Catalog.CatTypeCase.DROP_GLOBAL_TEMP_VIEW =>
+        transformDropGlobalTempView(catalog.getDropGlobalTempView)
+      case proto.Catalog.CatTypeCase.RECOVER_PARTITIONS =>
+        transformRecoverPartitions(catalog.getRecoverPartitions)
+      // TODO(SPARK-41612): Support Catalog.isCached
+      // case proto.Catalog.CatTypeCase.IS_CACHED => transformIsCached(catalog.getIsCached)
+      // TODO(SPARK-41600): Support Catalog.cacheTable
+      // case proto.Catalog.CatTypeCase.CACHE_TABLE => transformCacheTable(catalog.getCacheTable)
+      // TODO(SPARK-41623): Support Catalog.uncacheTable
+      // case proto.Catalog.CatTypeCase.UNCACHE_TABLE =>
+      //   transformUncacheTable(catalog.getUncacheTable)
+      case proto.Catalog.CatTypeCase.CLEAR_CACHE => transformClearCache(catalog.getClearCache)
+      case proto.Catalog.CatTypeCase.REFRESH_TABLE =>
+        transformRefreshTable(catalog.getRefreshTable)
+      case proto.Catalog.CatTypeCase.REFRESH_BY_PATH =>
+        transformRefreshByPath(catalog.getRefreshByPath)
+      case proto.Catalog.CatTypeCase.CURRENT_CATALOG =>
+        transformCurrentCatalog(catalog.getCurrentCatalog)
+      case proto.Catalog.CatTypeCase.SET_CURRENT_CATALOG =>
+        transformSetCurrentCatalog(catalog.getSetCurrentCatalog)
+      case proto.Catalog.CatTypeCase.LIST_CATALOGS =>
+        transformListCatalogs(catalog.getListCatalogs)
+      case other => throw InvalidPlanInput(s"$other not supported.")
     }
   }
 
@@ -328,6 +342,16 @@ class SparkConnectPlanner(session: SparkSession) {
       .logicalPlan
   }
 
+  private def transformStatCov(rel: proto.StatCov): LogicalPlan = {
+    val cov = Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .stat
+      .cov(rel.getCol1, rel.getCol2)
+    LocalRelation.fromProduct(
+      output = AttributeReference("cov", DoubleType, false)() :: Nil,
+      data = Tuple1.apply(cov) :: Nil)
+  }
+
   private def transformStatCrosstab(rel: proto.StatCrosstab): LogicalPlan = {
     Dataset
       .ofRows(session, transformRelation(rel.getInput))
@@ -415,6 +439,20 @@ class SparkConnectPlanner(session: SparkSession) {
         Seq(rel.getValueColumnName),
         transformRelation(rel.getInput))
     }
+  }
+
+  private def transformRepartitionByExpression(
+      rel: proto.RepartitionByExpression): LogicalPlan = {
+    val numPartitionsOpt = if (rel.hasNumPartitions) {
+      Some(rel.getNumPartitions)
+    } else {
+      None
+    }
+    val partitionExpressions = rel.getPartitionExprsList.asScala.map(transformExpression).toSeq
+    logical.RepartitionByExpression(
+      partitionExpressions,
+      transformRelation(rel.getInput),
+      numPartitionsOpt)
   }
 
   private def transformDeduplicate(rel: proto.Deduplicate): LogicalPlan = {

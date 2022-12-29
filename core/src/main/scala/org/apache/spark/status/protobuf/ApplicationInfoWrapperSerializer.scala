@@ -74,7 +74,7 @@ class ApplicationInfoWrapperSerializer extends ProtobufSerDe {
     val maxCores = getOptional(info.hasMaxCores, info.getMaxCores)
     val coresPerExecutor = getOptional(info.hasCoresPerExecutor, info.getCoresPerExecutor)
     val memoryPerExecutorMB = getOptional(info.hasMemoryPerExecutorMb, info.getMemoryPerExecutorMb)
-    val attempts = info.getAttemptsList.asScala.map(deserializeApplicationAttemptInfo).toSeq
+    val attempts = info.getAttemptsList.asScala.map(deserializeApplicationAttemptInfo)
     ApplicationInfo(
       id = info.getId,
       name = info.getName,

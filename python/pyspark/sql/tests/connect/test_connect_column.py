@@ -97,6 +97,10 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             df.select(df.name.substr(0, 1).alias("col")).toPandas(),
             df2.select(df2.name.substr(0, 1).alias("col")).toPandas(),
         )
+        self.assert_eq(
+            df.select(df.name.substr(0, 1).name("col")).toPandas(),
+            df2.select(df2.name.substr(0, 1).name("col")).toPandas(),
+        )
         df3 = self.connect.sql("SELECT cast(null as int) as name")
         df4 = self.spark.sql("SELECT cast(null as int) as name")
         self.assert_eq(
