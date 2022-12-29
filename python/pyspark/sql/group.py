@@ -145,7 +145,7 @@ class GroupedData(PandasGroupedOpsMixin):
 
         Group-by name, and calculate the minimum age.
 
-        >>> df.groupBy(df.name).agg(F.min(df.age)).sort("name").show()  # doctest: +SKIP
+        >>> df.groupBy(df.name).agg(F.min(df.age)).sort("name").show()
         +-----+--------+
         | name|min(age)|
         +-----+--------+
