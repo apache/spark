@@ -508,29 +508,29 @@ jobs:
     container:
       image: ${{ needs.precondition.outputs.image_url }}
     steps:
-      - name: Checkout Spark repository
-          uses: actions/checkout@v3
-          with:
-            fetch-depth: 0
-            repository: apache/spark
-            ref: ${{ inputs.branch }}
-      - name: Add GITHUB_WORKSPACE to git trust safe.directory
-        run: |
-          git config --global --add safe.directory ${GITHUB_WORKSPACE}
-      - name: Sync the current branch with the latest in Apache Spark
-        if: github.repository != 'apache/spark'
-        run: |
-          git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
-      - name: Install dependencies for Python code generation check
-        run: |
-          # See more in "Installation" https://docs.buf.build/installation#tarball
-          curl -LO https://github.com/bufbuild/buf/releases/download/v1.11.0/buf-Linux-x86_64.tar.gz
-          mkdir -p $HOME/buf
-          tar -xvzf buf-Linux-x86_64.tar.gz -C $HOME/buf --strip-components 1
-      - name: Python code generation check
-        run: if test -f ./connector/connect/dev/detect_breaking_changes.sh; then PATH=$PATH:$HOME/buf/bin ./connector/connect/dev/detect_breaking_changes.sh; fi
+    - name: Checkout Spark repository
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+        repository: apache/spark
+        ref: ${{ inputs.branch }}
+    - name: Add GITHUB_WORKSPACE to git trust safe.directory
+      run: |
+        git config --global --add safe.directory ${GITHUB_WORKSPACE}
+    - name: Sync the current branch with the latest in Apache Spark
+      if: github.repository != 'apache/spark'
+      run: |
+        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+    - name: Install dependencies for Python code generation check
+      run: |
+        # See more in "Installation" https://docs.buf.build/installation#tarball
+        curl -LO https://github.com/bufbuild/buf/releases/download/v1.11.0/buf-Linux-x86_64.tar.gz
+        mkdir -p $HOME/buf
+        tar -xvzf buf-Linux-x86_64.tar.gz -C $HOME/buf --strip-components 1
+    - name: Python code generation check
+      run: if test -f ./connector/connect/dev/detect_breaking_changes.sh; then PATH=$PATH:$HOME/buf/bin ./connector/connect/dev/detect_breaking_changes.sh; fi
 
   # Static analysis, and documentation build
   lint:
