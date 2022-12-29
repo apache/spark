@@ -176,10 +176,10 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
           def eligibleToLiftUp(exp: Expression): Boolean = {
             exp match {
               case e if AggregateExpression.isAggregate(e) => true
-              case e: Attribute if !groupingExpressions.exists(_.semanticEquals(e)) => false
+              case e if groupingExpressions.exists(_.semanticEquals(e)) => true
+              case a: Attribute => false
               case s: ScalarSubquery if s.children.nonEmpty
                 && !groupingExpressions.exists(_.semanticEquals(s)) => false
-              case e if groupingExpressions.exists(_.semanticEquals(e)) => true
               case e => e.children.forall(eligibleToLiftUp)
             }
           }
