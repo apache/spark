@@ -25,6 +25,7 @@ import org.apache.spark.JobExecutionStatus
 import org.apache.spark.sql.execution.ui.SQLExecutionUIData
 import org.apache.spark.status.protobuf.{ProtobufSerDe, StoreTypes}
 import org.apache.spark.status.protobuf.Utils.getOptional
+import org.apache.spark.util.Utils.weakIntern
 
 class SQLExecutionUIDataSerializer extends ProtobufSerDe {
 
@@ -62,7 +63,7 @@ class SQLExecutionUIDataSerializer extends ProtobufSerDe {
     val ui = StoreTypes.SQLExecutionUIData.parseFrom(bytes)
     val completionTime =
       getOptional(ui.hasCompletionTime, () => new Date(ui.getCompletionTime))
-    val errorMessage = getOptional(ui.hasErrorMessage, () => ui.getErrorMessage)
+    val errorMessage = getOptional(ui.hasErrorMessage, () => weakIntern(ui.getErrorMessage))
     val metrics =
       ui.getMetricsList.asScala.map(m => SQLPlanMetricSerializer.deserialize(m))
     val jobs = ui.getJobsMap.asScala.map {
@@ -74,9 +75,9 @@ class SQLExecutionUIDataSerializer extends ProtobufSerDe {
 
     new SQLExecutionUIData(
       executionId = ui.getExecutionId,
-      description = ui.getDescription,
-      details = ui.getDetails,
-      physicalPlanDescription = ui.getPhysicalPlanDescription,
+      description = weakIntern(ui.getDescription),
+      details = weakIntern(ui.getDetails),
+      physicalPlanDescription = weakIntern(ui.getPhysicalPlanDescription),
       modifiedConfigs = ui.getModifiedConfigsMap.asScala.toMap,
       metrics = metrics,
       submissionTime = ui.getSubmissionTime,

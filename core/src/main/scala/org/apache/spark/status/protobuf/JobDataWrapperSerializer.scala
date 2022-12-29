@@ -19,11 +19,11 @@ package org.apache.spark.status.protobuf
 
 import collection.JavaConverters._
 import java.util.Date
-
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.status.JobDataWrapper
 import org.apache.spark.status.api.v1.JobData
 import org.apache.spark.status.protobuf.Utils.getOptional
+import org.apache.spark.util.Utils.weakIntern
 
 class JobDataWrapperSerializer extends ProtobufSerDe {
 
@@ -84,16 +84,16 @@ class JobDataWrapperSerializer extends ProtobufSerDe {
   }
 
   private def deserializeJobData(info: StoreTypes.JobData): JobData = {
-    val description = getOptional(info.hasDescription, info.getDescription)
+    val description = getOptional(info.hasDescription, () => weakIntern(info.getDescription))
     val submissionTime =
       getOptional(info.hasSubmissionTime, () => new Date(info.getSubmissionTime))
     val completionTime = getOptional(info.hasCompletionTime, () => new Date(info.getCompletionTime))
-    val jobGroup = getOptional(info.hasJobGroup, info.getJobGroup)
+    val jobGroup = getOptional(info.hasJobGroup, () => weakIntern(info.getJobGroup))
     val status = JobExecutionStatus.valueOf(info.getStatus.toString)
 
     new JobData(
       jobId = info.getJobId.toInt,
-      name = info.getName,
+      name = weakIntern(info.getName),
       description = description,
       submissionTime = submissionTime,
       completionTime = completionTime,

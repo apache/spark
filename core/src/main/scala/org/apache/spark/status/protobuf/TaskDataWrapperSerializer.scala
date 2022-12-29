@@ -85,9 +85,9 @@ class TaskDataWrapperSerializer extends ProtobufSerDe {
     binary.getAccumulatorUpdatesList.forEach { update =>
       accumulatorUpdates.append(new AccumulableInfo(
         id = update.getId,
-        name = update.getName,
-        update = getOptional(update.hasUpdate, update.getUpdate),
-        value = update.getValue))
+        name = weakIntern(update.getName),
+        update = getOptional(update.hasUpdate, () => weakIntern(update.getUpdate)),
+        value = weakIntern(update.getValue)))
     }
     new TaskDataWrapper(
       taskId = binary.getTaskId,
@@ -103,7 +103,7 @@ class TaskDataWrapperSerializer extends ProtobufSerDe {
       taskLocality = weakIntern(binary.getTaskLocality),
       speculative = binary.getSpeculative,
       accumulatorUpdates = accumulatorUpdates,
-      errorMessage = getOptional(binary.hasErrorMessage, binary.getErrorMessage),
+      errorMessage = getOptional(binary.hasErrorMessage, () => weakIntern(binary.getErrorMessage)),
       hasMetrics = binary.getHasMetrics,
       executorDeserializeTime = binary.getExecutorDeserializeTime,
       executorDeserializeCpuTime = binary.getExecutorDeserializeCpuTime,

@@ -22,6 +22,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.status.RDDStorageInfoWrapper
 import org.apache.spark.status.api.v1.{RDDDataDistribution, RDDPartitionInfo, RDDStorageInfo}
 import org.apache.spark.status.protobuf.Utils.getOptional
+import org.apache.spark.util.Utils.weakIntern
 
 class RDDStorageInfoWrapperSerializer extends ProtobufSerDe {
 
@@ -86,10 +87,10 @@ class RDDStorageInfoWrapperSerializer extends ProtobufSerDe {
   private def deserializeRDDStorageInfo(info: StoreTypes.RDDStorageInfo): RDDStorageInfo = {
     new RDDStorageInfo(
       id = info.getId,
-      name = info.getName,
+      name = weakIntern(info.getName),
       numPartitions = info.getNumPartitions,
       numCachedPartitions = info.getNumCachedPartitions,
-      storageLevel = info.getStorageLevel,
+      storageLevel = weakIntern(info.getStorageLevel),
       memoryUsed = info.getMemoryUsed,
       diskUsed = info.getDiskUsed,
       dataDistribution =
@@ -107,7 +108,7 @@ class RDDStorageInfoWrapperSerializer extends ProtobufSerDe {
     RDDDataDistribution = {
 
     new RDDDataDistribution(
-      address = info.getAddress,
+      address = weakIntern(info.getAddress),
       memoryUsed = info.getMemoryUsed,
       memoryRemaining = info.getMemoryRemaining,
       diskUsed = info.getDiskUsed,
@@ -122,11 +123,11 @@ class RDDStorageInfoWrapperSerializer extends ProtobufSerDe {
 
   private def deserializeRDDPartitionInfo(info: StoreTypes.RDDPartitionInfo): RDDPartitionInfo = {
     new RDDPartitionInfo(
-      blockName = info.getBlockName,
-      storageLevel = info.getStorageLevel,
+      blockName = weakIntern(info.getBlockName),
+      storageLevel = weakIntern(info.getStorageLevel),
       memoryUsed = info.getMemoryUsed,
       diskUsed = info.getDiskUsed,
-      executors = info.getExecutorsList.asScala
+      executors = info.getExecutorsList.asScala.map(weakIntern)
     )
   }
 }

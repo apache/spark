@@ -22,6 +22,7 @@ import collection.JavaConverters._
 import org.apache.spark.sql.execution.ui.{SparkPlanGraphClusterWrapper, SparkPlanGraphEdge, SparkPlanGraphNode, SparkPlanGraphNodeWrapper, SparkPlanGraphWrapper}
 import org.apache.spark.status.protobuf.ProtobufSerDe
 import org.apache.spark.status.protobuf.StoreTypes
+import org.apache.spark.util.Utils.weakIntern
 
 class SparkPlanGraphWrapperSerializer extends ProtobufSerDe {
 
@@ -99,8 +100,8 @@ class SparkPlanGraphWrapperSerializer extends ProtobufSerDe {
 
     new SparkPlanGraphNode(
       id = node.getId,
-      name = node.getName,
-      desc = node.getDesc,
+      name =  weakIntern(node.getName),
+      desc =  weakIntern(node.getDesc),
       metrics = node.getMetricsList.asScala.map(SQLPlanMetricSerializer.deserialize).toSeq
     )
   }
@@ -125,8 +126,8 @@ class SparkPlanGraphWrapperSerializer extends ProtobufSerDe {
 
     new SparkPlanGraphClusterWrapper(
       id = cluster.getId,
-      name = cluster.getName,
-      desc = cluster.getDesc,
+      name = weakIntern(cluster.getName),
+      desc = weakIntern(cluster.getDesc),
       nodes = cluster.getNodesList.asScala.map(deserializeSparkPlanGraphNodeWrapper).toSeq,
       metrics = cluster.getMetricsList.asScala.map(SQLPlanMetricSerializer.deserialize).toSeq
     )

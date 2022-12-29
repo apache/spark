@@ -22,6 +22,7 @@ import collection.JavaConverters._
 import org.apache.spark.resource.{ExecutorResourceRequest, TaskResourceRequest}
 import org.apache.spark.status.ApplicationEnvironmentInfoWrapper
 import org.apache.spark.status.api.v1.{ApplicationEnvironmentInfo, ResourceProfileInfo, RuntimeInfo}
+import org.apache.spark.util.Utils.weakIntern
 
 class ApplicationEnvironmentInfoWrapperSerializer extends ProtobufSerDe {
 
@@ -77,9 +78,9 @@ class ApplicationEnvironmentInfoWrapperSerializer extends ProtobufSerDe {
   private def deserializeApplicationEnvironmentInfo(info: StoreTypes.ApplicationEnvironmentInfo):
     ApplicationEnvironmentInfo = {
     val runtime = new RuntimeInfo (
-      javaVersion = info.getRuntime.getJavaVersion,
-      javaHome = info.getRuntime.getJavaHome,
-      scalaVersion = info.getRuntime.getScalaVersion
+      javaVersion = weakIntern(info.getRuntime.getJavaVersion),
+      javaHome = weakIntern(info.getRuntime.getJavaHome),
+      scalaVersion = weakIntern(info.getRuntime.getScalaVersion)
     )
     val pairSSToTuple = (pair: StoreTypes.PairStrings) => {
       (pair.getValue1, pair.getValue2)
@@ -138,15 +139,16 @@ class ApplicationEnvironmentInfoWrapperSerializer extends ProtobufSerDe {
   private def deserializeExecutorResourceRequest(info: StoreTypes.ExecutorResourceRequest):
     ExecutorResourceRequest = {
     new ExecutorResourceRequest(
-      resourceName = info.getResourceName,
+      resourceName = weakIntern(info.getResourceName),
       amount = info.getAmount,
-      discoveryScript = info.getDiscoveryScript,
-      vendor = info.getVendor
+      discoveryScript = weakIntern(info.getDiscoveryScript),
+      vendor = weakIntern(info.getVendor)
     )
   }
 
   private def deserializeTaskResourceRequest(info: StoreTypes.TaskResourceRequest):
     TaskResourceRequest = {
-    new TaskResourceRequest(resourceName = info.getResourceName, amount = info.getAmount)
+    new TaskResourceRequest(resourceName = weakIntern(info.getResourceName),
+      amount = info.getAmount)
   }
 }

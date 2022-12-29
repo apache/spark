@@ -18,6 +18,7 @@
 package org.apache.spark.status.protobuf
 
 import org.apache.spark.status.CachedQuantile
+import org.apache.spark.util.Utils.weakIntern
 
 class CachedQuantileSerializer extends ProtobufSerDe {
   override val supportClass: Class[_] = classOf[CachedQuantile]
@@ -65,7 +66,7 @@ class CachedQuantileSerializer extends ProtobufSerDe {
     new CachedQuantile(
       stageId = binary.getStageId.toInt,
       stageAttemptId = binary.getStageAttemptId,
-      quantile = binary.getQuantile,
+      quantile = weakIntern(binary.getQuantile),
       taskCount = binary.getTaskCount,
       duration = binary.getDuration,
       executorDeserializeTime = binary.getExecutorDeserializeTime,
