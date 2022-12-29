@@ -23,7 +23,8 @@ class SparkConnectClient(private val userContext: proto.UserContext) {
 
   /**
    * Placeholder method.
-   * @return User ID.
+   * @return
+   *   User ID.
    */
   def userId: String = userContext.getUserId()
 }
