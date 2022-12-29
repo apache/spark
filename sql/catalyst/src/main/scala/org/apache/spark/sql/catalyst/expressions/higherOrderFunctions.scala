@@ -975,8 +975,8 @@ case class TransformValues(
 
   override def dataType: DataType = MapType(keyType, function.dataType, function.nullable)
 
-  override protected def bindInternal(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction)
-  : TransformValues = {
+  override protected def bindInternal(
+      f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): TransformValues = {
     copy(function = f(function, (keyType, false) :: (valueType, valueContainsNull) :: Nil))
   }
 
