@@ -33,6 +33,7 @@ import pyspark.sql.functions
 from pyspark.testing.utils import ReusedPySparkTestCase
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
+from pyspark.sql.connect.client import SparkConnectException, SparkConnectAnalysisException
 
 if should_test_connect:
     import grpc
@@ -116,6 +117,12 @@ class SparkConnectSQLTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLT
 
 
 class SparkConnectTests(SparkConnectSQLTestCase):
+    def test_error_handling(self):
+        # SPARK-41533 Proper error handling for Spark Connect
+        df = self.connect.range(10).select("id2")
+        with self.assertRaises(SparkConnectAnalysisException):
+            df.collect()
+
     def test_simple_read(self):
         df = self.connect.read.table(self.tbl_name)
         data = df.limit(10).toPandas()
@@ -262,12 +269,12 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         ):
             self.connect.createDataFrame(data, ["a", "b", "c", "d", "e"])
 
-        with self.assertRaises(grpc.RpcError):
+        with self.assertRaises(SparkConnectException):
             self.connect.createDataFrame(
                 data, "col1 magic_type, col2 int, col3 int, col4 int"
             ).show()
 
-        with self.assertRaises(grpc.RpcError):
+        with self.assertRaises(SparkConnectException):
             self.connect.createDataFrame(data, "col1 int, col2 int, col3 int").show()
 
     def test_with_local_list(self):
@@ -299,12 +306,12 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         ):
             self.connect.createDataFrame(data, ["a", "b", "c", "d", "e"])
 
-        with self.assertRaises(grpc.RpcError):
+        with self.assertRaises(SparkConnectException):
             self.connect.createDataFrame(
                 data, "col1 magic_type, col2 int, col3 int, col4 int"
             ).show()
 
-        with self.assertRaises(grpc.RpcError):
+        with self.assertRaises(SparkConnectException):
             self.connect.createDataFrame(data, "col1 int, col2 int, col3 int").show()
 
     def test_with_atom_type(self):
@@ -457,7 +464,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             ]
         )
 
-        with self.assertRaises(grpc.RpcError) as context:
+        with self.assertRaises(SparkConnectException) as context:
             self.connect.read.table(self.tbl_name).to(schema).toPandas()
             self.assertIn(
                 """Column or field `name` is of type "STRING" while it's required to be "INT".""",
@@ -679,7 +686,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
 
             # Test when creating a view which is already exists but
             self.assertTrue(self.spark.catalog.tableExists("global_temp.view_1"))
-            with self.assertRaises(grpc.RpcError):
+            with self.assertRaises(SparkConnectException):
                 self.connect.sql("SELECT 1 AS X LIMIT 0").createGlobalTempView("view_1")
 
     def test_create_session_local_temp_view(self):
@@ -691,7 +698,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             self.assertEqual(self.connect.sql("SELECT * FROM view_local_temp").count(), 0)
 
             # Test when creating a view which is already exists but
-            with self.assertRaises(grpc.RpcError):
+            with self.assertRaises(SparkConnectException):
                 self.connect.sql("SELECT 1 AS X LIMIT 0").createTempView("view_local_temp")
 
     def test_to_pandas(self):
@@ -876,7 +883,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             self.connect.sql(query).replace({None: 1}, subset="a").toPandas()
             self.assertTrue("Mixed type replacements are not supported" in str(context.exception))
 
-        with self.assertRaises(grpc.RpcError) as context:
+        with self.assertRaises(SparkConnectException) as context:
             self.connect.sql(query).replace({1: 2, 3: -1}, subset=("a", "x")).toPandas()
             self.assertIn(
                 """Cannot resolve column name "x" among (a, b, c)""", str(context.exception)
@@ -957,7 +964,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         )
 
         # Hint with unsupported parameter values
-        with self.assertRaises(grpc.RpcError):
+        with self.assertRaises(SparkConnectException):
             self.connect.read.table(self.tbl_name).hint("REPARTITION", "id+1").toPandas()
 
         # Hint with unsupported parameter types
@@ -965,7 +972,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             self.connect.read.table(self.tbl_name).hint("REPARTITION", 1.1).toPandas()
 
         # Hint with wrong combination
-        with self.assertRaises(grpc.RpcError):
+        with self.assertRaises(SparkConnectException):
             self.connect.read.table(self.tbl_name).hint("REPARTITION", "id", 3).toPandas()
 
     def test_empty_dataset(self):
@@ -1084,7 +1091,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         )
         self.assertEqual("name", col0)
 
-        with self.assertRaises(grpc.RpcError) as exc:
+        with self.assertRaises(SparkConnectException) as exc:
             self.connect.range(1, 10).select(col("id").alias("this", "is", "not")).collect()
         self.assertIn("(this, is, not)", str(exc.exception))
 
