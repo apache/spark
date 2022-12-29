@@ -596,6 +596,8 @@ class SparkConnectPlanner(session: SparkSession) {
         transformUnresolvedRegex(exp.getUnresolvedRegex)
       case proto.Expression.ExprTypeCase.UNRESOLVED_EXTRACT_VALUE =>
         transformUnresolvedExtractValue(exp.getUnresolvedExtractValue)
+      case proto.Expression.ExprTypeCase.UPDATE_FIELDS =>
+        transformUpdateFields(exp.getUpdateFields)
       case proto.Expression.ExprTypeCase.SORT_ORDER => transformSortOrder(exp.getSortOrder)
       case proto.Expression.ExprTypeCase.LAMBDA_FUNCTION =>
         transformLambdaFunction(exp.getLambdaFunction)
@@ -858,6 +860,19 @@ class SparkConnectPlanner(session: SparkSession) {
     UnresolvedExtractValue(
       transformExpression(extract.getChild),
       transformExpression(extract.getExtraction))
+  }
+
+  private def transformUpdateFields(update: proto.Expression.UpdateFields): UpdateFields = {
+    if (update.hasValueExpression) {
+      // add or replace field
+      UpdateFields.apply(
+        transformExpression(update.getStructExpression),
+        update.getFieldName,
+        transformExpression(update.getValueExpression))
+    } else {
+      // drop field
+      UpdateFields.apply(transformExpression(update.getStructExpression), update.getFieldName)
+    }
   }
 
   private def transformWindowExpression(window: proto.Expression.Window) = {

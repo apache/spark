@@ -54,6 +54,7 @@ from pyspark.sql.types import (
     BooleanType,
 )
 from pyspark.testing.connectutils import should_test_connect
+from pyspark.sql.connect.client import SparkConnectException
 
 if should_test_connect:
     import pandas as pd
@@ -61,6 +62,24 @@ if should_test_connect:
 
 
 class SparkConnectTests(SparkConnectSQLTestCase):
+    def compare_by_show(self, df1, df2, n: int = 20, truncate: int = 20):
+        from pyspark.sql.dataframe import DataFrame as SDF
+        from pyspark.sql.connect.dataframe import DataFrame as CDF
+
+        assert isinstance(df1, (SDF, CDF))
+        if isinstance(df1, SDF):
+            str1 = df1._jdf.showString(n, truncate, False)
+        else:
+            str1 = df1._show_string(n, truncate, False)
+
+        assert isinstance(df2, (SDF, CDF))
+        if isinstance(df2, SDF):
+            str2 = df2._jdf.showString(n, truncate, False)
+        else:
+            str2 = df2._show_string(n, truncate, False)
+
+        self.assertEqual(str1, str2)
+
     def test_column_operator(self):
         # SPARK-41351: Column needs to support !=
         df = self.connect.range(10)
@@ -183,6 +202,10 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             "Cannot convert column into bool",
         ):
             not (cdf.a > 2)
+
+        with self.assertRaises(TypeError):
+            for x in cdf.a:
+                pass
 
     def test_datetime(self):
         query = """
@@ -743,19 +766,118 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             sdf.select(sdf.a ** sdf["b"], sdf.d**2, 2**sdf.c).toPandas(),
         )
 
-    def test_unsupported_functions(self):
-        # SPARK-41225: Disable unsupported functions.
-        c = self.connect.range(1).id
-        for f in (
-            "withField",
-            "dropFields",
-        ):
-            with self.assertRaises(NotImplementedError):
-                getattr(c, f)()
+    def test_column_field_ops(self):
+        # SPARK-41767: test withField, dropFields
 
-        with self.assertRaises(TypeError):
-            for x in c:
-                pass
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        query = """
+            SELECT STRUCT(a, b, c, d) AS x, e FROM VALUES
+            (float(1.0), double(1.0), '2022', 1, 0),
+            (float(2.0), double(2.0), '2018', NULL, 2),
+            (float(3.0), double(3.0), NULL, 3, NULL)
+            AS tab(a, b, c, d, e)
+            """
+
+        # +----------------------+----+
+        # |                     x|   e|
+        # +----------------------+----+
+        # |   {1.0, 1.0, 2022, 1}|   0|
+        # |{2.0, 2.0, 2018, null}|   2|
+        # |   {3.0, 3.0, null, 3}|null|
+        # +----------------------+----+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        # add field
+        self.compare_by_show(
+            cdf.select(cdf.x.withField("z", cdf.e)),
+            sdf.select(sdf.x.withField("z", sdf.e)),
+            truncate=100,
+        )
+        self.compare_by_show(
+            cdf.select(cdf.x.withField("z", CF.col("e"))),
+            sdf.select(sdf.x.withField("z", SF.col("e"))),
+            truncate=100,
+        )
+        self.compare_by_show(
+            cdf.select(cdf.x.withField("z", CF.lit("xyz"))),
+            sdf.select(sdf.x.withField("z", SF.lit("xyz"))),
+            truncate=100,
+        )
+
+        # replace field
+        self.compare_by_show(
+            cdf.select(cdf.x.withField("a", cdf.e)),
+            sdf.select(sdf.x.withField("a", sdf.e)),
+            truncate=100,
+        )
+        self.compare_by_show(
+            cdf.select(cdf.x.withField("a", CF.col("e"))),
+            sdf.select(sdf.x.withField("a", SF.col("e"))),
+            truncate=100,
+        )
+        self.compare_by_show(
+            cdf.select(cdf.x.withField("a", CF.lit("xyz"))),
+            sdf.select(sdf.x.withField("a", SF.lit("xyz"))),
+            truncate=100,
+        )
+
+        # drop field
+        self.compare_by_show(
+            cdf.select(cdf.x.dropFields("a")),
+            sdf.select(sdf.x.dropFields("a")),
+            truncate=100,
+        )
+        self.compare_by_show(
+            cdf.select(cdf.x.dropFields("z")),
+            sdf.select(sdf.x.dropFields("z")),
+            truncate=100,
+        )
+        self.compare_by_show(
+            cdf.select(cdf.x.dropFields("a", "b", "z")),
+            sdf.select(sdf.x.dropFields("a", "b", "z")),
+            truncate=100,
+        )
+
+        # check error
+        # invalid column: not a struct column
+        with self.assertRaises(SparkConnectException):
+            cdf.select(cdf.e.withField("a", CF.lit(1))).show()
+
+        # invalid column: not a struct column
+        with self.assertRaises(SparkConnectException):
+            cdf.select(cdf.e.dropFields("a")).show()
+
+        # cannot drop all fields in struct
+        with self.assertRaises(SparkConnectException):
+            cdf.select(cdf.x.dropFields("a", "b", "c", "d")).show()
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "fieldName should be a string",
+        ):
+            cdf.select(cdf.x.withField(CF.col("a"), cdf.e)).show()
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "col should be a Column",
+        ):
+            cdf.select(cdf.x.withField("a", 2)).show()
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "fieldName should be a string",
+        ):
+            cdf.select(cdf.x.dropFields("a", 1, 2)).show()
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "dropFields requires at least 1 field",
+        ):
+            cdf.select(cdf.x.dropFields()).show()
 
 
 if __name__ == "__main__":

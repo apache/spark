@@ -520,6 +520,9 @@ class Column:
 
         .. versionadded:: 3.1.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         fieldName : str
@@ -566,6 +569,9 @@ class Column:
         This is a no-op if the schema doesn't contain field name(s).
 
         .. versionadded:: 3.1.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------

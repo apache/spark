@@ -42,6 +42,8 @@ from pyspark.sql.connect.expressions import (
     SortOrder,
     CastExpression,
     WindowExpression,
+    WithField,
+    DropField,
 )
 
 
@@ -358,11 +360,38 @@ class Column:
 
     getField.__doc__ = PySparkColumn.getField.__doc__
 
-    def withField(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("withField() is not yet implemented.")
+    def withField(self, fieldName: str, col: "Column") -> "Column":
+        if not isinstance(fieldName, str):
+            raise TypeError(
+                f"fieldName should be a string, but got {type(fieldName).__name__} {fieldName}"
+            )
 
-    def dropFields(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("dropFields() is not yet implemented.")
+        if not isinstance(col, Column):
+            raise TypeError(f"col should be a Column, but got {type(col).__name__} {col}")
+
+        return Column(WithField(self._expr, fieldName, col._expr))
+
+    withField.__doc__ = PySparkColumn.withField.__doc__
+
+    def dropFields(self, *fieldNames: str) -> "Column":
+        dropField: Optional[DropField] = None
+        for fieldName in fieldNames:
+            if not isinstance(fieldName, str):
+                raise TypeError(
+                    f"fieldName should be a string, but got {type(fieldName).__name__} {fieldName}"
+                )
+
+            if dropField is None:
+                dropField = DropField(self._expr, fieldName)
+            else:
+                dropField = DropField(dropField, fieldName)
+
+        if dropField is None:
+            raise ValueError("dropFields requires at least 1 field")
+
+        return Column(dropField)
+
+    dropFields.__doc__ = PySparkColumn.dropFields.__doc__
 
     def __getattr__(self, item: Any) -> "Column":
         if item.startswith("__"):
