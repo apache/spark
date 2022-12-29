@@ -462,8 +462,6 @@ def _test() -> None:
         # TODO(SPARK-41771): __getitem__ does not work with Column.isin
         del pyspark.sql.connect.column.Column.getField.__doc__
         del pyspark.sql.connect.column.Column.getItem.__doc__
-        # TODO(SPARK-41758): Support Window functions
-        del pyspark.sql.connect.column.Column.over.__doc__
 
         (failure_count, test_count) = doctest.testmod(
             pyspark.sql.connect.column,
