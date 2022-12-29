@@ -390,3 +390,34 @@ message SQLExecutionUIData {
   repeated int64 stages = 11;
   map<int64, string> metric_values = 12;
 }
+
+message SparkPlanGraphNode {
+  int64 id = 1;
+  string name = 2;
+  string desc = 3;
+  repeated SQLPlanMetric metrics = 4;
+}
+
+message SparkPlanGraphClusterWrapper {
+  int64 id = 1;
+  string name = 2;
+  string desc = 3;
+  repeated SparkPlanGraphNodeWrapper nodes = 4;
+  repeated SQLPlanMetric metrics = 5;
+}
+
+message SparkPlanGraphNodeWrapper {
+  SparkPlanGraphNode node = 1;
+  SparkPlanGraphClusterWrapper cluster = 2;
+}
+
+message SparkPlanGraphEdge {
+  int64 from_id = 1;
+  int64 to_id = 2;
+}
+
+message SparkPlanGraphWrapper {
+  int64 execution_id = 1;
+  repeated SparkPlanGraphNodeWrapper nodes = 2;
+  repeated SparkPlanGraphEdge edges = 3;
+}
