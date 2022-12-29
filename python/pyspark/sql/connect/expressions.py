@@ -308,7 +308,7 @@ class LiteralExpression(Expression):
         return expr
 
     def __repr__(self) -> str:
-        return f"Literal({self._value})"
+        return f"{self._value}"
 
 
 class ColumnReference(Expression):
@@ -333,7 +333,7 @@ class ColumnReference(Expression):
         return expr
 
     def __repr__(self) -> str:
-        return f"ColumnReference({self._unparsed_identifier})"
+        return f"{self._unparsed_identifier}"
 
 
 class SQLExpression(Expression):
@@ -418,6 +418,12 @@ class UnresolvedFunction(Expression):
             return f"{self._name}(distinct {', '.join([str(arg) for arg in self._args])})"
         else:
             return f"{self._name}({', '.join([str(arg) for arg in self._args])})"
+
+
+class UnresolvedBinaryFunction(UnresolvedFunction):
+    def __repr__(self) -> str:
+        assert len(self._args) == 2
+        return f"({self._args[0]} {self._name} {self._args[1]})"
 
 
 class WithField(Expression):

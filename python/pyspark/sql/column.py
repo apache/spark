@@ -182,9 +182,6 @@ def _reverse_op(
     return _
 
 
-# TODO(SPARK-41757): Compatibility of string representation for Column
-
-
 class Column:
 
     """
@@ -203,16 +200,16 @@ class Column:
     ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
 
     Select a column out of a DataFrame
-    >>> df.name   # doctest: +SKIP
+    >>> df.name
     Column<'name'>
-    >>> df["name"]  # doctest: +SKIP
+    >>> df["name"]
     Column<'name'>
 
     Create from an expression
 
-    >>> df.age + 1  # doctest: +SKIP
+    >>> df.age + 1
     Column<'(age + 1)'>
-    >>> 1 / df.age  # doctest: +SKIP
+    >>> 1 / df.age
     Column<'(1 / age)'>
     """
 
