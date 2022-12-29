@@ -371,9 +371,15 @@ abstract class CSVSuite
       }
 
       checkError(
+        exception = exception.getCause.asInstanceOf[SparkException],
+        errorClass = "_LEGACY_ERROR_TEMP_2177",
+        parameters = Map("failFastMode" -> "FAILFAST")
+      )
+
+      checkError(
         exception = ExceptionUtils.getRootCause(exception).asInstanceOf[SparkRuntimeException],
         errorClass = "MALFORMED_CSV_RECORD",
-        parameters = Map.empty
+        parameters = Map("tokenLength" -> "3", "schemaLength" -> "5")
       )
     }
   }
