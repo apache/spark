@@ -100,8 +100,8 @@ object SQLDataSourceExample {
     val beforeFilterDF = spark.read.format("parquet")
       // Files modified before 07/01/2020 at 05:30 are allowed
       .option("modifiedBefore", "2020-07-01T05:30:00")
-      .load("examples/src/main/resources/dir1");
-    beforeFilterDF.show();
+      .load("examples/src/main/resources/dir1")
+    beforeFilterDF.show()
     // +-------------+
     // |         file|
     // +-------------+
@@ -110,8 +110,8 @@ object SQLDataSourceExample {
     val afterFilterDF = spark.read.format("parquet")
        // Files modified after 06/01/2020 at 05:30 are allowed
       .option("modifiedAfter", "2020-06-01T05:30:00")
-      .load("examples/src/main/resources/dir1");
-    afterFilterDF.show();
+      .load("examples/src/main/resources/dir1")
+    afterFilterDF.show()
     // +-------------+
     // |         file|
     // +-------------+
@@ -314,8 +314,8 @@ object SQLDataSourceExample {
     df3.write.csv("output")
 
     // Read all files in a folder, please make sure only CSV files should present in the folder.
-    val folderPath = "examples/src/main/resources";
-    val df5 = spark.read.csv(folderPath);
+    val folderPath = "examples/src/main/resources"
+    val df5 = spark.read.csv(folderPath)
     df5.show();
     // Wrong schema because non-CSV files are read
     // +-----------+
