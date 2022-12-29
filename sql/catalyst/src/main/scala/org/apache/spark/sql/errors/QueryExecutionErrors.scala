@@ -1447,7 +1447,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def failToParseValueForDataTypeError(parser: JsonParser, token: JsonToken, dataType: DataType)
   : SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2136",
+      errorClass = "CANNOT_PARSE_JSON_FIELD",
       messageParameters = Map(
         "fieldName" -> parser.getCurrentName.toString(),
         "fieldValue" -> parser.getText.toString(),
