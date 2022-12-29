@@ -17,13 +17,8 @@
 package org.apache.spark.sql.connect.client
 
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
-import org.apache.spark.connect.proto
 
 class SparkConnectClientSuite extends AnyFunSuite { // scalastyle:ignore funsuite
-
-  private def createClient = {
-    new SparkConnectClient(proto.UserContext.newBuilder().build())
-  }
 
   test("Placeholder test: Create SparkConnectClient") {
     val client = SparkConnectClient.builder().userId("abc123").build()

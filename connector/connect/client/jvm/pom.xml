@@ -32,6 +32,7 @@
   <url>https://spark.apache.org/</url>
   <properties>
     <sbt.project.name>connect-client-jvm</sbt.project.name>
+    <guava.version>31.0.1-jre</guava.version>
   </properties>
 
   <dependencies>
@@ -50,6 +51,12 @@
       <groupId>com.google.protobuf</groupId>
       <artifactId>protobuf-java</artifactId>
       <version>${protobuf.version}</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+      <version>${guava.version}</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
