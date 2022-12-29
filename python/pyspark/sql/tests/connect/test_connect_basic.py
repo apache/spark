@@ -1144,6 +1144,12 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertEqual(len(result[0]), 3)
         self.assertEqual(len(result[1]), 3)
 
+        result = self.connect.read.table(self.tbl_name2).stat.approxQuantile(
+            ["col1"], [0.1, 0.5, 0.9], 0.1
+        )
+        self.assertEqual(len(result), 1)
+        self.assertEqual(len(result[0]), 3)
+
         with self.assertRaisesRegex(
             TypeError, "col should be a string, list or tuple, but got <class 'int'>"
         ):
@@ -1152,19 +1158,17 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             self.connect.read.table(self.tbl_name2).stat.approxQuantile([1], [0.1, 0.5, 0.9], 0.1)
         with self.assertRaisesRegex(TypeError, "probabilities should be a list or tuple"):
             self.connect.read.table(self.tbl_name2).stat.approxQuantile(["col1", "col3"], 0.1, 0.1)
-        with self.assertRaises(ValueError) as context:
+        with self.assertRaisesRegex(
+            ValueError, "probabilities should be numerical \\(float, int\\) in \\[0,1\\]"
+        ):
             self.connect.read.table(self.tbl_name2).stat.approxQuantile(
                 ["col1", "col3"], [-0.1], 0.1
             )
-            self.assertTrue(
-                "probabilities should be numerical (float, int) in [0,1]" in str(context.exception)
-            )
-        with self.assertRaises(TypeError) as context:
+        with self.assertRaisesRegex(
+            TypeError, "relativeError should be numerical \\(float, int\\)"
+        ):
             self.connect.read.table(self.tbl_name2).stat.approxQuantile(
                 ["col1", "col3"], [0.1, 0.5, 0.9], "str"
-            )
-            self.assertTrue(
-                "relativeError should be numerical (float, int)" in str(context.exception)
             )
         with self.assertRaisesRegex(ValueError, "relativeError should be >= 0."):
             self.connect.read.table(self.tbl_name2).stat.approxQuantile(
