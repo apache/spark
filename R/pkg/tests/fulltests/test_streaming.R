@@ -140,7 +140,7 @@ test_that("Non-streaming DataFrame", {
   expect_false(isStreaming(c))
 
   expect_error(write.stream(c, "memory", queryName = "people", outputMode = "complete"),
-               paste0(".*(writeStream : analysis error - 'writeStream' can be called only on ",
+               paste0(".*(writeStream : analysis error - `writeStream` can be called only on ",
                       "streaming Dataset/DataFrame).*"))
 })
 
