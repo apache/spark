@@ -140,7 +140,7 @@ trait OrcTest extends QueryTest with FileBasedDataSourceTest with BeforeAndAfter
     val url = Thread.currentThread().getContextClassLoader.getResource(name)
     // Copy to avoid URISyntaxException when `sql/hive` accesses the resources in `sql/core`
     val file = File.createTempFile("orc-test", ".orc")
-    file.deleteOnExit();
+    file.deleteOnExit()
     FileUtils.copyURLToFile(url, file)
     spark.read.orc(file.getAbsolutePath)
   }

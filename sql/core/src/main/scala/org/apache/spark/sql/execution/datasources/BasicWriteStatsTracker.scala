@@ -124,10 +124,10 @@ class BasicWriteTaskStatsTracker(
           s" bytes written may be under-reported");
       case e: UnsupportedOperationException =>
         // this is not unusual; ignore
-        logDebug(s"XAttr not supported on path $path", e);
+        logDebug(s"XAttr not supported on path $path", e)
       case e: Exception =>
         // Something else. Log at debug and continue.
-        logDebug(s"XAttr processing failure on $path", e);
+        logDebug(s"XAttr processing failure on $path", e)
     }
     Some(len)
   }

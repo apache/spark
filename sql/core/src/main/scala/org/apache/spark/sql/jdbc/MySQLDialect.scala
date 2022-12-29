@@ -55,7 +55,7 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
         funcName: String, isDistinct: Boolean, inputs: Array[String]): String =
       if (isDistinct && distinctUnsupportedAggregateFunctions.contains(funcName)) {
         throw new UnsupportedOperationException(s"${this.getClass.getSimpleName} does not " +
-          s"support aggregate function: $funcName with DISTINCT");
+          s"support aggregate function: $funcName with DISTINCT")
       } else {
         super.visitAggregateFunction(funcName, isDistinct, inputs)
       }
@@ -230,7 +230,7 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
           } else {
             // The only property we are building here is `COMMENT` because it's the only one
             // we can get from `SHOW INDEXES`.
-            val properties = new util.Properties();
+            val properties = new util.Properties()
             if (indexComment.nonEmpty) properties.put("COMMENT", indexComment)
             val index = new TableIndex(indexName, indexType, Array(FieldReference(colName)),
               new util.HashMap[NamedReference, util.Properties](), properties)

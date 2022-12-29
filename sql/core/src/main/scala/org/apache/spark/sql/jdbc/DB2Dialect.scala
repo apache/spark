@@ -48,7 +48,7 @@ private object DB2Dialect extends JdbcDialect {
         funcName: String, isDistinct: Boolean, inputs: Array[String]): String =
       if (isDistinct && distinctUnsupportedAggregateFunctions.contains(funcName)) {
         throw new UnsupportedOperationException(s"${this.getClass.getSimpleName} does not " +
-          s"support aggregate function: $funcName with DISTINCT");
+          s"support aggregate function: $funcName with DISTINCT")
       } else {
         super.visitAggregateFunction(funcName, isDistinct, inputs)
       }

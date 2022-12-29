@@ -115,7 +115,7 @@ class DiskBlockManagerSuite extends SparkFunSuite {
   }
 
   test("Test dir creation with permission 770") {
-    val testDir = new File("target/testDir");
+    val testDir = new File("target/testDir")
     FileUtils.deleteQuietly(testDir)
     diskBlockManager = new DiskBlockManager(testConf, deleteFilesOnStop = true, isDriver = false)
     diskBlockManager.createDirWithPermission770(testDir)
@@ -127,9 +127,9 @@ class DiskBlockManagerSuite extends SparkFunSuite {
   }
 
   test("Encode merged directory name and attemptId in shuffleManager field") {
-    testConf.set(config.APP_ATTEMPT_ID, "1");
+    testConf.set(config.APP_ATTEMPT_ID, "1")
     diskBlockManager = new DiskBlockManager(testConf, deleteFilesOnStop = true, isDriver = false)
-    val mergedShuffleMeta = diskBlockManager.getMergeDirectoryAndAttemptIDJsonString();
+    val mergedShuffleMeta = diskBlockManager.getMergeDirectoryAndAttemptIDJsonString()
     val mapper: ObjectMapper = new ObjectMapper
     val typeRef: TypeReference[HashMap[String, String]] =
       new TypeReference[HashMap[String, String]]() {}

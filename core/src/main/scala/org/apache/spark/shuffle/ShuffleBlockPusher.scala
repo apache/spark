@@ -86,7 +86,7 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
         // there is no need to retry it
         !(t.isInstanceOf[BlockPushNonFatalFailure] &&
           BlockPushNonFatalFailure.
-            shouldNotRetryErrorCode(t.asInstanceOf[BlockPushNonFatalFailure].getReturnCode));
+            shouldNotRetryErrorCode(t.asInstanceOf[BlockPushNonFatalFailure].getReturnCode))
       }
     }
   }

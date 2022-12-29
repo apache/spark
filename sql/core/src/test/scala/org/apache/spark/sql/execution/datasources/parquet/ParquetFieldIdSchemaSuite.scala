@@ -137,7 +137,7 @@ class ParquetFieldIdSchemaSuite extends ParquetSchemaTest {
       new StructType().add("f0", f0Type, nullable = false, withId(1))))
 
     assert(!ParquetUtils.hasFieldIds(new StructType().add("f0", IntegerType, nullable = true)))
-    assert(!ParquetUtils.hasFieldIds(new StructType()));
+    assert(!ParquetUtils.hasFieldIds(new StructType()))
   }
 
   test("check getFieldId for schema") {

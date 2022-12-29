@@ -197,8 +197,8 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     val expected = Seq("1", "2", "3", "4", "-", "*", "+")
     val expression = Add(Literal(1), Multiply(Literal(2), Subtract(Literal(3), Literal(4))))
     expression foreachUp {
-      case b: BinaryOperator => actual += b.symbol;
-      case l: Literal => actual += l.toString;
+      case b: BinaryOperator => actual += b.symbol
+      case l: Literal => actual += l.toString
     }
 
     assert(expected === actual)

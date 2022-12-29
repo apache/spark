@@ -121,7 +121,7 @@ class LookupFunctionsSuite extends PlanTest {
 }
 
 class CustomerFunctionRegistry extends SimpleFunctionRegistry {
-  private var lookupFunctionCalledTimes: Int = 0;
+  private var lookupFunctionCalledTimes: Int = 0
 
   override def lookupFunction(name: FunctionIdentifier): Option[ExpressionInfo] = {
     lookupFunctionCalledTimes += 1

@@ -371,16 +371,16 @@ private[spark] class Client(
     }
     if (regex.nonEmpty && isSupported) {
       logInfo(s"Processing token conf (spark.yarn.am.tokenConfRegex) with regex $regex")
-      val dob = new DataOutputBuffer();
-      val copy = new Configuration(false);
-      copy.clear();
+      val dob = new DataOutputBuffer()
+      val copy = new Configuration(false)
+      copy.clear()
       hadoopConf.asScala.foreach { entry =>
         if (entry.getKey.matches(regex.get)) {
           copy.set(entry.getKey, entry.getValue)
           logInfo(s"Captured key: ${entry.getKey} -> value: ${entry.getValue}")
         }
       }
-      copy.write(dob);
+      copy.write(dob)
 
       // since this method was added in Hadoop 2.9 and 3.0, we use reflection here to avoid
       // compilation error for Hadoop 2.7 profile.

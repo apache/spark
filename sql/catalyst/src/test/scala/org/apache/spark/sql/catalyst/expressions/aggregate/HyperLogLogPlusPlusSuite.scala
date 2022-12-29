@@ -161,7 +161,7 @@ class HyperLogLogPlusPlusSuite extends SparkFunSuite {
     hll.update(buffer, input)
     input.setDouble(0, -0.0)
     hll.update(buffer, input)
-    evaluateEstimate(hll, buffer, 1);
+    evaluateEstimate(hll, buffer, 1)
   }
 
   test("SPARK-32110: add NaN") {
@@ -173,6 +173,6 @@ class HyperLogLogPlusPlusSuite extends SparkFunSuite {
     assert(JDouble.doubleToRawLongBits(Double.NaN) != JDouble.doubleToRawLongBits(specialNaN))
     input.setDouble(0, specialNaN)
     hll.update(buffer, input)
-    evaluateEstimate(hll, buffer, 1);
+    evaluateEstimate(hll, buffer, 1)
   }
 }

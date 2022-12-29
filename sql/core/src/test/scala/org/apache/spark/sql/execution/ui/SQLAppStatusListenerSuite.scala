@@ -1150,7 +1150,7 @@ object CustomMetricReaderFactory extends PartitionReaderFactory {
         }
         val innerMetric = new CustomTaskMetric {
           override def name(): String = "inner_metric"
-          override def value(): Long = 54321;
+          override def value(): Long = 54321
         }
         Array(metric, innerMetric)
       }
@@ -1200,15 +1200,15 @@ class CustomMetricsCSVDataWriter(fs: FileSystem, file: Path) extends CSVDataWrit
     }
     val innerMetric = new CustomTaskMetric {
       override def name(): String = "inner_metric"
-      override def value(): Long = 54321;
+      override def value(): Long = 54321
     }
     val bytesWrittenMetric = new CustomTaskMetric {
       override def name(): String = "bytesWritten"
-      override def value(): Long = 123;
+      override def value(): Long = 123
     }
     val recordsWrittenMetric = new CustomTaskMetric {
       override def name(): String = "recordsWritten"
-      override def value(): Long = 10;
+      override def value(): Long = 10
     }
     Array(metric, innerMetric, bytesWrittenMetric, recordsWrittenMetric)
   }

@@ -91,7 +91,7 @@ private[hive] class SparkGetFunctionsOperation(
               s"Usage: ${info.getUsage}\nExtended Usage:${info.getExtended}", // REMARKS
               DatabaseMetaData.functionResultUnknown.asInstanceOf[AnyRef], // FUNCTION_TYPE
               info.getClassName) // SPECIFIC_NAME
-            rowSet.addRow(rowData);
+            rowSet.addRow(rowData)
         }
       }
       setState(OperationState.FINISHED)

@@ -66,7 +66,7 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
 
   private def computePid(): Int = {
     if (!isAvailable || testing) {
-      return -1;
+      return -1
     }
     try {
       // This can be simplified in java9:
@@ -86,7 +86,7 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
 
   private def computePageSize(): Long = {
     if (testing) {
-      return 4096;
+      return 4096
     }
     try {
       val cmd = Array("getconf", "PAGESIZE")

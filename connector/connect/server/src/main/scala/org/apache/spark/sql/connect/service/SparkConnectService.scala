@@ -222,7 +222,7 @@ object SparkConnectService {
 
   // Type alias for the SessionCacheKey. Right now this is a String but allows us to switch to a
   // different or complex type easily.
-  private type SessionCacheKey = (String, String);
+  private type SessionCacheKey = (String, String)
 
   private var server: Server = _
 

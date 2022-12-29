@@ -263,7 +263,7 @@ private[sql] object H2Dialect extends JdbcDialect {
         }
       } else {
         throw new UnsupportedOperationException(
-          s"${this.getClass.getSimpleName} does not support function: $funcName");
+          s"${this.getClass.getSimpleName} does not support function: $funcName")
       }
     }
   }

@@ -206,7 +206,7 @@ trait FileSourceAggregatePushDownSuite
       spark.range(10).selectExpr("id", "id % 3 as P")
         .write.partitionBy("p").format(format).save(dir.getCanonicalPath)
       withTempView("tmp") {
-        spark.read.format(format).load(dir.getCanonicalPath).createOrReplaceTempView("tmp");
+        spark.read.format(format).load(dir.getCanonicalPath).createOrReplaceTempView("tmp")
         val query = "SELECT count(*), count(id), p, max(id), p, count(p), max(id)," +
           "  min(id), p FROM tmp group by p"
         var expected = Array.empty[Row]

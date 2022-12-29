@@ -585,7 +585,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   test("localProperties are inherited by spawned threads.") {
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
     sc.setLocalProperty("testProperty", "testValue")
-    var result = "unset";
+    var result = "unset"
     val thread = new Thread() {
       override def run(): Unit = {result = sc.getLocalProperty("testProperty")}
     }
@@ -597,7 +597,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 
   test("localProperties do not cross-talk between threads.") {
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
-    var result = "unset";
+    var result = "unset"
     val thread1 = new Thread() {
       override def run(): Unit = {sc.setLocalProperty("testProperty", "testValue")}}
     // testProperty should be unset and thus return null

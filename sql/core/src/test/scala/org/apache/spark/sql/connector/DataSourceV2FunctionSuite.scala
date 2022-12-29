@@ -120,7 +120,7 @@ case class StrLen(impl: BoundFunction) extends UnboundFunction {
 
   override def bind(inputType: StructType): BoundFunction = {
     if (inputType.fields.length != 1) {
-      throw new UnsupportedOperationException("Expect exactly one argument");
+      throw new UnsupportedOperationException("Expect exactly one argument")
     }
     inputType.fields(0).dataType match {
       case StringType => impl

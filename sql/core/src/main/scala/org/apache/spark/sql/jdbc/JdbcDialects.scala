@@ -260,7 +260,7 @@ abstract class JdbcDialect extends Serializable with Logging {
         super.visitAggregateFunction(dialectFunctionName(funcName), isDistinct, inputs)
       } else {
         throw new UnsupportedOperationException(
-          s"${this.getClass.getSimpleName} does not support aggregate function: $funcName");
+          s"${this.getClass.getSimpleName} does not support aggregate function: $funcName")
       }
     }
 
@@ -347,7 +347,7 @@ abstract class JdbcDialect extends Serializable with Logging {
   def schemasExists(conn: Connection, options: JDBCOptions, schema: String): Boolean = {
     val rs = conn.getMetaData.getSchemas(null, schema)
     while (rs.next()) {
-      if (rs.getString(1) == schema) return true;
+      if (rs.getString(1) == schema) return true
     }
     false
   }

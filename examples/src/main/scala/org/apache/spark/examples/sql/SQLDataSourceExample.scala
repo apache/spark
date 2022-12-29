@@ -316,7 +316,7 @@ object SQLDataSourceExample {
     // Read all files in a folder, please make sure only CSV files should present in the folder.
     val folderPath = "examples/src/main/resources"
     val df5 = spark.read.csv(folderPath)
-    df5.show();
+    df5.show()
     // Wrong schema because non-CSV files are read
     // +-----------+
     // |        _c0|

@@ -210,7 +210,7 @@ class CommitterBindingSuite extends SparkFunSuite {
       "")
     try {
       // delete the temp file and create a temp dir.
-      jobCommitDir.delete();
+      jobCommitDir.delete()
       val jobUri = jobCommitDir.toURI
       // hadoop path of the job
       val path = new Path(jobUri)
@@ -229,7 +229,7 @@ class CommitterBindingSuite extends SparkFunSuite {
       committer.setupTask(tContext)
       verifyAbsTempFileWorks(tContext, committer)
     } finally {
-      jobCommitDir.delete();
+      jobCommitDir.delete()
     }
   }
 

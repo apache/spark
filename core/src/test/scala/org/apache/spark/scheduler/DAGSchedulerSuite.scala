@@ -3899,7 +3899,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
     // The second task fails with Metadata Failed exception.
     val metadataFetchFailedEx = new MetadataFetchFailedException(
-      shuffleDep.shuffleId, 1, "metadata failure");
+      shuffleDep.shuffleId, 1, "metadata failure")
     runEvent(makeCompletionEvent(
       taskSets(1).tasks(1), metadataFetchFailedEx.toTaskFailedReason, null))
     assert(mapOutputTracker.getNumAvailableOutputs(shuffleDep.shuffleId) == parts)

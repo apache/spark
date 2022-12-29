@@ -29,7 +29,7 @@ import org.apache.spark.sql.types.{IntegerType, StringType}
  * Translated from * org.apache.parquet.column.values.delta.TestDeltaByteArray
  */
 class ParquetDeltaByteArrayEncodingSuite extends ParquetCompatibilityTest with SharedSparkSession {
-  val values: Array[String] = Array("parquet-mr", "parquet", "parquet-format");
+  val values: Array[String] = Array("parquet-mr", "parquet", "parquet-format")
   val randvalues: Array[String] = Utils.getRandomStringSamples(10000, 32)
 
   var writer: DeltaByteArrayWriter = _
