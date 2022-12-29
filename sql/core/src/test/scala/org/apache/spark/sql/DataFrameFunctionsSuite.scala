@@ -4009,18 +4009,22 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     ).toDF("i")
 
     def testArrayOfPrimitiveTypeNotContainsNull(): Unit = {
-      checkAnswer(df.selectExpr("aggregate(i, 0, (acc, x) -> acc + x)"),
-        Seq(
-          Row(25),
-          Row(31),
-          Row(0),
-          Row(null)))
-      checkAnswer(df.selectExpr("aggregate(i, 0, (acc, x) -> acc + x, acc -> acc * 10)"),
-        Seq(
-          Row(250),
-          Row(310),
-          Row(0),
-          Row(null)))
+      Seq("aggregate", "reduce").foreach { agg =>
+        checkAnswer(
+          df.selectExpr(s"$agg(i, 0, (acc, x) -> acc + x)"),
+          Seq(
+            Row(25),
+            Row(31),
+            Row(0),
+            Row(null)))
+        checkAnswer(
+          df.selectExpr(s"$agg(i, 0, (acc, x) -> acc + x, acc -> acc * 10)"),
+          Seq(
+            Row(250),
+            Row(310),
+            Row(0),
+            Row(null)))
+      }
       checkAnswer(df.select(aggregate(col("i"), lit(0), (acc, x) => acc + x)),
         Seq(
           Row(25),
@@ -4051,19 +4055,22 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     ).toDF("i")
 
     def testArrayOfPrimitiveTypeContainsNull(): Unit = {
-      checkAnswer(df.selectExpr("aggregate(i, 0, (acc, x) -> acc + x)"),
-        Seq(
-          Row(25),
-          Row(null),
-          Row(0),
-          Row(null)))
-      checkAnswer(
-        df.selectExpr("aggregate(i, 0, (acc, x) -> acc + x, acc -> coalesce(acc, 0) * 10)"),
-        Seq(
-          Row(250),
-          Row(0),
-          Row(0),
-          Row(null)))
+      Seq("aggregate", "reduce").foreach { agg =>
+        checkAnswer(
+          df.selectExpr(s"$agg(i, 0, (acc, x) -> acc + x)"),
+          Seq(
+            Row(25),
+            Row(null),
+            Row(0),
+            Row(null)))
+        checkAnswer(
+          df.selectExpr(s"$agg(i, 0, (acc, x) -> acc + x, acc -> coalesce(acc, 0) * 10)"),
+          Seq(
+            Row(250),
+            Row(0),
+            Row(0),
+            Row(null)))
+      }
       checkAnswer(df.select(aggregate(col("i"), lit(0), (acc, x) => acc + x)),
         Seq(
           Row(25),
@@ -4096,19 +4103,22 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     ).toDF("ss", "s")
 
     def testNonPrimitiveType(): Unit = {
-      checkAnswer(df.selectExpr("aggregate(ss, s, (acc, x) -> concat(acc, x))"),
-        Seq(
-          Row("acab"),
-          Row(null),
-          Row("c"),
-          Row(null)))
-      checkAnswer(
-        df.selectExpr("aggregate(ss, s, (acc, x) -> concat(acc, x), acc -> coalesce(acc , ''))"),
-        Seq(
-          Row("acab"),
-          Row(""),
-          Row("c"),
-          Row(null)))
+      Seq("aggregate", "reduce").foreach { agg =>
+        checkAnswer(
+          df.selectExpr(s"$agg(ss, s, (acc, x) -> concat(acc, x))"),
+          Seq(
+            Row("acab"),
+            Row(null),
+            Row("c"),
+            Row(null)))
+        checkAnswer(
+          df.selectExpr(s"$agg(ss, s, (acc, x) -> concat(acc, x), acc -> coalesce(acc , ''))"),
+          Seq(
+            Row("acab"),
+            Row(""),
+            Row("c"),
+            Row(null)))
+      }
       checkAnswer(df.select(aggregate(col("ss"), col("s"), (acc, x) => concat(acc, x))),
         Seq(
           Row("acab"),
@@ -4141,32 +4151,36 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       (null, 4)
     ).toDF("s", "i")
 
-    val ex1 = intercept[AnalysisException] {
-      df.selectExpr("aggregate(s, '', x -> x)")
-    }
-    assert(ex1.getMessage.contains("The number of lambda function arguments '1' does not match"))
+    Seq("aggregate", "reduce").foreach { agg =>
+      val ex1 = intercept[AnalysisException] {
+        df.selectExpr(s"$agg(s, '', x -> x)")
+      }
+      assert(ex1.getMessage.contains("The number of lambda function arguments '1' does not match"))
 
-    val ex2 = intercept[AnalysisException] {
-      df.selectExpr("aggregate(s, '', (acc, x) -> x, (acc, x) -> x)")
+      val ex2 = intercept[AnalysisException] {
+        df.selectExpr(s"$agg(s, '', (acc, x) -> x, (acc, x) -> x)")
+      }
+      assert(ex2.getMessage.contains("The number of lambda function arguments '2' does not match"))
     }
-    assert(ex2.getMessage.contains("The number of lambda function arguments '2' does not match"))
 
-    checkError(
-      exception = intercept[AnalysisException] {
-        df.selectExpr("aggregate(i, 0, (acc, x) -> x)")
-      },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-      sqlState = None,
-      parameters = Map(
-        "sqlExpr" -> """"aggregate(i, 0, lambdafunction(x, acc, x), lambdafunction(id, id))"""",
-        "paramIndex" -> "1",
-        "inputSql" -> "\"i\"",
-        "inputType" -> "\"INT\"",
-        "requiredType" -> "\"ARRAY\""),
-      context = ExpectedContext(
-        fragment = "aggregate(i, 0, (acc, x) -> x)",
-        start = 0,
-        stop = 29))
+    Seq("aggregate", "reduce").foreach { agg =>
+      checkError(
+        exception = intercept[AnalysisException] {
+          df.selectExpr(s"$agg(i, 0, (acc, x) -> x)")
+        },
+        errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+        sqlState = None,
+        parameters = Map(
+          "sqlExpr" -> s""""$agg(i, 0, lambdafunction(x, acc, x), lambdafunction(id, id))"""",
+          "paramIndex" -> "1",
+          "inputSql" -> "\"i\"",
+          "inputType" -> "\"INT\"",
+          "requiredType" -> "\"ARRAY\""),
+        context = ExpectedContext(
+          fragment = s"$agg(i, 0, (acc, x) -> x)",
+          start = 0,
+          stop = agg.length + 20))
+    }
 
     // scalastyle:off line.size.limit
     checkError(
@@ -4184,18 +4198,20 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     // scalastyle:on line.size.limit
 
     // scalastyle:off line.size.limit
-    checkError(
-      exception = intercept[AnalysisException] {
-        df.selectExpr("aggregate(s, 0, (acc, x) -> x)")
-      },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-      parameters = Map(
-        "sqlExpr" -> """"aggregate(s, 0, lambdafunction(namedlambdavariable(), namedlambdavariable(), namedlambdavariable()), lambdafunction(namedlambdavariable(), namedlambdavariable()))"""",
-        "paramIndex" -> "3",
-        "inputSql" -> "\"lambdafunction(namedlambdavariable(), namedlambdavariable(), namedlambdavariable())\"",
-        "inputType" -> "\"STRING\"",
-        "requiredType" -> "\"INT\""
-      ))
+    Seq("aggregate", "reduce").foreach { agg =>
+      checkError(
+        exception = intercept[AnalysisException] {
+          df.selectExpr(s"$agg(s, 0, (acc, x) -> x)")
+        },
+        errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+        parameters = Map(
+          "sqlExpr" -> s""""$agg(s, 0, lambdafunction(namedlambdavariable(), namedlambdavariable(), namedlambdavariable()), lambdafunction(namedlambdavariable(), namedlambdavariable()))"""",
+          "paramIndex" -> "3",
+          "inputSql" -> "\"lambdafunction(namedlambdavariable(), namedlambdavariable(), namedlambdavariable())\"",
+          "inputType" -> "\"STRING\"",
+          "requiredType" -> "\"INT\""
+        ))
+    }
     // scalastyle:on line.size.limit
 
     // scalastyle:off line.size.limit
@@ -4213,16 +4229,18 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       ))
     // scalastyle:on line.size.limit
 
-    checkError(
-      exception =
-        intercept[AnalysisException](df.selectExpr("aggregate(a, 0, (acc, x) -> x)")),
-      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-      sqlState = None,
-      parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"),
-      context = ExpectedContext(
-        fragment = "a",
-        start = 10,
-        stop = 10))
+    Seq("aggregate", "reduce").foreach { agg =>
+      checkError(
+        exception =
+          intercept[AnalysisException](df.selectExpr(s"$agg(a, 0, (acc, x) -> x)")),
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = None,
+        parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"),
+        context = ExpectedContext(
+          fragment = "a",
+          start = agg.length + 1,
+          stop = agg.length + 1))
+    }
   }
 
   test("map_zip_with function - map of primitive types") {
