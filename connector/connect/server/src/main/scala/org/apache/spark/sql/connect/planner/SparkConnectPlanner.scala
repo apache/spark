@@ -354,10 +354,13 @@ class SparkConnectPlanner(session: SparkSession) {
   }
 
   private def transformStatCorr(rel: proto.StatCorr): LogicalPlan = {
-    val corr = Dataset
-      .ofRows(session, transformRelation(rel.getInput))
-      .stat
-      .corr(rel.getCol1, rel.getCol2, rel.getMethod)
+    val df = Dataset.ofRows(session, transformRelation(rel.getInput))
+    val corr = if (rel.hasMethod) {
+      df.stat.corr(rel.getCol1, rel.getCol2, rel.getMethod)
+    } else {
+      df.stat.corr(rel.getCol1, rel.getCol2)
+    }
+
     LocalRelation.fromProduct(
       output = AttributeReference("corr", DoubleType, false)() :: Nil,
       data = Tuple1.apply(corr) :: Nil)
