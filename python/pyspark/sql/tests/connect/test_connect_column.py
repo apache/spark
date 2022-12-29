@@ -97,6 +97,10 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             df.select(df.name.substr(0, 1).alias("col")).toPandas(),
             df2.select(df2.name.substr(0, 1).alias("col")).toPandas(),
         )
+        self.assert_eq(
+            df.select(df.name.substr(0, 1).name("col")).toPandas(),
+            df2.select(df2.name.substr(0, 1).name("col")).toPandas(),
+        )
         df3 = self.connect.sql("SELECT cast(null as int) as name")
         df4 = self.spark.sql("SELECT cast(null as int) as name")
         self.assert_eq(
@@ -107,6 +111,38 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             df3.filter(df3.name.isNotNull()).toPandas(),
             df4.filter(df4.name.isNotNull()).toPandas(),
         )
+
+    def test_invalid_ops(self):
+        query = """
+            SELECT * FROM VALUES
+            (1, 1, 0, NULL), (2, NULL, 1, 2.0), (3, 3, 4, 3.5)
+            AS tab(a, b, c, d)
+            """
+        cdf = self.connect.sql(query)
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Cannot apply 'in' operator against a column",
+        ):
+            1 in cdf.a
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Cannot convert column into bool",
+        ):
+            cdf.a > 2 and cdf.b < 1
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Cannot convert column into bool",
+        ):
+            cdf.a > 2 or cdf.b < 1
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Cannot convert column into bool",
+        ):
+            not (cdf.a > 2)
 
     def test_datetime(self):
         query = """
@@ -167,6 +203,45 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assert_eq(
             cdf.select(cdf.b < datetime.datetime(2022, 12, 23, 17, 0, 0)).toPandas(),
             sdf.select(sdf.b < datetime.datetime(2022, 12, 23, 17, 0, 0)).toPandas(),
+        )
+
+    def test_decimal(self):
+        # SPARK-41701: test decimal
+        query = """
+            SELECT * FROM VALUES
+            (1, 1, 0, NULL), (2, NULL, 1, 2.0), (3, 3, 4, 3.5)
+            AS tab(a, b, c, d)
+            """
+        # +---+----+---+----+
+        # |  a|   b|  c|   d|
+        # +---+----+---+----+
+        # |  1|   1|  0|null|
+        # |  2|null|  1| 2.0|
+        # |  3|   3|  4| 3.5|
+        # +---+----+---+----+
+
+        cdf = self.spark.sql(query)
+        sdf = self.connect.sql(query)
+
+        self.assert_eq(
+            cdf.select(cdf.a < decimal.Decimal(3)).toPandas(),
+            sdf.select(sdf.a < decimal.Decimal(3)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.a != decimal.Decimal(2)).toPandas(),
+            sdf.select(sdf.a != decimal.Decimal(2)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.a == decimal.Decimal(2)).toPandas(),
+            sdf.select(sdf.a == decimal.Decimal(2)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.b < decimal.Decimal(2.5)).toPandas(),
+            sdf.select(sdf.b < decimal.Decimal(2.5)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.d >= decimal.Decimal(3.0)).toPandas(),
+            sdf.select(sdf.d >= decimal.Decimal(3.0)).toPandas(),
         )
 
     def test_simple_binary_expressions(self):
@@ -408,21 +483,145 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             sdf.select(sdf.a.isin(sdf.b, 4, 5, 6)).toPandas(),
         )
 
+    def test_between(self):
+        query = """
+            SELECT * FROM VALUES
+            (TIMESTAMP('2022-12-22 15:50:00'), DATE('2022-12-25'), 1.1),
+            (TIMESTAMP('2022-12-22 18:50:00'), NULL, 2.2),
+            (TIMESTAMP('2022-12-23 15:50:00'), DATE('2022-12-24'), 3.3),
+            (NULL, DATE('2022-12-22'), NULL)
+            AS tab(a, b, c)
+            """
+
+        # +-------------------+----------+----+
+        # |                  a|         b|   c|
+        # +-------------------+----------+----+
+        # |2022-12-22 15:50:00|2022-12-25| 1.1|
+        # |2022-12-22 18:50:00|      null| 2.2|
+        # |2022-12-23 15:50:00|2022-12-24| 3.3|
+        # |               null|2022-12-22|null|
+        # +-------------------+----------+----+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        self.assert_eq(
+            cdf.select(cdf.c.between(0, 2)).toPandas(),
+            sdf.select(sdf.c.between(0, 2)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.c.between(1.1, 2.2)).toPandas(),
+            sdf.select(sdf.c.between(1.1, 2.2)).toPandas(),
+        )
+
+        self.assert_eq(
+            cdf.select(cdf.c.between(decimal.Decimal(0), decimal.Decimal(2))).toPandas(),
+            sdf.select(sdf.c.between(decimal.Decimal(0), decimal.Decimal(2))).toPandas(),
+        )
+
+        self.assert_eq(
+            cdf.select(
+                cdf.a.between(
+                    datetime.datetime(2022, 12, 22, 17, 0, 0),
+                    datetime.datetime(2022, 12, 23, 6, 0, 0),
+                )
+            ).toPandas(),
+            sdf.select(
+                sdf.a.between(
+                    datetime.datetime(2022, 12, 22, 17, 0, 0),
+                    datetime.datetime(2022, 12, 23, 6, 0, 0),
+                )
+            ).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(
+                cdf.b.between(datetime.date(2022, 12, 23), datetime.date(2022, 12, 24))
+            ).toPandas(),
+            sdf.select(
+                sdf.b.between(datetime.date(2022, 12, 23), datetime.date(2022, 12, 24))
+            ).toPandas(),
+        )
+
+    def test_column_accessor(self):
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        query = """
+            SELECT STRUCT(a, b, c) AS x, y, z, c FROM VALUES
+            (float(1.0), double(1.0), '2022', MAP('b', '123', 'a', 'kk'), ARRAY(1, 2, 3)),
+            (float(2.0), double(2.0), '2018', MAP('a', 'xy'), ARRAY(-1, -2, -3)),
+            (float(3.0), double(3.0), NULL, MAP('a', 'ab'), ARRAY(-1, 0, 1))
+            AS tab(a, b, c, y, z)
+            """
+
+        # +----------------+-------------------+------------+----+
+        # |               x|                  y|           z|   c|
+        # +----------------+-------------------+------------+----+
+        # |{1.0, 1.0, 2022}|{b -> 123, a -> kk}|   [1, 2, 3]|2022|
+        # |{2.0, 2.0, 2018}|          {a -> xy}|[-1, -2, -3]|2018|
+        # |{3.0, 3.0, null}|          {a -> ab}|  [-1, 0, 1]|null|
+        # +----------------+-------------------+------------+----+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        # test struct
+        self.assert_eq(
+            cdf.select(cdf.x.a, cdf.x["b"], cdf["x"].c).toPandas(),
+            sdf.select(sdf.x.a, sdf.x["b"], sdf["x"].c).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.col("x").a, cdf.x.b, CF.col("x")["c"]).toPandas(),
+            sdf.select(SF.col("x").a, sdf.x.b, SF.col("x")["c"]).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.x.getItem("a"), cdf.x.getItem("b"), cdf["x"].getField("c")).toPandas(),
+            sdf.select(sdf.x.getItem("a"), sdf.x.getItem("b"), sdf["x"].getField("c")).toPandas(),
+        )
+
+        # test map
+        self.assert_eq(
+            cdf.select(cdf.y.a, cdf.y["b"], cdf["y"].c).toPandas(),
+            sdf.select(sdf.y.a, sdf.y["b"], sdf["y"].c).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.col("y").a, cdf.y.b, CF.col("y")["c"]).toPandas(),
+            sdf.select(SF.col("y").a, sdf.y.b, SF.col("y")["c"]).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.y.getItem("a"), cdf.y.getItem("b"), cdf["y"].getField("c")).toPandas(),
+            sdf.select(sdf.y.getItem("a"), sdf.y.getItem("b"), sdf["y"].getField("c")).toPandas(),
+        )
+
+        # test array
+        self.assert_eq(
+            cdf.select(cdf.z[0], cdf.z[1], cdf["z"][2]).toPandas(),
+            sdf.select(sdf.z[0], sdf.z[1], sdf["z"][2]).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.col("z")[0], cdf.z[10], CF.col("z")[-10]).toPandas(),
+            sdf.select(SF.col("z")[0], sdf.z[10], SF.col("z")[-10]).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.z.getItem(0), cdf.z.getItem(1), cdf["z"].getField(2)).toPandas(),
+            sdf.select(sdf.z.getItem(0), sdf.z.getItem(1), sdf["z"].getField(2)).toPandas(),
+        )
+
+        # test string with slice
+        self.assert_eq(
+            cdf.select(cdf.c[0:1], cdf["c"][2:10]).toPandas(),
+            sdf.select(sdf.c[0:1], sdf["c"][2:10]).toPandas(),
+        )
+
     def test_unsupported_functions(self):
         # SPARK-41225: Disable unsupported functions.
         c = self.connect.range(1).id
         for f in (
-            "getItem",
-            "between",
-            "getField",
             "withField",
             "dropFields",
         ):
             with self.assertRaises(NotImplementedError):
                 getattr(c, f)()
-
-        with self.assertRaises(NotImplementedError):
-            c["a"]
 
         with self.assertRaises(TypeError):
             for x in c:

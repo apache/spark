@@ -1331,6 +1331,11 @@
           "Catalog <catalogName> does not support <operation>."
         ]
       },
+      "COMBINATION_QUERY_RESULT_CLAUSES" : {
+        "message" : [
+          "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY."
+        ]
+      },
       "DESC_TABLE_COLUMN_PARTITION" : {
         "message" : [
           "DESC TABLE COLUMN for a specific partition."
@@ -1643,11 +1648,6 @@
   "_LEGACY_ERROR_TEMP_0008" : {
     "message" : [
       "There must be at least one WHEN clause in a MERGE statement."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0011" : {
-    "message" : [
-      "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY is not supported."
     ]
   },
   "_LEGACY_ERROR_TEMP_0012" : {

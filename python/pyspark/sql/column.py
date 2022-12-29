@@ -430,6 +430,9 @@ class Column:
 
         .. versionadded:: 1.3.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         key
@@ -468,6 +471,9 @@ class Column:
         An expression that gets a field by name in a :class:`StructType`.
 
         .. versionadded:: 1.3.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -1235,6 +1241,9 @@ class Column:
         Define a windowing column.
 
         .. versionadded:: 1.4.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------

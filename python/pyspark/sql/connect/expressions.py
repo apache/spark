@@ -261,15 +261,17 @@ class LiteralExpression(Expression):
         else:
             raise ValueError(f"Unsupported Data Type {type(value).__name__}")
 
+    @classmethod
+    def _from_value(cls, value: Any) -> "LiteralExpression":
+        return LiteralExpression(value=value, dataType=LiteralExpression._infer_type(value))
+
     def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
         """Converts the literal expression to the literal in proto."""
 
         expr = proto.Expression()
 
-        if isinstance(self._dataType, NullType):
-            expr.literal.null = True
-        elif self._value is None:
-            expr.literal.typed_null.CopyFrom(pyspark_types_to_proto_types(self._dataType))
+        if self._value is None:
+            expr.literal.null.CopyFrom(pyspark_types_to_proto_types(self._dataType))
         elif isinstance(self._dataType, BinaryType):
             expr.literal.binary = bytes(self._value)
         elif isinstance(self._dataType, BooleanType):
@@ -416,6 +418,30 @@ class UnresolvedFunction(Expression):
             return f"{self._name}(distinct {', '.join([str(arg) for arg in self._args])})"
         else:
             return f"{self._name}({', '.join([str(arg) for arg in self._args])})"
+
+
+class UnresolvedExtractValue(Expression):
+    def __init__(
+        self,
+        child: Expression,
+        extraction: Expression,
+    ) -> None:
+        super().__init__()
+
+        assert isinstance(child, Expression)
+        self._child = child
+
+        assert isinstance(extraction, Expression)
+        self._extraction = extraction
+
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
+        expr = proto.Expression()
+        expr.unresolved_extract_value.child.CopyFrom(self._child.to_plan(session))
+        expr.unresolved_extract_value.extraction.CopyFrom(self._extraction.to_plan(session))
+        return expr
+
+    def __repr__(self) -> str:
+        return f"UnresolvedExtractValue({str(self._child)}, {str(self._extraction)})"
 
 
 class UnresolvedRegex(Expression):

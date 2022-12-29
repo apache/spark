@@ -246,7 +246,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   private def makeFunction(ident: Seq[String]): Function = {
-    val plan = UnresolvedFunc(ident, "Catalog.makeFunction", false, None)
+    val plan = UnresolvedFunctionName(ident, "Catalog.makeFunction", false, None)
     sparkSession.sessionState.executePlan(plan).analyzed match {
       case f: ResolvedPersistentFunc =>
         val className = f.func match {

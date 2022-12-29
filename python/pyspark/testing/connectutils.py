@@ -34,8 +34,29 @@ except ImportError as e:
     grpc_requirement_message = str(e)
 have_grpc = grpc_requirement_message is None
 
+
+grpc_status_requirement_message = None
+try:
+    import grpc_status
+except ImportError as e:
+    grpc_status_requirement_message = str(e)
+have_grpc_status = grpc_status_requirement_message is None
+
+googleapis_common_protos_requirement_message = None
+try:
+    from google.rpc import error_details_pb2
+except ImportError as e:
+    googleapis_common_protos_requirement_message = str(e)
+have_googleapis_common_protos = googleapis_common_protos_requirement_message is None
+
 connect_not_compiled_message = None
-if have_pandas and have_pyarrow and have_grpc:
+if (
+    have_pandas
+    and have_pyarrow
+    and have_grpc
+    and have_grpc_status
+    and have_googleapis_common_protos
+):
     from pyspark.sql.connect import DataFrame
     from pyspark.sql.connect.plan import Read, Range, SQL
     from pyspark.testing.utils import search_jar
@@ -62,6 +83,8 @@ connect_requirement_message = (
     or pyarrow_requirement_message
     or grpc_requirement_message
     or connect_not_compiled_message
+    or googleapis_common_protos_requirement_message
+    or grpc_status_requirement_message
 )
 should_test_connect: str = typing.cast(str, connect_requirement_message is None)
 

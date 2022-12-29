@@ -33,7 +33,7 @@ object LiteralValueProtoConverter {
   def toCatalystExpression(lit: proto.Expression.Literal): expressions.Literal = {
     lit.getLiteralTypeCase match {
       case proto.Expression.Literal.LiteralTypeCase.NULL =>
-        expressions.Literal(null, NullType)
+        expressions.Literal(null, DataTypeProtoConverter.toCatalystType(lit.getNull))
 
       case proto.Expression.Literal.LiteralTypeCase.BINARY =>
         expressions.Literal(lit.getBinary.toByteArray, BinaryType)
@@ -96,9 +96,6 @@ object LiteralValueProtoConverter {
       case proto.Expression.Literal.LiteralTypeCase.DAY_TIME_INTERVAL =>
         expressions.Literal(lit.getDayTimeInterval, DayTimeIntervalType())
 
-      case proto.Expression.Literal.LiteralTypeCase.TYPED_NULL =>
-        expressions.Literal(null, DataTypeProtoConverter.toCatalystType(lit.getTypedNull))
-
       case _ =>
         throw InvalidPlanInput(
           s"Unsupported Literal Type: ${lit.getLiteralTypeCase.getNumber}" +
@@ -116,7 +113,11 @@ object LiteralValueProtoConverter {
 
   def toConnectProtoValue(value: Any): proto.Expression.Literal = {
     value match {
-      case null => proto.Expression.Literal.newBuilder().setNull(true).build()
+      case null =>
+        proto.Expression.Literal
+          .newBuilder()
+          .setNull(DataTypeProtoConverter.toConnectProtoType(NullType))
+          .build()
       case b: Boolean => proto.Expression.Literal.newBuilder().setBoolean(b).build()
       case b: Byte => proto.Expression.Literal.newBuilder().setByte(b).build()
       case s: Short => proto.Expression.Literal.newBuilder().setShort(s).build()
