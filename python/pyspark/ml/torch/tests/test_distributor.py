@@ -17,6 +17,7 @@
 
 import contextlib
 import os
+import shutil
 from six import StringIO  # type: ignore
 import stat
 import subprocess
@@ -24,7 +25,7 @@ import sys
 import time
 import tempfile
 import threading
-from typing import Callable, Dict
+from typing import Callable, Dict, Any
 import unittest
 from unittest.mock import patch
 
@@ -45,6 +46,74 @@ def patch_stdout() -> StringIO:
         yield io_out
     finally:
         sys.stdout = sys_stdout
+
+
+def create_training_function() -> Callable:
+    import torch.nn as nn
+    import torch.nn.functional as F
+    from torchvision import transforms, datasets
+
+    batch_size = 100
+    num_epochs = 1
+    momentum = 0.5
+
+    temp_directory_path = tempfile.mkdtemp()
+
+    train_dataset = datasets.MNIST(
+        temp_directory_path,
+        train=True,
+        download=True,
+        transform=transforms.Compose(
+            [transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]
+        ),
+    )
+
+    class Net(nn.Module):
+        def __init__(self) -> None:
+            super(Net, self).__init__()
+            self.conv1 = nn.Conv2d(1, 10, kernel_size=5)
+            self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
+            self.conv2_drop = nn.Dropout2d()
+            self.fc1 = nn.Linear(320, 50)
+            self.fc2 = nn.Linear(50, 10)
+
+        def forward(self, x: Any) -> Any:
+            x = F.relu(F.max_pool2d(self.conv1(x), 2))
+            x = F.relu(F.max_pool2d(self.conv2_drop(self.conv2(x)), 2))
+            x = x.view(-1, 320)
+            x = F.relu(self.fc1(x))
+            x = F.dropout(x, training=self.training)
+            x = self.fc2(x)
+            return F.log_softmax(x)
+
+    def train_fn(learning_rate: float) -> Any:
+        import torch
+        import torch.optim as optim
+        import torch.distributed as dist
+        from torch.nn.parallel import DistributedDataParallel as DDP
+        from torch.utils.data.distributed import DistributedSampler
+
+        dist.init_process_group("gloo")
+
+        train_sampler = DistributedSampler(dataset=train_dataset)
+        data_loader = torch.utils.data.DataLoader(
+            train_dataset, batch_size=batch_size, sampler=train_sampler
+        )
+
+        model = Net()
+        ddp_model = DDP(model)
+        optimizer = optim.SGD(ddp_model.parameters(), lr=learning_rate, momentum=momentum)
+        for epoch in range(1, num_epochs + 1):
+            model.train()
+            for _, (data, target) in enumerate(data_loader):
+                optimizer.zero_grad()
+                output = model(data)
+                loss = F.nll_loss(output, target)
+                loss.backward()
+                optimizer.step()
+            print(f"epoch {epoch} finished.")
+
+    return train_fn, temp_directory_path
 
 
 class TorchDistributorBaselineUnitTests(unittest.TestCase):
@@ -296,6 +365,11 @@ class TorchDistributorLocalUnitTests(unittest.TestCase):
             test_file_path, learning_rate_str
         )
 
+    def test_end_to_end_run_locally(self) -> None:
+        train_fn, temp_directory_path = create_training_function()
+        TorchDistributor(num_processes=2, local_mode=True, use_gpu=False).run(train_fn, 0.001)
+        shutil.rmtree(temp_directory_path)
+
 
 class TorchDistributorDistributedUnitTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -363,6 +437,11 @@ class TorchDistributorDistributedUnitTests(unittest.TestCase):
         TorchDistributor(num_processes=2, local_mode=False, use_gpu=False).run(
             test_file_path, learning_rate_str
         )
+
+    def test_end_to_end_run_distributedly(self) -> None:
+        train_fn, temp_directory_path = create_training_function()
+        TorchDistributor(num_processes=2, local_mode=False, use_gpu=False).run(train_fn, 0.001)
+        shutil.rmtree(temp_directory_path)
 
 
 class TorchWrapperUnitTests(unittest.TestCase):

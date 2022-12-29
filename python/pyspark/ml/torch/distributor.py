@@ -15,14 +15,18 @@
 # limitations under the License.
 #
 
+import cloudpickle
 import collections
 import logging
 import math
 import os
 import random
 import re
-import sys
+import shutil
 import subprocess
+import sys
+import tempfile
+import textwrap
 import time
 from typing import Union, Callable, List, Dict, Optional, Any
 
@@ -298,6 +302,10 @@ class TorchDistributor(Distributor):
     ...     use_gpu=True)
     >>> trainer = distributor.run(train)
     """
+
+    PICKLED_FUNC_FILE = "func.pickle"
+    TRAIN_FILE = "train.py"
+    PICKLED_OUTPUT_FILE = "output.pickle"
 
     def __init__(
         self,
@@ -577,6 +585,68 @@ class TorchDistributor(Distributor):
             training_command, log_streaming_client=log_streaming_client
         )
 
+    @staticmethod
+    def _run_training_on_pytorch_function(
+        input_params: dict[str, Any], train_fn: Callable, *args: Any
+    ) -> Any:
+        save_dir = TorchDistributor._create_save_dir()
+        pickle_file_path = TorchDistributor._save_pickled_function(save_dir, train_fn, *args)
+        output_file_path = os.path.join(save_dir, TorchDistributor.PICKLED_OUTPUT_FILE)
+        train_file_path = TorchDistributor._create_torchrun_train_file(
+            save_dir, pickle_file_path, output_file_path
+        )
+        args = []
+
+        TorchDistributor._run_training_on_pytorch_file(input_params, train_file_path, *args)
+
+        output = TorchDistributor._get_pickled_output(output_file_path)
+        TorchDistributor._cleanup_files(save_dir)
+        return output
+
+    @staticmethod
+    def _create_save_dir() -> str:
+        # TODO: need to do this in a safe way to avoid issues during concurrent runs
+        return tempfile.mkdtemp()
+
+    @staticmethod
+    def _cleanup_files(save_dir: str) -> None:
+        shutil.rmtree(save_dir)
+
+    @staticmethod
+    def _save_pickled_function(save_dir: str, train_fn: Union[str, Callable], *args: Any) -> str:
+        saved_pickle_path = os.path.join(save_dir, TorchDistributor.PICKLED_FUNC_FILE)
+        with open(saved_pickle_path, "wb") as f:
+            cloudpickle.dump((train_fn, args), f)
+        return saved_pickle_path
+
+    @staticmethod
+    def _create_torchrun_train_file(
+        save_dir_path: str, pickle_file_path: str, output_file_path: str
+    ) -> str:
+        code = textwrap.dedent(
+            f"""
+                    import cloudpickle
+                    import os
+
+                    if __name__ == "__main__":
+                        with open("{pickle_file_path}", "rb") as f:
+                            train_fn, args = cloudpickle.load(f)
+                        output = train_fn(*args)
+                        with open("{output_file_path}", "wb") as f:
+                            cloudpickle.dump(output, f)
+                    """
+        )
+        saved_file_path = os.path.join(save_dir_path, TorchDistributor.TRAIN_FILE)
+        with open(saved_file_path, "w") as f:
+            f.write(code)
+        return saved_file_path
+
+    @staticmethod
+    def _get_pickled_output(output_file_path: str) -> Any:
+        with open(output_file_path, "rb") as f:
+            output = cloudpickle.load(f)
+        return output
+
     def run(self, train_object: Union[Callable, str], *args: Any) -> Optional[Any]:
         """Runs distributed training.
 
@@ -596,6 +666,8 @@ class TorchDistributor(Distributor):
         framework_wrapper_fn = None
         if isinstance(train_object, str):
             framework_wrapper_fn = TorchDistributor._run_training_on_pytorch_file
+        else:
+            framework_wrapper_fn = TorchDistributor._run_training_on_pytorch_function
         if self.local_mode:
             output = self._run_local_training(framework_wrapper_fn, train_object, *args)
         else:

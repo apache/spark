@@ -55,6 +55,8 @@ if __name__ == "__main__":
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         env=os.environ,
     )
     t = threading.Thread(target=check_parent_alive, args=(task,), daemon=True)
