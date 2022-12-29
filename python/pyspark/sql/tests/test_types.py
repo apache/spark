@@ -1144,6 +1144,16 @@ class TypesTests(ReusedSQLTestCase):
         for n, (a, e) in enumerate(zip(actual, expected)):
             self.assertEqual(a, e, "%s does not match with %s" % (exprs[n], expected[n]))
 
+    def test_min_timestamp(self):
+        from pyspark.sql import functions as F
+
+        with self.sql_conf({"spark.sql.session.timeZone": "Europe/Brussels"}):
+            minTs = datetime.datetime(1, 1, 1, 0, 0, 0, 0, tzinfo=datetime.timezone.utc)
+            ts = self.spark.createDataFrame([minTs], TimestampType()).toDF("test_column")
+            result = ts.select(F.min("test_column")).first()[0]
+            localMinTs = minTs.astimezone(None).replace(tzinfo=None)
+            self.assertEqual(result, localMinTs)
+
 
 class DataTypeTests(unittest.TestCase):
     # regression test for SPARK-6055
