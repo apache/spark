@@ -196,6 +196,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
 
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       executionId,
+      executionId,
       "test",
       "test",
       df.queryExecution.toString,
@@ -348,7 +349,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       val listener = new SparkListener {
         override def onOtherEvent(event: SparkListenerEvent): Unit = {
           event match {
-            case SparkListenerSQLExecutionStart(_, _, _, planDescription, _, _, _) =>
+            case SparkListenerSQLExecutionStart(_, _, _, _, planDescription, _, _, _) =>
               assert(expected.forall(planDescription.contains))
               checkDone = true
             case _ => // ignore other events
@@ -386,6 +387,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     val df = createTestDataFrame
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       executionId,
+      executionId,
       "test",
       "test",
       df.queryExecution.toString,
@@ -415,6 +417,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     val executionId = 0
     val df = createTestDataFrame
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
+      executionId,
       executionId,
       "test",
       "test",
@@ -457,6 +460,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     val df = createTestDataFrame
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       executionId,
+      executionId,
       "test",
       "test",
       df.queryExecution.toString,
@@ -486,6 +490,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     val executionId = 0
     val df = createTestDataFrame
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
+      executionId,
       executionId,
       "test",
       "test",
@@ -517,6 +522,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     val executionId = 0
     val df = createTestDataFrame
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
+      executionId,
       executionId,
       "test",
       "test",
@@ -658,6 +664,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     time += 1
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       1,
+      1,
       "test",
       "test",
       df.queryExecution.toString,
@@ -666,6 +673,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       Map.empty))
     time += 1
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
+      2,
       2,
       "test",
       "test",
@@ -683,6 +691,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     // Start execution 3 and execution 2 should be evicted.
     time += 1
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
+      3,
       3,
       "test",
       "test",
@@ -719,6 +728,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
         .allNodes.flatMap(_.metrics.map(_.accumulatorId))
 
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
+      executionId,
       executionId,
       "test",
       "test",

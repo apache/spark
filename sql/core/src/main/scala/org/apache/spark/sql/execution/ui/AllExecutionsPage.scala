@@ -83,9 +83,8 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
           // NOTE: this code assumes the root execution id always comes first. which is guaranteed
           // by the `sqlStore.executionsList()`
           executionIdToSubExecutions(e.executionId) = new mutable.ArrayBuffer[SQLExecutionUIData]()
-        } else {
-          processExecution(e)
         }
+        processExecution(e)
       }
     }
 

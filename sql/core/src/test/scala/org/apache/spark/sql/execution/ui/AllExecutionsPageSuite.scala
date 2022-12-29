@@ -59,6 +59,7 @@ class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndAfter {
     when(tab.sqlStore).thenReturn(statusStore)
 
     val request = mock(classOf[HttpServletRequest])
+    when(tab.conf).thenReturn(new SparkConf(false))
     when(tab.appName).thenReturn("testing")
     when(tab.headerTabs).thenReturn(Seq.empty)
 
@@ -73,6 +74,7 @@ class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndAfter {
     when(tab.sqlStore).thenReturn(statusStore)
 
     val request = mock(classOf[HttpServletRequest])
+    when(tab.conf).thenReturn(new SparkConf(false))
     when(tab.appName).thenReturn("testing")
     when(tab.headerTabs).thenReturn(Seq.empty)
 
@@ -81,6 +83,7 @@ class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndAfter {
       val page = new AllExecutionsPage(tab)
       val df = createTestDataFrame
       listener.onOtherEvent(SparkListenerSQLExecutionStart(
+        0,
         0,
         "test",
         "test",
@@ -108,6 +111,7 @@ class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndAfter {
     val tab = mock(classOf[SQLTab], RETURNS_SMART_NULLS)
     val request = mock(classOf[HttpServletRequest])
 
+    when(tab.conf).thenReturn(new SparkConf(false))
     when(tab.sqlStore).thenReturn(statusStore)
     when(tab.appName).thenReturn("testing")
     when(tab.headerTabs).thenReturn(Seq.empty)
@@ -194,6 +198,7 @@ class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndAfter {
     Seq(0, 1).foreach { executionId =>
       val df = createTestDataFrame
       listener.onOtherEvent(SparkListenerSQLExecutionStart(
+        executionId,
         executionId,
         "test",
         "test",

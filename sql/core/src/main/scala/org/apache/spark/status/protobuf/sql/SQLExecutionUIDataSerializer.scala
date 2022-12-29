@@ -74,6 +74,7 @@ class SQLExecutionUIDataSerializer extends ProtobufSerDe {
 
     new SQLExecutionUIData(
       executionId = ui.getExecutionId,
+      rootExecutionId = ui.getExecutionId,
       description = ui.getDescription,
       details = ui.getDetails,
       physicalPlanDescription = ui.getPhysicalPlanDescription,

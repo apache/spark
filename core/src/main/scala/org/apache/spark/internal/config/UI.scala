@@ -235,5 +235,5 @@ private[spark] object UI {
       "root execution")
     .version("3.4.0")
     .booleanConf
-    .createWithDefault(true)
+    .createWithDefault(false)
 }

@@ -52,6 +52,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
 
     val input1 = new SQLExecutionUIData(
       executionId = templateData.executionId,
+      rootExecutionId = templateData.rootExecutionId,
       description = templateData.description,
       details = templateData.details,
       physicalPlanDescription = templateData.physicalPlanDescription,
@@ -71,6 +72,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
 
     val input2 = new SQLExecutionUIData(
       executionId = templateData.executionId,
+      rootExecutionId = templateData.rootExecutionId,
       description = templateData.description,
       details = templateData.details,
       physicalPlanDescription = templateData.physicalPlanDescription,
