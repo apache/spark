@@ -1136,7 +1136,8 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     assert(result.recordsWritten == input.recordsWritten)
   }
 
-  private def assert(result: Seq[AccumulableInfo], input: Seq[AccumulableInfo]): Unit = {
+  private def assert(result: collection.Seq[AccumulableInfo],
+      input: collection.Seq[AccumulableInfo]): Unit = {
     assert(result.length == input.length)
     result.zip(input).foreach { case (a1, a2) =>
       assert(a1.id == a2.id)
