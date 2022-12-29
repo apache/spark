@@ -181,6 +181,7 @@ def _reverse_op(
     _.__doc__ = doc
     return _
 
+
 # TODO(SPARK-41757): Compatibility of string representation for Column
 
 
