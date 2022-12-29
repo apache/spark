@@ -389,6 +389,7 @@ class Column:
 
     __bool__ = __nonzero__
 
+
 Column.__doc__ = PySparkColumn.__doc__
 
 
