@@ -144,9 +144,9 @@ class Column:
         )
 
     # bitwise operators
-    bitwiseOR = _bin_op("bitwiseOR", PySparkColumn.bitwiseOR.__doc__)
-    bitwiseAND = _bin_op("bitwiseAND", PySparkColumn.bitwiseAND.__doc__)
-    bitwiseXOR = _bin_op("bitwiseXOR", PySparkColumn.bitwiseXOR.__doc__)
+    bitwiseOR = _bin_op("|", PySparkColumn.bitwiseOR.__doc__)
+    bitwiseAND = _bin_op("&", PySparkColumn.bitwiseAND.__doc__)
+    bitwiseXOR = _bin_op("^", PySparkColumn.bitwiseXOR.__doc__)
 
     isNull = _unary_op("isNull", PySparkColumn.isNull.__doc__)
     isNotNull = _unary_op("isNotNull", PySparkColumn.isNotNull.__doc__)
