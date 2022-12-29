@@ -234,7 +234,8 @@ case class RelationConversions(
         metastoreCatalog.convert(relation, isWrite = false)
 
       // CTAS path
-      // `InsertIntoHiveTable` is derived from `CreateHiveTableAsSelectCommand`.
+      // This `InsertIntoHiveTable` is derived from `CreateHiveTableAsSelectCommand`,
+      // that only matches table insertion inside Hive CTAS.
       // This pattern would not cause conflicts because this rule is always applied before
       // `HiveAnalysis` and both of these rules are running once.
       case InsertIntoHiveTable(tableDesc, _, query, overwrite, ifPartitionNotExists, _)
