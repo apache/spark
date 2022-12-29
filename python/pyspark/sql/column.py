@@ -200,7 +200,7 @@ class Column:
     ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
 
     Select a column out of a DataFrame
-
+    # TODO(SPARK-41757): Compatibility of string representation
     >>> df.name   # doctest: +SKIP
     Column<'name'>
     >>> df["name"]  # doctest: +SKIP
