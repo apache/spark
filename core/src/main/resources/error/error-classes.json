@@ -924,14 +924,14 @@
       "Cannot find <catalystFieldPath> in Protobuf schema"
     ]
   },
-  "NO_UDF_INTERFACE" : {
-    "message" : [
-      "UDF class <className> doesn't implement any UDF interface"
-    ]
-  },
   "NOT_A_PARTITIONED_TABLE" : {
     "message" : [
       "Operation <operation> is not allowed for <tableName> because it is not a partitioned table."
+    ]
+  },
+  "NO_UDF_INTERFACE" : {
+    "message" : [
+      "UDF class <className> doesn't implement any UDF interface"
     ]
   },
   "NULLABLE_ARRAY_OR_MAP_ELEMENT" : {
