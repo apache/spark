@@ -81,7 +81,7 @@ class RDDOperationGraphWrapperSerializer extends ProtobufSerDe {
   }
 
   private def serializeRDDOperationNode(node: RDDOperationNode): StoreTypes.RDDOperationNode = {
-    val outputDeterministicLevel = StoreTypes.RDDOperationGraphWrapper.DeterministicLevel
+    val outputDeterministicLevel = StoreTypes.RDDOperationNode.DeterministicLevel
       .valueOf(node.outputDeterministicLevel.toString)
     val builder = StoreTypes.RDDOperationNode.newBuilder()
     builder.setId(node.id)
