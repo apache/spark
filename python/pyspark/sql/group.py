@@ -230,7 +230,6 @@ class GroupedData(PandasGroupedOpsMixin):
         """
 
     # TODO(SPARK-41743): groupBy(...).agg(...).sort does not actually sort the output
-    # TODO(SPARK-41747): Support multiple arguments in groupBy.avg(...)
     @df_varargs_api
     def avg(self, *cols: str) -> DataFrame:
         """Computes average values for each numeric columns for each group.
@@ -274,7 +273,7 @@ class GroupedData(PandasGroupedOpsMixin):
 
         Calculate the mean of the age and height in all data.
 
-        >>> df.groupBy().avg('age', 'height').show()  # doctest: +SKIP
+        >>> df.groupBy().avg('age', 'height').show()
         +--------+-----------+
         |avg(age)|avg(height)|
         +--------+-----------+
@@ -283,7 +282,6 @@ class GroupedData(PandasGroupedOpsMixin):
         """
 
     # TODO(SPARK-41743): groupBy(...).agg(...).sort does not actually sort the output
-    # TODO(SPARK-41744): Support multiple arguments in groupBy.max(...)
     @df_varargs_api
     def max(self, *cols: str) -> DataFrame:
         """Computes the max value for each numeric columns for each group.
@@ -320,7 +318,7 @@ class GroupedData(PandasGroupedOpsMixin):
 
         Calculate the max of the age and height in all data.
 
-        >>> df.groupBy().max("age", "height").show()  # doctest: +SKIP
+        >>> df.groupBy().max("age", "height").show()
         +--------+-----------+
         |max(age)|max(height)|
         +--------+-----------+
@@ -329,7 +327,6 @@ class GroupedData(PandasGroupedOpsMixin):
         """
 
     # TODO(SPARK-41743): groupBy(...).agg(...).sort does not actually sort the output
-    # TODO(SPARK-41748): Support multiple arguments in groupBy.min(...)
     @df_varargs_api
     def min(self, *cols: str) -> DataFrame:
         """Computes the min value for each numeric column for each group.
@@ -371,7 +368,7 @@ class GroupedData(PandasGroupedOpsMixin):
 
         Calculate the min of the age and height in all data.
 
-        >>> df.groupBy().min("age", "height").show()  # doctest: +SKIP
+        >>> df.groupBy().min("age", "height").show()
         +--------+-----------+
         |min(age)|min(height)|
         +--------+-----------+
@@ -380,7 +377,6 @@ class GroupedData(PandasGroupedOpsMixin):
         """
 
     # TODO(SPARK-41743): groupBy(...).agg(...).sort does not actually sort the output
-    # TODO(SPARK-41749): Support multiple arguments in groupBy.sum(...)
     @df_varargs_api
     def sum(self, *cols: str) -> DataFrame:
         """Computes the sum for each numeric columns for each group.
@@ -422,7 +418,7 @@ class GroupedData(PandasGroupedOpsMixin):
 
         Calculate the sum of the age and height in all data.
 
-        >>> df.groupBy().sum("age", "height").show()  # doctest: +SKIP
+        >>> df.groupBy().sum("age", "height").show()
         +--------+-----------+
         |sum(age)|sum(height)|
         +--------+-----------+
