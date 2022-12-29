@@ -425,7 +425,7 @@ def _test() -> None:
         # TODO(SPARK-41756): Fix createDataFrame
         del pyspark.sql.connect.column.Column.getField.__doc__
         del pyspark.sql.connect.column.Column.getItem.__doc__
-        # TODO(SPARK-41292): Support Window functions
+        # TODO(SPARK-41758): Support Window functions
         del pyspark.sql.connect.column.Column.over.__doc__
 
         (failure_count, test_count) = doctest.testmod(
