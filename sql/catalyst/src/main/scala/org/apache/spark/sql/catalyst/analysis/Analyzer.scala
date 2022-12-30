@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
-import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin}
+import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils, StringUtils}
@@ -1450,26 +1450,13 @@ class Analyzer(override val catalogManager: CatalogManager)
       }
     }
 
-    def apply(plan: LogicalPlan): LogicalPlan = {
-      // To follow the behavior of `resolveOperators`, we return the input plan immediately if it's
-      // already analyzed before.
-      if (plan.analyzed) return plan
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+      // Wait for other rules to resolve child plans first
+      case p: LogicalPlan if !p.childrenResolved => p
 
-      val newPlan = plan.mapChildren(apply)
-      if (newPlan.childrenResolved && !hasConflictingAttrs(newPlan)) {
-        CurrentOrigin.withOrigin(newPlan.origin) {
-          val resolvedPlan = resolveColumns(newPlan)
-          resolvedPlan.copyTagsFrom(newPlan)
-          resolvedPlan
-        }
-      } else {
-        // Wait for other rules to resolve child plans first, or wait for the rule
-        // `DeduplicateRelations` to resolve conflicting attrs first.
-        newPlan
-      }
-    }
+      // Wait for the rule `DeduplicateRelations` to resolve conflicting attrs first.
+      case p: LogicalPlan if hasConflictingAttrs(p) => p
 
-    private def resolveColumns(plan: LogicalPlan): LogicalPlan = plan match {
       // If the projection list contains Stars, expand it.
       case p: Project if containsStar(p.projectList) =>
         p.copy(projectList = buildExpandedProjectList(p.projectList, p.child))
