@@ -228,8 +228,8 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         # |               null|2022-12-22|null|
         # +-------------------+----------+----+
 
-        cdf = self.spark.sql(query)
-        sdf = self.connect.sql(query)
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
 
         # datetime.date
         self.assert_eq(
@@ -286,8 +286,8 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         # |  3|   3|  4| 3.5|
         # +---+----+---+----+
 
-        cdf = self.spark.sql(query)
-        sdf = self.connect.sql(query)
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
 
         self.assert_eq(
             cdf.select(cdf.a < decimal.Decimal(3)).toPandas(),
