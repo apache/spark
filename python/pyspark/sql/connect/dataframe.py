@@ -879,13 +879,30 @@ class DataFrame:
     def __getattr__(self, name: str) -> "Column":
         return self[name]
 
-    def __getitem__(self, name: str) -> "Column":
-        # Check for alias
-        alias = self._get_alias()
-        if alias is not None:
-            return col(alias)
+    @overload
+    def __getitem__(self, item: Union[int, str]) -> Column:
+        ...
+
+    @overload
+    def __getitem__(self, item: Union[Column, List, Tuple]) -> "DataFrame":
+        ...
+
+    def __getitem__(self, item: Union[int, str, Column, List, Tuple]) -> Union[Column, "DataFrame"]:
+        if isinstance(item, str):
+            # Check for alias
+            alias = self._get_alias()
+            if alias is not None:
+                return col(alias)
+            else:
+                return col(item)
+        elif isinstance(item, Column):
+            return self.filter(item)
+        elif isinstance(item, (list, tuple)):
+            return self.select(*item)
+        elif isinstance(item, int):
+            return col(self.columns[item])
         else:
-            return col(name)
+            raise TypeError("unexpected item type: %s" % type(item))
 
     def _print_plan(self) -> str:
         if self._plan:
