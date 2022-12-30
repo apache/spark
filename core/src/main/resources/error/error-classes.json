@@ -1605,7 +1605,7 @@
   },
   "WRITE_STREAM_NOT_ALLOWED" : {
     "message" : [
-      "`writeStream` can be called only on streaming Dataset/DataFrame"
+      "`writeStream` can be called only on streaming Dataset/DataFrame."
     ]
   },
   "WRONG_NUM_ARGS" : {
