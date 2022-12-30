@@ -1339,8 +1339,9 @@ public class RemoteBlockPushResolverSuite {
       void deleteMergedFiles(
           AppAttemptShuffleMergeId appAttemptShuffleMergeId,
           AppShuffleInfo appShuffleInfo,
-          int[] reduceIds) {
-        super.deleteMergedFiles(appAttemptShuffleMergeId, appShuffleInfo, reduceIds);
+          int[] reduceIds,
+          boolean deleteFromDB) {
+        super.deleteMergedFiles(appAttemptShuffleMergeId, appShuffleInfo, reduceIds, deleteFromDB);
         closed.release();
       }
     };
