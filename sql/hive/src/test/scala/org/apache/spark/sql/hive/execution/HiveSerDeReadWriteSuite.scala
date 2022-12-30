@@ -25,6 +25,7 @@ import java.sql.{Date, Timestamp}
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.io.{DelegateSymlinkTextInputFormat, SymlinkTextInputFormat}
 import org.apache.hadoop.mapred.FileSplit
+
 import org.apache.spark.internal.config.HADOOP_RDD_IGNORE_EMPTY_SPLITS
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.hive.HiveUtils.{CONVERT_METASTORE_ORC, CONVERT_METASTORE_PARQUET, USE_DELEGATE_FOR_SYMLINK_TEXT_INPUT_FORMAT}
