@@ -458,8 +458,6 @@ def _test() -> None:
         #  the row
         del pyspark.sql.connect.column.Column.isNotNull.__doc__
         del pyspark.sql.connect.column.Column.isNull.__doc__
-        del pyspark.sql.connect.column.Column.isin.__doc__
-        # TODO(SPARK-41771): __getitem__ does not work with Column.isin
         del pyspark.sql.connect.column.Column.getField.__doc__
         del pyspark.sql.connect.column.Column.getItem.__doc__
 
