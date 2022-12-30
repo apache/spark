@@ -206,8 +206,10 @@ trait FileSourceScanLike extends DataSourceScanExec {
   def tableIdentifier: Option[TableIdentifier]
 
 
-  lazy val metadataColumns: Seq[AttributeReference] =
-    output.collect { case FileSourceMetadataAttribute(attr) => attr }
+  lazy val metadataColumns: Seq[AttributeReference] = output.collect {
+    // Collect metadata columns to be handled outside of the scan by appending constant columns.
+    case FileSourceConstantMetadataAttribute(attr) => attr
+  }
 
   override def vectorTypes: Option[Seq[String]] =
     relation.fileFormat.vectorTypes(
@@ -217,7 +219,7 @@ trait FileSourceScanLike extends DataSourceScanExec {
         vectorTypes ++
           // for column-based file format, append metadata column's vector type classes if any
           metadataColumns.map { metadataCol =>
-            if (FileFormat.isConstantMetadataAttr(metadataCol.name)) {
+            if (FileFormat.isConstantMetadataAttr(metadataCol)) {
               classOf[ConstantColumnVector].getName
             } else if (relation.sparkSession.sessionState.conf.offHeapColumnVectorEnabled) {
               classOf[OffHeapColumnVector].getName
@@ -379,11 +381,12 @@ trait FileSourceScanLike extends DataSourceScanExec {
   @transient
   protected lazy val pushedDownFilters = {
     val supportNestedPredicatePushdown = DataSourceUtils.supportNestedPredicatePushdown(relation)
-    // `dataFilters` should not include any metadata col filters
+    // `dataFilters` should not include any constant metadata col filters
     // because the metadata struct has been flatted in FileSourceStrategy
-    // and thus metadata col filters are invalid to be pushed down
+    // and thus metadata col filters are invalid to be pushed down. Metadata that is generated
+    // during the scan can be used for filters.
     dataFilters.filterNot(_.references.exists {
-      case FileSourceMetadataAttribute(_) => true
+      case FileSourceConstantMetadataAttribute(_) => true
       case _ => false
     }).flatMap(DataSourceStrategy.translateFilter(_, supportNestedPredicatePushdown))
   }

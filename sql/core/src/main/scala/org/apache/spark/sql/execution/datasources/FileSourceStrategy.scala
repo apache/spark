@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.Locale
 
+import scala.collection.mutable
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
@@ -208,35 +210,41 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       val requiredExpressions: Seq[NamedExpression] = filterAttributes.toSeq ++ projects
       val requiredAttributes = AttributeSet(requiredExpressions)
 
-      val metadataStructOpt = l.output.collectFirst {
-        case FileSourceMetadataAttribute(attr) => attr
-      }
-
-      val metadataColumns = metadataStructOpt.map { metadataStruct =>
-        metadataStruct.dataType.asInstanceOf[StructType].fields.map { field =>
-          FileSourceMetadataAttribute(field.name, field.dataType)
-        }.toSeq
-      }.getOrElse(Seq.empty)
-
-      val fileConstantMetadataColumns: Seq[Attribute] =
-        metadataColumns.filter(_.name != FileFormat.ROW_INDEX)
-
       val readDataColumns = dataColumns
         .filter(requiredAttributes.contains)
         .filterNot(partitionColumns.contains)
 
-      val fileFormatReaderGeneratedMetadataColumns: Seq[Attribute] =
-        metadataColumns.map(_.name).flatMap {
-          case FileFormat.ROW_INDEX =>
-            if ((readDataColumns ++ partitionColumns).map(_.name.toLowerCase(Locale.ROOT))
+      // Metadata attributes are part of a column of type struct up to this point. Here we extract
+      // this column from the schema.
+      val metadataStructOpt = l.output.collectFirst {
+        case FileSourceMetadataAttribute(attr) => attr
+      }
+
+      val fileConstantMetadataColumns: mutable.Buffer[Attribute] = mutable.Buffer.empty
+      val fileFormatReaderGeneratedMetadataColumns: mutable.Buffer[Attribute] = mutable.Buffer.empty
+
+      metadataStructOpt.foreach { metadataStruct =>
+        metadataStruct.dataType.asInstanceOf[StructType].fields.foreach { field =>
+          field.name match {
+            case FileFormat.ROW_INDEX =>
+              if ((readDataColumns ++ partitionColumns).map(_.name.toLowerCase(Locale.ROOT))
                 .contains(FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME)) {
               throw new AnalysisException(FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME +
                 " is a reserved column name that cannot be read in combination with " +
                 s"${FileFormat.METADATA_NAME}.${FileFormat.ROW_INDEX} column.")
-            }
-            Some(AttributeReference(FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME, LongType)())
-          case _ => None
+          }
+          fileFormatReaderGeneratedMetadataColumns +=
+            FileSourceGeneratedMetadataAttribute(
+              FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME, LongType)
+          case _ =>
+            fileConstantMetadataColumns +=
+              FileSourceConstantMetadataAttribute(field.name, field.dataType, field.nullable)
         }
+      }
+  }
+
+  val metadataColumns: Seq[Attribute] =
+    fileConstantMetadataColumns ++ fileFormatReaderGeneratedMetadataColumns
 
       val outputDataSchema = (readDataColumns ++ fileFormatReaderGeneratedMetadataColumns)
         .toStructType
@@ -269,7 +277,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
             case FileFormat.FILE_PATH | FileFormat.FILE_NAME | FileFormat.FILE_SIZE |
                  FileFormat.FILE_MODIFICATION_TIME =>
               col
-            case FileFormat.ROW_INDEX =>
+            case FileFormat.ROW_INDEX | FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME =>
               fileFormatReaderGeneratedMetadataColumns
                 .find(_.name == FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME)
                 // Change the `_tmp_metadata_row_index` to `row_index`,
