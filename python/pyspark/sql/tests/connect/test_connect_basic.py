@@ -117,6 +117,79 @@ class SparkConnectSQLTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLT
 
 
 class SparkConnectTests(SparkConnectSQLTestCase):
+    def test_df_get_item(self):
+        # SPARK-41779: test __getitem__
+
+        query = """
+            SELECT * FROM VALUES
+            (true, 1, NULL), (false, NULL, 2.0), (NULL, 3, 3.0)
+            AS tab(a, b, c)
+            """
+
+        # +-----+----+----+
+        # |    a|   b|   c|
+        # +-----+----+----+
+        # | true|   1|null|
+        # |false|null| 2.0|
+        # | null|   3| 3.0|
+        # +-----+----+----+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        # filter
+        self.assert_eq(
+            cdf[cdf.a].toPandas(),
+            sdf[sdf.a].toPandas(),
+        )
+        self.assert_eq(
+            cdf[cdf.b.isin(2, 3)].toPandas(),
+            sdf[sdf.b.isin(2, 3)].toPandas(),
+        )
+        self.assert_eq(
+            cdf[cdf.c > 1.5].toPandas(),
+            sdf[sdf.c > 1.5].toPandas(),
+        )
+
+        # select
+        self.assert_eq(
+            cdf[[cdf.a, "b", cdf.c]].toPandas(),
+            sdf[[sdf.a, "b", sdf.c]].toPandas(),
+        )
+        self.assert_eq(
+            cdf[(cdf.a, "b", cdf.c)].toPandas(),
+            sdf[(sdf.a, "b", sdf.c)].toPandas(),
+        )
+
+        # select by index
+        self.assertTrue(isinstance(cdf[0], Column))
+        self.assertTrue(isinstance(cdf[1], Column))
+        self.assertTrue(isinstance(cdf[2], Column))
+
+        self.assert_eq(
+            cdf[[cdf[0], cdf[1], cdf[2]]].toPandas(),
+            sdf[[sdf[0], sdf[1], sdf[2]]].toPandas(),
+        )
+
+        # check error
+        with self.assertRaisesRegex(
+            TypeError,
+            "unexpected item type",
+        ):
+            cdf[1.5]
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "unexpected item type",
+        ):
+            cdf[None]
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "unexpected item type",
+        ):
+            cdf[cdf]
+
     def test_error_handling(self):
         # SPARK-41533 Proper error handling for Spark Connect
         df = self.connect.range(10).select("id2")
