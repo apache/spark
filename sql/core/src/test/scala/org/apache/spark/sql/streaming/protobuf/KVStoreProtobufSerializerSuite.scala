@@ -32,7 +32,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     val input = new StreamingQueryData(
       name = "some-query",
       id = id,
-      runId = id.toString,
+      runId = s"run-id-$id",
       isActive = false,
       exception = Some("Some Exception"),
       startTimestamp = 1L,

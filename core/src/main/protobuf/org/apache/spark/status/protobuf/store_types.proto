@@ -456,3 +456,13 @@ message RDDOperationGraphWrapper {
   repeated RDDOperationEdge incoming_edges = 4;
   RDDOperationClusterWrapper root_cluster = 5;
 }
+
+message StreamingQueryData {
+  string name = 1;
+  string id = 2;
+  string run_id = 3;
+  bool is_active = 4;
+  optional string exception = 5;
+  int64 start_timestamp = 6;
+  optional int64 end_timestamp = 7;
+}
