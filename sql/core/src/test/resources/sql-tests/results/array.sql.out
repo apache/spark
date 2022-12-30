@@ -348,6 +348,54 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+select size(arrays_zip(array(1, 2, 3), array(4), array(7, 8, 9, 10)))
+-- !query schema
+struct<size(arrays_zip(array(1, 2, 3), array(4), array(7, 8, 9, 10))):int>
+-- !query output
+4
+
+
+-- !query
+select size(arrays_zip(array(), array(1, 2, 3), array(4), array(7, 8, 9, 10)))
+-- !query schema
+struct<size(arrays_zip(array(), array(1, 2, 3), array(4), array(7, 8, 9, 10))):int>
+-- !query output
+4
+
+
+-- !query
+select size(arrays_zip(array(1, 2, 3), array(4), null, array(7, 8, 9, 10)))
+-- !query schema
+struct<size(arrays_zip(array(1, 2, 3), array(4), NULL, array(7, 8, 9, 10))):int>
+-- !query output
+-1
+
+
+-- !query
+select isnotnull(arrays_zip(array(), array(4), array(7, 8, 9, 10)))
+-- !query schema
+struct<(arrays_zip(array(), array(4), array(7, 8, 9, 10)) IS NOT NULL):boolean>
+-- !query output
+true
+
+
+-- !query
+select isnotnull(arrays_zip(array(1, 2, 3), array(4), array(7, 8, 9, 10)))
+-- !query schema
+struct<(arrays_zip(array(1, 2, 3), array(4), array(7, 8, 9, 10)) IS NOT NULL):boolean>
+-- !query output
+true
+
+
+-- !query
+select isnotnull(arrays_zip(array(1, 2, 3), NULL, array(4), array(7, 8, 9, 10)))
+-- !query schema
+struct<(arrays_zip(array(1, 2, 3), NULL, array(4), array(7, 8, 9, 10)) IS NOT NULL):boolean>
+-- !query output
+false
+
+
+-- !query
 select get(array(1, 2, 3), 0)
 -- !query schema
 struct<get(array(1, 2, 3), 0):int>
