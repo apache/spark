@@ -3822,7 +3822,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
     agg = aggregate
 
-    def transpose(self, *args: Any, **kwargs: Any) -> "Series":
+    def transpose(self) -> "Series":
         """
         Return the transpose, which is self.
 
