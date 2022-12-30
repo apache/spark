@@ -1457,7 +1457,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def rootConverterReturnNullError(): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2137",
+      errorClass = "ROOT_CONVERTER_RETURNS_NULL",
       messageParameters = Map.empty)
   }
 

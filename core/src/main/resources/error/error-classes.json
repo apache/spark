@@ -1062,6 +1062,11 @@
       "Failed to set original permission <permission> back to the created path: <path>. Exception: <message>"
     ]
   },
+  "ROOT_CONVERTER_RETURNS_NULL" : {
+    "message" : [
+      "Root converter returns null"
+    ]
+  },
   "ROUTINE_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create the function <routineName> because it already exists.",
@@ -4093,11 +4098,6 @@
   "_LEGACY_ERROR_TEMP_2136" : {
     "message" : [
       "Failed to parse field name <fieldName>, field value <fieldValue>, [<token>] to target spark data type [<dataType>]."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2137" : {
-    "message" : [
-      "Root converter returned null"
     ]
   },
   "_LEGACY_ERROR_TEMP_2138" : {
