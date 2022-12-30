@@ -95,6 +95,7 @@ class Relation(google.protobuf.message.Message):
     CROSSTAB_FIELD_NUMBER: builtins.int
     DESCRIBE_FIELD_NUMBER: builtins.int
     COV_FIELD_NUMBER: builtins.int
+    CORR_FIELD_NUMBER: builtins.int
     CATALOG_FIELD_NUMBER: builtins.int
     UNKNOWN_FIELD_NUMBER: builtins.int
     @property
@@ -168,6 +169,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def cov(self) -> global___StatCov: ...
     @property
+    def corr(self) -> global___StatCorr: ...
+    @property
     def catalog(self) -> pyspark.sql.connect.proto.catalog_pb2.Catalog:
         """Catalog API (experimental / unstable)"""
     @property
@@ -209,6 +212,7 @@ class Relation(google.protobuf.message.Message):
         crosstab: global___StatCrosstab | None = ...,
         describe: global___StatDescribe | None = ...,
         cov: global___StatCov | None = ...,
+        corr: global___StatCorr | None = ...,
         catalog: pyspark.sql.connect.proto.catalog_pb2.Catalog | None = ...,
         unknown: global___Unknown | None = ...,
     ) -> None: ...
@@ -221,6 +225,8 @@ class Relation(google.protobuf.message.Message):
             b"catalog",
             "common",
             b"common",
+            "corr",
+            b"corr",
             "cov",
             b"cov",
             "crosstab",
@@ -300,6 +306,8 @@ class Relation(google.protobuf.message.Message):
             b"catalog",
             "common",
             b"common",
+            "corr",
+            b"corr",
             "cov",
             b"cov",
             "crosstab",
@@ -406,6 +414,7 @@ class Relation(google.protobuf.message.Message):
         "crosstab",
         "describe",
         "cov",
+        "corr",
         "catalog",
         "unknown",
     ] | None: ...
@@ -1709,6 +1718,65 @@ class StatCov(google.protobuf.message.Message):
     ) -> None: ...
 
 global___StatCov = StatCov
+
+class StatCorr(google.protobuf.message.Message):
+    """Calculates the correlation of two columns of a DataFrame. Currently only supports the Pearson
+    Correlation Coefficient. It will invoke 'Dataset.stat.corr' (same as
+    'StatFunctions.pearsonCorrelation') to compute the results.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    COL1_FIELD_NUMBER: builtins.int
+    COL2_FIELD_NUMBER: builtins.int
+    METHOD_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    col1: builtins.str
+    """(Required) The name of the first column."""
+    col2: builtins.str
+    """(Required) The name of the second column."""
+    method: builtins.str
+    """(Optional) Default value is 'pearson'.
+
+    Currently only supports the Pearson Correlation Coefficient.
+    """
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        col1: builtins.str = ...,
+        col2: builtins.str = ...,
+        method: builtins.str | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_method", b"_method", "input", b"input", "method", b"method"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_method",
+            b"_method",
+            "col1",
+            b"col1",
+            "col2",
+            b"col2",
+            "input",
+            b"input",
+            "method",
+            b"method",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_method", b"_method"]
+    ) -> typing_extensions.Literal["method"] | None: ...
+
+global___StatCorr = StatCorr
 
 class NAFill(google.protobuf.message.Message):
     """Replaces null values.

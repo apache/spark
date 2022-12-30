@@ -856,6 +856,28 @@ class DataFrame:
 
     cov.__doc__ = PySparkDataFrame.cov.__doc__
 
+    def corr(self, col1: str, col2: str, method: Optional[str] = None) -> float:
+        if not isinstance(col1, str):
+            raise TypeError("col1 should be a string.")
+        if not isinstance(col2, str):
+            raise TypeError("col2 should be a string.")
+        if not method:
+            method = "pearson"
+        if not method == "pearson":
+            raise ValueError(
+                "Currently only the calculation of the Pearson Correlation "
+                + "coefficient is supported."
+            )
+        pdf = DataFrame.withPlan(
+            plan.StatCorr(child=self._plan, col1=col1, col2=col2, method=method),
+            session=self._session,
+        ).toPandas()
+
+        assert pdf is not None
+        return pdf["corr"][0]
+
+    corr.__doc__ = PySparkDataFrame.corr.__doc__
+
     def crosstab(self, col1: str, col2: str) -> "DataFrame":
         if not isinstance(col1, str):
             raise TypeError(f"'col1' must be str, but got {type(col1).__name__}")
@@ -1215,6 +1237,11 @@ class DataFrameStatFunctions:
         return self.df.cov(col1, col2)
 
     cov.__doc__ = DataFrame.cov.__doc__
+
+    def corr(self, col1: str, col2: str, method: Optional[str] = None) -> float:
+        return self.df.corr(col1, col2, method)
+
+    corr.__doc__ = DataFrame.corr.__doc__
 
     def crosstab(self, col1: str, col2: str) -> DataFrame:
         return self.df.crosstab(col1, col2)

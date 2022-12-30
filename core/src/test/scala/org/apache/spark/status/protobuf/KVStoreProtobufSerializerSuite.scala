@@ -22,9 +22,11 @@ import java.util.Date
 import org.apache.spark.{JobExecutionStatus, SparkFunSuite}
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.metrics.ExecutorMetricType
+import org.apache.spark.rdd.DeterministicLevel
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceInformation, TaskResourceRequest}
 import org.apache.spark.status._
 import org.apache.spark.status.api.v1._
+import org.apache.spark.ui.scope.{RDDOperationEdge, RDDOperationNode}
 
 class KVStoreProtobufSerializerSuite extends SparkFunSuite {
   private val serializer = new KVStoreProtobufSerializer()
@@ -772,5 +774,87 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       assert(input.info.processLogs.contains(k))
       assert(result.info.processLogs(k) == input.info.processLogs(k))
     }
+  }
+
+  test("RDD Operation Graph") {
+    val input = new RDDOperationGraphWrapper(
+      stageId = 1,
+      edges = Seq(
+        RDDOperationEdge(fromId = 2, toId = 3)
+      ),
+      outgoingEdges = Seq(
+        RDDOperationEdge(fromId = 4, toId = 5),
+        RDDOperationEdge(fromId = 6, toId = 7)
+      ),
+      incomingEdges = Seq(
+        RDDOperationEdge(fromId = 8, toId = 9),
+        RDDOperationEdge(fromId = 10, toId = 11),
+        RDDOperationEdge(fromId = 12, toId = 13)
+      ),
+      rootCluster = new RDDOperationClusterWrapper(
+        id = "id_1",
+        name = "name1",
+        childNodes = Seq(
+          RDDOperationNode(
+            id = 14,
+            name = "name2",
+            cached = true,
+            barrier = false,
+            callsite = "callsite_1",
+            outputDeterministicLevel = DeterministicLevel.INDETERMINATE)),
+        childClusters = Seq(new RDDOperationClusterWrapper(
+          id = "id_1",
+          name = "name1",
+          childNodes = Seq(
+            RDDOperationNode(
+              id = 15,
+              name = "name3",
+              cached = false,
+              barrier = true,
+              callsite = "callsite_2",
+              outputDeterministicLevel = DeterministicLevel.UNORDERED)),
+          childClusters = Seq.empty
+        ))
+      )
+    )
+    val bytes = serializer.serialize(input)
+    val result = serializer.deserialize(bytes, classOf[RDDOperationGraphWrapper])
+
+    assert(result.stageId == input.stageId)
+    assert(result.edges.size == input.edges.size)
+    result.edges.zip(input.edges).foreach { case (e1, e2) =>
+      assert(e1.fromId == e2.fromId)
+      assert(e1.toId == e2.toId)
+    }
+    assert(result.outgoingEdges.size == input.outgoingEdges.size)
+    result.outgoingEdges.zip(input.outgoingEdges).foreach { case (e1, e2) =>
+      assert(e1.fromId == e2.fromId)
+      assert(e1.toId == e2.toId)
+    }
+    assert(result.incomingEdges.size == input.incomingEdges.size)
+    result.incomingEdges.zip(input.incomingEdges).foreach { case (e1, e2) =>
+      assert(e1.fromId == e2.fromId)
+      assert(e1.toId == e2.toId)
+    }
+
+    def compareClusters(c1: RDDOperationClusterWrapper, c2: RDDOperationClusterWrapper): Unit = {
+      assert(c1.id == c2.id)
+      assert(c1.name == c2.name)
+      assert(c1.childNodes.size == c2.childNodes.size)
+      c1.childNodes.zip(c2.childNodes).foreach { case (n1, n2) =>
+        assert(n1.id == n2.id)
+        assert(n1.name == n2.name)
+        assert(n1.cached == n2.cached)
+        assert(n1.barrier == n2.barrier)
+        assert(n1.callsite == n2.callsite)
+        assert(n1.outputDeterministicLevel == n2.outputDeterministicLevel)
+      }
+      assert(c1.childClusters.size == c2.childClusters.size)
+      c1.childClusters.zip(c2.childClusters).foreach {
+        case (_c1, _c2) => compareClusters(_c1, _c2)
+      }
+    }
+
+    compareClusters(result.rootCluster, input.rootCluster)
   }
 }
