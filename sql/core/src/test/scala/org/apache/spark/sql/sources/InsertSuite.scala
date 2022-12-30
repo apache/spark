@@ -1141,8 +1141,8 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         errorClass = "_LEGACY_ERROR_TEMP_0059",
         parameters = Map.empty,
         context = ExpectedContext(
-          fragment = "partition(i=default)",
-          start = 14,
+          fragment = "(i=default)",
+          start = 23,
           stop = 33))
     }
     // The configuration option to append missing NULL values to the end of the INSERT INTO

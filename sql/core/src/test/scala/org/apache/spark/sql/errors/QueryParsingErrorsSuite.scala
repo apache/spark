@@ -325,8 +325,8 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "23000",
       parameters = Map("keyColumn" -> "`p1`"),
       context = ExpectedContext(
-        fragment = "PARTITION(p1='1', p1='1')",
-        start = 29,
+        fragment = "(p1='1', p1='1')",
+        start = 38,
         stop = 53))
   }
 
@@ -438,8 +438,8 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "42000",
       parameters = Map("inputString" -> "Partition key `grade` must set value (can't be empty)."),
       context = ExpectedContext(
-        fragment = "PARTITION (grade)",
-        start = 47,
+        fragment = "(grade)",
+        start = 57,
         stop = 63))
   }
 

@@ -51,8 +51,8 @@ class ShowPartitionsParserSuite extends AnalysisTest {
       sqlState = "42000",
       parameters = Map("inputString" -> "Partition key `b` must set value (can't be empty)."),
       context = ExpectedContext(
-        fragment = "PARTITION (a='1', b)",
-        start = 25,
+        fragment = "(a='1', b)",
+        start = 35,
         stop = 44))
   }
 }

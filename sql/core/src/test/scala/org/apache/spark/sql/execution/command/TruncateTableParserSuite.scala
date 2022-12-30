@@ -51,8 +51,8 @@ class TruncateTableParserSuite extends AnalysisTest {
       sqlState = "42000",
       parameters = Map("inputString" -> "Partition key `b` must set value (can't be empty)."),
       context = ExpectedContext(
-        fragment = "PARTITION (a='1', b)",
-        start = 24,
+        fragment = "(a='1', b)",
+        start = 34,
         stop = 43))
   }
 }
