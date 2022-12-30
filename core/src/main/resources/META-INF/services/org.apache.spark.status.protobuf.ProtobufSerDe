@@ -27,3 +27,4 @@ org.apache.spark.status.protobuf.ResourceProfileWrapperSerializer
 org.apache.spark.status.protobuf.SpeculationStageSummaryWrapperSerializer
 org.apache.spark.status.protobuf.ExecutorSummaryWrapperSerializer
 org.apache.spark.status.protobuf.ProcessSummaryWrapperSerializer
+org.apache.spark.status.protobuf.RDDOperationGraphWrapperSerializer

@@ -24,17 +24,21 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogTable, SessionCatalog}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.command.{DataWritingCommand, DDLUtils, LeafRunnableCommand}
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelation}
-import org.apache.spark.sql.hive.HiveSessionCatalog
-import org.apache.spark.util.Utils
+import org.apache.spark.sql.execution.command.{DataWritingCommand, LeafRunnableCommand}
 
-trait CreateHiveTableAsSelectBase extends LeafRunnableCommand {
-  val tableDesc: CatalogTable
-  val query: LogicalPlan
-  val outputColumnNames: Seq[String]
-  val mode: SaveMode
-
+/**
+ * Create table and insert the query result into it.
+ *
+ * @param tableDesc the table description, which may contain serde, storage handler etc.
+ * @param query the query whose result will be insert into the new relation
+ * @param mode SaveMode
+ */
+case class CreateHiveTableAsSelectCommand(
+    tableDesc: CatalogTable,
+    query: LogicalPlan,
+    outputColumnNames: Seq[String],
+    mode: SaveMode)
+  extends LeafRunnableCommand {
   assert(query.resolved)
   override def innerChildren: Seq[LogicalPlan] = query :: Nil
 
@@ -60,9 +64,9 @@ trait CreateHiveTableAsSelectBase extends LeafRunnableCommand {
       val qe = sparkSession.sessionState.executePlan(command)
       qe.assertCommandExecuted()
     } else {
-        tableDesc.storage.locationUri.foreach { p =>
-          DataWritingCommand.assertEmptyRootPath(p, mode, sparkSession.sessionState.newHadoopConf)
-        }
+      tableDesc.storage.locationUri.foreach { p =>
+        DataWritingCommand.assertEmptyRootPath(p, mode, sparkSession.sessionState.newHadoopConf)
+      }
       // TODO ideally, we should get the output data ready first and then
       // add the relation into catalog, just in case of failure occurs while data
       // processing.
@@ -90,38 +94,7 @@ trait CreateHiveTableAsSelectBase extends LeafRunnableCommand {
     Seq.empty[Row]
   }
 
-  // Returns `DataWritingCommand` which actually writes data into the table.
-  def getWritingCommand(
-    catalog: SessionCatalog,
-    tableDesc: CatalogTable,
-    tableExists: Boolean): DataWritingCommand
-
-  // A subclass should override this with the Class name of the concrete type expected to be
-  // returned from `getWritingCommand`.
-  def writingCommandClassName: String
-
-  override def argString(maxFields: Int): String = {
-    s"[Database: ${tableDesc.database}, " +
-    s"TableName: ${tableDesc.identifier.table}, " +
-    s"${writingCommandClassName}]"
-  }
-}
-
-/**
- * Create table and insert the query result into it.
- *
- * @param tableDesc the table description, which may contain serde, storage handler etc.
- * @param query the query whose result will be insert into the new relation
- * @param mode SaveMode
- */
-case class CreateHiveTableAsSelectCommand(
-    tableDesc: CatalogTable,
-    query: LogicalPlan,
-    outputColumnNames: Seq[String],
-    mode: SaveMode)
-  extends CreateHiveTableAsSelectBase {
-
-  override def getWritingCommand(
+  private def getWritingCommand(
       catalog: SessionCatalog,
       tableDesc: CatalogTable,
       tableExists: Boolean): DataWritingCommand = {
@@ -136,53 +109,8 @@ case class CreateHiveTableAsSelectCommand(
       outputColumnNames = outputColumnNames)
   }
 
-  override def writingCommandClassName: String =
-    Utils.getSimpleName(classOf[InsertIntoHiveTable])
-}
-
-/**
- * Create table and insert the query result into it. This creates Hive table but inserts
- * the query result into it by using data source.
- *
- * @param tableDesc the table description, which may contain serde, storage handler etc.
- * @param query the query whose result will be insert into the new relation
- * @param mode SaveMode
- */
-case class OptimizedCreateHiveTableAsSelectCommand(
-    tableDesc: CatalogTable,
-    query: LogicalPlan,
-    outputColumnNames: Seq[String],
-    mode: SaveMode)
-  extends CreateHiveTableAsSelectBase {
-
-  override def getWritingCommand(
-      catalog: SessionCatalog,
-      tableDesc: CatalogTable,
-      tableExists: Boolean): DataWritingCommand = {
-    val metastoreCatalog = catalog.asInstanceOf[HiveSessionCatalog].metastoreCatalog
-    val hiveTable = DDLUtils.readHiveTable(tableDesc)
-
-    val hadoopRelation = metastoreCatalog.convert(hiveTable, isWrite = true) match {
-      case LogicalRelation(t: HadoopFsRelation, _, _, _) => t
-      case _ => throw QueryCompilationErrors.tableIdentifierNotConvertedToHadoopFsRelationError(
-        tableIdentifier)
-    }
-
-    InsertIntoHadoopFsRelationCommand(
-      hadoopRelation.location.rootPaths.head,
-      Map.empty, // We don't support to convert partitioned table.
-      false,
-      Seq.empty, // We don't support to convert partitioned table.
-      hadoopRelation.bucketSpec,
-      hadoopRelation.fileFormat,
-      hadoopRelation.options,
-      query,
-      if (tableExists) mode else SaveMode.Overwrite,
-      Some(tableDesc),
-      Some(hadoopRelation.location),
-      query.output.map(_.name))
+  override def argString(maxFields: Int): String = {
+    s"[Database: ${tableDesc.database}, " +
+      s"TableName: ${tableDesc.identifier.table}]"
   }
-
-  override def writingCommandClassName: String =
-    Utils.getSimpleName(classOf[InsertIntoHadoopFsRelationCommand])
 }
