@@ -114,6 +114,7 @@ if (in_spark):
 _minimum_pandas_version = "1.0.5"
 _minimum_pyarrow_version = "1.0.0"
 _minimum_grpc_version = "1.48.1"
+_minimum_googleapis_common_protos_version = "1.56.4"
 
 
 class InstallCommand(install):
@@ -280,7 +281,9 @@ try:
             'connect': [
                 'pandas>=%s' % _minimum_pandas_version,
                 'pyarrow>=%s' % _minimum_pyarrow_version,
-                'grpc>=%s' % _minimum_grpc_version,
+                'grpcio>=%s' % _minimum_grpc_version,
+                'grpcio-status>=%s' % _minimum_grpc_version,
+                'googleapis-common-protos>=%s' % _minimum_googleapis_common_protos_version,
                 'numpy>=1.15',
             ],
         },

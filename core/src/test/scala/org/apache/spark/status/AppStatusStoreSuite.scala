@@ -106,7 +106,7 @@ class AppStatusStoreSuite extends SparkFunSuite {
     val store: KVStore = if (disk) {
       conf.set(HYBRID_STORE_DISK_BACKEND, diskStoreType.toString)
       val testDir = Utils.createTempDir()
-      val diskStore = KVUtils.open(testDir, getClass.getName, conf)
+      val diskStore = KVUtils.open(testDir, getClass.getName, conf, live = false)
       new ElementTrackingStore(diskStore, conf)
     } else {
       new ElementTrackingStore(new InMemoryStore, conf)
