@@ -15,13 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.streaming.protobuf
+package org.apache.spark.status.protobuf.sql
 
 import java.util.UUID
 
 import org.apache.spark.sql.streaming.ui.StreamingQueryData
-import org.apache.spark.status.protobuf.ProtobufSerDe
-import org.apache.spark.status.protobuf.StoreTypes
+import org.apache.spark.status.protobuf.{ProtobufSerDe, StoreTypes}
 import org.apache.spark.status.protobuf.Utils.getOptional
 
 class StreamingQueryDataSerializer extends ProtobufSerDe {
