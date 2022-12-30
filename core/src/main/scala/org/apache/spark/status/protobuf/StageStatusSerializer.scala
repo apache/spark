@@ -21,15 +21,15 @@ import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.status.api.v1.StageStatus
 
-object StageStatusSerializer {
+private[protobuf] object StageStatusSerializer {
 
   private def PREFIX = "STAGE_STATUS_"
 
-  private[protobuf] def serialize(input: StageStatus): StoreTypes.StageStatus = {
+  def serialize(input: StageStatus): StoreTypes.StageStatus = {
     StoreTypes.StageStatus.valueOf(PREFIX + input.toString)
   }
 
-  private[protobuf] def deserialize(binary: StoreTypes.StageStatus): StageStatus = {
+  def deserialize(binary: StoreTypes.StageStatus): StageStatus = {
     StageStatus.valueOf(StringUtils.removeStart(binary.toString, PREFIX))
   }
 }

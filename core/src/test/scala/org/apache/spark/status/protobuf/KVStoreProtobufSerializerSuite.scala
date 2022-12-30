@@ -131,7 +131,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
 
     val bytes = serializer.serialize(input)
     val result = serializer.deserialize(bytes, classOf[TaskDataWrapper])
-    assert(result.accumulatorUpdates, input.accumulatorUpdates)
+    checkAnswer(result.accumulatorUpdates, input.accumulatorUpdates)
     assert(result.taskId == input.taskId)
     assert(result.index == input.index)
     assert(result.attempt == input.attempt)
@@ -205,7 +205,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     assert(result.stageId == input.stageId)
     assert(result.stageAttemptId == input.stageAttemptId)
     assert(result.executorId == input.executorId)
-    assert(result.info, input.info)
+    checkAnswer(result.info, input.info)
   }
 
   test("Application Environment Info") {
@@ -585,7 +585,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     val result = serializer.deserialize(bytes, classOf[SpeculationStageSummaryWrapper])
     assert(result.stageId == input.stageId)
     assert(result.stageAttemptId == input.stageAttemptId)
-    assert(result.info, input.info)
+    checkAnswer(result.info, input.info)
   }
 
   test("Executor Summary") {
@@ -686,7 +686,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
 
     assert(result.info.peakMemoryMetrics.isDefined == input.info.peakMemoryMetrics.isDefined)
     if (result.info.peakMemoryMetrics.isDefined && input.info.peakMemoryMetrics.isDefined) {
-      assert(result.info.peakMemoryMetrics.get, input.info.peakMemoryMetrics.get)
+      checkAnswer(result.info.peakMemoryMetrics.get, input.info.peakMemoryMetrics.get)
     }
 
     assert(result.info.attributes.size == input.info.attributes.size)
@@ -1056,90 +1056,90 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     assert(result.info.schedulingPool == input.info.schedulingPool)
 
     assert(result.info.rddIds == input.info.rddIds)
-    assert(result.info.accumulatorUpdates, input.info.accumulatorUpdates)
+    checkAnswer(result.info.accumulatorUpdates, input.info.accumulatorUpdates)
 
     assert(result.info.tasks.isDefined == input.info.tasks.isDefined)
     if (result.info.tasks.isDefined && input.info.tasks.isDefined) {
-      assertIdTask(result.info.tasks.get, input.info.tasks.get)
+      checkIdTask(result.info.tasks.get, input.info.tasks.get)
     }
 
     assert(result.info.executorSummary.isDefined == input.info.executorSummary.isDefined)
     if (result.info.executorSummary.isDefined && input.info.executorSummary.isDefined) {
-      assert(result.info.executorSummary.get, input.info.executorSummary.get)
+      checkAnswer(result.info.executorSummary.get, input.info.executorSummary.get)
     }
 
     assert(result.info.speculationSummary.isDefined == input.info.speculationSummary.isDefined)
     if (result.info.speculationSummary.isDefined && input.info.speculationSummary.isDefined) {
-      assert(result.info.speculationSummary.get, input.info.speculationSummary.get)
+      checkAnswer(result.info.speculationSummary.get, input.info.speculationSummary.get)
     }
     assert(result.info.killedTasksSummary == input.info.killedTasksSummary)
     assert(result.info.resourceProfileId == input.info.resourceProfileId)
     assert(result.info.peakExecutorMetrics.isDefined == input.info.peakExecutorMetrics.isDefined)
     if (result.info.peakExecutorMetrics.isDefined && input.info.peakExecutorMetrics.isDefined) {
-      assert(result.info.peakExecutorMetrics.get, input.info.peakExecutorMetrics.get)
+      checkAnswer(result.info.peakExecutorMetrics.get, input.info.peakExecutorMetrics.get)
     }
     assert(result.info.taskMetricsDistributions.isDefined ==
       input.info.taskMetricsDistributions.isDefined)
     if (result.info.taskMetricsDistributions.isDefined &&
       input.info.taskMetricsDistributions.isDefined) {
-      assert(result.info.taskMetricsDistributions.get, input.info.taskMetricsDistributions.get)
+      checkAnswer(result.info.taskMetricsDistributions.get, input.info.taskMetricsDistributions.get)
     }
     assert(result.info.executorMetricsDistributions.isDefined ==
       input.info.executorMetricsDistributions.isDefined)
     if (result.info.executorMetricsDistributions.isDefined &&
       input.info.executorMetricsDistributions.isDefined) {
-      assert(result.info.executorMetricsDistributions.get,
+      checkAnswer(result.info.executorMetricsDistributions.get,
         input.info.executorMetricsDistributions.get)
     }
   }
 
-  private def assert(result: TaskMetrics, input: TaskMetrics): Unit = {
-    assert(result.executorDeserializeTime == input.executorDeserializeTime)
-    assert(result.executorDeserializeCpuTime == input.executorDeserializeCpuTime)
-    assert(result.executorRunTime == input.executorRunTime)
-    assert(result.executorCpuTime == input.executorCpuTime)
-    assert(result.resultSize == input.resultSize)
-    assert(result.jvmGcTime == input.jvmGcTime)
-    assert(result.resultSerializationTime == input.resultSerializationTime)
-    assert(result.memoryBytesSpilled == input.memoryBytesSpilled)
-    assert(result.diskBytesSpilled == input.diskBytesSpilled)
-    assert(result.peakExecutionMemory == input.peakExecutionMemory)
-    assert(result.inputMetrics, input.inputMetrics)
-    assert(result.outputMetrics, input.outputMetrics)
-    assert(result.shuffleReadMetrics, input.shuffleReadMetrics)
-    assert(result.shuffleWriteMetrics, input.shuffleWriteMetrics)
+  private def checkAnswer(result: TaskMetrics, expected: TaskMetrics): Unit = {
+    assert(result.executorDeserializeTime == expected.executorDeserializeTime)
+    assert(result.executorDeserializeCpuTime == expected.executorDeserializeCpuTime)
+    assert(result.executorRunTime == expected.executorRunTime)
+    assert(result.executorCpuTime == expected.executorCpuTime)
+    assert(result.resultSize == expected.resultSize)
+    assert(result.jvmGcTime == expected.jvmGcTime)
+    assert(result.resultSerializationTime == expected.resultSerializationTime)
+    assert(result.memoryBytesSpilled == expected.memoryBytesSpilled)
+    assert(result.diskBytesSpilled == expected.diskBytesSpilled)
+    assert(result.peakExecutionMemory == expected.peakExecutionMemory)
+    checkAnswer(result.inputMetrics, expected.inputMetrics)
+    checkAnswer(result.outputMetrics, expected.outputMetrics)
+    checkAnswer(result.shuffleReadMetrics, expected.shuffleReadMetrics)
+    checkAnswer(result.shuffleWriteMetrics, expected.shuffleWriteMetrics)
   }
 
-  private def assert(result: InputMetrics, input: InputMetrics): Unit = {
-    assert(result.bytesRead == input.bytesRead)
-    assert(result.recordsRead == input.recordsRead)
+  private def checkAnswer(result: InputMetrics, expected: InputMetrics): Unit = {
+    assert(result.bytesRead == expected.bytesRead)
+    assert(result.recordsRead == expected.recordsRead)
   }
 
-  private def assert(result: OutputMetrics, input: OutputMetrics): Unit = {
-    assert(result.bytesWritten == input.bytesWritten)
-    assert(result.recordsWritten == input.recordsWritten)
+  private def checkAnswer(result: OutputMetrics, expected: OutputMetrics): Unit = {
+    assert(result.bytesWritten == expected.bytesWritten)
+    assert(result.recordsWritten == expected.recordsWritten)
   }
 
-  private def assert(result: ShuffleReadMetrics, input: ShuffleReadMetrics): Unit = {
-    assert(result.remoteBlocksFetched == input.remoteBlocksFetched)
-    assert(result.localBlocksFetched == input.localBlocksFetched)
-    assert(result.fetchWaitTime == input.fetchWaitTime)
-    assert(result.remoteBytesRead == input.remoteBytesRead)
-    assert(result.remoteBytesReadToDisk == input.remoteBytesReadToDisk)
-    assert(result.localBytesRead == input.localBytesRead)
-    assert(result.recordsRead == input.recordsRead)
+  private def checkAnswer(result: ShuffleReadMetrics, expected: ShuffleReadMetrics): Unit = {
+    assert(result.remoteBlocksFetched == expected.remoteBlocksFetched)
+    assert(result.localBlocksFetched == expected.localBlocksFetched)
+    assert(result.fetchWaitTime == expected.fetchWaitTime)
+    assert(result.remoteBytesRead == expected.remoteBytesRead)
+    assert(result.remoteBytesReadToDisk == expected.remoteBytesReadToDisk)
+    assert(result.localBytesRead == expected.localBytesRead)
+    assert(result.recordsRead == expected.recordsRead)
   }
 
-  private def assert(result: ShuffleWriteMetrics, input: ShuffleWriteMetrics): Unit = {
-    assert(result.bytesWritten == input.bytesWritten)
-    assert(result.writeTime == input.writeTime)
-    assert(result.recordsWritten == input.recordsWritten)
+  private def checkAnswer(result: ShuffleWriteMetrics, expected: ShuffleWriteMetrics): Unit = {
+    assert(result.bytesWritten == expected.bytesWritten)
+    assert(result.writeTime == expected.writeTime)
+    assert(result.recordsWritten == expected.recordsWritten)
   }
 
-  private def assert(result: collection.Seq[AccumulableInfo],
-      input: collection.Seq[AccumulableInfo]): Unit = {
-    assert(result.length == input.length)
-    result.zip(input).foreach { case (a1, a2) =>
+  private def checkAnswer(result: collection.Seq[AccumulableInfo],
+      expected: collection.Seq[AccumulableInfo]): Unit = {
+    assert(result.length == expected.length)
+    result.zip(expected).foreach { case (a1, a2) =>
       assert(a1.id == a2.id)
       assert(a1.name == a2.name)
       assert(a1.update.getOrElse("") == a2.update.getOrElse(""))
@@ -1147,161 +1147,166 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     }
   }
 
-  private def assertIdTask(result: Map[Long, TaskData], input: Map[Long, TaskData]): Unit = {
-    assert(result.size == input.size)
-    assert(result.keys.size == input.keys.size)
+  private def checkIdTask(result: Map[Long, TaskData], expected: Map[Long, TaskData]): Unit = {
+    assert(result.size == expected.size)
+    assert(result.keys.size == expected.keys.size)
     result.keysIterator.foreach { k =>
-      assert(input.contains(k))
-      assert(result(k), input(k))
+      assert(expected.contains(k))
+      checkAnswer(result(k), expected(k))
     }
   }
 
-  private def assert(result: TaskData, input: TaskData): Unit = {
-    assert(result.taskId == input.taskId)
-    assert(result.index == input.index)
-    assert(result.attempt == input.attempt)
-    assert(result.partitionId == input.partitionId)
-    assert(result.launchTime == input.launchTime)
-    assert(result.resultFetchStart == input.resultFetchStart)
-    assert(result.duration == input.duration)
-    assert(result.executorId == input.executorId)
-    assert(result.host == input.host)
-    assert(result.status == input.status)
-    assert(result.taskLocality == input.taskLocality)
-    assert(result.speculative == input.speculative)
-    assert(result.accumulatorUpdates, input.accumulatorUpdates)
-    assert(result.errorMessage == input.errorMessage)
-    assert(result.taskMetrics.isDefined == input.taskMetrics.isDefined)
-    if (result.taskMetrics.isDefined && input.taskMetrics.isDefined) {
-      assert(result.taskMetrics.get, input.taskMetrics.get)
+  private def checkAnswer(result: TaskData, expected: TaskData): Unit = {
+    assert(result.taskId == expected.taskId)
+    assert(result.index == expected.index)
+    assert(result.attempt == expected.attempt)
+    assert(result.partitionId == expected.partitionId)
+    assert(result.launchTime == expected.launchTime)
+    assert(result.resultFetchStart == expected.resultFetchStart)
+    assert(result.duration == expected.duration)
+    assert(result.executorId == expected.executorId)
+    assert(result.host == expected.host)
+    assert(result.status == expected.status)
+    assert(result.taskLocality == expected.taskLocality)
+    assert(result.speculative == expected.speculative)
+    checkAnswer(result.accumulatorUpdates, expected.accumulatorUpdates)
+    assert(result.errorMessage == expected.errorMessage)
+    assert(result.taskMetrics.isDefined == expected.taskMetrics.isDefined)
+    if (result.taskMetrics.isDefined && expected.taskMetrics.isDefined) {
+      checkAnswer(result.taskMetrics.get, expected.taskMetrics.get)
     }
   }
 
-  private def assert(result: Map[String, ExecutorStageSummary],
-      input: Map[String, ExecutorStageSummary]): Unit = {
-    assert(result.size == input.size)
-    assert(result.keys.size == input.keys.size)
+  private def checkAnswer(result: Map[String, ExecutorStageSummary],
+      expected: Map[String, ExecutorStageSummary]): Unit = {
+    assert(result.size == expected.size)
+    assert(result.keys.size == expected.keys.size)
     result.keysIterator.foreach { k =>
-      assert(input.contains(k))
-      assert(result(k), input(k))
+      assert(expected.contains(k))
+      checkAnswer(result(k), expected(k))
     }
   }
 
-  private def assert(result: ExecutorStageSummary, input: ExecutorStageSummary): Unit = {
-    assert(result.taskTime == input.taskTime)
-    assert(result.failedTasks == input.failedTasks)
-    assert(result.succeededTasks == input.succeededTasks)
-    assert(result.killedTasks == input.killedTasks)
-    assert(result.inputBytes == input.inputBytes)
-    assert(result.inputRecords == input.inputRecords)
-    assert(result.outputBytes == input.outputBytes)
-    assert(result.outputRecords == input.outputRecords)
-    assert(result.shuffleRead == input.shuffleRead)
-    assert(result.shuffleReadRecords == input.shuffleReadRecords)
-    assert(result.shuffleWrite == input.shuffleWrite)
-    assert(result.shuffleWriteRecords == input.shuffleWriteRecords)
-    assert(result.memoryBytesSpilled == input.memoryBytesSpilled)
-    assert(result.diskBytesSpilled == input.diskBytesSpilled)
-    assert(result.isBlacklistedForStage == input.isBlacklistedForStage)
-    assert(result.isExcludedForStage == input.isExcludedForStage)
-    assert(result.peakMemoryMetrics.isDefined == input.peakMemoryMetrics.isDefined)
-    if (result.peakMemoryMetrics.isDefined && input.peakMemoryMetrics.isDefined) {
-      assert(result.peakMemoryMetrics.get, input.peakMemoryMetrics.get)
+  private def checkAnswer(result: ExecutorStageSummary,
+      expected: ExecutorStageSummary): Unit = {
+    assert(result.taskTime == expected.taskTime)
+    assert(result.failedTasks == expected.failedTasks)
+    assert(result.succeededTasks == expected.succeededTasks)
+    assert(result.killedTasks == expected.killedTasks)
+    assert(result.inputBytes == expected.inputBytes)
+    assert(result.inputRecords == expected.inputRecords)
+    assert(result.outputBytes == expected.outputBytes)
+    assert(result.outputRecords == expected.outputRecords)
+    assert(result.shuffleRead == expected.shuffleRead)
+    assert(result.shuffleReadRecords == expected.shuffleReadRecords)
+    assert(result.shuffleWrite == expected.shuffleWrite)
+    assert(result.shuffleWriteRecords == expected.shuffleWriteRecords)
+    assert(result.memoryBytesSpilled == expected.memoryBytesSpilled)
+    assert(result.diskBytesSpilled == expected.diskBytesSpilled)
+    assert(result.isBlacklistedForStage == expected.isBlacklistedForStage)
+    assert(result.isExcludedForStage == expected.isExcludedForStage)
+    assert(result.peakMemoryMetrics.isDefined == expected.peakMemoryMetrics.isDefined)
+    if (result.peakMemoryMetrics.isDefined && expected.peakMemoryMetrics.isDefined) {
+      checkAnswer(result.peakMemoryMetrics.get, expected.peakMemoryMetrics.get)
     }
   }
 
-  private def assert(result: SpeculationStageSummary, input: SpeculationStageSummary): Unit = {
-    assert(result.numTasks == input.numTasks)
-    assert(result.numActiveTasks == input.numActiveTasks)
-    assert(result.numCompletedTasks == input.numCompletedTasks)
-    assert(result.numFailedTasks == input.numFailedTasks)
-    assert(result.numKilledTasks == input.numKilledTasks)
+  private def checkAnswer(result: SpeculationStageSummary,
+      expected: SpeculationStageSummary): Unit = {
+    assert(result.numTasks == expected.numTasks)
+    assert(result.numActiveTasks == expected.numActiveTasks)
+    assert(result.numCompletedTasks == expected.numCompletedTasks)
+    assert(result.numFailedTasks == expected.numFailedTasks)
+    assert(result.numKilledTasks == expected.numKilledTasks)
   }
 
-  private def assert(result: ExecutorMetrics, input: ExecutorMetrics): Unit = {
+  private def checkAnswer(result: ExecutorMetrics, expected: ExecutorMetrics): Unit = {
     ExecutorMetricType.metricToOffset.foreach { case (name, _) =>
-      result.getMetricValue(name) == input.getMetricValue(name)
+      result.getMetricValue(name) == expected.getMetricValue(name)
     }
   }
 
-  private def assert(result: TaskMetricDistributions, input: TaskMetricDistributions): Unit = {
-    assert(result.quantiles == input.quantiles)
-    assert(result.duration == input.duration)
-    assert(result.executorDeserializeTime == input.executorDeserializeTime)
-    assert(result.executorDeserializeCpuTime == input.executorDeserializeCpuTime)
-    assert(result.executorRunTime == input.executorRunTime)
-    assert(result.executorCpuTime == input.executorCpuTime)
-    assert(result.resultSize == input.resultSize)
-    assert(result.jvmGcTime == input.jvmGcTime)
-    assert(result.resultSerializationTime == input.resultSerializationTime)
-    assert(result.gettingResultTime == input.gettingResultTime)
-    assert(result.schedulerDelay == input.schedulerDelay)
-    assert(result.peakExecutionMemory == input.peakExecutionMemory)
-    assert(result.memoryBytesSpilled == input.memoryBytesSpilled)
-    assert(result.diskBytesSpilled == input.diskBytesSpilled)
+  private def checkAnswer(result: TaskMetricDistributions,
+      expected: TaskMetricDistributions): Unit = {
+    assert(result.quantiles == expected.quantiles)
+    assert(result.duration == expected.duration)
+    assert(result.executorDeserializeTime == expected.executorDeserializeTime)
+    assert(result.executorDeserializeCpuTime == expected.executorDeserializeCpuTime)
+    assert(result.executorRunTime == expected.executorRunTime)
+    assert(result.executorCpuTime == expected.executorCpuTime)
+    assert(result.resultSize == expected.resultSize)
+    assert(result.jvmGcTime == expected.jvmGcTime)
+    assert(result.resultSerializationTime == expected.resultSerializationTime)
+    assert(result.gettingResultTime == expected.gettingResultTime)
+    assert(result.schedulerDelay == expected.schedulerDelay)
+    assert(result.peakExecutionMemory == expected.peakExecutionMemory)
+    assert(result.memoryBytesSpilled == expected.memoryBytesSpilled)
+    assert(result.diskBytesSpilled == expected.diskBytesSpilled)
 
-    assert(result.inputMetrics, input.inputMetrics)
-    assert(result.outputMetrics, input.outputMetrics)
-    assert(result.shuffleReadMetrics, input.shuffleReadMetrics)
-    assert(result.shuffleWriteMetrics, input.shuffleWriteMetrics)
+    checkAnswer(result.inputMetrics, expected.inputMetrics)
+    checkAnswer(result.outputMetrics, expected.outputMetrics)
+    checkAnswer(result.shuffleReadMetrics, expected.shuffleReadMetrics)
+    checkAnswer(result.shuffleWriteMetrics, expected.shuffleWriteMetrics)
   }
 
-  private def assert(result: InputMetricDistributions, input: InputMetricDistributions): Unit = {
-    assert(result.bytesRead == input.bytesRead)
-    assert(result.recordsRead == input.recordsRead)
+  private def checkAnswer(result: InputMetricDistributions,
+      expected: InputMetricDistributions): Unit = {
+    assert(result.bytesRead == expected.bytesRead)
+    assert(result.recordsRead == expected.recordsRead)
   }
 
-  private def assert(result: OutputMetricDistributions, input: OutputMetricDistributions): Unit = {
-    assert(result.bytesWritten == input.bytesWritten)
-    assert(result.recordsWritten == input.recordsWritten)
+  private def checkAnswer(result: OutputMetricDistributions,
+      expected: OutputMetricDistributions): Unit = {
+    assert(result.bytesWritten == expected.bytesWritten)
+    assert(result.recordsWritten == expected.recordsWritten)
   }
 
-  private def assert(result: ShuffleReadMetricDistributions,
-      input: ShuffleReadMetricDistributions): Unit = {
-    assert(result.readBytes == input.readBytes)
-    assert(result.readRecords == input.readRecords)
-    assert(result.remoteBlocksFetched == input.remoteBlocksFetched)
-    assert(result.localBlocksFetched == input.localBlocksFetched)
-    assert(result.fetchWaitTime == input.fetchWaitTime)
-    assert(result.remoteBytesRead == input.remoteBytesRead)
-    assert(result.remoteBytesReadToDisk == input.remoteBytesReadToDisk)
-    assert(result.totalBlocksFetched == input.totalBlocksFetched)
+  private def checkAnswer(result: ShuffleReadMetricDistributions,
+      expected: ShuffleReadMetricDistributions): Unit = {
+    assert(result.readBytes == expected.readBytes)
+    assert(result.readRecords == expected.readRecords)
+    assert(result.remoteBlocksFetched == expected.remoteBlocksFetched)
+    assert(result.localBlocksFetched == expected.localBlocksFetched)
+    assert(result.fetchWaitTime == expected.fetchWaitTime)
+    assert(result.remoteBytesRead == expected.remoteBytesRead)
+    assert(result.remoteBytesReadToDisk == expected.remoteBytesReadToDisk)
+    assert(result.totalBlocksFetched == expected.totalBlocksFetched)
   }
 
-  private def assert(result: ShuffleWriteMetricDistributions,
-      input: ShuffleWriteMetricDistributions): Unit = {
-    assert(result.writeBytes == input.writeBytes)
-    assert(result.writeRecords == input.writeRecords)
-    assert(result.writeTime == input.writeTime)
+  private def checkAnswer(result: ShuffleWriteMetricDistributions,
+      expected: ShuffleWriteMetricDistributions): Unit = {
+    assert(result.writeBytes == expected.writeBytes)
+    assert(result.writeRecords == expected.writeRecords)
+    assert(result.writeTime == expected.writeTime)
   }
 
-  private def assert(result: ExecutorMetricsDistributions,
-      input: ExecutorMetricsDistributions): Unit = {
-    assert(result.quantiles == input.quantiles)
+  private def checkAnswer(result: ExecutorMetricsDistributions,
+      expected: ExecutorMetricsDistributions): Unit = {
+    assert(result.quantiles == expected.quantiles)
 
-    assert(result.taskTime == input.taskTime)
-    assert(result.failedTasks == input.failedTasks)
-    assert(result.succeededTasks == input.succeededTasks)
-    assert(result.killedTasks == input.killedTasks)
-    assert(result.inputBytes == input.inputBytes)
-    assert(result.inputRecords == input.inputRecords)
-    assert(result.outputBytes == input.outputBytes)
-    assert(result.outputRecords == input.outputRecords)
-    assert(result.shuffleRead == input.shuffleRead)
-    assert(result.shuffleReadRecords == input.shuffleReadRecords)
-    assert(result.shuffleWrite == input.shuffleWrite)
-    assert(result.shuffleWriteRecords == input.shuffleWriteRecords)
-    assert(result.memoryBytesSpilled == input.memoryBytesSpilled)
-    assert(result.diskBytesSpilled == input.diskBytesSpilled)
-    assert(result.peakMemoryMetrics, input.peakMemoryMetrics)
+    assert(result.taskTime == expected.taskTime)
+    assert(result.failedTasks == expected.failedTasks)
+    assert(result.succeededTasks == expected.succeededTasks)
+    assert(result.killedTasks == expected.killedTasks)
+    assert(result.inputBytes == expected.inputBytes)
+    assert(result.inputRecords == expected.inputRecords)
+    assert(result.outputBytes == expected.outputBytes)
+    assert(result.outputRecords == expected.outputRecords)
+    assert(result.shuffleRead == expected.shuffleRead)
+    assert(result.shuffleReadRecords == expected.shuffleReadRecords)
+    assert(result.shuffleWrite == expected.shuffleWrite)
+    assert(result.shuffleWriteRecords == expected.shuffleWriteRecords)
+    assert(result.memoryBytesSpilled == expected.memoryBytesSpilled)
+    assert(result.diskBytesSpilled == expected.diskBytesSpilled)
+    checkAnswer(result.peakMemoryMetrics, expected.peakMemoryMetrics)
   }
 
-  private def assert(result: ExecutorPeakMetricsDistributions,
-      input: ExecutorPeakMetricsDistributions): Unit = {
-    assert(result.quantiles == input.quantiles)
-    assert(result.executorMetrics.size == input.executorMetrics.size)
-    result.executorMetrics.zip(input.executorMetrics).foreach { case (a1, a2) =>
-      assert(a1, a2)
+  private def checkAnswer(result: ExecutorPeakMetricsDistributions,
+      expected: ExecutorPeakMetricsDistributions): Unit = {
+    assert(result.quantiles == expected.quantiles)
+    assert(result.executorMetrics.size == expected.executorMetrics.size)
+    result.executorMetrics.zip(expected.executorMetrics).foreach { case (a1, a2) =>
+      checkAnswer(a1, a2)
     }
   }
 }

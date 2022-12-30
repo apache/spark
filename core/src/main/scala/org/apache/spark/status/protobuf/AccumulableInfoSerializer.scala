@@ -24,10 +24,9 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.status.api.v1.AccumulableInfo
 import org.apache.spark.status.protobuf.Utils.getOptional
 
-object AccumulableInfoSerializer {
+private[protobuf] object AccumulableInfoSerializer {
 
-  private[protobuf] def serialize(
-      input: AccumulableInfo): StoreTypes.AccumulableInfo = {
+  def serialize(input: AccumulableInfo): StoreTypes.AccumulableInfo = {
     val builder = StoreTypes.AccumulableInfo.newBuilder()
       .setId(input.id)
       .setName(input.name)
@@ -36,8 +35,7 @@ object AccumulableInfoSerializer {
     builder.build()
   }
 
-  private[protobuf] def deserialize(
-      updates: JList[StoreTypes.AccumulableInfo]): ArrayBuffer[AccumulableInfo] = {
+  def deserialize(updates: JList[StoreTypes.AccumulableInfo]): ArrayBuffer[AccumulableInfo] = {
     val accumulatorUpdates = new ArrayBuffer[AccumulableInfo](updates.size())
     updates.forEach { update =>
       accumulatorUpdates.append(new AccumulableInfo(

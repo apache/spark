@@ -20,9 +20,9 @@ package org.apache.spark.status.protobuf
 import org.apache.spark.status.api.v1.ExecutorStageSummary
 import org.apache.spark.status.protobuf.Utils.getOptional
 
-object ExecutorStageSummarySerializer {
+private[protobuf] object ExecutorStageSummarySerializer {
 
-  private[protobuf] def serialize(input: ExecutorStageSummary): StoreTypes.ExecutorStageSummary = {
+  def serialize(input: ExecutorStageSummary): StoreTypes.ExecutorStageSummary = {
     val builder = StoreTypes.ExecutorStageSummary.newBuilder()
       .setTaskTime(input.taskTime)
       .setFailedTasks(input.failedTasks)
@@ -46,8 +46,7 @@ object ExecutorStageSummarySerializer {
     builder.build()
   }
 
-  private[protobuf] def deserialize(
-      binary: StoreTypes.ExecutorStageSummary): ExecutorStageSummary = {
+  def deserialize(binary: StoreTypes.ExecutorStageSummary): ExecutorStageSummary = {
     val peakMemoryMetrics =
       getOptional(binary.hasPeakMemoryMetrics,
         () => ExecutorMetricsSerializer.deserialize(binary.getPeakMemoryMetrics))
