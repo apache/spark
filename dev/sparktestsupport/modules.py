@@ -504,7 +504,10 @@ pyspark_connect = Module(
     source_file_regexes=["python/pyspark/sql/connect"],
     python_test_goals=[
         # doctests
-        # No doctests yet.
+        "pyspark.sql.connect.catalog",
+        "pyspark.sql.connect.group",
+        "pyspark.sql.connect.window",
+        "pyspark.sql.connect.column",
         # unittests
         "pyspark.sql.tests.connect.test_connect_column_expressions",
         "pyspark.sql.tests.connect.test_connect_plan_only",
@@ -512,6 +515,9 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_connect_basic",
         "pyspark.sql.tests.connect.test_connect_function",
         "pyspark.sql.tests.connect.test_connect_column",
+        "pyspark.sql.tests.connect.test_parity_catalog",
+        "pyspark.sql.tests.connect.test_parity_functions",
+        "pyspark.sql.tests.connect.test_parity_dataframe",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and

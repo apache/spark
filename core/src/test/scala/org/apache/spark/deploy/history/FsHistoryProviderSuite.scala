@@ -51,6 +51,7 @@ import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.KVUtils
 import org.apache.spark.status.KVUtils.KVStoreScalaSerializer
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
+import org.apache.spark.status.protobuf.KVStoreProtobufSerializer
 import org.apache.spark.tags.ExtendedLevelDBTest
 import org.apache.spark.util.{Clock, JsonProtocol, ManualClock, Utils}
 import org.apache.spark.util.kvstore.InMemoryStore
@@ -75,6 +76,8 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
 
   protected def diskBackend: HybridStoreDiskBackend.Value
 
+  protected def serializer: LocalStoreSerializer.Value = LocalStoreSerializer.JSON
+
   /** Create a fake log file using the new log format used in Spark 1.3+ */
   private def newLogFile(
       appId: String,
@@ -95,6 +98,17 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
 
   test("SPARK-31608: parse application logs with HybridStore") {
     testAppLogParsing(false, true)
+  }
+
+  test("SPARK-41685: Verify the configurable serializer for history server") {
+    val conf = createTestConf()
+    val serializerOfKVStore = KVUtils.serializerForHistoryServer(conf)
+    assert(serializerOfKVStore.isInstanceOf[KVStoreScalaSerializer])
+    if (serializer == LocalStoreSerializer.JSON) {
+      assert(!serializerOfKVStore.isInstanceOf[KVStoreProtobufSerializer])
+    } else {
+      assert(serializerOfKVStore.isInstanceOf[KVStoreProtobufSerializer])
+    }
   }
 
   private def testAppLogParsing(inMemory: Boolean, useHybridStore: Boolean = false): Unit = {
@@ -1705,6 +1719,61 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     provider.stop()
   }
 
+  test("SPARK-41447: Reduce the number of doMergeApplicationListing invocations") {
+    class TestFsHistoryProvider(conf: SparkConf, clock: Clock)
+      extends FsHistoryProvider(conf, clock) {
+      var doMergeApplicationListingCall = 0
+      override private[history] def doMergeApplicationListing(
+          reader: EventLogFileReader,
+          lastSeen: Long,
+          enableSkipToEnd: Boolean,
+          lastCompactionIndex: Option[Long]): Unit = {
+        super.doMergeApplicationListing(reader, lastSeen, enableSkipToEnd, lastCompactionIndex)
+        doMergeApplicationListingCall += 1
+      }
+    }
+
+    val maxAge = TimeUnit.SECONDS.toMillis(10)
+    val clock = new ManualClock(maxAge / 2)
+    val conf = createTestConf().set(MAX_LOG_AGE_S.key, s"${maxAge}ms").set(CLEANER_ENABLED, true)
+    val provider = new TestFsHistoryProvider(conf, clock)
+
+    val log1 = newLogFile("app1", Some("attempt1"), inProgress = false)
+    writeFile(log1, None,
+      SparkListenerApplicationStart("app1", Some("app1"), 1L, "test", Some("attempt1")),
+      SparkListenerApplicationEnd(2L)
+    )
+    log1.setLastModified(0L)
+
+    val log2 = newLogFile("app1", Some("attempt2"), inProgress = false)
+    writeFile(log2, None,
+      SparkListenerApplicationStart("app1", Some("app1"), 2L, "test", Some("attempt2")),
+      SparkListenerApplicationEnd(4L)
+    )
+    log2.setLastModified(clock.getTimeMillis())
+
+    val log3 = newLogFile("app2", Some("attempt1"), inProgress = false)
+    writeFile(log3, None,
+      SparkListenerApplicationStart("app2", Some("app1"), 3L, "test", Some("attempt1")),
+      SparkListenerApplicationEnd(4L)
+    )
+    log3.setLastModified(0L)
+
+    provider.getListing().size should be (0)
+
+    // Move the clock forward so log1 and log3 exceed the max age.
+    clock.advance(maxAge)
+    // Avoid unnecessary parse, the expired log files would be cleaned by checkForLogs().
+    provider.checkForLogs()
+
+    provider.doMergeApplicationListingCall should be (1)
+    provider.getListing().size should be (1)
+
+    assert(!log1.exists())
+    assert(!log3.exists())
+    assert(log2.exists())
+  }
+
   /**
    * Asks the provider to check for logs and calls a function to perform checks on the updated
    * app list. Example:
@@ -1755,6 +1824,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     }
     conf.set(HYBRID_STORE_ENABLED, useHybridStore)
     conf.set(HYBRID_STORE_DISK_BACKEND.key, diskBackend.toString)
+    conf.set(LOCAL_STORE_SERIALIZER.key, serializer.toString)
 
     conf
   }
@@ -1810,7 +1880,16 @@ class LevelDBBackendFsHistoryProviderSuite extends FsHistoryProviderSuite {
     HybridStoreDiskBackend.LEVELDB
 }
 
+@ExtendedLevelDBTest
+class LevelDBBackendWithProtobufSerializerSuite extends LevelDBBackendFsHistoryProviderSuite {
+  override protected def serializer: LocalStoreSerializer.Value = LocalStoreSerializer.PROTOBUF
+}
+
 class RocksDBBackendFsHistoryProviderSuite extends FsHistoryProviderSuite {
   override protected def diskBackend: HybridStoreDiskBackend.Value =
     HybridStoreDiskBackend.ROCKSDB
+}
+
+class RocksDBBackendWithProtobufSerializerSuite extends RocksDBBackendFsHistoryProviderSuite {
+  override protected def serializer: LocalStoreSerializer.Value = LocalStoreSerializer.PROTOBUF
 }

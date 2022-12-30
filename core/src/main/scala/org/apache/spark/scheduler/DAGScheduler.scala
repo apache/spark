@@ -383,8 +383,8 @@ private[spark] class DAGScheduler(
   /**
    * Called by the TaskSetManager when it decides a speculative task is needed.
    */
-  def speculativeTaskSubmitted(task: Task[_]): Unit = {
-    eventProcessLoop.post(SpeculativeTaskSubmitted(task))
+  def speculativeTaskSubmitted(task: Task[_], taskIndex: Int): Unit = {
+    eventProcessLoop.post(SpeculativeTaskSubmitted(task, taskIndex))
   }
 
   /**
@@ -1178,8 +1178,10 @@ private[spark] class DAGScheduler(
     listenerBus.post(SparkListenerTaskStart(task.stageId, stageAttemptId, taskInfo))
   }
 
-  private[scheduler] def handleSpeculativeTaskSubmitted(task: Task[_]): Unit = {
-    listenerBus.post(SparkListenerSpeculativeTaskSubmitted(task.stageId, task.stageAttemptId))
+  private[scheduler] def handleSpeculativeTaskSubmitted(task: Task[_], taskIndex: Int): Unit = {
+    val speculativeTaskSubmittedEvent = new SparkListenerSpeculativeTaskSubmitted(
+      task.stageId, task.stageAttemptId, taskIndex, task.partitionId)
+    listenerBus.post(speculativeTaskSubmittedEvent)
   }
 
   private[scheduler] def handleUnschedulableTaskSetAdded(
@@ -1588,9 +1590,14 @@ private[spark] class DAGScheduler(
     if (tasks.nonEmpty) {
       logInfo(s"Submitting ${tasks.size} missing tasks from $stage (${stage.rdd}) (first 15 " +
         s"tasks are for partitions ${tasks.take(15).map(_.partitionId)})")
+      val shuffleId = stage match {
+        case s: ShuffleMapStage => Some(s.shuffleDep.shuffleId)
+        case _: ResultStage => None
+      }
+
       taskScheduler.submitTasks(new TaskSet(
         tasks.toArray, stage.id, stage.latestInfo.attemptNumber, jobId, properties,
-        stage.resourceProfileId))
+        stage.resourceProfileId, shuffleId))
     } else {
       // Because we posted SparkListenerStageSubmitted earlier, we should mark
       // the stage as completed here in case there are no tasks to run
@@ -2962,8 +2969,8 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
     case BeginEvent(task, taskInfo) =>
       dagScheduler.handleBeginEvent(task, taskInfo)
 
-    case SpeculativeTaskSubmitted(task) =>
-      dagScheduler.handleSpeculativeTaskSubmitted(task)
+    case SpeculativeTaskSubmitted(task, taskIndex) =>
+      dagScheduler.handleSpeculativeTaskSubmitted(task, taskIndex)
 
     case UnschedulableTaskSetAdded(stageId, stageAttemptId) =>
       dagScheduler.handleUnschedulableTaskSetAdded(stageId, stageAttemptId)

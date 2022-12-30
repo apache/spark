@@ -39,7 +39,7 @@ case class ApplicationInfo private[spark](
     maxCores: Option[Int],
     coresPerExecutor: Option[Int],
     memoryPerExecutorMB: Option[Int],
-    attempts: Seq[ApplicationAttemptInfo])
+    attempts: collection.Seq[ApplicationAttemptInfo])
 
 @JsonIgnoreProperties(
   value = Array("startTimeEpoch", "endTimeEpoch", "lastUpdatedEpoch"),
@@ -196,7 +196,7 @@ class JobData private[spark](
     val description: Option[String],
     val submissionTime: Option[Date],
     val completionTime: Option[Date],
-    val stageIds: Seq[Int],
+    val stageIds: collection.Seq[Int],
     val jobGroup: Option[String],
     val status: JobExecutionStatus,
     val numTasks: Int,
@@ -220,8 +220,8 @@ class RDDStorageInfo private[spark](
     val storageLevel: String,
     val memoryUsed: Long,
     val diskUsed: Long,
-    val dataDistribution: Option[Seq[RDDDataDistribution]],
-    val partitions: Option[Seq[RDDPartitionInfo]])
+    val dataDistribution: Option[collection.Seq[RDDDataDistribution]],
+    val partitions: Option[collection.Seq[RDDPartitionInfo]])
 
 class RDDDataDistribution private[spark](
     val address: String,
@@ -242,7 +242,7 @@ class RDDPartitionInfo private[spark](
     val storageLevel: String,
     val memoryUsed: Long,
     val diskUsed: Long,
-    val executors: Seq[String])
+    val executors: collection.Seq[String])
 
 class StageData private[spark](
     val status: StageStatus,
@@ -318,7 +318,7 @@ class TaskData private[spark](
     val status: String,
     val taskLocality: String,
     val speculative: Boolean,
-    val accumulatorUpdates: Seq[AccumulableInfo],
+    val accumulatorUpdates: collection.Seq[AccumulableInfo],
     val errorMessage: Option[String] = None,
     val taskMetrics: Option[TaskMetrics] = None,
     val executorLogs: Map[String, String],
@@ -456,12 +456,12 @@ class VersionInfo private[spark](
 // REST call, they are not stored with it.
 class ApplicationEnvironmentInfo private[spark] (
     val runtime: RuntimeInfo,
-    val sparkProperties: Seq[(String, String)],
-    val hadoopProperties: Seq[(String, String)],
-    val systemProperties: Seq[(String, String)],
-    val metricsProperties: Seq[(String, String)],
-    val classpathEntries: Seq[(String, String)],
-    val resourceProfiles: Seq[ResourceProfileInfo])
+    val sparkProperties: collection.Seq[(String, String)],
+    val hadoopProperties: collection.Seq[(String, String)],
+    val systemProperties: collection.Seq[(String, String)],
+    val metricsProperties: collection.Seq[(String, String)],
+    val classpathEntries: collection.Seq[(String, String)],
+    val resourceProfiles: collection.Seq[ResourceProfileInfo])
 
 class RuntimeInfo private[spark](
     val javaVersion: String,

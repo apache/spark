@@ -14,14 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
 import sys
 from typing import cast, Iterable, List, Tuple, TYPE_CHECKING, Union
 
+from py4j.java_gateway import JavaObject
+
 from pyspark import SparkContext
 from pyspark.sql.column import _to_seq, _to_java_column
-
-from py4j.java_gateway import JavaObject
+from pyspark.sql.utils import try_remote_window, try_remote_windowspec
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import ColumnOrName, ColumnOrName_
@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 __all__ = ["Window", "WindowSpec"]
 
 
-def _to_java_cols(cols: Tuple[Union["ColumnOrName", List["ColumnOrName_"]], ...]) -> int:
+def _to_java_cols(cols: Tuple[Union["ColumnOrName", List["ColumnOrName_"]], ...]) -> JavaObject:
     sc = SparkContext._active_spark_context
     if len(cols) == 1 and isinstance(cols[0], list):
         cols = cols[0]  # type: ignore[assignment]
@@ -41,7 +41,10 @@ class Window:
     """
     Utility functions for defining window in DataFrames.
 
-    .. versionadded:: 1.4
+    .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Notes
     -----
@@ -69,7 +72,9 @@ class Window:
 
     currentRow: int = 0
 
+    # TODO(SPARK-41773): Window.partitionBy is not respected with row_number in Spark Connect
     @staticmethod
+    @try_remote_window
     def partitionBy(*cols: Union["ColumnOrName", List["ColumnOrName_"]]) -> "WindowSpec":
         """
         Creates a :class:`WindowSpec` with the partitioning defined.
@@ -107,7 +112,7 @@ class Window:
         Show row number order by ``id`` in partition ``category``.
 
         >>> window = Window.partitionBy("category").orderBy("id")
-        >>> df.withColumn("row_number", row_number().over(window)).show()
+        >>> df.withColumn("row_number", row_number().over(window)).show()  # doctest: +SKIP
         +---+--------+----------+
         | id|category|row_number|
         +---+--------+----------+
@@ -124,7 +129,9 @@ class Window:
         jspec = sc._jvm.org.apache.spark.sql.expressions.Window.partitionBy(_to_java_cols(cols))
         return WindowSpec(jspec)
 
+    # TODO(SPARK-41773): Window.partitionBy is not respected with row_number in Spark Connect
     @staticmethod
+    @try_remote_window
     def orderBy(*cols: Union["ColumnOrName", List["ColumnOrName_"]]) -> "WindowSpec":
         """
         Creates a :class:`WindowSpec` with the ordering defined.
@@ -162,7 +169,7 @@ class Window:
         Show row number order by ``category`` in partition ``id``.
 
         >>> window = Window.partitionBy("id").orderBy("category")
-        >>> df.withColumn("row_number", row_number().over(window)).show()
+        >>> df.withColumn("row_number", row_number().over(window)).show()  # doctest: +SKIP
         +---+--------+----------+
         | id|category|row_number|
         +---+--------+----------+
@@ -179,7 +186,9 @@ class Window:
         jspec = sc._jvm.org.apache.spark.sql.expressions.Window.orderBy(_to_java_cols(cols))
         return WindowSpec(jspec)
 
+    # TODO(SPARK-41773): Window.partitionBy is not respected with row_number in Spark Connect
     @staticmethod
+    @try_remote_window
     def rowsBetween(start: int, end: int) -> "WindowSpec":
         """
         Creates a :class:`WindowSpec` with the frame boundaries defined,
@@ -241,6 +250,7 @@ class Window:
 
         >>> window = Window.partitionBy("category").orderBy("id").rowsBetween(Window.currentRow, 1)
         >>> df.withColumn("sum", func.sum("id").over(window)).sort("id", "category", "sum").show()
+        ... # doctest: +SKIP
         +---+--------+---+
         | id|category|sum|
         +---+--------+---+
@@ -262,7 +272,9 @@ class Window:
         jspec = sc._jvm.org.apache.spark.sql.expressions.Window.rowsBetween(start, end)
         return WindowSpec(jspec)
 
+    # TODO(SPARK-41773): Window.partitionBy is not respected with row_number in Spark Connect
     @staticmethod
+    @try_remote_window
     def rangeBetween(start: int, end: int) -> "WindowSpec":
         """
         Creates a :class:`WindowSpec` with the frame boundaries defined,
@@ -327,6 +339,7 @@ class Window:
 
         >>> window = Window.partitionBy("category").orderBy("id").rangeBetween(Window.currentRow, 1)
         >>> df.withColumn("sum", func.sum("id").over(window)).sort("id", "category").show()
+        ... # doctest: +SKIP
         +---+--------+---+
         | id|category|sum|
         +---+--------+---+
@@ -357,11 +370,15 @@ class WindowSpec:
     Use the static methods in :class:`Window` to create a :class:`WindowSpec`.
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
     """
 
     def __init__(self, jspec: JavaObject) -> None:
         self._jspec = jspec
 
+    @try_remote_windowspec
     def partitionBy(self, *cols: Union["ColumnOrName", List["ColumnOrName_"]]) -> "WindowSpec":
         """
         Defines the partitioning columns in a :class:`WindowSpec`.
@@ -375,6 +392,7 @@ class WindowSpec:
         """
         return WindowSpec(self._jspec.partitionBy(_to_java_cols(cols)))
 
+    @try_remote_windowspec
     def orderBy(self, *cols: Union["ColumnOrName", List["ColumnOrName_"]]) -> "WindowSpec":
         """
         Defines the ordering columns in a :class:`WindowSpec`.
@@ -388,6 +406,7 @@ class WindowSpec:
         """
         return WindowSpec(self._jspec.orderBy(_to_java_cols(cols)))
 
+    @try_remote_windowspec
     def rowsBetween(self, start: int, end: int) -> "WindowSpec":
         """
         Defines the frame boundaries, from `start` (inclusive) to `end` (inclusive).
@@ -419,6 +438,7 @@ class WindowSpec:
             end = Window.unboundedFollowing
         return WindowSpec(self._jspec.rowsBetween(start, end))
 
+    @try_remote_windowspec
     def rangeBetween(self, start: int, end: int) -> "WindowSpec":
         """
         Defines the frame boundaries, from `start` (inclusive) to `end` (inclusive).

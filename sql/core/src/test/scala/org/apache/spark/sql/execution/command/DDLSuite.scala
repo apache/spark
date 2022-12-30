@@ -2079,10 +2079,18 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     }.getMessage
     assert(msg.contains(
       "md5 is a built-in/temporary function. 'REFRESH FUNCTION' expects a persistent function"))
-    val msg2 = intercept[AnalysisException] {
-      sql("REFRESH FUNCTION default.md5")
-    }.getMessage
-    assert(msg2.contains(s"Undefined function: default.md5"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("REFRESH FUNCTION default.md5")
+      },
+      errorClass = "UNRESOLVED_ROUTINE",
+      parameters = Map(
+        "routineName" -> "`default`.`md5`",
+        "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
+      context = ExpectedContext(
+        fragment = "REFRESH FUNCTION default.md5",
+        start = 0,
+        stop = 27))
 
     withUserDefinedFunction("func1" -> true) {
       sql("CREATE TEMPORARY FUNCTION func1 AS 'test.org.apache.spark.sql.MyDoubleAvg'")
@@ -2105,12 +2113,18 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       assert(!spark.sessionState.catalog.isRegisteredFunction(func))
       sql("REFRESH FUNCTION func1")
       assert(spark.sessionState.catalog.isRegisteredFunction(func))
-      val msg = intercept[AnalysisException] {
-        sql("REFRESH FUNCTION func2")
-      }.getMessage
-      assert(msg.contains(s"Undefined function: func2. This function is neither a " +
-        "built-in/temporary function, nor a persistent function that is qualified as " +
-        "spark_catalog.default.func2"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("REFRESH FUNCTION func2")
+        },
+        errorClass = "UNRESOLVED_ROUTINE",
+        parameters = Map(
+          "routineName" -> "`func2`",
+          "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
+        context = ExpectedContext(
+          fragment = "REFRESH FUNCTION func2",
+          start = 0,
+          stop = 21))
       assert(spark.sessionState.catalog.isRegisteredFunction(func))
 
       spark.sessionState.catalog.externalCatalog.dropFunction("default", "func1")

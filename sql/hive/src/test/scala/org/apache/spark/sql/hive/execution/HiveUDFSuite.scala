@@ -570,10 +570,19 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
             sql(s"CREATE FUNCTION dAtABaSe1.test_avg AS '${classOf[GenericUDAFAverage].getName}'")
             checkAnswer(sql("SELECT dAtABaSe1.test_avg(1)"), Row(1.0))
           }
-          val message = intercept[AnalysisException] {
-            sql("SELECT dAtABaSe1.unknownFunc(1)")
-          }.getMessage
-          assert(message.contains("Undefined function: dAtABaSe1.unknownFunc"))
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql("SELECT dAtABaSe1.unknownFunc(1)")
+            },
+            errorClass = "UNRESOLVED_ROUTINE",
+            parameters = Map(
+              "routineName" -> "`dAtABaSe1`.`unknownFunc`",
+              "searchPath" ->
+                "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
+            context = ExpectedContext(
+              fragment = "dAtABaSe1.unknownFunc(1)",
+              start = 7,
+              stop = 30))
         }
       }
     }

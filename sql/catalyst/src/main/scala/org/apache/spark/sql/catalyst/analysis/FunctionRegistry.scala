@@ -227,7 +227,7 @@ trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging
   override def lookupFunction(name: FunctionIdentifier, children: Seq[Expression]): T = {
     val func = synchronized {
       functionBuilders.get(normalizeFuncName(name)).map(_._2).getOrElse {
-        throw QueryCompilationErrors.functionUndefinedError(name)
+        throw QueryCompilationErrors.unresolvedRoutineError(name, Seq("system.builtin"))
       }
     }
     func(children)
@@ -668,6 +668,7 @@ object FunctionRegistry {
     expression[ArraySort]("array_sort"),
     expression[ArrayExcept]("array_except"),
     expression[ArrayUnion]("array_union"),
+    expression[ArrayCompact]("array_compact"),
     expression[CreateMap]("map"),
     expression[CreateNamedStruct]("named_struct"),
     expression[ElementAt]("element_at"),
@@ -699,6 +700,7 @@ object FunctionRegistry {
     expression[ArrayExists]("exists"),
     expression[ArrayForAll]("forall"),
     expression[ArrayAggregate]("aggregate"),
+    expression[ArrayAggregate]("reduce", setAlias = true, Some("3.4.0")),
     expression[TransformValues]("transform_values"),
     expression[TransformKeys]("transform_keys"),
     expression[MapZipWith]("map_zip_with"),

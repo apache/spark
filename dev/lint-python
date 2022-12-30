@@ -69,6 +69,7 @@ function mypy_annotation_test {
 
     echo "starting mypy annotations test..."
     MYPY_REPORT=$( ($MYPY_BUILD \
+      --namespace-packages \
       --config-file python/mypy.ini \
       --cache-dir /tmp/.mypy_cache/ \
       python/pyspark) 2>&1)
@@ -127,6 +128,7 @@ function mypy_examples_test {
     echo "starting mypy examples test..."
 
     MYPY_REPORT=$( (MYPYPATH=python $MYPY_BUILD \
+      --namespace-packages \
       --config-file python/mypy.ini \
       --exclude "mllib/*" \
       examples/src/main/python/) 2>&1)

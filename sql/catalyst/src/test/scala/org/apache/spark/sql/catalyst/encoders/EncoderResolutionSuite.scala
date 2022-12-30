@@ -94,8 +94,8 @@ class EncoderResolutionSuite extends PlanTest {
         "details" -> (
           s"""
           |The type path of the target object is:
-          |- array element class: "scala.Long"
-          |- field (class: "scala.Array", name: "arr")
+          |- array element class: "long"
+          |- field (class: "[J", name: "arr")
           |- root class: "org.apache.spark.sql.catalyst.encoders.PrimitiveArrayClass"
           |You can either add an explicit cast to the input data or choose a higher precision type
           """.stripMargin.trim + " of the field in the target object")))
@@ -254,7 +254,7 @@ class EncoderResolutionSuite extends PlanTest {
         "details" -> (
           s"""
           |The type path of the target object is:
-          |- field (class: "scala.Int", name: "b")
+          |- field (class: "int", name: "b")
           |- root class: "org.apache.spark.sql.catalyst.encoders.StringIntClass"
           |You can either add an explicit cast to the input data or choose a higher precision type
           """.stripMargin.trim + " of the field in the target object")))
@@ -271,7 +271,7 @@ class EncoderResolutionSuite extends PlanTest {
         "details" -> (
           s"""
           |The type path of the target object is:
-          |- field (class: "scala.Long", name: "b")
+          |- field (class: "long", name: "b")
           |- field (class: "org.apache.spark.sql.catalyst.encoders.StringLongClass", name: "b")
           |- root class: "org.apache.spark.sql.catalyst.encoders.ComplexClass"
           |You can either add an explicit cast to the input data or choose a higher precision type
