@@ -77,11 +77,4 @@ private[spark] object Status {
     .version("3.4.0")
     .stringConf
     .createOptional
-
-  val LIVE_UI_LOCAL_STORE_CLEANUP_ENABLED = ConfigBuilder("spark.ui.store.clean.enabled")
-    .doc("If true, automatically cleanup the the data of `spark.ui.store.path` when " +
-      "SparkContext stops.")
-    .version("3.4.0")
-    .booleanConf
-    .createWithDefault(true)
 }

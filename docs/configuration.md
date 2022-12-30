@@ -1389,14 +1389,6 @@ Apart from these, the following properties are also available, and may be useful
   <td>3.4.0</td>
 </tr>
 <tr>
-  <td><code>spark.ui.store.clean.enabled</code></td>
-  <td>true</td>
-  <td>
-    If true, automatically cleanup the the data of `spark.ui.store.path` when SparkContext stops.
-  </td>
-  <td>3.4.0</td>
-</tr>
-<tr>
   <td><code>spark.ui.killEnabled</code></td>
   <td>true</td>
   <td>

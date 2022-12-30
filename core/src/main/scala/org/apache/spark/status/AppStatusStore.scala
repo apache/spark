@@ -18,13 +18,15 @@
 package org.apache.spark.status
 
 import java.io.File
+import java.io.IOException
 import java.util.{List => JList}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.{JobExecutionStatus, SparkConf, SparkContext}
-import org.apache.spark.internal.config.Status.{LIVE_UI_LOCAL_STORE_CLEANUP_ENABLED, LIVE_UI_LOCAL_STORE_DIR}
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.Status.LIVE_UI_LOCAL_STORE_DIR
 import org.apache.spark.status.api.v1
 import org.apache.spark.storage.FallbackStorage.FALLBACK_BLOCK_MANAGER_ID
 import org.apache.spark.ui.scope._
@@ -767,7 +769,7 @@ private[spark] class AppStatusStore(
   }
 }
 
-private[spark] object AppStatusStore {
+private[spark] object AppStatusStore extends Logging {
 
   val CURRENT_VERSION = 2L
 
@@ -777,14 +779,23 @@ private[spark] object AppStatusStore {
   def createLiveStore(
       conf: SparkConf,
       appStatusSource: Option[AppStatusSource] = None): AppStatusStore = {
-    val storePath = conf.get(LIVE_UI_LOCAL_STORE_DIR).map(new File(_))
+
+    def createStorePath(rootDir: String): Option[File] = {
+      try {
+        val localDir = Utils.createDirectory(rootDir, "spark-ui")
+        logInfo(s"Created spark ui store directory at $rootDir")
+        Some(localDir)
+      } catch {
+        case e: IOException =>
+          logError(s"Failed to create spark ui store path in $rootDir.", e)
+          None
+      }
+    }
+
+    val storePath = conf.get(LIVE_UI_LOCAL_STORE_DIR).flatMap(createStorePath)
     val kvStore = KVUtils.createKVStore(storePath, live = true, conf)
     val store = new ElementTrackingStore(kvStore, conf)
     val listener = new AppStatusListener(store, conf, true, appStatusSource)
-    if (conf.get(LIVE_UI_LOCAL_STORE_CLEANUP_ENABLED)) {
-      new AppStatusStore(store, listener = Some(listener), storePath)
-    } else {
-      new AppStatusStore(store, listener = Some(listener))
-    }
+    new AppStatusStore(store, listener = Some(listener), storePath)
   }
 }

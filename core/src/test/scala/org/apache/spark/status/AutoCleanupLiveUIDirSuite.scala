@@ -18,38 +18,33 @@
 package org.apache.spark.status
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
-import org.apache.spark.internal.config.Status.{LIVE_UI_LOCAL_STORE_CLEANUP_ENABLED, LIVE_UI_LOCAL_STORE_DIR}
+import org.apache.spark.internal.config.Status.LIVE_UI_LOCAL_STORE_DIR
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
 
 class AutoCleanupLiveUIDirSuite extends SparkFunSuite {
 
-  Seq(true, false).foreach { autoCleanup =>
-    test(s"with auto cleanup $autoCleanup") {
-      val storePath = Utils.createTempDir()
-      try {
-        val conf = new SparkConf().setAppName("ui-dir-cleanup").setMaster("local")
-          .set(LIVE_UI_LOCAL_STORE_DIR, storePath.getCanonicalPath)
-          .set(LIVE_UI_LOCAL_STORE_CLEANUP_ENABLED, autoCleanup)
-        val sc = new SparkContext(conf)
-        sc.parallelize(0 until 100, 10)
-          .map { x => (x % 10) -> x }
-          .reduceByKey {_ + _}
-          .collect()
-        // `storePath` should exists and not emtpy before SparkContext stop.
-        assert(storePath.exists())
-        assert(storePath.listFiles().nonEmpty)
-        sc.stop()
-        if(autoCleanup) {
-          assert(!storePath.exists())
-        } else {
-          assert(storePath.exists())
-          assert(storePath.listFiles().nonEmpty)
+  test(s"auto cleanup spark ui store path") {
+    val storePath = Utils.createTempDir()
+    try {
+      val conf = new SparkConf().setAppName("ui-dir-cleanup").setMaster("local")
+        .set(LIVE_UI_LOCAL_STORE_DIR, storePath.getCanonicalPath)
+      val sc = new SparkContext(conf)
+      sc.parallelize(0 until 100, 10)
+        .map { x => (x % 10) -> x }
+        .reduceByKey {
+          _ + _
         }
-      } finally {
-        JavaUtils.deleteRecursively(storePath)
-        assert(!storePath.exists())
-      }
+        .collect()
+      // `storePath` should exists and not emtpy before SparkContext stop.
+      assert(storePath.exists())
+      assert(storePath.listFiles().nonEmpty)
+      sc.stop()
+      assert(storePath.exists())
+      assert(storePath.listFiles().isEmpty)
+    } finally {
+      JavaUtils.deleteRecursively(storePath)
+      assert(!storePath.exists())
     }
   }
 }
