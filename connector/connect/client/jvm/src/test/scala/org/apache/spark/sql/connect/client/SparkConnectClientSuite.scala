@@ -16,12 +16,82 @@
  */
 package org.apache.spark.sql.connect.client
 
+import java.util.concurrent.TimeUnit
+
+import io.grpc.Server
+import io.grpc.netty.NettyServerBuilder
+import io.grpc.stub.StreamObserver
+import org.scalatest.BeforeAndAfterEach
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
-class SparkConnectClientSuite extends AnyFunSuite { // scalastyle:ignore funsuite
+import org.apache.spark.connect.proto.{AnalyzePlanRequest, AnalyzePlanResponse, SparkConnectServiceGrpc}
+
+class SparkConnectClientSuite
+  extends AnyFunSuite // scalastyle:ignore funsuite
+    with BeforeAndAfterEach {
+
+  private var client: SparkConnectClient = _
+  private var server: Server = _
+
+  private def startDummyServer(port: Int): Unit = {
+    val sb = NettyServerBuilder
+      .forPort(port)
+      .addService(new DummySparkConnectService())
+
+    server = sb.build
+    server.start()
+  }
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    client = null
+    server = null
+  }
+
+  override def afterEach(): Unit = {
+    if (server != null) {
+      server.shutdownNow()
+      assert(server.awaitTermination(5, TimeUnit.SECONDS), "server failed to shutdown")
+    }
+
+    if (client != null) {
+      client.shutdown()
+    }
+  }
 
   test("Placeholder test: Create SparkConnectClient") {
-    val client = SparkConnectClient.builder().userId("abc123").build()
+    client = SparkConnectClient.builder().userId("abc123").build()
     assert(client.userId == "abc123")
   }
+
+  test("Test connection") {
+    val testPort = 16000
+    startDummyServer(testPort)
+    client = SparkConnectClient.builder().port(testPort).build()
+    val request = AnalyzePlanRequest
+      .newBuilder()
+      .setClientId("abc123")
+      .build()
+
+    val response = client.analyze(request)
+    assert(response.getClientId === "abc123")
+  }
 }
+
+
+class DummySparkConnectService()
+  extends SparkConnectServiceGrpc.SparkConnectServiceImplBase {
+
+  override def analyzePlan(
+    request: AnalyzePlanRequest,
+    responseObserver: StreamObserver[AnalyzePlanResponse]): Unit = {
+    // Reply with a dummy response using the same client ID
+    val requestClientId = request.getClientId
+    val response = AnalyzePlanResponse
+      .newBuilder()
+      .setClientId(requestClientId)
+      .build()
+    responseObserver.onNext(response)
+    responseObserver.onCompleted()
+  }
+}
+

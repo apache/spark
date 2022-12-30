@@ -37,6 +37,10 @@ class SparkConnectClient(
 
   def analyze(request: proto.AnalyzePlanRequest): proto.AnalyzePlanResponse =
     stub.analyzePlan(request)
+
+  def shutdown(): Unit = {
+    channel.shutdownNow()
+  }
 }
 
 object SparkConnectClient {
