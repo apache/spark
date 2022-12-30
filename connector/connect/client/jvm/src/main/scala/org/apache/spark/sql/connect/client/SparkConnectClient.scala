@@ -22,6 +22,7 @@ import scala.language.existentials
 import io.grpc.{ManagedChannel, ManagedChannelBuilder}
 
 import org.apache.spark.connect.proto
+import org.apache.spark.sql.connect.common.config.ConnectCommon
 
 class SparkConnectClient(
   private val userContext: proto.UserContext,
@@ -44,8 +45,7 @@ object SparkConnectClient {
   class Builder() {
     private val userContextBuilder = proto.UserContext.newBuilder()
     private var _host: String = "localhost"
-    // TODO: pull out config from server
-    private var _port: Int = 15002
+    private var _port: Int = ConnectCommon.CONNECT_GRPC_BINDING_PORT
     private var _connectionString: Option[String] = None
 
     def userId(id: String): Builder = {
