@@ -41,6 +41,7 @@ message Expression {
     LambdaFunction lambda_function = 10;
     Window window = 11;
     UnresolvedExtractValue unresolved_extract_value = 12;
+    UpdateFields update_fields = 13;
   }
 
 
@@ -239,6 +240,20 @@ message Expression {
     // (Required) The expression to describe the extraction, can be
     // key of Map, index of Array, field name of Struct.
     Expression extraction = 2;
+  }
+
+  // Add, replace or drop a field of `StructType` expression by name.
+  message UpdateFields {
+    // (Required) The struct expression.
+    Expression struct_expression = 1;
+
+    // (Required) The field name.
+    string field_name = 2;
+
+    // (Optional) The expression to add or replace.
+    //
+    // When not set, it means this field will be dropped.
+    Expression value_expression = 3;
   }
 
   message Alias {
