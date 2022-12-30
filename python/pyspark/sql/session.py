@@ -1554,6 +1554,9 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Examples
         --------
         >>> spark.stop()  # doctest: +SKIP

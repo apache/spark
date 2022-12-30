@@ -400,6 +400,30 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(connectPlan2, sparkPlan2)
   }
 
+  test("Test RepartitionByExpression") {
+    val connectPlan1 = connectTestRelation.repartition(12, "id".protoAttr)
+    val sparkPlan1 = sparkTestRelation.repartition(12, sparkTestRelation.col("id"))
+    comparePlans(connectPlan1, sparkPlan1)
+
+    val connectPlan2 = connectTestRelation.repartition("id".protoAttr)
+    val sparkPlan2 = sparkTestRelation.repartition(sparkTestRelation.col("id"))
+    comparePlans(connectPlan2, sparkPlan2)
+  }
+
+  test("Test repartitionByRange") {
+    val connectPlan1 = connectTestRelation.repartitionByRange(12, "id".protoAttr)
+    val sparkPlan1 = sparkTestRelation.repartitionByRange(12, sparkTestRelation.col("id"))
+    comparePlans(connectPlan1, sparkPlan1)
+
+    val connectPlan2 = connectTestRelation.repartitionByRange("id".protoAttr)
+    val sparkPlan2 = sparkTestRelation.repartitionByRange(sparkTestRelation.col("id"))
+    comparePlans(connectPlan2, sparkPlan2)
+
+    val connectPlan3 = connectTestRelation.repartitionByRange(12, "id".asc)
+    val sparkPlan3 = sparkTestRelation.repartitionByRange(12, sparkTestRelation.col("id").asc)
+    comparePlans(connectPlan3, sparkPlan3)
+  }
+
   test("SPARK-41128: Test fill na") {
     comparePlans(connectTestRelation.na.fillValue(1L), sparkTestRelation.na.fill(1L))
     comparePlans(connectTestRelation.na.fillValue(1.5), sparkTestRelation.na.fill(1.5))

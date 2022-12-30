@@ -36,7 +36,6 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, TypeUtils}
 import org.apache.spark.sql.connector.catalog.TableProvider
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.DataWritingCommand
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider
@@ -45,7 +44,6 @@ import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
-import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.{RateStreamProvider, TextSocketSourceProvider}
 import org.apache.spark.sql.internal.SQLConf
@@ -97,8 +95,19 @@ case class DataSource(
 
   case class SourceInfo(name: String, schema: StructType, partitionColumns: Seq[String])
 
-  lazy val providingClass: Class[_] =
-    DataSource.providingClass(className, sparkSession.sessionState.conf)
+  lazy val providingClass: Class[_] = {
+    val cls = DataSource.lookupDataSource(className, sparkSession.sessionState.conf)
+    // `providingClass` is used for resolving data source relation for catalog tables.
+    // As now catalog for data source V2 is under development, here we fall back all the
+    // [[FileDataSourceV2]] to [[FileFormat]] to guarantee the current catalog works.
+    // [[FileDataSourceV2]] will still be used if we call the load()/save() method in
+    // [[DataFrameReader]]/[[DataFrameWriter]], since they use method `lookupDataSource`
+    // instead of `providingClass`.
+    cls.newInstance() match {
+      case f: FileDataSourceV2 => f.fallbackFileFormat
+      case _ => cls
+    }
+  }
 
   private[sql] def providingInstance(): Any = providingClass.getConstructor().newInstance()
 
@@ -483,17 +492,11 @@ case class DataSource(
    * @param outputColumnNames The original output column names of the input query plan. The
    *                          optimizer may not preserve the output column's names' case, so we need
    *                          this parameter instead of `data.output`.
-   * @param physicalPlan The physical plan of the input query plan. We should run the writing
-   *                     command with this physical plan instead of creating a new physical plan,
-   *                     so that the metrics can be correctly linked to the given physical plan and
-   *                     shown in the web UI.
    */
   def writeAndRead(
       mode: SaveMode,
       data: LogicalPlan,
-      outputColumnNames: Seq[String],
-      physicalPlan: SparkPlan,
-      metrics: Map[String, SQLMetric]): BaseRelation = {
+      outputColumnNames: Seq[String]): BaseRelation = {
     val outputColumns = DataWritingCommand.logicalPlanOutputWithNames(data, outputColumnNames)
     providingInstance() match {
       case dataSource: CreatableRelationProvider =>
@@ -503,13 +506,8 @@ case class DataSource(
       case format: FileFormat =>
         disallowWritingIntervals(outputColumns.map(_.dataType), forbidAnsiIntervals = false)
         val cmd = planForWritingFileFormat(format, mode, data)
-        val resolvedPartCols =
-          DataSource.resolvePartitionColumns(cmd.partitionColumns, outputColumns, data, equality)
-        val resolved = cmd.copy(
-          partitionColumns = resolvedPartCols,
-          outputColumnNames = outputColumnNames)
-        resolved.run(sparkSession, physicalPlan)
-        DataWritingCommand.propogateMetrics(sparkSession.sparkContext, resolved, metrics)
+        val qe = sparkSession.sessionState.executePlan(cmd)
+        qe.assertCommandExecuted()
         // Replace the schema with that of the DataFrame we just wrote out to avoid re-inferring
         copy(userSpecifiedSchema = Some(outputColumns.toStructType.asNullable)).resolveRelation()
       case _ => throw new IllegalStateException(
@@ -830,20 +828,6 @@ object DataSource extends Logging {
         throw QueryCompilationErrors.cannotResolveAttributeError(
           name, plan.output.map(_.name).mkString(", "))
       }
-    }
-  }
-
-  def providingClass(className: String, conf: SQLConf): Class[_] = {
-    val cls = DataSource.lookupDataSource(className, conf)
-    // `providingClass` is used for resolving data source relation for catalog tables.
-    // As now catalog for data source V2 is under development, here we fall back all the
-    // [[FileDataSourceV2]] to [[FileFormat]] to guarantee the current catalog works.
-    // [[FileDataSourceV2]] will still be used if we call the load()/save() method in
-    // [[DataFrameReader]]/[[DataFrameWriter]], since they use method `lookupDataSource`
-    // instead of `providingClass`.
-    cls.newInstance() match {
-      case f: FileDataSourceV2 => f.fallbackFileFormat
-      case _ => cls
     }
   }
 }

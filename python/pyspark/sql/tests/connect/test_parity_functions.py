@@ -40,10 +40,8 @@ class FunctionsParityTests(ReusedSQLTestCase, FunctionsTestsMixin):
 
     @classmethod
     def tearDownClass(cls):
-        # TODO(SPARK-41529): Implement stop in RemoteSparkSession.
-        #  Stop the regular Spark session (server) too.
-        cls.spark = cls._spark
         super(FunctionsParityTests, cls).tearDownClass()
+        cls.spark = cls._spark.stop()
         del os.environ["SPARK_REMOTE"]
 
     @unittest.skip("Fails in Spark Connect, should enable.")

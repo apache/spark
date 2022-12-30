@@ -22,9 +22,9 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.utils import ReusedPySparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
+from pyspark.sql.connect.client import SparkConnectException
 
 if should_test_connect:
-    import grpc
     from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
 
 
@@ -818,7 +818,7 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             cdf.select(CF.rank().over(cdf.a))
 
         # invalid window function
-        with self.assertRaises(grpc.RpcError):
+        with self.assertRaises(SparkConnectException):
             cdf.select(cdf.b.over(CW.orderBy("b"))).show()
 
         # invalid window frame
@@ -832,34 +832,34 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             CF.lead("c", 1),
             CF.ntile(1),
         ]:
-            with self.assertRaises(grpc.RpcError):
+            with self.assertRaises(SparkConnectException):
                 cdf.select(
                     ccol.over(CW.orderBy("b").rowsBetween(CW.currentRow, CW.currentRow + 123))
                 ).show()
 
-            with self.assertRaises(grpc.RpcError):
+            with self.assertRaises(SparkConnectException):
                 cdf.select(
                     ccol.over(CW.orderBy("b").rangeBetween(CW.currentRow, CW.currentRow + 123))
                 ).show()
 
-            with self.assertRaises(grpc.RpcError):
+            with self.assertRaises(SparkConnectException):
                 cdf.select(
                     ccol.over(CW.orderBy("b").rangeBetween(CW.unboundedPreceding, CW.currentRow))
                 ).show()
 
         # Function 'cume_dist' requires Windowframe(RangeFrame, UnboundedPreceding, CurrentRow)
         ccol = CF.cume_dist()
-        with self.assertRaises(grpc.RpcError):
+        with self.assertRaises(SparkConnectException):
             cdf.select(
                 ccol.over(CW.orderBy("b").rangeBetween(CW.currentRow, CW.currentRow + 123))
             ).show()
 
-        with self.assertRaises(grpc.RpcError):
+        with self.assertRaises(SparkConnectException):
             cdf.select(
                 ccol.over(CW.orderBy("b").rowsBetween(CW.currentRow, CW.currentRow + 123))
             ).show()
 
-        with self.assertRaises(grpc.RpcError):
+        with self.assertRaises(SparkConnectException):
             cdf.select(
                 ccol.over(CW.orderBy("b").rowsBetween(CW.unboundedPreceding, CW.currentRow))
             ).show()
@@ -1047,6 +1047,24 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
         self.compare_by_show(
             cdf.select(CF.struct(cdf.a, "d", "e", cdf.f)),
             sdf.select(SF.struct(sdf.a, "d", "e", sdf.f)),
+        )
+
+        # test sequence
+        self.assert_eq(
+            cdf.select(CF.sequence(CF.lit(1), CF.lit(5))).toPandas(),
+            sdf.select(SF.sequence(SF.lit(1), SF.lit(5))).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.sequence(CF.lit(1), CF.lit(5), CF.lit(1))).toPandas(),
+            sdf.select(SF.sequence(SF.lit(1), SF.lit(5), SF.lit(1))).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.sequence(cdf.d, "e")).toPandas(),
+            sdf.select(SF.sequence(sdf.d, "e")).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.sequence(cdf.d, "e", CF.lit(1))).toPandas(),
+            sdf.select(SF.sequence(sdf.d, "e", SF.lit(1))).toPandas(),
         )
 
     def test_map_collection_functions(self):
@@ -1611,14 +1629,14 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
         cdf = self.connect.sql(query)
         sdf = self.spark.sql(query)
 
-        # TODO(SPARK-41473): Resolve the data type mismatch issue and enable the
-        # Disable the test because:
-        # Cannot resolve "format_number(a, 2)" due to data type mismatch:
-        # Parameter 2 requires the ("INT" or "STRING") type, however "2" has the type "BIGINT"
-        # self.assert_eq(
-        #     cdf.select(CF.format_number(cdf.a, 2)).toPandas(),
-        #     sdf.select(SF.format_number(sdf.a, 2)).toPandas(),
-        # )
+        self.assert_eq(
+            cdf.select(CF.format_number(cdf.a, 2)).toPandas(),
+            sdf.select(SF.format_number(sdf.a, 2)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.format_number("a", 5)).toPandas(),
+            sdf.select(SF.format_number("a", 5)).toPandas(),
+        )
 
         self.assert_eq(
             cdf.select(CF.concat_ws("-", cdf.b, "c")).toPandas(),
@@ -1946,11 +1964,11 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
         sdf = self.spark.sql(query)
 
         # test assert_true
-        with self.assertRaises(grpc.RpcError):
+        with self.assertRaises(SparkConnectException):
             cdf.select(CF.assert_true(cdf.a > 0, "a should be positive!")).show()
 
         # test raise_error
-        with self.assertRaises(grpc.RpcError):
+        with self.assertRaises(SparkConnectException):
             cdf.select(CF.raise_error("a should be positive!")).show()
 
         # test crc32
@@ -1987,6 +2005,37 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
         self.assert_eq(
             cdf.select(CF.sha2(cdf.c, 256), CF.sha2("d", 512)).toPandas(),
             sdf.select(SF.sha2(sdf.c, 256), SF.sha2("d", 512)).toPandas(),
+        )
+
+    def test_call_udf(self):
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        query = """
+            SELECT a, b, c, BINARY(c) as d FROM VALUES
+            (-1.0, float("NAN"), 'x'), (-2.1, NULL, 'y'), (1, 2.1, 'z'), (0, 0.5, NULL)
+            AS tab(a, b, c)
+            """
+
+        # +----+----+----+----+
+        # |   a|   b|   c|   d|
+        # +----+----+----+----+
+        # |-1.0| NaN|   x|[78]|
+        # |-2.1|null|   y|[79]|
+        # | 1.0| 2.1|   z|[7A]|
+        # | 0.0| 0.5|null|null|
+        # +----+----+----+----+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        self.assert_eq(
+            cdf.select(
+                CF.call_udf("abs", cdf.a), CF.call_udf("xxhash64", "b", cdf.c, "d")
+            ).toPandas(),
+            sdf.select(
+                SF.call_udf("abs", sdf.a), SF.call_udf("xxhash64", "b", sdf.c, "d")
+            ).toPandas(),
         )
 
 

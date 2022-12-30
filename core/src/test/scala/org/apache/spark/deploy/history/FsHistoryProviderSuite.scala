@@ -51,6 +51,7 @@ import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.KVUtils
 import org.apache.spark.status.KVUtils.KVStoreScalaSerializer
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
+import org.apache.spark.status.protobuf.KVStoreProtobufSerializer
 import org.apache.spark.tags.ExtendedLevelDBTest
 import org.apache.spark.util.{Clock, JsonProtocol, ManualClock, Utils}
 import org.apache.spark.util.kvstore.InMemoryStore
@@ -75,6 +76,8 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
 
   protected def diskBackend: HybridStoreDiskBackend.Value
 
+  protected def serializer: LocalStoreSerializer.Value = LocalStoreSerializer.JSON
+
   /** Create a fake log file using the new log format used in Spark 1.3+ */
   private def newLogFile(
       appId: String,
@@ -95,6 +98,17 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
 
   test("SPARK-31608: parse application logs with HybridStore") {
     testAppLogParsing(false, true)
+  }
+
+  test("SPARK-41685: Verify the configurable serializer for history server") {
+    val conf = createTestConf()
+    val serializerOfKVStore = KVUtils.serializerForHistoryServer(conf)
+    assert(serializerOfKVStore.isInstanceOf[KVStoreScalaSerializer])
+    if (serializer == LocalStoreSerializer.JSON) {
+      assert(!serializerOfKVStore.isInstanceOf[KVStoreProtobufSerializer])
+    } else {
+      assert(serializerOfKVStore.isInstanceOf[KVStoreProtobufSerializer])
+    }
   }
 
   private def testAppLogParsing(inMemory: Boolean, useHybridStore: Boolean = false): Unit = {
@@ -1810,6 +1824,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     }
     conf.set(HYBRID_STORE_ENABLED, useHybridStore)
     conf.set(HYBRID_STORE_DISK_BACKEND.key, diskBackend.toString)
+    conf.set(LOCAL_STORE_SERIALIZER.key, serializer.toString)
 
     conf
   }
@@ -1865,7 +1880,16 @@ class LevelDBBackendFsHistoryProviderSuite extends FsHistoryProviderSuite {
     HybridStoreDiskBackend.LEVELDB
 }
 
+@ExtendedLevelDBTest
+class LevelDBBackendWithProtobufSerializerSuite extends LevelDBBackendFsHistoryProviderSuite {
+  override protected def serializer: LocalStoreSerializer.Value = LocalStoreSerializer.PROTOBUF
+}
+
 class RocksDBBackendFsHistoryProviderSuite extends FsHistoryProviderSuite {
   override protected def diskBackend: HybridStoreDiskBackend.Value =
     HybridStoreDiskBackend.ROCKSDB
+}
+
+class RocksDBBackendWithProtobufSerializerSuite extends RocksDBBackendFsHistoryProviderSuite {
+  override protected def serializer: LocalStoreSerializer.Value = LocalStoreSerializer.PROTOBUF
 }

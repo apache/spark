@@ -651,4 +651,31 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
       )
     )
   }
+
+  test("window_time in SQL") {
+    withTempView("tmpView") {
+      val df = Seq(
+        ("2016-03-27 19:38:19", 1), ("2016-03-27 19:39:25", 2)
+      ).toDF("time", "value")
+      df.createOrReplaceTempView("tmpView")
+      checkAnswer(
+        spark.sql(
+          s"""
+             |select
+             |  CAST(window.start AS string), CAST(window.end AS string),
+             |  CAST(window_time(window) AS string), counts
+             |from
+             |(
+             |  select window, count(*) AS counts from tmpView
+             |  group by window(time, "10 seconds")
+             |  order by window.start
+             |)
+             |""".stripMargin),
+        Seq(
+          Row("2016-03-27 19:38:10", "2016-03-27 19:38:20", "2016-03-27 19:38:19.999999", 1),
+          Row("2016-03-27 19:39:20", "2016-03-27 19:39:30", "2016-03-27 19:39:29.999999", 1)
+        )
+      )
+    }
+  }
 }
