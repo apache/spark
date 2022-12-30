@@ -2411,7 +2411,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "NOT_A_PARTITIONED_TABLE",
       messageParameters = Map(
-        "operation" -> operation,
+        "operation" -> toSQLStmt(operation),
         "tableIdentWithDB" -> tableIdentWithDB))
   }
 
@@ -2421,7 +2421,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "NOT_A_PARTITIONED_TABLE",
       messageParameters = Map(
-        "operation" -> operation,
+        "operation" -> toSQLStmt(operation),
         "tableIdentWithDB" -> tableIdentWithDB))
   }
 
