@@ -117,7 +117,7 @@ class SparkConnectSQLTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLT
         cls.spark.sql("DROP TABLE IF EXISTS {}".format(cls.tbl_name_empty))
 
 
-class SparkConnectTests(SparkConnectSQLTestCase):
+class SparkConnectBasicTests(SparkConnectSQLTestCase):
     def test_df_get_item(self):
         # SPARK-41779: test __getitem__
 
@@ -1745,6 +1745,28 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             "Numeric aggregation function can only be applied on numeric columns",
         ):
             cdf.groupBy("name").pivot("department").sum("salary", "department").show()
+
+    def test_unsupported_functions(self):
+        # SPARK-41225: Disable unsupported functions.
+        df = self.connect.read.table(self.tbl_name)
+        for f in (
+            "rdd",
+            "unpersist",
+            "cache",
+            "persist",
+            "withWatermark",
+            "observe",
+            "foreach",
+            "foreachPartition",
+            "toLocalIterator",
+            "checkpoint",
+            "localCheckpoint",
+            "_repr_html_",
+            "semanticHash",
+            "sameSemantics",
+        ):
+            with self.assertRaises(NotImplementedError):
+                getattr(df, f)()
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)

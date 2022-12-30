@@ -61,7 +61,7 @@ if should_test_connect:
     from pyspark.sql.connect.functions import lit
 
 
-class SparkConnectTests(SparkConnectSQLTestCase):
+class SparkConnectColumnTests(SparkConnectSQLTestCase):
     def compare_by_show(self, df1, df2, n: int = 20, truncate: int = 20):
         from pyspark.sql.dataframe import DataFrame as SDF
         from pyspark.sql.connect.dataframe import DataFrame as CDF
