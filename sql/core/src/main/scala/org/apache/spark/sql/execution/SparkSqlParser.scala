@@ -751,14 +751,14 @@ class SparkSqlAstBuilder extends AstBuilder {
           (Nil, Option(name), props, recordHandler)
       }
 
-      val (inFormat, inSerdeClass, inSerdeProps, reader) =
+      val (outFormat, outSerdeClass, outSerdeProps, reader) =
         format(
-          inRowFormat, "hive.script.recordreader",
+          outRowFormat, "hive.script.recordreader",
           "org.apache.hadoop.hive.ql.exec.TextRecordReader")
 
-      val (outFormat, outSerdeClass, outSerdeProps, writer) =
+      val (inFormat, inSerdeClass, inSerdeProps, writer) =
         format(
-          outRowFormat, "hive.script.recordwriter",
+          inRowFormat, "hive.script.recordwriter",
           "org.apache.hadoop.hive.ql.exec.TextRecordWriter")
 
       ScriptInputOutputSchema(
