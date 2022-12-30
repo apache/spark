@@ -141,6 +141,7 @@ select array_compact(array(null));
 -- function array_append
 select array_append(array(1, 2, 3), 4);
 select array_append(array('a', 'b', 'c'), 'd');
-select array_append(array(1, 2, 3), null);
+select array_append(array(1, 2, 3, NULL), NULL);
+select array_append(array('a', 'b', 'c', NULL), NULL);
 select array_append(CAST(null AS ARRAY<String>), 'a');
 select array_append(CAST(null AS ARRAY<String>), CAST(null as String));
