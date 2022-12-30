@@ -672,7 +672,7 @@ class Frame(object, metaclass=ABCMeta):
         .. note:: pandas-on-Spark writes CSV files into the directory, `path`, and writes
             multiple `part-...` files in the directory when `path` is specified.
             This behavior was inherited from Apache Spark. The number of partitions can
-            be controlled by `num_files`. This is deprecated. 
+            be controlled by `num_files`. This is deprecated.
             Use `DataFrame.spark.repartition` instead.
 
         Parameters
@@ -902,7 +902,7 @@ class Frame(object, metaclass=ABCMeta):
         .. note:: pandas-on-Spark writes JSON files into the directory, `path`, and writes
             multiple `part-...` files in the directory when `path` is specified.
             This behavior was inherited from Apache Spark. The number of partitions can
-            be controlled by `num_files`. This is deprecated. 
+            be controlled by `num_files`. This is deprecated.
             Use `DataFrame.spark.repartition` instead.
 
         .. note:: output JSON format is different from pandas'. It always uses `orient='records'`
