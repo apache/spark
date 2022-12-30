@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.ScalarSubquery._
@@ -753,12 +754,13 @@ object RewriteLateralSubquery extends Rule[LogicalPlan] {
 object OptimizeOneRowRelationSubquery extends Rule[LogicalPlan] {
 
   object OneRowSubquery {
-    def unapply(plan: LogicalPlan): Option[Seq[NamedExpression]] = {
+    def unapply(plan: LogicalPlan): Option[UnaryNode] = {
       // SPARK-40800: always inline expressions to support a broader range of correlated
       // subqueries and avoid expensive domain joins.
       val alwaysInline = conf.getConf(SQLConf.ALWAYS_INLINE_ONE_ROW_RELATION_SUBQUERY)
       CollapseProject(EliminateSubqueryAliases(plan), alwaysInline = alwaysInline) match {
-        case Project(projectList, _: OneRowRelation) => Some(stripOuterReferences(projectList))
+        case p @ Project(_, _: OneRowRelation) => Some(p)
+        case g @ Generate(_, _, _, _, _, _: OneRowRelation) => Some(g)
         case _ => None
       }
     }
@@ -774,15 +776,28 @@ object OptimizeOneRowRelationSubquery extends Rule[LogicalPlan] {
    */
   private def rewrite(plan: LogicalPlan): LogicalPlan = plan.transformUpWithSubqueries {
     case LateralJoin(
-      left, right @ LateralSubquery(OneRowSubquery(projectList), _, _, _, _), _, None)
+      left, right @ LateralSubquery(OneRowSubquery(plan), _, _, _, _), _, None)
         if !hasCorrelatedSubquery(right.plan) && right.joinCond.isEmpty =>
-      Project(left.output ++ projectList, left)
+      plan match {
+        case Project(projectList, _: OneRowRelation) =>
+          val newPList = stripOuterReferences(projectList)
+          Project(left.output ++ newPList, left)
+
+        case g @ Generate(generator, _, _, _, _, _: OneRowRelation) =>
+          val newGenerator = stripOuterReference(generator)
+          g.copy(generator = newGenerator, child = left)
+
+        case o =>
+          throw SparkException.internalError(
+            s"Unexpected plan when optimizing one row relation subquery: $o")
+      }
+
     case p: LogicalPlan => p.transformExpressionsUpWithPruning(
       _.containsPattern(SCALAR_SUBQUERY)) {
-      case s @ ScalarSubquery(OneRowSubquery(projectList), _, _, _, _)
+      case s @ ScalarSubquery(OneRowSubquery(p @ Project(_, _: OneRowRelation)), _, _, _, _)
           if !hasCorrelatedSubquery(s.plan) && s.joinCond.isEmpty =>
-        assert(projectList.size == 1)
-        projectList.head
+        assert(p.projectList.size == 1)
+        stripOuterReferences(p.projectList).head
     }
   }
 

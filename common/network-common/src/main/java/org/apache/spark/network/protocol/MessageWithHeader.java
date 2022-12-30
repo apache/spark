@@ -140,7 +140,7 @@ class MessageWithHeader extends AbstractFileRegion {
     // SPARK-24578: cap the sub-region's size of returned nio buffer to improve the performance
     // for the case that the passed-in buffer has too many components.
     int length = Math.min(buf.readableBytes(), NIO_BUFFER_LIMIT);
-    // If the ByteBuf holds more then one ByteBuffer we should better call nioBuffers(...)
+    // If the ByteBuf holds more than one ByteBuffer we should better call nioBuffers(...)
     // to eliminate extra memory copies.
     int written = 0;
     if (buf.nioBufferCount() == 1) {

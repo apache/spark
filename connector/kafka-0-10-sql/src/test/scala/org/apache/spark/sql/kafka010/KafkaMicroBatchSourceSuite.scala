@@ -25,6 +25,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ListBuffer
 import scala.io.Source
 import scala.util.Random
 
@@ -32,6 +33,7 @@ import org.apache.commons.io.FileUtils
 import org.apache.kafka.clients.producer.{ProducerRecord, RecordMetadata}
 import org.apache.kafka.common.TopicPartition
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
+import org.scalatest.matchers.should._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.TestUtils
@@ -41,8 +43,9 @@ import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.AsyncProgressTrackingMicroBatchExecution.{ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS, ASYNC_PROGRESS_TRACKING_ENABLED}
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
-import org.apache.spark.sql.functions.{count, window}
+import org.apache.spark.sql.functions.{count, expr, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.sql.streaming.{StreamingQuery, StreamingQueryException, StreamTest, Trigger}
@@ -180,7 +183,7 @@ abstract class KafkaSourceTest extends StreamTest with SharedSparkSession with K
   protected def newTopic(): String = s"topic-${topicId.getAndIncrement()}"
 }
 
-abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
+abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase with Matchers {
 
   import testImplicits._
 
@@ -194,6 +197,89 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       throw q.exception.get
     }
     true
+  }
+
+  /**
+   * Test async progress tracking capability with Kafka source and sink
+   */
+  test("async progress tracking") {
+    val inputTopic = newTopic()
+    testUtils.createTopic(inputTopic, partitions = 5)
+
+    val dataSent = new ListBuffer[String]()
+    testUtils.sendMessages(inputTopic, (0 until 15).map { case x =>
+      val m = s"foo-$x"
+      dataSent += m
+      m
+    }.toArray, Some(0))
+
+    val outputTopic = newTopic()
+    testUtils.createTopic(outputTopic, partitions = 5)
+
+    withTempDir { dir =>
+      val reader = spark
+        .readStream
+        .format("kafka")
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("kafka.metadata.max.age.ms", "1")
+        .option("maxOffsetsPerTrigger", 5)
+        .option("subscribe", inputTopic)
+        .option("startingOffsets", "earliest")
+        .load()
+
+      def startQuery(): StreamingQuery = {
+        reader.writeStream
+          .format("kafka")
+          .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+          .option("kafka.max.block.ms", "5000")
+          .option("topic", outputTopic)
+          .option("checkpointLocation", dir.getCanonicalPath)
+          .option(ASYNC_PROGRESS_TRACKING_ENABLED, true)
+          .option(ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS, 1000)
+          .queryName("kafkaStream")
+          .start()
+      }
+
+      def readResults(): List[String] = {
+        spark.read
+          .format("kafka")
+          .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+          .option("startingOffsets", "earliest")
+          .option("subscribe", outputTopic)
+          .load()
+          .select(expr("CAST(value AS string)"))
+          .toDF
+          .collect().map(_.getAs[String]("value")).toList
+      }
+
+      val query = startQuery()
+      try {
+        query.processAllAvailable()
+      } finally {
+        query.stop()
+      }
+
+      val data = readResults()
+      data should equal (dataSent)
+
+      // Restart query
+
+      testUtils.sendMessages(inputTopic, (15 until 30).map { case x =>
+        val m = s"foo-$x"
+        dataSent += m
+        m
+      }.toArray, Some(0))
+
+      val query2 = startQuery()
+      try {
+        query2.processAllAvailable()
+      } finally {
+        query2.stop()
+      }
+
+      val data2 = readResults()
+      data2.toSet should equal (dataSent.toSet)
+    }
   }
 
   test("Trigger.AvailableNow") {

@@ -20,19 +20,23 @@ package org.apache.spark.sql.connect.service
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
 
 import com.google.common.base.Ticker
 import com.google.common.cache.CacheBuilder
+import com.google.protobuf.{Any => ProtoAny}
+import com.google.rpc.{Code => RPCCode, ErrorInfo, Status => RPCStatus}
 import io.grpc.{Server, Status}
 import io.grpc.netty.NettyServerBuilder
+import io.grpc.protobuf.StatusProto
 import io.grpc.protobuf.services.ProtoReflectionService
 import io.grpc.stub.StreamObserver
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkEnv, SparkThrowable}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AnalyzePlanRequest, AnalyzePlanResponse, ExecutePlanRequest, ExecutePlanResponse, SparkConnectServiceGrpc}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Dataset, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Dataset, SparkSession}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_BINDING_PORT
 import org.apache.spark.sql.connect.planner.{DataTypeProtoConverter, SparkConnectPlanner}
 import org.apache.spark.sql.execution.{CodegenMode, CostMode, ExplainMode, ExtendedMode, FormattedMode, SimpleMode}
@@ -49,6 +53,71 @@ class SparkConnectService(debug: Boolean)
     extends SparkConnectServiceGrpc.SparkConnectServiceImplBase
     with Logging {
 
+  private def buildStatusFromThrowable[A <: Throwable with SparkThrowable](st: A): RPCStatus = {
+    val t = Option(st.getCause).getOrElse(st)
+    RPCStatus
+      .newBuilder()
+      .setCode(RPCCode.INTERNAL_VALUE)
+      .addDetails(
+        ProtoAny.pack(
+          ErrorInfo
+            .newBuilder()
+            .setReason(t.getClass.getName)
+            .setDomain("org.apache.spark")
+            .build()))
+      .setMessage(t.getLocalizedMessage)
+      .build()
+  }
+
+  /**
+   * Common exception handling function for the Analysis and Execution methods. Closes the stream
+   * after the error has been sent.
+   *
+   * @param opType
+   *   String value indicating the operation type (analysis, execution)
+   * @param observer
+   *   The GRPC response observer.
+   * @tparam V
+   * @return
+   */
+  private def handleError[V](
+      opType: String,
+      observer: StreamObserver[V]): PartialFunction[Throwable, Unit] = {
+    case ae: AnalysisException =>
+      logError(s"Error during: $opType", ae)
+      val status = RPCStatus
+        .newBuilder()
+        .setCode(RPCCode.INTERNAL_VALUE)
+        .addDetails(
+          ProtoAny.pack(
+            ErrorInfo
+              .newBuilder()
+              .setReason(ae.getClass.getName)
+              .setDomain("org.apache.spark")
+              .putMetadata("message", ae.getSimpleMessage)
+              .putMetadata("plan", Option(ae.plan).flatten.map(p => s"$p").getOrElse(""))
+              .build()))
+        .setMessage(ae.getLocalizedMessage)
+        .build()
+      observer.onError(StatusProto.toStatusRuntimeException(status))
+    case st: SparkThrowable =>
+      logError(s"Error during: $opType", st)
+      val status = buildStatusFromThrowable(st)
+      observer.onError(StatusProto.toStatusRuntimeException(status))
+    case NonFatal(nf) =>
+      logError(s"Error during: $opType", nf)
+      val status = RPCStatus
+        .newBuilder()
+        .setCode(RPCCode.INTERNAL_VALUE)
+        .setMessage(nf.getLocalizedMessage)
+        .build()
+      observer.onError(StatusProto.toStatusRuntimeException(status))
+    case e: Throwable =>
+      logError(s"Error during: $opType", e)
+      observer.onError(
+        Status.UNKNOWN.withCause(e).withDescription(e.getLocalizedMessage).asRuntimeException())
+  }
+
   /**
    * This is the main entry method for Spark Connect and all calls to execute a plan.
    *
@@ -64,12 +133,7 @@ class SparkConnectService(debug: Boolean)
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     try {
       new SparkConnectStreamHandler(responseObserver).handle(request)
-    } catch {
-      case e: Throwable =>
-        log.error("Error executing plan.", e)
-        responseObserver.onError(
-          Status.UNKNOWN.withCause(e).withDescription(e.getLocalizedMessage).asRuntimeException())
-    }
+    } catch handleError("execute", observer = responseObserver)
   }
 
   /**
@@ -94,7 +158,9 @@ class SparkConnectService(debug: Boolean)
             s"${request.getPlan.getOpTypeCase} not supported for analysis."))
       }
       val session =
-        SparkConnectService.getOrCreateIsolatedSession(request.getUserContext.getUserId).session
+        SparkConnectService
+          .getOrCreateIsolatedSession(request.getUserContext.getUserId, request.getClientId)
+          .session
 
       val explainMode = request.getExplain.getExplainMode match {
         case proto.Explain.ExplainMode.SIMPLE => SimpleMode
@@ -112,12 +178,7 @@ class SparkConnectService(debug: Boolean)
       response.setClientId(request.getClientId)
       responseObserver.onNext(response.build())
       responseObserver.onCompleted()
-    } catch {
-      case e: Throwable =>
-        log.error("Error analyzing plan.", e)
-        responseObserver.onError(
-          Status.UNKNOWN.withCause(e).withDescription(e.getLocalizedMessage).asRuntimeException())
-    }
+    } catch handleError("analyze", observer = responseObserver)
   }
 
   def handleAnalyzePlanRequest(
@@ -145,7 +206,7 @@ class SparkConnectService(debug: Boolean)
  * @param userId
  * @param session
  */
-case class SessionHolder(userId: String, session: SparkSession)
+case class SessionHolder(userId: String, sessionId: String, session: SparkSession)
 
 /**
  * Static instance of the SparkConnectService.
@@ -161,7 +222,7 @@ object SparkConnectService {
 
   // Type alias for the SessionCacheKey. Right now this is a String but allows us to switch to a
   // different or complex type easily.
-  private type SessionCacheKey = String;
+  private type SessionCacheKey = (String, String);
 
   private var server: Server = _
 
@@ -183,11 +244,11 @@ object SparkConnectService {
   /**
    * Based on the `key` find or create a new SparkSession.
    */
-  def getOrCreateIsolatedSession(key: SessionCacheKey): SessionHolder = {
+  def getOrCreateIsolatedSession(userId: String, sessionId: String): SessionHolder = {
     userSessionMapping.get(
-      key,
+      (userId, sessionId),
       () => {
-        SessionHolder(key, newIsolatedSession())
+        SessionHolder(userId, sessionId, newIsolatedSession())
       })
   }
 

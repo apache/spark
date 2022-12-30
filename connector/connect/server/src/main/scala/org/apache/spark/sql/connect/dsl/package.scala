@@ -27,6 +27,8 @@ import org.apache.spark.connect.proto.SetOperation.SetOpType
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.connect.planner.DataTypeProtoConverter
 import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.toConnectProtoValue
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.Utils
 
 /**
  * A collection of implicit conversions that create a DSL for constructing connect protos.
@@ -57,6 +59,18 @@ package object dsl {
             Expression.UnresolvedRegex
               .newBuilder()
               .setColName(s))
+          .build()
+
+      def asc: Expression =
+        Expression
+          .newBuilder()
+          .setSortOrder(
+            Expression.SortOrder
+              .newBuilder()
+              .setChild(protoAttr)
+              .setDirectionValue(
+                proto.Expression.SortOrder.SortDirection.SORT_DIRECTION_ASCENDING_VALUE)
+              .setNullOrdering(proto.Expression.SortOrder.NullOrdering.SORT_NULLS_FIRST))
           .build()
     }
 
@@ -360,6 +374,19 @@ package object dsl {
     }
 
     implicit class DslStatFunctions(val logicalPlan: Relation) {
+      def cov(col1: String, col2: String): Relation = {
+        Relation
+          .newBuilder()
+          .setCov(
+            proto.StatCov
+              .newBuilder()
+              .setInput(logicalPlan)
+              .setCol1(col1)
+              .setCol2(col2)
+              .build())
+          .build()
+      }
+
       def crosstab(col1: String, col2: String): Relation = {
         Relation
           .newBuilder()
@@ -535,12 +562,12 @@ package object dsl {
           .build()
       }
 
-      def createDefaultSortField(col: String): Sort.SortField = {
-        Sort.SortField
+      def createDefaultSortField(col: String): Expression.SortOrder = {
+        Expression.SortOrder
           .newBuilder()
-          .setNulls(Sort.SortNulls.SORT_NULLS_FIRST)
-          .setDirection(Sort.SortDirection.SORT_DIRECTION_ASCENDING)
-          .setExpression(
+          .setNullOrdering(Expression.SortOrder.NullOrdering.SORT_NULLS_FIRST)
+          .setDirection(Expression.SortOrder.SortDirection.SORT_DIRECTION_ASCENDING)
+          .setChild(
             Expression.newBuilder
               .setUnresolvedAttribute(
                 Expression.UnresolvedAttribute.newBuilder.setUnparsedIdentifier(col).build())
@@ -555,7 +582,7 @@ package object dsl {
             Sort
               .newBuilder()
               .setInput(logicalPlan)
-              .addAllSortFields(columns.map(createDefaultSortField).asJava)
+              .addAllOrder(columns.map(createDefaultSortField).asJava)
               .setIsGlobal(true)
               .build())
           .build()
@@ -568,7 +595,7 @@ package object dsl {
             Sort
               .newBuilder()
               .setInput(logicalPlan)
-              .addAllSortFields(columns.map(createDefaultSortField).asJava)
+              .addAllOrder(columns.map(createDefaultSortField).asJava)
               .setIsGlobal(false)
               .build())
           .build()
@@ -599,13 +626,61 @@ package object dsl {
       def groupBy(groupingExprs: Expression*)(aggregateExprs: Expression*): Relation = {
         val agg = Aggregate.newBuilder()
         agg.setInput(logicalPlan)
+        agg.setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
 
         for (groupingExpr <- groupingExprs) {
           agg.addGroupingExpressions(groupingExpr)
         }
         for (aggregateExpr <- aggregateExprs) {
-          agg.addResultExpressions(aggregateExpr)
+          agg.addAggregateExpressions(aggregateExpr)
         }
+        Relation.newBuilder().setAggregate(agg.build()).build()
+      }
+
+      def rollup(groupingExprs: Expression*)(aggregateExprs: Expression*): Relation = {
+        val agg = Aggregate.newBuilder()
+        agg.setInput(logicalPlan)
+        agg.setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_ROLLUP)
+
+        for (groupingExpr <- groupingExprs) {
+          agg.addGroupingExpressions(groupingExpr)
+        }
+        for (aggregateExpr <- aggregateExprs) {
+          agg.addAggregateExpressions(aggregateExpr)
+        }
+        Relation.newBuilder().setAggregate(agg.build()).build()
+      }
+
+      def cube(groupingExprs: Expression*)(aggregateExprs: Expression*): Relation = {
+        val agg = Aggregate.newBuilder()
+        agg.setInput(logicalPlan)
+        agg.setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_CUBE)
+
+        for (groupingExpr <- groupingExprs) {
+          agg.addGroupingExpressions(groupingExpr)
+        }
+        for (aggregateExpr <- aggregateExprs) {
+          agg.addAggregateExpressions(aggregateExpr)
+        }
+        Relation.newBuilder().setAggregate(agg.build()).build()
+      }
+
+      def pivot(groupingExprs: Expression*)(
+          pivotCol: Expression,
+          pivotValues: Seq[proto.Expression.Literal])(aggregateExprs: Expression*): Relation = {
+        val agg = Aggregate.newBuilder()
+        agg.setInput(logicalPlan)
+        agg.setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_PIVOT)
+
+        for (groupingExpr <- groupingExprs) {
+          agg.addGroupingExpressions(groupingExpr)
+        }
+        for (aggregateExpr <- aggregateExprs) {
+          agg.addAggregateExpressions(aggregateExpr)
+        }
+        agg.setPivot(
+          Aggregate.Pivot.newBuilder().setCol(pivotCol).addAllValues(pivotValues.asJava).build())
+
         Relation.newBuilder().setAggregate(agg.build()).build()
       }
 
@@ -647,12 +722,76 @@ package object dsl {
               .setShuffle(false))
           .build()
 
-      def repartition(num: Integer): Relation =
+      def repartition(num: Int): Relation =
         Relation
           .newBuilder()
           .setRepartition(
             Repartition.newBuilder().setInput(logicalPlan).setNumPartitions(num).setShuffle(true))
           .build()
+
+      @scala.annotation.varargs
+      def repartition(partitionExprs: Expression*): Relation = {
+        repartition(None, partitionExprs)
+      }
+
+      @scala.annotation.varargs
+      def repartition(num: Int, partitionExprs: Expression*): Relation = {
+        repartition(Some(num), partitionExprs)
+      }
+
+      private def repartition(numOpt: Option[Int], partitionExprs: Seq[Expression]): Relation = {
+        val expressions = RepartitionByExpression
+          .newBuilder()
+          .setInput(logicalPlan)
+        numOpt.foreach(expressions.setNumPartitions)
+        for (expr <- partitionExprs) {
+          expressions.addPartitionExprs(expr)
+        }
+        Relation
+          .newBuilder()
+          .setRepartitionByExpression(expressions)
+          .build()
+      }
+
+      @scala.annotation.varargs
+      def repartitionByRange(partitionExprs: Expression*): Relation = {
+        repartitionByRange(None, partitionExprs)
+      }
+
+      @scala.annotation.varargs
+      def repartitionByRange(num: Int, partitionExprs: Expression*): Relation = {
+        repartitionByRange(Some(num), partitionExprs)
+      }
+
+      private def repartitionByRange(
+          numOpt: Option[Int],
+          partitionExprs: Seq[Expression]): Relation = {
+        val expressions = RepartitionByExpression
+          .newBuilder()
+          .setInput(logicalPlan)
+        numOpt.foreach(expressions.setNumPartitions)
+        partitionExprs
+          .map(expr =>
+            expr.getExprTypeCase match {
+              case Expression.ExprTypeCase.SORT_ORDER => expr
+              case _ =>
+                Expression
+                  .newBuilder()
+                  .setSortOrder(
+                    Expression.SortOrder
+                      .newBuilder()
+                      .setChild(expr)
+                      .setDirectionValue(
+                        proto.Expression.SortOrder.SortDirection.SORT_DIRECTION_ASCENDING_VALUE)
+                      .setNullOrdering(proto.Expression.SortOrder.NullOrdering.SORT_NULLS_FIRST))
+                  .build()
+            })
+          .foreach(order => expressions.addPartitionExprs(order))
+        Relation
+          .newBuilder()
+          .setRepartitionByExpression(expressions)
+          .build()
+      }
 
       def na: DslNAFunctions = new DslNAFunctions(logicalPlan)
 
@@ -681,6 +820,17 @@ package object dsl {
               .build())
           .build()
       }
+
+      def to(schema: StructType): Relation =
+        Relation
+          .newBuilder()
+          .setToSchema(
+            ToSchema
+              .newBuilder()
+              .setInput(logicalPlan)
+              .setSchema(DataTypeProtoConverter.toConnectProtoType(schema))
+              .build())
+          .build()
 
       def toDF(columnNames: String*): Relation =
         Relation
@@ -774,6 +924,39 @@ package object dsl {
           variableColumnName: String,
           valueColumnName: String): Relation =
         unpivot(ids, variableColumnName, valueColumnName)
+
+      def randomSplit(weights: Array[Double], seed: Long): Array[Relation] = {
+        require(
+          weights.forall(_ >= 0),
+          s"Weights must be nonnegative, but got ${weights.mkString("[", ",", "]")}")
+        require(
+          weights.sum > 0,
+          s"Sum of weights must be positive, but got ${weights.mkString("[", ",", "]")}")
+
+        val sum = weights.toSeq.sum
+        val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _)
+        normalizedCumWeights
+          .sliding(2)
+          .map { x =>
+            Relation
+              .newBuilder()
+              .setSample(
+                Sample
+                  .newBuilder()
+                  .setInput(logicalPlan)
+                  .setLowerBound(x(0))
+                  .setUpperBound(x(1))
+                  .setWithReplacement(false)
+                  .setSeed(seed)
+                  .setForceStableSort(true)
+                  .build())
+              .build()
+          }
+          .toArray
+      }
+
+      def randomSplit(weights: Array[Double]): Array[Relation] =
+        randomSplit(weights, Utils.random.nextLong)
 
       private def createSetOperation(
           left: Relation,
