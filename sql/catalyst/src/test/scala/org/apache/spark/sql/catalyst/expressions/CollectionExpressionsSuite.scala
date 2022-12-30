@@ -2633,17 +2633,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
         Literal.create(Seq(null, 1d, 2d), ArrayType(DoubleType)),
         Literal.create(3d, DoubleType)),
       Seq(null, 1d, 2d, 3d))
-    checkEvaluation(
-      ArrayAppend(
-        Literal.create(
-          Seq(Date.valueOf("2017-04-06"), Date.valueOf("2017-03-23"), Date.valueOf("2017-03-10")),
-          ArrayType(DateType)),
-        Literal.create(Date.valueOf("2017-03-10"), DateType)),
-      Seq(
-        Date.valueOf("2017-04-06"),
-        Date.valueOf("2017-03-23"),
-        Date.valueOf("2017-03-10"),
-        Date.valueOf("2017-03-10")))
+
     checkEvaluation(
       ArrayAppend(
         Literal.create(Seq("a", "b", "c"), ArrayType(StringType)),
@@ -2664,36 +2654,6 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
             "rightType" -> "\"INT\""))
     )
 
-    assert(
-      ArrayAppend(
-        Literal.create(
-          Seq(Date.valueOf("2017-04-06"), Date.valueOf("2017-03-23"), Date.valueOf("2017-03-10")),
-          ArrayType(DateType)),
-        Literal.create(Timestamp.valueOf("2017-03-10 00:00:00"), TimestampType))
-        .checkInputDataTypes() == DataTypeMismatch(
-          errorSubClass = "ARRAY_FUNCTION_DIFF_TYPES",
-          messageParameters = Map(
-            "functionName" -> "`array_append`",
-            "dataType" -> "\"ARRAY\"",
-            "leftType" -> "\"ARRAY<DATE>\"",
-            "rightType" -> "\"TIMESTAMP\""))
-    )
-
-    assert(
-      ArrayAppend(
-        Literal.create(
-          Date.valueOf("2017-04-06"), DateType),
-        Literal.create(Timestamp.valueOf("2017-03-10 00:00:00"), TimestampType))
-        .checkInputDataTypes() == DataTypeMismatch(
-        errorSubClass = "UNEXPECTED_INPUT_TYPE",
-        messageParameters = Map(
-          "paramIndex" -> "0",
-          "requiredType" -> "\"ARRAY\"",
-          "inputSql" -> "\"DATE '2017-04-06'\"",
-          "inputType" -> "\"DATE\""
-          )
-        )
-    )
 
     assert(
       ArrayAppend(

@@ -1098,13 +1098,6 @@ def array_intersect(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 array_intersect.__doc__ = pysparkfuncs.array_intersect.__doc__
 
 
-def array_append(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("array_append", col1, col2)
-
-
-array_append.__doc__ = pysparkfuncs.array_append.__doc__
-
-
 def array_join(
     col: "ColumnOrName", delimiter: str, null_replacement: Optional[str] = None
 ) -> Column:
