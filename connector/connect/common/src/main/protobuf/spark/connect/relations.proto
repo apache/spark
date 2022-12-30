@@ -19,6 +19,7 @@ syntax = 'proto3';
 
 package spark.connect;
 
+import "google/protobuf/any.proto";
 import "spark/connect/expressions.proto";
 import "spark/connect/types.proto";
 import "spark/connect/catalog.proto";
@@ -70,10 +71,14 @@ message Relation {
     StatCrosstab crosstab = 101;
     StatDescribe describe = 102;
     StatCov cov = 103;
+    StatCorr corr = 104;
 
     // Catalog API (experimental / unstable)
     Catalog catalog = 200;
 
+    // This field is used to mark extensions to the protocol. When plugins generate arbitrary
+    // relations they can add them here. During the planning the correct resolution is done.
+    google.protobuf.Any extension = 998;
     Unknown unknown = 999;
   }
 }
@@ -353,9 +358,10 @@ message Sample {
   // (Optional) The random seed.
   optional int64 seed = 5;
 
-  // (Optional) Explicitly sort the underlying plan to make the ordering deterministic.
-  // This flag is only used to randomly splits DataFrame with the provided weights.
-  optional bool force_stable_sort = 6;
+  // (Required) Explicitly sort the underlying plan to make the ordering deterministic or cache it.
+  // This flag is true when invoking `dataframe.randomSplit` to randomly splits DataFrame with the
+  // provided weights. Otherwise, it is false.
+  bool deterministic_order = 6;
 }
 
 // Relation of type [[Range]] that generates a sequence of integers.
@@ -479,6 +485,25 @@ message StatCov {
 
   // (Required) The name of the second column.
   string col2 = 3;
+}
+
+// Calculates the correlation of two columns of a DataFrame. Currently only supports the Pearson
+// Correlation Coefficient. It will invoke 'Dataset.stat.corr' (same as
+// 'StatFunctions.pearsonCorrelation') to compute the results.
+message StatCorr {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) The name of the first column.
+  string col1 = 2;
+
+  // (Required) The name of the second column.
+  string col2 = 3;
+
+  // (Optional) Default value is 'pearson'.
+  //
+  // Currently only supports the Pearson Correlation Coefficient.
+  optional string method = 4;
 }
 
 // Replaces null values.

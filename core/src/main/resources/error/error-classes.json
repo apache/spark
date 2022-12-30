@@ -139,6 +139,16 @@
         "message" : [
           "Error instantiating GRPC interceptor: <msg>"
         ]
+      },
+      "PLUGIN_CTOR_MISSING" : {
+        "message" : [
+          "Cannot instantiate Spark Connect plugin because <cls> is missing a default constructor without arguments."
+        ]
+      },
+      "PLUGIN_RUNTIME_ERROR" : {
+        "message" : [
+          "Error instantiating Spark Connect plugin: <msg>"
+        ]
       }
     }
   },
@@ -457,6 +467,11 @@
   "ELEMENT_AT_BY_INDEX_ZERO" : {
     "message" : [
       "The index 0 is invalid. An index shall be either < 0 or > 0 (the first element has index 1)."
+    ]
+  },
+  "ENCODER_NOT_FOUND" : {
+    "message" : [
+      "Not found an encoder of the type <typeName> to Spark SQL internal representation. Consider to change the input type to one of supported at https://spark.apache.org/docs/latest/sql-ref-datatypes.html."
     ]
   },
   "FAILED_EXECUTE_UDF" : {
@@ -4113,12 +4128,6 @@
   "_LEGACY_ERROR_TEMP_2140" : {
     "message" : [
       "`<fieldName>` is not a valid identifier of Java and cannot be used as field name",
-      "<walkedTypePath>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2141" : {
-    "message" : [
-      "No Encoder found for <tpe>",
       "<walkedTypePath>"
     ]
   },
