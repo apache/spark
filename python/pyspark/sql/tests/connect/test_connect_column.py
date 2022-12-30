@@ -760,8 +760,8 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         )
 
         self.assert_eq(
-            cdf.select(cdf.a % cdf["b"], cdf["a"] % 2).toPandas(),
-            sdf.select(sdf.a % sdf["b"], sdf["a"] % 2).toPandas(),
+            cdf.select(cdf.a % cdf["b"], cdf["a"] % 2, 12 % cdf.c).toPandas(),
+            sdf.select(sdf.a % sdf["b"], sdf["a"] % 2, 12 % sdf.c).toPandas(),
         )
 
         self.assert_eq(
