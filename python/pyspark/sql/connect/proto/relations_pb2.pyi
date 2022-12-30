@@ -97,6 +97,7 @@ class Relation(google.protobuf.message.Message):
     DESCRIBE_FIELD_NUMBER: builtins.int
     COV_FIELD_NUMBER: builtins.int
     CORR_FIELD_NUMBER: builtins.int
+    APPROX_QUANTILE_FIELD_NUMBER: builtins.int
     CATALOG_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     UNKNOWN_FIELD_NUMBER: builtins.int
@@ -173,6 +174,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def corr(self) -> global___StatCorr: ...
     @property
+    def approx_quantile(self) -> global___StatApproxQuantile: ...
+    @property
     def catalog(self) -> pyspark.sql.connect.proto.catalog_pb2.Catalog:
         """Catalog API (experimental / unstable)"""
     @property
@@ -220,6 +223,7 @@ class Relation(google.protobuf.message.Message):
         describe: global___StatDescribe | None = ...,
         cov: global___StatCov | None = ...,
         corr: global___StatCorr | None = ...,
+        approx_quantile: global___StatApproxQuantile | None = ...,
         catalog: pyspark.sql.connect.proto.catalog_pb2.Catalog | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
         unknown: global___Unknown | None = ...,
@@ -229,6 +233,8 @@ class Relation(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "aggregate",
             b"aggregate",
+            "approx_quantile",
+            b"approx_quantile",
             "catalog",
             b"catalog",
             "common",
@@ -312,6 +318,8 @@ class Relation(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "aggregate",
             b"aggregate",
+            "approx_quantile",
+            b"approx_quantile",
             "catalog",
             b"catalog",
             "common",
@@ -427,6 +435,7 @@ class Relation(google.protobuf.message.Message):
         "describe",
         "cov",
         "corr",
+        "approx_quantile",
         "catalog",
         "extension",
         "unknown",
@@ -1781,6 +1790,68 @@ class StatCorr(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["method"] | None: ...
 
 global___StatCorr = StatCorr
+
+class StatApproxQuantile(google.protobuf.message.Message):
+    """Calculates the approximate quantiles of numerical columns of a DataFrame.
+    It will invoke 'Dataset.stat.approxQuantile' (same as 'StatFunctions.approxQuantile')
+    to compute the results.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    COLS_FIELD_NUMBER: builtins.int
+    PROBABILITIES_FIELD_NUMBER: builtins.int
+    RELATIVE_ERROR_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    @property
+    def cols(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """(Required) The names of the numerical columns."""
+    @property
+    def probabilities(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.float]:
+        """(Required) A list of quantile probabilities.
+
+        Each number must belong to [0, 1].
+        For example 0 is the minimum, 0.5 is the median, 1 is the maximum.
+        """
+    relative_error: builtins.float
+    """(Required) The relative target precision to achieve (greater than or equal to 0).
+
+    If set to zero, the exact quantiles are computed, which could be very expensive.
+    Note that values greater than 1 are accepted but give the same result as 1.
+    """
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        cols: collections.abc.Iterable[builtins.str] | None = ...,
+        probabilities: collections.abc.Iterable[builtins.float] | None = ...,
+        relative_error: builtins.float = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "cols",
+            b"cols",
+            "input",
+            b"input",
+            "probabilities",
+            b"probabilities",
+            "relative_error",
+            b"relative_error",
+        ],
+    ) -> None: ...
+
+global___StatApproxQuantile = StatApproxQuantile
 
 class NAFill(google.protobuf.message.Message):
     """Replaces null values.
