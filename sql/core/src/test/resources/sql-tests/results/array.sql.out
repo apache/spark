@@ -509,11 +509,11 @@ struct<array_append(array(a, b, c), d):array<string>>
 
 
 -- !query
-select array_append(array(1, 2, 3), CAST(null AS INT))
+select array_append(array(1, 2, 3), NULL)
 -- !query schema
-struct<array_append(array(1, 2, 3), CAST(NULL AS INT)):array<int>>
+struct<array_append(array(1, 2, 3), NULL):array<int>>
 -- !query output
-NULL
+[1, 2, 3, NULL]
 
 
 -- !query
