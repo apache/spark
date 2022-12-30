@@ -102,7 +102,7 @@ case class InsertIntoHiveDirCommand(
     val (stagingDir, tmpPath) = getExternalTmpPath(sparkSession, hadoopConf, qualifiedPath)
     val fileSinkConf = new org.apache.spark.sql.hive.HiveShim.ShimFileSinkDesc(
       tmpPath.toString, tableDesc, false)
-    InsertIntoHiveTable.setupCompression(fileSinkConf, hadoopConf, sparkSession)
+    setupCompression(fileSinkConf, hadoopConf, sparkSession)
     createExternalTmpPath(stagingDir, hadoopConf)
 
     try {
