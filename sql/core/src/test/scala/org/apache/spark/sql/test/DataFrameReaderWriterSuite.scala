@@ -162,7 +162,6 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
         .writeStream
         .start()
     }
-    
     checkError(
       exception = e,
       errorClass = "WRITE_STREAM_NOT_ALLOWED",
