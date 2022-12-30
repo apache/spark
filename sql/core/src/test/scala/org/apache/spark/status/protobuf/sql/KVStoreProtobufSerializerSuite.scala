@@ -18,7 +18,7 @@
 package org.apache.spark.status.protobuf.sql
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.execution.ui.SQLExecutionUIData
+import org.apache.spark.sql.execution.ui._
 import org.apache.spark.status.api.v1.sql.SqlResourceSuite
 import org.apache.spark.status.protobuf.KVStoreProtobufSerializer
 
@@ -84,5 +84,131 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     val result2 = serializer.deserialize(bytes2, classOf[SQLExecutionUIData])
     // input.metricValues is null, result.metricValues is also empty map.
     assert(result2.metricValues.isEmpty)
+  }
+
+  test("Spark Plan Graph") {
+    val cluster = new SparkPlanGraphClusterWrapper(
+      id = 5,
+      name = "name_5",
+      desc = "desc_5",
+      nodes = Seq(new SparkPlanGraphNodeWrapper(
+        node = new SparkPlanGraphNode(
+          id = 12,
+          name = "name_12",
+          desc = "desc_12",
+          metrics = Seq(
+            SQLPlanMetric(
+              name = "name_13",
+              accumulatorId = 13,
+              metricType = "metric_13"
+            ),
+            SQLPlanMetric(
+              name = "name_14",
+              accumulatorId = 14,
+              metricType = "metric_14"
+            )
+          )
+        ),
+        cluster = new SparkPlanGraphClusterWrapper(
+          id = 15,
+          name = "name_15",
+          desc = "desc_15",
+          nodes = Seq(),
+          metrics = Seq(
+            SQLPlanMetric(
+              name = "name_16",
+              accumulatorId = 16,
+              metricType = "metric_16"
+            ),
+            SQLPlanMetric(
+              name = "name_17",
+              accumulatorId = 17,
+              metricType = "metric_17"
+            )
+          )
+        )
+      )),
+      metrics = Seq(
+        SQLPlanMetric(
+          name = "name_6",
+          accumulatorId = 6,
+          metricType = "metric_6"
+        ),
+        SQLPlanMetric(
+          name = "name_7 d",
+          accumulatorId = 7,
+          metricType = "metric_7"
+        )
+      )
+    )
+    val node = new SparkPlanGraphNodeWrapper(
+      node = new SparkPlanGraphNode(
+        id = 2,
+        name = "name_1",
+        desc = "desc_1",
+        metrics = Seq(
+          SQLPlanMetric(
+            name = "name_2",
+            accumulatorId = 3,
+            metricType = "metric_1"
+          ),
+          SQLPlanMetric(
+            name = "name_3",
+            accumulatorId = 4,
+            metricType = "metric_2"
+          )
+        )
+      ),
+      cluster = cluster
+    )
+    val input = new SparkPlanGraphWrapper(
+      executionId = 1,
+      nodes = Seq(node),
+      edges = Seq(
+        SparkPlanGraphEdge(8, 9),
+        SparkPlanGraphEdge(10, 11)
+      )
+    )
+
+    val bytes = serializer.serialize(input)
+    val result = serializer.deserialize(bytes, classOf[SparkPlanGraphWrapper])
+    assert(result.executionId == input.executionId)
+    assert(result.nodes.size == input.nodes.size)
+
+    def compareNodes(n1: SparkPlanGraphNodeWrapper, n2: SparkPlanGraphNodeWrapper): Unit = {
+      assert(n1.node.id == n2.node.id)
+      assert(n1.node.name == n2.node.name)
+      assert(n1.node.desc == n2.node.desc)
+
+      assert(n1.node.metrics.size == n2.node.metrics.size)
+      n1.node.metrics.zip(n2.node.metrics).foreach { case (m1, m2) =>
+        assert(m1.name == m2.name)
+        assert(m1.accumulatorId == m2.accumulatorId)
+        assert(m1.metricType == m2.metricType)
+      }
+
+      assert(n1.cluster.id == n2.cluster.id)
+      assert(n1.cluster.name == n2.cluster.name)
+      assert(n1.cluster.desc == n2.cluster.desc)
+      assert(n1.cluster.nodes.size == n2.cluster.nodes.size)
+      n1.cluster.nodes.zip(n2.cluster.nodes).foreach { case (n3, n4) =>
+        compareNodes(n3, n4)
+      }
+      n1.cluster.metrics.zip(n2.cluster.metrics).foreach { case (m1, m2) =>
+        assert(m1.name == m2.name)
+        assert(m1.accumulatorId == m2.accumulatorId)
+        assert(m1.metricType == m2.metricType)
+      }
+    }
+
+    result.nodes.zip(input.nodes).foreach { case (n1, n2) =>
+      compareNodes(n1, n2)
+    }
+
+    assert(result.edges.size == input.edges.size)
+    result.edges.zip(input.edges).foreach { case (e1, e2) =>
+      assert(e1.fromId == e2.fromId)
+      assert(e1.toId == e2.toId)
+    }
   }
 }

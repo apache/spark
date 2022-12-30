@@ -390,3 +390,69 @@ message SQLExecutionUIData {
   repeated int64 stages = 11;
   map<int64, string> metric_values = 12;
 }
+
+message SparkPlanGraphNode {
+  int64 id = 1;
+  string name = 2;
+  string desc = 3;
+  repeated SQLPlanMetric metrics = 4;
+}
+
+message SparkPlanGraphClusterWrapper {
+  int64 id = 1;
+  string name = 2;
+  string desc = 3;
+  repeated SparkPlanGraphNodeWrapper nodes = 4;
+  repeated SQLPlanMetric metrics = 5;
+}
+
+message SparkPlanGraphNodeWrapper {
+  SparkPlanGraphNode node = 1;
+  SparkPlanGraphClusterWrapper cluster = 2;
+}
+
+message SparkPlanGraphEdge {
+  int64 from_id = 1;
+  int64 to_id = 2;
+}
+
+message SparkPlanGraphWrapper {
+  int64 execution_id = 1;
+  repeated SparkPlanGraphNodeWrapper nodes = 2;
+  repeated SparkPlanGraphEdge edges = 3;
+}
+
+message RDDOperationEdge {
+  int32 from_id = 1;
+  int32 to_id = 2;
+}
+
+message RDDOperationNode {
+  enum DeterministicLevel {
+    UNSPECIFIED = 0;
+    DETERMINATE = 1;
+    UNORDERED = 2;
+    INDETERMINATE = 3;
+  }
+  int32 id = 1;
+  string name = 2;
+  bool cached = 3;
+  bool barrier = 4;
+  string callsite = 5;
+  DeterministicLevel output_deterministic_level = 6;
+}
+
+message RDDOperationClusterWrapper {
+  string id = 1;
+  string name = 2;
+  repeated RDDOperationNode child_nodes = 3;
+  repeated RDDOperationClusterWrapper child_clusters = 4;
+}
+
+message RDDOperationGraphWrapper {
+  int64 stage_id = 1;
+  repeated RDDOperationEdge edges = 2;
+  repeated RDDOperationEdge outgoing_edges = 3;
+  repeated RDDOperationEdge incoming_edges = 4;
+  RDDOperationClusterWrapper root_cluster = 5;
+}

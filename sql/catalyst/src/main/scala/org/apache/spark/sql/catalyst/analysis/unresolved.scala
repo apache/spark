@@ -269,6 +269,11 @@ case class UnresolvedGenerator(name: FunctionIdentifier, children: Seq[Expressio
     newChildren: IndexedSeq[Expression]): UnresolvedGenerator = copy(children = newChildren)
 }
 
+/**
+ * Represents an unresolved function that is being invoked. The analyzer will resolve the function
+ * arguments first, then look up the function by name and arguments, and return an expression that
+ * can be evaluated to get the result of this function invocation.
+ */
 case class UnresolvedFunction(
     nameParts: Seq[String],
     arguments: Seq[Expression],

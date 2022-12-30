@@ -7750,6 +7750,32 @@ def array_except(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
 
 @try_remote_functions
+def array_compact(col: "ColumnOrName") -> Column:
+    """
+    Collection function: removes null values from the array.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        name of column or expression
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        an array by exluding the null values.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([([1, None, 2, 3],), ([4, 5, None, 4],)], ['data'])
+    >>> df.select(array_compact(df.data)).collect()
+    [Row(array_compact(data)=[1, 2, 3]), Row(array_compact(data)=[4, 5, 4])]
+    """
+    return _invoke_function_over_columns("array_compact", col)
+
+
+@try_remote_functions
 def array_append(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """
     Collection function: returns an array of the elements in col1 along
@@ -9943,6 +9969,8 @@ def unwrap_udt(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.4.0
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
     """
     return _invoke_function("unwrap_udt", _to_java_column(col))
 

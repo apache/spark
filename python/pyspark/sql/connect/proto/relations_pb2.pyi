@@ -39,6 +39,7 @@ import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
+import pyspark.sql.connect.proto.catalog_pb2
 import pyspark.sql.connect.proto.expressions_pb2
 import pyspark.sql.connect.proto.types_pb2
 import sys
@@ -86,12 +87,16 @@ class Relation(google.protobuf.message.Message):
     HINT_FIELD_NUMBER: builtins.int
     UNPIVOT_FIELD_NUMBER: builtins.int
     TO_SCHEMA_FIELD_NUMBER: builtins.int
+    REPARTITION_BY_EXPRESSION_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
     SUMMARY_FIELD_NUMBER: builtins.int
     CROSSTAB_FIELD_NUMBER: builtins.int
     DESCRIBE_FIELD_NUMBER: builtins.int
+    COV_FIELD_NUMBER: builtins.int
+    CORR_FIELD_NUMBER: builtins.int
+    CATALOG_FIELD_NUMBER: builtins.int
     UNKNOWN_FIELD_NUMBER: builtins.int
     @property
     def common(self) -> global___RelationCommon: ...
@@ -146,6 +151,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def to_schema(self) -> global___ToSchema: ...
     @property
+    def repartition_by_expression(self) -> global___RepartitionByExpression: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -159,6 +166,13 @@ class Relation(google.protobuf.message.Message):
     def crosstab(self) -> global___StatCrosstab: ...
     @property
     def describe(self) -> global___StatDescribe: ...
+    @property
+    def cov(self) -> global___StatCov: ...
+    @property
+    def corr(self) -> global___StatCorr: ...
+    @property
+    def catalog(self) -> pyspark.sql.connect.proto.catalog_pb2.Catalog:
+        """Catalog API (experimental / unstable)"""
     @property
     def unknown(self) -> global___Unknown: ...
     def __init__(
@@ -190,12 +204,16 @@ class Relation(google.protobuf.message.Message):
         hint: global___Hint | None = ...,
         unpivot: global___Unpivot | None = ...,
         to_schema: global___ToSchema | None = ...,
+        repartition_by_expression: global___RepartitionByExpression | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
         summary: global___StatSummary | None = ...,
         crosstab: global___StatCrosstab | None = ...,
         describe: global___StatDescribe | None = ...,
+        cov: global___StatCov | None = ...,
+        corr: global___StatCorr | None = ...,
+        catalog: pyspark.sql.connect.proto.catalog_pb2.Catalog | None = ...,
         unknown: global___Unknown | None = ...,
     ) -> None: ...
     def HasField(
@@ -203,8 +221,14 @@ class Relation(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "aggregate",
             b"aggregate",
+            "catalog",
+            b"catalog",
             "common",
             b"common",
+            "corr",
+            b"corr",
+            "cov",
+            b"cov",
             "crosstab",
             b"crosstab",
             "deduplicate",
@@ -243,6 +267,8 @@ class Relation(google.protobuf.message.Message):
             b"rename_columns_by_same_length_names",
             "repartition",
             b"repartition",
+            "repartition_by_expression",
+            b"repartition_by_expression",
             "replace",
             b"replace",
             "sample",
@@ -276,8 +302,14 @@ class Relation(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "aggregate",
             b"aggregate",
+            "catalog",
+            b"catalog",
             "common",
             b"common",
+            "corr",
+            b"corr",
+            "cov",
+            b"cov",
             "crosstab",
             b"crosstab",
             "deduplicate",
@@ -316,6 +348,8 @@ class Relation(google.protobuf.message.Message):
             b"rename_columns_by_same_length_names",
             "repartition",
             b"repartition",
+            "repartition_by_expression",
+            b"repartition_by_expression",
             "replace",
             b"replace",
             "sample",
@@ -372,12 +406,16 @@ class Relation(google.protobuf.message.Message):
         "hint",
         "unpivot",
         "to_schema",
+        "repartition_by_expression",
         "fill_na",
         "drop_na",
         "replace",
         "summary",
         "crosstab",
         "describe",
+        "cov",
+        "corr",
+        "catalog",
         "unknown",
     ] | None: ...
 
@@ -1485,13 +1523,13 @@ class ShowString(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
-    NUMROWS_FIELD_NUMBER: builtins.int
+    NUM_ROWS_FIELD_NUMBER: builtins.int
     TRUNCATE_FIELD_NUMBER: builtins.int
     VERTICAL_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
         """(Required) The input relation."""
-    numRows: builtins.int
+    num_rows: builtins.int
     """(Required) Number of rows to show."""
     truncate: builtins.int
     """(Required) If set to more than 0, truncates strings to
@@ -1503,7 +1541,7 @@ class ShowString(google.protobuf.message.Message):
         self,
         *,
         input: global___Relation | None = ...,
-        numRows: builtins.int = ...,
+        num_rows: builtins.int = ...,
         truncate: builtins.int = ...,
         vertical: builtins.bool = ...,
     ) -> None: ...
@@ -1515,8 +1553,8 @@ class ShowString(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "input",
             b"input",
-            "numRows",
-            b"numRows",
+            "num_rows",
+            b"num_rows",
             "truncate",
             b"truncate",
             "vertical",
@@ -1646,6 +1684,99 @@ class StatCrosstab(google.protobuf.message.Message):
     ) -> None: ...
 
 global___StatCrosstab = StatCrosstab
+
+class StatCov(google.protobuf.message.Message):
+    """Calculate the sample covariance of two numerical columns of a DataFrame.
+    It will invoke 'Dataset.stat.cov' (same as 'StatFunctions.calculateCov') to compute the results.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    COL1_FIELD_NUMBER: builtins.int
+    COL2_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    col1: builtins.str
+    """(Required) The name of the first column."""
+    col2: builtins.str
+    """(Required) The name of the second column."""
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        col1: builtins.str = ...,
+        col2: builtins.str = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal["col1", b"col1", "col2", b"col2", "input", b"input"],
+    ) -> None: ...
+
+global___StatCov = StatCov
+
+class StatCorr(google.protobuf.message.Message):
+    """Calculates the correlation of two columns of a DataFrame. Currently only supports the Pearson
+    Correlation Coefficient. It will invoke 'Dataset.stat.corr' (same as
+    'StatFunctions.pearsonCorrelation') to compute the results.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    COL1_FIELD_NUMBER: builtins.int
+    COL2_FIELD_NUMBER: builtins.int
+    METHOD_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    col1: builtins.str
+    """(Required) The name of the first column."""
+    col2: builtins.str
+    """(Required) The name of the second column."""
+    method: builtins.str
+    """(Optional) Default value is 'pearson'.
+
+    Currently only supports the Pearson Correlation Coefficient.
+    """
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        col1: builtins.str = ...,
+        col2: builtins.str = ...,
+        method: builtins.str | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_method", b"_method", "input", b"input", "method", b"method"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_method",
+            b"_method",
+            "col1",
+            b"col1",
+            "col2",
+            b"col2",
+            "input",
+            b"input",
+            "method",
+            b"method",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_method", b"_method"]
+    ) -> typing_extensions.Literal["method"] | None: ...
+
+global___StatCorr = StatCorr
 
 class NAFill(google.protobuf.message.Message):
     """Replaces null values.
@@ -2133,3 +2264,61 @@ class ToSchema(google.protobuf.message.Message):
     ) -> None: ...
 
 global___ToSchema = ToSchema
+
+class RepartitionByExpression(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    PARTITION_EXPRS_FIELD_NUMBER: builtins.int
+    NUM_PARTITIONS_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    @property
+    def partition_exprs(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.expressions_pb2.Expression
+    ]:
+        """(Required) The partitioning expressions."""
+    num_partitions: builtins.int
+    """(Optional) number of partitions, must be positive."""
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        partition_exprs: collections.abc.Iterable[
+            pyspark.sql.connect.proto.expressions_pb2.Expression
+        ]
+        | None = ...,
+        num_partitions: builtins.int | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_num_partitions",
+            b"_num_partitions",
+            "input",
+            b"input",
+            "num_partitions",
+            b"num_partitions",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_num_partitions",
+            b"_num_partitions",
+            "input",
+            b"input",
+            "num_partitions",
+            b"num_partitions",
+            "partition_exprs",
+            b"partition_exprs",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_num_partitions", b"_num_partitions"]
+    ) -> typing_extensions.Literal["num_partitions"] | None: ...
+
+global___RepartitionByExpression = RepartitionByExpression

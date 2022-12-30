@@ -422,7 +422,7 @@ class DataFrame:
                 )
 
         pdf = DataFrame.withPlan(
-            plan.ShowString(child=self._plan, numRows=n, truncate=_truncate, vertical=vertical),
+            plan.ShowString(child=self._plan, num_rows=n, truncate=_truncate, vertical=vertical),
             session=self._session,
         ).toPandas()
         assert pdf is not None
@@ -481,6 +481,12 @@ class DataFrame:
     melt = unpivot
 
     def hint(self, name: str, *params: Any) -> "DataFrame":
+        for param in params:
+            if param is not None and not isinstance(param, (int, str)):
+                raise TypeError(
+                    f"param should be a int or str, but got {type(param).__name__} {param}"
+                )
+
         return DataFrame.withPlan(
             plan.Hint(self._plan, name, list(params)),
             session=self._session,
@@ -835,6 +841,43 @@ class DataFrame:
 
     describe.__doc__ = PySparkDataFrame.describe.__doc__
 
+    def cov(self, col1: str, col2: str) -> float:
+        if not isinstance(col1, str):
+            raise TypeError("col1 should be a string.")
+        if not isinstance(col2, str):
+            raise TypeError("col2 should be a string.")
+        pdf = DataFrame.withPlan(
+            plan.StatCov(child=self._plan, col1=col1, col2=col2),
+            session=self._session,
+        ).toPandas()
+
+        assert pdf is not None
+        return pdf["cov"][0]
+
+    cov.__doc__ = PySparkDataFrame.cov.__doc__
+
+    def corr(self, col1: str, col2: str, method: Optional[str] = None) -> float:
+        if not isinstance(col1, str):
+            raise TypeError("col1 should be a string.")
+        if not isinstance(col2, str):
+            raise TypeError("col2 should be a string.")
+        if not method:
+            method = "pearson"
+        if not method == "pearson":
+            raise ValueError(
+                "Currently only the calculation of the Pearson Correlation "
+                + "coefficient is supported."
+            )
+        pdf = DataFrame.withPlan(
+            plan.StatCorr(child=self._plan, col1=col1, col2=col2, method=method),
+            session=self._session,
+        ).toPandas()
+
+        assert pdf is not None
+        return pdf["corr"][0]
+
+    corr.__doc__ = PySparkDataFrame.corr.__doc__
+
     def crosstab(self, col1: str, col2: str) -> "DataFrame":
         if not isinstance(col1, str):
             raise TypeError(f"'col1' must be str, but got {type(col1).__name__}")
@@ -886,7 +929,7 @@ class DataFrame:
         if self._session is None:
             raise Exception("Cannot collect on empty session.")
         query = self._plan.to_proto(self._session.client)
-        return self._session.client._to_pandas(query)
+        return self._session.client.to_pandas(query)
 
     toPandas.__doc__ = PySparkDataFrame.toPandas.__doc__
 
@@ -1189,6 +1232,16 @@ DataFrameNaFunctions.__doc__ = PySparkDataFrameNaFunctions.__doc__
 class DataFrameStatFunctions:
     def __init__(self, df: DataFrame):
         self.df = df
+
+    def cov(self, col1: str, col2: str) -> float:
+        return self.df.cov(col1, col2)
+
+    cov.__doc__ = DataFrame.cov.__doc__
+
+    def corr(self, col1: str, col2: str, method: Optional[str] = None) -> float:
+        return self.df.corr(col1, col2, method)
+
+    corr.__doc__ = DataFrame.corr.__doc__
 
     def crosstab(self, col1: str, col2: str) -> DataFrame:
         return self.df.crosstab(col1, col2)

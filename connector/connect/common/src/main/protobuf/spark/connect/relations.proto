@@ -21,6 +21,7 @@ package spark.connect;
 
 import "spark/connect/expressions.proto";
 import "spark/connect/types.proto";
+import "spark/connect/catalog.proto";
 
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
@@ -57,6 +58,7 @@ message Relation {
     Hint hint = 24;
     Unpivot unpivot = 25;
     ToSchema to_schema = 26;
+    RepartitionByExpression repartition_by_expression = 27;
 
     // NA functions
     NAFill fill_na = 90;
@@ -67,6 +69,11 @@ message Relation {
     StatSummary summary = 100;
     StatCrosstab crosstab = 101;
     StatDescribe describe = 102;
+    StatCov cov = 103;
+    StatCorr corr = 104;
+
+    // Catalog API (experimental / unstable)
+    Catalog catalog = 200;
 
     Unknown unknown = 999;
   }
@@ -399,7 +406,7 @@ message ShowString {
   Relation input = 1;
 
   // (Required) Number of rows to show.
-  int32 numRows = 2;
+  int32 num_rows = 2;
 
   // (Required) If set to more than 0, truncates strings to
   // `truncate` characters and all cells will be aligned right.
@@ -460,6 +467,38 @@ message StatCrosstab {
   //
   // Distinct items will make the column names of the DataFrame.
   string col2 = 3;
+}
+
+// Calculate the sample covariance of two numerical columns of a DataFrame.
+// It will invoke 'Dataset.stat.cov' (same as 'StatFunctions.calculateCov') to compute the results.
+message StatCov {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) The name of the first column.
+  string col1 = 2;
+
+  // (Required) The name of the second column.
+  string col2 = 3;
+}
+
+// Calculates the correlation of two columns of a DataFrame. Currently only supports the Pearson
+// Correlation Coefficient. It will invoke 'Dataset.stat.corr' (same as
+// 'StatFunctions.pearsonCorrelation') to compute the results.
+message StatCorr {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) The name of the first column.
+  string col1 = 2;
+
+  // (Required) The name of the second column.
+  string col2 = 3;
+
+  // (Optional) Default value is 'pearson'.
+  //
+  // Currently only supports the Pearson Correlation Coefficient.
+  optional string method = 4;
 }
 
 // Replaces null values.
@@ -625,4 +664,15 @@ message ToSchema {
   //
   // The Sever side will update the dataframe with this schema.
   DataType schema = 2;
+}
+
+  message RepartitionByExpression {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) The partitioning expressions.
+  repeated Expression partition_exprs = 2;
+
+  // (Optional) number of partitions, must be positive.
+  optional int32 num_partitions = 3;
 }

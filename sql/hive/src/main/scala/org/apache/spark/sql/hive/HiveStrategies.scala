@@ -28,9 +28,10 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoStatement, LogicalPlan, ScriptTransformation, Statistics}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils, InsertIntoDataSourceDirCommand}
-import org.apache.spark.sql.execution.datasources.{CreateTable, DataSourceStrategy}
+import org.apache.spark.sql.execution.datasources.{CreateTable, DataSourceStrategy, HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelation}
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.hive.execution.HiveScriptTransformationExec
 import org.apache.spark.sql.internal.HiveSerDe
@@ -232,15 +233,36 @@ case class RelationConversions(
           if DDLUtils.isHiveTable(relation.tableMeta) && isConvertible(relation) =>
         metastoreCatalog.convert(relation, isWrite = false)
 
-      // CTAS
-      case CreateTable(tableDesc, mode, Some(query))
+      // CTAS path
+      // This `InsertIntoHiveTable` is derived from `CreateHiveTableAsSelectCommand`,
+      // that only matches table insertion inside Hive CTAS.
+      // This pattern would not cause conflicts because this rule is always applied before
+      // `HiveAnalysis` and both of these rules are running once.
+      case InsertIntoHiveTable(tableDesc, _, query, overwrite, ifPartitionNotExists, _)
           if query.resolved && DDLUtils.isHiveTable(tableDesc) &&
             tableDesc.partitionColumnNames.isEmpty && isConvertible(tableDesc) &&
             conf.getConf(HiveUtils.CONVERT_METASTORE_CTAS) =>
         // validation is required to be done here before relation conversion.
         DDLUtils.checkTableColumns(tableDesc.copy(schema = query.schema))
-        OptimizedCreateHiveTableAsSelectCommand(
-          tableDesc, query, query.output.map(_.name), mode)
+        val hiveTable = DDLUtils.readHiveTable(tableDesc)
+        val hadoopRelation = metastoreCatalog.convert(hiveTable, isWrite = true) match {
+          case LogicalRelation(t: HadoopFsRelation, _, _, _) => t
+          case _ => throw QueryCompilationErrors.tableIdentifierNotConvertedToHadoopFsRelationError(
+            tableDesc.identifier)
+        }
+        InsertIntoHadoopFsRelationCommand(
+          hadoopRelation.location.rootPaths.head,
+          Map.empty, // We don't support to convert partitioned table.
+          ifPartitionNotExists,
+          Seq.empty, // We don't support to convert partitioned table.
+          hadoopRelation.bucketSpec,
+          hadoopRelation.fileFormat,
+          hadoopRelation.options,
+          query,
+          if (overwrite) SaveMode.Overwrite else SaveMode.Append,
+          Some(tableDesc),
+          Some(hadoopRelation.location),
+          query.output.map(_.name))
 
       // INSERT HIVE DIR
       case InsertIntoDir(_, storage, provider, query, overwrite)
