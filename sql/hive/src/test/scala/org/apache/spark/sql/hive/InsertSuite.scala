@@ -541,25 +541,24 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     val conf = spark.sessionState.newHadoopConf()
     val inputPath = new Path("/tmp/b/c")
     var stagingDir = "tmp/b"
-    val saveHiveFile = InsertIntoHiveTable(null, Map.empty, null, false, false, null)
     val getStagingDir = PrivateMethod[Path](Symbol("getStagingDir"))
-    var path = saveHiveFile invokePrivate getStagingDir(inputPath, conf, stagingDir)
+    var path = InsertIntoHiveTable invokePrivate getStagingDir(inputPath, conf, stagingDir)
     assert(path.toString.indexOf("/tmp/b_hive_") != -1)
 
     stagingDir = "tmp/b/c"
-    path = saveHiveFile invokePrivate getStagingDir(inputPath, conf, stagingDir)
+    path = InsertIntoHiveTable invokePrivate getStagingDir(inputPath, conf, stagingDir)
     assert(path.toString.indexOf("/tmp/b/c/.hive-staging_hive_") != -1)
 
     stagingDir = "d/e"
-    path = saveHiveFile invokePrivate getStagingDir(inputPath, conf, stagingDir)
+    path = InsertIntoHiveTable invokePrivate getStagingDir(inputPath, conf, stagingDir)
     assert(path.toString.indexOf("/tmp/b/c/.hive-staging_hive_") != -1)
 
     stagingDir = ".d/e"
-    path = saveHiveFile invokePrivate getStagingDir(inputPath, conf, stagingDir)
+    path = InsertIntoHiveTable invokePrivate getStagingDir(inputPath, conf, stagingDir)
     assert(path.toString.indexOf("/tmp/b/c/.d/e_hive_") != -1)
 
     stagingDir = "/tmp/c/"
-    path = saveHiveFile invokePrivate getStagingDir(inputPath, conf, stagingDir)
+    path = InsertIntoHiveTable invokePrivate getStagingDir(inputPath, conf, stagingDir)
     assert(path.toString.indexOf("/tmp/c_hive_") != -1)
   }
 

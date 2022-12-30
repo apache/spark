@@ -22,6 +22,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.plan.TableDesc
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
@@ -30,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.CommandUtils
-import org.apache.spark.sql.execution.datasources.{V1WriteCommand, V1WritesUtils}
+import org.apache.spark.sql.execution.datasources.{FileFormat, V1WriteCommand, V1WritesUtils}
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.hive.client.HiveClientImpl
@@ -73,16 +74,18 @@ case class InsertIntoHiveTable(
     query: LogicalPlan,
     overwrite: Boolean,
     ifPartitionNotExists: Boolean,
-    outputColumnNames: Seq[String]
+    outputColumnNames: Seq[String],
+    partitionColumns: Seq[Attribute],
+    bucketSpec: Option[BucketSpec],
+    options: Map[String, String],
+    fileFormat: FileFormat,
+    externalTmpPath: String,
+    @transient stagingDir: Path,
+    @transient hadoopConf: Configuration
   ) extends SaveAsHiveFile with V1WriteCommand with V1WritesHiveUtils {
 
-  override lazy val partitionColumns: Seq[Attribute] = {
-    getDynamicPartitionColumns(table, partition, query)
-  }
-
   override def requiredOrdering: Seq[SortOrder] = {
-    val options = getOptionsWithHiveBucketWrite(table.bucketSpec)
-    V1WritesUtils.getSortOrder(outputColumns, partitionColumns, table.bucketSpec, options)
+    V1WritesUtils.getSortOrder(outputColumns, partitionColumns, bucketSpec, options)
   }
 
   /**
@@ -92,29 +95,13 @@ case class InsertIntoHiveTable(
    */
   override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
     val externalCatalog = sparkSession.sharedState.externalCatalog
-    val hadoopConf = sparkSession.sessionState.newHadoopConf()
-
-    val hiveQlTable = HiveClientImpl.toHiveTable(table)
-    // Have to pass the TableDesc object to RDD.mapPartitions and then instantiate new serializer
-    // instances within the closure, since Serializer is not serializable while TableDesc is.
-    val tableDesc = new TableDesc(
-      hiveQlTable.getInputFormatClass,
-      // The class of table should be org.apache.hadoop.hive.ql.metadata.Table because
-      // getOutputFormatClass will use HiveFileFormatUtils.getOutputFormatSubstitute to
-      // substitute some output formats, e.g. substituting SequenceFileOutputFormat to
-      // HiveSequenceFileOutputFormat.
-      hiveQlTable.getOutputFormatClass,
-      hiveQlTable.getMetadata
-    )
-    val tableLocation = hiveQlTable.getDataLocation
-    val tmpLocation = getExternalTmpPath(sparkSession, hadoopConf, tableLocation)
-
+    createExternalTmpPath(stagingDir, hadoopConf)
     try {
-      processInsert(sparkSession, externalCatalog, hadoopConf, tableDesc, tmpLocation, child)
+      processInsert(sparkSession, externalCatalog, child)
     } finally {
       // Attempt to delete the staging directory and the inclusive files. If failed, the files are
       // expected to be dropped at the normal termination of VM since deleteOnExit is used.
-      deleteExternalTmpPath(hadoopConf)
+      deleteExternalTmpPath(stagingDir, hadoopConf)
     }
 
     // un-cache this table.
@@ -133,24 +120,20 @@ case class InsertIntoHiveTable(
   private def processInsert(
       sparkSession: SparkSession,
       externalCatalog: ExternalCatalog,
-      hadoopConf: Configuration,
-      tableDesc: TableDesc,
-      tmpLocation: Path,
       child: SparkPlan): Unit = {
-    val fileSinkConf = new FileSinkDesc(tmpLocation.toString, tableDesc, false)
 
     val numDynamicPartitions = partition.values.count(_.isEmpty)
     val partitionSpec = getPartitionSpec(partition)
-    val partitionAttributes = getDynamicPartitionColumns(table, partition, query)
 
     val writtenParts = saveAsHiveFile(
       sparkSession = sparkSession,
       plan = child,
       hadoopConf = hadoopConf,
-      fileSinkConf = fileSinkConf,
-      outputLocation = tmpLocation.toString,
-      partitionAttributes = partitionAttributes,
-      bucketSpec = table.bucketSpec)
+      fileFormat = fileFormat,
+      outputLocation = externalTmpPath,
+      partitionAttributes = partitionColumns,
+      bucketSpec = bucketSpec,
+      options = options)
 
     if (partition.nonEmpty) {
       if (numDynamicPartitions > 0) {
@@ -204,7 +187,7 @@ case class InsertIntoHiveTable(
         externalCatalog.loadDynamicPartitions(
           db = table.database,
           table = table.identifier.table,
-          tmpLocation.toString,
+          externalTmpPath,
           partitionSpec,
           overwrite,
           numDynamicPartitions)
@@ -274,7 +257,7 @@ case class InsertIntoHiveTable(
           externalCatalog.loadPartition(
             table.database,
             table.identifier.table,
-            tmpLocation.toString,
+            externalTmpPath,
             partitionSpec,
             isOverwrite = doHiveOverwrite,
             inheritTableSpecs = inheritTableSpecs,
@@ -285,7 +268,7 @@ case class InsertIntoHiveTable(
       externalCatalog.loadTable(
         table.database,
         table.identifier.table,
-        tmpLocation.toString, // TODO: URI
+        externalTmpPath, // TODO: URI
         overwrite,
         isSrcLocal = false)
     }
@@ -293,4 +276,41 @@ case class InsertIntoHiveTable(
 
   override protected def withNewChildInternal(newChild: LogicalPlan): InsertIntoHiveTable =
     copy(query = newChild)
+}
+object InsertIntoHiveTable extends V1WritesHiveUtils with Logging {
+  def apply(
+      table: CatalogTable,
+      partition: Map[String, Option[String]],
+      query: LogicalPlan,
+      overwrite: Boolean,
+      ifPartitionNotExists: Boolean,
+      outputColumnNames: Seq[String]): InsertIntoHiveTable = {
+    val sparkSession = SparkSession.getActiveSession.orNull
+    val hiveQlTable = HiveClientImpl.toHiveTable(table)
+    // Have to pass the TableDesc object to RDD.mapPartitions and then instantiate new serializer
+    // instances within the closure, since Serializer is not serializable while TableDesc is.
+    val tableDesc = new TableDesc(
+      hiveQlTable.getInputFormatClass,
+      // The class of table should be org.apache.hadoop.hive.ql.metadata.Table because
+      // getOutputFormatClass will use HiveFileFormatUtils.getOutputFormatSubstitute to
+      // substitute some output formats, e.g. substituting SequenceFileOutputFormat to
+      // HiveSequenceFileOutputFormat.
+      hiveQlTable.getOutputFormatClass,
+      hiveQlTable.getMetadata
+    )
+    val hadoopConf = sparkSession.sessionState.newHadoopConf()
+    val tableLocation = hiveQlTable.getDataLocation
+    val (stagingDir, externalTmpPath) = getExternalTmpPath(sparkSession, hadoopConf, tableLocation)
+    val fileSinkConf = new FileSinkDesc(externalTmpPath.toString, tableDesc, false)
+    setupCompression(fileSinkConf, hadoopConf, sparkSession)
+    val fileFormat: FileFormat = new HiveFileFormat(fileSinkConf)
+
+    val partitionColumns = getDynamicPartitionColumns(table, partition, query)
+    val bucketSpec = table.bucketSpec
+    val options = getOptionsWithHiveBucketWrite(bucketSpec)
+
+    new InsertIntoHiveTable(table, partition, query, overwrite, ifPartitionNotExists,
+      outputColumnNames, partitionColumns, bucketSpec, options, fileFormat,
+      externalTmpPath.toString, stagingDir, hadoopConf)
+  }
 }

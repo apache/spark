@@ -99,21 +99,23 @@ case class InsertIntoHiveDirCommand(
     }
 
     // The temporary path must be a HDFS path, not a local path.
-    val tmpPath = getExternalTmpPath(sparkSession, hadoopConf, qualifiedPath)
+    val (stagingDir, tmpPath) = getExternalTmpPath(sparkSession, hadoopConf, qualifiedPath)
     val fileSinkConf = new org.apache.spark.sql.hive.HiveShim.ShimFileSinkDesc(
       tmpPath.toString, tableDesc, false)
+    InsertIntoHiveTable.setupCompression(fileSinkConf, hadoopConf, sparkSession)
+    createExternalTmpPath(stagingDir, hadoopConf)
 
     try {
       saveAsHiveFile(
         sparkSession = sparkSession,
         plan = child,
         hadoopConf = hadoopConf,
-        fileSinkConf = fileSinkConf,
+        fileFormat = new HiveFileFormat(fileSinkConf),
         outputLocation = tmpPath.toString)
 
       if (overwrite && fs.exists(writeToPath)) {
         fs.listStatus(writeToPath).foreach { existFile =>
-          if (Option(existFile.getPath) != createdTempDir) fs.delete(existFile.getPath, true)
+          if (existFile.getPath != stagingDir) fs.delete(existFile.getPath, true)
         }
       }
 
@@ -131,7 +133,7 @@ case class InsertIntoHiveDirCommand(
         throw new SparkException(
           "Failed inserting overwrite directory " + storage.locationUri.get, e)
     } finally {
-      deleteExternalTmpPath(hadoopConf)
+      deleteExternalTmpPath(stagingDir, hadoopConf)
     }
 
     Seq.empty[Row]
