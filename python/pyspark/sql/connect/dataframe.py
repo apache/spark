@@ -42,13 +42,9 @@ from pyspark.sql.types import DataType, StructType, Row
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.group import GroupedData
 from pyspark.sql.connect.readwriter import DataFrameWriter
-from pyspark.sql.connect.column import (
-    Column,
-    scalar_function,
-    sql_expression,
-)
+from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import UnresolvedRegex
-from pyspark.sql.connect.functions import col, lit
+from pyspark.sql.connect.functions import _invoke_function, col, lit, expr as sql_expression
 from pyspark.sql.dataframe import (
     DataFrame as PySparkDataFrame,
     DataFrameNaFunctions as PySparkDataFrameNaFunctions,
@@ -110,7 +106,7 @@ class DataFrame:
             raise ValueError("Argument 'exprs' must not be empty")
 
         if len(exprs) == 1 and isinstance(exprs[0], dict):
-            measures = [scalar_function(f, col(e)) for e, f in exprs[0].items()]
+            measures = [_invoke_function(f, col(e)) for e, f in exprs[0].items()]
             return self.groupBy().agg(*measures)
         else:
             # other expressions
@@ -152,7 +148,7 @@ class DataFrame:
     sparkSession.__doc__ = PySparkDataFrame.sparkSession.__doc__
 
     def count(self) -> int:
-        pdd = self.agg(scalar_function("count", lit(1))).toPandas()
+        pdd = self.agg(_invoke_function("count", lit(1))).toPandas()
         return pdd.iloc[0, 0]
 
     count.__doc__ = PySparkDataFrame.count.__doc__
