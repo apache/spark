@@ -35,6 +35,7 @@ limitations under the License.
 """
 import builtins
 import collections.abc
+import google.protobuf.any_pb2
 import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.internal.enum_type_wrapper
@@ -97,6 +98,7 @@ class Relation(google.protobuf.message.Message):
     COV_FIELD_NUMBER: builtins.int
     CORR_FIELD_NUMBER: builtins.int
     CATALOG_FIELD_NUMBER: builtins.int
+    EXTENSION_FIELD_NUMBER: builtins.int
     UNKNOWN_FIELD_NUMBER: builtins.int
     @property
     def common(self) -> global___RelationCommon: ...
@@ -174,6 +176,11 @@ class Relation(google.protobuf.message.Message):
     def catalog(self) -> pyspark.sql.connect.proto.catalog_pb2.Catalog:
         """Catalog API (experimental / unstable)"""
     @property
+    def extension(self) -> google.protobuf.any_pb2.Any:
+        """This field is used to mark extensions to the protocol. When plugins generate arbitrary
+        relations they can add them here. During the planning the correct resolution is done.
+        """
+    @property
     def unknown(self) -> global___Unknown: ...
     def __init__(
         self,
@@ -214,6 +221,7 @@ class Relation(google.protobuf.message.Message):
         cov: global___StatCov | None = ...,
         corr: global___StatCorr | None = ...,
         catalog: pyspark.sql.connect.proto.catalog_pb2.Catalog | None = ...,
+        extension: google.protobuf.any_pb2.Any | None = ...,
         unknown: global___Unknown | None = ...,
     ) -> None: ...
     def HasField(
@@ -239,6 +247,8 @@ class Relation(google.protobuf.message.Message):
             b"drop",
             "drop_na",
             b"drop_na",
+            "extension",
+            b"extension",
             "fill_na",
             b"fill_na",
             "filter",
@@ -320,6 +330,8 @@ class Relation(google.protobuf.message.Message):
             b"drop",
             "drop_na",
             b"drop_na",
+            "extension",
+            b"extension",
             "fill_na",
             b"fill_na",
             "filter",
@@ -416,6 +428,7 @@ class Relation(google.protobuf.message.Message):
         "cov",
         "corr",
         "catalog",
+        "extension",
         "unknown",
     ] | None: ...
 

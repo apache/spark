@@ -139,6 +139,16 @@
         "message" : [
           "Error instantiating GRPC interceptor: <msg>"
         ]
+      },
+      "PLUGIN_CTOR_MISSING" : {
+        "message" : [
+          "Cannot instantiate Spark Connect plugin because <cls> is missing a default constructor without arguments."
+        ]
+      },
+      "PLUGIN_RUNTIME_ERROR" : {
+        "message" : [
+          "Error instantiating Spark Connect plugin: <msg>"
+        ]
       }
     }
   },
