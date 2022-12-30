@@ -1387,6 +1387,10 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             sdf.groupBy("name", sdf.department).avg("salary", "year").toPandas(),
         )
         self.assert_eq(
+            cdf.groupBy("name", cdf.department).mean("salary", "year").toPandas(),
+            sdf.groupBy("name", sdf.department).mean("salary", "year").toPandas(),
+        )
+        self.assert_eq(
             cdf.groupBy("name", cdf.department).sum("salary", "year").toPandas(),
             sdf.groupBy("name", sdf.department).sum("salary", "year").toPandas(),
         )
@@ -1409,6 +1413,10 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             sdf.rollup("name", sdf.department).avg("salary", "year").toPandas(),
         )
         self.assert_eq(
+            cdf.rollup("name", cdf.department).mean("salary", "year").toPandas(),
+            sdf.rollup("name", sdf.department).mean("salary", "year").toPandas(),
+        )
+        self.assert_eq(
             cdf.rollup("name", cdf.department).sum("salary", "year").toPandas(),
             sdf.rollup("name", sdf.department).sum("salary", "year").toPandas(),
         )
@@ -1417,6 +1425,10 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assert_eq(
             cdf.cube("name").avg().toPandas(),
             sdf.cube("name").avg().toPandas(),
+        )
+        self.assert_eq(
+            cdf.cube("name").mean().toPandas(),
+            sdf.cube("name").mean().toPandas(),
         )
         self.assert_eq(
             cdf.cube("name").min("salary").toPandas(),
