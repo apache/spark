@@ -35,6 +35,7 @@ limitations under the License.
 """
 import builtins
 import collections.abc
+import google.protobuf.any_pb2
 import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.internal.enum_type_wrapper
@@ -898,6 +899,7 @@ class Expression(google.protobuf.message.Message):
     WINDOW_FIELD_NUMBER: builtins.int
     UNRESOLVED_EXTRACT_VALUE_FIELD_NUMBER: builtins.int
     UPDATE_FIELDS_FIELD_NUMBER: builtins.int
+    EXTENSION_FIELD_NUMBER: builtins.int
     @property
     def literal(self) -> global___Expression.Literal: ...
     @property
@@ -924,6 +926,11 @@ class Expression(google.protobuf.message.Message):
     def unresolved_extract_value(self) -> global___Expression.UnresolvedExtractValue: ...
     @property
     def update_fields(self) -> global___Expression.UpdateFields: ...
+    @property
+    def extension(self) -> google.protobuf.any_pb2.Any:
+        """This field is used to mark extensions to the protocol. When plugins generate arbitrary
+        relations they can add them here. During the planning the correct resolution is done.
+        """
     def __init__(
         self,
         *,
@@ -940,6 +947,7 @@ class Expression(google.protobuf.message.Message):
         window: global___Expression.Window | None = ...,
         unresolved_extract_value: global___Expression.UnresolvedExtractValue | None = ...,
         update_fields: global___Expression.UpdateFields | None = ...,
+        extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -952,6 +960,8 @@ class Expression(google.protobuf.message.Message):
             b"expr_type",
             "expression_string",
             b"expression_string",
+            "extension",
+            b"extension",
             "lambda_function",
             b"lambda_function",
             "literal",
@@ -985,6 +995,8 @@ class Expression(google.protobuf.message.Message):
             b"expr_type",
             "expression_string",
             b"expression_string",
+            "extension",
+            b"extension",
             "lambda_function",
             b"lambda_function",
             "literal",
@@ -1023,6 +1035,7 @@ class Expression(google.protobuf.message.Message):
         "window",
         "unresolved_extract_value",
         "update_fields",
+        "extension",
     ] | None: ...
 
 global___Expression = Expression

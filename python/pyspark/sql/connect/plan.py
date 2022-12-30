@@ -558,14 +558,14 @@ class Sample(LogicalPlan):
         upper_bound: float,
         with_replacement: bool,
         seed: Optional[int],
-        force_stable_sort: bool = False,
+        deterministic_order: bool = False,
     ) -> None:
         super().__init__(child)
         self.lower_bound = lower_bound
         self.upper_bound = upper_bound
         self.with_replacement = with_replacement
         self.seed = seed
-        self.force_stable_sort = force_stable_sort
+        self.deterministic_order = deterministic_order
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
@@ -576,7 +576,7 @@ class Sample(LogicalPlan):
         plan.sample.with_replacement = self.with_replacement
         if self.seed is not None:
             plan.sample.seed = self.seed
-        plan.sample.force_stable_sort = self.force_stable_sort
+        plan.sample.deterministic_order = self.deterministic_order
         return plan
 
 
@@ -1092,6 +1092,24 @@ class StatCrosstab(LogicalPlan):
         plan.crosstab.input.CopyFrom(self._child.plan(session))
         plan.crosstab.col1 = self.col1
         plan.crosstab.col2 = self.col2
+        return plan
+
+
+class StatCorr(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], col1: str, col2: str, method: str) -> None:
+        super().__init__(child)
+        self._col1 = col1
+        self._col2 = col2
+        self._method = method
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+
+        plan = proto.Relation()
+        plan.corr.input.CopyFrom(self._child.plan(session))
+        plan.corr.col1 = self._col1
+        plan.corr.col2 = self._col2
+        plan.corr.method = self._method
         return plan
 
 

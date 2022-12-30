@@ -31,7 +31,8 @@ class SparkConnectClient(
   private[this] val stub = proto.SparkConnectServiceGrpc.newBlockingStub(channel)
   /**
    * Placeholder method.
-   * @return User ID.
+   * @return
+   *   User ID.
    */
   def userId: String = userContext.getUserId()
 

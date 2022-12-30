@@ -523,7 +523,7 @@ class DataFrame:
                     upper_bound=upperBound,
                     with_replacement=False,
                     seed=int(seed),
-                    force_stable_sort=True,
+                    deterministic_order=True,
                 ),
                 session=self._session,
             )
@@ -856,6 +856,28 @@ class DataFrame:
 
     cov.__doc__ = PySparkDataFrame.cov.__doc__
 
+    def corr(self, col1: str, col2: str, method: Optional[str] = None) -> float:
+        if not isinstance(col1, str):
+            raise TypeError("col1 should be a string.")
+        if not isinstance(col2, str):
+            raise TypeError("col2 should be a string.")
+        if not method:
+            method = "pearson"
+        if not method == "pearson":
+            raise ValueError(
+                "Currently only the calculation of the Pearson Correlation "
+                + "coefficient is supported."
+            )
+        pdf = DataFrame.withPlan(
+            plan.StatCorr(child=self._plan, col1=col1, col2=col2, method=method),
+            session=self._session,
+        ).toPandas()
+
+        assert pdf is not None
+        return pdf["corr"][0]
+
+    corr.__doc__ = PySparkDataFrame.corr.__doc__
+
     def crosstab(self, col1: str, col2: str) -> "DataFrame":
         if not isinstance(col1, str):
             raise TypeError(f"'col1' must be str, but got {type(col1).__name__}")
@@ -879,13 +901,30 @@ class DataFrame:
     def __getattr__(self, name: str) -> "Column":
         return self[name]
 
-    def __getitem__(self, name: str) -> "Column":
-        # Check for alias
-        alias = self._get_alias()
-        if alias is not None:
-            return col(alias)
+    @overload
+    def __getitem__(self, item: Union[int, str]) -> Column:
+        ...
+
+    @overload
+    def __getitem__(self, item: Union[Column, List, Tuple]) -> "DataFrame":
+        ...
+
+    def __getitem__(self, item: Union[int, str, Column, List, Tuple]) -> Union[Column, "DataFrame"]:
+        if isinstance(item, str):
+            # Check for alias
+            alias = self._get_alias()
+            if alias is not None:
+                return col(alias)
+            else:
+                return col(item)
+        elif isinstance(item, Column):
+            return self.filter(item)
+        elif isinstance(item, (list, tuple)):
+            return self.select(*item)
+        elif isinstance(item, int):
+            return col(self.columns[item])
         else:
-            return col(name)
+            raise TypeError("unexpected item type: %s" % type(item))
 
     def _print_plan(self) -> str:
         if self._plan:
@@ -1215,6 +1254,11 @@ class DataFrameStatFunctions:
         return self.df.cov(col1, col2)
 
     cov.__doc__ = DataFrame.cov.__doc__
+
+    def corr(self, col1: str, col2: str, method: Optional[str] = None) -> float:
+        return self.df.corr(col1, col2, method)
+
+    corr.__doc__ = DataFrame.corr.__doc__
 
     def crosstab(self, col1: str, col2: str) -> DataFrame:
         return self.df.crosstab(col1, col2)
