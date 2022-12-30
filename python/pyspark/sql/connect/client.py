@@ -374,7 +374,7 @@ class PlanMetrics:
 
 
 class PlanObservedMetrics:
-    def __init__(self, name: str, metrics: List[pb2.Expression]):
+    def __init__(self, name: str, metrics: List[pb2.Expression.Literal]):
         self._name = name
         self._metrics = metrics
 
@@ -386,7 +386,7 @@ class PlanObservedMetrics:
         return self._name
 
     @property
-    def metrics(self) -> List[ProtoExpression]:
+    def metrics(self) -> List[pb2.Expression.Literal]:
         return self._metrics
 
 
@@ -584,7 +584,7 @@ class SparkConnectClient(object):
         return [
             PlanObservedMetrics(
                 x.name,
-                list(x.values),
+                [v for v in x.values],
             )
             for x in metrics.metrics_objects
         ]
