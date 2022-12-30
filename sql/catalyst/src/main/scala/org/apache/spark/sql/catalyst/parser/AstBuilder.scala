@@ -273,7 +273,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     ctx match {
       case table: InsertIntoTableContext =>
         val (relation, cols, partition, ifPartitionNotExists) = visitInsertIntoTable(table)
-        InsertIntoStatement(
+        InsertInto(
           relation,
           partition,
           cols,
@@ -282,7 +282,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
           ifPartitionNotExists)
       case table: InsertOverwriteTableContext =>
         val (relation, cols, partition, ifPartitionNotExists) = visitInsertOverwriteTable(table)
-        InsertIntoStatement(
+        InsertInto(
           relation,
           partition,
           cols,

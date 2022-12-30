@@ -1481,7 +1481,7 @@ class DDLParserSuite extends AnalysisTest {
       "INSERT INTO testcat.ns1.ns2.tbl SELECT * FROM source"
     ).foreach { sql =>
       parseCompare(sql,
-        InsertIntoStatement(
+        InsertInto(
           UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
           Map.empty,
           Nil,
@@ -1496,7 +1496,7 @@ class DDLParserSuite extends AnalysisTest {
       "INSERT INTO testcat.ns1.ns2.tbl (a, b) SELECT * FROM source"
     ).foreach { sql =>
       parseCompare(sql,
-        InsertIntoStatement(
+        InsertInto(
           UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
           Map.empty,
           Seq("a", "b"),
@@ -1507,7 +1507,7 @@ class DDLParserSuite extends AnalysisTest {
 
   test("insert table: append from another catalog") {
     parseCompare("INSERT INTO TABLE testcat.ns1.ns2.tbl SELECT * FROM testcat2.db.tbl",
-      InsertIntoStatement(
+      InsertInto(
         UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
         Map.empty,
         Nil,
@@ -1522,7 +1522,7 @@ class DDLParserSuite extends AnalysisTest {
         |PARTITION (p1 = 3, p2)
         |SELECT * FROM source
       """.stripMargin,
-      InsertIntoStatement(
+      InsertInto(
         UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
         Map("p1" -> Some("3"), "p2" -> None),
         Nil,
@@ -1537,7 +1537,7 @@ class DDLParserSuite extends AnalysisTest {
         |PARTITION (p1 = 3, p2) (a, b)
         |SELECT * FROM source
       """.stripMargin,
-      InsertIntoStatement(
+      InsertInto(
         UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
         Map("p1" -> Some("3"), "p2" -> None),
         Seq("a", "b"),
@@ -1551,7 +1551,7 @@ class DDLParserSuite extends AnalysisTest {
       "INSERT OVERWRITE testcat.ns1.ns2.tbl SELECT * FROM source"
     ).foreach { sql =>
       parseCompare(sql,
-        InsertIntoStatement(
+        InsertInto(
           UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
           Map.empty,
           Nil,
@@ -1566,7 +1566,7 @@ class DDLParserSuite extends AnalysisTest {
       "INSERT OVERWRITE testcat.ns1.ns2.tbl (a, b) SELECT * FROM source"
     ).foreach { sql =>
       parseCompare(sql,
-        InsertIntoStatement(
+        InsertInto(
           UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
           Map.empty,
           Seq("a", "b"),
@@ -1582,7 +1582,7 @@ class DDLParserSuite extends AnalysisTest {
         |PARTITION (p1 = 3, p2)
         |SELECT * FROM source
       """.stripMargin,
-      InsertIntoStatement(
+      InsertInto(
         UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
         Map("p1" -> Some("3"), "p2" -> None),
         Nil,
@@ -1597,7 +1597,7 @@ class DDLParserSuite extends AnalysisTest {
         |PARTITION (p1 = 3, p2) (a, b)
         |SELECT * FROM source
       """.stripMargin,
-      InsertIntoStatement(
+      InsertInto(
         UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
         Map("p1" -> Some("3"), "p2" -> None),
         Seq("a", "b"),
@@ -1612,7 +1612,7 @@ class DDLParserSuite extends AnalysisTest {
         |PARTITION (p1 = 3) IF NOT EXISTS
         |SELECT * FROM source
       """.stripMargin,
-      InsertIntoStatement(
+      InsertInto(
         UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
         Map("p1" -> Some("3")),
         Nil,
@@ -2518,8 +2518,8 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   test("SPARK-33474: Support typed literals as partition spec values") {
-    def insertPartitionPlan(part: String): InsertIntoStatement = {
-      InsertIntoStatement(
+    def insertPartitionPlan(part: String): InsertInto = {
+      InsertInto(
         UnresolvedRelation(Seq("t")),
         Map("part" -> Some(part)),
         Seq.empty[String],
@@ -2647,7 +2647,7 @@ class DDLParserSuite extends AnalysisTest {
           UnresolvedAttribute("DEFAULT"))))))
     comparePlans(parsePlan(
       "INSERT INTO t PARTITION(part = date'2019-01-02') VALUES ('a', DEFAULT)"),
-      InsertIntoStatement(
+      InsertInto(
         UnresolvedRelation(Seq("t")),
         Map("part" -> Some("2019-01-02")),
         userSpecifiedCols = Seq.empty[String],

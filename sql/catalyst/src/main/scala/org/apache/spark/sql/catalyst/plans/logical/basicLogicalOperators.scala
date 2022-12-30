@@ -685,6 +685,44 @@ case class Join(
 }
 
 /**
+ * Insert query result into a table.
+ *
+ * @param table                the logical plan representing the table.
+ * @param partitionSpec        a map from the partition key to the partition value (optional).
+ *                             If the value is missing, dynamic partition insert will be performed.
+ *                             As an example, `INSERT INTO tbl PARTITION (a=1, b=2) AS` would have
+ *                             Map('a' -> Some('1'), 'b' -> Some('2')),
+ *                             and `INSERT INTO tbl PARTITION (a=1, b) AS ...`
+ *                             would have Map('a' -> Some('1'), 'b' -> None).
+ * @param userSpecifiedCols    the user specified list of columns that belong to the table.
+ * @param query                the logical plan representing data to write to.
+ * @param overwrite            overwrite existing table or partitions.
+ * @param ifPartitionNotExists If true, only write if the partition does not exist.
+ *                             Only valid for static partitions.
+ */
+case class InsertInto(
+    table: LogicalPlan,
+    partitionSpec: Map[String, Option[String]],
+    userSpecifiedCols: Seq[String],
+    query: LogicalPlan,
+    overwrite: Boolean,
+    ifPartitionNotExists: Boolean)
+  extends UnaryNode {
+
+  require(overwrite || !ifPartitionNotExists,
+    "IF NOT EXISTS is only valid in INSERT OVERWRITE")
+  require(partitionSpec.values.forall(_.nonEmpty) || !ifPartitionNotExists,
+    "IF NOT EXISTS is only valid with static partitions")
+
+  override def output: Seq[Attribute] = Seq.empty
+  override def metadataOutput: Seq[Attribute] = Nil
+  override lazy val resolved: Boolean = false
+  override def child: LogicalPlan = query
+  override protected def withNewChildInternal(newChild: LogicalPlan): InsertInto =
+    copy(query = newChild)
+}
+
+/**
  * Insert query result into a directory.
  *
  * @param isLocal Indicates whether the specified directory is local directory

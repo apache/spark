@@ -53,9 +53,9 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsWithPruning(
       (_ => SQLConf.get.enableDefaultColumns), ruleId) {
-      case i: InsertIntoStatement if insertsFromInlineTable(i) =>
+      case i: InsertInto if insertsFromInlineTable(i) =>
         resolveDefaultColumnsForInsertFromInlineTable(i)
-      case i@InsertIntoStatement(_, _, _, project: Project, _, _)
+      case i@InsertInto(_, _, _, project: Project, _, _)
         if !project.projectList.exists(_.isInstanceOf[Star]) =>
         resolveDefaultColumnsForInsertFromProject(i)
       case u: UpdateTable =>
@@ -69,7 +69,7 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
    * Checks if a logical plan is an INSERT INTO command where the inserted data comes from a VALUES
    * list, with possible projection(s), aggregate(s), and/or alias(es) in between.
    */
-  private def insertsFromInlineTable(i: InsertIntoStatement): Boolean = {
+  private def insertsFromInlineTable(i: InsertInto): Boolean = {
     var query = i.query
     while (query.children.size == 1) {
       query match {
@@ -95,7 +95,7 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
    * Resolves DEFAULT column references for an INSERT INTO command satisfying the
    * [[insertsFromInlineTable]] method.
    */
-  private def resolveDefaultColumnsForInsertFromInlineTable(i: InsertIntoStatement): LogicalPlan = {
+  private def resolveDefaultColumnsForInsertFromInlineTable(i: InsertInto): LogicalPlan = {
     val children = mutable.Buffer.empty[LogicalPlan]
     var node = i.query
     while (node.children.size == 1) {
@@ -105,7 +105,7 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
     val insertTableSchemaWithoutPartitionColumns: Option[StructType] =
       getInsertTableSchemaWithoutPartitionColumns(i)
     insertTableSchemaWithoutPartitionColumns.map { schema: StructType =>
-      val regenerated: InsertIntoStatement =
+      val regenerated: InsertInto =
         regenerateUserSpecifiedCols(i, schema)
       val expanded: LogicalPlan =
         addMissingDefaultValuesForInsertFromInlineTable(node, schema)
@@ -125,11 +125,11 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
    * Resolves DEFAULT column references for an INSERT INTO command whose query is a general
    * projection.
    */
-  private def resolveDefaultColumnsForInsertFromProject(i: InsertIntoStatement): LogicalPlan = {
+  private def resolveDefaultColumnsForInsertFromProject(i: InsertInto): LogicalPlan = {
     val insertTableSchemaWithoutPartitionColumns: Option[StructType] =
       getInsertTableSchemaWithoutPartitionColumns(i)
     insertTableSchemaWithoutPartitionColumns.map { schema =>
-      val regenerated: InsertIntoStatement = regenerateUserSpecifiedCols(i, schema)
+      val regenerated: InsertInto = regenerateUserSpecifiedCols(i, schema)
       val project: Project = i.query.asInstanceOf[Project]
       val expanded: Project =
         addMissingDefaultValuesForInsertFromProject(project, schema)
@@ -246,12 +246,12 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
   }
 
   /**
-   * Regenerates user-specified columns of an InsertIntoStatement based on the names in the
+   * Regenerates user-specified columns of an InsertInto based on the names in the
    * insertTableSchemaWithoutPartitionColumns field of this class.
    */
   private def regenerateUserSpecifiedCols(
-      i: InsertIntoStatement,
-      insertTableSchemaWithoutPartitionColumns: StructType): InsertIntoStatement = {
+      i: InsertInto,
+      insertTableSchemaWithoutPartitionColumns: StructType): InsertInto = {
     if (i.userSpecifiedCols.nonEmpty) {
       i.copy(
         userSpecifiedCols = insertTableSchemaWithoutPartitionColumns.fields.map(_.name))
@@ -476,7 +476,7 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
    * Looks up the schema for the table object of an INSERT INTO statement from the catalog.
    */
   private def getInsertTableSchemaWithoutPartitionColumns(
-      enclosingInsert: InsertIntoStatement): Option[StructType] = {
+      enclosingInsert: InsertInto): Option[StructType] = {
     val target: StructType = getSchemaForTargetTable(enclosingInsert.table).getOrElse(return None)
     val schema: StructType = StructType(target.fields.dropRight(enclosingInsert.partitionSpec.size))
     // Rearrange the columns in the result schema to match the order of the explicit column list,
