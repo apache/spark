@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, AttributeMap, AttributeSet, BitwiseAnd, Expression, HiveHash, Literal, NamedExpression, Pmod, SortOrder, String2StringExpression, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Sort}
@@ -40,6 +41,11 @@ trait V1WriteCommand extends DataWritingCommand {
    * Specify the partition columns of the V1 write command.
    */
   def partitionColumns: Seq[Attribute]
+
+  /**
+   * Specify the partition spec of the V1 write command.
+   */
+  def staticPartitions: TablePartitionSpec
 
   /**
    * Specify the bucket spec of the V1 write command.
@@ -72,7 +78,7 @@ object V1Writes extends Rule[LogicalPlan] with SQLConfHelper {
           val newQuery = prepareQuery(write, write.query)
           val attrMap = AttributeMap(write.query.output.zip(newQuery.output))
           val newChild = WriteFiles(newQuery, write.fileFormat, write.partitionColumns,
-            write.bucketSpec, write.options, write.requiredOrdering)
+            write.bucketSpec, write.options, write.staticPartitions)
           val newWrite = write.withNewChildren(newChild :: Nil).transformExpressions {
             case a: Attribute if attrMap.contains(a) =>
               a.withExprId(attrMap(a).exprId)
