@@ -23,7 +23,7 @@ import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions.{from_json, grouping, grouping_id, lit, struct, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, MapType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{Decimal, IntegerType, MapType, StringType, StructField, StructType}
 
 case class StringLongClass(a: String, b: Long)
 
@@ -679,6 +679,18 @@ class QueryCompilationErrorsSuite
       ),
       context = ExpectedContext("", "", 7, 13, "CAST(1)")
     )
+  }
+
+  test("NEGATIVE_SCALE_NOT_ALLOWED: negative scale for Decimal is not allowed") {
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "false") {
+      checkError(
+        exception = intercept[AnalysisException] (Decimal(BigDecimal("98765"), 5, -3)),
+        errorClass = "NEGATIVE_SCALE_NOT_ALLOWED",
+        parameters = Map(
+          "scale" -> "-3",
+          "allowNegativeConf" -> "spark.sql.legacy.allowNegativeScaleOfDecimal")
+      )
+    }
   }
 }
 
