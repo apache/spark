@@ -78,7 +78,12 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
 
   def +=(v: Long): Unit = add(v)
 
-  override def value: Long = _value
+  // We may use -1 as initial value of the accumulator, so that the SQL UI can filter out
+  // invalid accumulator values (0 is a valid metric value) when calculating min, max, etc.
+  // However, users can also access the SQL metrics values programmatically via this method.
+  // We should be consistent with the SQL UI and don't expose -1 to users.
+  // See `SQLMetrics.stringValue`. When there is no valid accumulator values, 0 is the metric value.
+  override def value: Long = if (_value < 0) 0 else _value
 
   // Provide special identifier as metadata so we can tell that this is a `SQLMetric` later
   override def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
