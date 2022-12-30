@@ -1013,6 +1013,30 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             self.spark.read.table(self.tbl_name2).stat.cov("col1", "col3"),
         )
 
+    def test_stat_corr(self):
+        # SPARK-41068: Test the stat.corr method
+        self.assertEqual(
+            self.connect.read.table(self.tbl_name2).stat.corr("col1", "col3"),
+            self.spark.read.table(self.tbl_name2).stat.corr("col1", "col3"),
+        )
+
+        self.assertEqual(
+            self.connect.read.table(self.tbl_name2).stat.corr("col1", "col3", "pearson"),
+            self.spark.read.table(self.tbl_name2).stat.corr("col1", "col3", "pearson"),
+        )
+
+        with self.assertRaisesRegex(TypeError, "col1 should be a string."):
+            self.connect.read.table(self.tbl_name2).stat.corr(1, "col3", "pearson")
+        with self.assertRaisesRegex(TypeError, "col2 should be a string."):
+            self.connect.read.table(self.tbl_name).stat.corr("col1", 1, "pearson")
+        with self.assertRaises(ValueError) as context:
+            self.connect.read.table(self.tbl_name2).stat.corr("col1", "col3", "spearman"),
+            self.assertTrue(
+                "Currently only the calculation of the Pearson Correlation "
+                + "coefficient is supported."
+                in str(context.exception)
+            )
+
     def test_repr(self):
         # SPARK-41213: Test the __repr__ method
         query = """SELECT * FROM VALUES (1L, NULL), (3L, "Z") AS tab(a, b)"""

@@ -1095,6 +1095,24 @@ class StatCrosstab(LogicalPlan):
         return plan
 
 
+class StatCorr(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], col1: str, col2: str, method: str) -> None:
+        super().__init__(child)
+        self._col1 = col1
+        self._col2 = col2
+        self._method = method
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+
+        plan = proto.Relation()
+        plan.corr.input.CopyFrom(self._child.plan(session))
+        plan.corr.col1 = self._col1
+        plan.corr.col2 = self._col2
+        plan.corr.method = self._method
+        return plan
+
+
 class RenameColumns(LogicalPlan):
     def __init__(self, child: Optional["LogicalPlan"], cols: Sequence[str]) -> None:
         super().__init__(child)

@@ -70,6 +70,7 @@ message Relation {
     StatCrosstab crosstab = 101;
     StatDescribe describe = 102;
     StatCov cov = 103;
+    StatCorr corr = 104;
 
     // Catalog API (experimental / unstable)
     Catalog catalog = 200;
@@ -479,6 +480,25 @@ message StatCov {
 
   // (Required) The name of the second column.
   string col2 = 3;
+}
+
+// Calculates the correlation of two columns of a DataFrame. Currently only supports the Pearson
+// Correlation Coefficient. It will invoke 'Dataset.stat.corr' (same as
+// 'StatFunctions.pearsonCorrelation') to compute the results.
+message StatCorr {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) The name of the first column.
+  string col1 = 2;
+
+  // (Required) The name of the second column.
+  string col2 = 3;
+
+  // (Optional) Default value is 'pearson'.
+  //
+  // Currently only supports the Pearson Correlation Coefficient.
+  optional string method = 4;
 }
 
 // Replaces null values.
