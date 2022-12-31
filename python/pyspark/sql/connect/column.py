@@ -72,7 +72,7 @@ def _bin_op(
     def wrapped(self: "Column", other: Any) -> "Column":
         from pyspark.sql.connect.functions import lit
 
-        if isinstance(
+        if other is None or isinstance(
             other, (bool, float, int, str, datetime.datetime, datetime.date, decimal.Decimal)
         ):
             other = lit(other)
@@ -255,7 +255,7 @@ class Column:
         """
         from pyspark.sql.connect.functions import lit
 
-        if isinstance(
+        if other is None or isinstance(
             other, (bool, float, int, str, datetime.datetime, datetime.date, decimal.Decimal)
         ):
             other = lit(other)
@@ -452,7 +452,8 @@ def _test() -> None:
         del pyspark.sql.connect.column.Column.bitwiseAND.__doc__
         del pyspark.sql.connect.column.Column.bitwiseOR.__doc__
         del pyspark.sql.connect.column.Column.bitwiseXOR.__doc__
-        # TODO(SPARK-41770): eqNullSafe does not support None as its argument
+        # TODO(SPARK-41745): SparkSession.createDataFrame does not respect the column names in
+        #  the row
         del pyspark.sql.connect.column.Column.eqNullSafe.__doc__
         # TODO(SPARK-41745): SparkSession.createDataFrame does not respect the column names in
         #  the row
