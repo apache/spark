@@ -1079,6 +1079,30 @@ class StatCov(LogicalPlan):
         return plan
 
 
+class StatApproxQuantile(LogicalPlan):
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        cols: List[str],
+        probabilities: List[float],
+        relativeError: float,
+    ) -> None:
+        super().__init__(child)
+        self._cols = cols
+        self._probabilities = probabilities
+        self._relativeError = relativeError
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+
+        plan = proto.Relation()
+        plan.approx_quantile.input.CopyFrom(self._child.plan(session))
+        plan.approx_quantile.cols.extend(self._cols)
+        plan.approx_quantile.probabilities.extend(self._probabilities)
+        plan.approx_quantile.relative_error = self._relativeError
+        return plan
+
+
 class StatCrosstab(LogicalPlan):
     def __init__(self, child: Optional["LogicalPlan"], col1: str, col2: str) -> None:
         super().__init__(child)

@@ -93,6 +93,8 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Relation.RelTypeCase.DESCRIBE => transformStatDescribe(rel.getDescribe)
       case proto.Relation.RelTypeCase.COV => transformStatCov(rel.getCov)
       case proto.Relation.RelTypeCase.CORR => transformStatCorr(rel.getCorr)
+      case proto.Relation.RelTypeCase.APPROX_QUANTILE =>
+        transformStatApproxQuantile(rel.getApproxQuantile)
       case proto.Relation.RelTypeCase.CROSSTAB =>
         transformStatCrosstab(rel.getCrosstab)
       case proto.Relation.RelTypeCase.TO_SCHEMA => transformToSchema(rel.getToSchema)
@@ -383,6 +385,19 @@ class SparkConnectPlanner(session: SparkSession) {
     LocalRelation.fromProduct(
       output = AttributeReference("corr", DoubleType, false)() :: Nil,
       data = Tuple1.apply(corr) :: Nil)
+  }
+
+  private def transformStatApproxQuantile(rel: proto.StatApproxQuantile): LogicalPlan = {
+    val cols = rel.getColsList.asScala.toArray
+    val probabilities = rel.getProbabilitiesList.asScala.map(_.doubleValue()).toArray
+    val approxQuantile = Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .stat
+      .approxQuantile(cols, probabilities, rel.getRelativeError)
+    LocalRelation.fromProduct(
+      output =
+        AttributeReference("approx_quantile", ArrayType(ArrayType(DoubleType)), false)() :: Nil,
+      data = Tuple1.apply(approxQuantile) :: Nil)
   }
 
   private def transformStatCrosstab(rel: proto.StatCrosstab): LogicalPlan = {

@@ -1135,6 +1135,46 @@ class SparkConnectTests(SparkConnectSQLTestCase):
                 in str(context.exception)
             )
 
+    def test_stat_approx_quantile(self):
+        # SPARK-41069: Test the stat.approxQuantile method
+        result = self.connect.read.table(self.tbl_name2).stat.approxQuantile(
+            ["col1", "col3"], [0.1, 0.5, 0.9], 0.1
+        )
+        self.assertEqual(len(result), 2)
+        self.assertEqual(len(result[0]), 3)
+        self.assertEqual(len(result[1]), 3)
+
+        result = self.connect.read.table(self.tbl_name2).stat.approxQuantile(
+            ["col1"], [0.1, 0.5, 0.9], 0.1
+        )
+        self.assertEqual(len(result), 1)
+        self.assertEqual(len(result[0]), 3)
+
+        with self.assertRaisesRegex(
+            TypeError, "col should be a string, list or tuple, but got <class 'int'>"
+        ):
+            self.connect.read.table(self.tbl_name2).stat.approxQuantile(1, [0.1, 0.5, 0.9], 0.1)
+        with self.assertRaisesRegex(TypeError, "columns should be strings, but got <class 'int'>"):
+            self.connect.read.table(self.tbl_name2).stat.approxQuantile([1], [0.1, 0.5, 0.9], 0.1)
+        with self.assertRaisesRegex(TypeError, "probabilities should be a list or tuple"):
+            self.connect.read.table(self.tbl_name2).stat.approxQuantile(["col1", "col3"], 0.1, 0.1)
+        with self.assertRaisesRegex(
+            ValueError, "probabilities should be numerical \\(float, int\\) in \\[0,1\\]"
+        ):
+            self.connect.read.table(self.tbl_name2).stat.approxQuantile(
+                ["col1", "col3"], [-0.1], 0.1
+            )
+        with self.assertRaisesRegex(
+            TypeError, "relativeError should be numerical \\(float, int\\)"
+        ):
+            self.connect.read.table(self.tbl_name2).stat.approxQuantile(
+                ["col1", "col3"], [0.1, 0.5, 0.9], "str"
+            )
+        with self.assertRaisesRegex(ValueError, "relativeError should be >= 0."):
+            self.connect.read.table(self.tbl_name2).stat.approxQuantile(
+                ["col1", "col3"], [0.1, 0.5, 0.9], -0.1
+            )
+
     def test_repr(self):
         # SPARK-41213: Test the __repr__ method
         query = """SELECT * FROM VALUES (1L, NULL), (3L, "Z") AS tab(a, b)"""
