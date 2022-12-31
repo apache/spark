@@ -496,8 +496,8 @@ jobs:
         path: "**/target/test-reports/*.xml"
 
   proto-breaking-changes-check:
-    needs: [precondition, infra-image]
-    if: always() && fromJson(needs.precondition.outputs.required).lint == 'true'
+    needs: [precondition]
+    if: always() && fromJson(needs.precondition.outputs.required).proto-breaking-changes-check == 'true'
     name: Spark Connect Proto Backwards Compat Check
     runs-on: ubuntu-20.04
     env:
@@ -505,8 +505,6 @@ jobs:
       LANG: C.UTF-8
       PYSPARK_DRIVER_PYTHON: python3.9
       PYSPARK_PYTHON: python3.9
-    container:
-      image: ${{ needs.precondition.outputs.image_url }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v3

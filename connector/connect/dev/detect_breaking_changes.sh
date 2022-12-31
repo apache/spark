@@ -15,9 +15,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-if [[ $# -gt 1 ]]; then
+if [[ $# -gt 0 ]]; then
   echo "Illegal number of parameters."
-  echo "Usage: ./connector/connect/dev/generate_protos.sh [path]"
+  echo "Usage: ./connector/connect/dev/detect_breaking_changes.sh"
   exit -1
 fi
 
