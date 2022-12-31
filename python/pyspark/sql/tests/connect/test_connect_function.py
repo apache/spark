@@ -521,7 +521,6 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
         cdf = self.connect.sql(query)
         sdf = self.spark.sql(query)
 
-        # TODO(SPARK-41383): add tests for grouping, grouping_id after DataFrame.cube is supported.
         for cfunc, sfunc in [
             (CF.approx_count_distinct, SF.approx_count_distinct),
             (CF.approxCountDistinct, SF.approxCountDistinct),
@@ -573,6 +572,18 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
                 cdf.groupBy("a").agg(cfunc(cdf.b, "c")).toPandas(),
                 sdf.groupBy("a").agg(sfunc(sdf.b, "c")).toPandas(),
             )
+
+        # test grouping
+        self.assert_eq(
+            cdf.cube("a").agg(CF.grouping("a"), CF.sum("c")).orderBy("a").toPandas(),
+            sdf.cube("a").agg(SF.grouping("a"), SF.sum("c")).orderBy("a").toPandas(),
+        )
+
+        # test grouping_id
+        self.assert_eq(
+            cdf.cube("a").agg(CF.grouping_id(), CF.sum("c")).orderBy("a").toPandas(),
+            sdf.cube("a").agg(SF.grouping_id(), SF.sum("c")).orderBy("a").toPandas(),
+        )
 
         # test percentile_approx
         self.assert_eq(
