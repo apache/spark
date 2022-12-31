@@ -18,6 +18,8 @@ package org.apache.spark.sql.execution.datasources.orc
 
 import scala.collection.JavaConverters._
 
+import org.apache.hadoop.hive.ql.io.sarg.SearchArgumentImpl
+
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{Column, DataFrame}
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -74,7 +76,8 @@ class OrcV1FilterSuite extends OrcFilterSuite {
       (predicate: Predicate, stringExpr: String)
       (implicit df: DataFrame): Unit = {
     def checkLogicalOperator(filter: SearchArgument) = {
-      assert(filter.toString == stringExpr)
+      // HIVE-24458 changes toString format and provides `toOldString` for old style.
+      assert(filter.asInstanceOf[SearchArgumentImpl].toOldString == stringExpr)
     }
     checkFilterPredicate(df, predicate, checkLogicalOperator)
   }
