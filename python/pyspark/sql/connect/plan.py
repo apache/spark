@@ -1119,6 +1119,27 @@ class StatCrosstab(LogicalPlan):
         return plan
 
 
+class StatFreqItems(LogicalPlan):
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        cols: List[str],
+        support: float,
+    ) -> None:
+        super().__init__(child)
+        self._cols = cols
+        self._support = support
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+
+        plan = proto.Relation()
+        plan.freq_items.input.CopyFrom(self._child.plan(session))
+        plan.freq_items.cols.extend(self._cols)
+        plan.freq_items.support = self._support
+        return plan
+
+
 class StatCorr(LogicalPlan):
     def __init__(self, child: Optional["LogicalPlan"], col1: str, col2: str, method: str) -> None:
         super().__init__(child)

@@ -98,6 +98,7 @@ class Relation(google.protobuf.message.Message):
     COV_FIELD_NUMBER: builtins.int
     CORR_FIELD_NUMBER: builtins.int
     APPROX_QUANTILE_FIELD_NUMBER: builtins.int
+    FREQ_ITEMS_FIELD_NUMBER: builtins.int
     CATALOG_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     UNKNOWN_FIELD_NUMBER: builtins.int
@@ -176,6 +177,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def approx_quantile(self) -> global___StatApproxQuantile: ...
     @property
+    def freq_items(self) -> global___StatFreqItems: ...
+    @property
     def catalog(self) -> pyspark.sql.connect.proto.catalog_pb2.Catalog:
         """Catalog API (experimental / unstable)"""
     @property
@@ -224,6 +227,7 @@ class Relation(google.protobuf.message.Message):
         cov: global___StatCov | None = ...,
         corr: global___StatCorr | None = ...,
         approx_quantile: global___StatApproxQuantile | None = ...,
+        freq_items: global___StatFreqItems | None = ...,
         catalog: pyspark.sql.connect.proto.catalog_pb2.Catalog | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
         unknown: global___Unknown | None = ...,
@@ -259,6 +263,8 @@ class Relation(google.protobuf.message.Message):
             b"fill_na",
             "filter",
             b"filter",
+            "freq_items",
+            b"freq_items",
             "hint",
             b"hint",
             "join",
@@ -344,6 +350,8 @@ class Relation(google.protobuf.message.Message):
             b"fill_na",
             "filter",
             b"filter",
+            "freq_items",
+            b"freq_items",
             "hint",
             b"hint",
             "join",
@@ -436,6 +444,7 @@ class Relation(google.protobuf.message.Message):
         "cov",
         "corr",
         "approx_quantile",
+        "freq_items",
         "catalog",
         "extension",
         "unknown",
@@ -1852,6 +1861,54 @@ class StatApproxQuantile(google.protobuf.message.Message):
     ) -> None: ...
 
 global___StatApproxQuantile = StatApproxQuantile
+
+class StatFreqItems(google.protobuf.message.Message):
+    """Finding frequent items for columns, possibly with false positives.
+    It will invoke 'Dataset.stat.freqItems' (same as 'StatFunctions.freqItems')
+    to compute the results.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    COLS_FIELD_NUMBER: builtins.int
+    SUPPORT_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    @property
+    def cols(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """(Required) The names of the columns to search frequent items in."""
+    support: builtins.float
+    """(Optional) The minimum frequency for an item to be considered `frequent`.
+    Should be greater than 1e-4.
+    """
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        cols: collections.abc.Iterable[builtins.str] | None = ...,
+        support: builtins.float | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_support", b"_support", "input", b"input", "support", b"support"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_support", b"_support", "cols", b"cols", "input", b"input", "support", b"support"
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_support", b"_support"]
+    ) -> typing_extensions.Literal["support"] | None: ...
+
+global___StatFreqItems = StatFreqItems
 
 class NAFill(google.protobuf.message.Message):
     """Replaces null values.

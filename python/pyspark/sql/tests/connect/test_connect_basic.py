@@ -1175,6 +1175,25 @@ class SparkConnectTests(SparkConnectSQLTestCase):
                 ["col1", "col3"], [0.1, 0.5, 0.9], -0.1
             )
 
+    def test_stat_freq_items(self):
+        # SPARK-41065: Test the stat.freqItems method
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name2).stat.freqItems(["col1", "col3"]).toPandas(),
+            self.spark.read.table(self.tbl_name2).stat.freqItems(["col1", "col3"]).toPandas(),
+        )
+
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name2)
+            .stat.freqItems(["col1", "col3"], 0.4)
+            .toPandas(),
+            self.spark.read.table(self.tbl_name2).stat.freqItems(["col1", "col3"], 0.4).toPandas(),
+        )
+
+        with self.assertRaisesRegex(
+            TypeError, "cols must be a list or tuple of column names as strings"
+        ):
+            self.connect.read.table(self.tbl_name2).stat.freqItems("col1")
+
     def test_repr(self):
         # SPARK-41213: Test the __repr__ method
         query = """SELECT * FROM VALUES (1L, NULL), (3L, "Z") AS tab(a, b)"""
