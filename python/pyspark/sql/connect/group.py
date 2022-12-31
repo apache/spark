@@ -80,8 +80,14 @@ class GroupedData:
 
         assert exprs, "exprs should not be empty"
         if len(exprs) == 1 and isinstance(exprs[0], dict):
+            # There is a special case for count(*) which is rewritten into count(1).
             # Convert the dict into key value pairs
-            aggregate_cols = [scalar_function(exprs[0][k], col(k)) for k in exprs[0]]
+            aggregate_cols = [
+                scalar_function(
+                    exprs[0][k], lit(1) if exprs[0][k] == "count" and k == "*" else col(k)
+                )
+                for k in exprs[0]
+            ]
         else:
             # Columns
             assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
@@ -159,6 +165,8 @@ class GroupedData:
         return self._numeric_agg("avg", list(cols))
 
     avg.__doc__ = PySparkGroupedData.avg.__doc__
+
+    mean = avg
 
     def count(self) -> "DataFrame":
         return self.agg(scalar_function("count", lit(1)))

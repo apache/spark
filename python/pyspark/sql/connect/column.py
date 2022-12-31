@@ -72,7 +72,7 @@ def _bin_op(
     def wrapped(self: "Column", other: Any) -> "Column":
         from pyspark.sql.connect.functions import lit
 
-        if isinstance(
+        if other is None or isinstance(
             other, (bool, float, int, str, datetime.datetime, datetime.date, decimal.Decimal)
         ):
             other = lit(other)
@@ -122,6 +122,7 @@ class Column:
     __rmul__ = _bin_op("*", reverse=True)
     __rdiv__ = _bin_op("/", reverse=True)
     __rtruediv__ = _bin_op("/", reverse=True)
+    __rmod__ = _bin_op("%", reverse=True)
     __pow__ = _bin_op("power")
     __rpow__ = _bin_op("power", reverse=True)
     __ge__ = _bin_op(">=")
@@ -255,7 +256,7 @@ class Column:
         """
         from pyspark.sql.connect.functions import lit
 
-        if isinstance(
+        if other is None or isinstance(
             other, (bool, float, int, str, datetime.datetime, datetime.date, decimal.Decimal)
         ):
             other = lit(other)
@@ -452,18 +453,15 @@ def _test() -> None:
         del pyspark.sql.connect.column.Column.bitwiseAND.__doc__
         del pyspark.sql.connect.column.Column.bitwiseOR.__doc__
         del pyspark.sql.connect.column.Column.bitwiseXOR.__doc__
-        # TODO(SPARK-41770): eqNullSafe does not support None as its argument
+        # TODO(SPARK-41745): SparkSession.createDataFrame does not respect the column names in
+        #  the row
         del pyspark.sql.connect.column.Column.eqNullSafe.__doc__
         # TODO(SPARK-41745): SparkSession.createDataFrame does not respect the column names in
         #  the row
         del pyspark.sql.connect.column.Column.isNotNull.__doc__
         del pyspark.sql.connect.column.Column.isNull.__doc__
-        del pyspark.sql.connect.column.Column.isin.__doc__
-        # TODO(SPARK-41771): __getitem__ does not work with Column.isin
         del pyspark.sql.connect.column.Column.getField.__doc__
         del pyspark.sql.connect.column.Column.getItem.__doc__
-        # TODO(SPARK-41758): Support Window functions
-        del pyspark.sql.connect.column.Column.over.__doc__
 
         (failure_count, test_count) = doctest.testmod(
             pyspark.sql.connect.column,

@@ -78,8 +78,6 @@ class GroupedData(PandasGroupedOpsMixin):
     def agg(self, __exprs: Dict[str, str]) -> DataFrame:
         ...
 
-    # TODO(SPARK-41279): Enable the doctest with supporting the star in Spark Connect.
-    # TODO(SPARK-41743): groupBy(...).agg(...).sort does not actually sort the output
     def agg(self, *exprs: Union[Column, Dict[str, str]]) -> DataFrame:
         """Compute aggregates and returns the result as a :class:`DataFrame`.
 
@@ -135,7 +133,7 @@ class GroupedData(PandasGroupedOpsMixin):
 
         Group-by name, and count each group.
 
-        >>> df.groupBy(df.name).agg({"*": "count"}).sort("name").show()  # doctest: +SKIP
+        >>> df.groupBy(df.name).agg({"*": "count"}).sort("name").show()
         +-----+--------+
         | name|count(1)|
         +-----+--------+
@@ -145,7 +143,7 @@ class GroupedData(PandasGroupedOpsMixin):
 
         Group-by name, and calculate the minimum age.
 
-        >>> df.groupBy(df.name).agg(F.min(df.age)).sort("name").show()  # doctest: +SKIP
+        >>> df.groupBy(df.name).agg(F.min(df.age)).sort("name").show()
         +-----+--------+
         | name|min(age)|
         +-----+--------+

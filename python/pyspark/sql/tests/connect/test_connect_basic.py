@@ -28,6 +28,7 @@ from pyspark.sql.types import (
     IntegerType,
     MapType,
     ArrayType,
+    Row,
 )
 import pyspark.sql.functions
 from pyspark.testing.utils import ReusedPySparkTestCase
@@ -117,6 +118,79 @@ class SparkConnectSQLTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLT
 
 
 class SparkConnectTests(SparkConnectSQLTestCase):
+    def test_df_get_item(self):
+        # SPARK-41779: test __getitem__
+
+        query = """
+            SELECT * FROM VALUES
+            (true, 1, NULL), (false, NULL, 2.0), (NULL, 3, 3.0)
+            AS tab(a, b, c)
+            """
+
+        # +-----+----+----+
+        # |    a|   b|   c|
+        # +-----+----+----+
+        # | true|   1|null|
+        # |false|null| 2.0|
+        # | null|   3| 3.0|
+        # +-----+----+----+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        # filter
+        self.assert_eq(
+            cdf[cdf.a].toPandas(),
+            sdf[sdf.a].toPandas(),
+        )
+        self.assert_eq(
+            cdf[cdf.b.isin(2, 3)].toPandas(),
+            sdf[sdf.b.isin(2, 3)].toPandas(),
+        )
+        self.assert_eq(
+            cdf[cdf.c > 1.5].toPandas(),
+            sdf[sdf.c > 1.5].toPandas(),
+        )
+
+        # select
+        self.assert_eq(
+            cdf[[cdf.a, "b", cdf.c]].toPandas(),
+            sdf[[sdf.a, "b", sdf.c]].toPandas(),
+        )
+        self.assert_eq(
+            cdf[(cdf.a, "b", cdf.c)].toPandas(),
+            sdf[(sdf.a, "b", sdf.c)].toPandas(),
+        )
+
+        # select by index
+        self.assertTrue(isinstance(cdf[0], Column))
+        self.assertTrue(isinstance(cdf[1], Column))
+        self.assertTrue(isinstance(cdf[2], Column))
+
+        self.assert_eq(
+            cdf[[cdf[0], cdf[1], cdf[2]]].toPandas(),
+            sdf[[sdf[0], sdf[1], sdf[2]]].toPandas(),
+        )
+
+        # check error
+        with self.assertRaisesRegex(
+            TypeError,
+            "unexpected item type",
+        ):
+            cdf[1.5]
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "unexpected item type",
+        ):
+            cdf[None]
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "unexpected item type",
+        ):
+            cdf[cdf]
+
     def test_error_handling(self):
         # SPARK-41533 Proper error handling for Spark Connect
         df = self.connect.range(10).select("id2")
@@ -313,6 +387,30 @@ class SparkConnectTests(SparkConnectSQLTestCase):
 
         with self.assertRaises(SparkConnectException):
             self.connect.createDataFrame(data, "col1 int, col2 int, col3 int").show()
+
+    def test_with_local_rows(self):
+        # SPARK-41789: Test creating a dataframe with list of Rows
+        data = [
+            Row(course="dotNET", year=2012, earnings=10000),
+            Row(course="Java", year=2012, earnings=20000),
+            Row(course="dotNET", year=2012, earnings=5000),
+            Row(course="dotNET", year=2013, earnings=48000),
+            Row(course="Java", year=2013, earnings=30000),
+            Row(course="Scala", year=2022, earnings=None),
+        ]
+
+        sdf = self.spark.createDataFrame(data)
+        cdf = self.connect.createDataFrame(data)
+
+        self.assertEqual(sdf.schema, cdf.schema)
+        self.assert_eq(sdf.toPandas(), cdf.toPandas())
+
+        # test with rename
+        sdf = self.spark.createDataFrame(data, schema=["a", "b", "c"])
+        cdf = self.connect.createDataFrame(data, schema=["a", "b", "c"])
+
+        self.assertEqual(sdf.schema, cdf.schema)
+        self.assert_eq(sdf.toPandas(), cdf.toPandas())
 
     def test_with_atom_type(self):
         for data in [[(1), (2), (3)], [1, 2, 3]]:
@@ -1013,6 +1111,30 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             self.spark.read.table(self.tbl_name2).stat.cov("col1", "col3"),
         )
 
+    def test_stat_corr(self):
+        # SPARK-41068: Test the stat.corr method
+        self.assertEqual(
+            self.connect.read.table(self.tbl_name2).stat.corr("col1", "col3"),
+            self.spark.read.table(self.tbl_name2).stat.corr("col1", "col3"),
+        )
+
+        self.assertEqual(
+            self.connect.read.table(self.tbl_name2).stat.corr("col1", "col3", "pearson"),
+            self.spark.read.table(self.tbl_name2).stat.corr("col1", "col3", "pearson"),
+        )
+
+        with self.assertRaisesRegex(TypeError, "col1 should be a string."):
+            self.connect.read.table(self.tbl_name2).stat.corr(1, "col3", "pearson")
+        with self.assertRaisesRegex(TypeError, "col2 should be a string."):
+            self.connect.read.table(self.tbl_name).stat.corr("col1", 1, "pearson")
+        with self.assertRaises(ValueError) as context:
+            self.connect.read.table(self.tbl_name2).stat.corr("col1", "col3", "spearman"),
+            self.assertTrue(
+                "Currently only the calculation of the Pearson Correlation "
+                + "coefficient is supported."
+                in str(context.exception)
+            )
+
     def test_repr(self):
         # SPARK-41213: Test the __repr__ method
         query = """SELECT * FROM VALUES (1L, NULL), (3L, "Z") AS tab(a, b)"""
@@ -1387,6 +1509,10 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             sdf.groupBy("name", sdf.department).avg("salary", "year").toPandas(),
         )
         self.assert_eq(
+            cdf.groupBy("name", cdf.department).mean("salary", "year").toPandas(),
+            sdf.groupBy("name", sdf.department).mean("salary", "year").toPandas(),
+        )
+        self.assert_eq(
             cdf.groupBy("name", cdf.department).sum("salary", "year").toPandas(),
             sdf.groupBy("name", sdf.department).sum("salary", "year").toPandas(),
         )
@@ -1409,6 +1535,10 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             sdf.rollup("name", sdf.department).avg("salary", "year").toPandas(),
         )
         self.assert_eq(
+            cdf.rollup("name", cdf.department).mean("salary", "year").toPandas(),
+            sdf.rollup("name", sdf.department).mean("salary", "year").toPandas(),
+        )
+        self.assert_eq(
             cdf.rollup("name", cdf.department).sum("salary", "year").toPandas(),
             sdf.rollup("name", sdf.department).sum("salary", "year").toPandas(),
         )
@@ -1417,6 +1547,10 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assert_eq(
             cdf.cube("name").avg().toPandas(),
             sdf.cube("name").avg().toPandas(),
+        )
+        self.assert_eq(
+            cdf.cube("name").mean().toPandas(),
+            sdf.cube("name").mean().toPandas(),
         )
         self.assert_eq(
             cdf.cube("name").min("salary").toPandas(),

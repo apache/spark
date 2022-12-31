@@ -1715,7 +1715,7 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
         val allFilesNum = scan1.metrics("numFiles").value
         val allFilesSize = scan1.metrics("filesSize").value
         assert(scan1.metrics("numPartitions").value === numPartitions)
-        assert(scan1.metrics("pruningTime").value === -1)
+        assert(scan1.metrics("pruningTime").value === 0)
 
         // No dynamic partition pruning, so no static metrics
         // Only files from fid = 5 partition are scanned
@@ -1729,7 +1729,7 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
         assert(0 < partFilesNum && partFilesNum < allFilesNum)
         assert(0 < partFilesSize && partFilesSize < allFilesSize)
         assert(scan2.metrics("numPartitions").value === 1)
-        assert(scan2.metrics("pruningTime").value === -1)
+        assert(scan2.metrics("pruningTime").value === 0)
 
         // Dynamic partition pruning is used
         // Static metrics are as-if reading the whole fact table
