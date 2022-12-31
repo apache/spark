@@ -156,7 +156,7 @@ class classproperty(property):
 class SparkSession(SparkConversionMixin):
     """The entry point to programming Spark with the Dataset and DataFrame API.
 
-    A SparkSession can be used create :class:`DataFrame`, register :class:`DataFrame` as
+    A SparkSession can be used to create :class:`DataFrame`, register :class:`DataFrame` as
     tables, execute SQL over tables, cache tables, and read parquet files.
     To create a :class:`SparkSession`, use the following builder pattern:
 
@@ -665,6 +665,9 @@ class SparkSession(SparkConversionMixin):
         databases, tables, functions, etc.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Returns
         -------
@@ -1411,6 +1414,9 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         tableName : str
@@ -1547,6 +1553,9 @@ class SparkSession(SparkConversionMixin):
         Stop the underlying :class:`SparkContext`.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Examples
         --------

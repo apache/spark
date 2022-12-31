@@ -65,7 +65,7 @@ trait V1WriteCommandSuiteBase extends SQLTestUtils {
       override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
         qe.optimizedPlan match {
           case w: V1WriteCommand =>
-            if (hasLogicalSort) {
+            if (hasLogicalSort && conf.getConf(SQLConf.PLANNED_WRITE_ENABLED)) {
               assert(w.query.isInstanceOf[WriteFiles])
               optimizedPlan = w.query.asInstanceOf[WriteFiles].child
             } else {
@@ -86,16 +86,15 @@ trait V1WriteCommandSuiteBase extends SQLTestUtils {
 
     sparkContext.listenerBus.waitUntilEmpty()
 
+    assert(optimizedPlan != null)
     // Check whether a logical sort node is at the top of the logical plan of the write query.
-    if (optimizedPlan != null) {
-      assert(optimizedPlan.isInstanceOf[Sort] == hasLogicalSort,
-        s"Expect hasLogicalSort: $hasLogicalSort, Actual: ${optimizedPlan.isInstanceOf[Sort]}")
+    assert(optimizedPlan.isInstanceOf[Sort] == hasLogicalSort,
+      s"Expect hasLogicalSort: $hasLogicalSort, Actual: ${optimizedPlan.isInstanceOf[Sort]}")
 
-      // Check empty2null conversion.
-      val empty2nullExpr = optimizedPlan.exists(p => V1WritesUtils.hasEmptyToNull(p.expressions))
-      assert(empty2nullExpr == hasEmpty2Null,
-        s"Expect hasEmpty2Null: $hasEmpty2Null, Actual: $empty2nullExpr. Plan:\n$optimizedPlan")
-    }
+    // Check empty2null conversion.
+    val empty2nullExpr = optimizedPlan.exists(p => V1WritesUtils.hasEmptyToNull(p.expressions))
+    assert(empty2nullExpr == hasEmpty2Null,
+      s"Expect hasEmpty2Null: $hasEmpty2Null, Actual: $empty2nullExpr. Plan:\n$optimizedPlan")
 
     spark.listenerManager.unregister(listener)
   }

@@ -45,7 +45,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
       new FakeTask(stageId, i, Nil)
     }
     new TaskSetManager(taskScheduler, new TaskSet(tasks, stageId, 0, 0, null,
-      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID), 0)
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, None), 0)
   }
 
   def scheduleTaskAndVerifyId(taskId: Int, rootPool: Pool, expectedStageId: Int): Unit = {
