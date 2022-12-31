@@ -3143,8 +3143,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       df5.select(array_insert(lit(null).cast("array<string>"), col("b"), col("c"))),
       Seq(Row(null))
     )
-    checkAnswer(df1.selectExpr("array_insert(a, 7, c)"), Seq(Row(null)))
-    checkAnswer(df1.selectExpr("array_insert(a, -6, c)"), Seq(Row(null)))
+    checkAnswer(df1.selectExpr("array_insert(a, 7, c)"), Seq(Row(Seq(3, 2, 5, 1, 2, null, 3))))
+    checkAnswer(df1.selectExpr("array_insert(a, -6, c)"), Seq(Row(Seq(3, null, 3, 2, 5, 1, 2))))
   }
 
   test("transform function - array for primitive type not containing null") {
