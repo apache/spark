@@ -1020,13 +1020,10 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             cdf.select(CF.array_repeat("f", cdf.d)).toPandas(),
             sdf.select(SF.array_repeat("f", sdf.d)).toPandas(),
         )
-        # TODO: Make Literal contains DataType
-        #   Cannot resolve "array_repeat(f, 3)" due to data type mismatch:
-        #   Parameter 2 requires the "INT" type, however "3" has the type "BIGINT".
-        # self.assert_eq(
-        #     cdf.select(CF.array_repeat("f", 3)).toPandas(),
-        #     sdf.select(SF.array_repeat("f", 3)).toPandas(),
-        # )
+        self.assert_eq(
+            cdf.select(CF.array_repeat("f", 3)).toPandas(),
+            sdf.select(SF.array_repeat("f", 3)).toPandas(),
+        )
 
         # test arrays_zip
         # TODO: Make toPandas support complex nested types like Array<Struct>
