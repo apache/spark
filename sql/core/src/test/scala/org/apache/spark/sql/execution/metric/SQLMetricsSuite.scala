@@ -786,11 +786,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
 
     testMetricsInSparkPlanOperator(exchanges.head,
       Map("dataSize" -> 3200, "shuffleRecordsWritten" -> 100))
-    // `testData2.filter($"b" === 0)` is an empty relation.
-    // The exchange doesn't serialize any bytes.
-    // The SQLMetric keeps initial value.
-    testMetricsInSparkPlanOperator(exchanges(1),
-      Map("dataSize" -> -1, "shuffleRecordsWritten" -> 0))
+    testMetricsInSparkPlanOperator(exchanges(1), Map("dataSize" -> 0, "shuffleRecordsWritten" -> 0))
   }
 
   test("Add numRows to metric of BroadcastExchangeExec") {
