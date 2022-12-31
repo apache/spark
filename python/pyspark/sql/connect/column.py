@@ -122,6 +122,7 @@ class Column:
     __rmul__ = _bin_op("*", reverse=True)
     __rdiv__ = _bin_op("/", reverse=True)
     __rtruediv__ = _bin_op("/", reverse=True)
+    __rmod__ = _bin_op("%", reverse=True)
     __pow__ = _bin_op("power")
     __rpow__ = _bin_op("power", reverse=True)
     __ge__ = _bin_op(">=")
