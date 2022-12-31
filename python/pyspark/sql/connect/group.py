@@ -168,8 +168,6 @@ class GroupedData:
 
     mean = avg
 
-    mean.__doc__ = PySparkGroupedData.mean.__doc__
-
     def count(self) -> "DataFrame":
         return self.agg(scalar_function("count", lit(1)))
 
