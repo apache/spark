@@ -521,7 +521,6 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
         cdf = self.connect.sql(query)
         sdf = self.spark.sql(query)
 
-        # TODO(SPARK-41383): add tests for grouping, grouping_id after DataFrame.cube is supported.
         for cfunc, sfunc in [
             (CF.approx_count_distinct, SF.approx_count_distinct),
             (CF.approxCountDistinct, SF.approxCountDistinct),
@@ -573,6 +572,18 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
                 cdf.groupBy("a").agg(cfunc(cdf.b, "c")).toPandas(),
                 sdf.groupBy("a").agg(sfunc(sdf.b, "c")).toPandas(),
             )
+
+        # test grouping
+        self.assert_eq(
+            cdf.cube("a").agg(CF.grouping("a"), CF.sum("c")).orderBy("a").toPandas(),
+            sdf.cube("a").agg(SF.grouping("a"), SF.sum("c")).orderBy("a").toPandas(),
+        )
+
+        # test grouping_id
+        self.assert_eq(
+            cdf.cube("a").agg(CF.grouping_id(), CF.sum("c")).orderBy("a").toPandas(),
+            sdf.cube("a").agg(SF.grouping_id(), SF.sum("c")).orderBy("a").toPandas(),
+        )
 
         # test percentile_approx
         self.assert_eq(
@@ -864,6 +875,57 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
                 ccol.over(CW.orderBy("b").rowsBetween(CW.unboundedPreceding, CW.currentRow))
             ).show()
 
+    def test_window_order(self):
+        # SPARK-41773: test window function with order
+
+        from pyspark.sql import functions as SF
+        from pyspark.sql.window import Window as SW
+        from pyspark.sql.connect import functions as CF
+        from pyspark.sql.connect.window import Window as CW
+
+        data = [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")]
+        # +---+--------+
+        # | id|category|
+        # +---+--------+
+        # |  1|       a|
+        # |  1|       a|
+        # |  2|       a|
+        # |  1|       b|
+        # |  2|       b|
+        # |  3|       b|
+        # +---+--------+
+
+        cdf = self.connect.createDataFrame(data, ["id", "category"])
+        sdf = self.spark.createDataFrame(data, ["id", "category"])
+
+        cw = CW.partitionBy("id").orderBy("category")
+        sw = SW.partitionBy("id").orderBy("category")
+        self.assert_eq(
+            cdf.withColumn("row_number", CF.row_number().over(cw)).toPandas(),
+            sdf.withColumn("row_number", SF.row_number().over(sw)).toPandas(),
+        )
+
+        cw = CW.partitionBy("category").orderBy("id")
+        sw = SW.partitionBy("category").orderBy("id")
+        self.assert_eq(
+            cdf.withColumn("row_number", CF.row_number().over(cw)).toPandas(),
+            sdf.withColumn("row_number", SF.row_number().over(sw)).toPandas(),
+        )
+
+        cw = CW.partitionBy("category").orderBy("id").rowsBetween(CW.currentRow, 1)
+        sw = SW.partitionBy("category").orderBy("id").rowsBetween(SW.currentRow, 1)
+        self.assert_eq(
+            cdf.withColumn("sum", CF.sum("id").over(cw)).sort("id", "category", "sum").toPandas(),
+            sdf.withColumn("sum", SF.sum("id").over(sw)).sort("id", "category", "sum").toPandas(),
+        )
+
+        cw = CW.partitionBy("category").orderBy("id").rangeBetween(CW.currentRow, 1)
+        sw = SW.partitionBy("category").orderBy("id").rangeBetween(SW.currentRow, 1)
+        self.assert_eq(
+            cdf.withColumn("sum", CF.sum("id").over(cw)).sort("id", "category").toPandas(),
+            sdf.withColumn("sum", SF.sum("id").over(sw)).sort("id", "category").toPandas(),
+        )
+
     def test_collection_functions(self):
         from pyspark.sql import functions as SF
         from pyspark.sql.connect import functions as CF
@@ -969,13 +1031,10 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             cdf.select(CF.array_repeat("f", cdf.d)).toPandas(),
             sdf.select(SF.array_repeat("f", sdf.d)).toPandas(),
         )
-        # TODO: Make Literal contains DataType
-        #   Cannot resolve "array_repeat(f, 3)" due to data type mismatch:
-        #   Parameter 2 requires the "INT" type, however "3" has the type "BIGINT".
-        # self.assert_eq(
-        #     cdf.select(CF.array_repeat("f", 3)).toPandas(),
-        #     sdf.select(SF.array_repeat("f", 3)).toPandas(),
-        # )
+        self.assert_eq(
+            cdf.select(CF.array_repeat("f", 3)).toPandas(),
+            sdf.select(SF.array_repeat("f", 3)).toPandas(),
+        )
 
         # test arrays_zip
         # TODO: Make toPandas support complex nested types like Array<Struct>

@@ -51,7 +51,7 @@ def _invoke_function(name: str, *args: Union[Column, Expression]) -> Column:
 
     Returns
     -------
-    :class:`UnresolvedFunction`
+    :class:`Column`
     """
     expressions: List[Expression] = []
     for arg in args:
@@ -161,6 +161,9 @@ def col(col: str) -> Column:
     return Column(ColumnReference(col))
 
 
+col.__doc__ = pysparkfuncs.col.__doc__
+
+
 column = col
 
 
@@ -170,8 +173,7 @@ def lit(col: Any) -> Column:
     elif isinstance(col, list):
         return array(*[lit(c) for c in col])
     else:
-        dataType = LiteralExpression._infer_type(col)
-        return Column(LiteralExpression(col, dataType))
+        return Column(LiteralExpression._from_value(col))
 
 
 lit.__doc__ = pysparkfuncs.lit.__doc__

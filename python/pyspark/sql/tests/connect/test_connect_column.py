@@ -228,8 +228,8 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         # |               null|2022-12-22|null|
         # +-------------------+----------+----+
 
-        cdf = self.spark.sql(query)
-        sdf = self.connect.sql(query)
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
 
         # datetime.date
         self.assert_eq(
@@ -286,8 +286,8 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         # |  3|   3|  4| 3.5|
         # +---+----+---+----+
 
-        cdf = self.spark.sql(query)
-        sdf = self.connect.sql(query)
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
 
         self.assert_eq(
             cdf.select(cdf.a < decimal.Decimal(3)).toPandas(),
@@ -308,6 +308,42 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assert_eq(
             cdf.select(cdf.d >= decimal.Decimal(3.0)).toPandas(),
             sdf.select(sdf.d >= decimal.Decimal(3.0)).toPandas(),
+        )
+
+    def test_none(self):
+        # SPARK-41783: test none
+
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        query = """
+            SELECT * FROM VALUES
+            (1, 1, NULL), (2, NULL, 1), (NULL, 3, 4)
+            AS tab(a, b, c)
+            """
+
+        # +----+----+----+
+        # |   a|   b|   c|
+        # +----+----+----+
+        # |   1|   1|null|
+        # |   2|null|   1|
+        # |null|   3|   4|
+        # +----+----+----+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        self.assert_eq(
+            cdf.select(cdf.b > None, CF.col("c") >= None).toPandas(),
+            sdf.select(sdf.b > None, SF.col("c") >= None).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.b < None, CF.col("c") <= None).toPandas(),
+            sdf.select(sdf.b < None, SF.col("c") <= None).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(cdf.b.eqNullSafe(None), CF.col("c").eqNullSafe(None)).toPandas(),
+            sdf.select(sdf.b.eqNullSafe(None), SF.col("c").eqNullSafe(None)).toPandas(),
         )
 
     def test_simple_binary_expressions(self):
@@ -760,8 +796,8 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         )
 
         self.assert_eq(
-            cdf.select(cdf.a % cdf["b"], cdf["a"] % 2).toPandas(),
-            sdf.select(sdf.a % sdf["b"], sdf["a"] % 2).toPandas(),
+            cdf.select(cdf.a % cdf["b"], cdf["a"] % 2, 12 % cdf.c).toPandas(),
+            sdf.select(sdf.a % sdf["b"], sdf["a"] % 2, 12 % sdf.c).toPandas(),
         )
 
         self.assert_eq(
@@ -930,8 +966,12 @@ class SparkConnectTests(SparkConnectSQLTestCase):
 
 
 if __name__ == "__main__":
+    import os
     import unittest
     from pyspark.sql.tests.connect.test_connect_column import *  # noqa: F401
+
+    # TODO(SPARK-41794): Enable ANSI mode in this file.
+    os.environ["SPARK_ANSI_SQL_MODE"] = "false"
 
     try:
         import xmlrunner
