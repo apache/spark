@@ -1194,6 +1194,34 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         ):
             self.connect.read.table(self.tbl_name2).stat.freqItems("col1")
 
+    def test_stat_sample_by(self):
+        # SPARK-41069: Test stat.sample_by
+
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        cdf = self.connect.range(0, 100).select((CF.col("id") % 3).alias("key"))
+        sdf = self.spark.range(0, 100).select((SF.col("id") % 3).alias("key"))
+
+        self.assert_eq(
+            cdf.sampleBy(cdf.key, fractions={0: 0.1, 1: 0.2}, seed=0)
+            .groupBy("key")
+            .agg(CF.count(CF.lit(1)))
+            .orderBy("key")
+            .toPandas(),
+            sdf.sampleBy(sdf.key, fractions={0: 0.1, 1: 0.2}, seed=0)
+            .groupBy("key")
+            .agg(SF.count(SF.lit(1)))
+            .orderBy("key")
+            .toPandas(),
+        )
+
+        with self.assertRaisesRegex(TypeError, "key must be float, int, or string"):
+            cdf.stat.sampleBy(cdf.key, fractions={0: 0.1, None: 0.2}, seed=0)
+
+        with self.assertRaises(SparkConnectException):
+            cdf.sampleBy(cdf.key, fractions={0: 0.1, 1: 1.2}, seed=0).show()
+
     def test_repr(self):
         # SPARK-41213: Test the __repr__ method
         query = """SELECT * FROM VALUES (1L, NULL), (3L, "Z") AS tab(a, b)"""
