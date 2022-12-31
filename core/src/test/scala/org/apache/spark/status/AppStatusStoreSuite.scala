@@ -22,7 +22,7 @@ import scala.util.Random
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.config.History.{HYBRID_STORE_DISK_BACKEND, HybridStoreDiskBackend}
-import org.apache.spark.internal.config.Status.{LIVE_ENTITY_UPDATE_PERIOD, LIVE_UI_LOCAL_STORE_DIR}
+import org.apache.spark.internal.config.Status.{LIVE_ENTITY_UPDATE_PERIOD, LIVE_UI_USE_DISK_STORE_ENABLED}
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.{SparkListenerStageSubmitted, SparkListenerTaskStart, StageInfo, TaskInfo, TaskLocality}
 import org.apache.spark.status.api.v1.SpeculationStageSummary
@@ -89,8 +89,7 @@ class AppStatusStoreSuite extends SparkFunSuite {
     val conf = new SparkConf()
     if (live) {
       if (disk) {
-        val testDir = Utils.createTempDir()
-        conf.set(LIVE_UI_LOCAL_STORE_DIR, testDir.getCanonicalPath)
+        conf.set(LIVE_UI_USE_DISK_STORE_ENABLED, true)
       }
       val liveStore = AppStatusStore.createLiveStore(conf)
       if (disk) {

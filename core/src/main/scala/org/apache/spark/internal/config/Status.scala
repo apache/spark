@@ -71,10 +71,11 @@ private[spark] object Status {
       .booleanConf
       .createWithDefault(false)
 
-  val LIVE_UI_LOCAL_STORE_DIR = ConfigBuilder("spark.ui.store.path")
-    .doc("Local directory where to cache application information for live UI. By default this is " +
-      "not set, meaning all application information will be kept in memory.")
+  val LIVE_UI_USE_DISK_STORE_ENABLED = ConfigBuilder("spark.ui.useDiskStore.enabled")
+    .doc("If true, Spark will use disk store to cache application information for live UI, " +
+      "the disk store implementation is RocksDB now. By default, this is false, meaning all " +
+      "application information will be kept in memory.")
     .version("3.4.0")
-    .stringConf
-    .createOptional
+    .booleanConf
+    .createWithDefault(false)
 }

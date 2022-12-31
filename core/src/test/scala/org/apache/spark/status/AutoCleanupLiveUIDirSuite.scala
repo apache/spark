@@ -18,17 +18,18 @@
 package org.apache.spark.status
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
-import org.apache.spark.internal.config.Status.LIVE_UI_LOCAL_STORE_DIR
+import org.apache.spark.internal.config.Status.LIVE_UI_USE_DISK_STORE_ENABLED
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
 
 class AutoCleanupLiveUIDirSuite extends SparkFunSuite {
 
   test(s"auto cleanup spark ui store path") {
-    val storePath = Utils.createTempDir()
+    val localDir = Utils.createTempDir()
     try {
       val conf = new SparkConf().setAppName("ui-dir-cleanup").setMaster("local")
-        .set(LIVE_UI_LOCAL_STORE_DIR, storePath.getCanonicalPath)
+        .set(LIVE_UI_USE_DISK_STORE_ENABLED, true)
+        .set("spark.local.dir", localDir.getCanonicalPath)
       val sc = new SparkContext(conf)
       sc.parallelize(0 until 100, 10)
         .map { x => (x % 10) -> x }
@@ -36,15 +37,19 @@ class AutoCleanupLiveUIDirSuite extends SparkFunSuite {
           _ + _
         }
         .collect()
-      // `storePath` should exists and not emtpy before SparkContext stop.
-      assert(storePath.exists())
-      assert(storePath.listFiles().nonEmpty)
+      // `localDir` should exists and not emtpy before SparkContext stop.
+      assert(localDir.exists())
+      val subDirs = localDir.listFiles()
+      assert(subDirs.nonEmpty)
+      // subDirs contains `blockmgr-*` and `spark-ui-*`
+      val uiDirs = subDirs.filter(_.getName.startsWith("spark-ui"))
+      assert(uiDirs.length == 1)
+      assert(uiDirs.head.listFiles().nonEmpty)
       sc.stop()
-      assert(storePath.exists())
-      assert(storePath.listFiles().isEmpty)
+      assert(!uiDirs.head.exists())
     } finally {
-      JavaUtils.deleteRecursively(storePath)
-      assert(!storePath.exists())
+      JavaUtils.deleteRecursively(localDir)
+      assert(!localDir.exists())
     }
   }
 }
