@@ -14,16 +14,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
 from threading import RLock
 from collections.abc import Sized
+from functools import reduce
 
 import numpy as np
 import pandas as pd
 import pyarrow as pa
 
 from pyspark.sql.session import classproperty, SparkSession as PySparkSession
-from pyspark.sql.types import DataType, StructType
+from pyspark.sql.types import (
+    _infer_schema,
+    _has_nulltype,
+    _merge_type,
+    Row,
+    DataType,
+    StructType,
+)
 from pyspark.sql.utils import to_str
 
 from pyspark.sql.connect.client import SparkConnectClient
@@ -49,7 +56,7 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.catalog import Catalog
 
 
-class SparkSession(object):
+class SparkSession:
     class Builder:
         """Builder for :class:`SparkSession`."""
 
@@ -132,6 +139,40 @@ class SparkSession(object):
 
     read.__doc__ = PySparkSession.read.__doc__
 
+    def _inferSchemaFromList(
+        self, data: Iterable[Any], names: Optional[List[str]] = None
+    ) -> StructType:
+        """
+        Infer schema from list of Row, dict, or tuple.
+
+        Refer to 'pyspark.sql.session._inferSchemaFromList' with default configurations:
+
+          - 'infer_dict_as_struct' : False
+          - 'infer_array_from_first_element' : False
+          - 'prefer_timestamp_ntz' : False
+        """
+        if not data:
+            raise ValueError("can not infer schema from empty dataset")
+        infer_dict_as_struct = False
+        infer_array_from_first_element = False
+        prefer_timestamp_ntz = False
+        schema = reduce(
+            _merge_type,
+            (
+                _infer_schema(
+                    row,
+                    names,
+                    infer_dict_as_struct=infer_dict_as_struct,
+                    infer_array_from_first_element=infer_array_from_first_element,
+                    prefer_timestamp_ntz=prefer_timestamp_ntz,
+                )
+                for row in data
+            ),
+        )
+        if _has_nulltype(schema):
+            raise ValueError("Some of types cannot be determined after inferring")
+        return schema
+
     def createDataFrame(
         self,
         data: Union["pd.DataFrame", "np.ndarray", Iterable[Any]],
@@ -175,7 +216,15 @@ class SparkSession(object):
                     _cols = ["_%s" % i for i in range(1, data.shape[1] + 1)]
 
         else:
-            pdf = pd.DataFrame(list(data))
+            _data = list(data)
+            pdf = pd.DataFrame(_data)
+
+            if _schema is None and isinstance(_data[0], Row):
+                _schema = self._inferSchemaFromList(_data, _cols)
+                if _cols is not None:
+                    for i, name in enumerate(_cols):
+                        _schema.fields[i].name = name
+                        _schema.names[i] = name
 
             if _cols is None:
                 _cols = ["_%s" % i for i in range(1, pdf.shape[1] + 1)]
