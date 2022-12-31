@@ -45,7 +45,6 @@ from pyspark.sql.connect.expressions import (
     WindowExpression,
     WithField,
     DropField,
-    UnresolvedBinaryFunction,
 )
 
 
@@ -95,8 +94,6 @@ def _unary_op(name: str, doc: Optional[str] = "unary function") -> Callable[["Co
 
 
 def scalar_function(op: str, *args: "Column") -> "Column":
-    if len(args) == 2:
-        return Column(UnresolvedBinaryFunction(op, [arg._expr for arg in args]))
     return Column(UnresolvedFunction(op, [arg._expr for arg in args]))
 
 
