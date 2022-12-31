@@ -674,7 +674,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
     // All sub-fields all not nullable
     val analyzedStruct = analyzedSchema.fields.head.dataType.asInstanceOf[StructType]
     val executedStruct = executedSchema.fields.head.dataType.asInstanceOf[StructType]
-    assert(analyzedStruct.fields.forall(!_.nullable))
-    assert(executedStruct.fields.forall(!_.nullable))
+    assert(analyzedStruct.fields.forall(!_.nullable), analyzedStruct.fields.mkString(", "))
+    assert(executedStruct.fields.forall(!_.nullable), executedStruct.fields.mkString(", "))
   }
 }

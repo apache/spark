@@ -228,23 +228,23 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
           field.name match {
             case FileFormat.ROW_INDEX =>
               if ((readDataColumns ++ partitionColumns).map(_.name.toLowerCase(Locale.ROOT))
-                .contains(FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME)) {
-              throw new AnalysisException(FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME +
-                " is a reserved column name that cannot be read in combination with " +
-                s"${FileFormat.METADATA_NAME}.${FileFormat.ROW_INDEX} column.")
-          }
-          fileFormatReaderGeneratedMetadataColumns +=
-            FileSourceGeneratedMetadataAttribute(
-              FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME, LongType)
-          case _ =>
-            fileConstantMetadataColumns +=
-              FileSourceConstantMetadataAttribute(field.name, field.dataType, field.nullable)
+                  .contains(FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME)) {
+                throw new AnalysisException(FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME +
+                  " is a reserved column name that cannot be read in combination with " +
+                  s"${FileFormat.METADATA_NAME}.${FileFormat.ROW_INDEX} column.")
+              }
+              fileFormatReaderGeneratedMetadataColumns +=
+                FileSourceGeneratedMetadataAttribute(
+                  FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME, LongType, nullable = true)
+            case _ =>
+              fileConstantMetadataColumns +=
+                FileSourceConstantMetadataAttribute(field.name, field.dataType)
         }
       }
   }
 
   val metadataColumns: Seq[Attribute] =
-    fileConstantMetadataColumns ++ fileFormatReaderGeneratedMetadataColumns
+    fileConstantMetadataColumns.toSeq ++ fileFormatReaderGeneratedMetadataColumns.toSeq
 
       val outputDataSchema = (readDataColumns ++ fileFormatReaderGeneratedMetadataColumns)
         .toStructType
@@ -277,7 +277,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
             case FileFormat.FILE_PATH | FileFormat.FILE_NAME | FileFormat.FILE_SIZE |
                  FileFormat.FILE_MODIFICATION_TIME =>
               col
-            case FileFormat.ROW_INDEX | FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME =>
+            case FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME =>
               fileFormatReaderGeneratedMetadataColumns
                 .find(_.name == FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME)
                 // Change the `_tmp_metadata_row_index` to `row_index`,
