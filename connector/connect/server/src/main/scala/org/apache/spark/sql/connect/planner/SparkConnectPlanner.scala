@@ -410,7 +410,7 @@ class SparkConnectPlanner(session: SparkSession) {
   }
 
   private def transformStatFreqItems(rel: proto.StatFreqItems): LogicalPlan = {
-    val cols = rel.getColsList.asScala
+    val cols = rel.getColsList.asScala.toSeq
     val df = Dataset.ofRows(session, transformRelation(rel.getInput))
     if (rel.hasSupport) {
       df.stat.freqItems(cols, rel.getSupport).logicalPlan
