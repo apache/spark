@@ -167,9 +167,6 @@ col.__doc__ = pysparkfuncs.col.__doc__
 column = col
 
 
-column.__doc__ = pysparkfuncs.column.__doc__
-
-
 def lit(col: Any) -> Column:
     if isinstance(col, Column):
         return col
