@@ -605,19 +605,19 @@ NULL
 
 
 -- !query
-select array_insert(array(1, 2, 3), cast(NULL as INT), 4)
+select array_insert(array(1, 2, 3, NULL), cast(NULL as INT), 4)
 -- !query schema
-struct<array_insert(array(1, 2, 3), CAST(NULL AS INT), 4):array<int>>
+struct<array_insert(array(1, 2, 3, NULL), CAST(NULL AS INT), 4):array<int>>
 -- !query output
 NULL
 
 
 -- !query
-select array_insert(array(1, 2, 3), 4, cast(NULL as INT))
+select array_insert(array(1, 2, 3, NULL), 4, cast(NULL as INT))
 -- !query schema
-struct<array_insert(array(1, 2, 3), 4, CAST(NULL AS INT)):array<int>>
+struct<array_insert(array(1, 2, 3, NULL), 4, CAST(NULL AS INT)):array<int>>
 -- !query output
-[1,2,3,0]
+[1,2,3,null,null]
 
 
 -- !query

@@ -2274,9 +2274,9 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val litFourInt = Literal.create(4, IntegerType)
     val litNullInt = Literal.create(null, IntegerType)
     val litZeroInt = Literal.create(0, IntegerType)
-    val litHundredInt = Literal.create(100, IntegerType)
+    val litTenInt = Literal.create(10, IntegerType)
     val litMinusTwoInt = Literal.create(-2, IntegerType)
-    val litMinusHundredInt = Literal.create(-100, IntegerType)
+    val litMinusTenInt = Literal.create(-10, IntegerType)
     val litThreeLong = Literal.create(3L, LongType)
     val litBoolTrue = Literal.create(true, BooleanType)
     val litThreeByte = Literal.create(5.asInstanceOf[Byte], ByteType)
@@ -2306,13 +2306,20 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
     // index edge cases
     checkEvaluation(ArrayInsert(a1, litOneInt, litThreeInt), Seq(3, 1, 2, 4))
+    checkEvaluation(ArrayInsert(a1, litZeroInt, litThreeInt), Seq(3, 1, 2, 4))
     checkEvaluation(ArrayInsert(a1, litFourInt, litThreeInt), Seq(1, 2, 4, 3))
     checkEvaluation(ArrayInsert(a1, litMinusTwoInt, litThreeInt), Seq(1, 3, 2, 4))
-    checkEvaluation(ArrayInsert(a1, litZeroInt, litThreeInt), Seq(3, 1, 2, 4))
-    checkEvaluation(ArrayInsert(a1, litHundredInt, litThreeInt), null)
-    checkEvaluation(ArrayInsert(a1, litMinusHundredInt, litThreeInt), null)
+    checkEvaluation(
+      ArrayInsert(a1, litTenInt, litThreeInt),
+      Seq(1, 2, 4, null, null, null, null, null, null, 3)
+    )
+    checkEvaluation(
+      ArrayInsert(a1, litMinusTenInt, litThreeInt),
+      Seq(3, null, null, null, null, null, null, null, 1, 2, 4)
+    )
 
     // null handling
+    checkEvaluation(ArrayInsert(a1, litThreeInt, litNullInt), Seq(1, 2, null, 4))
     checkEvaluation(ArrayInsert(a2, litThreeInt, litThreeInt), Seq(1, 2, 3, null, 4, 5, null))
     checkEvaluation(ArrayInsert(a16, litThreeInt, litDString), Seq("b", null, "d", "a", "g", null))
     checkEvaluation(ArrayInsert(a18, litThreeInt, litDString), null)

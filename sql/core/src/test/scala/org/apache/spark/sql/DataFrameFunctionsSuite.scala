@@ -3129,7 +3129,11 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df6.selectExpr("array_insert(a, b, c)"), Seq(Row(Seq("a", null, "b", "c", "d"))))
     checkAnswer(df5.select(
       array_insert(col("a"), col("b"), lit(null).cast("string"))),
-      Seq(Row(null))
+      Seq(Row(Seq(null, "a", "b", "c")))
+    )
+    checkAnswer(df6.select(
+      array_insert(col("a"), col("b"), lit(null).cast("string"))),
+      Seq(Row(Seq("a", null, "b", "c", null)))
     )
     checkAnswer(
       df5.select(array_insert(col("a"), lit(null).cast("integer"), col("c"))),
@@ -3141,7 +3145,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     )
     checkAnswer(df1.selectExpr("array_insert(a, 7, c)"), Seq(Row(null)))
     checkAnswer(df1.selectExpr("array_insert(a, -6, c)"), Seq(Row(null)))
-
   }
 
   test("transform function - array for primitive type not containing null") {

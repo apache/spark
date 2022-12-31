@@ -4660,52 +4660,53 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
       val value2 = second.eval(input)
       if (value2 != null) {
         val value3 = third.eval(input)
-        return maybeNullItemEval(value1, value2, value3)
+        return nullSafeEval(value1, value2, value3)
       }
     }
     null
   }
 
-  def maybeNullItemEval(arr: Any, pos: Any, item: Any): Any = {
-      val baseArr = arr.asInstanceOf[ArrayData]
-      val posInt = pos.asInstanceOf[Int]
-      val arrayElementType = dataType.asInstanceOf[ArrayType].elementType
+  override def nullSafeEval(arr: Any, pos: Any, item: Any): Any = {
+    val baseArr = arr.asInstanceOf[ArrayData]
+    val posInt = pos.asInstanceOf[Int]
+    val arrayElementType = dataType.asInstanceOf[ArrayType].elementType
 
-      val insertionIndex = if (posInt > 0) {
-        posInt - 1
-      } else if (posInt < 0) {
-        posInt + baseArr.numElements()
-      } else {
-        posInt
+    val insertionIndex = if (posInt > 0) {
+      posInt - 1
+    } else if (posInt < 0) {
+      posInt + baseArr.numElements()
+    } else {
+      posInt
+    }
+
+    val newArrayLength = if (insertionIndex >= 0) {
+      math.max(baseArr.numElements() + 1, insertionIndex + 1)
+    } else {
+      math.abs(insertionIndex) + baseArr.numElements() + 1
+    }
+
+    val newArray = new Array[Any](newArrayLength)
+
+    baseArr.foreach(arrayElementType, (i, v) => {
+      var elementPosition = i
+      if (insertionIndex < 0) {
+        elementPosition = elementPosition + 1 + math.abs(insertionIndex)
       }
-
-      val newArrayLength = if (insertionIndex >= 0) {
-        math.max(baseArr.numElements() + 1, insertionIndex + 1)
-      } else {
-        math.abs(insertionIndex) + baseArr.numElements() + 1
+      if (i >= insertionIndex && insertionIndex >= 0) {
+        elementPosition = elementPosition + 1
       }
+      newArray(elementPosition) = v
+    })
 
-      val newArray = new Array[Any](newArrayLength)
-      baseArr.foreach(arrayElementType, (i, v) => {
-        var elementPosition = i
-        if (insertionIndex < 0) {
-          elementPosition = elementPosition + 1 + math.abs(insertionIndex)
-        }
-        if (i >= insertionIndex && insertionIndex >= 0) {
-          elementPosition = elementPosition + 1
-        }
-        newArray(elementPosition) = v
-      })
+    val newItemElemPosition = if (insertionIndex >= 0) {
+      insertionIndex
+    } else {
+      0
+    }
 
-      val newItemElemPosition = if (insertionIndex >= 0) {
-        insertionIndex
-      } else {
-        0
-      }
+    newArray(newItemElemPosition) = item
 
-      newArray(newItemElemPosition) = item
-
-      new GenericArrayData(newArray)
+    return new GenericArrayData(newArray)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -4728,9 +4729,10 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
       val allocation = CodeGenerator.createArrayData(
         values, elementType, resLength, s"$prettyName failed.")
       val assignment = CodeGenerator.createArrayAssignment(values, elementType, arr,
-        adjustedAllocIdx, i, resultArrayElementNullable)
+        adjustedAllocIdx, i, true)
 
       val defaultIntValue = CodeGenerator.defaultValue(CodeGenerator.JAVA_INT, false)
+
       s"""
          |${CodeGenerator.JAVA_INT} $posIdx = 0;
          |${CodeGenerator.JAVA_INT} $resLength = $defaultIntValue;
@@ -4813,12 +4815,11 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
 
   override def prettyName: String = "array_insert"
   override def dataType: DataType = first.dataType
-  override def nullable: Boolean = true
+  override def nullable: Boolean = first.nullable | second.nullable
 
   @transient private lazy val elementType: DataType =
     srcArrayExpr.dataType.asInstanceOf[ArrayType].elementType
 
-  private def resultArrayElementNullable = true
 
   override protected def withNewChildrenInternal(
       newSrcArrayExpr: Expression, newPosExpr: Expression, newItemExpr: Expression): ArrayInsert =
