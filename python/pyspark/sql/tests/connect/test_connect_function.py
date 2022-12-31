@@ -864,6 +864,57 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
                 ccol.over(CW.orderBy("b").rowsBetween(CW.unboundedPreceding, CW.currentRow))
             ).show()
 
+    def test_window_order(self):
+        # SPARK-41773: test window function with order
+
+        from pyspark.sql import functions as SF
+        from pyspark.sql.window import Window as SW
+        from pyspark.sql.connect import functions as CF
+        from pyspark.sql.connect.window import Window as CW
+
+        data = [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")]
+        # +---+--------+
+        # | id|category|
+        # +---+--------+
+        # |  1|       a|
+        # |  1|       a|
+        # |  2|       a|
+        # |  1|       b|
+        # |  2|       b|
+        # |  3|       b|
+        # +---+--------+
+
+        cdf = self.connect.createDataFrame(data, ["id", "category"])
+        sdf = self.spark.createDataFrame(data, ["id", "category"])
+
+        cw = CW.partitionBy("id").orderBy("category")
+        sw = SW.partitionBy("id").orderBy("category")
+        self.assert_eq(
+            cdf.withColumn("row_number", CF.row_number().over(cw)).toPandas(),
+            sdf.withColumn("row_number", SF.row_number().over(sw)).toPandas(),
+        )
+
+        cw = CW.partitionBy("category").orderBy("id")
+        sw = SW.partitionBy("category").orderBy("id")
+        self.assert_eq(
+            cdf.withColumn("row_number", CF.row_number().over(cw)).toPandas(),
+            sdf.withColumn("row_number", SF.row_number().over(sw)).toPandas(),
+        )
+
+        cw = CW.partitionBy("category").orderBy("id").rowsBetween(CW.currentRow, 1)
+        sw = SW.partitionBy("category").orderBy("id").rowsBetween(SW.currentRow, 1)
+        self.assert_eq(
+            cdf.withColumn("sum", CF.sum("id").over(cw)).sort("id", "category", "sum").toPandas(),
+            sdf.withColumn("sum", SF.sum("id").over(sw)).sort("id", "category", "sum").toPandas(),
+        )
+
+        cw = CW.partitionBy("category").orderBy("id").rangeBetween(CW.currentRow, 1)
+        sw = SW.partitionBy("category").orderBy("id").rangeBetween(SW.currentRow, 1)
+        self.assert_eq(
+            cdf.withColumn("sum", CF.sum("id").over(cw)).sort("id", "category").toPandas(),
+            sdf.withColumn("sum", SF.sum("id").over(sw)).sort("id", "category").toPandas(),
+        )
+
     def test_collection_functions(self):
         from pyspark.sql import functions as SF
         from pyspark.sql.connect import functions as CF
