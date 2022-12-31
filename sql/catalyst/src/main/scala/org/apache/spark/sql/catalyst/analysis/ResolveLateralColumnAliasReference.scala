@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeMap, Expression, LateralColumnAliasReference, LeafExpression, Literal, NamedExpression, ScalarSubquery}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, Expression, LateralColumnAliasReference, NamedExpression, ScalarSubquery}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -168,8 +168,8 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
             && aggregateExpressions.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
 
           // Check if current Aggregate is eligible to lift up with Project: the aggregate
-          // expression only contains: 1) aggregate functions, 2) grouping expressions, 3) lateral
-          // column alias reference or 4) literals.
+          // expression only contains: 1) aggregate functions, 2) grouping expressions, 3) leaf
+          // expressions excluding attributes not in grouping expressions
           // This check is to prevent unnecessary transformation on invalid plan, to guarantee it
           // throws the same exception. For example, cases like non-aggregate expressions not
           // in group by, once transformed, will throw a different exception: missing input.
@@ -177,10 +177,9 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
             exp match {
               case e if AggregateExpression.isAggregate(e) => true
               case e if groupingExpressions.exists(_.semanticEquals(e)) => true
-              case _: Literal | _: LateralColumnAliasReference => true
+              case a: Attribute => false
               case s: ScalarSubquery if s.children.nonEmpty
-                  && !groupingExpressions.exists(_.semanticEquals(s)) => false
-              case _: LeafExpression => false
+                && !groupingExpressions.exists(_.semanticEquals(s)) => false
               case e => e.children.forall(eligibleToLiftUp)
             }
           }
@@ -210,14 +209,10 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
                 ne.toAttribute
             }.asInstanceOf[NamedExpression]
           }
-          if (newAggExprs.isEmpty) {
-            agg
-          } else {
-            Project(
-              projectList = projectExprs,
-              child = agg.copy(aggregateExpressions = newAggExprs.toSeq)
-            )
-          }
+          Project(
+            projectList = projectExprs,
+            child = agg.copy(aggregateExpressions = newAggExprs.toSeq)
+          )
       }
     }
   }

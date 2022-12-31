@@ -37,10 +37,8 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedSQLTestCase):
 
     @classmethod
     def tearDownClass(cls):
-        # TODO(SPARK-41529): Implement stop in RemoteSparkSession.
-        #  Stop the regular Spark session (server) too.
-        cls.spark = cls._spark
         super(DataFrameParityTests, cls).tearDownClass()
+        cls._spark.stop()
         del os.environ["SPARK_REMOTE"]
 
     @unittest.skip("Fails in Spark Connect, should enable.")
@@ -86,6 +84,10 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedSQLTestCase):
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_fillna(self):
         super().test_fillna()
+
+    @unittest.skip("Fails in Spark Connect, should enable.")
+    def test_freqItems(self):
+        super().test_freqItems()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_generic_hints(self):
@@ -146,6 +148,10 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedSQLTestCase):
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_to(self):
         super().test_to()
+
+    @unittest.skip("Fails in Spark Connect, should enable.")
+    def test_toDF_with_schema_string(self):
+        super().test_toDF_with_schema_string()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_to_local_iterator(self):

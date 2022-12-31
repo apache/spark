@@ -226,7 +226,7 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
     val conf = new SparkConf()
       .set(HYBRID_STORE_DISK_BACKEND, HybridStoreDiskBackend.LEVELDB.toString)
     val testDir = Utils.createTempDir()
-    val kvStore = KVUtils.open(testDir, getClass.getName, conf)
+    val kvStore = KVUtils.open(testDir, getClass.getName, conf, live = false)
     try {
       testStreamingQueryData(kvStore)
     } finally {
@@ -239,7 +239,7 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
     val conf = new SparkConf()
       .set(HYBRID_STORE_DISK_BACKEND, HybridStoreDiskBackend.ROCKSDB.toString)
     val testDir = Utils.createTempDir()
-    val kvStore = KVUtils.open(testDir, getClass.getName, conf)
+    val kvStore = KVUtils.open(testDir, getClass.getName, conf, live = false)
     try {
       testStreamingQueryData(kvStore)
     } finally {

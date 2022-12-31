@@ -36,18 +36,12 @@ class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mutable
     this(bindReferences(expressions, inputSchema))
 
   private[this] val subExprEliminationEnabled = SQLConf.get.subexpressionEliminationEnabled
-  private[this] lazy val runtime =
-    new SubExprEvaluationRuntime(SQLConf.get.subexpressionEliminationCacheMaxEntries)
-  private[this] val exprs = if (subExprEliminationEnabled) {
-    runtime.proxyExpressions(expressions)
-  } else {
-    expressions
-  }
+  private[this] val exprs = prepareExpressions(expressions, subExprEliminationEnabled)
 
   private[this] val buffer = new Array[Any](expressions.size)
 
   override def initialize(partitionIndex: Int): Unit = {
-    expressions.foreach(_.foreach {
+    exprs.foreach(_.foreach {
       case n: Nondeterministic => n.initialize(partitionIndex)
       case _ =>
     })
@@ -117,10 +111,6 @@ object InterpretedMutableProjection {
    * Returns a [[MutableProjection]] for given sequence of bound Expressions.
    */
   def createProjection(exprs: Seq[Expression]): MutableProjection = {
-    // We need to make sure that we do not reuse stateful expressions.
-    val cleanedExpressions = exprs.map(_.transform {
-      case s: Stateful => s.freshCopy()
-    })
-    new InterpretedMutableProjection(cleanedExpressions)
+    new InterpretedMutableProjection(exprs)
   }
 }
