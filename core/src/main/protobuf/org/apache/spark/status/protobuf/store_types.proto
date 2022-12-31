@@ -464,6 +464,16 @@ message RDDOperationGraphWrapper {
   RDDOperationClusterWrapper root_cluster = 5;
 }
 
+message StreamingQueryData {
+  string name = 1;
+  string id = 2;
+  string run_id = 3;
+  bool is_active = 4;
+  optional string exception = 5;
+  int64 start_timestamp = 6;
+  optional int64 end_timestamp = 7;
+}
+
 message StageDataWrapper {
   StageData info = 1;
   repeated int64 job_ids = 2;
