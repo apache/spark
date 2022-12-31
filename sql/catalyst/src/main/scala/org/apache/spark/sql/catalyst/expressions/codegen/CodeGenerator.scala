@@ -1271,8 +1271,11 @@ class CodegenContext extends Logging {
   def generateExpressions(
       expressions: Seq[Expression],
       doSubexpressionElimination: Boolean = false): Seq[ExprCode] = {
-    if (doSubexpressionElimination) subexpressionElimination(expressions)
-    expressions.map(e => e.genCode(this))
+    // We need to make sure that we do not reuse stateful expressions. This is needed for codegen
+    // as well because some expressions may implement `CodegenFallback`.
+    val cleanedExpressions = expressions.map(_.freshCopyIfContainsStatefulExpression())
+    if (doSubexpressionElimination) subexpressionElimination(cleanedExpressions)
+    cleanedExpressions.map(e => e.genCode(this))
   }
 
   /**
