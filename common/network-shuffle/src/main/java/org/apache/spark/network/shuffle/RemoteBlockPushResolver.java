@@ -229,13 +229,13 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
             // happens in the indeterminate stage retries
             AppAttemptShuffleMergeId currrentAppAttemptShuffleMergeId =
                 new AppAttemptShuffleMergeId(appShuffleInfo.appId, appShuffleInfo.attemptId,
-                        shuffleId, latestShuffleMergeId);
+                    shuffleId, latestShuffleMergeId);
             logger.info("{}: creating a new shuffle merge metadata since received " +
                 "shuffleMergeId {} is higher than latest shuffleMergeId {}",
-                    currrentAppAttemptShuffleMergeId, shuffleMergeId, latestShuffleMergeId);
+                currrentAppAttemptShuffleMergeId, shuffleMergeId, latestShuffleMergeId);
             submitCleanupTask(() ->
                 closeAndDeleteOutdatedPartitions(currrentAppAttemptShuffleMergeId,
-                        mergePartitionsInfo.shuffleMergePartitions));
+                    mergePartitionsInfo.shuffleMergePartitions));
             return new AppShuffleMergePartitionsInfo(shuffleMergeId, false);
           } else {
             // The request is for block with same shuffleMergeId as the latest shuffleMergeId
