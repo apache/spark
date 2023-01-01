@@ -2765,6 +2765,21 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         psser = ps.from_pandas(pser)
         self.assert_eq(pser.first_valid_index(), psser.first_valid_index())
 
+    def test_transpose_int(self):
+        pser = pd.Series([1, 2, 3])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pser.transpose(), psser.transpose())
+
+    def test_transpose_char(self):
+        pser = pd.Series(['a', 'b', 'c'])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pser.transpose(), psser.transpose())
+
+    def test_transpose_emty(self):
+        pser = pd.Series([])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pser.transpose(), psser.transpose())
+
     def test_factorize(self):
         pser = pd.Series(["a", "b", "a", "b"])
         psser = ps.from_pandas(pser)
