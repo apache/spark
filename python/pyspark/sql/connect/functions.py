@@ -17,7 +17,18 @@
 
 import inspect
 import warnings
-from typing import Any, TYPE_CHECKING, Union, List, overload, Optional, Tuple, Callable, ValuesView
+from typing import (
+    Any,
+    Dict,
+    TYPE_CHECKING,
+    Union,
+    List,
+    overload,
+    Optional,
+    Tuple,
+    Callable,
+    ValuesView,
+)
 
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import (
@@ -152,6 +163,14 @@ def _invoke_higher_order_function(
     _funs = [_create_lambda(f) for f in funs]
 
     return _invoke_function(name, *_cols, *_funs)
+
+
+def _options_to_col(options: Dict[str, Any]) -> Column:
+    _options: List[Column] = []
+    for k, v in options.items():
+        _options.append(lit(str(k)))
+        _options.append(lit(str(v)))
+    return create_map(*_options)
 
 
 # Normal Functions
@@ -1255,6 +1274,7 @@ forall.__doc__ = pysparkfuncs.forall.__doc__
 def from_csv(
     col: "ColumnOrName",
     schema: Union[Column, str],
+    options: Optional[Dict[str, str]] = None,
 ) -> Column:
     if isinstance(schema, Column):
         _schema = schema
@@ -1263,7 +1283,10 @@ def from_csv(
     else:
         raise TypeError(f"schema should be a Column or str, but got {type(schema).__name__}")
 
-    return _invoke_function("from_csv", _to_col(col), _schema)
+    if options is None:
+        return _invoke_function("from_csv", _to_col(col), _schema)
+    else:
+        return _invoke_function("from_csv", _to_col(col), _schema, _options_to_col(options))
 
 
 from_csv.__doc__ = pysparkfuncs.from_csv.__doc__
@@ -1428,8 +1451,7 @@ def sequence(
 sequence.__doc__ = pysparkfuncs.sequence.__doc__
 
 
-# TODO(SPARK-41493): Support options
-def schema_of_csv(csv: "ColumnOrName") -> Column:
+def schema_of_csv(csv: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
     if isinstance(csv, Column):
         _csv = csv
     elif isinstance(csv, str):
@@ -1437,7 +1459,10 @@ def schema_of_csv(csv: "ColumnOrName") -> Column:
     else:
         raise TypeError(f"csv should be a Column or str, but got {type(csv).__name__}")
 
-    return _invoke_function("schema_of_csv", _csv)
+    if options is None:
+        return _invoke_function("schema_of_csv", _csv)
+    else:
+        return _invoke_function("schema_of_csv", _csv, _options_to_col(options))
 
 
 schema_of_csv.__doc__ = pysparkfuncs.schema_of_csv.__doc__
@@ -1513,9 +1538,11 @@ def struct(
 struct.__doc__ = pysparkfuncs.struct.__doc__
 
 
-# TODO(SPARK-41493): Support options
-def to_csv(col: "ColumnOrName") -> Column:
-    return _invoke_function("to_csv", _to_col(col))
+def to_csv(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
+    if options is None:
+        return _invoke_function("to_csv", _to_col(col))
+    else:
+        return _invoke_function("to_csv", _to_col(col), _options_to_col(options))
 
 
 to_csv.__doc__ = pysparkfuncs.to_csv.__doc__

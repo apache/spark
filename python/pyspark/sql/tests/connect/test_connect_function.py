@@ -1528,17 +1528,43 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
                 SF.from_csv("b", SF.lit("x STRING, y STRING, z DOUBLE")),
             ),
         )
+        self.compare_by_show(
+            cdf.select(
+                CF.from_csv(cdf.a, CF.lit("a INT, b INT, c INT"), {"maxCharsPerColumn": "3"}),
+                CF.from_csv(
+                    "b", CF.lit("x STRING, y STRING, z DOUBLE"), {"maxCharsPerColumn": "3"}
+                ),
+            ),
+            sdf.select(
+                SF.from_csv(sdf.a, SF.lit("a INT, b INT, c INT"), {"maxCharsPerColumn": "3"}),
+                SF.from_csv(
+                    "b", SF.lit("x STRING, y STRING, z DOUBLE"), {"maxCharsPerColumn": "3"}
+                ),
+            ),
+        )
 
         # test schema_of_csv
         self.assert_eq(
             cdf.select(CF.schema_of_csv(CF.lit('{"a": 0}'))).toPandas(),
             sdf.select(SF.schema_of_csv(SF.lit('{"a": 0}'))).toPandas(),
         )
+        self.assert_eq(
+            cdf.select(
+                CF.schema_of_csv(CF.lit('{"a": 0}'), {"maxCharsPerColumn": "10"})
+            ).toPandas(),
+            sdf.select(
+                SF.schema_of_csv(SF.lit('{"a": 0}'), {"maxCharsPerColumn": "10"})
+            ).toPandas(),
+        )
 
         # test to_csv
         self.compare_by_show(
             cdf.select(CF.to_csv(CF.struct(CF.lit("a"), CF.lit("b")))),
             sdf.select(SF.to_csv(SF.struct(SF.lit("a"), SF.lit("b")))),
+        )
+        self.compare_by_show(
+            cdf.select(CF.to_csv(CF.struct(CF.lit("a"), CF.lit("b")), {"maxCharsPerColumn": "10"})),
+            sdf.select(SF.to_csv(SF.struct(SF.lit("a"), SF.lit("b")), {"maxCharsPerColumn": "10"})),
         )
 
     def test_json_functions(self):
