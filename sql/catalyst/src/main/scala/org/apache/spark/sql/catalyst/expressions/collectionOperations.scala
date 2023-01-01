@@ -4854,3 +4854,4 @@ case class ArrayCompact(child: Expression)
   override protected def withNewChildInternal(newChild: Expression): ArrayCompact =
     copy(child = newChild)
 }
+
