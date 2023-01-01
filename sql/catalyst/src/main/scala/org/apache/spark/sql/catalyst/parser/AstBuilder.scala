@@ -661,16 +661,16 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   }
 
   override def visitNamedExpressionSeq(
-      ctx: NamedExpressionSeqContext): Seq[Expression] = {
+      ctx: NamedExpressionSeqContext): Seq[(Expression, String)] = {
     Option(ctx).toSeq
       .flatMap(_.namedExpression.asScala)
-      .map(typedVisit[Expression])
+      .map(parseTree => (typedVisit[Expression](parseTree), parseTree.getText))
   }
 
-  override def visitExpressionSeq(ctx: ExpressionSeqContext): Seq[Expression] = {
+  override def visitExpressionSeq(ctx: ExpressionSeqContext): Seq[(Expression, String)] = {
     Option(ctx).toSeq
       .flatMap(_.expression.asScala)
-      .map(typedVisit[Expression])
+      .map(parseTree => (typedVisit[Expression](parseTree), parseTree.getText))
   }
 
   /**
@@ -784,7 +784,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
 
   def visitCommonSelectQueryClausePlan(
       relation: LogicalPlan,
-      expressions: Seq[Expression],
+      expressions: Seq[(Expression, String)],
       lateralView: java.util.List[LateralViewContext],
       whereClause: WhereClauseContext,
       aggregationClause: AggregationClauseContext,
@@ -799,8 +799,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
 
     // Add aggregation or a project.
     val namedExpressions = expressions.map {
-      case e: NamedExpression => e
-      case e: Expression => UnresolvedAlias(e)
+      case (e: NamedExpression, _) => e
+      case (e: Expression, alias) => UnresolvedAlias(e, derivedAlias = Some(alias))
     }
 
     def createProject() = if (namedExpressions.nonEmpty) {
