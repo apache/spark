@@ -3735,7 +3735,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       AlwaysProcess.fn, ruleId) {
       case i: InsertIntoStatement if !i.table.isInstanceOf[DataSourceV2Relation] &&
-        i.table.resolved && i.query.resolved && i.userSpecifiedCols.nonEmpty =>
+          i.table.resolved && i.query.resolved && i.userSpecifiedCols.nonEmpty =>
         val resolved = resolveUserSpecifiedColumns(i)
         val projection = addColumnListOnQuery(i.table.output, resolved, i.query)
         i.copy(userSpecifiedCols = Nil, query = projection)
