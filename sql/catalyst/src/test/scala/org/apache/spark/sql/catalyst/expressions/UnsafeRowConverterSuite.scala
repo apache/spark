@@ -687,4 +687,24 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
     val fields5 = Array[DataType](udt)
     assert(convertBackToInternalRow(udtRow, fields5) === udtRow)
   }
+
+  testBothCodegenAndInterpreted("SPARK-41804: Array of UDTs") {
+    val doubleArray1 = Array[Double](1.0, 3.0, 5.0)
+    val doubleArray2 = Array[Double](7.0, 9.0, 11.0)
+    val udt = new OddSizeStructUDT
+    val odd1 = udt.serialize(MyOddSizeStruct(doubleArray1))
+    val odd2 = udt.serialize(MyOddSizeStruct(doubleArray2))
+    val outerArray = new GenericArrayData(Seq(odd1, odd2))
+    val row = new GenericInternalRow(Array[Any](outerArray))
+    val unsafeProj = UnsafeProjection.create(Array[DataType](ArrayType(udt)))
+    val unsafeRow = unsafeProj.apply(row)
+    // get the outer array (the array of UDTs)
+    val unsafeOuterArray = unsafeRow.getArray(0)
+    // get second element from the outer array (the second serialized MyOddSizeStruct instance)
+    val unsafeStruct = unsafeOuterArray.getStruct(1, 3)
+    // get the 3rd field from the serialized MyOddSizeStruct instance
+    val unsafeInnerArray = unsafeStruct.getArray(2)
+    val result = unsafeInnerArray.toDoubleArray
+    assert(result.toSeq == doubleArray2.toSeq)
+  }
 }

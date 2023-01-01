@@ -18,7 +18,7 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 
 
@@ -131,4 +131,48 @@ private[spark] class ExampleSubTypeUDT extends UserDefinedType[IExampleSubType] 
   }
 
   override def userClass: Class[IExampleSubType] = classOf[IExampleSubType]
+}
+
+case class MyOddSizeStruct(data: Array[Double]) {
+  override def hashCode(): Int = java.util.Arrays.hashCode(data)
+
+  override def equals(other: Any): Boolean = other match {
+    case v: MyOddSizeStruct => java.util.Arrays.equals(this.data, v.data)
+    case _ => false
+  }
+
+  override def toString: String = data.mkString("(", ", ", ")")
+}
+
+class OddSizeStructUDT extends UserDefinedType[MyOddSizeStruct] {
+  override final def sqlType: StructType = {
+    StructType(
+      Array(
+      StructField("type", ByteType, nullable = false),
+      StructField("size", IntegerType, nullable = true),
+      StructField("data", ArrayType(DoubleType, containsNull = false), nullable = true)))
+  }
+
+  override def serialize(obj: MyOddSizeStruct): InternalRow = {
+    val mo = new MyOddSizeStruct(Array(0.1d))
+
+    val row = new GenericInternalRow(3)
+    row.setByte(0, 1)
+    row.setInt(1, obj.data.size)
+    row.update(2, UnsafeArrayData.fromPrimitiveArray(obj.data))
+    row
+  }
+
+  override def deserialize(datum: Any): MyOddSizeStruct = {
+    datum match {
+      case row: InternalRow =>
+        MyOddSizeStruct(row.getArray(2).toDoubleArray())
+    }
+  }
+
+  override def userClass: Class[MyOddSizeStruct] = classOf[MyOddSizeStruct]
+
+  override def hashCode(): Int = getClass.hashCode()
+
+  override def equals(other: Any): Boolean = other.isInstanceOf[MyOddSizeStruct]
 }
