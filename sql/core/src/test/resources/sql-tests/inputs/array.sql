@@ -139,8 +139,8 @@ select array_insert(array(1, 2, 3), 4, "4");
 select array_insert(cast(NULL as ARRAY<INT>), 1, 1);
 select array_insert(array(1, 2, 3, NULL), cast(NULL as INT), 4);
 select array_insert(array(1, 2, 3, NULL), 4, cast(NULL as INT));
-select array_insert(array(2, 3, null, 4), 6, 5);
-select array_insert(array(2, 3, null, 4), -5, 1);
+select array_insert(array(2, 3, NULL, 4), 6, 5);
+select array_insert(array(2, 3, NULL, 4), -5, 1);
 
 -- function array_compact
 select array_compact(id) from values (1) as t(id);

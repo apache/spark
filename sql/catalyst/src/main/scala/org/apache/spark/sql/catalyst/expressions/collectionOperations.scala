@@ -4715,16 +4715,13 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
       val pos = posExpr.value
       val item = itemExpr.value
 
-      val expr = ctx.addReferenceObj("arrayInsertExpr", this)
-      val posIdx = ctx.freshName("posIdx")
-      val finalPosIdx = ctx.freshName("finalPosIdx")
+      val realItemPosIndex = ctx.freshName("realItemPosIndex")
+      val newPosExtendsArrayLeft = ctx.freshName("newPosExtendsArrayLeft")
       val adjustedAllocIdx = ctx.freshName("adjustedAllocIdx")
       val resLength = ctx.freshName("resLength")
       val i = ctx.freshName("i")
       val j = ctx.freshName("j")
-      val nullifyAllocIdx = ctx.freshName("nullifyAllocIdx")
       val values = ctx.freshName("values")
-      val insertedItemIsNull = ctx.freshName("insertedItemIsNull")
 
       val allocation = CodeGenerator.createArrayData(
         values, elementType, resLength, s"$prettyName failed.")
@@ -4734,46 +4731,52 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
       val defaultIntValue = CodeGenerator.defaultValue(CodeGenerator.JAVA_INT, false)
 
       s"""
-         |${CodeGenerator.JAVA_INT} $posIdx = 0;
+         |${CodeGenerator.JAVA_INT} $realItemPosIndex = 0;
+         |${CodeGenerator.JAVA_BOOLEAN} $newPosExtendsArrayLeft = false;
          |${CodeGenerator.JAVA_INT} $resLength = $defaultIntValue;
          |${CodeGenerator.JAVA_INT} $adjustedAllocIdx = $defaultIntValue;
-         |${CodeGenerator.JAVA_INT} $finalPosIdx = 0;
-         |${CodeGenerator.JAVA_BOOLEAN} $insertedItemIsNull = ${itemExpr.isNull};
-         |if ($pos < 0) {
-         |  $posIdx = $pos + $arr.numElements();
+         |
+         |if ($pos < 0 && java.lang.Math.abs($pos) > $arr.numElements()) {
+         |  $realItemPosIndex = 0;
+         |  $newPosExtendsArrayLeft = true;
+         |} else if ($pos < 0) {
+         |  $realItemPosIndex = $pos + $arr.numElements();
          |} else if ($pos > 0) {
-         |  $posIdx = $pos - 1;
+         |  $realItemPosIndex = $pos - 1;
          |}
-         |if ($posIdx >= 0) {
-         |  $resLength = java.lang.Math.max($arr.numElements() + 1, $posIdx + 1);
+         |
+         |if ($newPosExtendsArrayLeft) {
+         |  $resLength = java.lang.Math.abs($pos) + 1;
          |} else {
-         |  $resLength = java.lang.Math.abs($posIdx) + $arr.numElements() + 1;
+         |  $resLength = java.lang.Math.max($arr.numElements() + 1, $realItemPosIndex + 1);
          |}
+         |
          |$allocation
          |for (int $i = 0; $i < $arr.numElements(); $i ++) {
          |  $adjustedAllocIdx = $i;
-         |  if ($posIdx < 0) {
-         |    $adjustedAllocIdx = $adjustedAllocIdx + 1 + java.lang.Math.abs($posIdx);
+         |  if ($newPosExtendsArrayLeft) {
+         |    $adjustedAllocIdx =
+         |        $adjustedAllocIdx + 1 + java.lang.Math.abs($pos + $arr.numElements());
          |  }
-         |  if ($i >= $posIdx && $posIdx >= 0) {
+         |  if ($i >= $realItemPosIndex && !$newPosExtendsArrayLeft) {
          |    $adjustedAllocIdx = $adjustedAllocIdx + 1;
          |  }
          |  $assignment
          |}
-         |if ($posIdx >= 0) {
-         |  $finalPosIdx = $posIdx;
-         |}
+         |
          |${CodeGenerator.setArrayElement(
-            values, elementType, finalPosIdx, item, Some(insertedItemIsNull))}
-         |if ($posIdx >= 0) {
+            values, elementType, realItemPosIndex, item, Some(itemExpr.isNull))}
+         |
+         |if ($newPosExtendsArrayLeft) {
+         |  for (int $j = $pos + $arr.numElements(); $j < 0; $j ++) {
+         |    $values.setNullAt($j + 1 + java.lang.Math.abs($pos + $arr.numElements()));
+         |  }
+         |} else {
          |  for (int $j = $arr.numElements(); $j < $resLength - 1; $j ++) {
          |    $values.setNullAt($j);
          |  }
-         |} else {
-         |    for (int $j = $posIdx; $j < 0; $j ++) {
-         |      $values.setNullAt($j + 1 + java.lang.Math.abs($posIdx));
-         |    }
          |}
+         |
          |${ev.value} = $values;
        """.stripMargin
     }
