@@ -503,9 +503,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0022",
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "msg" : "contains illegal character for hexBinary: 0XuZ"
+    "value" : "'XuZ'",
+    "valueType" : "\"X\""
   },
   "queryContext" : [ {
     "objectType" : "",

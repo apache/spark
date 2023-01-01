@@ -20,11 +20,21 @@ import tempfile
 
 from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.sql import SparkSession, Row
-from pyspark.sql.types import StructType, StructField, LongType, StringType
+from pyspark.sql.types import (
+    StructType,
+    StructField,
+    LongType,
+    StringType,
+    IntegerType,
+    MapType,
+    ArrayType,
+    Row,
+)
 import pyspark.sql.functions
 from pyspark.testing.utils import ReusedPySparkTestCase
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
+from pyspark.sql.connect.client import SparkConnectException, SparkConnectAnalysisException
 
 if should_test_connect:
     import grpc
@@ -58,6 +68,7 @@ class SparkConnectSQLTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLT
         cls.tbl_name = "test_connect_basic_table_1"
         cls.tbl_name2 = "test_connect_basic_table_2"
         cls.tbl_name3 = "test_connect_basic_table_3"
+        cls.tbl_name4 = "test_connect_basic_table_4"
         cls.tbl_name_empty = "test_connect_basic_table_empty"
 
         # Cleanup test data
@@ -78,10 +89,16 @@ class SparkConnectSQLTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLT
         # Since we might create multiple Spark sessions, we need to create global temporary view
         # that is specifically maintained in the "global_temp" schema.
         df.write.saveAsTable(cls.tbl_name)
-        df2 = cls.spark.createDataFrame([(x, f"{x}") for x in range(100)], ["col1", "col2"])
+        df2 = cls.spark.createDataFrame(
+            [(x, f"{x}", 2 * x) for x in range(100)], ["col1", "col2", "col3"]
+        )
         df2.write.saveAsTable(cls.tbl_name2)
         df3 = cls.spark.createDataFrame([(x, f"{x}") for x in range(100)], ["id", "test\n_column"])
         df3.write.saveAsTable(cls.tbl_name3)
+        df4 = cls.spark.createDataFrame(
+            [(x, {"a": x}, [x, x * 2]) for x in range(100)], ["id", "map_column", "array_column"]
+        )
+        df4.write.saveAsTable(cls.tbl_name4)
         empty_table_schema = StructType(
             [
                 StructField("firstname", StringType(), True),
@@ -100,7 +117,86 @@ class SparkConnectSQLTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLT
         cls.spark.sql("DROP TABLE IF EXISTS {}".format(cls.tbl_name_empty))
 
 
-class SparkConnectTests(SparkConnectSQLTestCase):
+class SparkConnectBasicTests(SparkConnectSQLTestCase):
+    def test_df_get_item(self):
+        # SPARK-41779: test __getitem__
+
+        query = """
+            SELECT * FROM VALUES
+            (true, 1, NULL), (false, NULL, 2.0), (NULL, 3, 3.0)
+            AS tab(a, b, c)
+            """
+
+        # +-----+----+----+
+        # |    a|   b|   c|
+        # +-----+----+----+
+        # | true|   1|null|
+        # |false|null| 2.0|
+        # | null|   3| 3.0|
+        # +-----+----+----+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        # filter
+        self.assert_eq(
+            cdf[cdf.a].toPandas(),
+            sdf[sdf.a].toPandas(),
+        )
+        self.assert_eq(
+            cdf[cdf.b.isin(2, 3)].toPandas(),
+            sdf[sdf.b.isin(2, 3)].toPandas(),
+        )
+        self.assert_eq(
+            cdf[cdf.c > 1.5].toPandas(),
+            sdf[sdf.c > 1.5].toPandas(),
+        )
+
+        # select
+        self.assert_eq(
+            cdf[[cdf.a, "b", cdf.c]].toPandas(),
+            sdf[[sdf.a, "b", sdf.c]].toPandas(),
+        )
+        self.assert_eq(
+            cdf[(cdf.a, "b", cdf.c)].toPandas(),
+            sdf[(sdf.a, "b", sdf.c)].toPandas(),
+        )
+
+        # select by index
+        self.assertTrue(isinstance(cdf[0], Column))
+        self.assertTrue(isinstance(cdf[1], Column))
+        self.assertTrue(isinstance(cdf[2], Column))
+
+        self.assert_eq(
+            cdf[[cdf[0], cdf[1], cdf[2]]].toPandas(),
+            sdf[[sdf[0], sdf[1], sdf[2]]].toPandas(),
+        )
+
+        # check error
+        with self.assertRaisesRegex(
+            TypeError,
+            "unexpected item type",
+        ):
+            cdf[1.5]
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "unexpected item type",
+        ):
+            cdf[None]
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "unexpected item type",
+        ):
+            cdf[cdf]
+
+    def test_error_handling(self):
+        # SPARK-41533 Proper error handling for Spark Connect
+        df = self.connect.range(10).select("id2")
+        with self.assertRaises(SparkConnectAnalysisException):
+            df.collect()
+
     def test_simple_read(self):
         df = self.connect.read.table(self.tbl_name)
         data = df.limit(10).toPandas()
@@ -219,8 +315,15 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertEqual(sdf.schema, cdf.schema)
         self.assert_eq(sdf.toPandas(), cdf.toPandas())
 
-        # TODO: add cases for StructType after 'pyspark_types_to_proto_types' support StructType
         for schema in [
+            StructType(
+                [
+                    StructField("col1", IntegerType(), True),
+                    StructField("col2", IntegerType(), True),
+                    StructField("col3", IntegerType(), True),
+                    StructField("col4", IntegerType(), True),
+                ]
+            ),
             "struct<col1 int, col2 int, col3 int, col4 int>",
             "col1 int, col2 int, col3 int, col4 int",
             "col1 int, col2 long, col3 string, col4 long",
@@ -240,12 +343,12 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         ):
             self.connect.createDataFrame(data, ["a", "b", "c", "d", "e"])
 
-        with self.assertRaises(grpc.RpcError):
+        with self.assertRaises(SparkConnectException):
             self.connect.createDataFrame(
                 data, "col1 magic_type, col2 int, col3 int, col4 int"
             ).show()
 
-        with self.assertRaises(grpc.RpcError):
+        with self.assertRaises(SparkConnectException):
             self.connect.createDataFrame(data, "col1 int, col2 int, col3 int").show()
 
     def test_with_local_list(self):
@@ -277,13 +380,37 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         ):
             self.connect.createDataFrame(data, ["a", "b", "c", "d", "e"])
 
-        with self.assertRaises(grpc.RpcError):
+        with self.assertRaises(SparkConnectException):
             self.connect.createDataFrame(
                 data, "col1 magic_type, col2 int, col3 int, col4 int"
             ).show()
 
-        with self.assertRaises(grpc.RpcError):
+        with self.assertRaises(SparkConnectException):
             self.connect.createDataFrame(data, "col1 int, col2 int, col3 int").show()
+
+    def test_with_local_rows(self):
+        # SPARK-41789: Test creating a dataframe with list of Rows
+        data = [
+            Row(course="dotNET", year=2012, earnings=10000),
+            Row(course="Java", year=2012, earnings=20000),
+            Row(course="dotNET", year=2012, earnings=5000),
+            Row(course="dotNET", year=2013, earnings=48000),
+            Row(course="Java", year=2013, earnings=30000),
+            Row(course="Scala", year=2022, earnings=None),
+        ]
+
+        sdf = self.spark.createDataFrame(data)
+        cdf = self.connect.createDataFrame(data)
+
+        self.assertEqual(sdf.schema, cdf.schema)
+        self.assert_eq(sdf.toPandas(), cdf.toPandas())
+
+        # test with rename
+        sdf = self.spark.createDataFrame(data, schema=["a", "b", "c"])
+        cdf = self.connect.createDataFrame(data, schema=["a", "b", "c"])
+
+        self.assertEqual(sdf.schema, cdf.schema)
+        self.assert_eq(sdf.toPandas(), cdf.toPandas())
 
     def test_with_atom_type(self):
         for data in [[(1), (2), (3)], [1, 2, 3]]:
@@ -382,6 +509,80 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             self.connect.sql(query).schema.__repr__(),
         )
 
+    def test_to(self):
+        # SPARK-41464: test DataFrame.to()
+
+        # The schema has not changed
+        schema = StructType(
+            [
+                StructField("id", IntegerType(), True),
+                StructField("name", StringType(), True),
+            ]
+        )
+
+        cdf = self.connect.read.table(self.tbl_name).to(schema)
+        df = self.spark.read.table(self.tbl_name).to(schema)
+
+        self.assertEqual(cdf.schema, df.schema)
+        self.assert_eq(cdf.toPandas(), df.toPandas())
+
+        # Change the column name
+        schema = StructType(
+            [
+                StructField("col1", IntegerType(), True),
+                StructField("col2", StringType(), True),
+            ]
+        )
+
+        cdf = self.connect.read.table(self.tbl_name).to(schema)
+        df = self.spark.read.table(self.tbl_name).to(schema)
+
+        self.assertEqual(cdf.schema, df.schema)
+        self.assert_eq(cdf.toPandas(), df.toPandas())
+
+        # Change the column data type
+        schema = StructType(
+            [
+                StructField("id", StringType(), True),
+                StructField("name", StringType(), True),
+            ]
+        )
+
+        cdf = self.connect.read.table(self.tbl_name).to(schema)
+        df = self.spark.read.table(self.tbl_name).to(schema)
+
+        self.assertEqual(cdf.schema, df.schema)
+        self.assert_eq(cdf.toPandas(), df.toPandas())
+
+        # Change the column data type failed
+        schema = StructType(
+            [
+                StructField("id", IntegerType(), True),
+                StructField("name", IntegerType(), True),
+            ]
+        )
+
+        with self.assertRaises(SparkConnectException) as context:
+            self.connect.read.table(self.tbl_name).to(schema).toPandas()
+            self.assertIn(
+                """Column or field `name` is of type "STRING" while it's required to be "INT".""",
+                str(context.exception),
+            )
+
+        # Test map type and array type
+        schema = StructType(
+            [
+                StructField("id", StringType(), True),
+                StructField("my_map", MapType(StringType(), IntegerType(), False), True),
+                StructField("my_array", ArrayType(IntegerType(), False), True),
+            ]
+        )
+        cdf = self.connect.read.table(self.tbl_name4).to(schema)
+        df = self.spark.read.table(self.tbl_name4).to(schema)
+
+        self.assertEqual(cdf.schema, df.schema)
+        self.assert_eq(cdf.toPandas(), df.toPandas())
+
     def test_toDF(self):
         # SPARK-41310: test DataFrame.toDF()
         self.assertEqual(
@@ -400,8 +601,8 @@ class SparkConnectTests(SparkConnectSQLTestCase):
 
     def test_is_local(self):
         # SPARK-41216: Test is local
-        self.assertTrue(self.connect.sql("SHOW DATABASES").isLocal)
-        self.assertFalse(self.connect.read.table(self.tbl_name).isLocal)
+        self.assertTrue(self.connect.sql("SHOW DATABASES").isLocal())
+        self.assertFalse(self.connect.read.table(self.tbl_name).isLocal())
 
     def test_is_streaming(self):
         # SPARK-41216: Test is streaming
@@ -583,7 +784,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
 
             # Test when creating a view which is already exists but
             self.assertTrue(self.spark.catalog.tableExists("global_temp.view_1"))
-            with self.assertRaises(grpc.RpcError):
+            with self.assertRaises(SparkConnectException):
                 self.connect.sql("SELECT 1 AS X LIMIT 0").createGlobalTempView("view_1")
 
     def test_create_session_local_temp_view(self):
@@ -595,7 +796,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             self.assertEqual(self.connect.sql("SELECT * FROM view_local_temp").count(), 0)
 
             # Test when creating a view which is already exists but
-            with self.assertRaises(grpc.RpcError):
+            with self.assertRaises(SparkConnectException):
                 self.connect.sql("SELECT 1 AS X LIMIT 0").createTempView("view_local_temp")
 
     def test_to_pandas(self):
@@ -780,7 +981,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             self.connect.sql(query).replace({None: 1}, subset="a").toPandas()
             self.assertTrue("Mixed type replacements are not supported" in str(context.exception))
 
-        with self.assertRaises(grpc.RpcError) as context:
+        with self.assertRaises(SparkConnectException) as context:
             self.connect.sql(query).replace({1: 2, 3: -1}, subset=("a", "x")).toPandas()
             self.assertIn(
                 """Cannot resolve column name "x" among (a, b, c)""", str(context.exception)
@@ -809,6 +1010,21 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             .toPandas(),
         )
 
+    def test_random_split(self):
+        # SPARK-41440: test randomSplit(weights, seed).
+        relations = (
+            self.connect.read.table(self.tbl_name).filter("id > 3").randomSplit([1.0, 2.0, 3.0], 2)
+        )
+        datasets = (
+            self.spark.read.table(self.tbl_name).filter("id > 3").randomSplit([1.0, 2.0, 3.0], 2)
+        )
+
+        self.assertTrue(len(relations) == len(datasets))
+        i = 0
+        while i < len(relations):
+            self.assert_eq(relations[i].toPandas(), datasets[i].toPandas())
+            i += 1
+
     def test_with_columns(self):
         # SPARK-41256: test withColumn(s).
         self.assert_eq(
@@ -832,6 +1048,31 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             .toPandas(),
         )
 
+    def test_hint(self):
+        # SPARK-41349: Test hint
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name).hint("COALESCE", 3000).toPandas(),
+            self.spark.read.table(self.tbl_name).hint("COALESCE", 3000).toPandas(),
+        )
+
+        # Hint with unsupported name will be ignored
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name).hint("illegal").toPandas(),
+            self.spark.read.table(self.tbl_name).hint("illegal").toPandas(),
+        )
+
+        # Hint with unsupported parameter values
+        with self.assertRaises(SparkConnectException):
+            self.connect.read.table(self.tbl_name).hint("REPARTITION", "id+1").toPandas()
+
+        # Hint with unsupported parameter types
+        with self.assertRaises(TypeError):
+            self.connect.read.table(self.tbl_name).hint("REPARTITION", 1.1).toPandas()
+
+        # Hint with wrong combination
+        with self.assertRaises(SparkConnectException):
+            self.connect.read.table(self.tbl_name).hint("REPARTITION", "id", 3).toPandas()
+
     def test_empty_dataset(self):
         # SPARK-41005: Test arrow based collection with empty dataset.
         self.assertTrue(
@@ -850,7 +1091,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertTrue(self.connect.sql("SELECT 1 AS X LIMIT 0").isEmpty())
 
     def test_session(self):
-        self.assertEqual(self.connect, self.connect.sql("SELECT 1").sparkSession())
+        self.assertEqual(self.connect, self.connect.sql("SELECT 1").sparkSession)
 
     def test_show(self):
         # SPARK-41111: Test the show method
@@ -862,6 +1103,96 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         # +---+---+
         expected = "+---+---+\n|  X|  Y|\n+---+---+\n|  1|  2|\n+---+---+\n"
         self.assertEqual(show_str, expected)
+
+    def test_stat_cov(self):
+        # SPARK-41067: Test the stat.cov method
+        self.assertEqual(
+            self.connect.read.table(self.tbl_name2).stat.cov("col1", "col3"),
+            self.spark.read.table(self.tbl_name2).stat.cov("col1", "col3"),
+        )
+
+    def test_stat_corr(self):
+        # SPARK-41068: Test the stat.corr method
+        self.assertEqual(
+            self.connect.read.table(self.tbl_name2).stat.corr("col1", "col3"),
+            self.spark.read.table(self.tbl_name2).stat.corr("col1", "col3"),
+        )
+
+        self.assertEqual(
+            self.connect.read.table(self.tbl_name2).stat.corr("col1", "col3", "pearson"),
+            self.spark.read.table(self.tbl_name2).stat.corr("col1", "col3", "pearson"),
+        )
+
+        with self.assertRaisesRegex(TypeError, "col1 should be a string."):
+            self.connect.read.table(self.tbl_name2).stat.corr(1, "col3", "pearson")
+        with self.assertRaisesRegex(TypeError, "col2 should be a string."):
+            self.connect.read.table(self.tbl_name).stat.corr("col1", 1, "pearson")
+        with self.assertRaises(ValueError) as context:
+            self.connect.read.table(self.tbl_name2).stat.corr("col1", "col3", "spearman"),
+            self.assertTrue(
+                "Currently only the calculation of the Pearson Correlation "
+                + "coefficient is supported."
+                in str(context.exception)
+            )
+
+    def test_stat_approx_quantile(self):
+        # SPARK-41069: Test the stat.approxQuantile method
+        result = self.connect.read.table(self.tbl_name2).stat.approxQuantile(
+            ["col1", "col3"], [0.1, 0.5, 0.9], 0.1
+        )
+        self.assertEqual(len(result), 2)
+        self.assertEqual(len(result[0]), 3)
+        self.assertEqual(len(result[1]), 3)
+
+        result = self.connect.read.table(self.tbl_name2).stat.approxQuantile(
+            ["col1"], [0.1, 0.5, 0.9], 0.1
+        )
+        self.assertEqual(len(result), 1)
+        self.assertEqual(len(result[0]), 3)
+
+        with self.assertRaisesRegex(
+            TypeError, "col should be a string, list or tuple, but got <class 'int'>"
+        ):
+            self.connect.read.table(self.tbl_name2).stat.approxQuantile(1, [0.1, 0.5, 0.9], 0.1)
+        with self.assertRaisesRegex(TypeError, "columns should be strings, but got <class 'int'>"):
+            self.connect.read.table(self.tbl_name2).stat.approxQuantile([1], [0.1, 0.5, 0.9], 0.1)
+        with self.assertRaisesRegex(TypeError, "probabilities should be a list or tuple"):
+            self.connect.read.table(self.tbl_name2).stat.approxQuantile(["col1", "col3"], 0.1, 0.1)
+        with self.assertRaisesRegex(
+            ValueError, "probabilities should be numerical \\(float, int\\) in \\[0,1\\]"
+        ):
+            self.connect.read.table(self.tbl_name2).stat.approxQuantile(
+                ["col1", "col3"], [-0.1], 0.1
+            )
+        with self.assertRaisesRegex(
+            TypeError, "relativeError should be numerical \\(float, int\\)"
+        ):
+            self.connect.read.table(self.tbl_name2).stat.approxQuantile(
+                ["col1", "col3"], [0.1, 0.5, 0.9], "str"
+            )
+        with self.assertRaisesRegex(ValueError, "relativeError should be >= 0."):
+            self.connect.read.table(self.tbl_name2).stat.approxQuantile(
+                ["col1", "col3"], [0.1, 0.5, 0.9], -0.1
+            )
+
+    def test_stat_freq_items(self):
+        # SPARK-41065: Test the stat.freqItems method
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name2).stat.freqItems(["col1", "col3"]).toPandas(),
+            self.spark.read.table(self.tbl_name2).stat.freqItems(["col1", "col3"]).toPandas(),
+        )
+
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name2)
+            .stat.freqItems(["col1", "col3"], 0.4)
+            .toPandas(),
+            self.spark.read.table(self.tbl_name2).stat.freqItems(["col1", "col3"], 0.4).toPandas(),
+        )
+
+        with self.assertRaisesRegex(
+            TypeError, "cols must be a list or tuple of column names as strings"
+        ):
+            self.connect.read.table(self.tbl_name2).stat.freqItems("col1")
 
     def test_repr(self):
         # SPARK-41213: Test the __repr__ method
@@ -941,7 +1272,7 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         )
         self.assertEqual("name", col0)
 
-        with self.assertRaises(grpc.RpcError) as exc:
+        with self.assertRaises(SparkConnectException) as exc:
             self.connect.range(1, 10).select(col("id").alias("this", "is", "not")).collect()
         self.assertIn("(this, is, not)", str(exc.exception))
 
@@ -1011,13 +1342,13 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assertEqual(5.0, res[1][1])
 
         # Additional GroupBy tests with 3 rows
-        from pyspark.sql.connect.function_builder import functions as FB
+        import pyspark.sql.connect.functions as CF
         import pyspark.sql.functions as PF
 
         df_a = self.connect.range(10).groupBy((col("id") % lit(3)).alias("moded"))
         df_b = self.spark.range(10).groupBy((PF.col("id") % PF.lit(3)).alias("moded"))
         self.assertEqual(
-            set(df_b.agg(PF.sum("id")).collect()), set(df_a.agg(FB.sum("id")).collect())
+            set(df_b.agg(PF.sum("id")).collect()), set(df_a.agg(CF.sum("id")).collect())
         )
 
         # Dict agg
@@ -1047,6 +1378,395 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             set(connect_df.select("id").crossJoin(other=connect_df.select("name")).toPandas()),
             set(spark_df.select("id").crossJoin(other=spark_df.select("name")).toPandas()),
         )
+
+    def test_grouped_data(self):
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        query = """
+            SELECT * FROM VALUES
+                ('James', 'Sales', 3000, 2020),
+                ('Michael', 'Sales', 4600, 2020),
+                ('Robert', 'Sales', 4100, 2020),
+                ('Maria', 'Finance', 3000, 2020),
+                ('James', 'Sales', 3000, 2019),
+                ('Scott', 'Finance', 3300, 2020),
+                ('Jen', 'Finance', 3900, 2020),
+                ('Jeff', 'Marketing', 3000, 2020),
+                ('Kumar', 'Marketing', 2000, 2020),
+                ('Saif', 'Sales', 4100, 2020)
+            AS T(name, department, salary, year)
+            """
+
+        # +-------+----------+------+----+
+        # |   name|department|salary|year|
+        # +-------+----------+------+----+
+        # |  James|     Sales|  3000|2020|
+        # |Michael|     Sales|  4600|2020|
+        # | Robert|     Sales|  4100|2020|
+        # |  Maria|   Finance|  3000|2020|
+        # |  James|     Sales|  3000|2019|
+        # |  Scott|   Finance|  3300|2020|
+        # |    Jen|   Finance|  3900|2020|
+        # |   Jeff| Marketing|  3000|2020|
+        # |  Kumar| Marketing|  2000|2020|
+        # |   Saif|     Sales|  4100|2020|
+        # +-------+----------+------+----+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        # test groupby
+        self.assert_eq(
+            cdf.groupBy("name").agg(CF.sum(cdf.salary)).toPandas(),
+            sdf.groupBy("name").agg(SF.sum(sdf.salary)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.groupBy("name", cdf.department).agg(CF.max("year"), CF.min(cdf.salary)).toPandas(),
+            sdf.groupBy("name", sdf.department).agg(SF.max("year"), SF.min(sdf.salary)).toPandas(),
+        )
+
+        # test rollup
+        self.assert_eq(
+            cdf.rollup("name").agg(CF.sum(cdf.salary)).toPandas(),
+            sdf.rollup("name").agg(SF.sum(sdf.salary)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.rollup("name", cdf.department).agg(CF.max("year"), CF.min(cdf.salary)).toPandas(),
+            sdf.rollup("name", sdf.department).agg(SF.max("year"), SF.min(sdf.salary)).toPandas(),
+        )
+
+        # test cube
+        self.assert_eq(
+            cdf.cube("name").agg(CF.sum(cdf.salary)).toPandas(),
+            sdf.cube("name").agg(SF.sum(sdf.salary)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.cube("name", cdf.department).agg(CF.max("year"), CF.min(cdf.salary)).toPandas(),
+            sdf.cube("name", sdf.department).agg(SF.max("year"), SF.min(sdf.salary)).toPandas(),
+        )
+
+        # test pivot
+        # pivot with values
+        self.assert_eq(
+            cdf.groupBy("name")
+            .pivot("department", ["Sales", "Marketing"])
+            .agg(CF.sum(cdf.salary))
+            .toPandas(),
+            sdf.groupBy("name")
+            .pivot("department", ["Sales", "Marketing"])
+            .agg(SF.sum(sdf.salary))
+            .toPandas(),
+        )
+        self.assert_eq(
+            cdf.groupBy(cdf.name)
+            .pivot("department", ["Sales", "Finance", "Marketing"])
+            .agg(CF.sum(cdf.salary))
+            .toPandas(),
+            sdf.groupBy(sdf.name)
+            .pivot("department", ["Sales", "Finance", "Marketing"])
+            .agg(SF.sum(sdf.salary))
+            .toPandas(),
+        )
+        self.assert_eq(
+            cdf.groupBy(cdf.name)
+            .pivot("department", ["Sales", "Finance", "Unknown"])
+            .agg(CF.sum(cdf.salary))
+            .toPandas(),
+            sdf.groupBy(sdf.name)
+            .pivot("department", ["Sales", "Finance", "Unknown"])
+            .agg(SF.sum(sdf.salary))
+            .toPandas(),
+        )
+
+        # pivot without values
+        self.assert_eq(
+            cdf.groupBy("name").pivot("department").agg(CF.sum(cdf.salary)).toPandas(),
+            sdf.groupBy("name").pivot("department").agg(SF.sum(sdf.salary)).toPandas(),
+        )
+
+        self.assert_eq(
+            cdf.groupBy("name").pivot("year").agg(CF.sum(cdf.salary)).toPandas(),
+            sdf.groupBy("name").pivot("year").agg(SF.sum(sdf.salary)).toPandas(),
+        )
+
+        # check error
+        with self.assertRaisesRegex(
+            Exception,
+            "PIVOT after ROLLUP is not supported",
+        ):
+            cdf.rollup("name").pivot("department").agg(CF.sum(cdf.salary))
+
+        with self.assertRaisesRegex(
+            Exception,
+            "PIVOT after CUBE is not supported",
+        ):
+            cdf.cube("name").pivot("department").agg(CF.sum(cdf.salary))
+
+        with self.assertRaisesRegex(
+            Exception,
+            "Repeated PIVOT operation is not supported",
+        ):
+            cdf.groupBy("name").pivot("year").pivot("year").agg(CF.sum(cdf.salary))
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "value should be a bool, float, int or str, but got bytes",
+        ):
+            cdf.groupBy("name").pivot("department", ["Sales", b"Marketing"]).agg(CF.sum(cdf.salary))
+
+    def test_numeric_aggregation(self):
+        # SPARK-41737: test numeric aggregation
+        query = """
+                SELECT * FROM VALUES
+                    ('James', 'Sales', 3000, 2020),
+                    ('Michael', 'Sales', 4600, 2020),
+                    ('Robert', 'Sales', 4100, 2020),
+                    ('Maria', 'Finance', 3000, 2020),
+                    ('James', 'Sales', 3000, 2019),
+                    ('Scott', 'Finance', 3300, 2020),
+                    ('Jen', 'Finance', 3900, 2020),
+                    ('Jeff', 'Marketing', 3000, 2020),
+                    ('Kumar', 'Marketing', 2000, 2020),
+                    ('Saif', 'Sales', 4100, 2020)
+                AS T(name, department, salary, year)
+                """
+
+        # +-------+----------+------+----+
+        # |   name|department|salary|year|
+        # +-------+----------+------+----+
+        # |  James|     Sales|  3000|2020|
+        # |Michael|     Sales|  4600|2020|
+        # | Robert|     Sales|  4100|2020|
+        # |  Maria|   Finance|  3000|2020|
+        # |  James|     Sales|  3000|2019|
+        # |  Scott|   Finance|  3300|2020|
+        # |    Jen|   Finance|  3900|2020|
+        # |   Jeff| Marketing|  3000|2020|
+        # |  Kumar| Marketing|  2000|2020|
+        # |   Saif|     Sales|  4100|2020|
+        # +-------+----------+------+----+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        # test groupby
+        self.assert_eq(
+            cdf.groupBy("name").min().toPandas(),
+            sdf.groupBy("name").min().toPandas(),
+        )
+        self.assert_eq(
+            cdf.groupBy("name").min("salary").toPandas(),
+            sdf.groupBy("name").min("salary").toPandas(),
+        )
+        self.assert_eq(
+            cdf.groupBy("name").max("salary").toPandas(),
+            sdf.groupBy("name").max("salary").toPandas(),
+        )
+        self.assert_eq(
+            cdf.groupBy("name", cdf.department).avg("salary", "year").toPandas(),
+            sdf.groupBy("name", sdf.department).avg("salary", "year").toPandas(),
+        )
+        self.assert_eq(
+            cdf.groupBy("name", cdf.department).mean("salary", "year").toPandas(),
+            sdf.groupBy("name", sdf.department).mean("salary", "year").toPandas(),
+        )
+        self.assert_eq(
+            cdf.groupBy("name", cdf.department).sum("salary", "year").toPandas(),
+            sdf.groupBy("name", sdf.department).sum("salary", "year").toPandas(),
+        )
+
+        # test rollup
+        self.assert_eq(
+            cdf.rollup("name").max().toPandas(),
+            sdf.rollup("name").max().toPandas(),
+        )
+        self.assert_eq(
+            cdf.rollup("name").min("salary").toPandas(),
+            sdf.rollup("name").min("salary").toPandas(),
+        )
+        self.assert_eq(
+            cdf.rollup("name").max("salary").toPandas(),
+            sdf.rollup("name").max("salary").toPandas(),
+        )
+        self.assert_eq(
+            cdf.rollup("name", cdf.department).avg("salary", "year").toPandas(),
+            sdf.rollup("name", sdf.department).avg("salary", "year").toPandas(),
+        )
+        self.assert_eq(
+            cdf.rollup("name", cdf.department).mean("salary", "year").toPandas(),
+            sdf.rollup("name", sdf.department).mean("salary", "year").toPandas(),
+        )
+        self.assert_eq(
+            cdf.rollup("name", cdf.department).sum("salary", "year").toPandas(),
+            sdf.rollup("name", sdf.department).sum("salary", "year").toPandas(),
+        )
+
+        # test cube
+        self.assert_eq(
+            cdf.cube("name").avg().toPandas(),
+            sdf.cube("name").avg().toPandas(),
+        )
+        self.assert_eq(
+            cdf.cube("name").mean().toPandas(),
+            sdf.cube("name").mean().toPandas(),
+        )
+        self.assert_eq(
+            cdf.cube("name").min("salary").toPandas(),
+            sdf.cube("name").min("salary").toPandas(),
+        )
+        self.assert_eq(
+            cdf.cube("name").max("salary").toPandas(),
+            sdf.cube("name").max("salary").toPandas(),
+        )
+        self.assert_eq(
+            cdf.cube("name", cdf.department).avg("salary", "year").toPandas(),
+            sdf.cube("name", sdf.department).avg("salary", "year").toPandas(),
+        )
+        self.assert_eq(
+            cdf.cube("name", cdf.department).sum("salary", "year").toPandas(),
+            sdf.cube("name", sdf.department).sum("salary", "year").toPandas(),
+        )
+
+        # test pivot
+        # pivot with values
+        self.assert_eq(
+            cdf.groupBy("name").pivot("department", ["Sales", "Marketing"]).sum().toPandas(),
+            sdf.groupBy("name").pivot("department", ["Sales", "Marketing"]).sum().toPandas(),
+        )
+        self.assert_eq(
+            cdf.groupBy("name")
+            .pivot("department", ["Sales", "Marketing"])
+            .min("salary")
+            .toPandas(),
+            sdf.groupBy("name")
+            .pivot("department", ["Sales", "Marketing"])
+            .min("salary")
+            .toPandas(),
+        )
+        self.assert_eq(
+            cdf.groupBy("name")
+            .pivot("department", ["Sales", "Marketing"])
+            .max("salary")
+            .toPandas(),
+            sdf.groupBy("name")
+            .pivot("department", ["Sales", "Marketing"])
+            .max("salary")
+            .toPandas(),
+        )
+        self.assert_eq(
+            cdf.groupBy(cdf.name)
+            .pivot("department", ["Sales", "Finance", "Unknown"])
+            .avg("salary", "year")
+            .toPandas(),
+            sdf.groupBy(sdf.name)
+            .pivot("department", ["Sales", "Finance", "Unknown"])
+            .avg("salary", "year")
+            .toPandas(),
+        )
+        self.assert_eq(
+            cdf.groupBy(cdf.name)
+            .pivot("department", ["Sales", "Finance", "Unknown"])
+            .sum("salary", "year")
+            .toPandas(),
+            sdf.groupBy(sdf.name)
+            .pivot("department", ["Sales", "Finance", "Unknown"])
+            .sum("salary", "year")
+            .toPandas(),
+        )
+
+        # pivot without values
+        self.assert_eq(
+            cdf.groupBy("name").pivot("department").min().toPandas(),
+            sdf.groupBy("name").pivot("department").min().toPandas(),
+        )
+        self.assert_eq(
+            cdf.groupBy("name").pivot("department").min("salary").toPandas(),
+            sdf.groupBy("name").pivot("department").min("salary").toPandas(),
+        )
+        self.assert_eq(
+            cdf.groupBy("name").pivot("department").max("salary").toPandas(),
+            sdf.groupBy("name").pivot("department").max("salary").toPandas(),
+        )
+        self.assert_eq(
+            cdf.groupBy(cdf.name).pivot("department").avg("salary", "year").toPandas(),
+            sdf.groupBy(sdf.name).pivot("department").avg("salary", "year").toPandas(),
+        )
+        self.assert_eq(
+            cdf.groupBy(cdf.name).pivot("department").sum("salary", "year").toPandas(),
+            sdf.groupBy(sdf.name).pivot("department").sum("salary", "year").toPandas(),
+        )
+
+        # check error
+        with self.assertRaisesRegex(
+            TypeError,
+            "Numeric aggregation function can only be applied on numeric columns",
+        ):
+            cdf.groupBy("name").min("department").show()
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "Numeric aggregation function can only be applied on numeric columns",
+        ):
+            cdf.groupBy("name").max("salary", "department").show()
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "Numeric aggregation function can only be applied on numeric columns",
+        ):
+            cdf.rollup("name").avg("department").show()
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "Numeric aggregation function can only be applied on numeric columns",
+        ):
+            cdf.rollup("name").sum("salary", "department").show()
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "Numeric aggregation function can only be applied on numeric columns",
+        ):
+            cdf.cube("name").min("department").show()
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "Numeric aggregation function can only be applied on numeric columns",
+        ):
+            cdf.cube("name").max("salary", "department").show()
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "Numeric aggregation function can only be applied on numeric columns",
+        ):
+            cdf.groupBy("name").pivot("department").avg("department").show()
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "Numeric aggregation function can only be applied on numeric columns",
+        ):
+            cdf.groupBy("name").pivot("department").sum("salary", "department").show()
+
+    def test_unsupported_functions(self):
+        # SPARK-41225: Disable unsupported functions.
+        df = self.connect.read.table(self.tbl_name)
+        for f in (
+            "rdd",
+            "unpersist",
+            "cache",
+            "persist",
+            "withWatermark",
+            "observe",
+            "foreach",
+            "foreachPartition",
+            "toLocalIterator",
+            "checkpoint",
+            "localCheckpoint",
+            "_repr_html_",
+            "semanticHash",
+            "sameSemantics",
+        ):
+            with self.assertRaises(NotImplementedError):
+                getattr(df, f)()
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)

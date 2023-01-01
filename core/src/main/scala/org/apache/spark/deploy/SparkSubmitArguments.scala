@@ -41,7 +41,10 @@ import org.apache.spark.util.Utils
  */
 private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, String] = sys.env)
   extends SparkSubmitArgumentsParser with Logging {
-  var master: String = null
+  var maybeMaster: Option[String] = None
+  // Global defaults. These should be keep to minimum to avoid confusing behavior.
+  def master: String = maybeMaster.getOrElse("local[*]")
+  var maybeRemote: Option[String] = None
   var deployMode: String = null
   var executorMemory: String = null
   var executorCores: String = null
@@ -149,10 +152,13 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
    * Load arguments from environment variables, Spark properties etc.
    */
   private def loadEnvironmentArguments(): Unit = {
-    master = Option(master)
+    maybeMaster = maybeMaster
       .orElse(sparkProperties.get("spark.master"))
       .orElse(env.get("MASTER"))
-      .orNull
+    maybeRemote = maybeRemote
+      .orElse(sparkProperties.get("spark.remote"))
+      .orElse(env.get("SPARK_REMOTE"))
+
     driverExtraClassPath = Option(driverExtraClassPath)
       .orElse(sparkProperties.get(config.DRIVER_CLASS_PATH.key))
       .orNull
@@ -210,9 +216,6 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     dynamicAllocationEnabled =
       sparkProperties.get(DYN_ALLOCATION_ENABLED.key).exists("true".equalsIgnoreCase)
 
-    // Global defaults. These should be keep to minimum to avoid confusing behavior.
-    master = Option(master).getOrElse("local[*]")
-
     // In YARN mode, app name can be set via SPARK_YARN_APP_NAME (see SPARK-5222)
     if (master.startsWith("yarn")) {
       name = Option(name).orElse(env.get("SPARK_YARN_APP_NAME")).orNull
@@ -241,6 +244,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   private def validateSubmitArguments(): Unit = {
     if (args.length == 0) {
       printUsageAndExit(-1)
+    }
+    if (maybeRemote.isDefined && (maybeMaster.isDefined || deployMode != null)) {
+      error("Remote cannot be specified with master and/or deploy mode.")
     }
     if (primaryResource == null) {
       error("Must specify a primary resource (JAR or Python or R file)")
@@ -299,6 +305,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   override def toString: String = {
     s"""Parsed arguments:
     |  master                  $master
+    |  remote                  ${maybeRemote.orNull}
     |  deployMode              $deployMode
     |  executorMemory          $executorMemory
     |  executorCores           $executorCores
@@ -338,7 +345,10 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         name = value
 
       case MASTER =>
-        master = value
+        maybeMaster = Option(value)
+
+      case REMOTE =>
+        maybeRemote = Option(value)
 
       case CLASS =>
         mainClass = value
@@ -538,6 +548,12 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |  --help, -h                  Show this help message and exit.
         |  --verbose, -v               Print additional debug output.
         |  --version,                  Print the version of current Spark.
+        |
+        | Experimental options:
+        |   --remote CONNECT_URL       URL to connect to the server for Spark Connect, e.g.,
+        |                              sc://host:port. --master and --deploy-mode cannot be set
+        |                              together with this option. This option is experimental, and
+        |                              might change between minor releases.
         |
         | Cluster deploy mode only:
         |  --driver-cores NUM          Number of cores used by the driver, only in cluster mode

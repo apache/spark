@@ -36,6 +36,6 @@ public interface Statistics {
   OptionalLong sizeInBytes();
   OptionalLong numRows();
   default Map<NamedReference, ColumnStatistics> columnStats() {
-    return new HashMap();
+    return new HashMap<>();
   }
 }

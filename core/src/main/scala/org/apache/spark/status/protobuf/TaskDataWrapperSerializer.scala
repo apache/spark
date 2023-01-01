@@ -17,15 +17,18 @@
 
 package org.apache.spark.status.protobuf
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.status.TaskDataWrapper
-import org.apache.spark.status.api.v1.AccumulableInfo
 import org.apache.spark.status.protobuf.Utils.getOptional
 import org.apache.spark.util.Utils.weakIntern
 
-object TaskDataWrapperSerializer {
-  def serialize(input: TaskDataWrapper): Array[Byte] = {
+class TaskDataWrapperSerializer extends ProtobufSerDe {
+
+  override val supportClass: Class[_] = classOf[TaskDataWrapper]
+
+  override def serialize(input: Any): Array[Byte] =
+    serialize(input.asInstanceOf[TaskDataWrapper])
+
+  private def serialize(input: TaskDataWrapper): Array[Byte] = {
     val builder = StoreTypes.TaskDataWrapper.newBuilder()
       .setTaskId(input.taskId)
       .setIndex(input.index)
@@ -68,21 +71,14 @@ object TaskDataWrapperSerializer {
       .setStageAttemptId(input.stageAttemptId)
     input.errorMessage.foreach(builder.setErrorMessage)
     input.accumulatorUpdates.foreach { update =>
-      builder.addAccumulatorUpdates(serializeAccumulableInfo(update))
+      builder.addAccumulatorUpdates(AccumulableInfoSerializer.serialize(update))
     }
     builder.build().toByteArray
   }
 
   def deserialize(bytes: Array[Byte]): TaskDataWrapper = {
     val binary = StoreTypes.TaskDataWrapper.parseFrom(bytes)
-    val accumulatorUpdates = new ArrayBuffer[AccumulableInfo]()
-    binary.getAccumulatorUpdatesList.forEach { update =>
-      accumulatorUpdates.append(new AccumulableInfo(
-        id = update.getId,
-        name = update.getName,
-        update = getOptional(update.hasUpdate, update.getUpdate),
-        value = update.getValue))
-    }
+    val accumulatorUpdates = AccumulableInfoSerializer.deserialize(binary.getAccumulatorUpdatesList)
     new TaskDataWrapper(
       taskId = binary.getTaskId,
       index = binary.getIndex,
@@ -96,7 +92,7 @@ object TaskDataWrapperSerializer {
       status = weakIntern(binary.getStatus),
       taskLocality = weakIntern(binary.getTaskLocality),
       speculative = binary.getSpeculative,
-      accumulatorUpdates = accumulatorUpdates.toSeq,
+      accumulatorUpdates = accumulatorUpdates,
       errorMessage = getOptional(binary.hasErrorMessage, binary.getErrorMessage),
       hasMetrics = binary.getHasMetrics,
       executorDeserializeTime = binary.getExecutorDeserializeTime,
@@ -126,14 +122,5 @@ object TaskDataWrapperSerializer {
       stageId = binary.getStageId.toInt,
       stageAttemptId = binary.getStageAttemptId
     )
-  }
-
-  def serializeAccumulableInfo(input: AccumulableInfo): StoreTypes.AccumulableInfo = {
-    val builder = StoreTypes.AccumulableInfo.newBuilder()
-      .setId(input.id)
-      .setName(input.name)
-      .setValue(input.value)
-    input.update.foreach(builder.setUpdate)
-    builder.build()
   }
 }

@@ -25,7 +25,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearMonthIntervalTypes}
 import org.apache.spark.unsafe.Platform
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class MutableProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -124,6 +124,33 @@ class MutableProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
     val scalaRows = Seq(
       Seq(null, null),
       Seq(BigDecimal(77.77), BigDecimal(245.00)))
+    testRows(bufferSchema, buffer, scalaRows)
+  }
+
+  testBothCodegenAndInterpreted("SPARK-41535: unsafe buffer with null intervals") {
+    val bufferSchema = StructType(Array(
+      StructField("intv1", CalendarIntervalType, nullable = true),
+      StructField("intv2", CalendarIntervalType, nullable = true)))
+    val buffer = UnsafeProjection.create(bufferSchema)
+      .apply(new GenericInternalRow(bufferSchema.length))
+    val scalaRows = Seq(
+      Seq(null, null),
+      Seq(
+        new CalendarInterval(0, 7, 0L),
+        new CalendarInterval(12*17, 2, 0L)))
+    testRows(bufferSchema, buffer, scalaRows)
+  }
+
+  testBothCodegenAndInterpreted("SPARK-41535: generic buffer with null intervals") {
+    val bufferSchema = StructType(Array(
+      StructField("intv1", CalendarIntervalType, nullable = true),
+      StructField("intv2", CalendarIntervalType, nullable = true)))
+    val buffer = new GenericInternalRow(bufferSchema.length)
+    val scalaRows = Seq(
+      Seq(null, null),
+      Seq(
+        new CalendarInterval(0, 7, 0L),
+        new CalendarInterval(12*17, 2, 0L)))
     testRows(bufferSchema, buffer, scalaRows)
   }
 

@@ -23,14 +23,13 @@ import scala.collection.JavaConverters._
 
 import com.google.protobuf.{ByteString, DynamicMessage}
 
-import org.apache.spark.sql.{Column, QueryTest, Row}
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.functions.{lit, struct}
-import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos.SimpleMessageRepeated
+import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos.{messageA, messageB, messageC, EM, EM2, Employee, EventPerson, EventRecursiveA, EventRecursiveB, EventWithRecursion, IC, OneOfEvent, OneOfEventWithRecursion, SimpleMessageRepeated}
 import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos.SimpleMessageRepeated.NestedEnum
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DayTimeIntervalType, IntegerType, StringType, StructField, StructType, TimestampType}
+import org.apache.spark.sql.types.{DataType, DayTimeIntervalType, IntegerType, StringType, StructField, StructType, TimestampType}
 
 class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with ProtobufTestBase
   with Serializable {
@@ -417,7 +416,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
             .show()
         }
         assert(e.getMessage.contains(
-          "Found recursive reference in Protobuf schema, which can not be processed by Spark:"
+          "Found recursive reference in Protobuf schema, which can not be processed by Spark"
         ))
     }
   }
@@ -453,7 +452,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
             .show()
         }
         assert(e.getMessage.contains(
-          "Found recursive reference in Protobuf schema, which can not be processed by Spark:"
+          "Found recursive reference in Protobuf schema, which can not be processed by Spark"
         ))
     }
   }
@@ -692,5 +691,570 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       exception = e,
       errorClass = "CANNOT_CONSTRUCT_PROTOBUF_DESCRIPTOR",
       parameters = Map("descFilePath" -> testFileDescriptor))
+  }
+
+  test("Verify OneOf field between from_protobuf -> to_protobuf and struct -> from_protobuf") {
+    val descriptor = ProtobufUtils.buildDescriptor(testFileDesc, "OneOfEvent")
+    val oneOfEvent = OneOfEvent.newBuilder()
+      .setKey("key")
+      .setCol1(123)
+      .setCol3(109202L)
+      .setCol2("col2value")
+      .addCol4("col4value").build()
+
+    val df = Seq(oneOfEvent.toByteArray).toDF("value")
+
+    checkWithFileAndClassName("OneOfEvent") {
+      case (name, descFilePathOpt) =>
+        val fromProtoDf = df.select(
+          from_protobuf_wrapper($"value", name, descFilePathOpt) as 'sample)
+        val toDf = fromProtoDf.select(
+          to_protobuf_wrapper($"sample", name, descFilePathOpt) as 'toProto)
+        val toFromDf = toDf.select(
+          from_protobuf_wrapper($"toProto", name, descFilePathOpt) as 'fromToProto)
+        checkAnswer(fromProtoDf, toFromDf)
+        val actualFieldNames = fromProtoDf.select("sample.*").schema.fields.toSeq.map(f => f.name)
+        descriptor.getFields.asScala.map(f => {
+          assert(actualFieldNames.contains(f.getName))
+        })
+
+        val eventFromSpark = OneOfEvent.parseFrom(
+          toDf.select("toProto").take(1).toSeq(0).getAs[Array[Byte]](0))
+        // OneOf field: the last set value(by order) will overwrite all previous ones.
+        assert(eventFromSpark.getCol2.equals("col2value"))
+        assert(eventFromSpark.getCol3 == 0)
+        val expectedFields = descriptor.getFields.asScala.map(f => f.getName)
+        eventFromSpark.getDescriptorForType.getFields.asScala.map(f => {
+          assert(expectedFields.contains(f.getName))
+        })
+
+        val jsonSchema =
+          s"""
+             |{
+             |  "type" : "struct",
+             |  "fields" : [ {
+             |    "name" : "sample",
+             |    "type" : {
+             |      "type" : "struct",
+             |      "fields" : [ {
+             |        "name" : "key",
+             |        "type" : "string",
+             |        "nullable" : true
+             |      }, {
+             |        "name" : "col_1",
+             |        "type" : "integer",
+             |        "nullable" : true
+             |      }, {
+             |        "name" : "col_2",
+             |        "type" : "string",
+             |        "nullable" : true
+             |      }, {
+             |        "name" : "col_3",
+             |        "type" : "long",
+             |        "nullable" : true
+             |      }, {
+             |        "name" : "col_4",
+             |        "type" : {
+             |          "type" : "array",
+             |          "elementType" : "string",
+             |          "containsNull" : false
+             |        },
+             |        "nullable" : false
+             |      } ]
+             |    },
+             |    "nullable" : true
+             |  } ]
+             |}
+             |{
+             |  "type" : "struct",
+             |  "fields" : [ {
+             |    "name" : "sample",
+             |    "type" : {
+             |      "type" : "struct",
+             |      "fields" : [ {
+             |        "name" : "key",
+             |        "type" : "string",
+             |        "nullable" : true
+             |      }, {
+             |        "name" : "col_1",
+             |        "type" : "integer",
+             |        "nullable" : true
+             |      }, {
+             |        "name" : "col_2",
+             |        "type" : "string",
+             |        "nullable" : true
+             |      }, {
+             |        "name" : "col_3",
+             |        "type" : "long",
+             |        "nullable" : true
+             |      }, {
+             |        "name" : "col_4",
+             |        "type" : {
+             |          "type" : "array",
+             |          "elementType" : "string",
+             |          "containsNull" : false
+             |        },
+             |        "nullable" : false
+             |      } ]
+             |    },
+             |    "nullable" : true
+             |  } ]
+             |}
+             |""".stripMargin
+        val schema = DataType.fromJson(jsonSchema).asInstanceOf[StructType]
+        val data = Seq(Row(Row("key", 123, "col2value", 109202L, Seq("col4value"))))
+        val dataDf = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+        val dataDfToProto = dataDf.select(
+          to_protobuf_wrapper($"sample", name, descFilePathOpt) as 'toProto)
+
+        val eventFromSparkSchema = OneOfEvent.parseFrom(
+          dataDfToProto.select("toProto").take(1).toSeq(0).getAs[Array[Byte]](0))
+        assert(eventFromSparkSchema.getCol2.isEmpty)
+        assert(eventFromSparkSchema.getCol3 == 109202L)
+        eventFromSparkSchema.getDescriptorForType.getFields.asScala.map(f => {
+          assert(expectedFields.contains(f.getName))
+        })
+    }
+  }
+
+  test("Fail for recursion field with complex schema without recursive.fields.max.depth") {
+    val aEventWithRecursion = EventWithRecursion.newBuilder().setKey(2).build()
+    val aaEventWithRecursion = EventWithRecursion.newBuilder().setKey(3).build()
+    val aaaEventWithRecursion = EventWithRecursion.newBuilder().setKey(4).build()
+    val c = messageC.newBuilder().setAaa(aaaEventWithRecursion).setKey(12092)
+    val b = messageB.newBuilder().setAa(aaEventWithRecursion).setC(c)
+    val a = messageA.newBuilder().setA(aEventWithRecursion).setB(b).build()
+    val eventWithRecursion = EventWithRecursion.newBuilder().setKey(1).setA(a).build()
+
+    val df = Seq(eventWithRecursion.toByteArray).toDF("protoEvent")
+
+    checkWithFileAndClassName("EventWithRecursion") {
+      case (name, descFilePathOpt) =>
+        val e = intercept[AnalysisException] {
+          df.select(
+            from_protobuf_wrapper($"protoEvent", name, descFilePathOpt).as("messageFromProto"))
+            .show()
+        }
+        assert(e.getMessage.contains(
+          "Found recursive reference in Protobuf schema, which can not be processed by Spark"
+        ))
+    }
+  }
+
+  test("Verify recursion field with complex schema with recursive.fields.max.depth") {
+    val descriptor = ProtobufUtils.buildDescriptor(testFileDesc, "Employee")
+
+    val manager = Employee.newBuilder().setFirstName("firstName").setLastName("lastName").build()
+    val em2 = EM2.newBuilder().setTeamsize(100).setEm2Manager(manager).build()
+    val em = EM.newBuilder().setTeamsize(100).setEmManager(manager).build()
+    val ic = IC.newBuilder().addSkills("java").setIcManager(manager).build()
+    val employee = Employee.newBuilder().setFirstName("firstName")
+      .setLastName("lastName").setEm2(em2).setEm(em).setIc(ic).build()
+
+    val df = Seq(employee.toByteArray).toDF("protoEvent")
+    val options = new java.util.HashMap[String, String]()
+    options.put("recursive.fields.max.depth", "1")
+
+    val fromProtoDf = df.select(
+      functions.from_protobuf($"protoEvent", "Employee", testFileDesc, options) as 'sample)
+
+    val toDf = fromProtoDf.select(
+      functions.to_protobuf($"sample", "Employee", testFileDesc) as 'toProto)
+    val toFromDf = toDf.select(
+      functions.from_protobuf($"toProto",
+        "Employee",
+        testFileDesc,
+        options) as 'fromToProto)
+
+    checkAnswer(fromProtoDf, toFromDf)
+
+    val actualFieldNames = fromProtoDf.select("sample.*").schema.fields.toSeq.map(f => f.name)
+    descriptor.getFields.asScala.map(f => {
+      assert(actualFieldNames.contains(f.getName))
+    })
+
+    val eventFromSpark = Employee.parseFrom(
+      toDf.select("toProto").take(1).toSeq(0).getAs[Array[Byte]](0))
+
+    assert(eventFromSpark.getIc.getIcManager.getFirstName.equals("firstName"))
+    assert(eventFromSpark.getIc.getIcManager.getLastName.equals("lastName"))
+    assert(eventFromSpark.getEm2.getEm2Manager.getFirstName.isEmpty)
+  }
+
+  test("Verify OneOf field with recursive fields between from_protobuf -> to_protobuf." +
+    "and struct -> from_protobuf") {
+    val descriptor = ProtobufUtils.buildDescriptor(testFileDesc, "OneOfEventWithRecursion")
+
+    val nestedTwo = OneOfEventWithRecursion.newBuilder()
+      .setKey("keyNested2").setValue("valueNested2").build()
+    val nestedOne = EventRecursiveA.newBuilder()
+      .setKey("keyNested1")
+      .setRecursiveA(nestedTwo).build()
+    val oneOfRecursionEvent = OneOfEventWithRecursion.newBuilder()
+      .setKey("keyNested0")
+      .setValue("valueNested0")
+      .setRecursiveA(nestedOne).build()
+    val recursiveA = EventRecursiveA.newBuilder().setKey("recursiveAKey")
+      .setRecursiveA(oneOfRecursionEvent).build()
+    val recursiveB = EventRecursiveB.newBuilder()
+      .setKey("recursiveBKey")
+      .setValue("recursiveBvalue").build()
+    val oneOfEventWithRecursion = OneOfEventWithRecursion.newBuilder()
+      .setKey("key")
+      .setValue("value")
+      .setRecursiveB(recursiveB)
+      .setRecursiveA(recursiveA).build()
+
+    val df = Seq(oneOfEventWithRecursion.toByteArray).toDF("value")
+
+    val options = new java.util.HashMap[String, String]()
+    options.put("recursive.fields.max.depth", "1")
+
+    val fromProtoDf = df.select(
+      functions.from_protobuf($"value",
+        "OneOfEventWithRecursion",
+        testFileDesc, options) as 'sample)
+    val toDf = fromProtoDf.select(
+      functions.to_protobuf($"sample", "OneOfEventWithRecursion", testFileDesc) as 'toProto)
+    val toFromDf = toDf.select(
+      functions.from_protobuf($"toProto",
+        "OneOfEventWithRecursion",
+        testFileDesc,
+        options) as 'fromToProto)
+
+    checkAnswer(fromProtoDf, toFromDf)
+
+    val actualFieldNames = fromProtoDf.select("sample.*").schema.fields.toSeq.map(f => f.name)
+    descriptor.getFields.asScala.map(f => {
+      assert(actualFieldNames.contains(f.getName))
+    })
+
+    val eventFromSpark = OneOfEventWithRecursion.parseFrom(
+      toDf.select("toProto").take(1).toSeq(0).getAs[Array[Byte]](0))
+
+    var recursiveField = eventFromSpark.getRecursiveA.getRecursiveA
+    assert(recursiveField.getKey.equals("keyNested0"))
+    assert(recursiveField.getValue.equals("valueNested0"))
+    assert(recursiveField.getRecursiveA.getKey.equals("keyNested1"))
+    assert(recursiveField.getRecursiveA.getRecursiveA.getKey.isEmpty())
+
+    val expectedFields = descriptor.getFields.asScala.map(f => f.getName)
+    eventFromSpark.getDescriptorForType.getFields.asScala.map(f => {
+      assert(expectedFields.contains(f.getName))
+    })
+
+    val jsonSchema =
+      s"""
+         |{
+         |  "type" : "struct",
+         |  "fields" : [ {
+         |    "name" : "sample",
+         |    "type" : {
+         |      "type" : "struct",
+         |      "fields" : [ {
+         |        "name" : "key",
+         |        "type" : "string",
+         |        "nullable" : true
+         |      }, {
+         |        "name" : "recursiveA",
+         |        "type" : {
+         |          "type" : "struct",
+         |          "fields" : [ {
+         |            "name" : "recursiveA",
+         |            "type" : {
+         |              "type" : "struct",
+         |              "fields" : [ {
+         |                "name" : "key",
+         |                "type" : "string",
+         |                "nullable" : true
+         |              }, {
+         |                "name" : "recursiveA",
+         |                "type" : "void",
+         |                "nullable" : true
+         |              }, {
+         |                "name" : "recursiveB",
+         |                "type" : {
+         |                  "type" : "struct",
+         |                  "fields" : [ {
+         |                    "name" : "key",
+         |                    "type" : "string",
+         |                    "nullable" : true
+         |                  }, {
+         |                    "name" : "value",
+         |                    "type" : "string",
+         |                    "nullable" : true
+         |                  }, {
+         |                    "name" : "recursiveA",
+         |                    "type" : {
+         |                      "type" : "struct",
+         |                      "fields" : [ {
+         |                        "name" : "key",
+         |                        "type" : "string",
+         |                        "nullable" : true
+         |                      }, {
+         |                        "name" : "recursiveA",
+         |                        "type" : "void",
+         |                        "nullable" : true
+         |                      }, {
+         |                        "name" : "recursiveB",
+         |                        "type" : "void",
+         |                        "nullable" : true
+         |                      }, {
+         |                        "name" : "value",
+         |                        "type" : "string",
+         |                        "nullable" : true
+         |                      } ]
+         |                    },
+         |                    "nullable" : true
+         |                  } ]
+         |                },
+         |                "nullable" : true
+         |              }, {
+         |                "name" : "value",
+         |                "type" : "string",
+         |                "nullable" : true
+         |              } ]
+         |            },
+         |            "nullable" : true
+         |          }, {
+         |            "name" : "key",
+         |            "type" : "string",
+         |            "nullable" : true
+         |          } ]
+         |        },
+         |        "nullable" : true
+         |      }, {
+         |        "name" : "recursiveB",
+         |        "type" : {
+         |          "type" : "struct",
+         |          "fields" : [ {
+         |            "name" : "key",
+         |            "type" : "string",
+         |            "nullable" : true
+         |          }, {
+         |            "name" : "value",
+         |            "type" : "string",
+         |            "nullable" : true
+         |          }, {
+         |            "name" : "recursiveA",
+         |            "type" : {
+         |              "type" : "struct",
+         |              "fields" : [ {
+         |                "name" : "key",
+         |                "type" : "string",
+         |                "nullable" : true
+         |              }, {
+         |                "name" : "recursiveA",
+         |                "type" : {
+         |                  "type" : "struct",
+         |                  "fields" : [ {
+         |                    "name" : "recursiveA",
+         |                    "type" : {
+         |                      "type" : "struct",
+         |                      "fields" : [ {
+         |                        "name" : "key",
+         |                        "type" : "string",
+         |                        "nullable" : true
+         |                      }, {
+         |                        "name" : "recursiveA",
+         |                        "type" : "void",
+         |                        "nullable" : true
+         |                      }, {
+         |                        "name" : "recursiveB",
+         |                        "type" : "void",
+         |                        "nullable" : true
+         |                      }, {
+         |                        "name" : "value",
+         |                        "type" : "string",
+         |                        "nullable" : true
+         |                      } ]
+         |                    },
+         |                    "nullable" : true
+         |                  }, {
+         |                    "name" : "key",
+         |                    "type" : "string",
+         |                    "nullable" : true
+         |                  } ]
+         |                },
+         |                "nullable" : true
+         |              }, {
+         |                "name" : "recursiveB",
+         |                "type" : "void",
+         |                "nullable" : true
+         |              }, {
+         |                "name" : "value",
+         |                "type" : "string",
+         |                "nullable" : true
+         |              } ]
+         |            },
+         |            "nullable" : true
+         |          } ]
+         |        },
+         |        "nullable" : true
+         |      }, {
+         |        "name" : "value",
+         |        "type" : "string",
+         |        "nullable" : true
+         |      } ]
+         |    },
+         |    "nullable" : true
+         |  } ]
+         |}
+         |""".stripMargin
+
+    val schema = DataType.fromJson(jsonSchema).asInstanceOf[StructType]
+    val data = Seq(
+      Row(
+        Row("key1",
+          Row(
+            Row("keyNested0", null, null, "valueNested0"),
+            "recursiveAKey"),
+          null,
+          "value1")
+      )
+    )
+    val dataDf = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+    val dataDfToProto = dataDf.select(
+      functions.to_protobuf($"sample", "OneOfEventWithRecursion", testFileDesc) as 'toProto)
+
+    val eventFromSparkSchema = OneOfEventWithRecursion.parseFrom(
+      dataDfToProto.select("toProto").take(1).toSeq(0).getAs[Array[Byte]](0))
+    recursiveField = eventFromSparkSchema.getRecursiveA.getRecursiveA
+    assert(recursiveField.getKey.equals("keyNested0"))
+    assert(recursiveField.getValue.equals("valueNested0"))
+    assert(recursiveField.getRecursiveA.getKey.isEmpty())
+    eventFromSparkSchema.getDescriptorForType.getFields.asScala.map(f => {
+      assert(expectedFields.contains(f.getName))
+    })
+  }
+
+  test("Verify recursive.fields.max.depth Levels 0,1, and 2 with Simple Schema") {
+    val eventPerson3 = EventPerson.newBuilder().setName("person3").build()
+    val eventPerson2 = EventPerson.newBuilder().setName("person2").setBff(eventPerson3).build()
+    val eventPerson1 = EventPerson.newBuilder().setName("person1").setBff(eventPerson2).build()
+    val eventPerson0 = EventPerson.newBuilder().setName("person0").setBff(eventPerson1).build()
+    val df = Seq(eventPerson0.toByteArray).toDF("value")
+
+    val optionsZero = new java.util.HashMap[String, String]()
+    optionsZero.put("recursive.fields.max.depth", "0")
+    val schemaZero = DataType.fromJson(
+        s"""{
+           |  "type" : "struct",
+           |  "fields" : [ {
+           |    "name" : "sample",
+           |    "type" : {
+           |      "type" : "struct",
+           |      "fields" : [ {
+           |        "name" : "name",
+           |        "type" : "string",
+           |        "nullable" : true
+           |      }, {
+           |        "name" : "bff",
+           |        "type" : "void",
+           |        "nullable" : true
+           |      } ]
+           |    },
+           |    "nullable" : true
+           |  } ]
+           |}""".stripMargin).asInstanceOf[StructType]
+    val expectedDfZero = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row(Row("person0", null)))), schemaZero)
+
+    testFromProtobufWithOptions(df, expectedDfZero, optionsZero)
+
+    val optionsOne = new java.util.HashMap[String, String]()
+    optionsOne.put("recursive.fields.max.depth", "1")
+    val schemaOne = DataType.fromJson(
+      s"""{
+         |  "type" : "struct",
+         |  "fields" : [ {
+         |    "name" : "sample",
+         |    "type" : {
+         |      "type" : "struct",
+         |      "fields" : [ {
+         |        "name" : "name",
+         |        "type" : "string",
+         |        "nullable" : true
+         |      }, {
+         |        "name" : "bff",
+         |        "type" : {
+         |          "type" : "struct",
+         |          "fields" : [ {
+         |            "name" : "name",
+         |            "type" : "string",
+         |            "nullable" : true
+         |          }, {
+         |            "name" : "bff",
+         |            "type" : "void",
+         |            "nullable" : true
+         |          } ]
+         |        },
+         |        "nullable" : true
+         |      } ]
+         |    },
+         |    "nullable" : true
+         |  } ]
+         |}""".stripMargin).asInstanceOf[StructType]
+    val expectedDfOne = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row(Row("person0", Row("person1", null))))), schemaOne)
+    testFromProtobufWithOptions(df, expectedDfOne, optionsOne)
+
+    val optionsTwo = new java.util.HashMap[String, String]()
+    optionsTwo.put("recursive.fields.max.depth", "2")
+    val schemaTwo = DataType.fromJson(
+      s"""{
+         |  "type" : "struct",
+         |  "fields" : [ {
+         |    "name" : "sample",
+         |    "type" : {
+         |      "type" : "struct",
+         |      "fields" : [ {
+         |        "name" : "name",
+         |        "type" : "string",
+         |        "nullable" : true
+         |      }, {
+         |        "name" : "bff",
+         |        "type" : {
+         |          "type" : "struct",
+         |          "fields" : [ {
+         |            "name" : "name",
+         |            "type" : "string",
+         |            "nullable" : true
+         |          }, {
+         |            "name" : "bff",
+         |            "type" : {
+         |              "type" : "struct",
+         |              "fields" : [ {
+         |                "name" : "name",
+         |                "type" : "string",
+         |                "nullable" : true
+         |              }, {
+         |                "name" : "bff",
+         |                "type" : "void",
+         |                "nullable" : true
+         |              } ]
+         |            },
+         |            "nullable" : true
+         |          } ]
+         |        },
+         |        "nullable" : true
+         |      } ]
+         |    },
+         |    "nullable" : true
+         |  } ]
+         |}""".stripMargin).asInstanceOf[StructType]
+    val expectedDfTwo = spark.createDataFrame(spark.sparkContext.parallelize(
+      Seq(Row(Row("person0", Row("person1", Row("person2", null)))))), schemaTwo)
+    testFromProtobufWithOptions(df, expectedDfTwo, optionsTwo)
+  }
+
+  def testFromProtobufWithOptions(
+    df: DataFrame,
+    expectedDf: DataFrame,
+    options: java.util.HashMap[String, String]): Unit = {
+    val fromProtoDf = df.select(
+      functions.from_protobuf($"value", "EventPerson", testFileDesc, options) as 'sample)
+    assert(expectedDf.schema === fromProtoDf.schema)
+    checkAnswer(fromProtoDf, expectedDf)
   }
 }

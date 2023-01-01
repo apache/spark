@@ -35,13 +35,7 @@ class InterpretedUnsafeProjection(expressions: Array[Expression]) extends Unsafe
   import InterpretedUnsafeProjection._
 
   private[this] val subExprEliminationEnabled = SQLConf.get.subexpressionEliminationEnabled
-  private[this] lazy val runtime =
-    new SubExprEvaluationRuntime(SQLConf.get.subexpressionEliminationCacheMaxEntries)
-  private[this] val exprs = if (subExprEliminationEnabled) {
-    runtime.proxyExpressions(expressions)
-  } else {
-    expressions.toSeq
-  }
+  private[this] val exprs = prepareExpressions(expressions, subExprEliminationEnabled)
 
   /** Number of (top level) fields in the resulting row. */
   private[this] val numFields = expressions.length
@@ -106,11 +100,7 @@ object InterpretedUnsafeProjection {
    * Returns an [[UnsafeProjection]] for given sequence of bound Expressions.
    */
   def createProjection(exprs: Seq[Expression]): UnsafeProjection = {
-    // We need to make sure that we do not reuse stateful expressions.
-    val cleanedExpressions = exprs.map(_.transform {
-      case s: Stateful => s.freshCopy()
-    })
-    new InterpretedUnsafeProjection(cleanedExpressions.toArray)
+    new InterpretedUnsafeProjection(exprs.toArray)
   }
 
   /**
@@ -255,6 +245,9 @@ object InterpretedUnsafeProjection {
       case DecimalType.Fixed(precision, _) if precision > Decimal.MAX_LONG_DIGITS =>
         // We can't call setNullAt() for DecimalType with precision larger than 18, we call write
         // directly. We can use the unwrapped writer directly.
+        unsafeWriter
+      case CalendarIntervalType =>
+        // We can't call setNullAt() for CalendarIntervalType, we call write directly.
         unsafeWriter
       case BooleanType | ByteType =>
         (v, i) => {

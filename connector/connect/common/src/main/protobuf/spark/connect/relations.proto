@@ -19,8 +19,10 @@ syntax = 'proto3';
 
 package spark.connect;
 
+import "google/protobuf/any.proto";
 import "spark/connect/expressions.proto";
 import "spark/connect/types.proto";
+import "spark/connect/catalog.proto";
 
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
@@ -56,6 +58,8 @@ message Relation {
     WithColumns with_columns = 23;
     Hint hint = 24;
     Unpivot unpivot = 25;
+    ToSchema to_schema = 26;
+    RepartitionByExpression repartition_by_expression = 27;
 
     // NA functions
     NAFill fill_na = 90;
@@ -66,7 +70,17 @@ message Relation {
     StatSummary summary = 100;
     StatCrosstab crosstab = 101;
     StatDescribe describe = 102;
+    StatCov cov = 103;
+    StatCorr corr = 104;
+    StatApproxQuantile approx_quantile = 105;
+    StatFreqItems freq_items = 106;
 
+    // Catalog API (experimental / unstable)
+    Catalog catalog = 200;
+
+    // This field is used to mark extensions to the protocol. When plugins generate arbitrary
+    // relations they can add them here. During the planning the correct resolution is done.
+    google.protobuf.Any extension = 998;
     Unknown unknown = 999;
   }
 }
@@ -234,11 +248,39 @@ message Tail {
 
 // Relation of type [[Aggregate]].
 message Aggregate {
-  // (Required) Input relation for a Aggregate.
+  // (Required) Input relation for a RelationalGroupedDataset.
   Relation input = 1;
 
-  repeated Expression grouping_expressions = 2;
-  repeated Expression result_expressions = 3;
+  // (Required) How the RelationalGroupedDataset was built.
+  GroupType group_type = 2;
+
+  // (Required) Expressions for grouping keys
+  repeated Expression grouping_expressions = 3;
+
+  // (Required) List of values that will be translated to columns in the output DataFrame.
+  repeated Expression aggregate_expressions = 4;
+
+  // (Optional) Pivots a column of the current `DataFrame` and performs the specified aggregation.
+  Pivot pivot = 5;
+
+  enum GroupType {
+    GROUP_TYPE_UNSPECIFIED = 0;
+    GROUP_TYPE_GROUPBY = 1;
+    GROUP_TYPE_ROLLUP = 2;
+    GROUP_TYPE_CUBE = 3;
+    GROUP_TYPE_PIVOT = 4;
+  }
+
+  message Pivot {
+    // (Required) The column to pivot
+    Expression col = 1;
+
+    // (Optional) List of values that will be translated to columns in the output DataFrame.
+    //
+    // Note that if it is empty, the server side will immediately trigger a job to collect
+    // the distinct values of the column.
+    repeated Expression.Literal values = 2;
+  }
 }
 
 // Relation of type [[Sort]].
@@ -246,29 +288,11 @@ message Sort {
   // (Required) Input relation for a Sort.
   Relation input = 1;
 
-  // (Required) Sort fields.
-  repeated SortField sort_fields = 2;
+  // (Required) The ordering expressions
+  repeated Expression.SortOrder order = 2;
 
   // (Optional) if this is a global sort.
   optional bool is_global = 3;
-
-  message SortField {
-    Expression expression = 1;
-    SortDirection direction = 2;
-    SortNulls nulls = 3;
-  }
-
-  enum SortDirection {
-    SORT_DIRECTION_UNSPECIFIED = 0;
-    SORT_DIRECTION_ASCENDING = 1;
-    SORT_DIRECTION_DESCENDING = 2;
-  }
-
-  enum SortNulls {
-    SORT_NULLS_UNSPECIFIED = 0;
-    SORT_NULLS_FIRST = 1;
-    SORT_NULLS_LAST = 2;
-  }
 }
 
 
@@ -335,6 +359,11 @@ message Sample {
 
   // (Optional) The random seed.
   optional int64 seed = 5;
+
+  // (Required) Explicitly sort the underlying plan to make the ordering deterministic or cache it.
+  // This flag is true when invoking `dataframe.randomSplit` to randomly splits DataFrame with the
+  // provided weights. Otherwise, it is false.
+  bool deterministic_order = 6;
 }
 
 // Relation of type [[Range]] that generates a sequence of integers.
@@ -384,7 +413,7 @@ message ShowString {
   Relation input = 1;
 
   // (Required) Number of rows to show.
-  int32 numRows = 2;
+  int32 num_rows = 2;
 
   // (Required) If set to more than 0, truncates strings to
   // `truncate` characters and all cells will be aligned right.
@@ -445,6 +474,76 @@ message StatCrosstab {
   //
   // Distinct items will make the column names of the DataFrame.
   string col2 = 3;
+}
+
+// Calculate the sample covariance of two numerical columns of a DataFrame.
+// It will invoke 'Dataset.stat.cov' (same as 'StatFunctions.calculateCov') to compute the results.
+message StatCov {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) The name of the first column.
+  string col1 = 2;
+
+  // (Required) The name of the second column.
+  string col2 = 3;
+}
+
+// Calculates the correlation of two columns of a DataFrame. Currently only supports the Pearson
+// Correlation Coefficient. It will invoke 'Dataset.stat.corr' (same as
+// 'StatFunctions.pearsonCorrelation') to compute the results.
+message StatCorr {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) The name of the first column.
+  string col1 = 2;
+
+  // (Required) The name of the second column.
+  string col2 = 3;
+
+  // (Optional) Default value is 'pearson'.
+  //
+  // Currently only supports the Pearson Correlation Coefficient.
+  optional string method = 4;
+}
+
+// Calculates the approximate quantiles of numerical columns of a DataFrame.
+// It will invoke 'Dataset.stat.approxQuantile' (same as 'StatFunctions.approxQuantile')
+// to compute the results.
+message StatApproxQuantile {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) The names of the numerical columns.
+  repeated string cols = 2;
+
+  // (Required) A list of quantile probabilities.
+  //
+  // Each number must belong to [0, 1].
+  // For example 0 is the minimum, 0.5 is the median, 1 is the maximum.
+  repeated double probabilities = 3;
+
+  // (Required) The relative target precision to achieve (greater than or equal to 0).
+  //
+  // If set to zero, the exact quantiles are computed, which could be very expensive.
+  // Note that values greater than 1 are accepted but give the same result as 1.
+  double relative_error = 4;
+}
+
+// Finding frequent items for columns, possibly with false positives.
+// It will invoke 'Dataset.stat.freqItems' (same as 'StatFunctions.freqItems')
+// to compute the results.
+message StatFreqItems {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) The names of the columns to search frequent items in.
+  repeated string cols = 2;
+
+  // (Optional) The minimum frequency for an item to be considered `frequent`.
+  // Should be greater than 1e-4.
+  optional double support = 3;
 }
 
 // Replaces null values.
@@ -600,4 +699,25 @@ message Unpivot {
 
   // (Required) Name of the value column.
   string value_column_name = 5;
+}
+
+message ToSchema {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) The user provided schema.
+  //
+  // The Sever side will update the dataframe with this schema.
+  DataType schema = 2;
+}
+
+  message RepartitionByExpression {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) The partitioning expressions.
+  repeated Expression partition_exprs = 2;
+
+  // (Optional) number of partitions, must be positive.
+  optional int32 num_partitions = 3;
 }

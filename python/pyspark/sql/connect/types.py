@@ -17,7 +17,6 @@
 
 from typing import Optional
 
-import pyspark.sql.connect.proto as pb2
 from pyspark.sql.types import (
     DataType,
     ByteType,
@@ -43,10 +42,24 @@ from pyspark.sql.types import (
     NullType,
 )
 
+import pyspark.sql.connect.proto as pb2
+
+
+JVM_BYTE_MIN: int = -(1 << 7)
+JVM_BYTE_MAX: int = (1 << 7) - 1
+JVM_SHORT_MIN: int = -(1 << 15)
+JVM_SHORT_MAX: int = (1 << 15) - 1
+JVM_INT_MIN: int = -(1 << 31)
+JVM_INT_MAX: int = (1 << 31) - 1
+JVM_LONG_MIN: int = -(1 << 63)
+JVM_LONG_MAX: int = (1 << 63) - 1
+
 
 def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
     ret = pb2.DataType()
-    if isinstance(data_type, StringType):
+    if isinstance(data_type, NullType):
+        ret.null.CopyFrom(pb2.DataType.NULL())
+    elif isinstance(data_type, StringType):
         ret.string.CopyFrom(pb2.DataType.String())
     elif isinstance(data_type, BooleanType):
         ret.boolean.CopyFrom(pb2.DataType.Boolean())
@@ -75,6 +88,20 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
     elif isinstance(data_type, DayTimeIntervalType):
         ret.day_time_interval.start_field = data_type.startField
         ret.day_time_interval.end_field = data_type.endField
+    elif isinstance(data_type, StructType):
+        for field in data_type.fields:
+            struct_field = pb2.DataType.StructField()
+            struct_field.name = field.name
+            struct_field.data_type.CopyFrom(pyspark_types_to_proto_types(field.dataType))
+            struct_field.nullable = field.nullable
+            ret.struct.fields.append(struct_field)
+    elif isinstance(data_type, MapType):
+        ret.map.key_type.CopyFrom(pyspark_types_to_proto_types(data_type.keyType))
+        ret.map.value_type.CopyFrom(pyspark_types_to_proto_types(data_type.valueType))
+        ret.map.value_contains_null = data_type.valueContainsNull
+    elif isinstance(data_type, ArrayType):
+        ret.array.element_type.CopyFrom(pyspark_types_to_proto_types(data_type.elementType))
+        ret.array.contains_null = data_type.containsNull
     else:
         raise Exception(f"Unsupported data type {data_type}")
     return ret

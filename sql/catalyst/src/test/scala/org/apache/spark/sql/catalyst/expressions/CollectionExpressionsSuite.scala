@@ -2103,12 +2103,6 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       evaluateWithMutableProjection(Shuffle(ai0, seed2)))
     assert(evaluateWithUnsafeProjection(Shuffle(ai0, seed1)) !==
       evaluateWithUnsafeProjection(Shuffle(ai0, seed2)))
-
-    val shuffle = Shuffle(ai0, seed1)
-    assert(shuffle.fastEquals(shuffle))
-    assert(!shuffle.fastEquals(Shuffle(ai0, seed1)))
-    assert(!shuffle.fastEquals(shuffle.freshCopy()))
-    assert(!shuffle.fastEquals(Shuffle(ai0, seed2)))
   }
 
   test("Array Except") {

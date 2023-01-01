@@ -535,11 +535,21 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             }
           } catch {
             case _: NoSuchElementException =>
-              // If the file is currently not being tracked by the SHS, add an entry for it and try
-              // to parse it. This will allow the cleaner code to detect the file as stale later on
-              // if it was not possible to parse it.
+              // If the file is currently not being tracked by the SHS, check whether the log file
+              // has expired, if expired, delete it from log dir, if not, add an entry for it and
+              // try to parse it. This will allow the cleaner code to detect the file as stale
+              // later on if it was not possible to parse it.
               try {
-                if (count < conf.get(UPDATE_BATCHSIZE)) {
+                if (conf.get(CLEANER_ENABLED) && reader.modificationTime <
+                    clock.getTimeMillis() - conf.get(MAX_LOG_AGE_S) * 1000) {
+                  logInfo(s"Deleting expired event log ${reader.rootPath.toString}")
+                  deleteLog(fs, reader.rootPath)
+                  // If the LogInfo read had succeeded, but the ApplicationInafoWrapper
+                  // read failure and throw the exception, we should also cleanup the log
+                  // info from listing db.
+                  listing.delete(classOf[LogInfo], reader.rootPath.toString)
+                  false
+                } else if (count < conf.get(UPDATE_BATCHSIZE)) {
                   listing.write(LogInfo(reader.rootPath.toString(), newLastScanTime,
                     LogType.EventLogs, None, None, reader.fileSizeForLastIndex, reader.lastIndex,
                     None, reader.completed))
@@ -550,6 +560,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
                 }
               } catch {
                 case _: FileNotFoundException => false
+                case _: NoSuchElementException => false
                 case NonFatal(e) =>
                   logWarning(s"Error while reading new log ${reader.rootPath}", e)
                   false
@@ -1203,7 +1214,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     // the existing data.
     dm.openStore(appId, attempt.info.attemptId).foreach { path =>
       try {
-        return KVUtils.open(path, metadata, conf)
+        return KVUtils.open(path, metadata, conf, live = false)
       } catch {
         case e: Exception =>
           logInfo(s"Failed to open existing store for $appId/${attempt.info.attemptId}.", e)
@@ -1269,14 +1280,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     try {
       logInfo(s"Leasing disk manager space for app $appId / ${attempt.info.attemptId}...")
       lease = dm.lease(reader.totalSize, reader.compressionCodec.isDefined)
-      val diskStore = KVUtils.open(lease.tmpPath, metadata, conf)
+      val diskStore = KVUtils.open(lease.tmpPath, metadata, conf, live = false)
       hybridStore.setDiskStore(diskStore)
       hybridStore.switchToDiskStore(new HybridStore.SwitchToDiskStoreListener {
         override def onSwitchToDiskStoreSuccess: Unit = {
           logInfo(s"Completely switched to diskStore for app $appId / ${attempt.info.attemptId}.")
           diskStore.close()
           val newStorePath = lease.commit(appId, attempt.info.attemptId)
-          hybridStore.setDiskStore(KVUtils.open(newStorePath, metadata, conf))
+          hybridStore.setDiskStore(KVUtils.open(newStorePath, metadata, conf, live = false))
           memoryManager.release(appId, attempt.info.attemptId)
         }
         override def onSwitchToDiskStoreFail(e: Exception): Unit = {
@@ -1312,7 +1323,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       logInfo(s"Leasing disk manager space for app $appId / ${attempt.info.attemptId}...")
       val lease = dm.lease(reader.totalSize, isCompressed)
       try {
-        Utils.tryWithResource(KVUtils.open(lease.tmpPath, metadata, conf)) { store =>
+        Utils.tryWithResource(KVUtils.open(lease.tmpPath, metadata, conf, live = false)) { store =>
           rebuildAppStore(store, reader, attempt.info.lastUpdated.getTime())
         }
         newStorePath = lease.commit(appId, attempt.info.attemptId)
@@ -1330,7 +1341,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       }
     }
 
-    KVUtils.open(newStorePath, metadata, conf)
+    KVUtils.open(newStorePath, metadata, conf, live = false)
   }
 
   private def createInMemoryStore(attempt: AttemptInfoWrapper): KVStore = {
