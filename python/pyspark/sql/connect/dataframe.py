@@ -936,6 +936,22 @@ class DataFrame:
 
     crosstab.__doc__ = PySparkDataFrame.crosstab.__doc__
 
+    def freqItems(
+        self, cols: Union[List[str], Tuple[str]], support: Optional[float] = None
+    ) -> "DataFrame":
+        if isinstance(cols, tuple):
+            cols = list(cols)
+        if not isinstance(cols, list):
+            raise TypeError("cols must be a list or tuple of column names as strings.")
+        if not support:
+            support = 0.01
+        return DataFrame.withPlan(
+            plan.StatFreqItems(child=self._plan, cols=cols, support=support),
+            session=self._session,
+        )
+
+    freqItems.__doc__ = PySparkDataFrame.freqItems.__doc__
+
     def _get_alias(self) -> Optional[str]:
         p = self._plan
         while p is not None:
@@ -1320,6 +1336,13 @@ class DataFrameStatFunctions:
         return self.df.crosstab(col1, col2)
 
     crosstab.__doc__ = DataFrame.crosstab.__doc__
+
+    def freqItems(
+        self, cols: Union[List[str], Tuple[str]], support: Optional[float] = None
+    ) -> DataFrame:
+        return self.df.freqItems(cols, support)
+
+    freqItems.__doc__ = DataFrame.freqItems.__doc__
 
 
 DataFrameStatFunctions.__doc__ = PySparkDataFrameStatFunctions.__doc__

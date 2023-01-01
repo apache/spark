@@ -73,6 +73,7 @@ message Relation {
     StatCov cov = 103;
     StatCorr corr = 104;
     StatApproxQuantile approx_quantile = 105;
+    StatFreqItems freq_items = 106;
 
     // Catalog API (experimental / unstable)
     Catalog catalog = 200;
@@ -528,6 +529,21 @@ message StatApproxQuantile {
   // If set to zero, the exact quantiles are computed, which could be very expensive.
   // Note that values greater than 1 are accepted but give the same result as 1.
   double relative_error = 4;
+}
+
+// Finding frequent items for columns, possibly with false positives.
+// It will invoke 'Dataset.stat.freqItems' (same as 'StatFunctions.freqItems')
+// to compute the results.
+message StatFreqItems {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) The names of the columns to search frequent items in.
+  repeated string cols = 2;
+
+  // (Optional) The minimum frequency for an item to be considered `frequent`.
+  // Should be greater than 1e-4.
+  optional double support = 3;
 }
 
 // Replaces null values.

@@ -488,6 +488,16 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       sparkTestRelation.stat.crosstab("id", "name"))
   }
 
+  test("Test freqItems") {
+    comparePlans(
+      connectTestRelation.stat.freqItems(Seq("id", "name"), 1),
+      sparkTestRelation.stat.freqItems(Seq("id", "name"), 1))
+
+    comparePlans(
+      connectTestRelation.stat.freqItems(Seq("id", "name")),
+      sparkTestRelation.stat.freqItems(Seq("id", "name")))
+  }
+
   test("Test to") {
     val dataTypes: Seq[DataType] = Seq(
       StringType,

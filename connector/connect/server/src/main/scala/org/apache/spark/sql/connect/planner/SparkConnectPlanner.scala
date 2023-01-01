@@ -97,6 +97,7 @@ class SparkConnectPlanner(session: SparkSession) {
         transformStatApproxQuantile(rel.getApproxQuantile)
       case proto.Relation.RelTypeCase.CROSSTAB =>
         transformStatCrosstab(rel.getCrosstab)
+      case proto.Relation.RelTypeCase.FREQ_ITEMS => transformStatFreqItems(rel.getFreqItems)
       case proto.Relation.RelTypeCase.TO_SCHEMA => transformToSchema(rel.getToSchema)
       case proto.Relation.RelTypeCase.RENAME_COLUMNS_BY_SAME_LENGTH_NAMES =>
         transformRenameColumnsBySamelenghtNames(rel.getRenameColumnsBySameLengthNames)
@@ -406,6 +407,16 @@ class SparkConnectPlanner(session: SparkSession) {
       .stat
       .crosstab(rel.getCol1, rel.getCol2)
       .logicalPlan
+  }
+
+  private def transformStatFreqItems(rel: proto.StatFreqItems): LogicalPlan = {
+    val cols = rel.getColsList.asScala.toSeq
+    val df = Dataset.ofRows(session, transformRelation(rel.getInput))
+    if (rel.hasSupport) {
+      df.stat.freqItems(cols, rel.getSupport).logicalPlan
+    } else {
+      df.stat.freqItems(cols).logicalPlan
+    }
   }
 
   private def transformToSchema(rel: proto.ToSchema): LogicalPlan = {
