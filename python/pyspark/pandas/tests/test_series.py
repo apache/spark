@@ -2771,7 +2771,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(pser.transpose(), psser.transpose())
 
     def test_transpose_char(self):
-        pser = pd.Series(['a', 'b', 'c'])
+        pser = pd.Series(["a", "b", "c"])
         psser = ps.from_pandas(pser)
         self.assert_eq(pser.transpose(), psser.transpose())
 
