@@ -49,6 +49,250 @@ else:
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
+class Catalog(google.protobuf.message.Message):
+    """Catalog messages are marked as unstable."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    CURRENT_DATABASE_FIELD_NUMBER: builtins.int
+    SET_CURRENT_DATABASE_FIELD_NUMBER: builtins.int
+    LIST_DATABASES_FIELD_NUMBER: builtins.int
+    LIST_TABLES_FIELD_NUMBER: builtins.int
+    LIST_FUNCTIONS_FIELD_NUMBER: builtins.int
+    LIST_COLUMNS_FIELD_NUMBER: builtins.int
+    GET_DATABASE_FIELD_NUMBER: builtins.int
+    GET_TABLE_FIELD_NUMBER: builtins.int
+    GET_FUNCTION_FIELD_NUMBER: builtins.int
+    DATABASE_EXISTS_FIELD_NUMBER: builtins.int
+    TABLE_EXISTS_FIELD_NUMBER: builtins.int
+    FUNCTION_EXISTS_FIELD_NUMBER: builtins.int
+    CREATE_EXTERNAL_TABLE_FIELD_NUMBER: builtins.int
+    CREATE_TABLE_FIELD_NUMBER: builtins.int
+    DROP_TEMP_VIEW_FIELD_NUMBER: builtins.int
+    DROP_GLOBAL_TEMP_VIEW_FIELD_NUMBER: builtins.int
+    RECOVER_PARTITIONS_FIELD_NUMBER: builtins.int
+    CLEAR_CACHE_FIELD_NUMBER: builtins.int
+    REFRESH_TABLE_FIELD_NUMBER: builtins.int
+    REFRESH_BY_PATH_FIELD_NUMBER: builtins.int
+    CURRENT_CATALOG_FIELD_NUMBER: builtins.int
+    SET_CURRENT_CATALOG_FIELD_NUMBER: builtins.int
+    LIST_CATALOGS_FIELD_NUMBER: builtins.int
+    @property
+    def current_database(self) -> global___CurrentDatabase: ...
+    @property
+    def set_current_database(self) -> global___SetCurrentDatabase: ...
+    @property
+    def list_databases(self) -> global___ListDatabases: ...
+    @property
+    def list_tables(self) -> global___ListTables: ...
+    @property
+    def list_functions(self) -> global___ListFunctions: ...
+    @property
+    def list_columns(self) -> global___ListColumns: ...
+    @property
+    def get_database(self) -> global___GetDatabase: ...
+    @property
+    def get_table(self) -> global___GetTable: ...
+    @property
+    def get_function(self) -> global___GetFunction: ...
+    @property
+    def database_exists(self) -> global___DatabaseExists: ...
+    @property
+    def table_exists(self) -> global___TableExists: ...
+    @property
+    def function_exists(self) -> global___FunctionExists: ...
+    @property
+    def create_external_table(self) -> global___CreateExternalTable: ...
+    @property
+    def create_table(self) -> global___CreateTable: ...
+    @property
+    def drop_temp_view(self) -> global___DropTempView: ...
+    @property
+    def drop_global_temp_view(self) -> global___DropGlobalTempView: ...
+    @property
+    def recover_partitions(self) -> global___RecoverPartitions: ...
+    @property
+    def clear_cache(self) -> global___ClearCache:
+        """TODO(SPARK-41612): Support Catalog.isCached
+        IsCached is_cached = 18;
+        TODO(SPARK-41600): Support Catalog.cacheTable
+        CacheTable cache_table = 19;
+        TODO(SPARK-41623): Support Catalog.uncacheTable
+        UncacheTable uncache_table = 20;
+        """
+    @property
+    def refresh_table(self) -> global___RefreshTable: ...
+    @property
+    def refresh_by_path(self) -> global___RefreshByPath: ...
+    @property
+    def current_catalog(self) -> global___CurrentCatalog: ...
+    @property
+    def set_current_catalog(self) -> global___SetCurrentCatalog: ...
+    @property
+    def list_catalogs(self) -> global___ListCatalogs: ...
+    def __init__(
+        self,
+        *,
+        current_database: global___CurrentDatabase | None = ...,
+        set_current_database: global___SetCurrentDatabase | None = ...,
+        list_databases: global___ListDatabases | None = ...,
+        list_tables: global___ListTables | None = ...,
+        list_functions: global___ListFunctions | None = ...,
+        list_columns: global___ListColumns | None = ...,
+        get_database: global___GetDatabase | None = ...,
+        get_table: global___GetTable | None = ...,
+        get_function: global___GetFunction | None = ...,
+        database_exists: global___DatabaseExists | None = ...,
+        table_exists: global___TableExists | None = ...,
+        function_exists: global___FunctionExists | None = ...,
+        create_external_table: global___CreateExternalTable | None = ...,
+        create_table: global___CreateTable | None = ...,
+        drop_temp_view: global___DropTempView | None = ...,
+        drop_global_temp_view: global___DropGlobalTempView | None = ...,
+        recover_partitions: global___RecoverPartitions | None = ...,
+        clear_cache: global___ClearCache | None = ...,
+        refresh_table: global___RefreshTable | None = ...,
+        refresh_by_path: global___RefreshByPath | None = ...,
+        current_catalog: global___CurrentCatalog | None = ...,
+        set_current_catalog: global___SetCurrentCatalog | None = ...,
+        list_catalogs: global___ListCatalogs | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "cat_type",
+            b"cat_type",
+            "clear_cache",
+            b"clear_cache",
+            "create_external_table",
+            b"create_external_table",
+            "create_table",
+            b"create_table",
+            "current_catalog",
+            b"current_catalog",
+            "current_database",
+            b"current_database",
+            "database_exists",
+            b"database_exists",
+            "drop_global_temp_view",
+            b"drop_global_temp_view",
+            "drop_temp_view",
+            b"drop_temp_view",
+            "function_exists",
+            b"function_exists",
+            "get_database",
+            b"get_database",
+            "get_function",
+            b"get_function",
+            "get_table",
+            b"get_table",
+            "list_catalogs",
+            b"list_catalogs",
+            "list_columns",
+            b"list_columns",
+            "list_databases",
+            b"list_databases",
+            "list_functions",
+            b"list_functions",
+            "list_tables",
+            b"list_tables",
+            "recover_partitions",
+            b"recover_partitions",
+            "refresh_by_path",
+            b"refresh_by_path",
+            "refresh_table",
+            b"refresh_table",
+            "set_current_catalog",
+            b"set_current_catalog",
+            "set_current_database",
+            b"set_current_database",
+            "table_exists",
+            b"table_exists",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "cat_type",
+            b"cat_type",
+            "clear_cache",
+            b"clear_cache",
+            "create_external_table",
+            b"create_external_table",
+            "create_table",
+            b"create_table",
+            "current_catalog",
+            b"current_catalog",
+            "current_database",
+            b"current_database",
+            "database_exists",
+            b"database_exists",
+            "drop_global_temp_view",
+            b"drop_global_temp_view",
+            "drop_temp_view",
+            b"drop_temp_view",
+            "function_exists",
+            b"function_exists",
+            "get_database",
+            b"get_database",
+            "get_function",
+            b"get_function",
+            "get_table",
+            b"get_table",
+            "list_catalogs",
+            b"list_catalogs",
+            "list_columns",
+            b"list_columns",
+            "list_databases",
+            b"list_databases",
+            "list_functions",
+            b"list_functions",
+            "list_tables",
+            b"list_tables",
+            "recover_partitions",
+            b"recover_partitions",
+            "refresh_by_path",
+            b"refresh_by_path",
+            "refresh_table",
+            b"refresh_table",
+            "set_current_catalog",
+            b"set_current_catalog",
+            "set_current_database",
+            b"set_current_database",
+            "table_exists",
+            b"table_exists",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["cat_type", b"cat_type"]
+    ) -> typing_extensions.Literal[
+        "current_database",
+        "set_current_database",
+        "list_databases",
+        "list_tables",
+        "list_functions",
+        "list_columns",
+        "get_database",
+        "get_table",
+        "get_function",
+        "database_exists",
+        "table_exists",
+        "function_exists",
+        "create_external_table",
+        "create_table",
+        "drop_temp_view",
+        "drop_global_temp_view",
+        "recover_partitions",
+        "clear_cache",
+        "refresh_table",
+        "refresh_by_path",
+        "current_catalog",
+        "set_current_catalog",
+        "list_catalogs",
+    ] | None: ...
+
+global___Catalog = Catalog
+
 class CurrentDatabase(google.protobuf.message.Message):
     """See `spark.catalog.currentDatabase`"""
 

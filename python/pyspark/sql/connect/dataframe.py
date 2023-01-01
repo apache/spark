@@ -42,13 +42,9 @@ from pyspark.sql.types import DataType, StructType, Row
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.group import GroupedData
 from pyspark.sql.connect.readwriter import DataFrameWriter
-from pyspark.sql.connect.column import (
-    Column,
-    scalar_function,
-    sql_expression,
-)
+from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import UnresolvedRegex
-from pyspark.sql.connect.functions import col, lit
+from pyspark.sql.connect.functions import _invoke_function, col, lit, expr as sql_expression
 from pyspark.sql.dataframe import (
     DataFrame as PySparkDataFrame,
     DataFrameNaFunctions as PySparkDataFrameNaFunctions,
@@ -110,7 +106,7 @@ class DataFrame:
             raise ValueError("Argument 'exprs' must not be empty")
 
         if len(exprs) == 1 and isinstance(exprs[0], dict):
-            measures = [scalar_function(f, col(e)) for e, f in exprs[0].items()]
+            measures = [_invoke_function(f, col(e)) for e, f in exprs[0].items()]
             return self.groupBy().agg(*measures)
         else:
             # other expressions
@@ -152,7 +148,7 @@ class DataFrame:
     sparkSession.__doc__ = PySparkDataFrame.sparkSession.__doc__
 
     def count(self) -> int:
-        pdd = self.agg(scalar_function("count", lit(1))).toPandas()
+        pdd = self.agg(_invoke_function("count", lit(1))).toPandas()
         return pdd.iloc[0, 0]
 
     count.__doc__ = PySparkDataFrame.count.__doc__
@@ -523,7 +519,7 @@ class DataFrame:
                     upper_bound=upperBound,
                     with_replacement=False,
                     seed=int(seed),
-                    force_stable_sort=True,
+                    deterministic_order=True,
                 ),
                 session=self._session,
             )
@@ -841,6 +837,93 @@ class DataFrame:
 
     describe.__doc__ = PySparkDataFrame.describe.__doc__
 
+    def cov(self, col1: str, col2: str) -> float:
+        if not isinstance(col1, str):
+            raise TypeError("col1 should be a string.")
+        if not isinstance(col2, str):
+            raise TypeError("col2 should be a string.")
+        pdf = DataFrame.withPlan(
+            plan.StatCov(child=self._plan, col1=col1, col2=col2),
+            session=self._session,
+        ).toPandas()
+
+        assert pdf is not None
+        return pdf["cov"][0]
+
+    cov.__doc__ = PySparkDataFrame.cov.__doc__
+
+    def corr(self, col1: str, col2: str, method: Optional[str] = None) -> float:
+        if not isinstance(col1, str):
+            raise TypeError("col1 should be a string.")
+        if not isinstance(col2, str):
+            raise TypeError("col2 should be a string.")
+        if not method:
+            method = "pearson"
+        if not method == "pearson":
+            raise ValueError(
+                "Currently only the calculation of the Pearson Correlation "
+                + "coefficient is supported."
+            )
+        pdf = DataFrame.withPlan(
+            plan.StatCorr(child=self._plan, col1=col1, col2=col2, method=method),
+            session=self._session,
+        ).toPandas()
+
+        assert pdf is not None
+        return pdf["corr"][0]
+
+    corr.__doc__ = PySparkDataFrame.corr.__doc__
+
+    def approxQuantile(
+        self,
+        col: Union[str, List[str], Tuple[str]],
+        probabilities: Union[List[float], Tuple[float]],
+        relativeError: float,
+    ) -> Union[List[float], List[List[float]]]:
+        if not isinstance(col, (str, list, tuple)):
+            raise TypeError("col should be a string, list or tuple, but got %r" % type(col))
+
+        isStr = isinstance(col, str)
+
+        if isinstance(col, tuple):
+            col = list(col)
+        elif isStr:
+            col = [cast(str, col)]
+
+        for c in col:
+            if not isinstance(c, str):
+                raise TypeError("columns should be strings, but got %r" % type(c))
+
+        if not isinstance(probabilities, (list, tuple)):
+            raise TypeError("probabilities should be a list or tuple")
+        if isinstance(probabilities, tuple):
+            probabilities = list(probabilities)
+        for p in probabilities:
+            if not isinstance(p, (float, int)) or p < 0 or p > 1:
+                raise ValueError("probabilities should be numerical (float, int) in [0,1].")
+
+        if not isinstance(relativeError, (float, int)):
+            raise TypeError("relativeError should be numerical (float, int)")
+        if relativeError < 0:
+            raise ValueError("relativeError should be >= 0.")
+        relativeError = float(relativeError)
+        pdf = DataFrame.withPlan(
+            plan.StatApproxQuantile(
+                child=self._plan,
+                cols=list(col),
+                probabilities=probabilities,
+                relativeError=relativeError,
+            ),
+            session=self._session,
+        ).toPandas()
+
+        assert pdf is not None
+        jaq = pdf["approx_quantile"][0]
+        jaq_list = [list(j) for j in jaq]
+        return jaq_list[0] if isStr else jaq_list
+
+    approxQuantile.__doc__ = PySparkDataFrame.approxQuantile.__doc__
+
     def crosstab(self, col1: str, col2: str) -> "DataFrame":
         if not isinstance(col1, str):
             raise TypeError(f"'col1' must be str, but got {type(col1).__name__}")
@@ -864,13 +947,30 @@ class DataFrame:
     def __getattr__(self, name: str) -> "Column":
         return self[name]
 
-    def __getitem__(self, name: str) -> "Column":
-        # Check for alias
-        alias = self._get_alias()
-        if alias is not None:
-            return col(alias)
+    @overload
+    def __getitem__(self, item: Union[int, str]) -> Column:
+        ...
+
+    @overload
+    def __getitem__(self, item: Union[Column, List, Tuple]) -> "DataFrame":
+        ...
+
+    def __getitem__(self, item: Union[int, str, Column, List, Tuple]) -> Union[Column, "DataFrame"]:
+        if isinstance(item, str):
+            # Check for alias
+            alias = self._get_alias()
+            if alias is not None:
+                return col(alias)
+            else:
+                return col(item)
+        elif isinstance(item, Column):
+            return self.filter(item)
+        elif isinstance(item, (list, tuple)):
+            return self.select(*item)
+        elif isinstance(item, int):
+            return col(self.columns[item])
         else:
-            return col(name)
+            raise TypeError("unexpected item type: %s" % type(item))
 
     def _print_plan(self) -> str:
         if self._plan:
@@ -892,7 +992,7 @@ class DataFrame:
         if self._session is None:
             raise Exception("Cannot collect on empty session.")
         query = self._plan.to_proto(self._session.client)
-        return self._session.client._to_pandas(query)
+        return self._session.client.to_pandas(query)
 
     toPandas.__doc__ = PySparkDataFrame.toPandas.__doc__
 
@@ -1195,6 +1295,26 @@ DataFrameNaFunctions.__doc__ = PySparkDataFrameNaFunctions.__doc__
 class DataFrameStatFunctions:
     def __init__(self, df: DataFrame):
         self.df = df
+
+    def cov(self, col1: str, col2: str) -> float:
+        return self.df.cov(col1, col2)
+
+    cov.__doc__ = DataFrame.cov.__doc__
+
+    def corr(self, col1: str, col2: str, method: Optional[str] = None) -> float:
+        return self.df.corr(col1, col2, method)
+
+    corr.__doc__ = DataFrame.corr.__doc__
+
+    def approxQuantile(
+        self,
+        col: Union[str, List[str], Tuple[str]],
+        probabilities: Union[List[float], Tuple[float]],
+        relativeError: float,
+    ) -> Union[List[float], List[List[float]]]:
+        return self.df.approxQuantile(col, probabilities, relativeError)
+
+    approxQuantile.__doc__ = DataFrame.approxQuantile.__doc__
 
     def crosstab(self, col1: str, col2: str) -> DataFrame:
         return self.df.crosstab(col1, col2)

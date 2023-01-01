@@ -32,13 +32,7 @@ import org.apache.spark.sql.types._
 class InterpretedSafeProjection(expressions: Seq[Expression]) extends Projection {
 
   private[this] val subExprEliminationEnabled = SQLConf.get.subexpressionEliminationEnabled
-  private[this] lazy val runtime =
-    new SubExprEvaluationRuntime(SQLConf.get.subexpressionEliminationCacheMaxEntries)
-  private[this] val exprs = if (subExprEliminationEnabled) {
-    runtime.proxyExpressions(expressions)
-  } else {
-    expressions
-  }
+  private[this] val exprs = prepareExpressions(expressions, subExprEliminationEnabled)
 
   private[this] val mutableRow = new SpecificInternalRow(expressions.map(_.dataType))
 
@@ -106,6 +100,13 @@ class InterpretedSafeProjection(expressions: Seq[Expression]) extends Projection
     case _ => identity
   }
 
+  override def initialize(partitionIndex: Int): Unit = {
+    expressions.foreach(_.foreach {
+      case n: Nondeterministic => n.initialize(partitionIndex)
+      case _ =>
+    })
+  }
+
   override def apply(row: InternalRow): InternalRow = {
     if (subExprEliminationEnabled) {
       runtime.setInput(row)
@@ -130,10 +131,6 @@ object InterpretedSafeProjection {
    * Returns an [[SafeProjection]] for given sequence of bound Expressions.
    */
   def createProjection(exprs: Seq[Expression]): Projection = {
-    // We need to make sure that we do not reuse stateful expressions.
-    val cleanedExpressions = exprs.map(_.transform {
-      case s: Stateful => s.freshCopy()
-    })
-    new InterpretedSafeProjection(cleanedExpressions)
+    new InterpretedSafeProjection(exprs)
   }
 }

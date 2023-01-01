@@ -97,7 +97,7 @@ class JobDataWrapperSerializer extends ProtobufSerDe {
       description = description,
       submissionTime = submissionTime,
       completionTime = completionTime,
-      stageIds = info.getStageIdsList.asScala.map(_.toInt).toSeq,
+      stageIds = info.getStageIdsList.asScala.map(_.toInt),
       jobGroup = jobGroup,
       status = status,
       numTasks = info.getNumTasks,

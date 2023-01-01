@@ -43,7 +43,7 @@ private[spark] abstract class PagedDataSource[T](val pageSize: Int) {
   /**
    * Slice a range of data.
    */
-  protected def sliceData(from: Int, to: Int): Seq[T]
+  protected def sliceData(from: Int, to: Int): collection.Seq[T]
 
   /**
    * Slice the data for this page
@@ -76,7 +76,7 @@ private[spark] abstract class PagedDataSource[T](val pageSize: Int) {
  * The data returned by `PagedDataSource.pageData`, including the page number, the number of total
  * pages and the data in this page.
  */
-private[ui] case class PageData[T](totalPage: Int, data: Seq[T])
+private[ui] case class PageData[T](totalPage: Int, data: collection.Seq[T])
 
 /**
  * A paged table that will generate a HTML table for a specified page and also the page navigation.

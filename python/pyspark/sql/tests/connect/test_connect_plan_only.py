@@ -30,7 +30,14 @@ if should_test_connect:
     from pyspark.sql.connect.readwriter import DataFrameReader
     from pyspark.sql.connect.function_builder import UserDefinedFunction, udf
     from pyspark.sql.connect.types import pyspark_types_to_proto_types
-    from pyspark.sql.types import StringType, StructType, StructField, IntegerType, MapType
+    from pyspark.sql.types import (
+        StringType,
+        StructType,
+        StructField,
+        IntegerType,
+        MapType,
+        ArrayType,
+    )
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
@@ -244,21 +251,21 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
             self.assertEqual(plan.root.sample.upper_bound, 0.16666666666666666)
             self.assertEqual(plan.root.sample.with_replacement, False)
             self.assertEqual(plan.root.sample.HasField("seed"), True)
-            self.assertEqual(plan.root.sample.force_stable_sort, True)
+            self.assertEqual(plan.root.sample.deterministic_order, True)
 
             plan = relations[1]._plan.to_proto(self.connect)
             self.assertEqual(plan.root.sample.lower_bound, 0.16666666666666666)
             self.assertEqual(plan.root.sample.upper_bound, 0.5)
             self.assertEqual(plan.root.sample.with_replacement, False)
             self.assertEqual(plan.root.sample.HasField("seed"), True)
-            self.assertEqual(plan.root.sample.force_stable_sort, True)
+            self.assertEqual(plan.root.sample.deterministic_order, True)
 
             plan = relations[2]._plan.to_proto(self.connect)
             self.assertEqual(plan.root.sample.lower_bound, 0.5)
             self.assertEqual(plan.root.sample.upper_bound, 1.0)
             self.assertEqual(plan.root.sample.with_replacement, False)
             self.assertEqual(plan.root.sample.HasField("seed"), True)
-            self.assertEqual(plan.root.sample.force_stable_sort, True)
+            self.assertEqual(plan.root.sample.deterministic_order, True)
 
         relations = df.filter(df.col_name > 3).randomSplit([1.0, 2.0, 3.0], 1)
         checkRelations(relations)
@@ -319,7 +326,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertEqual(plan.root.sample.upper_bound, 0.3)
         self.assertEqual(plan.root.sample.with_replacement, False)
         self.assertEqual(plan.root.sample.HasField("seed"), False)
-        self.assertEqual(plan.root.sample.force_stable_sort, False)
+        self.assertEqual(plan.root.sample.deterministic_order, False)
 
         plan = (
             df.filter(df.col_name > 3)
@@ -330,7 +337,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertEqual(plan.root.sample.upper_bound, 0.4)
         self.assertEqual(plan.root.sample.with_replacement, True)
         self.assertEqual(plan.root.sample.seed, -1)
-        self.assertEqual(plan.root.sample.force_stable_sort, False)
+        self.assertEqual(plan.root.sample.deterministic_order, False)
 
     def test_sort(self):
         df = self.connect.readTable(table_name=self.tbl_name)
@@ -547,6 +554,7 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
                 StructField("col1", IntegerType(), True),
                 StructField("col2", StringType(), True),
                 StructField("map1", MapType(StringType(), IntegerType(), True), True),
+                StructField("array1", ArrayType(IntegerType(), True), True),
             ]
         )
         new_plan = df.to(schema)._plan.to_proto(self.connect)

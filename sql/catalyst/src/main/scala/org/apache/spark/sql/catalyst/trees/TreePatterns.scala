@@ -90,6 +90,7 @@ object TreePattern extends Enumeration  {
   val TIME_ZONE_AWARE_EXPRESSION: Value = Value
   val TRUE_OR_FALSE_LITERAL: Value = Value
   val WINDOW_EXPRESSION: Value = Value
+  val WINDOW_TIME: Value = Value
   val UNARY_POSITIVE: Value = Value
   val UNPIVOT: Value = Value
   val UPDATE_FIELDS: Value = Value

@@ -18,8 +18,15 @@
 syntax = "proto3";
 package org.apache.spark.status.protobuf;
 
+/**
+ * Developer guides:
+ *   - Coding style: https://developers.google.com/protocol-buffers/docs/style
+ *   - Use int64 for job/stage IDs, in case of future extension in Spark core.
+ *   - Use `weakIntern` on string values in create new objects during deserialization.
+ */
+
 enum JobExecutionStatus {
-  UNSPECIFIED = 0;
+  JOB_EXECUTION_STATUS_UNSPECIFIED = 0;
   RUNNING = 1;
   SUCCEEDED = 2;
   FAILED = 3;
@@ -389,4 +396,281 @@ message SQLExecutionUIData {
   map<int64, JobExecutionStatus> jobs = 10;
   repeated int64 stages = 11;
   map<int64, string> metric_values = 12;
+}
+
+message SparkPlanGraphNode {
+  int64 id = 1;
+  string name = 2;
+  string desc = 3;
+  repeated SQLPlanMetric metrics = 4;
+}
+
+message SparkPlanGraphClusterWrapper {
+  int64 id = 1;
+  string name = 2;
+  string desc = 3;
+  repeated SparkPlanGraphNodeWrapper nodes = 4;
+  repeated SQLPlanMetric metrics = 5;
+}
+
+message SparkPlanGraphNodeWrapper {
+  SparkPlanGraphNode node = 1;
+  SparkPlanGraphClusterWrapper cluster = 2;
+}
+
+message SparkPlanGraphEdge {
+  int64 from_id = 1;
+  int64 to_id = 2;
+}
+
+message SparkPlanGraphWrapper {
+  int64 execution_id = 1;
+  repeated SparkPlanGraphNodeWrapper nodes = 2;
+  repeated SparkPlanGraphEdge edges = 3;
+}
+
+message RDDOperationEdge {
+  int32 from_id = 1;
+  int32 to_id = 2;
+}
+
+message RDDOperationNode {
+  enum DeterministicLevel {
+    UNSPECIFIED = 0;
+    DETERMINATE = 1;
+    UNORDERED = 2;
+    INDETERMINATE = 3;
+  }
+  int32 id = 1;
+  string name = 2;
+  bool cached = 3;
+  bool barrier = 4;
+  string callsite = 5;
+  DeterministicLevel output_deterministic_level = 6;
+}
+
+message RDDOperationClusterWrapper {
+  string id = 1;
+  string name = 2;
+  repeated RDDOperationNode child_nodes = 3;
+  repeated RDDOperationClusterWrapper child_clusters = 4;
+}
+
+message RDDOperationGraphWrapper {
+  int64 stage_id = 1;
+  repeated RDDOperationEdge edges = 2;
+  repeated RDDOperationEdge outgoing_edges = 3;
+  repeated RDDOperationEdge incoming_edges = 4;
+  RDDOperationClusterWrapper root_cluster = 5;
+}
+
+message StageDataWrapper {
+  StageData info = 1;
+  repeated int64 job_ids = 2;
+  map<string, int64> locality = 3;
+}
+
+message TaskData {
+  int64 task_id = 1;
+  int32 index = 2;
+  int32 attempt = 3;
+  int32 partition_id = 4;
+  int64 launch_time = 5;
+  optional int64 result_fetch_start = 6;
+  optional int64 duration = 7;
+  string executor_id = 8;
+  string host = 9;
+  string status = 10;
+  string task_locality = 11;
+  bool speculative = 12;
+  repeated AccumulableInfo accumulator_updates = 13;
+  optional string error_message = 14;
+  optional TaskMetrics task_metrics = 15;
+  map<string, string> executor_logs = 16;
+  int64 scheduler_delay = 17;
+  int64 getting_result_time = 18;
+}
+
+enum StageStatus {
+  STAGE_STATUS_UNSPECIFIED = 0;
+  STAGE_STATUS_ACTIVE = 1;
+  STAGE_STATUS_COMPLETE = 2;
+  STAGE_STATUS_FAILED = 3;
+  STAGE_STATUS_PENDING = 4;
+  STAGE_STATUS_SKIPPED = 5;
+}
+
+message StageData {
+  StageStatus status = 1;
+  int64 stage_id = 2;
+  int32 attempt_id = 3;
+  int32 num_tasks = 4;
+  int32 num_active_tasks = 5;
+  int32 num_complete_tasks = 6;
+  int32 num_failed_tasks = 7;
+  int32 num_killed_tasks = 8;
+  int32 num_completed_indices = 9;
+
+  optional int64 submission_time = 10;
+  optional int64 first_task_launched_time = 11;
+  optional int64 completion_time = 12;
+  optional string failure_reason = 13;
+
+  int64 executor_deserialize_time = 14;
+  int64 executor_deserialize_cpu_time = 15;
+  int64 executor_run_time = 16;
+  int64 executor_cpu_time = 17;
+  int64 result_size = 18;
+  int64 jvm_gc_time = 19;
+  int64 result_serialization_time = 20;
+  int64 memory_bytes_spilled = 21;
+  int64 disk_bytes_spilled = 22;
+  int64 peak_execution_memory = 23;
+  int64 input_bytes = 24;
+  int64 input_records = 25;
+  int64 output_bytes = 26;
+  int64 output_records = 27;
+  int64 shuffle_remote_blocks_fetched = 28;
+  int64 shuffle_local_blocks_fetched = 29;
+  int64 shuffle_fetch_wait_time = 30;
+  int64 shuffle_remote_bytes_read = 31;
+  int64 shuffle_remote_bytes_read_to_disk = 32;
+  int64 shuffle_local_bytes_read = 33;
+  int64 shuffle_read_bytes = 34;
+  int64 shuffle_read_records = 35;
+  int64 shuffle_write_bytes = 36;
+  int64 shuffle_write_time = 37;
+  int64 shuffle_write_records = 38;
+
+  string name = 39;
+  optional string description = 40;
+  string details = 41;
+  string scheduling_pool = 42;
+
+  repeated int64 rdd_ids = 43;
+  repeated AccumulableInfo accumulator_updates = 44;
+  map<int64, TaskData> tasks = 45;
+  map<string, ExecutorStageSummary> executor_summary = 46;
+  optional SpeculationStageSummary speculation_summary = 47;
+  map<string, int32> killed_tasks_summary = 48;
+  int32 resource_profile_id = 49;
+  optional ExecutorMetrics peak_executor_metrics = 50;
+  optional TaskMetricDistributions task_metrics_distributions = 51;
+  optional ExecutorMetricsDistributions executor_metrics_distributions = 52;
+}
+
+message TaskMetrics {
+  int64 executor_deserialize_time = 1;
+  int64 executor_deserialize_cpu_time = 2;
+  int64 executor_run_time = 3;
+  int64 executor_cpu_time = 4;
+  int64 result_size = 5;
+  int64 jvm_gc_time = 6;
+  int64 result_serialization_time = 7;
+  int64 memory_bytes_spilled = 8;
+  int64 disk_bytes_spilled = 9;
+  int64 peak_execution_memory = 10;
+  InputMetrics input_metrics = 11;
+  OutputMetrics output_metrics = 12;
+  ShuffleReadMetrics shuffle_read_metrics = 13;
+  ShuffleWriteMetrics shuffle_write_metrics = 14;
+}
+
+message InputMetrics {
+  int64 bytes_read = 1;
+  int64 records_read = 2;
+}
+
+message OutputMetrics {
+  int64 bytes_written = 1;
+  int64 records_written = 2;
+}
+
+message ShuffleReadMetrics {
+  int64 remote_blocks_fetched = 1;
+  int64 local_blocks_fetched = 2;
+  int64 fetch_wait_time = 3;
+  int64 remote_bytes_read = 4;
+  int64 remote_bytes_read_to_disk = 5;
+  int64 local_bytes_read = 6;
+  int64 records_read = 7;
+}
+
+message ShuffleWriteMetrics {
+  int64 bytes_written = 1;
+  int64 write_time = 2;
+  int64 records_written = 3;
+}
+
+message TaskMetricDistributions {
+  repeated double quantiles = 1;
+  repeated double duration = 2;
+  repeated double executor_deserialize_time = 3;
+  repeated double executor_deserialize_cpu_time = 4;
+  repeated double executor_run_time = 5;
+  repeated double executor_cpu_time = 6;
+  repeated double result_size = 7;
+  repeated double jvm_gc_time = 8;
+  repeated double result_serialization_time = 9;
+  repeated double getting_result_time = 10;
+  repeated double scheduler_delay = 11;
+  repeated double peak_execution_memory = 12;
+  repeated double memory_bytes_spilled = 13;
+  repeated double disk_bytes_spilled = 14;
+  InputMetricDistributions input_metrics = 15;
+  OutputMetricDistributions output_metrics = 16;
+  ShuffleReadMetricDistributions shuffle_read_metrics = 17;
+  ShuffleWriteMetricDistributions shuffle_write_metrics = 18;
+}
+
+message InputMetricDistributions {
+  repeated double bytes_read = 1;
+  repeated double records_read = 2;
+}
+
+message OutputMetricDistributions {
+  repeated double bytes_written = 1;
+  repeated double records_written = 2;
+}
+
+message ShuffleReadMetricDistributions {
+  repeated double read_bytes = 1;
+  repeated double read_records = 2;
+  repeated double remote_blocks_fetched = 3;
+  repeated double local_blocks_fetched = 4;
+  repeated double fetch_wait_time = 5;
+  repeated double remote_bytes_read = 6;
+  repeated double remote_bytes_read_to_disk = 7;
+  repeated double total_blocks_fetched = 8;
+}
+
+message ShuffleWriteMetricDistributions {
+  repeated double write_bytes = 1;
+  repeated double write_records = 2;
+  repeated double write_time = 3;
+}
+
+message ExecutorMetricsDistributions {
+  repeated double quantiles = 1;
+
+  repeated double task_time = 2;
+  repeated double failed_tasks = 3;
+  repeated double succeeded_tasks = 4;
+  repeated double killed_tasks = 5;
+  repeated double input_bytes = 6;
+  repeated double input_records = 7;
+  repeated double output_bytes = 8;
+  repeated double output_records = 9;
+  repeated double shuffle_read = 10;
+  repeated double shuffle_read_records = 11;
+  repeated double shuffle_write = 12;
+  repeated double shuffle_write_records = 13;
+  repeated double memory_bytes_spilled = 14;
+  repeated double disk_bytes_spilled = 15;
+  ExecutorPeakMetricsDistributions peak_memory_metrics = 16;
+}
+
+message ExecutorPeakMetricsDistributions {
+  repeated double quantiles = 1;
+  repeated ExecutorMetrics executor_metrics = 2;
 }

@@ -1125,10 +1125,12 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   """,
   group = "array_funcs",
   since = "2.4.0")
-case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
-  extends UnaryExpression with ExpectsInputTypes with Stateful with ExpressionWithRandomSeed {
+case class Shuffle(child: Expression, randomSeed: Option[Long] = None) extends UnaryExpression
+  with ExpectsInputTypes with Nondeterministic with ExpressionWithRandomSeed {
 
   def this(child: Expression) = this(child, None)
+
+  override def stateful: Boolean = true
 
   override def seedExpression: Expression = randomSeed.map(Literal.apply).getOrElse(UnresolvedSeed)
 
@@ -1194,8 +1196,6 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
        |${ev.value} = $arrayData;
      """.stripMargin
   }
-
-  override def freshCopy(): Shuffle = Shuffle(child, randomSeed)
 
   override def withNewChildInternal(newChild: Expression): Shuffle = copy(child = newChild)
 }

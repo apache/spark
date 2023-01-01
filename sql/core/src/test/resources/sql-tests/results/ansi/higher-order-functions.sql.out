@@ -157,6 +157,44 @@ NULL
 
 
 -- !query
+select reduce(ys, 0, (y, a) -> y + a + x) as v from nested
+-- !query schema
+struct<v:int>
+-- !query output
+131
+15
+5
+
+
+-- !query
+select reduce(ys, (0 as sum, 0 as n), (acc, x) -> (acc.sum + x, acc.n + 1), acc -> acc.sum / acc.n) as v from nested
+-- !query schema
+struct<v:double>
+-- !query output
+0.5
+12.0
+64.5
+
+
+-- !query
+select transform(zs, z -> reduce(z, 1, (acc, val) -> acc * val * size(z))) as v from nested
+-- !query schema
+struct<v:array<int>>
+-- !query output
+[1010880,8]
+[17]
+[4752,20664,1]
+
+
+-- !query
+select reduce(cast(null as array<int>), 0, (a, y) -> a + y + 1, a -> a + 2) as v
+-- !query schema
+struct<v:int>
+-- !query output
+NULL
+
+
+-- !query
 select exists(ys, y -> y > 30) as v from nested
 -- !query schema
 struct<v:boolean>

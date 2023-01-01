@@ -15,14 +15,19 @@
 # limitations under the License.
 #
 
+import logging
 import os
 import urllib.parse
 import uuid
-from typing import Iterable, Optional, Any, Union, List, Tuple, Dict
+from typing import Iterable, Optional, Any, Union, List, Tuple, Dict, NoReturn, cast
 
+import google.protobuf.message
+from grpc_status import rpc_status
 import grpc
 import pandas
+from google.protobuf import text_format
 import pyarrow as pa
+from google.rpc import error_details_pb2
 
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
@@ -34,6 +39,50 @@ from pyspark.sql.types import (
     StructType,
     StructField,
 )
+
+
+def _configure_logging() -> logging.Logger:
+    """Configure logging for the Spark Connect clients."""
+    logger = logging.getLogger(__name__)
+    handler = logging.StreamHandler()
+    handler.setFormatter(
+        logging.Formatter(fmt="%(asctime)s %(process)d %(levelname)s %(funcName)s %(message)s")
+    )
+    logger.addHandler(handler)
+
+    # Check the environment variables for log levels:
+    if "SPARK_CONNECT_LOG_LEVEL" in os.environ:
+        logger.setLevel(os.getenv("SPARK_CONNECT_LOG_LEVEL", "error").upper())
+    else:
+        logger.disabled = True
+    return logger
+
+
+# Instantiate the logger based on the environment configuration.
+logger = _configure_logging()
+
+
+class SparkConnectException(Exception):
+    def __init__(self, message: str, reason: Optional[str] = None) -> None:
+        super(SparkConnectException, self).__init__(message)
+        self._reason = reason
+        self._message = message
+
+    def __str__(self) -> str:
+        if self._reason is not None:
+            return f"({self._reason}) {self._message}"
+        else:
+            return self._message
+
+
+class SparkConnectAnalysisException(SparkConnectException):
+    def __init__(self, reason: str, message: str, plan: str) -> None:
+        self._reason = reason
+        self._message = message
+        self._plan = plan
+
+    def __str__(self) -> str:
+        return f"{self._message}\nPlan: {self._plan}"
 
 
 class ChannelBuilder:
@@ -60,7 +109,18 @@ class ChannelBuilder:
 
     DEFAULT_PORT = 15002
 
-    def __init__(self, url: str) -> None:
+    def __init__(self, url: str, channelOptions: Optional[List[Tuple[str, Any]]] = None) -> None:
+        """
+        Constructs a new channel builder. This is used to create the proper GRPC channel from
+        the connection string.
+
+        Parameters
+        ----------
+        url : str
+            Spark Connect connection string
+        channelOptions: list of tuple, optional
+            Additional options that can be passed to the GRPC channel construction.
+        """
         # Explicitly check the scheme of the URL.
         if url[:5] != "sc://":
             raise AttributeError("URL scheme must be set to `sc`.")
@@ -74,6 +134,7 @@ class ChannelBuilder:
                 f"Path component for connection URI must be empty: {self.url.path}"
             )
         self._extract_attributes()
+        self._channel_options = channelOptions
 
     def _extract_attributes(self) -> None:
         if len(self.url.params) > 0:
@@ -159,7 +220,8 @@ class ChannelBuilder:
     def toChannel(self) -> grpc.Channel:
         """
         Applies the parameters of the connection string and creates a new
-        GRPC channel according to the configuration.
+        GRPC channel according to the configuration. Passes optional channel options to
+        construct the channel.
 
         Returns
         -------
@@ -176,7 +238,7 @@ class ChannelBuilder:
             use_secure = False
 
         if not use_secure:
-            return grpc.insecure_channel(destination)
+            return grpc.insecure_channel(destination, options=self._channel_options)
         else:
             # Default SSL Credentials.
             opt_token = self.params.get(ChannelBuilder.PARAM_TOKEN, None)
@@ -186,9 +248,15 @@ class ChannelBuilder:
                 composite_creds = grpc.composite_channel_credentials(
                     ssl_creds, grpc.access_token_call_credentials(opt_token)
                 )
-                return grpc.secure_channel(destination, credentials=composite_creds)
+                return grpc.secure_channel(
+                    destination, credentials=composite_creds, options=self._channel_options
+                )
             else:
-                return grpc.secure_channel(destination, credentials=grpc.ssl_channel_credentials())
+                return grpc.secure_channel(
+                    destination,
+                    credentials=grpc.ssl_channel_credentials(),
+                    options=self._channel_options,
+                )
 
 
 class MetricValue:
@@ -272,7 +340,12 @@ class AnalyzeResult:
 class SparkConnectClient(object):
     """Conceptually the remote spark session that communicates with the server"""
 
-    def __init__(self, connectionString: str, userId: Optional[str] = None):
+    def __init__(
+        self,
+        connectionString: str,
+        userId: Optional[str] = None,
+        channelOptions: Optional[List[Tuple[str, Any]]] = None,
+    ):
         """
         Creates a new SparkSession for the Spark Connect interface.
 
@@ -288,8 +361,12 @@ class SparkConnectClient(object):
             takes precedence.
         """
         # Parse the connection string.
-        self._builder = ChannelBuilder(connectionString)
+        self._builder = ChannelBuilder(connectionString, channelOptions)
         self._user_id = None
+        # Generate a unique session ID for this client. This UUID must be unique to allow
+        # concurrent Spark sessions of the same user. If the channel is closed, creating
+        # a new client will create a new session ID.
+        self._session_id = str(uuid.uuid4())
         if self._builder.userId is not None:
             self._user_id = self._builder.userId
         elif userId is not None:
@@ -299,6 +376,7 @@ class SparkConnectClient(object):
 
         self._channel = self._builder.toChannel()
         self._stub = grpc_lib.SparkConnectServiceStub(self._channel)
+        # Configure logging for the SparkConnect client.
 
     def register_udf(
         self, function: Any, return_type: Union[str, pyspark.sql.types.DataType]
@@ -308,6 +386,7 @@ class SparkConnectClient(object):
         name = f"fun_{uuid.uuid4().hex}"
         fun = pb2.CreateScalarFunction()
         fun.parts.append(name)
+        logger.info(f"Registering UDF: {self._proto_to_string(fun)}")
         fun.serialized_function = cloudpickle.dumps((function, return_type))
 
         req = self._execute_plan_request_with_metadata()
@@ -327,7 +406,8 @@ class SparkConnectClient(object):
             for x in metrics.metrics
         ]
 
-    def _to_pandas(self, plan: pb2.Plan) -> "pandas.DataFrame":
+    def to_pandas(self, plan: pb2.Plan) -> "pandas.DataFrame":
+        logger.info(f"Executing plan {self._proto_to_string(plan)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
         return self._execute_and_fetch(req)
@@ -335,7 +415,22 @@ class SparkConnectClient(object):
     def _proto_schema_to_pyspark_schema(self, schema: pb2.DataType) -> DataType:
         return types.proto_schema_to_pyspark_data_type(schema)
 
+    def _proto_to_string(self, p: google.protobuf.message.Message) -> str:
+        """
+        Helper method to generate a one line string representation of the plan.
+        Parameters
+        ----------
+        p : google.protobuf.message.Message
+            Generic Message type
+
+        Returns
+        -------
+        Single line string of the serialized proto message.
+        """
+        return text_format.MessageToString(p, as_one_line=True)
+
     def schema(self, plan: pb2.Plan) -> StructType:
+        logger.info(f"Schema for plan: {self._proto_to_string(plan)}")
         proto_schema = self._analyze(plan).schema
         # Server side should populate the struct field which is the schema.
         assert proto_schema.HasField("struct")
@@ -351,10 +446,12 @@ class SparkConnectClient(object):
         return StructType(fields)
 
     def explain_string(self, plan: pb2.Plan, explain_mode: str = "extended") -> str:
+        logger.info(f"Explain (mode={explain_mode}) for plan {self._proto_to_string(plan)}")
         result = self._analyze(plan, explain_mode)
         return result.explain_string
 
     def execute_command(self, command: pb2.Command) -> None:
+        logger.info(f"Execute command for command {self._proto_to_string(command)}")
         req = self._execute_plan_request_with_metadata()
         if self._user_id:
             req.user_context.user_id = self._user_id
@@ -367,6 +464,7 @@ class SparkConnectClient(object):
 
     def _execute_plan_request_with_metadata(self) -> pb2.ExecutePlanRequest:
         req = pb2.ExecutePlanRequest()
+        req.client_id = self._session_id
         req.client_type = "_SPARK_CONNECT_PYTHON"
         if self._user_id:
             req.user_context.user_id = self._user_id
@@ -374,12 +472,27 @@ class SparkConnectClient(object):
 
     def _analyze_plan_request_with_metadata(self) -> pb2.AnalyzePlanRequest:
         req = pb2.AnalyzePlanRequest()
+        req.client_id = self._session_id
         req.client_type = "_SPARK_CONNECT_PYTHON"
         if self._user_id:
             req.user_context.user_id = self._user_id
         return req
 
     def _analyze(self, plan: pb2.Plan, explain_mode: str = "extended") -> AnalyzeResult:
+        """
+        Call the analyze RPC of Spark Connect.
+
+        Parameters
+        ----------
+        plan : :class:`pyspark.sql.connect.proto.Plan`
+           Proto representation of the plan.
+        explain_mode : str
+           Explain mode
+
+        Returns
+        -------
+        The result of the analyze call.
+        """
         req = self._analyze_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
         if explain_mode not in ["simple", "extended", "codegen", "cost", "formatted"]:
@@ -400,30 +513,64 @@ class SparkConnectClient(object):
         else:  # formatted
             req.explain.explain_mode = pb2.Explain.ExplainMode.FORMATTED
 
-        resp = self._stub.AnalyzePlan(req, metadata=self._builder.metadata())
-        return AnalyzeResult.fromProto(resp)
+        try:
+            resp = self._stub.AnalyzePlan(req, metadata=self._builder.metadata())
+            if resp.client_id != self._session_id:
+                raise SparkConnectException("Received incorrect session identifier for request.")
+            return AnalyzeResult.fromProto(resp)
+        except grpc.RpcError as rpc_error:
+            self._handle_error(rpc_error)
 
     def _process_batch(self, arrow_batch: pb2.ExecutePlanResponse.ArrowBatch) -> "pandas.DataFrame":
         with pa.ipc.open_stream(arrow_batch.data) as rd:
             return rd.read_pandas()
 
     def _execute(self, req: pb2.ExecutePlanRequest) -> None:
-        for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
-            continue
-        return
+        """
+        Execute the passed request `req` and drop all results.
+
+        Parameters
+        ----------
+        req : pb2.ExecutePlanRequest
+            Proto representation of the plan.
+
+        """
+        logger.info("Execute")
+        try:
+            for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
+                if b.client_id != self._session_id:
+                    raise SparkConnectException(
+                        "Received incorrect session identifier for request."
+                    )
+                continue
+        except grpc.RpcError as rpc_error:
+            self._handle_error(rpc_error)
 
     def _execute_and_fetch(self, req: pb2.ExecutePlanRequest) -> "pandas.DataFrame":
+        logger.info("ExecuteAndFetch")
         import pandas as pd
 
         m: Optional[pb2.ExecutePlanResponse.Metrics] = None
         result_dfs = []
 
-        for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
-            if b.metrics is not None:
-                m = b.metrics
-            if b.HasField("arrow_batch"):
-                pb = self._process_batch(b.arrow_batch)
-                result_dfs.append(pb)
+        try:
+            for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
+                if b.client_id != self._session_id:
+                    raise SparkConnectException(
+                        "Received incorrect session identifier for request."
+                    )
+                if b.metrics is not None:
+                    logger.debug("Received metric batch.")
+                    m = b.metrics
+                if b.HasField("arrow_batch"):
+                    logger.debug(
+                        f"Received arrow batch rows={b.arrow_batch.row_count} "
+                        f"size={len(b.arrow_batch.data)}"
+                    )
+                    pb = self._process_batch(b.arrow_batch)
+                    result_dfs.append(pb)
+        except grpc.RpcError as rpc_error:
+            self._handle_error(rpc_error)
 
         assert len(result_dfs) > 0
 
@@ -439,3 +586,50 @@ class SparkConnectClient(object):
         if m is not None:
             df.attrs["metrics"] = self._build_metrics(m)
         return df
+
+    def _handle_error(self, rpc_error: grpc.RpcError) -> NoReturn:
+        """
+        Error handling helper for dealing with GRPC Errors. On the server side, certain
+        exceptions are enriched with additional RPC Status information. These are
+        unpacked in this function and put into the exception.
+
+        To avoid overloading the user with GRPC errors, this message explicitly
+        swallows the error context from the call. This GRPC Error is logged however,
+        and can be enabled.
+
+        Parameters
+        ----------
+        rpc_error : grpc.RpcError
+           RPC Error containing the details of the exception.
+
+        Returns
+        -------
+        Throws the appropriate internal Python exception.
+        """
+        logger.exception("GRPC Error received")
+        # We have to cast the value here because, a RpcError is a Call as well.
+        # https://grpc.github.io/grpc/python/grpc.html#grpc.UnaryUnaryMultiCallable.__call__
+        status = rpc_status.from_call(cast(grpc.Call, rpc_error))
+        if status:
+            for d in status.details:
+                if d.Is(error_details_pb2.ErrorInfo.DESCRIPTOR):
+                    info = error_details_pb2.ErrorInfo()
+                    d.Unpack(info)
+                    if info.reason == "org.apache.spark.sql.AnalysisException":
+                        raise SparkConnectAnalysisException(
+                            info.reason, info.metadata["message"], info.metadata["plan"]
+                        ) from None
+                    else:
+                        raise SparkConnectException(status.message, info.reason) from None
+
+            raise SparkConnectException(status.message) from None
+        else:
+            raise SparkConnectException(str(rpc_error)) from None
+
+
+__all__ = [
+    "ChannelBuilder",
+    "SparkConnectClient",
+    "SparkConnectException",
+    "SparkConnectAnalysisException",
+]
