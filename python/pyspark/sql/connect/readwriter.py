@@ -476,7 +476,9 @@ def _test() -> None:
         globs = pyspark.sql.connect.readwriter.__dict__.copy()
         # Works around to create a regular Spark session
         sc = SparkContext("local[4]", "sql.connect.readwriter tests", conf=SparkConf())
-        globs["_spark"] = PySparkSession(sc, options={"spark.app.name": "sql.connect.readwriter tests"})
+        globs["_spark"] = PySparkSession(
+            sc, options={"spark.app.name": "sql.connect.readwriter tests"}
+        )
 
         # Creates a remote Spark session.
         os.environ["SPARK_REMOTE"] = "sc://localhost"
@@ -486,8 +488,8 @@ def _test() -> None:
             pyspark.sql.connect.readwriter,
             globs=globs,
             optionflags=doctest.ELLIPSIS
-                        | doctest.NORMALIZE_WHITESPACE
-                        | doctest.IGNORE_EXCEPTION_DETAIL,
+            | doctest.NORMALIZE_WHITESPACE
+            | doctest.IGNORE_EXCEPTION_DETAIL,
         )
 
         globs["spark"].stop()
