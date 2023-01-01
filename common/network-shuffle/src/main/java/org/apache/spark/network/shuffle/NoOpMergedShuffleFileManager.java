@@ -44,12 +44,12 @@ public class NoOpMergedShuffleFileManager implements MergedShuffleFileManager {
 
   @Override
   public StreamCallbackWithID receiveBlockDataAsStream(PushBlockStream msg) {
-    throw new UnsupportedOperationException("Cannot handle merged shuffle remove");
+    throw new UnsupportedOperationException("Cannot handle shuffle block merge");
   }
 
   @Override
   public MergeStatuses finalizeShuffleMerge(FinalizeShuffleMerge msg) throws IOException {
-    throw new UnsupportedOperationException("Cannot handle merged shuffle remove");
+    throw new UnsupportedOperationException("Cannot handle shuffle block merge");
   }
 
   @Override
@@ -69,7 +69,7 @@ public class NoOpMergedShuffleFileManager implements MergedShuffleFileManager {
       int shuffleMergeId,
       int reduceId,
       int chunkId) {
-    throw new UnsupportedOperationException("Cannot handle merged shuffle remove");
+    throw new UnsupportedOperationException("Cannot handle shuffle block merge");
   }
 
   @Override
@@ -78,12 +78,12 @@ public class NoOpMergedShuffleFileManager implements MergedShuffleFileManager {
       int shuffleId,
       int shuffleMergeId,
       int reduceId) {
-    throw new UnsupportedOperationException("Cannot handle merged shuffle remove");
+    throw new UnsupportedOperationException("Cannot handle shuffle block merge");
   }
 
   @Override
   public String[] getMergedBlockDirs(String appId) {
-    throw new UnsupportedOperationException("Cannot handle merged shuffle remove");
+    throw new UnsupportedOperationException("Cannot handle shuffle block merge");
   }
 
   @Override
