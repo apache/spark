@@ -434,13 +434,14 @@ message RDDOperationEdge {
   int32 to_id = 2;
 }
 
+enum DeterministicLevel {
+  DETERMINISTIC_LEVEL_UNSPECIFIED = 0;
+  DETERMINISTIC_LEVEL_DETERMINATE = 1;
+  DETERMINISTIC_LEVEL_UNORDERED = 2;
+  DETERMINISTIC_LEVEL_INDETERMINATE = 3;
+}
+
 message RDDOperationNode {
-  enum DeterministicLevel {
-    UNSPECIFIED = 0;
-    DETERMINATE = 1;
-    UNORDERED = 2;
-    INDETERMINATE = 3;
-  }
   int32 id = 1;
   string name = 2;
   bool cached = 3;

@@ -19,7 +19,6 @@ package org.apache.spark.status.protobuf
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.rdd.DeterministicLevel
 import org.apache.spark.status.{RDDOperationClusterWrapper, RDDOperationGraphWrapper}
 import org.apache.spark.ui.scope.{RDDOperationEdge, RDDOperationNode}
 
@@ -81,8 +80,8 @@ class RDDOperationGraphWrapperSerializer extends ProtobufSerDe {
   }
 
   private def serializeRDDOperationNode(node: RDDOperationNode): StoreTypes.RDDOperationNode = {
-    val outputDeterministicLevel = StoreTypes.RDDOperationNode.DeterministicLevel
-      .valueOf(node.outputDeterministicLevel.toString)
+    val outputDeterministicLevel = DeterministicLevelSerializer.serialize(
+      node.outputDeterministicLevel)
     val builder = StoreTypes.RDDOperationNode.newBuilder()
     builder.setId(node.id)
     builder.setName(node.name)
@@ -100,8 +99,8 @@ class RDDOperationGraphWrapperSerializer extends ProtobufSerDe {
       cached = node.getCached,
       barrier = node.getBarrier,
       callsite = node.getCallsite,
-      outputDeterministicLevel =
-        DeterministicLevel.withName(node.getOutputDeterministicLevel.toString)
+      outputDeterministicLevel = DeterministicLevelSerializer.deserialize(
+        node.getOutputDeterministicLevel)
     )
   }
 

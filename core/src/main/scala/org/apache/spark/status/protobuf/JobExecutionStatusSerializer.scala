@@ -17,19 +17,27 @@
 
 package org.apache.spark.status.protobuf
 
-import org.apache.commons.lang3.StringUtils
-
 import org.apache.spark.JobExecutionStatus
+import org.apache.spark.status.protobuf.StoreTypes.{JobExecutionStatus => GJobExecutionStatus}
 
-object JobExecutionStatusSerializer {
+private[protobuf] object JobExecutionStatusSerializer {
 
-  private def PREFIX = "JOB_EXECUTION_STATUS_"
-
-  private[protobuf] def serialize(input: JobExecutionStatus): StoreTypes.JobExecutionStatus = {
-    StoreTypes.JobExecutionStatus.valueOf(PREFIX + input.toString)
+  def serialize(input: JobExecutionStatus): GJobExecutionStatus = {
+    input match {
+      case JobExecutionStatus.RUNNING => GJobExecutionStatus.JOB_EXECUTION_STATUS_RUNNING
+      case JobExecutionStatus.SUCCEEDED => GJobExecutionStatus.JOB_EXECUTION_STATUS_SUCCEEDED
+      case JobExecutionStatus.FAILED => GJobExecutionStatus.JOB_EXECUTION_STATUS_FAILED
+      case JobExecutionStatus.UNKNOWN => GJobExecutionStatus.JOB_EXECUTION_STATUS_UNKNOWN
+    }
   }
 
-  private[protobuf] def deserialize(binary: StoreTypes.JobExecutionStatus): JobExecutionStatus = {
-    JobExecutionStatus.valueOf(StringUtils.removeStart(binary.toString, PREFIX))
+  def deserialize(binary: GJobExecutionStatus): JobExecutionStatus = {
+    binary match {
+      case GJobExecutionStatus.JOB_EXECUTION_STATUS_RUNNING => JobExecutionStatus.RUNNING
+      case GJobExecutionStatus.JOB_EXECUTION_STATUS_SUCCEEDED => JobExecutionStatus.SUCCEEDED
+      case GJobExecutionStatus.JOB_EXECUTION_STATUS_FAILED => JobExecutionStatus.FAILED
+      case GJobExecutionStatus.JOB_EXECUTION_STATUS_UNKNOWN => JobExecutionStatus.UNKNOWN
+      case _ => null
+    }
   }
 }
