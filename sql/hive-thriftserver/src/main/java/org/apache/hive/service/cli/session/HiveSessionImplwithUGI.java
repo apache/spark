@@ -95,7 +95,6 @@ public class HiveSessionImplwithUGI extends HiveSessionImpl {
   }
 
   /**
-   * Close the file systems for the session and remove it from the FileSystem cache.
    * Cancel the session's delegation token and close the metastore connection
    */
   @Override
@@ -104,16 +103,7 @@ public class HiveSessionImplwithUGI extends HiveSessionImpl {
       acquire(true);
       cancelDelegationToken();
     } finally {
-      try {
-        super.close();
-      } finally {
-        try {
-          FileSystem.closeAllForUGI(sessionUgi);
-        } catch (IOException ioe) {
-          throw new HiveSQLException("Could not clean up file-system handles for UGI: "
-              + sessionUgi, ioe);
-        }
-      }
+      super.close();
     }
   }
 
