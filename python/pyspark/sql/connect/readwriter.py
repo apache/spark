@@ -480,17 +480,18 @@ def _test() -> None:
             sc, options={"spark.app.name": "sql.connect.readwriter tests"}
         )
 
-        # SPARK-41746: infer schema for dictionaries
-        del pyspark.sql.connect.readwriter.DataFrameReader.format.__doc__
-        del pyspark.sql.connect.readwriter.DataFrameReader.json.__doc__
-        del pyspark.sql.connect.readwriter.DataFrameReader.options.__doc__
-        del pyspark.sql.connect.readwriter.DataFrameReader.parquet.__doc__
-        del pyspark.sql.connect.readwriter.DataFrameWriter.format.__doc__
-        del pyspark.sql.connect.readwriter.DataFrameWriter.json.__doc__
-        del pyspark.sql.connect.readwriter.DataFrameWriter.mode.__doc__
-        del pyspark.sql.connect.readwriter.DataFrameWriter.orc.__doc__
-        del pyspark.sql.connect.readwriter.DataFrameWriter.partitionBy.__doc__
-        del pyspark.sql.connect.readwriter.DataFrameWriter.save.__doc__
+        # TODO(SPARK-41817): Support reading with schema
+        del pyspark.sql.connect.readwriter.DataFrameReader.load.__doc__
+        del pyspark.sql.connect.readwriter.DataFrameReader.option.__doc__
+        del pyspark.sql.connect.readwriter.DataFrameWriter.csv.__doc__
+        del pyspark.sql.connect.readwriter.DataFrameWriter.option.__doc__
+        del pyspark.sql.connect.readwriter.DataFrameWriter.text.__doc__
+        del pyspark.sql.connect.readwriter.DataFrameWriter.bucketBy.__doc__
+        del pyspark.sql.connect.readwriter.DataFrameWriter.sortBy.__doc__
+
+        # TODO(SPARK-41818): Support saveAsTable
+        del pyspark.sql.connect.readwriter.DataFrameWriter.insertInto.__doc__
+        del pyspark.sql.connect.readwriter.DataFrameWriter.saveAsTable.__doc__
 
         # Creates a remote Spark session.
         os.environ["SPARK_REMOTE"] = "sc://localhost"

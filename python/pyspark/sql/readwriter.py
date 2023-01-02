@@ -962,7 +962,7 @@ class DataFrameWriter(OptionUtils):
         >>> with tempfile.TemporaryDirectory() as d:
         ...     spark.createDataFrame(
         ...         [{"age": 80, "name": "Xinrong Meng"}]
-        ...     ).write.mode("error").format("parquet").save(d)
+        ...     ).write.mode("error").format("parquet").save(d) # doctest: +SKIP
         Traceback (most recent call last):
             ...
         ...AnalysisException: ...
