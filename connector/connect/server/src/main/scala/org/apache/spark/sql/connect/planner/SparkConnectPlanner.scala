@@ -422,13 +422,12 @@ class SparkConnectPlanner(session: SparkSession) {
   }
 
   private def transformStatSampleBy(rel: proto.StatSampleBy): LogicalPlan = {
-    val fractions = mutable.Map.empty[Any, Double]
-    rel.getFractionsList.asScala.toSeq.foreach { protoFraction =>
+    val fractions = rel.getFractionsList.asScala.toSeq.map { protoFraction =>
       val stratum = transformLiteral(protoFraction.getStratum) match {
         case Literal(s, StringType) if s != null => s.toString
         case literal => literal.value
       }
-      fractions.update(stratum, protoFraction.getFraction)
+      (stratum, protoFraction.getFraction)
     }
 
     Dataset

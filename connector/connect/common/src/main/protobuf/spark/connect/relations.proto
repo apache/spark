@@ -550,6 +550,8 @@ message StatFreqItems {
 
 // Returns a stratified sample without replacement based on the fraction
 // given on each stratum.
+// It will invoke 'Dataset.stat.freqItems' (same as 'StatFunctions.freqItems')
+// to compute the results.
 message StatSampleBy {
   // (Required) The input relation.
   Relation input = 1;
