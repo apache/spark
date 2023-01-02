@@ -201,8 +201,8 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("insert with column list - mismatched target table out size after rewritten query") {
-    val v2Msg = "expected 2 columns but found"
+  test("insert with column list - missing columns") {
+    val v2Msg = "Cannot write incompatible data to table 'testcat.t1'"
     val cols = Seq("c1", "c2", "c3", "c4")
 
     withTable("t1") {
