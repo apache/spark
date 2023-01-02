@@ -220,7 +220,7 @@ class SparkSession:
             _data = list(data)
             pdf = pd.DataFrame(_data)
 
-            if _schema is None and isinstance(_data[0], Row):
+            if _schema is None and (isinstance(_data[0], Row) or isinstance(_data[0], dict)):
                 _schema = self._inferSchemaFromList(_data, _cols)
                 if _cols is not None:
                     for i, name in enumerate(_cols):
