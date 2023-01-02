@@ -90,7 +90,7 @@ class DataFrameReader(OptionUtils):
         Examples
         --------
         >>> spark.read.format('json')
-        <pyspark.sql.readwriter.DataFrameReader object ...>
+        <...readwriter.DataFrameReader object ...>
 
         Write a DataFrame into a JSON file and read it back.
 
@@ -133,7 +133,7 @@ class DataFrameReader(OptionUtils):
         Examples
         --------
         >>> spark.read.schema("col0 INT, col1 DOUBLE")
-        <pyspark.sql.readwriter.DataFrameReader object ...>
+        <...readwriter.DataFrameReader object ...>
 
         Specify the schema with reading a CSV file.
 
@@ -177,7 +177,7 @@ class DataFrameReader(OptionUtils):
         >>> from pyspark.sql import SparkSession
         >>> spark = SparkSession.builder.master("local").getOrCreate()
         >>> spark.read.option("key", "value")
-        <pyspark.sql.readwriter.DataFrameReader object ...>
+        <...readwriter.DataFrameReader object ...>
 
         Specify the option 'nullValue' with reading a CSV file.
 
@@ -216,7 +216,7 @@ class DataFrameReader(OptionUtils):
         Examples
         --------
         >>> spark.read.option("key", "value")
-        <pyspark.sql.readwriter.DataFrameReader object ...>
+        <...readwriter.DataFrameReader object ...>
 
         Specify the option 'nullValue' and 'header' with reading a CSV file.
 
@@ -1016,7 +1016,7 @@ class DataFrameWriter(OptionUtils):
         Examples
         --------
         >>> spark.range(1).write.format('parquet')
-        <pyspark.sql.readwriter.DataFrameWriter object ...>
+        <...readwriter.DataFrameWriter object ...>
 
         Write a DataFrame into a Parquet file and read it back.
 
@@ -1057,7 +1057,7 @@ class DataFrameWriter(OptionUtils):
         Examples
         --------
         >>> spark.range(1).write.option("key", "value")
-        <pyspark.sql.readwriter.DataFrameWriter object ...>
+        <...readwriter.DataFrameWriter object ...>
 
         Specify the option 'nullValue' with writing a CSV file.
 
@@ -1096,7 +1096,7 @@ class DataFrameWriter(OptionUtils):
         Examples
         --------
         >>> spark.range(1).write.option("key", "value")
-        <pyspark.sql.readwriter.DataFrameWriter object ...>
+        <...readwriter.DataFrameWriter object ...>
 
         Specify the option 'nullValue' and 'header' with writing a CSV file.
 
