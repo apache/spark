@@ -25,10 +25,11 @@ import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 
 class SparkConnectClient(
-  private val userContext: proto.UserContext,
-  private val channel: ManagedChannel) {
+    private val userContext: proto.UserContext,
+    private val channel: ManagedChannel) {
 
   private[this] val stub = proto.SparkConnectServiceGrpc.newBlockingStub(channel)
+
   /**
    * Placeholder method.
    * @return
@@ -71,8 +72,8 @@ object SparkConnectClient {
 
     /**
      * Creates the channel with a target connection string, which can be either a valid
-     * NameResolver-compliant URI, or an authority string.
-     * Note: The connection string, if used, will override any host/port settings.
+     * NameResolver-compliant URI, or an authority string. Note: The connection string, if used,
+     * will override any host/port settings.
      */
     def connectionString(connectionString: String): Builder = {
       _connectionString = Some(connectionString)

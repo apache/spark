@@ -27,7 +27,7 @@ import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 import org.apache.spark.connect.proto.{AnalyzePlanRequest, AnalyzePlanResponse, SparkConnectServiceGrpc}
 
 class SparkConnectClientSuite
-  extends AnyFunSuite // scalastyle:ignore funsuite
+    extends AnyFunSuite // scalastyle:ignore funsuite
     with BeforeAndAfterEach {
 
   private var client: SparkConnectClient = _
@@ -77,13 +77,11 @@ class SparkConnectClientSuite
   }
 }
 
-
-class DummySparkConnectService()
-  extends SparkConnectServiceGrpc.SparkConnectServiceImplBase {
+class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectServiceImplBase {
 
   override def analyzePlan(
-    request: AnalyzePlanRequest,
-    responseObserver: StreamObserver[AnalyzePlanResponse]): Unit = {
+      request: AnalyzePlanRequest,
+      responseObserver: StreamObserver[AnalyzePlanResponse]): Unit = {
     // Reply with a dummy response using the same client ID
     val requestClientId = request.getClientId
     val response = AnalyzePlanResponse
@@ -94,4 +92,3 @@ class DummySparkConnectService()
     responseObserver.onCompleted()
   }
 }
-
