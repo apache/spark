@@ -25,7 +25,7 @@ if [[ $# -gt 1 ]]; then
 fi
 
 
-SPARK_HOME="$(cd "`dirname $0`"/../../..; pwd)"
+SPARK_HOME="$(cd "`dirname $0`"/..; pwd)"
 cd "$SPARK_HOME"
 
 

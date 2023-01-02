@@ -25,6 +25,11 @@ In order to run PySpark tests, you should build Spark itself first via Maven or 
 
     build/mvn -DskipTests clean package
 
+.. code-block:: bash
+
+    ./build/sbt -Phive clean package
+
+
 After that, the PySpark test cases can be run via using ``python/run-tests``. For example,
 
 .. code-block:: bash
@@ -49,7 +54,7 @@ You can run a specific test via using ``python/run-tests``, for example, as belo
 Please refer to `Testing PySpark <https://spark.apache.org/developer-tools.html>`_ for more details.
 
 
-Running tests using GitHub Actions
+Running Tests using GitHub Actions
 ----------------------------------
 
 You can run the full PySpark tests by using GitHub Actions in your own forked GitHub
@@ -57,72 +62,43 @@ repository with a few clicks. Please refer to
 `Running tests in your forked repository using GitHub Actions <https://spark.apache.org/developer-tools.html>`_ for more details.
 
 
-===================================
-Testing Spark Connect Python Client
-===================================
+Running PySpark tests for Python Client
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-**Spark Connect is a strictly experimental feature and under heavy development.
-All APIs should be considered volatile and should not be used in production.**
-
-This module contains the implementation of Spark Connect which is a logical plan
-facade for the implementation in Spark. Spark Connect is directly integrated into the build
-of Spark. To enable it, you only need to activate the driver plugin for Spark Connect.
-
-
-Build
------
+In order to run the tests for Spark Connect in Python, you should pass ``--parallelism 1`` option together, for example, as below:
 
 .. code-block:: bash
 
-    ./build/mvn -Phive clean package
+    ./python/run-tests --module pyspark-connect --parallelism 1
 
-or
-
-.. code-block:: bash
-
-    ./build/sbt -Phive clean package
+Note that if you made some changes in Protobuf definitions, for example, at
+`spark/connector/connect/common/src/main/protobuf/spark/connect <https://github.com/apache/spark/tree/master/connector/connect/common/src/main/protobuf/spark/connect>`_ ,
+you should regenerate Python Protonuf client by running ``./dev/generate_protos.sh``.
 
 
-Run Spark Shell
----------------
+Running PySpark Shell with Python Client
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-To run Spark Connect you locally built:
-
-.. code-block:: bash
-
-    # Scala shell
-    ./bin/spark-shell \
-    --jars `ls connector/connect/target/**/spark-connect*SNAPSHOT.jar | paste -sd ',' -` \
-    --conf spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin
-
-.. code-block:: bash
-
-    # PySpark shell
-    ./bin/pyspark \
-    --jars `ls connector/connect/target/**/spark-connect*SNAPSHOT.jar | paste -sd ',' -` \
-    --conf spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin
-
-To use the release version of Spark Connect:
+To run Spark Connect server you locally built:
 
 .. code-block:: bash
 
     ./bin/spark-shell \
-    --packages org.apache.spark:spark-connect_2.12:3.4.0 \
-    --conf spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin
+      --jars `ls connector/connect/target/**/spark-connect*SNAPSHOT.jar | paste -sd ',' -` \
+      --conf spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin
 
-
-Run Tests
----------
+To run the Spark Connect server from official Apache Spark:
 
 .. code-block:: bash
 
-    ./python/run-tests --testnames 'pyspark.sql.tests.connect.test_connect_basic'
+    ./bin/spark-shell \
+      --packages org.apache.spark:spark-connect_2.12:3.4.0 \
+      --conf spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin
 
 
-Generate proto generated files for the Python client
-----------------------------------------------------
+To run the Python client for the Spark Connect server:
 
-1. Install `buf version 1.8.0`: https://docs.buf.build/installation
-2. Run `pip install grpcio==1.48.1 protobuf==4.21.6 mypy-protobuf==3.3.0`
-3. Run `./connector/connect/dev/generate_protos.sh`
-4. Optional Check `./dev/check-codegen-python.py`
+.. code-block:: bash
+
+    ./bin/pyspark --remote sc://localhost
+
