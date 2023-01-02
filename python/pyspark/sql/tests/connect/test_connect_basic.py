@@ -389,8 +389,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.connect.createDataFrame(data, "col1 int, col2 int, col3 int").show()
 
     def test_with_local_rows(self):
-        # SPARK-41789: Test creating a dataframe with list of Rows
-        data = [
+        # SPARK-41789, SPARK-41810: Test creating a dataframe with list of rows and dictionaries
+        rows = [
             Row(course="dotNET", year=2012, earnings=10000),
             Row(course="Java", year=2012, earnings=20000),
             Row(course="dotNET", year=2012, earnings=5000),
@@ -398,19 +398,21 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             Row(course="Java", year=2013, earnings=30000),
             Row(course="Scala", year=2022, earnings=None),
         ]
+        dicts = [row.asDict() for row in rows]
 
-        sdf = self.spark.createDataFrame(data)
-        cdf = self.connect.createDataFrame(data)
+        for data in [rows, dicts]:
+            sdf = self.spark.createDataFrame(data)
+            cdf = self.connect.createDataFrame(data)
 
-        self.assertEqual(sdf.schema, cdf.schema)
-        self.assert_eq(sdf.toPandas(), cdf.toPandas())
+            self.assertEqual(sdf.schema, cdf.schema)
+            self.assert_eq(sdf.toPandas(), cdf.toPandas())
 
-        # test with rename
-        sdf = self.spark.createDataFrame(data, schema=["a", "b", "c"])
-        cdf = self.connect.createDataFrame(data, schema=["a", "b", "c"])
+            # test with rename
+            sdf = self.spark.createDataFrame(data, schema=["a", "b", "c"])
+            cdf = self.connect.createDataFrame(data, schema=["a", "b", "c"])
 
-        self.assertEqual(sdf.schema, cdf.schema)
-        self.assert_eq(sdf.toPandas(), cdf.toPandas())
+            self.assertEqual(sdf.schema, cdf.schema)
+            self.assert_eq(sdf.toPandas(), cdf.toPandas())
 
     def test_with_atom_type(self):
         for data in [[(1), (2), (3)], [1, 2, 3]]:
