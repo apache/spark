@@ -22,6 +22,7 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 
+from pyspark import SparkContext, SparkConf
 from pyspark.sql.session import classproperty, SparkSession as PySparkSession
 from pyspark.sql.types import (
     _infer_schema,
@@ -217,14 +218,20 @@ class SparkSession:
 
         else:
             _data = list(data)
-            pdf = pd.DataFrame(_data)
 
-            if _schema is None and isinstance(_data[0], Row):
+            if _schema is None and (isinstance(_data[0], Row) or isinstance(_data[0], dict)):
+                if isinstance(_data[0], dict):
+                    # Sort the data to respect inferred schema.
+                    # For dictionaries, we sort the schema in alphabetical order.
+                    _data = [dict(sorted(d.items())) for d in _data]
+
                 _schema = self._inferSchemaFromList(_data, _cols)
                 if _cols is not None:
                     for i, name in enumerate(_cols):
                         _schema.fields[i].name = name
                         _schema.names[i] = name
+
+            pdf = pd.DataFrame(_data)
 
             if _cols is None:
                 _cols = ["_%s" % i for i in range(1, pdf.shape[1] + 1)]
@@ -311,3 +318,60 @@ class SparkSession:
 
 
 SparkSession.__doc__ = PySparkSession.__doc__
+
+
+def _test() -> None:
+    import os
+    import sys
+    import doctest
+    from pyspark.sql import SparkSession as PySparkSession
+    from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    if should_test_connect:
+        import pyspark.sql.connect.session
+
+        globs = pyspark.sql.connect.session.__dict__.copy()
+        # Works around to create a regular Spark session
+        sc = SparkContext("local[4]", "sql.connect.session tests", conf=SparkConf())
+        globs["_spark"] = PySparkSession(
+            sc, options={"spark.app.name": "sql.connect.session tests"}
+        )
+
+        # Creates a remote Spark session.
+        os.environ["SPARK_REMOTE"] = "sc://localhost"
+        globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
+
+        # Uses PySpark session to test builder.
+        globs["SparkSession"] = PySparkSession
+        # Spark Connect does not support to set master together.
+        pyspark.sql.connect.session.SparkSession.__doc__ = None
+        del pyspark.sql.connect.session.SparkSession.Builder.master.__doc__
+        # RDD API is not supported in Spark Connect.
+        del pyspark.sql.connect.session.SparkSession.createDataFrame.__doc__
+
+        # TODO(SPARK-41811): Implement SparkSession.sql's string formatter
+        del pyspark.sql.connect.session.SparkSession.sql.__doc__
+
+        (failure_count, test_count) = doctest.testmod(
+            pyspark.sql.connect.session,
+            globs=globs,
+            optionflags=doctest.ELLIPSIS
+            | doctest.NORMALIZE_WHITESPACE
+            | doctest.IGNORE_EXCEPTION_DETAIL,
+        )
+
+        globs["spark"].stop()
+        globs["_spark"].stop()
+        if failure_count:
+            sys.exit(-1)
+    else:
+        print(
+            f"Skipping pyspark.sql.connect.session doctests: {connect_requirement_message}",
+            file=sys.stderr,
+        )
+
+
+if __name__ == "__main__":
+    _test()

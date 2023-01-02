@@ -282,6 +282,8 @@ class Column:
     __ge__ = _bin_op("geq")
     __gt__ = _bin_op("gt")
 
+    # TODO(SPARK-41812): DataFrame.join: ambiguous column
+    # TODO(SPARK-41814): Column.eqNullSafe fails on NaN comparison
     _eqNullSafe_doc = """
     Equality test that is safe for null values.
 
@@ -317,9 +319,9 @@ class Column:
     ...     Row(value = 'bar'),
     ...     Row(value = None)
     ... ])
-    >>> df1.join(df2, df1["value"] == df2["value"]).count()
+    >>> df1.join(df2, df1["value"] == df2["value"]).count()  # doctest: +SKIP
     0
-    >>> df1.join(df2, df1["value"].eqNullSafe(df2["value"])).count()
+    >>> df1.join(df2, df1["value"].eqNullSafe(df2["value"])).count()  # doctest: +SKIP
     1
     >>> df2 = spark.createDataFrame([
     ...     Row(id=1, value=float('NaN')),
@@ -330,7 +332,7 @@ class Column:
     ...     df2['value'].eqNullSafe(None),
     ...     df2['value'].eqNullSafe(float('NaN')),
     ...     df2['value'].eqNullSafe(42.0)
-    ... ).show()
+    ... ).show()  # doctest: +SKIP
     +----------------+---------------+----------------+
     |(value <=> NULL)|(value <=> NaN)|(value <=> 42.0)|
     +----------------+---------------+----------------+

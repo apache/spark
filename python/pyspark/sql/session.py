@@ -676,7 +676,7 @@ class SparkSession(SparkConversionMixin):
         Examples
         --------
         >>> spark.catalog
-        <pyspark.sql.catalog.Catalog object ...>
+        <...Catalog object ...>
 
         Create a temp view, show the list, and drop it.
 
@@ -1460,7 +1460,7 @@ class SparkSession(SparkConversionMixin):
         Examples
         --------
         >>> spark.read
-        <pyspark.sql.readwriter.DataFrameReader object ...>
+        <...DataFrameReader object ...>
 
         Write a DataFrame into a JSON file and read it back.
 
