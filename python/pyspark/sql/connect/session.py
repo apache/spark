@@ -218,14 +218,20 @@ class SparkSession:
 
         else:
             _data = list(data)
-            pdf = pd.DataFrame(_data)
 
             if _schema is None and (isinstance(_data[0], Row) or isinstance(_data[0], dict)):
+                if isinstance(_data[0], dict):
+                    # Sort the data to respect inferred schema.
+                    # For dictionaries, we sort the schema in alphabetical order.
+                    _data = [dict(sorted(d.items())) for d in _data]
+
                 _schema = self._inferSchemaFromList(_data, _cols)
                 if _cols is not None:
                     for i, name in enumerate(_cols):
                         _schema.fields[i].name = name
                         _schema.names[i] = name
+
+            pdf = pd.DataFrame(_data)
 
             if _cols is None:
                 _cols = ["_%s" % i for i in range(1, pdf.shape[1] + 1)]
@@ -342,11 +348,9 @@ def _test() -> None:
         # Spark Connect does not support to set master together.
         pyspark.sql.connect.session.SparkSession.__doc__ = None
         del pyspark.sql.connect.session.SparkSession.Builder.master.__doc__
-
-        # TODO(SPARK-41746): SparkSession.createDataFrame does not respect the column names in
-        #  dictionary
+        # RDD API is not supported in Spark Connect.
         del pyspark.sql.connect.session.SparkSession.createDataFrame.__doc__
-        del pyspark.sql.connect.session.SparkSession.read.__doc__
+
         # TODO(SPARK-41811): Implement SparkSession.sql's string formatter
         del pyspark.sql.connect.session.SparkSession.sql.__doc__
 

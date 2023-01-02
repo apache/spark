@@ -391,12 +391,12 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
     def test_with_local_rows(self):
         # SPARK-41789, SPARK-41810: Test creating a dataframe with list of rows and dictionaries
         rows = [
-            Row(course="dotNET", earnings=10000, year=2012),
-            Row(course="Java", earnings=20000, year=2012),
-            Row(course="dotNET", earnings=5000, year=2012),
-            Row(course="dotNET", earnings=48000, year=2013),
-            Row(course="Java", earnings=30000, year=2013),
-            Row(course="Scala", earnings=None, year=2022),
+            Row(course="dotNET", year=2012, earnings=10000),
+            Row(course="Java", year=2012, earnings=20000),
+            Row(course="dotNET", year=2012, earnings=5000),
+            Row(course="dotNET", year=2013, earnings=48000),
+            Row(course="Java", year=2013, earnings=30000),
+            Row(course="Scala", year=2022, earnings=None),
         ]
         dicts = [row.asDict() for row in rows]
 
