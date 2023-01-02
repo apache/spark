@@ -510,9 +510,7 @@ pyspark_connect = Module(
         "pyspark.sql.connect.column",
         "pyspark.sql.connect.readwriter",
         # unittests
-        "pyspark.sql.tests.connect.test_connect_column_expressions",
-        "pyspark.sql.tests.connect.test_connect_plan_only",
-        "pyspark.sql.tests.connect.test_connect_select_ops",
+        "pyspark.sql.tests.connect.test_connect_plan",
         "pyspark.sql.tests.connect.test_connect_basic",
         "pyspark.sql.tests.connect.test_connect_function",
         "pyspark.sql.tests.connect.test_connect_column",

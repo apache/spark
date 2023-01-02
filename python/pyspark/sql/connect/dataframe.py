@@ -936,6 +936,42 @@ class DataFrame:
 
     crosstab.__doc__ = PySparkDataFrame.crosstab.__doc__
 
+    def freqItems(
+        self, cols: Union[List[str], Tuple[str]], support: Optional[float] = None
+    ) -> "DataFrame":
+        if isinstance(cols, tuple):
+            cols = list(cols)
+        if not isinstance(cols, list):
+            raise TypeError("cols must be a list or tuple of column names as strings.")
+        if not support:
+            support = 0.01
+        return DataFrame.withPlan(
+            plan.StatFreqItems(child=self._plan, cols=cols, support=support),
+            session=self._session,
+        )
+
+    freqItems.__doc__ = PySparkDataFrame.freqItems.__doc__
+
+    def sampleBy(
+        self, col: "ColumnOrName", fractions: Dict[Any, float], seed: Optional[int] = None
+    ) -> "DataFrame":
+        if not isinstance(col, (Column, str)):
+            raise TypeError("col must be a string or a column, but got %r" % type(col))
+        if not isinstance(fractions, dict):
+            raise TypeError("fractions must be a dict but got %r" % type(fractions))
+        for k, v in fractions.items():
+            if not isinstance(k, (float, int, str)):
+                raise TypeError("key must be float, int, or string, but got %r" % type(k))
+            fractions[k] = float(v)
+        seed = seed if seed is not None else random.randint(0, sys.maxsize)
+
+        return DataFrame.withPlan(
+            plan.StatSampleBy(child=self._plan, col=col, fractions=fractions, seed=seed),
+            session=self._session,
+        )
+
+    sampleBy.__doc__ = PySparkDataFrame.sampleBy.__doc__
+
     def _get_alias(self) -> Optional[str]:
         p = self._plan
         while p is not None:
@@ -1320,6 +1356,20 @@ class DataFrameStatFunctions:
         return self.df.crosstab(col1, col2)
 
     crosstab.__doc__ = DataFrame.crosstab.__doc__
+
+    def freqItems(
+        self, cols: Union[List[str], Tuple[str]], support: Optional[float] = None
+    ) -> DataFrame:
+        return self.df.freqItems(cols, support)
+
+    freqItems.__doc__ = DataFrame.freqItems.__doc__
+
+    def sampleBy(
+        self, col: str, fractions: Dict[Any, float], seed: Optional[int] = None
+    ) -> DataFrame:
+        return self.df.sampleBy(col, fractions, seed)
+
+    sampleBy.__doc__ = DataFrame.sampleBy.__doc__
 
 
 DataFrameStatFunctions.__doc__ = PySparkDataFrameStatFunctions.__doc__

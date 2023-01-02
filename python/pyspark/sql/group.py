@@ -175,7 +175,6 @@ class GroupedData(PandasGroupedOpsMixin):
             jdf = self._jgd.agg(exprs[0]._jc, _to_seq(self.session._sc, [c._jc for c in exprs[1:]]))
         return DataFrame(jdf, self.session)
 
-    # TODO(SPARK-41743): groupBy(...).agg(...).sort does not actually sort the output
     @dfapi
     def count(self) -> DataFrame:
         """Counts the number of records for each group.
@@ -201,7 +200,7 @@ class GroupedData(PandasGroupedOpsMixin):
 
         Group-by name, and count each group.
 
-        >>> df.groupBy(df.name).count().sort("name").show()  # doctest: +SKIP
+        >>> df.groupBy(df.name).count().sort("name").show()
         +-----+-----+
         | name|count|
         +-----+-----+
@@ -227,7 +226,6 @@ class GroupedData(PandasGroupedOpsMixin):
             column names. Non-numeric columns are ignored.
         """
 
-    # TODO(SPARK-41743): groupBy(...).agg(...).sort does not actually sort the output
     @df_varargs_api
     def avg(self, *cols: str) -> DataFrame:
         """Computes average values for each numeric columns for each group.
@@ -261,7 +259,7 @@ class GroupedData(PandasGroupedOpsMixin):
 
         Group-by name, and calculate the mean of the age in each group.
 
-        >>> df.groupBy("name").avg('age').sort("name").show()  # doctest: +SKIP
+        >>> df.groupBy("name").avg('age').sort("name").show()
         +-----+--------+
         | name|avg(age)|
         +-----+--------+
@@ -279,7 +277,6 @@ class GroupedData(PandasGroupedOpsMixin):
         +--------+-----------+
         """
 
-    # TODO(SPARK-41743): groupBy(...).agg(...).sort does not actually sort the output
     @df_varargs_api
     def max(self, *cols: str) -> DataFrame:
         """Computes the max value for each numeric columns for each group.
@@ -306,7 +303,7 @@ class GroupedData(PandasGroupedOpsMixin):
 
         Group-by name, and calculate the max of the age in each group.
 
-        >>> df.groupBy("name").max("age").sort("name").show()  # doctest: +SKIP
+        >>> df.groupBy("name").max("age").sort("name").show()
         +-----+--------+
         | name|max(age)|
         +-----+--------+
@@ -324,7 +321,6 @@ class GroupedData(PandasGroupedOpsMixin):
         +--------+-----------+
         """
 
-    # TODO(SPARK-41743): groupBy(...).agg(...).sort does not actually sort the output
     @df_varargs_api
     def min(self, *cols: str) -> DataFrame:
         """Computes the min value for each numeric column for each group.
@@ -356,7 +352,7 @@ class GroupedData(PandasGroupedOpsMixin):
 
         Group-by name, and calculate the min of the age in each group.
 
-        >>> df.groupBy("name").min("age").sort("name").show()  # doctest: +SKIP
+        >>> df.groupBy("name").min("age").sort("name").show()
         +-----+--------+
         | name|min(age)|
         +-----+--------+
@@ -374,7 +370,6 @@ class GroupedData(PandasGroupedOpsMixin):
         +--------+-----------+
         """
 
-    # TODO(SPARK-41743): groupBy(...).agg(...).sort does not actually sort the output
     @df_varargs_api
     def sum(self, *cols: str) -> DataFrame:
         """Computes the sum for each numeric columns for each group.
@@ -406,7 +401,7 @@ class GroupedData(PandasGroupedOpsMixin):
 
         Group-by name, and calculate the sum of the age in each group.
 
-        >>> df.groupBy("name").sum("age").sort("name").show()  # doctest: +SKIP
+        >>> df.groupBy("name").sum("age").sort("name").show()
         +-----+--------+
         | name|sum(age)|
         +-----+--------+
@@ -424,7 +419,6 @@ class GroupedData(PandasGroupedOpsMixin):
         +--------+-----------+
         """
 
-    # TODO(SPARK-41745): SparkSession.createDataFrame does not respect the column names in the row
     # TODO(SPARK-41746): SparkSession.createDataFrame does not support nested datatypes
     def pivot(self, pivot_col: str, values: Optional[List["LiteralType"]] = None) -> "GroupedData":
         """
@@ -453,7 +447,7 @@ class GroupedData(PandasGroupedOpsMixin):
         ...     Row(course="dotNET", year=2013, earnings=48000),
         ...     Row(course="Java", year=2013, earnings=30000),
         ... ])
-        >>> df1.show()  # doctest: +SKIP
+        >>> df1.show()
         +------+----+--------+
         |course|year|earnings|
         +------+----+--------+
@@ -484,7 +478,6 @@ class GroupedData(PandasGroupedOpsMixin):
         Compute the sum of earnings for each year by course with each course as a separate column
 
         >>> df1.groupBy("year").pivot("course", ["dotNET", "Java"]).sum("earnings").show()
-        ... # doctest: +SKIP
         +----+------+-----+
         |year|dotNET| Java|
         +----+------+-----+
@@ -494,7 +487,7 @@ class GroupedData(PandasGroupedOpsMixin):
 
         Or without specifying column values (less efficient)
 
-        >>> df1.groupBy("year").pivot("course").sum("earnings").show()  # doctest: +SKIP
+        >>> df1.groupBy("year").pivot("course").sum("earnings").show()
         +----+-----+------+
         |year| Java|dotNET|
         +----+-----+------+

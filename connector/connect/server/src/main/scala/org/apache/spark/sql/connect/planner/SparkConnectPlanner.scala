@@ -97,6 +97,9 @@ class SparkConnectPlanner(session: SparkSession) {
         transformStatApproxQuantile(rel.getApproxQuantile)
       case proto.Relation.RelTypeCase.CROSSTAB =>
         transformStatCrosstab(rel.getCrosstab)
+      case proto.Relation.RelTypeCase.FREQ_ITEMS => transformStatFreqItems(rel.getFreqItems)
+      case proto.Relation.RelTypeCase.SAMPLE_BY =>
+        transformStatSampleBy(rel.getSampleBy)
       case proto.Relation.RelTypeCase.TO_SCHEMA => transformToSchema(rel.getToSchema)
       case proto.Relation.RelTypeCase.RENAME_COLUMNS_BY_SAME_LENGTH_NAMES =>
         transformRenameColumnsBySamelenghtNames(rel.getRenameColumnsBySameLengthNames)
@@ -408,6 +411,35 @@ class SparkConnectPlanner(session: SparkSession) {
       .logicalPlan
   }
 
+  private def transformStatFreqItems(rel: proto.StatFreqItems): LogicalPlan = {
+    val cols = rel.getColsList.asScala.toSeq
+    val df = Dataset.ofRows(session, transformRelation(rel.getInput))
+    if (rel.hasSupport) {
+      df.stat.freqItems(cols, rel.getSupport).logicalPlan
+    } else {
+      df.stat.freqItems(cols).logicalPlan
+    }
+  }
+
+  private def transformStatSampleBy(rel: proto.StatSampleBy): LogicalPlan = {
+    val fractions = rel.getFractionsList.asScala.toSeq.map { protoFraction =>
+      val stratum = transformLiteral(protoFraction.getStratum) match {
+        case Literal(s, StringType) if s != null => s.toString
+        case literal => literal.value
+      }
+      (stratum, protoFraction.getFraction)
+    }
+
+    Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .stat
+      .sampleBy(
+        col = Column(transformExpression(rel.getCol)),
+        fractions = fractions.toMap,
+        seed = if (rel.hasSeed) rel.getSeed else Utils.random.nextLong)
+      .logicalPlan
+  }
+
   private def transformToSchema(rel: proto.ToSchema): LogicalPlan = {
     val schema = DataTypeProtoConverter.toCatalystType(rel.getSchema)
     assert(schema.isInstanceOf[StructType])
@@ -686,7 +718,7 @@ class SparkConnectPlanner(session: SparkSession) {
    * @return
    *   Expression
    */
-  private def transformLiteral(lit: proto.Expression.Literal): Expression = {
+  private def transformLiteral(lit: proto.Expression.Literal): Literal = {
     toCatalystExpression(lit)
   }
 

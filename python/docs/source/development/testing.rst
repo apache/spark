@@ -25,6 +25,11 @@ In order to run PySpark tests, you should build Spark itself first via Maven or 
 
     build/mvn -DskipTests clean package
 
+.. code-block:: bash
+
+    build/sbt -Phive clean package
+
+
 After that, the PySpark test cases can be run via using ``python/run-tests``. For example,
 
 .. code-block:: bash
@@ -49,9 +54,54 @@ You can run a specific test via using ``python/run-tests``, for example, as belo
 Please refer to `Testing PySpark <https://spark.apache.org/developer-tools.html>`_ for more details.
 
 
-Running tests using GitHub Actions
+Running Tests using GitHub Actions
 ----------------------------------
 
 You can run the full PySpark tests by using GitHub Actions in your own forked GitHub
 repository with a few clicks. Please refer to
 `Running tests in your forked repository using GitHub Actions <https://spark.apache.org/developer-tools.html>`_ for more details.
+
+
+Running Tests for Spark Connect
+-------------------------------
+
+Running Tests for Python Client
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+In order to run the tests for Spark Connect in Pyth, you should pass ``--parallelism 1`` option together, for example, as below:
+
+.. code-block:: bash
+
+    python/run-tests --module pyspark-connect --parallelism 1
+
+Note that if you made some changes in Protobuf definitions, for example, at
+`spark/connector/connect/common/src/main/protobuf/spark/connect <https://github.com/apache/spark/tree/master/connector/connect/common/src/main/protobuf/spark/connect>`_,
+you should regenerate Python Protobuf client by running ``dev/connect-gen-protos.sh``.
+
+
+Running PySpark Shell with Python Client
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To run Spark Connect server you locally built:
+
+.. code-block:: bash
+
+    bin/spark-shell \
+      --jars `ls connector/connect/target/**/spark-connect*SNAPSHOT.jar | paste -sd ',' -` \
+      --conf spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin
+
+To run the Spark Connect server from the Apache Spark release:
+
+.. code-block:: bash
+
+    bin/spark-shell \
+      --packages org.apache.spark:spark-connect_2.12:3.4.0 \
+      --conf spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin
+
+
+To run the PySpark Shell with the client for the Spark Connect server:
+
+.. code-block:: bash
+
+    bin/pyspark --remote sc://localhost
+

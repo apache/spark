@@ -1528,17 +1528,43 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
                 SF.from_csv("b", SF.lit("x STRING, y STRING, z DOUBLE")),
             ),
         )
+        self.compare_by_show(
+            cdf.select(
+                CF.from_csv(cdf.a, CF.lit("a INT, b INT, c INT"), {"maxCharsPerColumn": "3"}),
+                CF.from_csv(
+                    "b", CF.lit("x STRING, y STRING, z DOUBLE"), {"maxCharsPerColumn": "3"}
+                ),
+            ),
+            sdf.select(
+                SF.from_csv(sdf.a, SF.lit("a INT, b INT, c INT"), {"maxCharsPerColumn": "3"}),
+                SF.from_csv(
+                    "b", SF.lit("x STRING, y STRING, z DOUBLE"), {"maxCharsPerColumn": "3"}
+                ),
+            ),
+        )
 
         # test schema_of_csv
         self.assert_eq(
             cdf.select(CF.schema_of_csv(CF.lit('{"a": 0}'))).toPandas(),
             sdf.select(SF.schema_of_csv(SF.lit('{"a": 0}'))).toPandas(),
         )
+        self.assert_eq(
+            cdf.select(
+                CF.schema_of_csv(CF.lit('{"a": 0}'), {"maxCharsPerColumn": "10"})
+            ).toPandas(),
+            sdf.select(
+                SF.schema_of_csv(SF.lit('{"a": 0}'), {"maxCharsPerColumn": "10"})
+            ).toPandas(),
+        )
 
         # test to_csv
         self.compare_by_show(
             cdf.select(CF.to_csv(CF.struct(CF.lit("a"), CF.lit("b")))),
             sdf.select(SF.to_csv(SF.struct(SF.lit("a"), SF.lit("b")))),
+        )
+        self.compare_by_show(
+            cdf.select(CF.to_csv(CF.struct(CF.lit("a"), CF.lit("b")), {"maxCharsPerColumn": "10"})),
+            sdf.select(SF.to_csv(SF.struct(SF.lit("a"), SF.lit("b")), {"maxCharsPerColumn": "10"})),
         )
 
     def test_json_functions(self):
@@ -1576,6 +1602,14 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
                 cdf.select(CF.from_json("a", schema)),
                 sdf.select(SF.from_json("a", schema)),
             )
+            self.compare_by_show(
+                cdf.select(CF.from_json(cdf.a, schema, {"mode": "FAILFAST"})),
+                sdf.select(SF.from_json(sdf.a, schema, {"mode": "FAILFAST"})),
+            )
+            self.compare_by_show(
+                cdf.select(CF.from_json("a", schema, {"mode": "FAILFAST"})),
+                sdf.select(SF.from_json("a", schema, {"mode": "FAILFAST"})),
+            )
 
         for schema in [
             "ARRAY<INT>",
@@ -1588,6 +1622,14 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             self.compare_by_show(
                 cdf.select(CF.from_json("b", schema)),
                 sdf.select(SF.from_json("b", schema)),
+            )
+            self.compare_by_show(
+                cdf.select(CF.from_json(cdf.b, schema, {"mode": "FAILFAST"})),
+                sdf.select(SF.from_json(sdf.b, schema, {"mode": "FAILFAST"})),
+            )
+            self.compare_by_show(
+                cdf.select(CF.from_json("b", schema, {"mode": "FAILFAST"})),
+                sdf.select(SF.from_json("b", schema, {"mode": "FAILFAST"})),
             )
 
         # test get_json_object
@@ -1617,11 +1659,19 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             cdf.select(CF.schema_of_json(CF.lit('{"a": 0}'))).toPandas(),
             sdf.select(SF.schema_of_json(SF.lit('{"a": 0}'))).toPandas(),
         )
+        self.assert_eq(
+            cdf.select(CF.schema_of_json(CF.lit('{"a": 0}'), {"mode": "FAILFAST"})).toPandas(),
+            sdf.select(SF.schema_of_json(SF.lit('{"a": 0}'), {"mode": "FAILFAST"})).toPandas(),
+        )
 
         # test to_json
         self.compare_by_show(
             cdf.select(CF.to_json(CF.struct(CF.lit("a"), CF.lit("b")))),
             sdf.select(SF.to_json(SF.struct(SF.lit("a"), SF.lit("b")))),
+        )
+        self.compare_by_show(
+            cdf.select(CF.to_json(CF.struct(CF.lit("a"), CF.lit("b")), {"mode": "FAILFAST"})),
+            sdf.select(SF.to_json(SF.struct(SF.lit("a"), SF.lit("b")), {"mode": "FAILFAST"})),
         )
 
     def test_string_functions_one_arg(self):
