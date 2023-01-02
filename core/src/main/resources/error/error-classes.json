@@ -1618,6 +1618,11 @@
     ],
     "sqlState" : "42000"
   },
+  "WRITE_STREAM_NOT_ALLOWED" : {
+    "message" : [
+      "`writeStream` can be called only on streaming Dataset/DataFrame."
+    ]
+  },
   "WRONG_NUM_ARGS" : {
     "message" : [
       "Invalid number of arguments for the function <functionName>."
@@ -4905,11 +4910,6 @@
   "_LEGACY_ERROR_TEMP_2309" : {
     "message" : [
       "cannot resolve <sqlExpr> in MERGE command given columns [<cols>]"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2310" : {
-    "message" : [
-      "'writeStream' can be called only on streaming Dataset/DataFrame"
     ]
   },
   "_LEGACY_ERROR_TEMP_2311" : {
