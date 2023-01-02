@@ -1922,6 +1922,8 @@ global___StatFreqItems = StatFreqItems
 class StatSampleBy(google.protobuf.message.Message):
     """Returns a stratified sample without replacement based on the fraction
     given on each stratum.
+    It will invoke 'Dataset.stat.freqItems' (same as 'StatFunctions.freqItems')
+    to compute the results.
     """
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
