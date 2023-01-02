@@ -2367,7 +2367,6 @@ def _test() -> None:
         del pyspark.sql.connect.functions.to_utc_timestamp.__doc__
         del pyspark.sql.connect.functions.unhex.__doc__
 
-
         # TODO(SPARK-41825): Dataframe.show formatting int as double
         del pyspark.sql.connect.functions.coalesce.__doc__
         del pyspark.sql.connect.functions.sum_distinct.__doc__
@@ -2427,8 +2426,8 @@ def _test() -> None:
             pyspark.sql.connect.functions,
             globs=globs,
             optionflags=doctest.ELLIPSIS
-                        | doctest.NORMALIZE_WHITESPACE
-                        | doctest.IGNORE_EXCEPTION_DETAIL,
+            | doctest.NORMALIZE_WHITESPACE
+            | doctest.IGNORE_EXCEPTION_DETAIL,
         )
 
         globs["spark"].stop()
