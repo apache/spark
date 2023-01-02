@@ -2256,7 +2256,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       errorClass = "NEGATIVE_SCALE_NOT_ALLOWED",
       messageParameters = Map(
         "scale" -> scale.toString,
-        "allowNegativeConf" -> LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key))
+        "allowNegativeConf" -> toSQLConf(LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key)))
   }
 
   def invalidPartitionColumnKeyInTableError(key: String, tblName: String): Throwable = {
