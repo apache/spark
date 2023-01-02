@@ -428,7 +428,7 @@
   },
   "DATA_SOURCE_NOT_FOUND" : {
     "message" : [
-      "Failed to find data source: <provider>. Please find packages at https://spark.apache.org/third-party-projects.html"
+      "Failed to find data source: <provider>. Please find packages at `https://spark.apache.org/third-party-projects.html`"
     ]
   },
   "DATETIME_OVERFLOW" : {
