@@ -74,6 +74,7 @@ message Relation {
     StatCorr corr = 104;
     StatApproxQuantile approx_quantile = 105;
     StatFreqItems freq_items = 106;
+    StatSampleBy sample_by = 107;
 
     // Catalog API (experimental / unstable)
     Catalog catalog = 200;
@@ -545,6 +546,34 @@ message StatFreqItems {
   // Should be greater than 1e-4.
   optional double support = 3;
 }
+
+
+// Returns a stratified sample without replacement based on the fraction
+// given on each stratum.
+message StatSampleBy {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) The column that defines strata.
+  Expression col = 2;
+
+  // (Required) Sampling fraction for each stratum.
+  //
+  // If a stratum is not specified, we treat its fraction as zero.
+  repeated Fraction fractions = 3;
+
+  // (Optional) The random seed.
+  optional int64 seed = 5;
+
+  message Fraction {
+    // (Required) The stratum.
+    Expression.Literal stratum = 1;
+
+    // (Required) The fraction value. Must be in [0, 1].
+    double fraction = 2;
+  }
+}
+
 
 // Replaces null values.
 // It will invoke 'Dataset.na.fill' (same as 'DataFrameNaFunctions.fill') to compute the results.
