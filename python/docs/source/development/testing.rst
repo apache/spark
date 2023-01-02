@@ -62,8 +62,11 @@ repository with a few clicks. Please refer to
 `Running tests in your forked repository using GitHub Actions <https://spark.apache.org/developer-tools.html>`_ for more details.
 
 
-Running Tests for Python Client
+Running Tests for Spark Connect
 -------------------------------
+
+Running Tests for Python Client
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 In order to run the tests for Spark Connect in Pyth, you should pass ``--parallelism 1`` option together, for example, as below:
 
@@ -77,7 +80,7 @@ you should regenerate Python Protonuf client by running ``dev/generate_protos.sh
 
 
 Running PySpark Shell with Python Client
-----------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 To run Spark Connect server you locally built:
 
