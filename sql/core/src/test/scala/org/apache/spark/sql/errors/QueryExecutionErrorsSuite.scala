@@ -676,7 +676,6 @@ class QueryExecutionErrorsSuite
         // FileSystem caching could cause a different implementation of fs.file to be used
         "fs.file.impl.disable.cache" -> "true"
       ) {
-
         val checkpointLocation = p.getAbsolutePath
 
         val ds = spark.readStream.format("rate").load()
@@ -695,18 +694,8 @@ class QueryExecutionErrorsSuite
           matchPVals = true,
           parameters = Map("sourcePath" -> s"$expectedPath.+")
         )
-        //          val basePath = new Path(p.getAbsolutePath)
-        //          val fm = new FileSystemBasedCheckpointFileManager(basePath, conf)
-        //          srcPath = new Path(s"$basePath/file")
-        //          assert(!fm.exists(srcPath))
-        //          fm.createAtomic(srcPath, overwriteIfPossible = true).cancel()
-        //          assert(!fm.exists(srcPath))
-        //          val dstPath = new Path(s"$basePath/new_file")
-        //          fm.renameTempFile(srcPath, dstPath, true)
       }
-
     }
-
   }
 
   test("UNSUPPORTED_FEATURE.JDBC_TRANSACTION: the target JDBC server does not support " +
