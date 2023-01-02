@@ -2178,7 +2178,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         errorClass = "NOT_A_PARTITIONED_TABLE",
         parameters = Map(
           "operation" -> "ALTER TABLE RECOVER PARTITIONS",
-          "tableIdentWithDB" -> "`spark_catalog`.`default`.`tal`")
+          "tableIdentWithDB" -> "`spark_catalog`.`default`.`tbl`")
       )
     }
   }
