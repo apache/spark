@@ -4727,25 +4727,25 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
 
       val defaultIntValue = CodeGenerator.defaultValue(CodeGenerator.JAVA_INT, false)
       s"""
-         |${CodeGenerator.JAVA_INT} itemInsertionIndex = 0;
+         |${CodeGenerator.JAVA_INT} $itemInsertionIndex = 0;
          |${CodeGenerator.JAVA_BOOLEAN} $newPosExtendsArrayLeft = false;
          |${CodeGenerator.JAVA_INT} $resLength = $defaultIntValue;
          |${CodeGenerator.JAVA_INT} $adjustedAllocIdx = $defaultIntValue;
          |${CodeGenerator.JAVA_BOOLEAN} $insertedItemIsNull = ${itemExpr.isNull};
          |
          |if ($pos < 0 && java.lang.Math.abs($pos) > $arr.numElements()) {
-         |  itemInsertionIndex = 0;
+         |  $itemInsertionIndex = 0;
          |  $newPosExtendsArrayLeft = true;
          |} else if ($pos < 0) {
-         |  itemInsertionIndex = $pos + $arr.numElements();
+         |  $itemInsertionIndex = $pos + $arr.numElements();
          |} else if ($pos > 0) {
-         |  itemInsertionIndex = $pos - 1;
+         |  $itemInsertionIndex = $pos - 1;
          |}
          |
          |if ($newPosExtendsArrayLeft) {
          |  $resLength = java.lang.Math.abs($pos) + 1;
          |} else {
-         |  $resLength = java.lang.Math.max($arr.numElements() + 1, itemInsertionIndex + 1);
+         |  $resLength = java.lang.Math.max($arr.numElements() + 1, $itemInsertionIndex + 1);
          |}
          |
          |$allocation
@@ -4755,7 +4755,7 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
          |    $adjustedAllocIdx =
          |        $adjustedAllocIdx + 1 + java.lang.Math.abs($pos + $arr.numElements());
          |  }
-         |  if ($i >= itemInsertionIndex && !$newPosExtendsArrayLeft) {
+         |  if ($i >= $itemInsertionIndex && !$newPosExtendsArrayLeft) {
          |    $adjustedAllocIdx = $adjustedAllocIdx + 1;
          |  }
          |  $assignment
