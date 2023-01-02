@@ -114,6 +114,16 @@ select array_size(array(2, 1));
 select array_size(NULL);
 select array_size(map('a', 1, 'b', 2));
 
+-- size(arrays_zip)
+select size(arrays_zip(array(1, 2, 3), array(4), array(7, 8, 9, 10)));
+select size(arrays_zip(array(), array(1, 2, 3), array(4), array(7, 8, 9, 10)));
+select size(arrays_zip(array(1, 2, 3), array(4), null, array(7, 8, 9, 10)));
+
+-- isnotnull(arrays_zip)
+select isnotnull(arrays_zip(array(), array(4), array(7, 8, 9, 10)));
+select isnotnull(arrays_zip(array(1, 2, 3), array(4), array(7, 8, 9, 10)));
+select isnotnull(arrays_zip(array(1, 2, 3), NULL, array(4), array(7, 8, 9, 10)));
+
 -- function get()
 select get(array(1, 2, 3), 0);
 select get(array(1, 2, 3), 3);

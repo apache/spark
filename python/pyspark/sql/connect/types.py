@@ -95,6 +95,13 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
             struct_field.data_type.CopyFrom(pyspark_types_to_proto_types(field.dataType))
             struct_field.nullable = field.nullable
             ret.struct.fields.append(struct_field)
+    elif isinstance(data_type, MapType):
+        ret.map.key_type.CopyFrom(pyspark_types_to_proto_types(data_type.keyType))
+        ret.map.value_type.CopyFrom(pyspark_types_to_proto_types(data_type.valueType))
+        ret.map.value_contains_null = data_type.valueContainsNull
+    elif isinstance(data_type, ArrayType):
+        ret.array.element_type.CopyFrom(pyspark_types_to_proto_types(data_type.elementType))
+        ret.array.contains_null = data_type.containsNull
     else:
         raise Exception(f"Unsupported data type {data_type}")
     return ret
