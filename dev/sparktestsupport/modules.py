@@ -506,6 +506,7 @@ pyspark_connect = Module(
         # doctests
         "pyspark.sql.connect.catalog",
         "pyspark.sql.connect.group",
+        "pyspark.sql.connect.session",
         "pyspark.sql.connect.window",
         "pyspark.sql.connect.column",
         # unittests
