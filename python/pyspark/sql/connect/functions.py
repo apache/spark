@@ -41,6 +41,7 @@ from pyspark.sql.connect.expressions import (
     LambdaFunction,
 )
 from pyspark.sql import functions as pysparkfuncs
+from pyspark.sql.types import DataType, StructType, ArrayType
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName
@@ -1292,18 +1293,21 @@ def from_csv(
 from_csv.__doc__ = pysparkfuncs.from_csv.__doc__
 
 
-# TODO: support ArrayType and StructType schema
 def from_json(
     col: "ColumnOrName",
-    schema: Union[Column, str],
+    schema: Union[ArrayType, StructType, Column, str],
     options: Optional[Dict[str, str]] = None,
 ) -> Column:
     if isinstance(schema, Column):
         _schema = schema
+    elif isinstance(schema, DataType):
+        _schema = lit(schema.json())
     elif isinstance(schema, str):
         _schema = lit(schema)
     else:
-        raise TypeError(f"schema should be a Column or str, but got {type(schema).__name__}")
+        raise TypeError(
+            f"schema should be a Column or str or DataType, but got {type(schema).__name__}"
+        )
 
     if options is None:
         return _invoke_function("from_json", _to_col(col), _schema)

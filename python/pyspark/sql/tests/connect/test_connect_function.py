@@ -18,6 +18,7 @@ import unittest
 import tempfile
 
 from pyspark.sql import SparkSession
+from pyspark.sql.types import StructType, StructField, ArrayType, IntegerType
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.utils import ReusedPySparkTestCase
@@ -1591,8 +1592,8 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
         for schema in [
             "a INT",
             "MAP<STRING,INT>",
-            # StructType([StructField("a", IntegerType())]),
-            # ArrayType(StructType([StructField("a", IntegerType())])),
+            StructType([StructField("a", IntegerType())]),
+            ArrayType(StructType([StructField("a", IntegerType())])),
         ]:
             self.compare_by_show(
                 cdf.select(CF.from_json(cdf.a, schema)),
@@ -1613,7 +1614,7 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
 
         for schema in [
             "ARRAY<INT>",
-            # ArrayType(IntegerType()),
+            ArrayType(IntegerType()),
         ]:
             self.compare_by_show(
                 cdf.select(CF.from_json(cdf.b, schema)),
