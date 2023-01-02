@@ -1292,10 +1292,11 @@ def from_csv(
 from_csv.__doc__ = pysparkfuncs.from_csv.__doc__
 
 
-# TODO: 1, support ArrayType and StructType schema; 2, support options
+# TODO: support ArrayType and StructType schema
 def from_json(
     col: "ColumnOrName",
     schema: Union[Column, str],
+    options: Optional[Dict[str, str]] = None,
 ) -> Column:
     if isinstance(schema, Column):
         _schema = schema
@@ -1304,7 +1305,10 @@ def from_json(
     else:
         raise TypeError(f"schema should be a Column or str, but got {type(schema).__name__}")
 
-    return _invoke_function("from_json", _to_col(col), _schema)
+    if options is None:
+        return _invoke_function("from_json", _to_col(col), _schema)
+    else:
+        return _invoke_function("from_json", _to_col(col), _schema, _options_to_col(options))
 
 
 from_json.__doc__ = pysparkfuncs.from_json.__doc__
@@ -1468,8 +1472,7 @@ def schema_of_csv(csv: "ColumnOrName", options: Optional[Dict[str, str]] = None)
 schema_of_csv.__doc__ = pysparkfuncs.schema_of_csv.__doc__
 
 
-# TODO(SPARK-41494): Support options
-def schema_of_json(json: "ColumnOrName") -> Column:
+def schema_of_json(json: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
     if isinstance(json, Column):
         _json = json
     elif isinstance(json, str):
@@ -1477,7 +1480,10 @@ def schema_of_json(json: "ColumnOrName") -> Column:
     else:
         raise TypeError(f"json should be a Column or str, but got {type(json).__name__}")
 
-    return _invoke_function("schema_of_json", _json)
+    if options is None:
+        return _invoke_function("schema_of_json", _json)
+    else:
+        return _invoke_function("schema_of_json", _json, _options_to_col(options))
 
 
 schema_of_json.__doc__ = pysparkfuncs.schema_of_json.__doc__
@@ -1548,8 +1554,11 @@ def to_csv(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Col
 to_csv.__doc__ = pysparkfuncs.to_csv.__doc__
 
 
-def to_json(col: "ColumnOrName") -> Column:
-    return _invoke_function("to_json", _to_col(col))
+def to_json(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
+    if options is None:
+        return _invoke_function("to_json", _to_col(col))
+    else:
+        return _invoke_function("to_json", _to_col(col), _options_to_col(options))
 
 
 to_json.__doc__ = pysparkfuncs.to_json.__doc__
