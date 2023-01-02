@@ -510,8 +510,8 @@ object FileSourceMetadataAttribute {
   def cleanupFileSourceMetadataInformation(attr: Attribute): Attribute =
     removeInternalMetadata(attr)
 
-  def apply(name: String, dataType: DataType): AttributeReference =
-    AttributeReference(name, dataType, nullable = false,
+  def apply(name: String, dataType: DataType, nullable: Boolean = false): AttributeReference =
+    AttributeReference(name, dataType, nullable = nullable,
       new MetadataBuilder()
         .putBoolean(METADATA_COL_ATTR_KEY, value = true)
         .putBoolean(FILE_SOURCE_METADATA_COL_ATTR_KEY, value = true).build())()
@@ -550,8 +550,8 @@ object FileSourceConstantMetadataAttribute {
 
   val FILE_SOURCE_CONSTANT_METADATA_COL_ATTR_KEY = "__file_source_constant_metadata_col"
 
-  def apply(name: String, dataType: DataType): AttributeReference =
-    AttributeReference(name, dataType, nullable = false,
+  def apply(name: String, dataType: DataType, nullable: Boolean = false): AttributeReference =
+    AttributeReference(name, dataType, nullable = nullable,
       new MetadataBuilder()
         .putBoolean(METADATA_COL_ATTR_KEY, value = true)
         .putBoolean(FileSourceMetadataAttribute.FILE_SOURCE_METADATA_COL_ATTR_KEY, value = true)
