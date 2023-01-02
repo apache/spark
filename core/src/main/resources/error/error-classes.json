@@ -1356,11 +1356,6 @@
           "DESC TABLE COLUMN for a specific partition."
         ]
       },
-      "DISTRIBUTE_BY" : {
-        "message" : [
-          "DISTRIBUTE BY clause."
-        ]
-      },
       "INSERT_PARTITION_SPEC_IF_NOT_EXISTS" : {
         "message" : [
           "INSERT INTO <tableName> IF NOT EXISTS in the PARTITION spec."
