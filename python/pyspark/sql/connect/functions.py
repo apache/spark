@@ -2386,6 +2386,30 @@ def _test() -> None:
         del pyspark.sql.connect.functions.window.__doc__
         del pyspark.sql.connect.functions.window_time.__doc__
 
+        # TODO(SPARK-41838): fix dataset.show
+        del pyspark.sql.connect.functions.posexplode_outer.__doc__
+        del pyspark.sql.connect.functions.explode_outer.__doc__
+
+        # TODO(SPARK-41837): createDataFrame datatype conversion error
+        del pyspark.sql.connect.functions.to_csv.__doc__
+        del pyspark.sql.connect.functions.to_json.__doc__
+
+        # TODO(SPARK-41835): Implement `transform_keys` function
+        del pyspark.sql.connect.functions.transform_keys.__doc__
+
+        # TODO(SPARK-41836): Implement `transform_values` function
+        del pyspark.sql.connect.functions.transform_values.__doc__
+
+        # TODO(SPARK-41839): Implement SparkSession.sparkContext
+        del pyspark.sql.connect.functions.monotonically_increasing_id.__doc__
+
+        # TODO(SPARK-41840): Fix 'Column' object is not callable
+        del pyspark.sql.connect.functions.first.__doc__
+        del pyspark.sql.connect.functions.last.__doc__
+        del pyspark.sql.connect.functions.max_by.__doc__
+        del pyspark.sql.connect.functions.median.__doc__
+        del pyspark.sql.connect.functions.min_by.__doc__
+
         del pyspark.sql.connect.functions.broadcast.__doc__
         del pyspark.sql.connect.functions.call_udf.__doc__
         del pyspark.sql.connect.functions.count.__doc__
@@ -2394,30 +2418,19 @@ def _test() -> None:
         del pyspark.sql.connect.functions.dense_rank.__doc__
         del pyspark.sql.connect.functions.element_at.__doc__
         del pyspark.sql.connect.functions.explode.__doc__
-        del pyspark.sql.connect.functions.explode_outer.__doc__
-        del pyspark.sql.connect.functions.first.__doc__
         del pyspark.sql.connect.functions.inline.__doc__
         del pyspark.sql.connect.functions.inline_outer.__doc__
         del pyspark.sql.connect.functions.input_file_name.__doc__
         del pyspark.sql.connect.functions.isnan.__doc__
-        del pyspark.sql.connect.functions.last.__doc__
         del pyspark.sql.connect.functions.map_filter.__doc__
         del pyspark.sql.connect.functions.map_zip_with.__doc__
-        del pyspark.sql.connect.functions.max_by.__doc__
-        del pyspark.sql.connect.functions.median.__doc__
-        del pyspark.sql.connect.functions.min_by.__doc__
         del pyspark.sql.connect.functions.mode.__doc__
-        del pyspark.sql.connect.functions.monotonically_increasing_id.__doc__
         del pyspark.sql.connect.functions.nanvl.__doc__
         del pyspark.sql.connect.functions.percent_rank.__doc__
         del pyspark.sql.connect.functions.pmod.__doc__
         del pyspark.sql.connect.functions.posexplode.__doc__
-        del pyspark.sql.connect.functions.posexplode_outer.__doc__
         del pyspark.sql.connect.functions.rank.__doc__
-        del pyspark.sql.connect.functions.to_csv.__doc__
-        del pyspark.sql.connect.functions.to_json.__doc__
-        del pyspark.sql.connect.functions.transform_keys.__doc__
-        del pyspark.sql.connect.functions.transform_values.__doc__
+
         # Creates a remote Spark session.
         os.environ["SPARK_REMOTE"] = "sc://localhost"
         globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
