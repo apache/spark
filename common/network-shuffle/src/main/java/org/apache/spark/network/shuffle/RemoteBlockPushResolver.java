@@ -435,16 +435,13 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       if(deleteCurrentMergedShuffle) {
         // request to clean up shuffle we are currently hosting
         if (!mergePartitionsInfo.isFinalized()) {
-          submitCleanupTask(() -> {
+          submitCleanupTask(() ->
             closeAndDeleteOutdatedPartitions(
-                currentAppAttemptShuffleMergeId, mergePartitionsInfo.shuffleMergePartitions);
-            writeAppAttemptShuffleMergeInfoToDB(appAttemptShuffleMergeId);
-          });
+                currentAppAttemptShuffleMergeId, mergePartitionsInfo.shuffleMergePartitions));
         } else {
-          submitCleanupTask(() -> {
+          submitCleanupTask(() ->
             deleteMergedFiles(currentAppAttemptShuffleMergeId, appShuffleInfo,
-                mergePartitionsInfo.getReduceIds(), false);
-          });
+                mergePartitionsInfo.getReduceIds(), false));
         }
       } else if(shuffleMergeId < mergePartitionsInfo.shuffleMergeId) {
         throw new RuntimeException(String.format("Asked to remove old shuffle merged data for " +
@@ -452,12 +449,11 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
             msg.appId, msg.shuffleId, shuffleMergeId, mergePartitionsInfo.shuffleMergeId));
       } else if (shuffleMergeId > mergePartitionsInfo.shuffleMergeId) {
         // cleanup request for newer shuffle - remove the outdated data we have.
-        submitCleanupTask(() -> {
+        submitCleanupTask(() ->
           closeAndDeleteOutdatedPartitions(
-              currentAppAttemptShuffleMergeId, mergePartitionsInfo.shuffleMergePartitions);
-          writeAppAttemptShuffleMergeInfoToDB(appAttemptShuffleMergeId);
-        });
+              currentAppAttemptShuffleMergeId, mergePartitionsInfo.shuffleMergePartitions));
       }
+      writeAppAttemptShuffleMergeInfoToDB(appAttemptShuffleMergeId);
       return new AppShuffleMergePartitionsInfo(shuffleMergeId, true);
     });
   }
