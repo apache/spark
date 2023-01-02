@@ -480,6 +480,18 @@ def _test() -> None:
             sc, options={"spark.app.name": "sql.connect.readwriter tests"}
         )
 
+        # SPARK-41746: infer schema for dictionaries
+        del pyspark.sql.connect.readwriter.DataFrameReader.format.__doc__
+        del pyspark.sql.connect.readwriter.DataFrameReader.json.__doc__
+        del pyspark.sql.connect.readwriter.DataFrameReader.options.__doc__
+        del pyspark.sql.connect.readwriter.DataFrameReader.parquet.__doc__
+        del pyspark.sql.connect.readwriter.DataFrameWriter.format.__doc__
+        del pyspark.sql.connect.readwriter.DataFrameWriter.json.__doc__
+        del pyspark.sql.connect.readwriter.DataFrameWriter.mode.__doc__
+        del pyspark.sql.connect.readwriter.DataFrameWriter.orc.__doc__
+        del pyspark.sql.connect.readwriter.DataFrameWriter.partitionBy.__doc__
+        del pyspark.sql.connect.readwriter.DataFrameWriter.save.__doc__
+
         # Creates a remote Spark session.
         os.environ["SPARK_REMOTE"] = "sc://localhost"
         globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
