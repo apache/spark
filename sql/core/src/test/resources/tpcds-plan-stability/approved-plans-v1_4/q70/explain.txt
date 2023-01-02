@@ -157,23 +157,23 @@ Input [2]: [s_state#13, sum#16]
 Keys [1]: [s_state#13]
 Functions [1]: [sum(UnscaledValue(ss_net_profit#10))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_profit#10))#17]
-Results [3]: [s_state#13, s_state#13, MakeDecimal(sum(UnscaledValue(ss_net_profit#10))#17,17,2) AS _w2#18]
+Results [3]: [s_state#13, MakeDecimal(sum(UnscaledValue(ss_net_profit#10))#17,17,2) AS _w0#18, s_state#13]
 
 (25) Sort [codegen id : 5]
-Input [3]: [s_state#13, s_state#13, _w2#18]
-Arguments: [s_state#13 ASC NULLS FIRST, _w2#18 DESC NULLS LAST], false, 0
+Input [3]: [s_state#13, _w0#18, s_state#13]
+Arguments: [s_state#13 ASC NULLS FIRST, _w0#18 DESC NULLS LAST], false, 0
 
 (26) Window
-Input [3]: [s_state#13, s_state#13, _w2#18]
-Arguments: [rank(_w2#18) windowspecdefinition(s_state#13, _w2#18 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS ranking#19], [s_state#13], [_w2#18 DESC NULLS LAST]
+Input [3]: [s_state#13, _w0#18, s_state#13]
+Arguments: [rank(_w0#18) windowspecdefinition(s_state#13, _w0#18 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS ranking#19], [s_state#13], [_w0#18 DESC NULLS LAST]
 
 (27) Filter [codegen id : 6]
-Input [4]: [s_state#13, s_state#13, _w2#18, ranking#19]
+Input [4]: [s_state#13, _w0#18, s_state#13, ranking#19]
 Condition : (ranking#19 <= 5)
 
 (28) Project [codegen id : 6]
 Output [1]: [s_state#13]
-Input [4]: [s_state#13, s_state#13, _w2#18, ranking#19]
+Input [4]: [s_state#13, _w0#18, s_state#13, ranking#19]
 
 (29) BroadcastExchange
 Input [1]: [s_state#13]
@@ -219,23 +219,23 @@ Input [4]: [s_state#20, s_county#21, spark_grouping_id#22, sum#24]
 Keys [3]: [s_state#20, s_county#21, spark_grouping_id#22]
 Functions [1]: [sum(UnscaledValue(ss_net_profit#2))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_profit#2))#25]
-Results [7]: [MakeDecimal(sum(UnscaledValue(ss_net_profit#2))#25,17,2) AS total_sum#26, s_state#20, s_county#21, (cast((shiftright(spark_grouping_id#22, 1) & 1) as tinyint) + cast((shiftright(spark_grouping_id#22, 0) & 1) as tinyint)) AS lochierarchy#27, (cast((shiftright(spark_grouping_id#22, 1) & 1) as tinyint) + cast((shiftright(spark_grouping_id#22, 0) & 1) as tinyint)) AS _w1#28, CASE WHEN (cast((shiftright(spark_grouping_id#22, 0) & 1) as tinyint) = 0) THEN s_state#20 END AS _w2#29, MakeDecimal(sum(UnscaledValue(ss_net_profit#2))#25,17,2) AS _w3#30]
+Results [7]: [MakeDecimal(sum(UnscaledValue(ss_net_profit#2))#25,17,2) AS total_sum#26, s_state#20, s_county#21, (cast((shiftright(spark_grouping_id#22, 1) & 1) as tinyint) + cast((shiftright(spark_grouping_id#22, 0) & 1) as tinyint)) AS lochierarchy#27, MakeDecimal(sum(UnscaledValue(ss_net_profit#2))#25,17,2) AS _w0#28, (cast((shiftright(spark_grouping_id#22, 1) & 1) as tinyint) + cast((shiftright(spark_grouping_id#22, 0) & 1) as tinyint)) AS _w1#29, CASE WHEN (cast((shiftright(spark_grouping_id#22, 0) & 1) as tinyint) = 0) THEN s_state#20 END AS _w2#30]
 
 (38) Exchange
-Input [7]: [total_sum#26, s_state#20, s_county#21, lochierarchy#27, _w1#28, _w2#29, _w3#30]
-Arguments: hashpartitioning(_w1#28, _w2#29, 5), ENSURE_REQUIREMENTS, [plan_id=6]
+Input [7]: [total_sum#26, s_state#20, s_county#21, lochierarchy#27, _w0#28, _w1#29, _w2#30]
+Arguments: hashpartitioning(_w1#29, _w2#30, 5), ENSURE_REQUIREMENTS, [plan_id=6]
 
 (39) Sort [codegen id : 10]
-Input [7]: [total_sum#26, s_state#20, s_county#21, lochierarchy#27, _w1#28, _w2#29, _w3#30]
-Arguments: [_w1#28 ASC NULLS FIRST, _w2#29 ASC NULLS FIRST, _w3#30 DESC NULLS LAST], false, 0
+Input [7]: [total_sum#26, s_state#20, s_county#21, lochierarchy#27, _w0#28, _w1#29, _w2#30]
+Arguments: [_w1#29 ASC NULLS FIRST, _w2#30 ASC NULLS FIRST, _w0#28 DESC NULLS LAST], false, 0
 
 (40) Window
-Input [7]: [total_sum#26, s_state#20, s_county#21, lochierarchy#27, _w1#28, _w2#29, _w3#30]
-Arguments: [rank(_w3#30) windowspecdefinition(_w1#28, _w2#29, _w3#30 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rank_within_parent#31], [_w1#28, _w2#29], [_w3#30 DESC NULLS LAST]
+Input [7]: [total_sum#26, s_state#20, s_county#21, lochierarchy#27, _w0#28, _w1#29, _w2#30]
+Arguments: [rank(_w0#28) windowspecdefinition(_w1#29, _w2#30, _w0#28 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rank_within_parent#31], [_w1#29, _w2#30], [_w0#28 DESC NULLS LAST]
 
 (41) Project [codegen id : 11]
 Output [5]: [total_sum#26, s_state#20, s_county#21, lochierarchy#27, rank_within_parent#31]
-Input [8]: [total_sum#26, s_state#20, s_county#21, lochierarchy#27, _w1#28, _w2#29, _w3#30, rank_within_parent#31]
+Input [8]: [total_sum#26, s_state#20, s_county#21, lochierarchy#27, _w0#28, _w1#29, _w2#30, rank_within_parent#31]
 
 (42) TakeOrderedAndProject
 Input [5]: [total_sum#26, s_state#20, s_county#21, lochierarchy#27, rank_within_parent#31]
