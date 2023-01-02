@@ -28,6 +28,7 @@ from typing import (
     Tuple,
     Callable,
     ValuesView,
+    cast,
 )
 
 from pyspark.sql.connect.column import Column
@@ -547,26 +548,13 @@ def hypot(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]
 hypot.__doc__ = pysparkfuncs.hypot.__doc__
 
 
-def log(col: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("ln", col)
-
-
-@overload  # type: ignore[no-redef]
-def log(arg1: "ColumnOrName") -> Column:
-    ...
-
-
-@overload
-def log(arg1: float, arg2: "ColumnOrName") -> Column:
-    ...
-
-
 def log(arg1: Union["ColumnOrName", float], arg2: Optional["ColumnOrName"] = None) -> Column:
-    _arg1 = lit(arg1) if isinstance(arg1, float) else _to_col(arg1)
     if arg2 is None:
-        return _invoke_function("ln", _arg1)
+        # in this case, arg1 should be "ColumnOrName"
+        return _invoke_function("ln", _to_col(cast("ColumnOrName", arg1)))
     else:
-        return _invoke_function("log", _arg1, _to_col(arg2))
+        # in this case, arg1 should be a float
+        return _invoke_function("log", lit(cast(float, arg1)), _to_col(arg2))
 
 
 log.__doc__ = pysparkfuncs.log.__doc__
