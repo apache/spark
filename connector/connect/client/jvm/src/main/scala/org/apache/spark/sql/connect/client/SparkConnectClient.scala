@@ -37,9 +37,16 @@ class SparkConnectClient(
    */
   def userId: String = userContext.getUserId()
 
+  /**
+   * Dispatch the [[proto.AnalyzePlanRequest]] to the Spark Connect server.
+   * @return A [[proto.AnalyzePlanResponse]] from the Spark Connect server.
+   */
   def analyze(request: proto.AnalyzePlanRequest): proto.AnalyzePlanResponse =
     stub.analyzePlan(request)
 
+  /**
+   * Shutdown the client's connection to the server.
+   */
   def shutdown(): Unit = {
     channel.shutdownNow()
   }
