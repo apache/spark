@@ -551,6 +551,24 @@ def log(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("ln", col)
 
 
+@overload  # type: ignore[no-redef]
+def log(arg1: "ColumnOrName") -> Column:
+    ...
+
+
+@overload
+def log(arg1: float, arg2: "ColumnOrName") -> Column:
+    ...
+
+
+def log(arg1: Union["ColumnOrName", float], arg2: Optional["ColumnOrName"] = None) -> Column:
+    _arg1 = lit(arg1) if isinstance(arg1, float) else _to_col(arg1)
+    if arg2 is None:
+        return _invoke_function("ln", _arg1)
+    else:
+        return _invoke_function("log", _arg1, _to_col(arg2))
+
+
 log.__doc__ = pysparkfuncs.log.__doc__
 
 
