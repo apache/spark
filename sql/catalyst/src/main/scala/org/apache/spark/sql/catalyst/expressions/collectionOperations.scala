@@ -4671,40 +4671,36 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
     val posInt = pos.asInstanceOf[Int]
     val arrayElementType = dataType.asInstanceOf[ArrayType].elementType
 
-    val insertionIndex = if (posInt > 0) {
-      posInt - 1
+    val newPosExtendsArrayLeft = posInt < 0 && math.abs(posInt) > baseArr.numElements()
+
+    val itemInsertionIndex = if (newPosExtendsArrayLeft || posInt == 0) {
+      0
     } else if (posInt < 0) {
       posInt + baseArr.numElements()
     } else {
-      posInt
+      posInt - 1
     }
 
-    val newArrayLength = if (insertionIndex >= 0) {
-      math.max(baseArr.numElements() + 1, insertionIndex + 1)
+    val newArrayLength = if (newPosExtendsArrayLeft) {
+      math.abs(posInt) + 1
     } else {
-      math.abs(insertionIndex) + baseArr.numElements() + 1
+      math.max(baseArr.numElements() + 1, itemInsertionIndex + 1)
     }
 
     val newArray = new Array[Any](newArrayLength)
 
     baseArr.foreach(arrayElementType, (i, v) => {
       var elementPosition = i
-      if (insertionIndex < 0) {
-        elementPosition = elementPosition + 1 + math.abs(insertionIndex)
+      if (newPosExtendsArrayLeft) {
+        elementPosition = elementPosition + 1 + math.abs(posInt + baseArr.numElements())
       }
-      if (i >= insertionIndex && insertionIndex >= 0) {
+      if (i >= itemInsertionIndex && !newPosExtendsArrayLeft) {
         elementPosition = elementPosition + 1
       }
       newArray(elementPosition) = v
     })
 
-    val newItemElemPosition = if (insertionIndex >= 0) {
-      insertionIndex
-    } else {
-      0
-    }
-
-    newArray(newItemElemPosition) = item
+    newArray(itemInsertionIndex) = item
 
     return new GenericArrayData(newArray)
   }
@@ -4715,7 +4711,7 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
       val pos = posExpr.value
       val item = itemExpr.value
 
-      val realItemPosIndex = ctx.freshName("realItemPosIndex")
+      val itemInsertionIndex = ctx.freshName("itemInsertionIndex")
       val newPosExtendsArrayLeft = ctx.freshName("newPosExtendsArrayLeft")
       val adjustedAllocIdx = ctx.freshName("adjustedAllocIdx")
       val resLength = ctx.freshName("resLength")
@@ -4729,26 +4725,25 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
         adjustedAllocIdx, i, true)
 
       val defaultIntValue = CodeGenerator.defaultValue(CodeGenerator.JAVA_INT, false)
-
       s"""
-         |${CodeGenerator.JAVA_INT} $realItemPosIndex = 0;
+         |${CodeGenerator.JAVA_INT} itemInsertionIndex = 0;
          |${CodeGenerator.JAVA_BOOLEAN} $newPosExtendsArrayLeft = false;
          |${CodeGenerator.JAVA_INT} $resLength = $defaultIntValue;
          |${CodeGenerator.JAVA_INT} $adjustedAllocIdx = $defaultIntValue;
          |
          |if ($pos < 0 && java.lang.Math.abs($pos) > $arr.numElements()) {
-         |  $realItemPosIndex = 0;
+         |  itemInsertionIndex = 0;
          |  $newPosExtendsArrayLeft = true;
          |} else if ($pos < 0) {
-         |  $realItemPosIndex = $pos + $arr.numElements();
+         |  itemInsertionIndex = $pos + $arr.numElements();
          |} else if ($pos > 0) {
-         |  $realItemPosIndex = $pos - 1;
+         |  itemInsertionIndex = $pos - 1;
          |}
          |
          |if ($newPosExtendsArrayLeft) {
          |  $resLength = java.lang.Math.abs($pos) + 1;
          |} else {
-         |  $resLength = java.lang.Math.max($arr.numElements() + 1, $realItemPosIndex + 1);
+         |  $resLength = java.lang.Math.max($arr.numElements() + 1, itemInsertionIndex + 1);
          |}
          |
          |$allocation
@@ -4758,14 +4753,14 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
          |    $adjustedAllocIdx =
          |        $adjustedAllocIdx + 1 + java.lang.Math.abs($pos + $arr.numElements());
          |  }
-         |  if ($i >= $realItemPosIndex && !$newPosExtendsArrayLeft) {
+         |  if ($i >= itemInsertionIndex && !$newPosExtendsArrayLeft) {
          |    $adjustedAllocIdx = $adjustedAllocIdx + 1;
          |  }
          |  $assignment
          |}
          |
          |${CodeGenerator.setArrayElement(
-            values, elementType, realItemPosIndex, item, Some(itemExpr.isNull))}
+            values, elementType, itemInsertionIndex, item, Some(itemExpr.isNull))}
          |
          |if ($newPosExtendsArrayLeft) {
          |  for (int $j = $pos + $arr.numElements(); $j < 0; $j ++) {
