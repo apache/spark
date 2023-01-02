@@ -2372,6 +2372,11 @@ def _test() -> None:
         del pyspark.sql.connect.functions.coalesce.__doc__
         del pyspark.sql.connect.functions.sum_distinct.__doc__
 
+        # TODO(SPARK-41834): implement Dataframe.conf
+        del pyspark.sql.connect.functions.from_unixtime.__doc__
+        del pyspark.sql.connect.functions.timestamp_seconds.__doc__
+        del pyspark.sql.connect.functions.unix_timestamp.__doc__
+
         del pyspark.sql.connect.functions.broadcast.__doc__
         del pyspark.sql.connect.functions.call_udf.__doc__
         del pyspark.sql.connect.functions.col.__doc__
@@ -2383,7 +2388,6 @@ def _test() -> None:
         del pyspark.sql.connect.functions.explode.__doc__
         del pyspark.sql.connect.functions.explode_outer.__doc__
         del pyspark.sql.connect.functions.first.__doc__
-        del pyspark.sql.connect.functions.from_unixtime.__doc__
         del pyspark.sql.connect.functions.hour.__doc__
         del pyspark.sql.connect.functions.inline.__doc__
         del pyspark.sql.connect.functions.inline_outer.__doc__
@@ -2405,12 +2409,10 @@ def _test() -> None:
         del pyspark.sql.connect.functions.posexplode_outer.__doc__
         del pyspark.sql.connect.functions.rank.__doc__
         del pyspark.sql.connect.functions.second.__doc__
-        del pyspark.sql.connect.functions.timestamp_seconds.__doc__
         del pyspark.sql.connect.functions.to_csv.__doc__
         del pyspark.sql.connect.functions.to_json.__doc__
         del pyspark.sql.connect.functions.transform_keys.__doc__
         del pyspark.sql.connect.functions.transform_values.__doc__
-        del pyspark.sql.connect.functions.unix_timestamp.__doc__
         del pyspark.sql.connect.functions.window.__doc__
         del pyspark.sql.connect.functions.window_time.__doc__
 
