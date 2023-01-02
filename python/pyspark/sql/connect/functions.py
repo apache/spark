@@ -2377,9 +2377,18 @@ def _test() -> None:
         del pyspark.sql.connect.functions.timestamp_seconds.__doc__
         del pyspark.sql.connect.functions.unix_timestamp.__doc__
 
+        # TODO(SPARK-41757): Fix String representation for Column class
+        del pyspark.sql.connect.functions.col.__doc__
+
+        # TODO: support data type: Timestamp(NANOSECOND, null)
+        del pyspark.sql.connect.functions.hour.__doc__
+        del pyspark.sql.connect.functions.minute.__doc__
+        del pyspark.sql.connect.functions.second.__doc__
+        del pyspark.sql.connect.functions.window.__doc__
+        del pyspark.sql.connect.functions.window_time.__doc__
+
         del pyspark.sql.connect.functions.broadcast.__doc__
         del pyspark.sql.connect.functions.call_udf.__doc__
-        del pyspark.sql.connect.functions.col.__doc__
         del pyspark.sql.connect.functions.count.__doc__
         del pyspark.sql.connect.functions.count_distinct.__doc__
         del pyspark.sql.connect.functions.cume_dist.__doc__
@@ -2388,7 +2397,6 @@ def _test() -> None:
         del pyspark.sql.connect.functions.explode.__doc__
         del pyspark.sql.connect.functions.explode_outer.__doc__
         del pyspark.sql.connect.functions.first.__doc__
-        del pyspark.sql.connect.functions.hour.__doc__
         del pyspark.sql.connect.functions.inline.__doc__
         del pyspark.sql.connect.functions.inline_outer.__doc__
         del pyspark.sql.connect.functions.input_file_name.__doc__
@@ -2399,7 +2407,6 @@ def _test() -> None:
         del pyspark.sql.connect.functions.max_by.__doc__
         del pyspark.sql.connect.functions.median.__doc__
         del pyspark.sql.connect.functions.min_by.__doc__
-        del pyspark.sql.connect.functions.minute.__doc__
         del pyspark.sql.connect.functions.mode.__doc__
         del pyspark.sql.connect.functions.monotonically_increasing_id.__doc__
         del pyspark.sql.connect.functions.nanvl.__doc__
@@ -2408,14 +2415,10 @@ def _test() -> None:
         del pyspark.sql.connect.functions.posexplode.__doc__
         del pyspark.sql.connect.functions.posexplode_outer.__doc__
         del pyspark.sql.connect.functions.rank.__doc__
-        del pyspark.sql.connect.functions.second.__doc__
         del pyspark.sql.connect.functions.to_csv.__doc__
         del pyspark.sql.connect.functions.to_json.__doc__
         del pyspark.sql.connect.functions.transform_keys.__doc__
         del pyspark.sql.connect.functions.transform_values.__doc__
-        del pyspark.sql.connect.functions.window.__doc__
-        del pyspark.sql.connect.functions.window_time.__doc__
-
         # Creates a remote Spark session.
         os.environ["SPARK_REMOTE"] = "sc://localhost"
         globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
