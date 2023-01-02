@@ -441,25 +441,17 @@ def _test() -> None:
         # Creates a remote Spark session.
         os.environ["SPARK_REMOTE"] = "sc://localhost"
         globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
+        # Spark Connect has a different string representation for Column.
+        del pyspark.sql.connect.column.Column.getItem.__doc__
 
         # TODO(SPARK-41746): SparkSession.createDataFrame does not support nested datatypes
         del pyspark.sql.connect.column.Column.dropFields.__doc__
         # TODO(SPARK-41772): Enable pyspark.sql.connect.column.Column.withField doctest
         del pyspark.sql.connect.column.Column.withField.__doc__
-        # TODO(SPARK-41745): SparkSession.createDataFrame does not respect the column names in
-        #  the row
-        del pyspark.sql.connect.column.Column.bitwiseAND.__doc__
-        del pyspark.sql.connect.column.Column.bitwiseOR.__doc__
-        del pyspark.sql.connect.column.Column.bitwiseXOR.__doc__
-        # TODO(SPARK-41745): SparkSession.createDataFrame does not respect the column names in
-        #  the row
-        del pyspark.sql.connect.column.Column.eqNullSafe.__doc__
-        # TODO(SPARK-41745): SparkSession.createDataFrame does not respect the column names in
-        #  the row
-        del pyspark.sql.connect.column.Column.isNotNull.__doc__
+        # TODO(SPARK-41815): Column.isNull returns nan instead of None
         del pyspark.sql.connect.column.Column.isNull.__doc__
+        # TODO(SPARK-41746): SparkSession.createDataFrame does not support nested datatypes
         del pyspark.sql.connect.column.Column.getField.__doc__
-        del pyspark.sql.connect.column.Column.getItem.__doc__
 
         (failure_count, test_count) = doctest.testmod(
             pyspark.sql.connect.column,
