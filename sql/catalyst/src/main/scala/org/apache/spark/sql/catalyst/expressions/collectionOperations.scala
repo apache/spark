@@ -4715,6 +4715,7 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
       val newPosExtendsArrayLeft = ctx.freshName("newPosExtendsArrayLeft")
       val adjustedAllocIdx = ctx.freshName("adjustedAllocIdx")
       val resLength = ctx.freshName("resLength")
+      val insertedItemIsNull = ctx.freshName("insertedItemIsNull")
       val i = ctx.freshName("i")
       val j = ctx.freshName("j")
       val values = ctx.freshName("values")
@@ -4730,6 +4731,7 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
          |${CodeGenerator.JAVA_BOOLEAN} $newPosExtendsArrayLeft = false;
          |${CodeGenerator.JAVA_INT} $resLength = $defaultIntValue;
          |${CodeGenerator.JAVA_INT} $adjustedAllocIdx = $defaultIntValue;
+         |${CodeGenerator.JAVA_BOOLEAN} $insertedItemIsNull = ${itemExpr.isNull};
          |
          |if ($pos < 0 && java.lang.Math.abs($pos) > $arr.numElements()) {
          |  itemInsertionIndex = 0;
@@ -4760,7 +4762,7 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
          |}
          |
          |${CodeGenerator.setArrayElement(
-            values, elementType, itemInsertionIndex, item, Some(itemExpr.isNull))}
+            values, elementType, itemInsertionIndex, item, Some(insertedItemIsNull))}
          |
          |if ($newPosExtendsArrayLeft) {
          |  for (int $j = $pos + $arr.numElements(); $j < 0; $j ++) {
