@@ -916,7 +916,7 @@
   },
   "NOT_A_PARTITIONED_TABLE" : {
     "message" : [
-      "Operation <operation> is not allowed for <tableName> because it is not a partitioned table."
+      "Operation <operation> is not allowed for <tableIdentWithDB> because it is not a partitioned table."
     ]
   },
   "NO_HANDLER_FOR_UDAF" : {
