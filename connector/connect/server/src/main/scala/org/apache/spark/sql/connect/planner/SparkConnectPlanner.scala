@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, 
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, Sort, SubqueryAlias, Union, Unpivot, UnresolvedHint}
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.{toCatalystExpression, toCatalystValue}
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -900,6 +900,41 @@ class SparkConnectPlanner(session: SparkSession) {
 
       case "unwrap_udt" if fun.getArgumentsCount == 1 =>
         Some(UnwrapUDT(transformExpression(fun.getArguments(0))))
+
+      case "from_json" if Seq(2, 3).contains(fun.getArgumentsCount) =>
+        // JsonToStructs constructors only accept DDL-formatted schema.
+        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
+
+        val schemaStr = children(1) match {
+          case Literal(s, StringType) if s != null => s.toString
+          case other =>
+            throw InvalidPlanInput(
+              s"Schema in from_json should be literal string, but got $other")
+        }
+        val schema = DataType.parseTypeWithFallback(
+          schemaStr,
+          DataType.fromJson,
+          fallbackParser = DataType.fromDDL)
+
+        val options = if (children.length == 3) {
+          // ExprUtils.convertToMapData requires the options to be resolved CreateMap,
+          // but the options here is not resolved yet: UnresolvedFunction("map", ...)
+          children(2) match {
+            case UnresolvedFunction(Seq("map"), arguments, _, _, _) =>
+              ExprUtils.convertToMapData(CreateMap(arguments))
+            case other =>
+              throw InvalidPlanInput(
+                s"Options in from_json should be created by map, but got $other")
+          }
+        } else {
+          Map.empty[String, String]
+        }
+
+        Some(
+          JsonToStructs(
+            schema = CharVarcharUtils.failIfHasCharVarchar(schema),
+            options = options,
+            child = children.head))
 
       case _ => None
     }
