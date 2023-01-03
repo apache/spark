@@ -735,6 +735,11 @@
       "The identifier <ident> is invalid. Please, consider quoting it with back-quotes as `<ident>`."
     ]
   },
+  "INVALID_JSON_ROOT_FIELD" : {
+    "message" : [
+      "Cannot convert JSON root field to target Spark type."
+    ]
+  },
   "INVALID_JSON_SCHEMA_MAP_TYPE" : {
     "message" : [
       "Input schema <jsonSchema> can only contain STRING as a key type for a MAP."
@@ -1060,11 +1065,6 @@
   "RESET_PERMISSION_TO_ORIGINAL" : {
     "message" : [
       "Failed to set original permission <permission> back to the created path: <path>. Exception: <message>"
-    ]
-  },
-  "INVALID_JSON_ROOT_FIELD" : {
-    "message" : [
-      "Cannot convert JSON root field to target Spark type."
     ]
   },
   "ROUTINE_ALREADY_EXISTS" : {
