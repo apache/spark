@@ -2379,7 +2379,7 @@ def _test() -> None:
         # TODO(SPARK-41757): Fix String representation for Column class
         del pyspark.sql.connect.functions.col.__doc__
 
-        # TODO: support data type: Timestamp(NANOSECOND, null)
+        # TODO(SPARK-41842): support data type: Timestamp(NANOSECOND, null)
         del pyspark.sql.connect.functions.hour.__doc__
         del pyspark.sql.connect.functions.minute.__doc__
         del pyspark.sql.connect.functions.second.__doc__
@@ -2394,7 +2394,7 @@ def _test() -> None:
         del pyspark.sql.connect.functions.to_csv.__doc__
         del pyspark.sql.connect.functions.to_json.__doc__
 
-        # TODO(SPARK-41835): Implement `transform_keys` function
+        # TODO(SPARK-41835): Fix `transform_keys` function
         del pyspark.sql.connect.functions.transform_keys.__doc__
 
         # TODO(SPARK-41836): Implement `transform_values` function
@@ -2409,27 +2409,44 @@ def _test() -> None:
         del pyspark.sql.connect.functions.max_by.__doc__
         del pyspark.sql.connect.functions.median.__doc__
         del pyspark.sql.connect.functions.min_by.__doc__
+        del pyspark.sql.connect.functions.mode.__doc__
 
+        # TODO(SPARK-41812): Proper column names after join
         del pyspark.sql.connect.functions.broadcast.__doc__
-        del pyspark.sql.connect.functions.call_udf.__doc__
-        del pyspark.sql.connect.functions.count.__doc__
         del pyspark.sql.connect.functions.count_distinct.__doc__
+
+        # TODO(SPARK-41843): Implement SparkSession.udf
+        del pyspark.sql.connect.functions.call_udf.__doc__
+
+        # TODO(SPARK-41845): Fix count bug
+        del pyspark.sql.connect.functions.count.__doc__
+
+        # TODO(SPARK-41846): window functions : unresolved columns
+        del pyspark.sql.connect.functions.rank.__doc__
         del pyspark.sql.connect.functions.cume_dist.__doc__
         del pyspark.sql.connect.functions.dense_rank.__doc__
+        del pyspark.sql.connect.functions.percent_rank.__doc__
+
+        # TODO(SPARK-41847): mapfield,structlist invalid type
         del pyspark.sql.connect.functions.element_at.__doc__
         del pyspark.sql.connect.functions.explode.__doc__
         del pyspark.sql.connect.functions.inline.__doc__
         del pyspark.sql.connect.functions.inline_outer.__doc__
-        del pyspark.sql.connect.functions.input_file_name.__doc__
-        del pyspark.sql.connect.functions.isnan.__doc__
         del pyspark.sql.connect.functions.map_filter.__doc__
         del pyspark.sql.connect.functions.map_zip_with.__doc__
-        del pyspark.sql.connect.functions.mode.__doc__
-        del pyspark.sql.connect.functions.nanvl.__doc__
-        del pyspark.sql.connect.functions.percent_rank.__doc__
-        del pyspark.sql.connect.functions.pmod.__doc__
         del pyspark.sql.connect.functions.posexplode.__doc__
-        del pyspark.sql.connect.functions.rank.__doc__
+
+        # TODO(SPARK-41849): implement DataFrameReader.text
+        del pyspark.sql.connect.functions.input_file_name.__doc__
+
+        # TODO(SPARK-41850): fix isnan
+        del pyspark.sql.connect.functions.isnan.__doc__
+
+        # TODO(SPARK-41851): fix nanvl
+        del pyspark.sql.connect.functions.nanvl.__doc__
+
+        # TODO(SPARK-41852): fix pmod
+        del pyspark.sql.connect.functions.pmod.__doc__
 
         # Creates a remote Spark session.
         os.environ["SPARK_REMOTE"] = "sc://localhost"
