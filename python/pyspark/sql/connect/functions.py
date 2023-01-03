@@ -31,6 +31,7 @@ from typing import (
     cast,
 )
 
+from pyspark import SparkContext, SparkConf
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import (
     CaseWhen,
@@ -2323,3 +2324,158 @@ def unwrap_udt(col: "ColumnOrName") -> Column:
 
 
 unwrap_udt.__doc__ = pysparkfuncs.unwrap_udt.__doc__
+
+
+def _test() -> None:
+    import os
+    import sys
+    import doctest
+    from pyspark.sql import SparkSession as PySparkSession
+    from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    if should_test_connect:
+        import pyspark.sql.connect.functions
+
+        globs = pyspark.sql.connect.functions.__dict__.copy()
+        # Works around to create a regular Spark session
+        sc = SparkContext("local[4]", "sql.connect.functions tests", conf=SparkConf())
+        globs["_spark"] = PySparkSession(
+            sc, options={"spark.app.name": "sql.connect.functions tests"}
+        )
+
+        # TODO(SPARK-41833): fix collect() output
+        del pyspark.sql.connect.functions.array.__doc__
+        del pyspark.sql.connect.functions.array_distinct.__doc__
+        del pyspark.sql.connect.functions.array_except.__doc__
+        del pyspark.sql.connect.functions.array_intersect.__doc__
+        del pyspark.sql.connect.functions.array_remove.__doc__
+        del pyspark.sql.connect.functions.array_repeat.__doc__
+        del pyspark.sql.connect.functions.array_sort.__doc__
+        del pyspark.sql.connect.functions.array_union.__doc__
+        del pyspark.sql.connect.functions.collect_list.__doc__
+        del pyspark.sql.connect.functions.collect_set.__doc__
+        del pyspark.sql.connect.functions.concat.__doc__
+        del pyspark.sql.connect.functions.create_map.__doc__
+        del pyspark.sql.connect.functions.date_trunc.__doc__
+        del pyspark.sql.connect.functions.from_utc_timestamp.__doc__
+        del pyspark.sql.connect.functions.from_csv.__doc__
+        del pyspark.sql.connect.functions.from_json.__doc__
+        del pyspark.sql.connect.functions.isnull.__doc__
+        del pyspark.sql.connect.functions.reverse.__doc__
+        del pyspark.sql.connect.functions.sequence.__doc__
+        del pyspark.sql.connect.functions.slice.__doc__
+        del pyspark.sql.connect.functions.sort_array.__doc__
+        del pyspark.sql.connect.functions.split.__doc__
+        del pyspark.sql.connect.functions.struct.__doc__
+        del pyspark.sql.connect.functions.to_timestamp.__doc__
+        del pyspark.sql.connect.functions.to_utc_timestamp.__doc__
+        del pyspark.sql.connect.functions.unhex.__doc__
+
+        # TODO(SPARK-41825): Dataframe.show formatting int as double
+        del pyspark.sql.connect.functions.coalesce.__doc__
+        del pyspark.sql.connect.functions.sum_distinct.__doc__
+
+        # TODO(SPARK-41834): implement Dataframe.conf
+        del pyspark.sql.connect.functions.from_unixtime.__doc__
+        del pyspark.sql.connect.functions.timestamp_seconds.__doc__
+        del pyspark.sql.connect.functions.unix_timestamp.__doc__
+
+        # TODO(SPARK-41757): Fix String representation for Column class
+        del pyspark.sql.connect.functions.col.__doc__
+
+        # TODO(SPARK-41842): support data type: Timestamp(NANOSECOND, null)
+        del pyspark.sql.connect.functions.hour.__doc__
+        del pyspark.sql.connect.functions.minute.__doc__
+        del pyspark.sql.connect.functions.second.__doc__
+        del pyspark.sql.connect.functions.window.__doc__
+        del pyspark.sql.connect.functions.window_time.__doc__
+
+        # TODO(SPARK-41838): fix dataset.show
+        del pyspark.sql.connect.functions.posexplode_outer.__doc__
+        del pyspark.sql.connect.functions.explode_outer.__doc__
+
+        # TODO(SPARK-41837): createDataFrame datatype conversion error
+        del pyspark.sql.connect.functions.to_csv.__doc__
+        del pyspark.sql.connect.functions.to_json.__doc__
+
+        # TODO(SPARK-41835): Fix `transform_keys` function
+        del pyspark.sql.connect.functions.transform_keys.__doc__
+
+        # TODO(SPARK-41836): Implement `transform_values` function
+        del pyspark.sql.connect.functions.transform_values.__doc__
+
+        # TODO(SPARK-41839): Implement SparkSession.sparkContext
+        del pyspark.sql.connect.functions.monotonically_increasing_id.__doc__
+
+        # TODO(SPARK-41840): Fix 'Column' object is not callable
+        del pyspark.sql.connect.functions.first.__doc__
+        del pyspark.sql.connect.functions.last.__doc__
+        del pyspark.sql.connect.functions.max_by.__doc__
+        del pyspark.sql.connect.functions.median.__doc__
+        del pyspark.sql.connect.functions.min_by.__doc__
+        del pyspark.sql.connect.functions.mode.__doc__
+
+        # TODO(SPARK-41812): Proper column names after join
+        del pyspark.sql.connect.functions.broadcast.__doc__
+        del pyspark.sql.connect.functions.count_distinct.__doc__
+
+        # TODO(SPARK-41843): Implement SparkSession.udf
+        del pyspark.sql.connect.functions.call_udf.__doc__
+
+        # TODO(SPARK-41845): Fix count bug
+        del pyspark.sql.connect.functions.count.__doc__
+
+        # TODO(SPARK-41846): window functions : unresolved columns
+        del pyspark.sql.connect.functions.rank.__doc__
+        del pyspark.sql.connect.functions.cume_dist.__doc__
+        del pyspark.sql.connect.functions.dense_rank.__doc__
+        del pyspark.sql.connect.functions.percent_rank.__doc__
+
+        # TODO(SPARK-41847): mapfield,structlist invalid type
+        del pyspark.sql.connect.functions.element_at.__doc__
+        del pyspark.sql.connect.functions.explode.__doc__
+        del pyspark.sql.connect.functions.inline.__doc__
+        del pyspark.sql.connect.functions.inline_outer.__doc__
+        del pyspark.sql.connect.functions.map_filter.__doc__
+        del pyspark.sql.connect.functions.map_zip_with.__doc__
+        del pyspark.sql.connect.functions.posexplode.__doc__
+
+        # TODO(SPARK-41849): implement DataFrameReader.text
+        del pyspark.sql.connect.functions.input_file_name.__doc__
+
+        # TODO(SPARK-41850): fix isnan
+        del pyspark.sql.connect.functions.isnan.__doc__
+
+        # TODO(SPARK-41851): fix nanvl
+        del pyspark.sql.connect.functions.nanvl.__doc__
+
+        # TODO(SPARK-41852): fix pmod
+        del pyspark.sql.connect.functions.pmod.__doc__
+
+        # Creates a remote Spark session.
+        os.environ["SPARK_REMOTE"] = "sc://localhost"
+        globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
+
+        (failure_count, test_count) = doctest.testmod(
+            pyspark.sql.connect.functions,
+            globs=globs,
+            optionflags=doctest.ELLIPSIS
+            | doctest.NORMALIZE_WHITESPACE
+            | doctest.IGNORE_EXCEPTION_DETAIL,
+        )
+
+        globs["spark"].stop()
+        globs["_spark"].stop()
+        if failure_count:
+            sys.exit(-1)
+    else:
+        print(
+            f"Skipping pyspark.sql.connect.functions doctests: {connect_requirement_message}",
+            file=sys.stderr,
+        )
+
+
+if __name__ == "__main__":
+    _test()
