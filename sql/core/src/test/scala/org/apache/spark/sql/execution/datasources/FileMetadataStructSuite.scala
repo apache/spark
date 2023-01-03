@@ -677,4 +677,59 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
     assert(analyzedStruct.fields.forall(!_.nullable), analyzedStruct.fields.mkString(", "))
     assert(executedStruct.fields.forall(!_.nullable), executedStruct.fields.mkString(", "))
   }
+
+  test(s"Filter on row_index and a stored column at the same time") {
+    withTempPath { dir =>
+      val storedIdName = "stored_id"
+      val storedIdUpperLimitExclusive = 520
+      val rowIndexLowerLimitInclusive = 10
+
+      spark.range(start = 500, end = 600)
+        .toDF(storedIdName)
+        .write
+        .format("parquet")
+        .save(dir.getAbsolutePath)
+
+      // Select stored_id 510 to 519 via a stored_id and row_index filter.
+      val collectedRows = spark.read.load(dir.getAbsolutePath)
+        .select(storedIdName, METADATA_ROW_INDEX)
+        .where(col(storedIdName).lt(lit(storedIdUpperLimitExclusive)))
+        .where(col(METADATA_ROW_INDEX).geq(lit(rowIndexLowerLimitInclusive)))
+        .collect()
+
+      assert(collectedRows.length === 10)
+      assert(collectedRows.forall(_.getLong(0) < storedIdUpperLimitExclusive))
+      assert(collectedRows.forall(_.getLong(1) >= rowIndexLowerLimitInclusive))
+    }
+  }
+
+  test("Filter on constant and generated metadata attributes at the same time") {
+    withTempPath { dir =>
+      val idColumnName = "id"
+      val partitionColumnName = "partition"
+      val numFiles = 4
+      val totalNumRows = 40
+
+      spark.range(end = totalNumRows)
+        .toDF(idColumnName)
+        .withColumn(partitionColumnName, col(idColumnName).mod(lit(numFiles)))
+        .write
+        .partitionBy(partitionColumnName)
+        .format("parquet")
+        .save(dir.getAbsolutePath)
+
+      // Get one file path.
+      val randomTableFilePath = spark.read.load(dir.getAbsolutePath)
+        .select(METADATA_FILE_PATH).collect().head.getString(0)
+
+      val halfTheNumberOfRowsPerFile = totalNumRows / (numFiles * 2)
+      val collectedRows = spark.read.load(dir.getAbsolutePath)
+        .where(col(METADATA_FILE_PATH).equalTo(lit(randomTableFilePath)))
+        .where(col(METADATA_ROW_INDEX).leq(lit(halfTheNumberOfRowsPerFile)))
+        .collect()
+
+      // The query will match half the rows in one of the files.
+      assert(collectedRows.length === halfTheNumberOfRowsPerFile)
+    }
+  }
 }
