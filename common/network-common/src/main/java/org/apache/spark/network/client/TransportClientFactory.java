@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.ReentrantLock;
 
 import com.codahale.metrics.MetricSet;
 import com.google.common.annotations.VisibleForTesting;
@@ -61,14 +62,14 @@ public class TransportClientFactory implements Closeable {
   /** A simple data structure to track the pool of clients between two peer nodes. */
   private static class ClientPool {
     TransportClient[] clients;
-    Object[] locks;
+    ReentrantLock[] locks;
     volatile long lastConnectionFailed;
 
     ClientPool(int size) {
       clients = new TransportClient[size];
-      locks = new Object[size];
+      locks = new ReentrantLock[size];
       for (int i = 0; i < size; i++) {
-        locks[i] = new Object();
+        locks[i] = new ReentrantLock();
       }
       lastConnectionFailed = 0;
     }
@@ -191,34 +192,38 @@ public class TransportClientFactory implements Closeable {
           resolvMsg, resolvedAddress, hostResolveTimeMs);
     }
 
-    synchronized (clientPool.locks[clientIndex]) {
-      cachedClient = clientPool.clients[clientIndex];
+    clientPool.locks[clientIndex].lockInterruptibly();
+    cachedClient = clientPool.clients[clientIndex];
 
-      if (cachedClient != null) {
-        if (cachedClient.isActive()) {
-          logger.trace("Returning cached connection to {}: {}", resolvedAddress, cachedClient);
-          return cachedClient;
-        } else {
-          logger.info("Found inactive connection to {}, creating a new one.", resolvedAddress);
-        }
+    if (cachedClient != null) {
+      if (cachedClient.isActive()) {
+        logger.trace("Returning cached connection to {}: {}", resolvedAddress, cachedClient);
+        clientPool.locks[clientIndex].unlock();
+        return cachedClient;
+      } else {
+        logger.info("Found inactive connection to {}, creating a new one.", resolvedAddress);
       }
-      // If this connection should fast fail when last connection failed in last fast fail time
-      // window and it did, fail this connection directly.
-      if (fastFail && System.currentTimeMillis() - clientPool.lastConnectionFailed <
-        fastFailTimeWindow) {
-        throw new IOException(
-          String.format("Connecting to %s failed in the last %s ms, fail this connection directly",
-            resolvedAddress, fastFailTimeWindow));
-      }
-      try {
-        clientPool.clients[clientIndex] = createClient(resolvedAddress);
-        clientPool.lastConnectionFailed = 0;
-      } catch (IOException e) {
-        clientPool.lastConnectionFailed = System.currentTimeMillis();
-        throw e;
-      }
-      return clientPool.clients[clientIndex];
     }
+    // If this connection should fast fail when last connection failed in last fast fail time
+    // window and it did, fail this connection directly.
+    if (fastFail && System.currentTimeMillis() - clientPool.lastConnectionFailed <
+            fastFailTimeWindow) {
+      clientPool.locks[clientIndex].unlock();
+      throw new IOException(
+              String.format("Connecting to %s failed in the last %s ms, fail this connection directly",
+                      resolvedAddress, fastFailTimeWindow));
+    }
+    try {
+      clientPool.clients[clientIndex] = createClient(resolvedAddress);
+      clientPool.lastConnectionFailed = 0;
+    } catch (IOException e) {
+      clientPool.lastConnectionFailed = System.currentTimeMillis();
+      throw e;
+    } finally {
+      clientPool.locks[clientIndex].unlock();
+    }
+    clientPool.locks[clientIndex].unlock();
+    return clientPool.clients[clientIndex];
   }
 
   public TransportClient createClient(String remoteHost, int remotePort)
