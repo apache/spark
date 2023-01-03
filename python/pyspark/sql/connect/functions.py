@@ -2344,6 +2344,8 @@ def _test() -> None:
         globs["_spark"] = PySparkSession(
             sc, options={"spark.app.name": "sql.connect.functions tests"}
         )
+        # Spark Connect does not support Spark Context but the test depends on that.
+        del pyspark.sql.connect.functions.monotonically_increasing_id.__doc__
 
         # TODO(SPARK-41833): fix collect() output
         del pyspark.sql.connect.functions.array.__doc__
@@ -2405,9 +2407,6 @@ def _test() -> None:
 
         # TODO(SPARK-41836): Implement `transform_values` function
         del pyspark.sql.connect.functions.transform_values.__doc__
-
-        # TODO(SPARK-41839): Implement SparkSession.sparkContext
-        del pyspark.sql.connect.functions.monotonically_increasing_id.__doc__
 
         # TODO(SPARK-41840): Fix 'Column' object is not callable
         del pyspark.sql.connect.functions.first.__doc__
