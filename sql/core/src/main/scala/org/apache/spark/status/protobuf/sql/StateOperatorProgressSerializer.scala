@@ -50,7 +50,7 @@ object StateOperatorProgressSerializer {
     var i = 0
     while (i < size) {
       result(i) = deserialize(stateOperatorList.get(i))
-      i = i + 1
+      i += 1
     }
     result
   }

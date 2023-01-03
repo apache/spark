@@ -33,6 +33,9 @@ private[protobuf] object SourceProgressSerializer {
     builder.setNumInputRows(source.numInputRows)
     builder.setInputRowsPerSecond(source.inputRowsPerSecond)
     builder.setProcessedRowsPerSecond(source.processedRowsPerSecond)
+    source.metrics.forEach {
+      case (k, v) => builder.putMetrics(k, v)
+    }
     builder.build()
   }
 
@@ -42,7 +45,7 @@ private[protobuf] object SourceProgressSerializer {
     var i = 0
     while (i < size) {
       result(i) = deserialize(sourceList.get(i))
-      i = i + 1
+      i += 1
     }
     result
   }
