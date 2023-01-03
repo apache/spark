@@ -2011,9 +2011,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     static final String LATE_BLOCK_PUSHES_METRIC = "lateBlockPushes";
     // blockBytesWritten tracks the length of the pushed block data written to file in bytes
     static final String BLOCK_BYTES_WRITTEN_METRIC = "blockBytesWritten";
-    // deferredBlockBytes tracks the size of the current deferred block parts buffered in memory.
+    // deferredBlockBytes tracks the size of the current deferred block parts buffered in memory
     static final String DEFERRED_BLOCK_BYTES_METRIC = "deferredBlockBytes";
-    // deferredBlocks tracks the number of deferred blocks got written to the merged shuffle file
+    // deferredBlocks tracks the number of the current deferred block parts buffered in memory
     static final String DEFERRED_BLOCKS_METRIC = "deferredBlocks";
     // staleBlockPushes tracks how many times a shuffle block push request it stale
     static final String STALE_BLOCK_PUSHES_METRIC = "staleBlockPushes";

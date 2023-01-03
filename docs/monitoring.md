@@ -1421,6 +1421,15 @@ Note: applies to the shuffle service
 - shuffle-server.usedDirectMemory
 - shuffle-server.usedHeapMemory
 
+Below shuffle service server-side metrics are specific to the Push-Based Shuffle
+
+- blockAppendCollisions - how many times a shuffle block collided because of another block for the same reduce partition was being written
+- lateBlockPushes - how many times a shuffle block push request is too late
+- blockBytesWritten - the length of the pushed block data written to file in bytes
+- deferredBlockBytes - the size of the current deferred block parts buffered in memory
+- deferredBlocks - the number of the current deferred block parts buffered in memory
+- staleBlockPushes - how many times a shuffle block push request it stale
+
 # Advanced Instrumentation
 
 Several external tools can be used to help profile the performance of Spark jobs:
