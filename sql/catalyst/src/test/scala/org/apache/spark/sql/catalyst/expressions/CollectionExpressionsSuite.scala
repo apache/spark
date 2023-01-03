@@ -2269,6 +2269,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val a16 = Literal.create(Seq("b", null, "a", "g", null), ArrayType(StringType, true))
     val a18 = Literal.create(null, ArrayType(StringType))
 
+    val litTwoInt = Literal.create(2, IntegerType)
     val litThreeInt = Literal.create(3, IntegerType)
     val litOneInt = Literal.create(1, IntegerType)
     val litFourInt = Literal.create(4, IntegerType)
@@ -2286,32 +2287,32 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val litDString = Literal.create("d", StringType)
 
     // basic additions per type
-    checkEvaluation(ArrayInsert(a1, litThreeInt, litThreeInt), Seq(1, 2, 3, 4))
+    checkEvaluation(ArrayInsert(a1, litTwoInt, litThreeInt), Seq(1, 2, 3, 4))
     checkEvaluation(
-      ArrayInsert(a3, litThreeInt, litBoolTrue),
+      ArrayInsert(a3, litTwoInt, litBoolTrue),
       Seq[Boolean](true, false, true, true)
     )
-    checkEvaluation(ArrayInsert(a4, litThreeInt, litThreeByte), Seq[Byte](1, 2, 5, 3, 2))
-    checkEvaluation(ArrayInsert(a7, litThreeInt, litThreeShort), Seq[Short](1, 2, 3, 3, 2))
+    checkEvaluation(ArrayInsert(a4, litTwoInt, litThreeByte), Seq[Byte](1, 2, 5, 3, 2))
+    checkEvaluation(ArrayInsert(a7, litTwoInt, litThreeShort), Seq[Short](1, 2, 3, 3, 2))
     checkEvaluation(
-      ArrayInsert(a11, litFourInt, litFourFourDouble),
+      ArrayInsert(a11, litThreeInt, litFourFourDouble),
       Seq[Double](1.1, 2.2, 3.3, 4.4, 2.2)
     )
     checkEvaluation(
-      ArrayInsert(a9, litFourInt, litFourFourFloat),
+      ArrayInsert(a9, litThreeInt, litFourFourFloat),
       Seq(1.1F, 2.2F, 3.3F, 4.4F, 2.2F)
     )
-    checkEvaluation(ArrayInsert(a13, litThreeInt, litThreeLong), Seq(1L, 2L, 3L, 4L))
-    checkEvaluation(ArrayInsert(a15, litThreeInt, litDString), Seq("b", "a", "d", "c"))
+    checkEvaluation(ArrayInsert(a13, litTwoInt, litThreeLong), Seq(1L, 2L, 3L, 4L))
+    checkEvaluation(ArrayInsert(a15, litTwoInt, litDString), Seq("b", "a", "d", "c"))
 
     // index edge cases
-    checkEvaluation(ArrayInsert(a1, litOneInt, litThreeInt), Seq(3, 1, 2, 4))
+    checkEvaluation(ArrayInsert(a1, litOneInt, litThreeInt), Seq(1, 3, 2, 4))
     checkEvaluation(ArrayInsert(a1, litZeroInt, litThreeInt), Seq(3, 1, 2, 4))
-    checkEvaluation(ArrayInsert(a1, litFourInt, litThreeInt), Seq(1, 2, 4, 3))
+    checkEvaluation(ArrayInsert(a1, litThreeInt, litThreeInt), Seq(1, 2, 4, 3))
     checkEvaluation(ArrayInsert(a1, litMinusTwoInt, litThreeInt), Seq(1, 3, 2, 4))
     checkEvaluation(
       ArrayInsert(a1, litTenInt, litThreeInt),
-      Seq(1, 2, 4, null, null, null, null, null, null, 3)
+      Seq(1, 2, 4, null, null, null, null, null, null, null, 3)
     )
     checkEvaluation(
       ArrayInsert(a1, litMinusTenInt, litThreeInt),
@@ -2319,10 +2320,10 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     )
 
     // null handling
-    checkEvaluation(ArrayInsert(a1, litThreeInt, litNullInt), Seq(1, 2, null, 4))
-    checkEvaluation(ArrayInsert(a2, litThreeInt, litThreeInt), Seq(1, 2, 3, null, 4, 5, null))
-    checkEvaluation(ArrayInsert(a16, litThreeInt, litDString), Seq("b", null, "d", "a", "g", null))
-    checkEvaluation(ArrayInsert(a18, litThreeInt, litDString), null)
+    checkEvaluation(ArrayInsert(a1, litTwoInt, litNullInt), Seq(1, 2, null, 4))
+    checkEvaluation(ArrayInsert(a2, litTwoInt, litThreeInt), Seq(1, 2, 3, null, 4, 5, null))
+    checkEvaluation(ArrayInsert(a16, litTwoInt, litDString), Seq("b", null, "d", "a", "g", null))
+    checkEvaluation(ArrayInsert(a18, litTwoInt, litDString), null)
     checkEvaluation(ArrayInsert(a16, litNullInt, litDString), null)
   }
 

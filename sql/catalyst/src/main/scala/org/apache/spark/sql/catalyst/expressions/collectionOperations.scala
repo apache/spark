@@ -4605,9 +4605,9 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
   usage = "_FUNC_(x, pos, val) - Places val into index pos of array x (array indices start at 1)",
   examples = """
     Examples:
-      > SELECT _FUNC_(array(1, 2, 3, 4), 5, 5);
+      > SELECT _FUNC_(array(1, 2, 3, 4), 4, 5);
        [1,2,3,4,5]
-      > SELECT _FUNC_(array(5, 3, 2, 1), 2, 4);
+      > SELECT _FUNC_(array(5, 3, 2, 1), -3, 4);
        [5,4,3,2,1]
   """,
   group = "array_funcs",
@@ -4671,14 +4671,14 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
     val posInt = pos.asInstanceOf[Int]
     val arrayElementType = dataType.asInstanceOf[ArrayType].elementType
 
-    val newPosExtendsArrayLeft = posInt < 0 && math.abs(posInt) > baseArr.numElements()
+    val newPosExtendsArrayLeft = posInt < 0 && math.abs(posInt) > baseArr.numElements() - 1
 
-    val itemInsertionIndex = if (newPosExtendsArrayLeft || posInt == 0) {
+    val itemInsertionIndex = if (newPosExtendsArrayLeft) {
       0
     } else if (posInt < 0) {
       posInt + baseArr.numElements()
     } else {
-      posInt - 1
+      posInt
     }
 
     val newArrayLength = if (newPosExtendsArrayLeft) {
@@ -4733,13 +4733,13 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
          |${CodeGenerator.JAVA_INT} $adjustedAllocIdx = $defaultIntValue;
          |${CodeGenerator.JAVA_BOOLEAN} $insertedItemIsNull = ${itemExpr.isNull};
          |
-         |if ($pos < 0 && java.lang.Math.abs($pos) > $arr.numElements()) {
+         |if ($pos < 0 && java.lang.Math.abs($pos) > $arr.numElements() - 1) {
          |  $itemInsertionIndex = 0;
          |  $newPosExtendsArrayLeft = true;
          |} else if ($pos < 0) {
          |  $itemInsertionIndex = $pos + $arr.numElements();
          |} else if ($pos > 0) {
-         |  $itemInsertionIndex = $pos - 1;
+         |  $itemInsertionIndex = $pos;
          |}
          |
          |if ($newPosExtendsArrayLeft) {
