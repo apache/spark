@@ -219,3 +219,4 @@ Hive built-in ORC                                        9674          12873    
 Native ORC MR                                           12151          16892        2838          0.1       11588.4       0.8X
 Native ORC Vectorized                                    3333           3448         163          0.3        3178.4       2.9X
 
+
