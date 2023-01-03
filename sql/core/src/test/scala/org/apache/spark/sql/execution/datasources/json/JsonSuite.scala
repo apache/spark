@@ -3201,7 +3201,7 @@ abstract class JsonSuite
 
     checkError(
       exception = ExceptionUtils.getRootCause(exception).asInstanceOf[SparkRuntimeException],
-      errorClass = "ROOT_CONVERTER_RETURNS_NULL",
+      errorClass = "INVALID_JSON_ROOT_FIELD",
       parameters = Map.empty
     )
 

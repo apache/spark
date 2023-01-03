@@ -1062,9 +1062,9 @@
       "Failed to set original permission <permission> back to the created path: <path>. Exception: <message>"
     ]
   },
-  "ROOT_CONVERTER_RETURNS_NULL" : {
+  "INVALID_JSON_ROOT_FIELD" : {
     "message" : [
-      "Root converter returns null"
+      "Cannot convert JSON root field to target Spark type."
     ]
   },
   "ROUTINE_ALREADY_EXISTS" : {
