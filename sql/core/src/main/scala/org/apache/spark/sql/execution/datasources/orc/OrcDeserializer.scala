@@ -57,14 +57,7 @@ class OrcDeserializer(
             } else {
               new RowUpdater(resultRow)
             }
-          val writer: (Int, WritableComparable[_]) => Unit =
-            (ordinal, value) =>
-              if (value == null) {
-                rowUpdater.setNullAt(ordinal)
-              } else {
-                val writerFunc = newWriter(f.dataType, rowUpdater)
-                writerFunc(ordinal, value)
-              }
+          val writer = newWriter(f.dataType, rowUpdater)
           (value: WritableComparable[_]) => writer(index, value)
         }
       }.toArray
@@ -75,7 +68,11 @@ class OrcDeserializer(
     while (targetColumnIndex < fieldWriters.length) {
       if (fieldWriters(targetColumnIndex) != null) {
         val value = orcStruct.getFieldValue(requestedColIds(targetColumnIndex))
-        fieldWriters(targetColumnIndex)(value)
+        if (value == null) {
+          resultRow.setNullAt(targetColumnIndex)
+        } else {
+          fieldWriters(targetColumnIndex)(value)
+        }
       }
       targetColumnIndex += 1
     }
@@ -88,7 +85,11 @@ class OrcDeserializer(
     while (targetColumnIndex < fieldWriters.length) {
       if (fieldWriters(targetColumnIndex) != null) {
         val value = orcValues(requestedColIds(targetColumnIndex))
-        fieldWriters(targetColumnIndex)(value)
+        if (value == null) {
+          resultRow.setNullAt(targetColumnIndex)
+        } else {
+          fieldWriters(targetColumnIndex)(value)
+        }
       }
       targetColumnIndex += 1
     }
