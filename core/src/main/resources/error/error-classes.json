@@ -853,7 +853,7 @@
   },
   "MALFORMED_CSV_RECORD" : {
     "message" : [
-      "Malformed CSV record. The number of tokens <tokenLength> doesn't match the schema <schemaLength>."
+      "Malformed CSV record: <badRecord>"
     ]
   },
   "MALFORMED_PROTOBUF_MESSAGE" : {

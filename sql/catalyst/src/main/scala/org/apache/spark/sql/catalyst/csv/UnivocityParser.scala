@@ -319,7 +319,7 @@ class UnivocityParser(
       throw BadRecordException(
         () => getCurrentInput,
         () => None,
-        QueryExecutionErrors.malformedCSVRecordError(0, parsedSchema.length))
+        QueryExecutionErrors.malformedCSVRecordError(tokens.toString))
     }
 
     var badRecordException: Option[Throwable] = if (tokens.length != parsedSchema.length) {
@@ -327,7 +327,7 @@ class UnivocityParser(
       // However, we still have chance to parse some of the tokens. It continues to parses the
       // tokens normally and sets null when `ArrayIndexOutOfBoundsException` occurs for missing
       // tokens.
-      Some(QueryExecutionErrors.malformedCSVRecordError(tokens.length, parsedSchema.length))
+      Some(QueryExecutionErrors.malformedCSVRecordError(getCurrentInput.toString))
     } else None
     // When the length of the returned tokens is identical to the length of the parsed schema,
     // we just need to:

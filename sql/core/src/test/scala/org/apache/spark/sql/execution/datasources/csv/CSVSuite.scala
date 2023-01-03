@@ -371,15 +371,9 @@ abstract class CSVSuite
       }
 
       checkError(
-        exception = exception.getCause.asInstanceOf[SparkException],
-        errorClass = "_LEGACY_ERROR_TEMP_2177",
-        parameters = Map("failFastMode" -> "FAILFAST")
-      )
-
-      checkError(
         exception = ExceptionUtils.getRootCause(exception).asInstanceOf[SparkRuntimeException],
         errorClass = "MALFORMED_CSV_RECORD",
-        parameters = Map("tokenLength" -> "3", "schemaLength" -> "5")
+        parameters = Map("badRecord" -> "2015,Chevy,Volt")
       )
     }
   }
@@ -3147,6 +3141,26 @@ class CSVv1Suite extends CSVSuite {
     super
       .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "csv")
+
+  private val carsFile = "test-data/cars.csv"
+
+  test("test for FAILFAST parsing mode on CSV v1") {
+    Seq(false, true).foreach { multiLine =>
+      val exception = intercept[SparkException] {
+        spark.read
+          .format("csv")
+          .option("multiLine", multiLine)
+          .options(Map("header" -> "true", "mode" -> "failfast"))
+          .load(testFile(carsFile)).collect()
+      }
+
+      checkError(
+        exception = exception.getCause.asInstanceOf[SparkException],
+        errorClass = "_LEGACY_ERROR_TEMP_2177",
+        parameters = Map("failFastMode" -> "FAILFAST")
+      )
+    }
+  }
 }
 
 class CSVv2Suite extends CSVSuite {
@@ -3154,6 +3168,26 @@ class CSVv2Suite extends CSVSuite {
     super
       .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "")
+
+  private val carsFile = "test-data/cars.csv"
+
+  test("test for FAILFAST parsing mode on CSV v2") {
+    Seq(false, true).foreach { multiLine =>
+      val exception = intercept[SparkException] {
+        spark.read
+          .format("csv")
+          .option("multiLine", multiLine)
+          .options(Map("header" -> "true", "mode" -> "failfast"))
+          .load(testFile(carsFile)).collect()
+      }
+
+      checkError(
+        exception = exception.getCause.asInstanceOf[SparkException],
+        errorClass = "_LEGACY_ERROR_TEMP_2064",
+        parameters = Map("path" -> s"${testFile(carsFile)}")
+      )
+    }
+  }
 }
 
 class CSVLegacyTimeParserSuite extends CSVSuite {

@@ -1543,12 +1543,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "name" -> name))
   }
 
-  def malformedCSVRecordError(tokenLength: Int, schemaLength: Int): SparkRuntimeException = {
+  def malformedCSVRecordError(badRecord: String): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "MALFORMED_CSV_RECORD",
-      messageParameters = Map(
-        "tokenLength" -> tokenLength.toString(),
-        "schemaLength" -> schemaLength.toString()))
+      messageParameters = Map("badRecord" -> badRecord))
   }
 
   def elementsOfTupleExceedLimitError(): SparkUnsupportedOperationException = {
