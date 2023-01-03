@@ -1394,7 +1394,7 @@ def _test() -> None:
             sc, options={"spark.app.name": "sql.connect.dataframe tests"}
         )
 
-        # TODO(SPARK-41819): Implement RDD.getNumPartitions
+        # Spark Connect does not support RDD but the tests depend on them.
         del pyspark.sql.connect.dataframe.DataFrame.coalesce.__doc__
         del pyspark.sql.connect.dataframe.DataFrame.repartition.__doc__
 
@@ -1420,7 +1420,7 @@ def _test() -> None:
         del pyspark.sql.connect.dataframe.DataFrame.replace.__doc__
         del pyspark.sql.connect.dataframe.DataFrame.intersect.__doc__
 
-        # TODO(SPARK-41826): Implement Dataframe.readStream
+        # TODO(SPARK-41625): Support Structured Streaming
         del pyspark.sql.connect.dataframe.DataFrame.isStreaming.__doc__
 
         # TODO(SPARK-41827): groupBy requires all cols be Column or str
