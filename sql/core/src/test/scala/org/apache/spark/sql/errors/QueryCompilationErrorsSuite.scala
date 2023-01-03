@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.errors
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, ClassData, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
@@ -684,11 +685,11 @@ class QueryCompilationErrorsSuite
   test("NEGATIVE_SCALE_NOT_ALLOWED: negative scale for Decimal is not allowed") {
     withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "false") {
       checkError(
-        exception = intercept[AnalysisException] (Decimal(BigDecimal("98765"), 5, -3)),
-        errorClass = "NEGATIVE_SCALE_NOT_ALLOWED",
-        parameters = Map(
-          "scale" -> "-3",
-          "allowNegativeConf" -> "spark.sql.legacy.allowNegativeScaleOfDecimal")
+        exception = intercept[SparkException] (Decimal(BigDecimal("98765"), 5, -3)),
+        errorClass = "INTERNAL_ERROR",
+        parameters = Map("message" -> ("Negative scale is not allowed: -3. " +
+            "Set the config \"spark.sql.legacy.allowNegativeScaleOfDecimal\" " +
+            "to \"true\" to allow it."))
       )
     }
   }

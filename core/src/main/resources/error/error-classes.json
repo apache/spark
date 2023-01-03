@@ -879,11 +879,6 @@
       "Not allowed to implement multiple UDF interfaces, UDF class <className>"
     ]
   },
-  "NEGATIVE_SCALE_NOT_ALLOWED" : {
-    "message" : [
-      "Negative scale is not allowed: <scale>. Set the config <allowNegativeConf> to \"true\" to allow it."
-    ]
-  },
   "NESTED_AGGREGATE_FUNCTION" : {
     "message" : [
       "It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query."
