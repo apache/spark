@@ -670,26 +670,6 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
       ),
       df.select($"col").collect())
   }
-
-  test("SPARK-41790: Set TRANSFORM reader and writer's format correctly") {
-    withTempView("v") {
-      val df = Seq(
-        (1, 2)
-      ).toDF("a", "b")
-      df.createTempView("v")
-
-      checkAnswer(
-        sql(
-          s"""
-             |SELECT TRANSFORM(a, b)
-             |  ROW FORMAT DELIMITED
-             |  FIELDS TERMINATED BY ','
-             |  USING 'cat'
-             |  AS (c)
-             |FROM v
-        """.stripMargin), identity, Row("1,2") :: Nil)
-    }
-  }
 }
 
 case class ExceptionInjectingOperator(child: SparkPlan) extends UnaryExecNode {
