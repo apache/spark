@@ -67,10 +67,7 @@ class InterpretedUnsafeProjection(expressions: Array[Expression]) extends Unsafe
   }
 
   override def initialize(partitionIndex: Int): Unit = {
-    exprs.foreach(_.foreach {
-      case n: Nondeterministic => n.initialize(partitionIndex)
-      case _ =>
-    })
+    initializeExprs(exprs, partitionIndex)
   }
 
   override def apply(row: InternalRow): UnsafeRow = {
