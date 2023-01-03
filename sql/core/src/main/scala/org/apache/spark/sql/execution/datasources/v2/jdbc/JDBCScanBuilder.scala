@@ -184,7 +184,7 @@ case class JDBCScanBuilder(
     finalSchema = StructType(fields)
   }
 
-  override def build(): Scan = {
+  override def build(): JDBCScan = {
     val resolver = session.sessionState.conf.resolver
     val timeZoneId = session.sessionState.conf.sessionLocalTimeZone
     val parts = JDBCRelation.columnPartition(schema, resolver, timeZoneId, jdbcOptions)

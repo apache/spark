@@ -33,7 +33,7 @@ class AvroScanBuilder (
     options: CaseInsensitiveStringMap)
   extends FileScanBuilder(sparkSession, fileIndex, dataSchema) {
 
-  override def build(): Scan = {
+  override def build(): AvroScan = {
     AvroScan(
       sparkSession,
       fileIndex,

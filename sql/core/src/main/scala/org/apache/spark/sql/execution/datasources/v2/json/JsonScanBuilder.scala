@@ -32,7 +32,7 @@ class JsonScanBuilder (
     dataSchema: StructType,
     options: CaseInsensitiveStringMap)
   extends FileScanBuilder(sparkSession, fileIndex, dataSchema) {
-  override def build(): Scan = {
+  override def build(): JsonScan = {
     JsonScan(
       sparkSession,
       fileIndex,

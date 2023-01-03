@@ -32,7 +32,7 @@ case class TextScanBuilder(
     options: CaseInsensitiveStringMap)
   extends FileScanBuilder(sparkSession, fileIndex, dataSchema) {
 
-  override def build(): Scan = {
+  override def build(): TextScan = {
     TextScan(sparkSession, fileIndex, dataSchema, readDataSchema(), readPartitionSchema(), options,
       partitionFilters, dataFilters)
   }

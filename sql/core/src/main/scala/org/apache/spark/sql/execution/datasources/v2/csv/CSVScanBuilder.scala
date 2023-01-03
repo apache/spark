@@ -34,7 +34,7 @@ case class CSVScanBuilder(
     options: CaseInsensitiveStringMap)
   extends FileScanBuilder(sparkSession, fileIndex, dataSchema) {
 
-  override def build(): Scan = {
+  override def build(): CSVScan = {
     CSVScan(
       sparkSession,
       fileIndex,

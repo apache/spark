@@ -51,7 +51,7 @@ case class OrcScanBuilder(
 
   override protected val supportsNestedSchemaPruning: Boolean = true
 
-  override def build(): Scan = {
+  override def build(): OrcScan = {
     // the `finalSchema` is either pruned in pushAggregation (if aggregates are
     // pushed down), or pruned in readDataSchema() (in regular column pruning). These
     // two are mutual exclusive.
