@@ -99,7 +99,7 @@ case class TaskSetFailed(taskSet: TaskSet, reason: String, exception: Option[Thr
 private[scheduler] case object ResubmitFailedStages extends DAGSchedulerEvent
 
 private[scheduler]
-case class SpeculativeTaskSubmitted(task: Task[_]) extends DAGSchedulerEvent
+case class SpeculativeTaskSubmitted(task: Task[_], taskIndex: Int = -1) extends DAGSchedulerEvent
 
 private[scheduler]
 case class UnschedulableTaskSetAdded(stageId: Int, stageAttemptId: Int)

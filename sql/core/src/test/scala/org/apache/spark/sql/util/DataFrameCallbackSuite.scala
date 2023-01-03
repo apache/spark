@@ -25,7 +25,7 @@ import org.apache.spark._
 import org.apache.spark.sql.{functions, Dataset, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
-import org.apache.spark.sql.execution.{QueryExecution, QueryExecutionException, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{QueryExecution, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectCommand, LeafRunnableCommand}
 import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationCommand
@@ -217,10 +217,14 @@ class DataFrameCallbackSuite extends QueryTest
     withTable("tab") {
       spark.range(10).select($"id", $"id" % 5 as "p").write.partitionBy("p").saveAsTable("tab")
       sparkContext.listenerBus.waitUntilEmpty()
-      assert(commands.length == 5)
-      assert(commands(4)._1 == "command")
-      assert(commands(4)._2.isInstanceOf[CreateDataSourceTableAsSelectCommand])
-      assert(commands(4)._2.asInstanceOf[CreateDataSourceTableAsSelectCommand]
+      // CTAS would derive 3 query executions
+      // 1. CreateDataSourceTableAsSelectCommand
+      // 2. InsertIntoHadoopFsRelationCommand
+      // 3. CommandResultExec
+      assert(commands.length == 6)
+      assert(commands(5)._1 == "command")
+      assert(commands(5)._2.isInstanceOf[CreateDataSourceTableAsSelectCommand])
+      assert(commands(5)._2.asInstanceOf[CreateDataSourceTableAsSelectCommand]
         .table.partitionColumnNames == Seq("p"))
     }
 
@@ -359,7 +363,7 @@ class DataFrameCallbackSuite extends QueryTest
       Dataset.ofRows(spark, ErrorTestCommand("foo")).collect()
     }
     sparkContext.listenerBus.waitUntilEmpty()
-    assert(e != null && e.isInstanceOf[QueryExecutionException]
+    assert(e != null && e.isInstanceOf[SparkException]
       && e.getCause.isInstanceOf[Error] && e.getCause.getMessage == "foo")
     spark.listenerManager.unregister(listener)
   }

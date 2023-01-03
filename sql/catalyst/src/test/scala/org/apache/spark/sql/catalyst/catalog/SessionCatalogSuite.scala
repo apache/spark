@@ -1477,6 +1477,21 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       assert(
         catalog.lookupFunction(
           FunctionIdentifier("temp1"), arguments) === Literal(arguments.length))
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          catalog.registerFunction(
+            CatalogFunction(FunctionIdentifier("temp2", None),
+              "function_class_cannot_load", Seq.empty[FunctionResource]),
+            overrideIfExists = false,
+            None)
+        },
+        errorClass = "CANNOT_LOAD_FUNCTION_CLASS",
+        parameters = Map(
+          "className" -> "function_class_cannot_load",
+          "functionName" -> "`temp2`"
+        )
+      )
     }
   }
 
@@ -1578,13 +1593,29 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       val arguments = Seq(Literal(1), Literal(2), Literal(3))
       assert(catalog.lookupFunction(FunctionIdentifier("func1"), arguments) === Literal(1))
       catalog.dropTempFunction("func1", ignoreIfNotExists = false)
-      intercept[NoSuchFunctionException] {
-        catalog.lookupFunction(FunctionIdentifier("func1"), arguments)
-      }
-      intercept[NoSuchTempFunctionException] {
-        catalog.dropTempFunction("func1", ignoreIfNotExists = false)
-      }
+      checkError(
+        exception = intercept[NoSuchFunctionException] {
+          catalog.lookupFunction(FunctionIdentifier("func1"), arguments)
+        },
+        errorClass = "ROUTINE_NOT_FOUND",
+        parameters = Map("routineName" -> "`default`.`func1`")
+      )
+      checkError(
+        exception = intercept[NoSuchTempFunctionException] {
+          catalog.dropTempFunction("func1", ignoreIfNotExists = false)
+        },
+        errorClass = "ROUTINE_NOT_FOUND",
+        parameters = Map("routineName" -> "`func1`")
+      )
       catalog.dropTempFunction("func1", ignoreIfNotExists = true)
+
+      checkError(
+        exception = intercept[NoSuchTempFunctionException] {
+          catalog.dropTempFunction("func2", ignoreIfNotExists = false)
+        },
+        errorClass = "ROUTINE_NOT_FOUND",
+        parameters = Map("routineName" -> "`func2`")
+      )
     }
   }
 

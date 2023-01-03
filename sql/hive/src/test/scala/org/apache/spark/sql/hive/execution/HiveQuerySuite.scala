@@ -1408,6 +1408,8 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     sql("USE hive_test_db")
     assert("hive_test_db" == sql("select current_database()").first().getString(0))
 
+    assert("hive_test_db" == sql("select current_schema()").first().getString(0))
+
     checkError(
       exception = intercept[AnalysisException] {
         sql("USE not_existing_db")
@@ -1420,15 +1422,15 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   }
 
   test("lookup hive UDF in another thread") {
-    checkErrorMatchPVals(
+    checkError(
       exception = intercept[AnalysisException] {
         range(1).selectExpr("not_a_udf()")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_1242",
+      errorClass = "UNRESOLVED_ROUTINE",
       sqlState = None,
       parameters = Map(
-        "rawName" -> "not_a_udf",
-        "fullName" -> "spark_catalog.[a-z]+.not_a_udf"),
+        "routineName" -> "`not_a_udf`",
+        "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`a`]"),
       context = ExpectedContext(
         fragment = "not_a_udf()",
         start = 0,
@@ -1437,15 +1439,15 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     var success = false
     val t = new Thread("test") {
       override def run(): Unit = {
-        checkErrorMatchPVals(
+        checkError(
           exception = intercept[AnalysisException] {
             range(1).selectExpr("not_a_udf()")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1242",
+          errorClass = "UNRESOLVED_ROUTINE",
           sqlState = None,
           parameters = Map(
-            "rawName" -> "not_a_udf",
-            "fullName" -> "spark_catalog.[a-z]+.not_a_udf"),
+            "routineName" -> "`not_a_udf`",
+            "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`a`]"),
           context = ExpectedContext(
             fragment = "not_a_udf()",
             start = 0,

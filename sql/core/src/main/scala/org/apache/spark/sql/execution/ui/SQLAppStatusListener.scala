@@ -393,9 +393,10 @@ class SQLAppStatusListener(
   }
 
   private def onExecutionEnd(event: SparkListenerSQLExecutionEnd): Unit = {
-    val SparkListenerSQLExecutionEnd(executionId, time) = event
+    val SparkListenerSQLExecutionEnd(executionId, time, errorMessage) = event
     Option(liveExecutions.get(executionId)).foreach { exec =>
       exec.completionTime = Some(new Date(time))
+      exec.errorMessage = errorMessage
       update(exec)
 
       // Aggregating metrics can be expensive for large queries, so do it asynchronously. The end
@@ -485,9 +486,10 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
   var details: String = null
   var physicalPlanDescription: String = null
   var modifiedConfigs: Map[String, String] = _
-  var metrics = Seq[SQLPlanMetric]()
+  var metrics = collection.Seq[SQLPlanMetric]()
   var submissionTime = -1L
   var completionTime: Option[Date] = None
+  var errorMessage: Option[String] = None
 
   var jobs = Map[Int, JobExecutionStatus]()
   var stages = Set[Int]()
@@ -509,6 +511,7 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
       metrics,
       submissionTime,
       completionTime,
+      errorMessage,
       jobs,
       stages,
       metricsValues)

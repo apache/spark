@@ -390,10 +390,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "value" : "mar 11 2016",
-    "valueType" : "DATE"
+    "value" : "'mar 11 2016'",
+    "valueType" : "\"DATE\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -420,10 +421,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0019",
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "value" : "2016-33-11 20:54:00.000",
-    "valueType" : "TIMESTAMP"
+    "value" : "'2016-33-11 20:54:00.000'",
+    "valueType" : "\"TIMESTAMP\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -442,9 +444,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0021",
+  "errorClass" : "UNSUPPORTED_TYPED_LITERAL",
   "messageParameters" : {
-    "valueType" : "GEO"
+    "supportedTypes" : "\"DATE\", \"TIMESTAMP_NTZ\", \"TIMESTAMP_LTZ\", \"TIMESTAMP\", \"INTERVAL\", \"X\"",
+    "unsupportedType" : "\"GEO\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -500,9 +503,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0022",
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "msg" : "contains illegal character for hexBinary: 0XuZ"
+    "value" : "'XuZ'",
+    "valueType" : "\"X\""
   },
   "queryContext" : [ {
     "objectType" : "",

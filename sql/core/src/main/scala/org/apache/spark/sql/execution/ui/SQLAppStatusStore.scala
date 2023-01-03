@@ -87,9 +87,10 @@ class SQLExecutionUIData(
     val details: String,
     val physicalPlanDescription: String,
     val modifiedConfigs: Map[String, String],
-    val metrics: Seq[SQLPlanMetric],
+    val metrics: collection.Seq[SQLPlanMetric],
     val submissionTime: Long,
     val completionTime: Option[Date],
+    val errorMessage: Option[String],
     @JsonDeserialize(keyAs = classOf[Integer])
     val jobs: Map[Int, JobExecutionStatus],
     @JsonDeserialize(contentAs = classOf[Integer])

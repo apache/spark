@@ -22,7 +22,9 @@ import scala.collection.immutable.TreeSet
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReference
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, LogicalPlan, Project}
@@ -31,30 +33,16 @@ import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
-
 /**
  * A base class for generated/interpreted predicate
  */
-abstract class BasePredicate {
+abstract class BasePredicate extends ExpressionsEvaluator {
   def eval(r: InternalRow): Boolean
-
-  /**
-   * Initializes internal states given the current partition index.
-   * This is used by nondeterministic expressions to set initial states.
-   * The default implementation does nothing.
-   */
-  def initialize(partitionIndex: Int): Unit = {}
 }
 
 case class InterpretedPredicate(expression: Expression) extends BasePredicate {
   private[this] val subExprEliminationEnabled = SQLConf.get.subexpressionEliminationEnabled
-  private[this] lazy val runtime =
-    new SubExprEvaluationRuntime(SQLConf.get.subexpressionEliminationCacheMaxEntries)
-  private[this] val expr = if (subExprEliminationEnabled) {
-    runtime.proxyExpressions(Seq(expression)).head
-  } else {
-    expression
-  }
+  private[this] val expr = prepareExpressions(Seq(expression), subExprEliminationEnabled).head
 
   override def eval(r: InternalRow): Boolean = {
     if (subExprEliminationEnabled) {
@@ -375,16 +363,15 @@ case class InSubquery(values: Seq[Expression], query: ListQuery)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (values.length != query.childOutputs.length) {
-      TypeCheckResult.TypeCheckFailure(
-        s"""
-           |The number of columns in the left hand side of an IN subquery does not match the
-           |number of columns in the output of subquery.
-           |#columns in left hand side: ${values.length}.
-           |#columns in right hand side: ${query.childOutputs.length}.
-           |Left side columns:
-           |[${values.map(_.sql).mkString(", ")}].
-           |Right side columns:
-           |[${query.childOutputs.map(_.sql).mkString(", ")}].""".stripMargin)
+      DataTypeMismatch(
+        errorSubClass = "IN_SUBQUERY_LENGTH_MISMATCH",
+        messageParameters = Map(
+          "leftLength" -> values.length.toString,
+          "rightLength" -> query.childOutputs.length.toString,
+          "leftColumns" -> values.map(toSQLExpr(_)).mkString(", "),
+          "rightColumns" -> query.childOutputs.map(toSQLExpr(_)).mkString(", ")
+        )
+      )
     } else if (!DataType.equalsStructurally(
       query.dataType, value.dataType, ignoreNullability = true)) {
 
@@ -393,16 +380,14 @@ case class InSubquery(values: Seq[Expression], query: ListQuery)
           Seq(s"(${l.sql}:${l.dataType.catalogString}, ${r.sql}:${r.dataType.catalogString})")
         case _ => None
       }
-      TypeCheckResult.TypeCheckFailure(
-        s"""
-           |The data type of one or more elements in the left hand side of an IN subquery
-           |is not compatible with the data type of the output of the subquery
-           |Mismatched columns:
-           |[${mismatchedColumns.mkString(", ")}]
-           |Left side:
-           |[${values.map(_.dataType.catalogString).mkString(", ")}].
-           |Right side:
-           |[${query.childOutputs.map(_.dataType.catalogString).mkString(", ")}].""".stripMargin)
+      DataTypeMismatch(
+        errorSubClass = "IN_SUBQUERY_DATA_TYPE_MISMATCH",
+        messageParameters = Map(
+          "mismatchedColumns" -> mismatchedColumns.mkString(", "),
+          "leftType" -> values.map(left => toSQLType(left.dataType)).mkString(", "),
+          "rightType" -> query.childOutputs.map(right => toSQLType(right.dataType)).mkString(", ")
+        )
+      )
     } else {
       TypeUtils.checkForOrderingExpr(value.dataType, prettyName)
     }
@@ -450,8 +435,13 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
     val mismatchOpt = list.find(l => !DataType.equalsStructurally(l.dataType, value.dataType,
       ignoreNullability = true))
     if (mismatchOpt.isDefined) {
-      TypeCheckResult.TypeCheckFailure(s"Arguments must be same type but were: " +
-        s"${value.dataType.catalogString} != ${mismatchOpt.get.dataType.catalogString}")
+      DataTypeMismatch(
+        errorSubClass = "DATA_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName),
+          "dataType" -> children.map(child => toSQLType(child.dataType)).mkString("[", ", ", "]")
+        )
+      )
     } else {
       TypeUtils.checkForOrderingExpr(value.dataType, prettyName)
     }
@@ -745,7 +735,7 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
 
   override def sqlOperator: String = "AND"
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(AND_OR)
+  final override val nodePatterns: Seq[TreePattern] = Seq(AND)
 
   // +---------+---------+---------+---------+
   // | AND     | TRUE    | FALSE   | UNKNOWN |
@@ -838,7 +828,7 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
 
   override def sqlOperator: String = "OR"
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(AND_OR)
+  final override val nodePatterns: Seq[TreePattern] = Seq(OR)
 
   // +---------+---------+---------+---------+
   // | OR      | TRUE    | FALSE   | UNKNOWN |

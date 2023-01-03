@@ -676,15 +676,6 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             res = df.select(f(col("id"), col("id")))
             self.assertEqual(df.collect(), res.collect())
 
-    def test_vectorized_udf_unsupported_types(self):
-        with QuietTest(self.sc):
-            for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
-                with self.assertRaisesRegex(
-                    NotImplementedError,
-                    "Invalid return type.*scalar Pandas UDF.*ArrayType.*TimestampType",
-                ):
-                    pandas_udf(lambda x: x, ArrayType(TimestampType()), udf_type)
-
     def test_vectorized_udf_dates(self):
         schema = StructType().add("idx", LongType()).add("date", DateType())
         data = [
@@ -1333,7 +1324,7 @@ if __name__ == "__main__":
     from pyspark.sql.tests.pandas.test_pandas_udf_scalar import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

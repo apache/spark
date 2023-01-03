@@ -360,9 +360,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0030",
+  "errorClass" : "UNSUPPORTED_DATATYPE",
+  "sqlState" : "0A000",
   "messageParameters" : {
-    "dataType" : "baz"
+    "typeName" : "\"BAZ\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -381,9 +382,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0030",
+  "errorClass" : "UNSUPPORTED_DATATYPE",
+  "sqlState" : "0A000",
   "messageParameters" : {
-    "dataType" : "ordinality"
+    "typeName" : "\"ORDINALITY\""
   },
   "queryContext" : [ {
     "objectType" : "",

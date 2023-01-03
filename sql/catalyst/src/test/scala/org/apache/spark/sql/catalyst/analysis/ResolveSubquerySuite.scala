@@ -51,11 +51,14 @@ class ResolveSubquerySuite extends AnalysisTest {
   test("SPARK-17251 Improve `OuterReference` to be `NamedExpression`") {
     val expr = Filter(
       InSubquery(Seq(a), ListQuery(Project(Seq(UnresolvedAttribute("a")), t2))), t1)
-    val m = intercept[AnalysisException] {
-      SimpleAnalyzer.checkAnalysis(SimpleAnalyzer.ResolveSubquery(expr))
-    }.getMessage
-    assert(m.contains(
-      "Expressions referencing the outer query are not supported outside of WHERE/HAVING clauses"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        SimpleAnalyzer.checkAnalysis(SimpleAnalyzer.ResolveSubquery(expr))
+      },
+      errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+      parameters = Map("sqlExprs" -> "\"a\""),
+      matchPVals = true
+    )
   }
 
   test("SPARK-29145 Support subquery in join condition") {
@@ -81,7 +84,9 @@ class ResolveSubquerySuite extends AnalysisTest {
 
   test("lateral join with ambiguous join conditions") {
     val plan = lateralJoin(t1, t0.select($"b"), condition = Some($"b" ===  1))
-    assertAnalysisError(plan, "Reference 'b' is ambiguous, could be: b, b." :: Nil)
+    assertAnalysisErrorClass(plan,
+      "AMBIGUOUS_REFERENCE", Map("name" -> "`b`", "referenceNames" -> "[`b`, `b`]")
+    )
   }
 
   test("prefer resolving lateral subquery attributes from the inner query") {

@@ -49,10 +49,9 @@ object DeserializerBuildHelper {
       dataType: DataType,
       nullable: Boolean,
       walkedTypePath: WalkedTypePath,
-      funcForCreatingDeserializer: (Expression, WalkedTypePath) => Expression): Expression = {
+      funcForCreatingDeserializer: Expression => Expression): Expression = {
     val casted = upCastToExpectedType(expr, dataType, walkedTypePath)
-    expressionWithNullSafety(funcForCreatingDeserializer(casted, walkedTypePath),
-      nullable, walkedTypePath)
+    expressionWithNullSafety(funcForCreatingDeserializer(casted), nullable, walkedTypePath)
   }
 
   def expressionWithNullSafety(
@@ -181,7 +180,7 @@ object DeserializerBuildHelper {
    * This method help us "remember" the required data type by adding a `UpCast`. Note that we
    * only need to do this for leaf nodes.
    */
-  private def upCastToExpectedType(
+  private[catalyst] def upCastToExpectedType(
       expr: Expression,
       expected: DataType,
       walkedTypePath: WalkedTypePath): Expression = expected match {

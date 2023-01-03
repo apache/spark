@@ -329,7 +329,13 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val plan = Project(Alias(In(Literal(null), Seq(Literal(true), Literal(1))), "a")() :: Nil,
       LocalRelation()
     )
-    assertAnalysisError(plan, Seq("data type mismatch: Arguments must be same type"))
+    assertAnalysisErrorClass(
+      plan,
+      "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+      Map(
+        "functionName" -> "`in`",
+        "dataType" -> "[\"VOID\", \"BOOLEAN\", \"INT\"]",
+        "sqlExpr" -> "\"(NULL IN (true, 1))\""))
   }
 
   test("SPARK-11725: correctly handle null inputs for ScalaUDF") {
@@ -675,15 +681,17 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("SPARK-34741: Avoid ambiguous reference in MergeIntoTable") {
     val cond = $"a" > 1
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       MergeIntoTable(
         testRelation,
         testRelation,
         cond,
         UpdateAction(Some(cond), Assignment($"a", $"a") :: Nil) :: Nil,
+        Nil,
         Nil
       ),
-      "Reference 'a' is ambiguous" :: Nil)
+      "AMBIGUOUS_REFERENCE",
+      Map("name" -> "`a`", "referenceNames" -> "[`a`, `a`]"))
   }
 
   test("SPARK-24488 Generator with multiple aliases") {
@@ -1286,5 +1294,19 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     }
 
     assertAnalysisSuccess(finalPlan)
+  }
+
+  test("SPARK-41271: bind named parameters to literals") {
+    comparePlans(
+      Parameter.bind(
+        plan = parsePlan("SELECT * FROM a LIMIT :limitA"),
+        args = Map("limitA" -> Literal(10))),
+      parsePlan("SELECT * FROM a LIMIT 10"))
+    // Ignore unused arguments
+    comparePlans(
+      Parameter.bind(
+        plan = parsePlan("SELECT c FROM a WHERE c < :param2"),
+        args = Map("param1" -> Literal(10), "param2" -> Literal(20))),
+      parsePlan("SELECT c FROM a WHERE c < 20"))
   }
 }

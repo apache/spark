@@ -19,7 +19,6 @@ package org.apache.spark.deploy.history
 
 import java.io.{File, FileNotFoundException, IOException}
 import java.lang.{Long => JLong}
-import java.nio.file.Files
 import java.util.{Date, NoSuchElementException, ServiceLoader}
 import java.util.concurrent.{ConcurrentHashMap, ExecutorService, TimeUnit}
 import java.util.zip.ZipOutputStream
@@ -36,15 +35,12 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.hdfs.DistributedFileSystem
 import org.apache.hadoop.hdfs.protocol.HdfsConstants
 import org.apache.hadoop.security.AccessControlException
-import org.fusesource.leveldbjni.internal.NativeDB
-import org.rocksdb.RocksDBException
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.History._
-import org.apache.spark.internal.config.History.HybridStoreDiskBackend._
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.internal.config.UI._
@@ -136,34 +132,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     HybridStoreDiskBackend.withName(conf.get(History.HYBRID_STORE_DISK_BACKEND))
 
   // Visible for testing.
-  private[history] val listing: KVStore = storePath.map { path =>
-    val dir = hybridStoreDiskBackend match {
-      case LEVELDB => "listing.ldb"
-      case ROCKSDB => "listing.rdb"
-    }
-    val dbPath = Files.createDirectories(new File(path, dir).toPath()).toFile()
-    Utils.chmod700(dbPath)
-
-    val metadata = FsHistoryProviderMetadata(CURRENT_LISTING_VERSION,
-      AppStatusStore.CURRENT_VERSION, logDir)
-
-    try {
-      open(dbPath, metadata, conf)
-    } catch {
-      // If there's an error, remove the listing database and any existing UI database
-      // from the store directory, since it's extremely likely that they'll all contain
-      // incompatible information.
-      case _: UnsupportedStoreVersionException | _: MetadataMismatchException =>
-        logInfo("Detected incompatible DB versions, deleting...")
-        path.listFiles().foreach(Utils.deleteRecursively)
-        open(dbPath, metadata, conf)
-      case dbExc @ (_: NativeDB.DBException | _: RocksDBException) =>
-        // Get rid of the corrupted data and re-create it.
-        logWarning(s"Failed to load disk store $dbPath :", dbExc)
-        Utils.deleteRecursively(dbPath)
-        open(dbPath, metadata, conf)
-    }
-  }.getOrElse(new InMemoryStore())
+  private[history] val listing: KVStore = {
+    KVUtils.createKVStore(storePath, live = false, conf)
+  }
 
   private val diskManager = storePath.map { path =>
     new HistoryServerDiskManager(conf, path, listing, clock)
@@ -564,11 +535,21 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             }
           } catch {
             case _: NoSuchElementException =>
-              // If the file is currently not being tracked by the SHS, add an entry for it and try
-              // to parse it. This will allow the cleaner code to detect the file as stale later on
-              // if it was not possible to parse it.
+              // If the file is currently not being tracked by the SHS, check whether the log file
+              // has expired, if expired, delete it from log dir, if not, add an entry for it and
+              // try to parse it. This will allow the cleaner code to detect the file as stale
+              // later on if it was not possible to parse it.
               try {
-                if (count < conf.get(UPDATE_BATCHSIZE)) {
+                if (conf.get(CLEANER_ENABLED) && reader.modificationTime <
+                    clock.getTimeMillis() - conf.get(MAX_LOG_AGE_S) * 1000) {
+                  logInfo(s"Deleting expired event log ${reader.rootPath.toString}")
+                  deleteLog(fs, reader.rootPath)
+                  // If the LogInfo read had succeeded, but the ApplicationInafoWrapper
+                  // read failure and throw the exception, we should also cleanup the log
+                  // info from listing db.
+                  listing.delete(classOf[LogInfo], reader.rootPath.toString)
+                  false
+                } else if (count < conf.get(UPDATE_BATCHSIZE)) {
                   listing.write(LogInfo(reader.rootPath.toString(), newLastScanTime,
                     LogType.EventLogs, None, None, reader.fileSizeForLastIndex, reader.lastIndex,
                     None, reader.completed))
@@ -579,6 +560,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
                 }
               } catch {
                 case _: FileNotFoundException => false
+                case _: NoSuchElementException => false
                 case NonFatal(e) =>
                   logWarning(s"Error while reading new log ${reader.rootPath}", e)
                   false
@@ -1232,7 +1214,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     // the existing data.
     dm.openStore(appId, attempt.info.attemptId).foreach { path =>
       try {
-        return KVUtils.open(path, metadata, conf)
+        return KVUtils.open(path, metadata, conf, live = false)
       } catch {
         case e: Exception =>
           logInfo(s"Failed to open existing store for $appId/${attempt.info.attemptId}.", e)
@@ -1298,14 +1280,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     try {
       logInfo(s"Leasing disk manager space for app $appId / ${attempt.info.attemptId}...")
       lease = dm.lease(reader.totalSize, reader.compressionCodec.isDefined)
-      val diskStore = KVUtils.open(lease.tmpPath, metadata, conf)
+      val diskStore = KVUtils.open(lease.tmpPath, metadata, conf, live = false)
       hybridStore.setDiskStore(diskStore)
       hybridStore.switchToDiskStore(new HybridStore.SwitchToDiskStoreListener {
         override def onSwitchToDiskStoreSuccess: Unit = {
           logInfo(s"Completely switched to diskStore for app $appId / ${attempt.info.attemptId}.")
           diskStore.close()
           val newStorePath = lease.commit(appId, attempt.info.attemptId)
-          hybridStore.setDiskStore(KVUtils.open(newStorePath, metadata, conf))
+          hybridStore.setDiskStore(KVUtils.open(newStorePath, metadata, conf, live = false))
           memoryManager.release(appId, attempt.info.attemptId)
         }
         override def onSwitchToDiskStoreFail(e: Exception): Unit = {
@@ -1341,7 +1323,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       logInfo(s"Leasing disk manager space for app $appId / ${attempt.info.attemptId}...")
       val lease = dm.lease(reader.totalSize, isCompressed)
       try {
-        Utils.tryWithResource(KVUtils.open(lease.tmpPath, metadata, conf)) { store =>
+        Utils.tryWithResource(KVUtils.open(lease.tmpPath, metadata, conf, live = false)) { store =>
           rebuildAppStore(store, reader, attempt.info.lastUpdated.getTime())
         }
         newStorePath = lease.commit(appId, attempt.info.attemptId)
@@ -1359,7 +1341,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       }
     }
 
-    KVUtils.open(newStorePath, metadata, conf)
+    KVUtils.open(newStorePath, metadata, conf, live = false)
   }
 
   private def createInMemoryStore(attempt: AttemptInfoWrapper): KVStore = {
@@ -1444,7 +1426,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   }
 }
 
-private[history] object FsHistoryProvider {
+private[spark] object FsHistoryProvider {
 
   private val APPL_START_EVENT_PREFIX = "{\"Event\":\"SparkListenerApplicationStart\""
 
@@ -1459,10 +1441,10 @@ private[history] object FsHistoryProvider {
    * db, if the version does not match this value, the FsHistoryProvider will throw away
    * all data and re-generate the listing data from the event logs.
    */
-  private[history] val CURRENT_LISTING_VERSION = 1L
+  val CURRENT_LISTING_VERSION = 1L
 }
 
-private[history] case class FsHistoryProviderMetadata(
+private[spark] case class FsHistoryProviderMetadata(
     version: Long,
     uiVersion: Long,
     logDir: String)

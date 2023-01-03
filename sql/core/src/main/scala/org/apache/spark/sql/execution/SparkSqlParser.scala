@@ -27,7 +27,7 @@ import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, UnresolvedFunc, UnresolvedIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, UnresolvedFunctionName, UnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser._
@@ -511,7 +511,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       if (tableIdentifier.database.isDefined) {
         // Temporary view names should NOT contain database prefix like "database.table"
         throw QueryParsingErrors
-          .notAllowedToAddDBPrefixForTempViewError(tableIdentifier.database.get, ctx)
+          .notAllowedToAddDBPrefixForTempViewError(tableIdentifier.nameParts, ctx)
       }
 
       CreateViewCommand(
@@ -604,7 +604,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     } else {
       val hintStr = "Please use fully qualified identifier to drop the persistent function."
       DropFunction(
-        UnresolvedFunc(
+        UnresolvedFunctionName(
           functionName,
           "DROP FUNCTION",
           requirePersistent = true,

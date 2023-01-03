@@ -922,6 +922,6 @@ case class ColumnStatsMap(originalMap: AttributeMap[ColumnStat]) {
       attr -> oriColStat.updateCountStats(
         rowsBeforeFilter, rowsAfterFilter, updatedMap.get(attr.exprId).map(_._2))
     }
-    AttributeMap(newColumnStats.toSeq)
+    AttributeMap(newColumnStats)
   }
 }

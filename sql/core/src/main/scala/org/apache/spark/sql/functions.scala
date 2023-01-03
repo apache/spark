@@ -4023,6 +4023,16 @@ object functions {
   }
 
   /**
+   * Remove all null elements from the given array.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def array_compact(column: Column): Column = withExpr {
+    ArrayCompact(column.expr)
+  }
+
+  /**
    * Removes duplicate values from the array.
    * @group collection_funcs
    * @since 2.4.0
@@ -4563,7 +4573,6 @@ object functions {
     val dataType = parseTypeWithFallback(
       schema,
       DataType.fromJson,
-      "Cannot parse the schema in JSON format: ",
       fallbackParser = DataType.fromDDL)
     from_json(e, dataType, options)
   }

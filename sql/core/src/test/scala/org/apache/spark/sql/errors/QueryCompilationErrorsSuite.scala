@@ -49,7 +49,7 @@ class QueryCompilationErrorsSuite
         "details" -> (
         s"""
            |The type path of the target object is:
-           |- field (class: "scala.Int", name: "b")
+           |- field (class: "int", name: "b")
            |- root class: "org.apache.spark.sql.errors.StringIntClass"
            |You can either add an explicit cast to the input data or choose a higher precision type
          """.stripMargin.trim + " of the field in the target object")))
@@ -67,7 +67,7 @@ class QueryCompilationErrorsSuite
         "details" -> (
         s"""
            |The type path of the target object is:
-           |- field (class: "scala.Long", name: "b")
+           |- field (class: "long", name: "b")
            |- field (class: "org.apache.spark.sql.errors.StringLongClass", name: "b")
            |- root class: "org.apache.spark.sql.errors.ComplexClass"
            |You can either add an explicit cast to the input data or choose a higher precision type
@@ -227,7 +227,7 @@ class QueryCompilationErrorsSuite
       parameters = Map[String, String]())
   }
 
-  test("NO_UDF_INTERFACE_ERROR: java udf class does not implement any udf interface") {
+  test("NO_UDF_INTERFACE: java udf class does not implement any udf interface") {
     val className = "org.apache.spark.sql.errors.MyCastToString"
     val e = intercept[AnalysisException](
       spark.udf.registerJava(
@@ -237,7 +237,7 @@ class QueryCompilationErrorsSuite
     )
     checkError(
       exception = e,
-      errorClass = "NO_UDF_INTERFACE_ERROR",
+      errorClass = "NO_UDF_INTERFACE",
       parameters = Map("className" -> className))
   }
 
@@ -666,6 +666,19 @@ class QueryCompilationErrorsSuite
       },
       errorClass = "DATATYPE_MISMATCH.INVALID_JSON_SCHEMA",
       parameters = Map("schema" -> "\"INT\"", "sqlExpr" -> "\"from_json(a)\""))
+  }
+
+  test("WRONG_NUM_ARGS.WITHOUT_SUGGESTION: wrong args of CAST(parameter types contains DataType)") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT CAST(1)")
+      },
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "functionName" -> "`cast`"
+      ),
+      context = ExpectedContext("", "", 7, 13, "CAST(1)")
+    )
   }
 }
 
