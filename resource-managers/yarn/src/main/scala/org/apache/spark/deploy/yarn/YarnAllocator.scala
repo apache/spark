@@ -203,7 +203,7 @@ private[yarn] class YarnAllocator(
 
   // The default profile is always present so we need to initialize the datastructures keyed by
   // ResourceProfile id to ensure its present if things start running before a request for
-  // executors could add it. This approach is easier then going and special casing everywhere.
+  // executors could add it. This approach is easier than going and special casing everywhere.
   private def initDefaultProfile(): Unit = synchronized {
     allocatedHostToContainersMapPerRPId(DEFAULT_RESOURCE_PROFILE_ID) =
       new HashMap[String, mutable.Set[ContainerId]]()

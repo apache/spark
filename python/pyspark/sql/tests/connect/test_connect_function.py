@@ -448,6 +448,12 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
                 sdf.select(sfunc("b"), sfunc(sdf.c)).toPandas(),
             )
 
+        # test log(arg1, arg2)
+        self.assert_eq(
+            cdf.select(CF.log(1.1, "b"), CF.log(1.2, cdf.c)).toPandas(),
+            sdf.select(SF.log(1.1, "b"), SF.log(1.2, sdf.c)).toPandas(),
+        )
+
         self.assert_eq(
             cdf.select(CF.atan2("b", cdf.c)).toPandas(),
             sdf.select(SF.atan2("b", sdf.c)).toPandas(),
