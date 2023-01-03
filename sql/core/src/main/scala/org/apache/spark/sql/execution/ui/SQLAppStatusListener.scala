@@ -486,7 +486,7 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
   var details: String = null
   var physicalPlanDescription: String = null
   var modifiedConfigs: Map[String, String] = _
-  var metrics = Seq[SQLPlanMetric]()
+  var metrics = collection.Seq[SQLPlanMetric]()
   var submissionTime = -1L
   var completionTime: Option[Date] = None
   var errorMessage: Option[String] = None

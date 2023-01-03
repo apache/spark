@@ -21,20 +21,23 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import com.google.common.collect.{Lists, Maps}
+import com.google.protobuf.{Any => ProtoAny}
 
 import org.apache.spark.TaskContext
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.{Column, Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserUtils}
-import org.apache.spark.sql.catalyst.plans.{logical, Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
+import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
+import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, Sort, SubqueryAlias, Union, Unpivot, UnresolvedHint}
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.{toCatalystExpression, toCatalystValue}
+import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.arrow.ArrowConverters
@@ -88,8 +91,15 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Relation.RelTypeCase.REPLACE => transformReplace(rel.getReplace)
       case proto.Relation.RelTypeCase.SUMMARY => transformStatSummary(rel.getSummary)
       case proto.Relation.RelTypeCase.DESCRIBE => transformStatDescribe(rel.getDescribe)
+      case proto.Relation.RelTypeCase.COV => transformStatCov(rel.getCov)
+      case proto.Relation.RelTypeCase.CORR => transformStatCorr(rel.getCorr)
+      case proto.Relation.RelTypeCase.APPROX_QUANTILE =>
+        transformStatApproxQuantile(rel.getApproxQuantile)
       case proto.Relation.RelTypeCase.CROSSTAB =>
         transformStatCrosstab(rel.getCrosstab)
+      case proto.Relation.RelTypeCase.FREQ_ITEMS => transformStatFreqItems(rel.getFreqItems)
+      case proto.Relation.RelTypeCase.SAMPLE_BY =>
+        transformStatSampleBy(rel.getSampleBy)
       case proto.Relation.RelTypeCase.TO_SCHEMA => transformToSchema(rel.getToSchema)
       case proto.Relation.RelTypeCase.RENAME_COLUMNS_BY_SAME_LENGTH_NAMES =>
         transformRenameColumnsBySamelenghtNames(rel.getRenameColumnsBySameLengthNames)
@@ -98,53 +108,81 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Relation.RelTypeCase.WITH_COLUMNS => transformWithColumns(rel.getWithColumns)
       case proto.Relation.RelTypeCase.HINT => transformHint(rel.getHint)
       case proto.Relation.RelTypeCase.UNPIVOT => transformUnpivot(rel.getUnpivot)
+      case proto.Relation.RelTypeCase.REPARTITION_BY_EXPRESSION =>
+        transformRepartitionByExpression(rel.getRepartitionByExpression)
       case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
         throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
 
       // Catalog API (internal-only)
-      case proto.Relation.RelTypeCase.CURRENT_DATABASE =>
-        transformCurrentDatabase(rel.getCurrentDatabase)
-      case proto.Relation.RelTypeCase.SET_CURRENT_DATABASE =>
-        transformSetCurrentDatabase(rel.getSetCurrentDatabase)
-      case proto.Relation.RelTypeCase.LIST_DATABASES =>
-        transformListDatabases(rel.getListDatabases)
-      case proto.Relation.RelTypeCase.LIST_TABLES => transformListTables(rel.getListTables)
-      case proto.Relation.RelTypeCase.LIST_FUNCTIONS =>
-        transformListFunctions(rel.getListFunctions)
-      case proto.Relation.RelTypeCase.LIST_COLUMNS => transformListColumns(rel.getListColumns)
-      case proto.Relation.RelTypeCase.GET_DATABASE => transformGetDatabase(rel.getGetDatabase)
-      case proto.Relation.RelTypeCase.GET_TABLE => transformGetTable(rel.getGetTable)
-      case proto.Relation.RelTypeCase.GET_FUNCTION => transformGetFunction(rel.getGetFunction)
-      case proto.Relation.RelTypeCase.DATABASE_EXISTS =>
-        transformDatabaseExists(rel.getDatabaseExists)
-      case proto.Relation.RelTypeCase.TABLE_EXISTS => transformTableExists(rel.getTableExists)
-      case proto.Relation.RelTypeCase.FUNCTION_EXISTS =>
-        transformFunctionExists(rel.getFunctionExists)
-      case proto.Relation.RelTypeCase.CREATE_EXTERNAL_TABLE =>
-        transformCreateExternalTable(rel.getCreateExternalTable)
-      case proto.Relation.RelTypeCase.CREATE_TABLE => transformCreateTable(rel.getCreateTable)
-      case proto.Relation.RelTypeCase.DROP_TEMP_VIEW => transformDropTempView(rel.getDropTempView)
-      case proto.Relation.RelTypeCase.DROP_GLOBAL_TEMP_VIEW =>
-        transformDropGlobalTempView(rel.getDropGlobalTempView)
-      case proto.Relation.RelTypeCase.RECOVER_PARTITIONS =>
-        transformRecoverPartitions(rel.getRecoverPartitions)
-// TODO(SPARK-41612): Support Catalog.isCached
-//      case proto.Relation.RelTypeCase.IS_CACHED => transformIsCached(rel.getIsCached)
-// TODO(SPARK-41600): Support Catalog.cacheTable
-//      case proto.Relation.RelTypeCase.CACHE_TABLE => transformCacheTable(rel.getCacheTable)
-// TODO(SPARK-41623): Support Catalog.uncacheTable
-//      case proto.Relation.RelTypeCase.UNCACHE_TABLE => transformUncacheTable(rel.getUncacheTable)
-      case proto.Relation.RelTypeCase.CLEAR_CACHE => transformClearCache(rel.getClearCache)
-      case proto.Relation.RelTypeCase.REFRESH_TABLE => transformRefreshTable(rel.getRefreshTable)
-      case proto.Relation.RelTypeCase.REFRESH_BY_PATH =>
-        transformRefreshByPath(rel.getRefreshByPath)
-      case proto.Relation.RelTypeCase.CURRENT_CATALOG =>
-        transformCurrentCatalog(rel.getCurrentCatalog)
-      case proto.Relation.RelTypeCase.SET_CURRENT_CATALOG =>
-        transformSetCurrentCatalog(rel.getSetCurrentCatalog)
-      case proto.Relation.RelTypeCase.LIST_CATALOGS => transformListCatalogs(rel.getListCatalogs)
+      case proto.Relation.RelTypeCase.CATALOG => transformCatalog(rel.getCatalog)
 
+      // Handle plugins for Spark Connect Relation types.
+      case proto.Relation.RelTypeCase.EXTENSION =>
+        transformRelationPlugin(rel.getExtension)
       case _ => throw InvalidPlanInput(s"${rel.getUnknown} not supported.")
+    }
+  }
+
+  def transformRelationPlugin(extension: ProtoAny): LogicalPlan = {
+    SparkConnectPluginRegistry.relationRegistry
+      // Lazily traverse the collection.
+      .view
+      // Apply the transformation.
+      .map(p => p.transform(extension, this))
+      // Find the first non-empty transformation or throw.
+      .find(_.nonEmpty)
+      .flatten
+      .getOrElse(throw InvalidPlanInput("No handler found for extension"))
+  }
+
+  private def transformCatalog(catalog: proto.Catalog): LogicalPlan = {
+    catalog.getCatTypeCase match {
+      case proto.Catalog.CatTypeCase.CURRENT_DATABASE =>
+        transformCurrentDatabase(catalog.getCurrentDatabase)
+      case proto.Catalog.CatTypeCase.SET_CURRENT_DATABASE =>
+        transformSetCurrentDatabase(catalog.getSetCurrentDatabase)
+      case proto.Catalog.CatTypeCase.LIST_DATABASES =>
+        transformListDatabases(catalog.getListDatabases)
+      case proto.Catalog.CatTypeCase.LIST_TABLES => transformListTables(catalog.getListTables)
+      case proto.Catalog.CatTypeCase.LIST_FUNCTIONS =>
+        transformListFunctions(catalog.getListFunctions)
+      case proto.Catalog.CatTypeCase.LIST_COLUMNS => transformListColumns(catalog.getListColumns)
+      case proto.Catalog.CatTypeCase.GET_DATABASE => transformGetDatabase(catalog.getGetDatabase)
+      case proto.Catalog.CatTypeCase.GET_TABLE => transformGetTable(catalog.getGetTable)
+      case proto.Catalog.CatTypeCase.GET_FUNCTION => transformGetFunction(catalog.getGetFunction)
+      case proto.Catalog.CatTypeCase.DATABASE_EXISTS =>
+        transformDatabaseExists(catalog.getDatabaseExists)
+      case proto.Catalog.CatTypeCase.TABLE_EXISTS => transformTableExists(catalog.getTableExists)
+      case proto.Catalog.CatTypeCase.FUNCTION_EXISTS =>
+        transformFunctionExists(catalog.getFunctionExists)
+      case proto.Catalog.CatTypeCase.CREATE_EXTERNAL_TABLE =>
+        transformCreateExternalTable(catalog.getCreateExternalTable)
+      case proto.Catalog.CatTypeCase.CREATE_TABLE => transformCreateTable(catalog.getCreateTable)
+      case proto.Catalog.CatTypeCase.DROP_TEMP_VIEW =>
+        transformDropTempView(catalog.getDropTempView)
+      case proto.Catalog.CatTypeCase.DROP_GLOBAL_TEMP_VIEW =>
+        transformDropGlobalTempView(catalog.getDropGlobalTempView)
+      case proto.Catalog.CatTypeCase.RECOVER_PARTITIONS =>
+        transformRecoverPartitions(catalog.getRecoverPartitions)
+      // TODO(SPARK-41612): Support Catalog.isCached
+      // case proto.Catalog.CatTypeCase.IS_CACHED => transformIsCached(catalog.getIsCached)
+      // TODO(SPARK-41600): Support Catalog.cacheTable
+      // case proto.Catalog.CatTypeCase.CACHE_TABLE => transformCacheTable(catalog.getCacheTable)
+      // TODO(SPARK-41623): Support Catalog.uncacheTable
+      // case proto.Catalog.CatTypeCase.UNCACHE_TABLE =>
+      //   transformUncacheTable(catalog.getUncacheTable)
+      case proto.Catalog.CatTypeCase.CLEAR_CACHE => transformClearCache(catalog.getClearCache)
+      case proto.Catalog.CatTypeCase.REFRESH_TABLE =>
+        transformRefreshTable(catalog.getRefreshTable)
+      case proto.Catalog.CatTypeCase.REFRESH_BY_PATH =>
+        transformRefreshByPath(catalog.getRefreshByPath)
+      case proto.Catalog.CatTypeCase.CURRENT_CATALOG =>
+        transformCurrentCatalog(catalog.getCurrentCatalog)
+      case proto.Catalog.CatTypeCase.SET_CURRENT_CATALOG =>
+        transformSetCurrentCatalog(catalog.getSetCurrentCatalog)
+      case proto.Catalog.CatTypeCase.LIST_CATALOGS =>
+        transformListCatalogs(catalog.getListCatalogs)
+      case other => throw InvalidPlanInput(s"$other not supported.")
     }
   }
 
@@ -178,8 +216,9 @@ class SparkConnectPlanner(session: SparkSession) {
    * wrap such fields into proto messages.
    */
   private def transformSample(rel: proto.Sample): LogicalPlan = {
-    val input = Dataset.ofRows(session, transformRelation(rel.getInput))
-    val plan = if (rel.getForceStableSort) {
+    val plan = if (rel.getDeterministicOrder) {
+      val input = Dataset.ofRows(session, transformRelation(rel.getInput))
+
       // It is possible that the underlying dataframe doesn't guarantee the ordering of rows in its
       // constituent partitions each time a split is materialized which could result in
       // overlapping splits. To prevent this, we explicitly sort each input partition to make the
@@ -191,11 +230,11 @@ class SparkConnectPlanner(session: SparkSession) {
       if (sortOrder.nonEmpty) {
         Sort(sortOrder, global = false, input.logicalPlan)
       } else {
+        input.cache()
         input.logicalPlan
       }
     } else {
-      input.cache()
-      input.logicalPlan
+      transformRelation(rel.getInput)
     }
 
     Sample(
@@ -328,11 +367,76 @@ class SparkConnectPlanner(session: SparkSession) {
       .logicalPlan
   }
 
+  private def transformStatCov(rel: proto.StatCov): LogicalPlan = {
+    val cov = Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .stat
+      .cov(rel.getCol1, rel.getCol2)
+    LocalRelation.fromProduct(
+      output = AttributeReference("cov", DoubleType, false)() :: Nil,
+      data = Tuple1.apply(cov) :: Nil)
+  }
+
+  private def transformStatCorr(rel: proto.StatCorr): LogicalPlan = {
+    val df = Dataset.ofRows(session, transformRelation(rel.getInput))
+    val corr = if (rel.hasMethod) {
+      df.stat.corr(rel.getCol1, rel.getCol2, rel.getMethod)
+    } else {
+      df.stat.corr(rel.getCol1, rel.getCol2)
+    }
+
+    LocalRelation.fromProduct(
+      output = AttributeReference("corr", DoubleType, false)() :: Nil,
+      data = Tuple1.apply(corr) :: Nil)
+  }
+
+  private def transformStatApproxQuantile(rel: proto.StatApproxQuantile): LogicalPlan = {
+    val cols = rel.getColsList.asScala.toArray
+    val probabilities = rel.getProbabilitiesList.asScala.map(_.doubleValue()).toArray
+    val approxQuantile = Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .stat
+      .approxQuantile(cols, probabilities, rel.getRelativeError)
+    LocalRelation.fromProduct(
+      output =
+        AttributeReference("approx_quantile", ArrayType(ArrayType(DoubleType)), false)() :: Nil,
+      data = Tuple1.apply(approxQuantile) :: Nil)
+  }
+
   private def transformStatCrosstab(rel: proto.StatCrosstab): LogicalPlan = {
     Dataset
       .ofRows(session, transformRelation(rel.getInput))
       .stat
       .crosstab(rel.getCol1, rel.getCol2)
+      .logicalPlan
+  }
+
+  private def transformStatFreqItems(rel: proto.StatFreqItems): LogicalPlan = {
+    val cols = rel.getColsList.asScala.toSeq
+    val df = Dataset.ofRows(session, transformRelation(rel.getInput))
+    if (rel.hasSupport) {
+      df.stat.freqItems(cols, rel.getSupport).logicalPlan
+    } else {
+      df.stat.freqItems(cols).logicalPlan
+    }
+  }
+
+  private def transformStatSampleBy(rel: proto.StatSampleBy): LogicalPlan = {
+    val fractions = rel.getFractionsList.asScala.toSeq.map { protoFraction =>
+      val stratum = transformLiteral(protoFraction.getStratum) match {
+        case Literal(s, StringType) if s != null => s.toString
+        case literal => literal.value
+      }
+      (stratum, protoFraction.getFraction)
+    }
+
+    Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .stat
+      .sampleBy(
+        col = Column(transformExpression(rel.getCol)),
+        fractions = fractions.toMap,
+        seed = if (rel.hasSeed) rel.getSeed else Utils.random.nextLong)
       .logicalPlan
   }
 
@@ -415,6 +519,20 @@ class SparkConnectPlanner(session: SparkSession) {
         Seq(rel.getValueColumnName),
         transformRelation(rel.getInput))
     }
+  }
+
+  private def transformRepartitionByExpression(
+      rel: proto.RepartitionByExpression): LogicalPlan = {
+    val numPartitionsOpt = if (rel.hasNumPartitions) {
+      Some(rel.getNumPartitions)
+    } else {
+      None
+    }
+    val partitionExpressions = rel.getPartitionExprsList.asScala.map(transformExpression).toSeq
+    logical.RepartitionByExpression(
+      partitionExpressions,
+      transformRelation(rel.getInput),
+      numPartitionsOpt)
   }
 
   private def transformDeduplicate(rel: proto.Deduplicate): LogicalPlan = {
@@ -540,7 +658,17 @@ class SparkConnectPlanner(session: SparkSession) {
     UnresolvedAttribute.quotedString(exp.getUnresolvedAttribute.getUnparsedIdentifier)
   }
 
-  private def transformExpression(exp: proto.Expression): Expression = {
+  /**
+   * Transforms an input protobuf expression into the Catalyst expression. This is usually not
+   * called directly. Typically the planner will traverse the expressions automatically, only
+   * plugins are expected to manually perform expression transformations.
+   *
+   * @param exp
+   *   the input expression
+   * @return
+   *   Catalyst expression
+   */
+  def transformExpression(exp: proto.Expression): Expression = {
     exp.getExprTypeCase match {
       case proto.Expression.ExprTypeCase.LITERAL => transformLiteral(exp.getLiteral)
       case proto.Expression.ExprTypeCase.UNRESOLVED_ATTRIBUTE =>
@@ -556,15 +684,33 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Expression.ExprTypeCase.CAST => transformCast(exp.getCast)
       case proto.Expression.ExprTypeCase.UNRESOLVED_REGEX =>
         transformUnresolvedRegex(exp.getUnresolvedRegex)
+      case proto.Expression.ExprTypeCase.UNRESOLVED_EXTRACT_VALUE =>
+        transformUnresolvedExtractValue(exp.getUnresolvedExtractValue)
+      case proto.Expression.ExprTypeCase.UPDATE_FIELDS =>
+        transformUpdateFields(exp.getUpdateFields)
       case proto.Expression.ExprTypeCase.SORT_ORDER => transformSortOrder(exp.getSortOrder)
       case proto.Expression.ExprTypeCase.LAMBDA_FUNCTION =>
         transformLambdaFunction(exp.getLambdaFunction)
       case proto.Expression.ExprTypeCase.WINDOW =>
         transformWindowExpression(exp.getWindow)
+      case proto.Expression.ExprTypeCase.EXTENSION =>
+        transformExpressionPlugin(exp.getExtension)
       case _ =>
         throw InvalidPlanInput(
           s"Expression with ID: ${exp.getExprTypeCase.getNumber} is not supported")
     }
+  }
+
+  def transformExpressionPlugin(extension: ProtoAny): Expression = {
+    SparkConnectPluginRegistry.expressionRegistry
+      // Lazily traverse the collection.
+      .view
+      // Apply the transformation.
+      .map(p => p.transform(extension, this))
+      // Find the first non-empty transformation or throw.
+      .find(_.nonEmpty)
+      .flatten
+      .getOrElse(throw InvalidPlanInput("No handler found for extension"))
   }
 
   /**
@@ -572,7 +718,7 @@ class SparkConnectPlanner(session: SparkSession) {
    * @return
    *   Expression
    */
-  private def transformLiteral(lit: proto.Expression.Literal): Expression = {
+  private def transformLiteral(lit: proto.Expression.Literal): Literal = {
     toCatalystExpression(lit)
   }
 
@@ -752,6 +898,44 @@ class SparkConnectPlanner(session: SparkSession) {
       case "hours" if fun.getArgumentsCount == 1 =>
         Some(Hours(transformExpression(fun.getArguments(0))))
 
+      case "unwrap_udt" if fun.getArgumentsCount == 1 =>
+        Some(UnwrapUDT(transformExpression(fun.getArguments(0))))
+
+      case "from_json" if Seq(2, 3).contains(fun.getArgumentsCount) =>
+        // JsonToStructs constructors only accept DDL-formatted schema.
+        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
+
+        val schemaStr = children(1) match {
+          case Literal(s, StringType) if s != null => s.toString
+          case other =>
+            throw InvalidPlanInput(
+              s"Schema in from_json should be literal string, but got $other")
+        }
+        val schema = DataType.parseTypeWithFallback(
+          schemaStr,
+          DataType.fromJson,
+          fallbackParser = DataType.fromDDL)
+
+        val options = if (children.length == 3) {
+          // ExprUtils.convertToMapData requires the options to be resolved CreateMap,
+          // but the options here is not resolved yet: UnresolvedFunction("map", ...)
+          children(2) match {
+            case UnresolvedFunction(Seq("map"), arguments, _, _, _) =>
+              ExprUtils.convertToMapData(CreateMap(arguments))
+            case other =>
+              throw InvalidPlanInput(
+                s"Options in from_json should be created by map, but got $other")
+          }
+        } else {
+          Map.empty[String, String]
+        }
+
+        Some(
+          JsonToStructs(
+            schema = CharVarcharUtils.failIfHasCharVarchar(schema),
+            options = options,
+            child = children.head))
+
       case _ => None
     }
   }
@@ -807,6 +991,28 @@ class SparkConnectPlanner(session: SparkSession) {
         UnresolvedRegex(columnNameRegex, Some(nameParts), caseSensitive)
       case _ =>
         UnresolvedAttribute.quotedString(regex.getColName)
+    }
+  }
+
+  private def transformUnresolvedExtractValue(
+      extract: proto.Expression.UnresolvedExtractValue): UnresolvedExtractValue = {
+    UnresolvedExtractValue(
+      transformExpression(extract.getChild),
+      transformExpression(extract.getExtraction))
+  }
+
+  private def transformUpdateFields(update: proto.Expression.UpdateFields): UpdateFields = {
+    if (update.hasValueExpression) {
+      // add or replace a field
+      UpdateFields.apply(
+        col = transformExpression(update.getStructExpression),
+        fieldName = update.getFieldName,
+        expr = transformExpression(update.getValueExpression))
+    } else {
+      // drop a field
+      UpdateFields.apply(
+        col = transformExpression(update.getStructExpression),
+        fieldName = update.getFieldName)
     }
   }
 
@@ -1057,8 +1263,22 @@ class SparkConnectPlanner(session: SparkSession) {
         handleWriteOperation(command.getWriteOperation)
       case proto.Command.CommandTypeCase.CREATE_DATAFRAME_VIEW =>
         handleCreateViewCommand(command.getCreateDataframeView)
+      case proto.Command.CommandTypeCase.EXTENSION =>
+        handleCommandPlugin(command.getExtension)
       case _ => throw new UnsupportedOperationException(s"$command not supported.")
     }
+  }
+
+  private def handleCommandPlugin(extension: ProtoAny): Unit = {
+    SparkConnectPluginRegistry.commandRegistry
+      // Lazily traverse the collection.
+      .view
+      // Apply the transformation.
+      .map(p => p.process(extension, this))
+      // Find the first non-empty transformation or throw.
+      .find(_.nonEmpty)
+      .flatten
+      .getOrElse(throw InvalidPlanInput("No handler found for extension"))
   }
 
   /**

@@ -162,9 +162,11 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
         .writeStream
         .start()
     }
-    Seq("'writeStream'", "only", "streaming Dataset/DataFrame").foreach { s =>
-      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
-    }
+    checkError(
+      exception = e,
+      errorClass = "WRITE_STREAM_NOT_ALLOWED",
+      parameters = Map.empty
+    )
   }
 
   test("resolve default source") {

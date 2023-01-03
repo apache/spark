@@ -64,7 +64,7 @@ class SQLExecutionUIDataSerializer extends ProtobufSerDe {
       getOptional(ui.hasCompletionTime, () => new Date(ui.getCompletionTime))
     val errorMessage = getOptional(ui.hasErrorMessage, () => ui.getErrorMessage)
     val metrics =
-      ui.getMetricsList.asScala.map(m => SQLPlanMetricSerializer.deserialize(m)).toSeq
+      ui.getMetricsList.asScala.map(m => SQLPlanMetricSerializer.deserialize(m))
     val jobs = ui.getJobsMap.asScala.map {
       case (jobId, status) => jobId.toInt -> JobExecutionStatus.valueOf(status.toString)
     }.toMap

@@ -35,6 +35,7 @@ limitations under the License.
 """
 import builtins
 import collections.abc
+import google.protobuf.any_pb2
 import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.internal.enum_type_wrapper
@@ -87,35 +88,20 @@ class Relation(google.protobuf.message.Message):
     HINT_FIELD_NUMBER: builtins.int
     UNPIVOT_FIELD_NUMBER: builtins.int
     TO_SCHEMA_FIELD_NUMBER: builtins.int
+    REPARTITION_BY_EXPRESSION_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
     SUMMARY_FIELD_NUMBER: builtins.int
     CROSSTAB_FIELD_NUMBER: builtins.int
     DESCRIBE_FIELD_NUMBER: builtins.int
-    CURRENT_DATABASE_FIELD_NUMBER: builtins.int
-    SET_CURRENT_DATABASE_FIELD_NUMBER: builtins.int
-    LIST_DATABASES_FIELD_NUMBER: builtins.int
-    LIST_TABLES_FIELD_NUMBER: builtins.int
-    LIST_FUNCTIONS_FIELD_NUMBER: builtins.int
-    LIST_COLUMNS_FIELD_NUMBER: builtins.int
-    GET_DATABASE_FIELD_NUMBER: builtins.int
-    GET_TABLE_FIELD_NUMBER: builtins.int
-    GET_FUNCTION_FIELD_NUMBER: builtins.int
-    DATABASE_EXISTS_FIELD_NUMBER: builtins.int
-    TABLE_EXISTS_FIELD_NUMBER: builtins.int
-    FUNCTION_EXISTS_FIELD_NUMBER: builtins.int
-    CREATE_EXTERNAL_TABLE_FIELD_NUMBER: builtins.int
-    CREATE_TABLE_FIELD_NUMBER: builtins.int
-    DROP_TEMP_VIEW_FIELD_NUMBER: builtins.int
-    DROP_GLOBAL_TEMP_VIEW_FIELD_NUMBER: builtins.int
-    RECOVER_PARTITIONS_FIELD_NUMBER: builtins.int
-    CLEAR_CACHE_FIELD_NUMBER: builtins.int
-    REFRESH_TABLE_FIELD_NUMBER: builtins.int
-    REFRESH_BY_PATH_FIELD_NUMBER: builtins.int
-    CURRENT_CATALOG_FIELD_NUMBER: builtins.int
-    SET_CURRENT_CATALOG_FIELD_NUMBER: builtins.int
-    LIST_CATALOGS_FIELD_NUMBER: builtins.int
+    COV_FIELD_NUMBER: builtins.int
+    CORR_FIELD_NUMBER: builtins.int
+    APPROX_QUANTILE_FIELD_NUMBER: builtins.int
+    FREQ_ITEMS_FIELD_NUMBER: builtins.int
+    SAMPLE_BY_FIELD_NUMBER: builtins.int
+    CATALOG_FIELD_NUMBER: builtins.int
+    EXTENSION_FIELD_NUMBER: builtins.int
     UNKNOWN_FIELD_NUMBER: builtins.int
     @property
     def common(self) -> global___RelationCommon: ...
@@ -170,6 +156,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def to_schema(self) -> global___ToSchema: ...
     @property
+    def repartition_by_expression(self) -> global___RepartitionByExpression: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -184,61 +172,23 @@ class Relation(google.protobuf.message.Message):
     @property
     def describe(self) -> global___StatDescribe: ...
     @property
-    def current_database(self) -> pyspark.sql.connect.proto.catalog_pb2.CurrentDatabase:
-        """Catalog API (internal-only)"""
+    def cov(self) -> global___StatCov: ...
     @property
-    def set_current_database(self) -> pyspark.sql.connect.proto.catalog_pb2.SetCurrentDatabase: ...
+    def corr(self) -> global___StatCorr: ...
     @property
-    def list_databases(self) -> pyspark.sql.connect.proto.catalog_pb2.ListDatabases: ...
+    def approx_quantile(self) -> global___StatApproxQuantile: ...
     @property
-    def list_tables(self) -> pyspark.sql.connect.proto.catalog_pb2.ListTables: ...
+    def freq_items(self) -> global___StatFreqItems: ...
     @property
-    def list_functions(self) -> pyspark.sql.connect.proto.catalog_pb2.ListFunctions: ...
+    def sample_by(self) -> global___StatSampleBy: ...
     @property
-    def list_columns(self) -> pyspark.sql.connect.proto.catalog_pb2.ListColumns: ...
+    def catalog(self) -> pyspark.sql.connect.proto.catalog_pb2.Catalog:
+        """Catalog API (experimental / unstable)"""
     @property
-    def get_database(self) -> pyspark.sql.connect.proto.catalog_pb2.GetDatabase: ...
-    @property
-    def get_table(self) -> pyspark.sql.connect.proto.catalog_pb2.GetTable: ...
-    @property
-    def get_function(self) -> pyspark.sql.connect.proto.catalog_pb2.GetFunction: ...
-    @property
-    def database_exists(self) -> pyspark.sql.connect.proto.catalog_pb2.DatabaseExists: ...
-    @property
-    def table_exists(self) -> pyspark.sql.connect.proto.catalog_pb2.TableExists: ...
-    @property
-    def function_exists(self) -> pyspark.sql.connect.proto.catalog_pb2.FunctionExists: ...
-    @property
-    def create_external_table(
-        self,
-    ) -> pyspark.sql.connect.proto.catalog_pb2.CreateExternalTable: ...
-    @property
-    def create_table(self) -> pyspark.sql.connect.proto.catalog_pb2.CreateTable: ...
-    @property
-    def drop_temp_view(self) -> pyspark.sql.connect.proto.catalog_pb2.DropTempView: ...
-    @property
-    def drop_global_temp_view(self) -> pyspark.sql.connect.proto.catalog_pb2.DropGlobalTempView: ...
-    @property
-    def recover_partitions(self) -> pyspark.sql.connect.proto.catalog_pb2.RecoverPartitions: ...
-    @property
-    def clear_cache(self) -> pyspark.sql.connect.proto.catalog_pb2.ClearCache:
-        """TODO(SPARK-41612): Support Catalog.isCached
-           IsCached is_cached = 218;
-        TODO(SPARK-41600): Support Catalog.cacheTable
-           CacheTable cache_table = 219;
-        TODO(SPARK-41623): Support Catalog.uncacheTable
-           UncacheTable uncache_table = 220;
+    def extension(self) -> google.protobuf.any_pb2.Any:
+        """This field is used to mark extensions to the protocol. When plugins generate arbitrary
+        relations they can add them here. During the planning the correct resolution is done.
         """
-    @property
-    def refresh_table(self) -> pyspark.sql.connect.proto.catalog_pb2.RefreshTable: ...
-    @property
-    def refresh_by_path(self) -> pyspark.sql.connect.proto.catalog_pb2.RefreshByPath: ...
-    @property
-    def current_catalog(self) -> pyspark.sql.connect.proto.catalog_pb2.CurrentCatalog: ...
-    @property
-    def set_current_catalog(self) -> pyspark.sql.connect.proto.catalog_pb2.SetCurrentCatalog: ...
-    @property
-    def list_catalogs(self) -> pyspark.sql.connect.proto.catalog_pb2.ListCatalogs: ...
     @property
     def unknown(self) -> global___Unknown: ...
     def __init__(
@@ -270,37 +220,20 @@ class Relation(google.protobuf.message.Message):
         hint: global___Hint | None = ...,
         unpivot: global___Unpivot | None = ...,
         to_schema: global___ToSchema | None = ...,
+        repartition_by_expression: global___RepartitionByExpression | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
         summary: global___StatSummary | None = ...,
         crosstab: global___StatCrosstab | None = ...,
         describe: global___StatDescribe | None = ...,
-        current_database: pyspark.sql.connect.proto.catalog_pb2.CurrentDatabase | None = ...,
-        set_current_database: pyspark.sql.connect.proto.catalog_pb2.SetCurrentDatabase | None = ...,
-        list_databases: pyspark.sql.connect.proto.catalog_pb2.ListDatabases | None = ...,
-        list_tables: pyspark.sql.connect.proto.catalog_pb2.ListTables | None = ...,
-        list_functions: pyspark.sql.connect.proto.catalog_pb2.ListFunctions | None = ...,
-        list_columns: pyspark.sql.connect.proto.catalog_pb2.ListColumns | None = ...,
-        get_database: pyspark.sql.connect.proto.catalog_pb2.GetDatabase | None = ...,
-        get_table: pyspark.sql.connect.proto.catalog_pb2.GetTable | None = ...,
-        get_function: pyspark.sql.connect.proto.catalog_pb2.GetFunction | None = ...,
-        database_exists: pyspark.sql.connect.proto.catalog_pb2.DatabaseExists | None = ...,
-        table_exists: pyspark.sql.connect.proto.catalog_pb2.TableExists | None = ...,
-        function_exists: pyspark.sql.connect.proto.catalog_pb2.FunctionExists | None = ...,
-        create_external_table: pyspark.sql.connect.proto.catalog_pb2.CreateExternalTable
-        | None = ...,
-        create_table: pyspark.sql.connect.proto.catalog_pb2.CreateTable | None = ...,
-        drop_temp_view: pyspark.sql.connect.proto.catalog_pb2.DropTempView | None = ...,
-        drop_global_temp_view: pyspark.sql.connect.proto.catalog_pb2.DropGlobalTempView
-        | None = ...,
-        recover_partitions: pyspark.sql.connect.proto.catalog_pb2.RecoverPartitions | None = ...,
-        clear_cache: pyspark.sql.connect.proto.catalog_pb2.ClearCache | None = ...,
-        refresh_table: pyspark.sql.connect.proto.catalog_pb2.RefreshTable | None = ...,
-        refresh_by_path: pyspark.sql.connect.proto.catalog_pb2.RefreshByPath | None = ...,
-        current_catalog: pyspark.sql.connect.proto.catalog_pb2.CurrentCatalog | None = ...,
-        set_current_catalog: pyspark.sql.connect.proto.catalog_pb2.SetCurrentCatalog | None = ...,
-        list_catalogs: pyspark.sql.connect.proto.catalog_pb2.ListCatalogs | None = ...,
+        cov: global___StatCov | None = ...,
+        corr: global___StatCorr | None = ...,
+        approx_quantile: global___StatApproxQuantile | None = ...,
+        freq_items: global___StatFreqItems | None = ...,
+        sample_by: global___StatSampleBy | None = ...,
+        catalog: pyspark.sql.connect.proto.catalog_pb2.Catalog | None = ...,
+        extension: google.protobuf.any_pb2.Any | None = ...,
         unknown: global___Unknown | None = ...,
     ) -> None: ...
     def HasField(
@@ -308,62 +241,40 @@ class Relation(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "aggregate",
             b"aggregate",
-            "clear_cache",
-            b"clear_cache",
+            "approx_quantile",
+            b"approx_quantile",
+            "catalog",
+            b"catalog",
             "common",
             b"common",
-            "create_external_table",
-            b"create_external_table",
-            "create_table",
-            b"create_table",
+            "corr",
+            b"corr",
+            "cov",
+            b"cov",
             "crosstab",
             b"crosstab",
-            "current_catalog",
-            b"current_catalog",
-            "current_database",
-            b"current_database",
-            "database_exists",
-            b"database_exists",
             "deduplicate",
             b"deduplicate",
             "describe",
             b"describe",
             "drop",
             b"drop",
-            "drop_global_temp_view",
-            b"drop_global_temp_view",
             "drop_na",
             b"drop_na",
-            "drop_temp_view",
-            b"drop_temp_view",
+            "extension",
+            b"extension",
             "fill_na",
             b"fill_na",
             "filter",
             b"filter",
-            "function_exists",
-            b"function_exists",
-            "get_database",
-            b"get_database",
-            "get_function",
-            b"get_function",
-            "get_table",
-            b"get_table",
+            "freq_items",
+            b"freq_items",
             "hint",
             b"hint",
             "join",
             b"join",
             "limit",
             b"limit",
-            "list_catalogs",
-            b"list_catalogs",
-            "list_columns",
-            b"list_columns",
-            "list_databases",
-            b"list_databases",
-            "list_functions",
-            b"list_functions",
-            "list_tables",
-            b"list_tables",
             "local_relation",
             b"local_relation",
             "offset",
@@ -374,12 +285,6 @@ class Relation(google.protobuf.message.Message):
             b"range",
             "read",
             b"read",
-            "recover_partitions",
-            b"recover_partitions",
-            "refresh_by_path",
-            b"refresh_by_path",
-            "refresh_table",
-            b"refresh_table",
             "rel_type",
             b"rel_type",
             "rename_columns_by_name_to_name_map",
@@ -388,14 +293,14 @@ class Relation(google.protobuf.message.Message):
             b"rename_columns_by_same_length_names",
             "repartition",
             b"repartition",
+            "repartition_by_expression",
+            b"repartition_by_expression",
             "replace",
             b"replace",
             "sample",
             b"sample",
-            "set_current_catalog",
-            b"set_current_catalog",
-            "set_current_database",
-            b"set_current_database",
+            "sample_by",
+            b"sample_by",
             "set_op",
             b"set_op",
             "show_string",
@@ -408,8 +313,6 @@ class Relation(google.protobuf.message.Message):
             b"subquery_alias",
             "summary",
             b"summary",
-            "table_exists",
-            b"table_exists",
             "tail",
             b"tail",
             "to_schema",
@@ -427,62 +330,40 @@ class Relation(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "aggregate",
             b"aggregate",
-            "clear_cache",
-            b"clear_cache",
+            "approx_quantile",
+            b"approx_quantile",
+            "catalog",
+            b"catalog",
             "common",
             b"common",
-            "create_external_table",
-            b"create_external_table",
-            "create_table",
-            b"create_table",
+            "corr",
+            b"corr",
+            "cov",
+            b"cov",
             "crosstab",
             b"crosstab",
-            "current_catalog",
-            b"current_catalog",
-            "current_database",
-            b"current_database",
-            "database_exists",
-            b"database_exists",
             "deduplicate",
             b"deduplicate",
             "describe",
             b"describe",
             "drop",
             b"drop",
-            "drop_global_temp_view",
-            b"drop_global_temp_view",
             "drop_na",
             b"drop_na",
-            "drop_temp_view",
-            b"drop_temp_view",
+            "extension",
+            b"extension",
             "fill_na",
             b"fill_na",
             "filter",
             b"filter",
-            "function_exists",
-            b"function_exists",
-            "get_database",
-            b"get_database",
-            "get_function",
-            b"get_function",
-            "get_table",
-            b"get_table",
+            "freq_items",
+            b"freq_items",
             "hint",
             b"hint",
             "join",
             b"join",
             "limit",
             b"limit",
-            "list_catalogs",
-            b"list_catalogs",
-            "list_columns",
-            b"list_columns",
-            "list_databases",
-            b"list_databases",
-            "list_functions",
-            b"list_functions",
-            "list_tables",
-            b"list_tables",
             "local_relation",
             b"local_relation",
             "offset",
@@ -493,12 +374,6 @@ class Relation(google.protobuf.message.Message):
             b"range",
             "read",
             b"read",
-            "recover_partitions",
-            b"recover_partitions",
-            "refresh_by_path",
-            b"refresh_by_path",
-            "refresh_table",
-            b"refresh_table",
             "rel_type",
             b"rel_type",
             "rename_columns_by_name_to_name_map",
@@ -507,14 +382,14 @@ class Relation(google.protobuf.message.Message):
             b"rename_columns_by_same_length_names",
             "repartition",
             b"repartition",
+            "repartition_by_expression",
+            b"repartition_by_expression",
             "replace",
             b"replace",
             "sample",
             b"sample",
-            "set_current_catalog",
-            b"set_current_catalog",
-            "set_current_database",
-            b"set_current_database",
+            "sample_by",
+            b"sample_by",
             "set_op",
             b"set_op",
             "show_string",
@@ -527,8 +402,6 @@ class Relation(google.protobuf.message.Message):
             b"subquery_alias",
             "summary",
             b"summary",
-            "table_exists",
-            b"table_exists",
             "tail",
             b"tail",
             "to_schema",
@@ -569,35 +442,20 @@ class Relation(google.protobuf.message.Message):
         "hint",
         "unpivot",
         "to_schema",
+        "repartition_by_expression",
         "fill_na",
         "drop_na",
         "replace",
         "summary",
         "crosstab",
         "describe",
-        "current_database",
-        "set_current_database",
-        "list_databases",
-        "list_tables",
-        "list_functions",
-        "list_columns",
-        "get_database",
-        "get_table",
-        "get_function",
-        "database_exists",
-        "table_exists",
-        "function_exists",
-        "create_external_table",
-        "create_table",
-        "drop_temp_view",
-        "drop_global_temp_view",
-        "recover_partitions",
-        "clear_cache",
-        "refresh_table",
-        "refresh_by_path",
-        "current_catalog",
-        "set_current_catalog",
-        "list_catalogs",
+        "cov",
+        "corr",
+        "approx_quantile",
+        "freq_items",
+        "sample_by",
+        "catalog",
+        "extension",
         "unknown",
     ] | None: ...
 
@@ -1462,7 +1320,7 @@ class Sample(google.protobuf.message.Message):
     UPPER_BOUND_FIELD_NUMBER: builtins.int
     WITH_REPLACEMENT_FIELD_NUMBER: builtins.int
     SEED_FIELD_NUMBER: builtins.int
-    FORCE_STABLE_SORT_FIELD_NUMBER: builtins.int
+    DETERMINISTIC_ORDER_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
         """(Required) Input relation for a Sample."""
@@ -1474,9 +1332,10 @@ class Sample(google.protobuf.message.Message):
     """(Optional) Whether to sample with replacement."""
     seed: builtins.int
     """(Optional) The random seed."""
-    force_stable_sort: builtins.bool
-    """(Optional) Explicitly sort the underlying plan to make the ordering deterministic.
-    This flag is only used to randomly splits DataFrame with the provided weights.
+    deterministic_order: builtins.bool
+    """(Required) Explicitly sort the underlying plan to make the ordering deterministic or cache it.
+    This flag is true when invoking `dataframe.randomSplit` to randomly splits DataFrame with the
+    provided weights. Otherwise, it is false.
     """
     def __init__(
         self,
@@ -1486,19 +1345,15 @@ class Sample(google.protobuf.message.Message):
         upper_bound: builtins.float = ...,
         with_replacement: builtins.bool | None = ...,
         seed: builtins.int | None = ...,
-        force_stable_sort: builtins.bool | None = ...,
+        deterministic_order: builtins.bool = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "_force_stable_sort",
-            b"_force_stable_sort",
             "_seed",
             b"_seed",
             "_with_replacement",
             b"_with_replacement",
-            "force_stable_sort",
-            b"force_stable_sort",
             "input",
             b"input",
             "seed",
@@ -1510,14 +1365,12 @@ class Sample(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "_force_stable_sort",
-            b"_force_stable_sort",
             "_seed",
             b"_seed",
             "_with_replacement",
             b"_with_replacement",
-            "force_stable_sort",
-            b"force_stable_sort",
+            "deterministic_order",
+            b"deterministic_order",
             "input",
             b"input",
             "lower_bound",
@@ -1530,10 +1383,6 @@ class Sample(google.protobuf.message.Message):
             b"with_replacement",
         ],
     ) -> None: ...
-    @typing.overload
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_force_stable_sort", b"_force_stable_sort"]
-    ) -> typing_extensions.Literal["force_stable_sort"] | None: ...
     @typing.overload
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["_seed", b"_seed"]
@@ -1866,6 +1715,299 @@ class StatCrosstab(google.protobuf.message.Message):
     ) -> None: ...
 
 global___StatCrosstab = StatCrosstab
+
+class StatCov(google.protobuf.message.Message):
+    """Calculate the sample covariance of two numerical columns of a DataFrame.
+    It will invoke 'Dataset.stat.cov' (same as 'StatFunctions.calculateCov') to compute the results.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    COL1_FIELD_NUMBER: builtins.int
+    COL2_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    col1: builtins.str
+    """(Required) The name of the first column."""
+    col2: builtins.str
+    """(Required) The name of the second column."""
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        col1: builtins.str = ...,
+        col2: builtins.str = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal["col1", b"col1", "col2", b"col2", "input", b"input"],
+    ) -> None: ...
+
+global___StatCov = StatCov
+
+class StatCorr(google.protobuf.message.Message):
+    """Calculates the correlation of two columns of a DataFrame. Currently only supports the Pearson
+    Correlation Coefficient. It will invoke 'Dataset.stat.corr' (same as
+    'StatFunctions.pearsonCorrelation') to compute the results.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    COL1_FIELD_NUMBER: builtins.int
+    COL2_FIELD_NUMBER: builtins.int
+    METHOD_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    col1: builtins.str
+    """(Required) The name of the first column."""
+    col2: builtins.str
+    """(Required) The name of the second column."""
+    method: builtins.str
+    """(Optional) Default value is 'pearson'.
+
+    Currently only supports the Pearson Correlation Coefficient.
+    """
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        col1: builtins.str = ...,
+        col2: builtins.str = ...,
+        method: builtins.str | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_method", b"_method", "input", b"input", "method", b"method"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_method",
+            b"_method",
+            "col1",
+            b"col1",
+            "col2",
+            b"col2",
+            "input",
+            b"input",
+            "method",
+            b"method",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_method", b"_method"]
+    ) -> typing_extensions.Literal["method"] | None: ...
+
+global___StatCorr = StatCorr
+
+class StatApproxQuantile(google.protobuf.message.Message):
+    """Calculates the approximate quantiles of numerical columns of a DataFrame.
+    It will invoke 'Dataset.stat.approxQuantile' (same as 'StatFunctions.approxQuantile')
+    to compute the results.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    COLS_FIELD_NUMBER: builtins.int
+    PROBABILITIES_FIELD_NUMBER: builtins.int
+    RELATIVE_ERROR_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    @property
+    def cols(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """(Required) The names of the numerical columns."""
+    @property
+    def probabilities(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.float]:
+        """(Required) A list of quantile probabilities.
+
+        Each number must belong to [0, 1].
+        For example 0 is the minimum, 0.5 is the median, 1 is the maximum.
+        """
+    relative_error: builtins.float
+    """(Required) The relative target precision to achieve (greater than or equal to 0).
+
+    If set to zero, the exact quantiles are computed, which could be very expensive.
+    Note that values greater than 1 are accepted but give the same result as 1.
+    """
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        cols: collections.abc.Iterable[builtins.str] | None = ...,
+        probabilities: collections.abc.Iterable[builtins.float] | None = ...,
+        relative_error: builtins.float = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "cols",
+            b"cols",
+            "input",
+            b"input",
+            "probabilities",
+            b"probabilities",
+            "relative_error",
+            b"relative_error",
+        ],
+    ) -> None: ...
+
+global___StatApproxQuantile = StatApproxQuantile
+
+class StatFreqItems(google.protobuf.message.Message):
+    """Finding frequent items for columns, possibly with false positives.
+    It will invoke 'Dataset.stat.freqItems' (same as 'StatFunctions.freqItems')
+    to compute the results.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    COLS_FIELD_NUMBER: builtins.int
+    SUPPORT_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    @property
+    def cols(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """(Required) The names of the columns to search frequent items in."""
+    support: builtins.float
+    """(Optional) The minimum frequency for an item to be considered `frequent`.
+    Should be greater than 1e-4.
+    """
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        cols: collections.abc.Iterable[builtins.str] | None = ...,
+        support: builtins.float | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_support", b"_support", "input", b"input", "support", b"support"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_support", b"_support", "cols", b"cols", "input", b"input", "support", b"support"
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_support", b"_support"]
+    ) -> typing_extensions.Literal["support"] | None: ...
+
+global___StatFreqItems = StatFreqItems
+
+class StatSampleBy(google.protobuf.message.Message):
+    """Returns a stratified sample without replacement based on the fraction
+    given on each stratum.
+    It will invoke 'Dataset.stat.freqItems' (same as 'StatFunctions.freqItems')
+    to compute the results.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class Fraction(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        STRATUM_FIELD_NUMBER: builtins.int
+        FRACTION_FIELD_NUMBER: builtins.int
+        @property
+        def stratum(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression.Literal:
+            """(Required) The stratum."""
+        fraction: builtins.float
+        """(Required) The fraction value. Must be in [0, 1]."""
+        def __init__(
+            self,
+            *,
+            stratum: pyspark.sql.connect.proto.expressions_pb2.Expression.Literal | None = ...,
+            fraction: builtins.float = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["stratum", b"stratum"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal["fraction", b"fraction", "stratum", b"stratum"],
+        ) -> None: ...
+
+    INPUT_FIELD_NUMBER: builtins.int
+    COL_FIELD_NUMBER: builtins.int
+    FRACTIONS_FIELD_NUMBER: builtins.int
+    SEED_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    @property
+    def col(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
+        """(Required) The column that defines strata."""
+    @property
+    def fractions(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___StatSampleBy.Fraction
+    ]:
+        """(Required) Sampling fraction for each stratum.
+
+        If a stratum is not specified, we treat its fraction as zero.
+        """
+    seed: builtins.int
+    """(Optional) The random seed."""
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        col: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
+        fractions: collections.abc.Iterable[global___StatSampleBy.Fraction] | None = ...,
+        seed: builtins.int | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_seed", b"_seed", "col", b"col", "input", b"input", "seed", b"seed"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_seed",
+            b"_seed",
+            "col",
+            b"col",
+            "fractions",
+            b"fractions",
+            "input",
+            b"input",
+            "seed",
+            b"seed",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_seed", b"_seed"]
+    ) -> typing_extensions.Literal["seed"] | None: ...
+
+global___StatSampleBy = StatSampleBy
 
 class NAFill(google.protobuf.message.Message):
     """Replaces null values.
@@ -2353,3 +2495,61 @@ class ToSchema(google.protobuf.message.Message):
     ) -> None: ...
 
 global___ToSchema = ToSchema
+
+class RepartitionByExpression(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    PARTITION_EXPRS_FIELD_NUMBER: builtins.int
+    NUM_PARTITIONS_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    @property
+    def partition_exprs(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.expressions_pb2.Expression
+    ]:
+        """(Required) The partitioning expressions."""
+    num_partitions: builtins.int
+    """(Optional) number of partitions, must be positive."""
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        partition_exprs: collections.abc.Iterable[
+            pyspark.sql.connect.proto.expressions_pb2.Expression
+        ]
+        | None = ...,
+        num_partitions: builtins.int | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_num_partitions",
+            b"_num_partitions",
+            "input",
+            b"input",
+            "num_partitions",
+            b"num_partitions",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_num_partitions",
+            b"_num_partitions",
+            "input",
+            b"input",
+            "num_partitions",
+            b"num_partitions",
+            "partition_exprs",
+            b"partition_exprs",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_num_partitions", b"_num_partitions"]
+    ) -> typing_extensions.Literal["num_partitions"] | None: ...
+
+global___RepartitionByExpression = RepartitionByExpression
