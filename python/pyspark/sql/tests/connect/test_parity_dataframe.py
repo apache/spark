@@ -66,6 +66,10 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedSQLTestCase):
         super().test_create_dataframe_required_pandas_not_found()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
+    def test_create_nan_decimal_dataframe(self):
+        super().test_create_nan_decimal_dataframe()
+
+    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_drop_duplicates(self):
         super().test_drop_duplicates()
 
