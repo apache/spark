@@ -14,16 +14,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
 from threading import RLock
 from collections.abc import Sized
+from functools import reduce
 
 import numpy as np
 import pandas as pd
 import pyarrow as pa
 
+from pyspark import SparkContext, SparkConf
 from pyspark.sql.session import classproperty, SparkSession as PySparkSession
-from pyspark.sql.types import DataType, StructType
+from pyspark.sql.types import (
+    _infer_schema,
+    _has_nulltype,
+    _merge_type,
+    Row,
+    DataType,
+    StructType,
+)
 from pyspark.sql.utils import to_str
 
 from pyspark.sql.connect.client import SparkConnectClient
@@ -49,7 +57,7 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.catalog import Catalog
 
 
-class SparkSession(object):
+class SparkSession:
     class Builder:
         """Builder for :class:`SparkSession`."""
 
@@ -132,6 +140,40 @@ class SparkSession(object):
 
     read.__doc__ = PySparkSession.read.__doc__
 
+    def _inferSchemaFromList(
+        self, data: Iterable[Any], names: Optional[List[str]] = None
+    ) -> StructType:
+        """
+        Infer schema from list of Row, dict, or tuple.
+
+        Refer to 'pyspark.sql.session._inferSchemaFromList' with default configurations:
+
+          - 'infer_dict_as_struct' : False
+          - 'infer_array_from_first_element' : False
+          - 'prefer_timestamp_ntz' : False
+        """
+        if not data:
+            raise ValueError("can not infer schema from empty dataset")
+        infer_dict_as_struct = False
+        infer_array_from_first_element = False
+        prefer_timestamp_ntz = False
+        schema = reduce(
+            _merge_type,
+            (
+                _infer_schema(
+                    row,
+                    names,
+                    infer_dict_as_struct=infer_dict_as_struct,
+                    infer_array_from_first_element=infer_array_from_first_element,
+                    prefer_timestamp_ntz=prefer_timestamp_ntz,
+                )
+                for row in data
+            ),
+        )
+        if _has_nulltype(schema):
+            raise ValueError("Some of types cannot be determined after inferring")
+        return schema
+
     def createDataFrame(
         self,
         data: Union["pd.DataFrame", "np.ndarray", Iterable[Any]],
@@ -175,7 +217,21 @@ class SparkSession(object):
                     _cols = ["_%s" % i for i in range(1, data.shape[1] + 1)]
 
         else:
-            pdf = pd.DataFrame(list(data))
+            _data = list(data)
+
+            if _schema is None and (isinstance(_data[0], Row) or isinstance(_data[0], dict)):
+                if isinstance(_data[0], dict):
+                    # Sort the data to respect inferred schema.
+                    # For dictionaries, we sort the schema in alphabetical order.
+                    _data = [dict(sorted(d.items())) for d in _data]
+
+                _schema = self._inferSchemaFromList(_data, _cols)
+                if _cols is not None:
+                    for i, name in enumerate(_cols):
+                        _schema.fields[i].name = name
+                        _schema.names[i] = name
+
+            pdf = pd.DataFrame(_data)
 
             if _cols is None:
                 _cols = ["_%s" % i for i in range(1, pdf.shape[1] + 1)]
@@ -262,3 +318,60 @@ class SparkSession(object):
 
 
 SparkSession.__doc__ = PySparkSession.__doc__
+
+
+def _test() -> None:
+    import os
+    import sys
+    import doctest
+    from pyspark.sql import SparkSession as PySparkSession
+    from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    if should_test_connect:
+        import pyspark.sql.connect.session
+
+        globs = pyspark.sql.connect.session.__dict__.copy()
+        # Works around to create a regular Spark session
+        sc = SparkContext("local[4]", "sql.connect.session tests", conf=SparkConf())
+        globs["_spark"] = PySparkSession(
+            sc, options={"spark.app.name": "sql.connect.session tests"}
+        )
+
+        # Creates a remote Spark session.
+        os.environ["SPARK_REMOTE"] = "sc://localhost"
+        globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
+
+        # Uses PySpark session to test builder.
+        globs["SparkSession"] = PySparkSession
+        # Spark Connect does not support to set master together.
+        pyspark.sql.connect.session.SparkSession.__doc__ = None
+        del pyspark.sql.connect.session.SparkSession.Builder.master.__doc__
+        # RDD API is not supported in Spark Connect.
+        del pyspark.sql.connect.session.SparkSession.createDataFrame.__doc__
+
+        # TODO(SPARK-41811): Implement SparkSession.sql's string formatter
+        del pyspark.sql.connect.session.SparkSession.sql.__doc__
+
+        (failure_count, test_count) = doctest.testmod(
+            pyspark.sql.connect.session,
+            globs=globs,
+            optionflags=doctest.ELLIPSIS
+            | doctest.NORMALIZE_WHITESPACE
+            | doctest.IGNORE_EXCEPTION_DETAIL,
+        )
+
+        globs["spark"].stop()
+        globs["_spark"].stop()
+        if failure_count:
+            sys.exit(-1)
+    else:
+        print(
+            f"Skipping pyspark.sql.connect.session doctests: {connect_requirement_message}",
+            file=sys.stderr,
+        )
+
+
+if __name__ == "__main__":
+    _test()

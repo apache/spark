@@ -37,7 +37,6 @@ from pyspark.sql.connect.expressions import (
     Expression,
     UnresolvedFunction,
     UnresolvedExtractValue,
-    SQLExpression,
     LiteralExpression,
     CaseWhen,
     SortOrder,
@@ -60,7 +59,7 @@ if TYPE_CHECKING:
 
 def _func_op(name: str, doc: Optional[str] = "") -> Callable[["Column"], "Column"]:
     def wrapped(self: "Column") -> "Column":
-        return scalar_function(name, self)
+        return Column(UnresolvedFunction(name, [self._expr]))
 
     wrapped.__doc__ = doc
     return wrapped
@@ -70,16 +69,17 @@ def _bin_op(
     name: str, doc: Optional[str] = "binary function", reverse: bool = False
 ) -> Callable[["Column", Any], "Column"]:
     def wrapped(self: "Column", other: Any) -> "Column":
-        from pyspark.sql.connect.functions import lit
-
-        if isinstance(
+        if other is None or isinstance(
             other, (bool, float, int, str, datetime.datetime, datetime.date, decimal.Decimal)
         ):
-            other = lit(other)
-        if not reverse:
-            return scalar_function(name, self, other)
+            other_expr = LiteralExpression._from_value(other)
         else:
-            return scalar_function(name, other, self)
+            other_expr = other._expr
+
+        if not reverse:
+            return Column(UnresolvedFunction(name, [self._expr, other_expr]))
+        else:
+            return Column(UnresolvedFunction(name, [other_expr, self._expr]))
 
     wrapped.__doc__ = doc
     return wrapped
@@ -87,18 +87,10 @@ def _bin_op(
 
 def _unary_op(name: str, doc: Optional[str] = "unary function") -> Callable[["Column"], "Column"]:
     def wrapped(self: "Column") -> "Column":
-        return scalar_function(name, self)
+        return Column(UnresolvedFunction(name, [self._expr]))
 
     wrapped.__doc__ = doc
     return wrapped
-
-
-def scalar_function(op: str, *args: "Column") -> "Column":
-    return Column(UnresolvedFunction(op, [arg._expr for arg in args]))
-
-
-def sql_expression(expr: str) -> "Column":
-    return Column(SQLExpression(expr))
 
 
 class Column:
@@ -122,6 +114,7 @@ class Column:
     __rmul__ = _bin_op("*", reverse=True)
     __rdiv__ = _bin_op("/", reverse=True)
     __rtruediv__ = _bin_op("/", reverse=True)
+    __rmod__ = _bin_op("%", reverse=True)
     __pow__ = _bin_op("power")
     __rpow__ = _bin_op("power", reverse=True)
     __ge__ = _bin_op(">=")
@@ -181,7 +174,7 @@ class Column:
         if isinstance(value, Column):
             _value = value._expr
         else:
-            _value = LiteralExpression(value, LiteralExpression._infer_type(value))
+            _value = LiteralExpression._from_value(value)
 
         _branches = self._expr._branches + [(condition._expr, _value)]
 
@@ -203,7 +196,7 @@ class Column:
         if isinstance(value, Column):
             _value = value._expr
         else:
-            _value = LiteralExpression(value, LiteralExpression._infer_type(value))
+            _value = LiteralExpression._from_value(value)
 
         return Column(CaseWhen(branches=self._expr._branches, else_value=_value))
 
@@ -253,13 +246,14 @@ class Column:
         """Returns a binary expression with the current column as the left
         side and the other expression as the right side.
         """
-        from pyspark.sql.connect.functions import lit
-
-        if isinstance(
+        if other is None or isinstance(
             other, (bool, float, int, str, datetime.datetime, datetime.date, decimal.Decimal)
         ):
-            other = lit(other)
-        return scalar_function("==", self, other)
+            other_expr = LiteralExpression._from_value(other)
+        else:
+            other_expr = other._expr
+
+        return Column(UnresolvedFunction("==", [self._expr, other_expr]))
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
         return self._expr.to_plan(session)
@@ -317,14 +311,19 @@ class Column:
     over.__doc__ = PySparkColumn.over.__doc__
 
     def isin(self, *cols: Any) -> "Column":
-        from pyspark.sql.connect.functions import lit
-
         if len(cols) == 1 and isinstance(cols[0], (list, set)):
             _cols = list(cols[0])
         else:
             _cols = list(cols)
 
-        return Column(UnresolvedFunction("in", [self._expr] + [lit(c)._expr for c in _cols]))
+        _exprs = [self._expr]
+        for c in _cols:
+            if isinstance(c, Column):
+                _exprs.append(c._expr)
+            else:
+                _exprs.append(LiteralExpression._from_value(c))
+
+        return Column(UnresolvedFunction("in", _exprs))
 
     isin.__doc__ = PySparkColumn.isin.__doc__
 
@@ -442,24 +441,17 @@ def _test() -> None:
         # Creates a remote Spark session.
         os.environ["SPARK_REMOTE"] = "sc://localhost"
         globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
+        # Spark Connect has a different string representation for Column.
+        del pyspark.sql.connect.column.Column.getItem.__doc__
 
         # TODO(SPARK-41746): SparkSession.createDataFrame does not support nested datatypes
         del pyspark.sql.connect.column.Column.dropFields.__doc__
         # TODO(SPARK-41772): Enable pyspark.sql.connect.column.Column.withField doctest
         del pyspark.sql.connect.column.Column.withField.__doc__
-        # TODO(SPARK-41745): SparkSession.createDataFrame does not respect the column names in
-        #  the row
-        del pyspark.sql.connect.column.Column.bitwiseAND.__doc__
-        del pyspark.sql.connect.column.Column.bitwiseOR.__doc__
-        del pyspark.sql.connect.column.Column.bitwiseXOR.__doc__
-        # TODO(SPARK-41770): eqNullSafe does not support None as its argument
-        del pyspark.sql.connect.column.Column.eqNullSafe.__doc__
-        # TODO(SPARK-41745): SparkSession.createDataFrame does not respect the column names in
-        #  the row
-        del pyspark.sql.connect.column.Column.isNotNull.__doc__
+        # TODO(SPARK-41815): Column.isNull returns nan instead of None
         del pyspark.sql.connect.column.Column.isNull.__doc__
+        # TODO(SPARK-41746): SparkSession.createDataFrame does not support nested datatypes
         del pyspark.sql.connect.column.Column.getField.__doc__
-        del pyspark.sql.connect.column.Column.getItem.__doc__
 
         (failure_count, test_count) = doctest.testmod(
             pyspark.sql.connect.column,

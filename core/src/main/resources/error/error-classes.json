@@ -1356,11 +1356,6 @@
           "DESC TABLE COLUMN for a specific partition."
         ]
       },
-      "DISTRIBUTE_BY" : {
-        "message" : [
-          "DISTRIBUTE BY clause."
-        ]
-      },
       "INSERT_PARTITION_SPEC_IF_NOT_EXISTS" : {
         "message" : [
           "INSERT INTO <tableName> IF NOT EXISTS in the PARTITION spec."
@@ -1617,6 +1612,11 @@
       "To tolerate the error on drop use DROP VIEW IF EXISTS."
     ],
     "sqlState" : "42000"
+  },
+  "WRITE_STREAM_NOT_ALLOWED" : {
+    "message" : [
+      "`writeStream` can be called only on streaming Dataset/DataFrame."
+    ]
   },
   "WRONG_NUM_ARGS" : {
     "message" : [
@@ -4905,11 +4905,6 @@
   "_LEGACY_ERROR_TEMP_2309" : {
     "message" : [
       "cannot resolve <sqlExpr> in MERGE command given columns [<cols>]"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2310" : {
-    "message" : [
-      "'writeStream' can be called only on streaming Dataset/DataFrame"
     ]
   },
   "_LEGACY_ERROR_TEMP_2311" : {

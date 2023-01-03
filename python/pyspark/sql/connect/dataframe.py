@@ -35,20 +35,16 @@ import pandas
 import warnings
 from collections.abc import Iterable
 
-from pyspark import _NoValue
+from pyspark import _NoValue, SparkContext, SparkConf
 from pyspark._globals import _NoValueType
 from pyspark.sql.types import DataType, StructType, Row
 
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.group import GroupedData
 from pyspark.sql.connect.readwriter import DataFrameWriter
-from pyspark.sql.connect.column import (
-    Column,
-    scalar_function,
-    sql_expression,
-)
+from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import UnresolvedRegex
-from pyspark.sql.connect.functions import col, lit
+from pyspark.sql.connect.functions import _invoke_function, col, lit, expr as sql_expression
 from pyspark.sql.dataframe import (
     DataFrame as PySparkDataFrame,
     DataFrameNaFunctions as PySparkDataFrameNaFunctions,
@@ -110,7 +106,7 @@ class DataFrame:
             raise ValueError("Argument 'exprs' must not be empty")
 
         if len(exprs) == 1 and isinstance(exprs[0], dict):
-            measures = [scalar_function(f, col(e)) for e, f in exprs[0].items()]
+            measures = [_invoke_function(f, col(e)) for e, f in exprs[0].items()]
             return self.groupBy().agg(*measures)
         else:
             # other expressions
@@ -152,7 +148,7 @@ class DataFrame:
     sparkSession.__doc__ = PySparkDataFrame.sparkSession.__doc__
 
     def count(self) -> int:
-        pdd = self.agg(scalar_function("count", lit(1))).toPandas()
+        pdd = self.agg(_invoke_function("count", lit(1))).toPandas()
         return pdd.iloc[0, 0]
 
     count.__doc__ = PySparkDataFrame.count.__doc__
@@ -878,6 +874,56 @@ class DataFrame:
 
     corr.__doc__ = PySparkDataFrame.corr.__doc__
 
+    def approxQuantile(
+        self,
+        col: Union[str, List[str], Tuple[str]],
+        probabilities: Union[List[float], Tuple[float]],
+        relativeError: float,
+    ) -> Union[List[float], List[List[float]]]:
+        if not isinstance(col, (str, list, tuple)):
+            raise TypeError("col should be a string, list or tuple, but got %r" % type(col))
+
+        isStr = isinstance(col, str)
+
+        if isinstance(col, tuple):
+            col = list(col)
+        elif isStr:
+            col = [cast(str, col)]
+
+        for c in col:
+            if not isinstance(c, str):
+                raise TypeError("columns should be strings, but got %r" % type(c))
+
+        if not isinstance(probabilities, (list, tuple)):
+            raise TypeError("probabilities should be a list or tuple")
+        if isinstance(probabilities, tuple):
+            probabilities = list(probabilities)
+        for p in probabilities:
+            if not isinstance(p, (float, int)) or p < 0 or p > 1:
+                raise ValueError("probabilities should be numerical (float, int) in [0,1].")
+
+        if not isinstance(relativeError, (float, int)):
+            raise TypeError("relativeError should be numerical (float, int)")
+        if relativeError < 0:
+            raise ValueError("relativeError should be >= 0.")
+        relativeError = float(relativeError)
+        pdf = DataFrame.withPlan(
+            plan.StatApproxQuantile(
+                child=self._plan,
+                cols=list(col),
+                probabilities=probabilities,
+                relativeError=relativeError,
+            ),
+            session=self._session,
+        ).toPandas()
+
+        assert pdf is not None
+        jaq = pdf["approx_quantile"][0]
+        jaq_list = [list(j) for j in jaq]
+        return jaq_list[0] if isStr else jaq_list
+
+    approxQuantile.__doc__ = PySparkDataFrame.approxQuantile.__doc__
+
     def crosstab(self, col1: str, col2: str) -> "DataFrame":
         if not isinstance(col1, str):
             raise TypeError(f"'col1' must be str, but got {type(col1).__name__}")
@@ -889,6 +935,42 @@ class DataFrame:
         )
 
     crosstab.__doc__ = PySparkDataFrame.crosstab.__doc__
+
+    def freqItems(
+        self, cols: Union[List[str], Tuple[str]], support: Optional[float] = None
+    ) -> "DataFrame":
+        if isinstance(cols, tuple):
+            cols = list(cols)
+        if not isinstance(cols, list):
+            raise TypeError("cols must be a list or tuple of column names as strings.")
+        if not support:
+            support = 0.01
+        return DataFrame.withPlan(
+            plan.StatFreqItems(child=self._plan, cols=cols, support=support),
+            session=self._session,
+        )
+
+    freqItems.__doc__ = PySparkDataFrame.freqItems.__doc__
+
+    def sampleBy(
+        self, col: "ColumnOrName", fractions: Dict[Any, float], seed: Optional[int] = None
+    ) -> "DataFrame":
+        if not isinstance(col, (Column, str)):
+            raise TypeError("col must be a string or a column, but got %r" % type(col))
+        if not isinstance(fractions, dict):
+            raise TypeError("fractions must be a dict but got %r" % type(fractions))
+        for k, v in fractions.items():
+            if not isinstance(k, (float, int, str)):
+                raise TypeError("key must be float, int, or string, but got %r" % type(k))
+            fractions[k] = float(v)
+        seed = seed if seed is not None else random.randint(0, sys.maxsize)
+
+        return DataFrame.withPlan(
+            plan.StatSampleBy(child=self._plan, col=col, fractions=fractions, seed=seed),
+            session=self._session,
+        )
+
+    sampleBy.__doc__ = PySparkDataFrame.sampleBy.__doc__
 
     def _get_alias(self) -> Optional[str]:
         p = self._plan
@@ -1260,10 +1342,131 @@ class DataFrameStatFunctions:
 
     corr.__doc__ = DataFrame.corr.__doc__
 
+    def approxQuantile(
+        self,
+        col: Union[str, List[str], Tuple[str]],
+        probabilities: Union[List[float], Tuple[float]],
+        relativeError: float,
+    ) -> Union[List[float], List[List[float]]]:
+        return self.df.approxQuantile(col, probabilities, relativeError)
+
+    approxQuantile.__doc__ = DataFrame.approxQuantile.__doc__
+
     def crosstab(self, col1: str, col2: str) -> DataFrame:
         return self.df.crosstab(col1, col2)
 
     crosstab.__doc__ = DataFrame.crosstab.__doc__
 
+    def freqItems(
+        self, cols: Union[List[str], Tuple[str]], support: Optional[float] = None
+    ) -> DataFrame:
+        return self.df.freqItems(cols, support)
+
+    freqItems.__doc__ = DataFrame.freqItems.__doc__
+
+    def sampleBy(
+        self, col: str, fractions: Dict[Any, float], seed: Optional[int] = None
+    ) -> DataFrame:
+        return self.df.sampleBy(col, fractions, seed)
+
+    sampleBy.__doc__ = DataFrame.sampleBy.__doc__
+
 
 DataFrameStatFunctions.__doc__ = PySparkDataFrameStatFunctions.__doc__
+
+
+def _test() -> None:
+    import os
+    import sys
+    import doctest
+    from pyspark.sql import SparkSession as PySparkSession
+    from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    if should_test_connect:
+        import pyspark.sql.connect.dataframe
+
+        globs = pyspark.sql.connect.dataframe.__dict__.copy()
+        # Works around to create a regular Spark session
+        sc = SparkContext("local[4]", "sql.connect.dataframe tests", conf=SparkConf())
+        globs["_spark"] = PySparkSession(
+            sc, options={"spark.app.name": "sql.connect.dataframe tests"}
+        )
+
+        # Spark Connect does not support RDD but the tests depend on them.
+        del pyspark.sql.connect.dataframe.DataFrame.coalesce.__doc__
+        del pyspark.sql.connect.dataframe.DataFrame.repartition.__doc__
+
+        # TODO(SPARK-41820): Fix SparkConnectException: requirement failed
+        del pyspark.sql.connect.dataframe.DataFrame.createOrReplaceGlobalTempView.__doc__
+        del pyspark.sql.connect.dataframe.DataFrame.createOrReplaceTempView.__doc__
+
+        # TODO(SPARK-41821): Fix DataFrame.describe
+        del pyspark.sql.connect.dataframe.DataFrame.describe.__doc__
+
+        # TODO(SPARK-41823): ambiguous column names
+        del pyspark.sql.connect.dataframe.DataFrame.drop.__doc__
+        del pyspark.sql.connect.dataframe.DataFrame.join.__doc__
+
+        # TODO(SPARK-41824): DataFrame.explain format is different
+        del pyspark.sql.connect.dataframe.DataFrame.explain.__doc__
+        del pyspark.sql.connect.dataframe.DataFrame.hint.__doc__
+
+        # TODO(SPARK-41825): Dataframe.show formatting int as double
+        del pyspark.sql.connect.dataframe.DataFrame.fillna.__doc__
+        del pyspark.sql.connect.dataframe.DataFrameNaFunctions.replace.__doc__
+        del pyspark.sql.connect.dataframe.DataFrameNaFunctions.fill.__doc__
+        del pyspark.sql.connect.dataframe.DataFrame.replace.__doc__
+        del pyspark.sql.connect.dataframe.DataFrame.intersect.__doc__
+
+        # TODO(SPARK-41625): Support Structured Streaming
+        del pyspark.sql.connect.dataframe.DataFrame.isStreaming.__doc__
+
+        # TODO(SPARK-41827): groupBy requires all cols be Column or str
+        del pyspark.sql.connect.dataframe.DataFrame.groupBy.__doc__
+
+        # TODO(SPARK-41828): Implement creating empty DataFrame
+        del pyspark.sql.connect.dataframe.DataFrame.isEmpty.__doc__
+
+        # TODO(SPARK-41829): Add Dataframe sort ordering
+        del pyspark.sql.connect.dataframe.DataFrame.sort.__doc__
+        del pyspark.sql.connect.dataframe.DataFrame.sortWithinPartitions.__doc__
+
+        # TODO(SPARK-41830): fix sample parameters
+        del pyspark.sql.connect.dataframe.DataFrame.sample.__doc__
+
+        # TODO(SPARK-41831): fix transform to accept ColumnReference
+        del pyspark.sql.connect.dataframe.DataFrame.transform.__doc__
+
+        # TODO(SPARK-41832): fix unionByName
+        del pyspark.sql.connect.dataframe.DataFrame.unionByName.__doc__
+
+        # TODO(SPARK-41818): Support saveAsTable
+        del pyspark.sql.connect.dataframe.DataFrame.write.__doc__
+
+        # Creates a remote Spark session.
+        os.environ["SPARK_REMOTE"] = "sc://localhost"
+        globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
+
+        (failure_count, test_count) = doctest.testmod(
+            pyspark.sql.connect.dataframe,
+            globs=globs,
+            optionflags=doctest.ELLIPSIS
+            | doctest.NORMALIZE_WHITESPACE
+            | doctest.IGNORE_EXCEPTION_DETAIL,
+        )
+
+        globs["spark"].stop()
+        globs["_spark"].stop()
+        if failure_count:
+            sys.exit(-1)
+    else:
+        print(
+            f"Skipping pyspark.sql.connect.dataframe doctests: {connect_requirement_message}",
+            file=sys.stderr,
+        )
+
+
+if __name__ == "__main__":
+    _test()

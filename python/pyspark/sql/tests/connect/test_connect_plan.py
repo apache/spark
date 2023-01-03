@@ -15,6 +15,9 @@
 # limitations under the License.
 #
 import unittest
+import uuid
+import datetime
+import decimal
 
 from pyspark.testing.connectutils import (
     PlanOnlyTestFixture,
@@ -26,8 +29,9 @@ if should_test_connect:
     import pyspark.sql.connect.proto as proto
     from pyspark.sql.connect.column import Column
     from pyspark.sql.connect.dataframe import DataFrame
-    from pyspark.sql.connect.plan import WriteOperation
+    from pyspark.sql.connect.plan import WriteOperation, Read
     from pyspark.sql.connect.readwriter import DataFrameReader
+    from pyspark.sql.connect.functions import col, lit
     from pyspark.sql.connect.function_builder import UserDefinedFunction, udf
     from pyspark.sql.connect.types import pyspark_types_to_proto_types
     from pyspark.sql.types import (
@@ -41,7 +45,7 @@ if should_test_connect:
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
-class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
+class SparkConnectPlanTests(PlanOnlyTestFixture):
     """These test cases exercise the interface to the proto plan
     generation but do not call Spark."""
 
@@ -309,6 +313,42 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         self.assertEqual(plan.root.crosstab.col1, "col_a")
         self.assertEqual(plan.root.crosstab.col2, "col_b")
 
+    def test_freqItems(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+        plan = (
+            df.filter(df.col_name > 3).freqItems(["col_a", "col_b"], 1)._plan.to_proto(self.connect)
+        )
+        self.assertEqual(plan.root.freq_items.cols, ["col_a", "col_b"])
+        self.assertEqual(plan.root.freq_items.support, 1)
+        plan = df.filter(df.col_name > 3).freqItems(["col_a", "col_b"])._plan.to_proto(self.connect)
+        self.assertEqual(plan.root.freq_items.cols, ["col_a", "col_b"])
+        self.assertEqual(plan.root.freq_items.support, 0.01)
+
+        plan = df.stat.freqItems(["col_a", "col_b"], 1)._plan.to_proto(self.connect)
+        self.assertEqual(plan.root.freq_items.cols, ["col_a", "col_b"])
+        self.assertEqual(plan.root.freq_items.support, 1)
+        plan = df.stat.freqItems(["col_a", "col_b"])._plan.to_proto(self.connect)
+        self.assertEqual(plan.root.freq_items.cols, ["col_a", "col_b"])
+        self.assertEqual(plan.root.freq_items.support, 0.01)
+
+    def test_freqItems(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+        plan = (
+            df.filter(df.col_name > 3).freqItems(["col_a", "col_b"], 1)._plan.to_proto(self.connect)
+        )
+        self.assertEqual(plan.root.freq_items.cols, ["col_a", "col_b"])
+        self.assertEqual(plan.root.freq_items.support, 1)
+        plan = df.filter(df.col_name > 3).freqItems(["col_a", "col_b"])._plan.to_proto(self.connect)
+        self.assertEqual(plan.root.freq_items.cols, ["col_a", "col_b"])
+        self.assertEqual(plan.root.freq_items.support, 0.01)
+
+        plan = df.stat.freqItems(["col_a", "col_b"], 1)._plan.to_proto(self.connect)
+        self.assertEqual(plan.root.freq_items.cols, ["col_a", "col_b"])
+        self.assertEqual(plan.root.freq_items.support, 1)
+        plan = df.stat.freqItems(["col_a", "col_b"])._plan.to_proto(self.connect)
+        self.assertEqual(plan.root.freq_items.cols, ["col_a", "col_b"])
+        self.assertEqual(plan.root.freq_items.support, 0.01)
+
     def test_limit(self):
         df = self.connect.readTable(table_name=self.tbl_name)
         limit_plan = df.limit(10)._plan.to_proto(self.connect)
@@ -560,28 +600,6 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         new_plan = df.to(schema)._plan.to_proto(self.connect)
         self.assertEqual(pyspark_types_to_proto_types(schema), new_plan.root.to_schema.schema)
 
-    def test_unsupported_functions(self):
-        # SPARK-41225: Disable unsupported functions.
-        df = self.connect.readTable(table_name=self.tbl_name)
-        for f in (
-            "rdd",
-            "unpersist",
-            "cache",
-            "persist",
-            "withWatermark",
-            "observe",
-            "foreach",
-            "foreachPartition",
-            "toLocalIterator",
-            "checkpoint",
-            "localCheckpoint",
-            "_repr_html_",
-            "semanticHash",
-            "sameSemantics",
-        ):
-            with self.assertRaises(NotImplementedError):
-                getattr(df, f)()
-
     def test_write_operation(self):
         wo = WriteOperation(self.connect.readTable("name")._plan)
         wo.mode = "overwrite"
@@ -652,9 +670,184 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         for line in expected:
             self.assertIn(line, actual)
 
+    def test_select_with_columns_and_strings(self):
+        df = self.connect.with_plan(Read("table"))
+        self.assertIsNotNone(df.select(col("name"))._plan.to_proto(self.connect))
+        self.assertIsNotNone(df.select("name"))
+        self.assertIsNotNone(df.select("name", "name2"))
+        self.assertIsNotNone(df.select(col("name"), col("name2")))
+        self.assertIsNotNone(df.select(col("name"), "name2"))
+        self.assertIsNotNone(df.select("*"))
+
+    def test_join_with_join_type(self):
+        df_left = self.connect.with_plan(Read("table"))
+        df_right = self.connect.with_plan(Read("table"))
+        for (join_type_str, join_type) in [
+            (None, proto.Join.JoinType.JOIN_TYPE_INNER),
+            ("inner", proto.Join.JoinType.JOIN_TYPE_INNER),
+            ("outer", proto.Join.JoinType.JOIN_TYPE_FULL_OUTER),
+            ("leftouter", proto.Join.JoinType.JOIN_TYPE_LEFT_OUTER),
+            ("rightouter", proto.Join.JoinType.JOIN_TYPE_RIGHT_OUTER),
+            ("leftanti", proto.Join.JoinType.JOIN_TYPE_LEFT_ANTI),
+            ("leftsemi", proto.Join.JoinType.JOIN_TYPE_LEFT_SEMI),
+            ("cross", proto.Join.JoinType.JOIN_TYPE_CROSS),
+        ]:
+            joined_df = df_left.join(df_right, on=col("name"), how=join_type_str)._plan.to_proto(
+                self.connect
+            )
+            self.assertEqual(joined_df.root.join.join_type, join_type)
+
+    def test_simple_column_expressions(self):
+        df = self.connect.with_plan(Read("table"))
+
+        c1 = df.col_name
+        self.assertIsInstance(c1, Column)
+        c2 = df["col_name"]
+        self.assertIsInstance(c2, Column)
+        c3 = col("col_name")
+        self.assertIsInstance(c3, Column)
+
+        # All Protos should be identical
+        cp1 = c1.to_plan(None)
+        cp2 = c2.to_plan(None)
+        cp3 = c3.to_plan(None)
+
+        self.assertIsNotNone(cp1)
+        self.assertEqual(cp1, cp2)
+        self.assertEqual(cp2, cp3)
+
+    def test_null_literal(self):
+        null_lit = lit(None)
+        null_lit_p = null_lit.to_plan(None)
+        self.assertEqual(null_lit_p.literal.HasField("null"), True)
+
+    def test_binary_literal(self):
+        val = b"binary\0\0asas"
+        bin_lit = lit(val)
+        bin_lit_p = bin_lit.to_plan(None)
+        self.assertEqual(bin_lit_p.literal.binary, val)
+
+    def test_uuid_literal(self):
+
+        val = uuid.uuid4()
+        with self.assertRaises(ValueError):
+            lit(val)
+
+    def test_column_literals(self):
+        df = self.connect.with_plan(Read("table"))
+        lit_df = df.select(lit(10))
+        self.assertIsNotNone(lit_df._plan.to_proto(None))
+
+        self.assertIsNotNone(lit(10).to_plan(None))
+        plan = lit(10).to_plan(None)
+        self.assertIs(plan.literal.integer, 10)
+
+        plan = lit(1 << 33).to_plan(None)
+        self.assertEqual(plan.literal.long, 1 << 33)
+
+    def test_numeric_literal_types(self):
+        int_lit = lit(10)
+        float_lit = lit(10.1)
+        decimal_lit = lit(decimal.Decimal(99))
+
+        self.assertIsNotNone(int_lit.to_plan(None))
+        self.assertIsNotNone(float_lit.to_plan(None))
+        self.assertIsNotNone(decimal_lit.to_plan(None))
+
+    def test_float_nan_inf(self):
+        na_lit = lit(float("nan"))
+        self.assertIsNotNone(na_lit.to_plan(None))
+
+        inf_lit = lit(float("inf"))
+        self.assertIsNotNone(inf_lit.to_plan(None))
+
+        inf_lit = lit(float("-inf"))
+        self.assertIsNotNone(inf_lit.to_plan(None))
+
+    def test_datetime_literal_types(self):
+        """Test the different timestamp, date, and timedelta types."""
+        datetime_lit = lit(datetime.datetime.now())
+
+        p = datetime_lit.to_plan(None)
+        self.assertIsNotNone(datetime_lit.to_plan(None))
+        self.assertGreater(p.literal.timestamp, 10000000000000)
+
+        date_lit = lit(datetime.date.today())
+        time_delta = lit(datetime.timedelta(days=1, seconds=2, microseconds=3))
+
+        self.assertIsNotNone(date_lit.to_plan(None))
+        self.assertIsNotNone(time_delta.to_plan(None))
+        # (24 * 3600 + 2) * 1000000 + 3
+        self.assertEqual(86402000003, time_delta.to_plan(None).literal.day_time_interval)
+
+    def test_list_to_literal(self):
+        """Test conversion of lists to literals"""
+        empty_list = []
+        single_type = [1, 2, 3, 4]
+        multi_type = ["ooo", 1, "asas", 2.3]
+
+        empty_list_lit = lit(empty_list)
+        single_type_lit = lit(single_type)
+        multi_type_lit = lit(multi_type)
+
+        p = empty_list_lit.to_plan(None)
+        self.assertIsNotNone(p)
+
+        p = single_type_lit.to_plan(None)
+        self.assertIsNotNone(p)
+
+        p = multi_type_lit.to_plan(None)
+        self.assertIsNotNone(p)
+
+        lit_list_plan = lit([lit(10), lit("str")]).to_plan(None)
+        self.assertIsNotNone(lit_list_plan)
+
+    def test_column_alias(self) -> None:
+        # SPARK-40809: Support for Column Aliases
+        col0 = col("a").alias("martin")
+        self.assertEqual("Column<'Alias(ColumnReference(a), (martin))'>", str(col0))
+
+        col0 = col("a").alias("martin", metadata={"pii": True})
+        plan = col0.to_plan(self.session.client)
+        self.assertIsNotNone(plan)
+        self.assertEqual(plan.alias.metadata, '{"pii": true}')
+
+    def test_column_expressions(self):
+        """Test a more complex combination of expressions and their translation into
+        the protobuf structure."""
+        df = self.connect.with_plan(Read("table"))
+
+        expr = lit(10) < lit(10)
+        expr_plan = expr.to_plan(None)
+        self.assertIsNotNone(expr_plan.unresolved_function)
+        self.assertEqual(expr_plan.unresolved_function.function_name, "<")
+
+        expr = df.id % lit(10) == lit(10)
+        expr_plan = expr.to_plan(None)
+        self.assertIsNotNone(expr_plan.unresolved_function)
+        self.assertEqual(expr_plan.unresolved_function.function_name, "==")
+
+        lit_fun = expr_plan.unresolved_function.arguments[1]
+        self.assertIsInstance(lit_fun, proto.Expression)
+        self.assertIsInstance(lit_fun.literal, proto.Expression.Literal)
+        self.assertEqual(lit_fun.literal.integer, 10)
+
+        mod_fun = expr_plan.unresolved_function.arguments[0]
+        self.assertIsInstance(mod_fun, proto.Expression)
+        self.assertIsInstance(mod_fun.unresolved_function, proto.Expression.UnresolvedFunction)
+        self.assertEqual(len(mod_fun.unresolved_function.arguments), 2)
+        self.assertIsInstance(mod_fun.unresolved_function.arguments[0], proto.Expression)
+        self.assertIsInstance(
+            mod_fun.unresolved_function.arguments[0].unresolved_attribute,
+            proto.Expression.UnresolvedAttribute,
+        )
+        self.assertEqual(
+            mod_fun.unresolved_function.arguments[0].unresolved_attribute.unparsed_identifier, "id"
+        )
+
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.connect.test_connect_plan_only import *  # noqa: F401
+    from pyspark.sql.tests.connect.test_connect_plan import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore

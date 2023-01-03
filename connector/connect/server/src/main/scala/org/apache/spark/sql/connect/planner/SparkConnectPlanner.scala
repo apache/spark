@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, 
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, Sort, SubqueryAlias, Union, Unpivot, UnresolvedHint}
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.{toCatalystExpression, toCatalystValue}
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -93,8 +93,13 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Relation.RelTypeCase.DESCRIBE => transformStatDescribe(rel.getDescribe)
       case proto.Relation.RelTypeCase.COV => transformStatCov(rel.getCov)
       case proto.Relation.RelTypeCase.CORR => transformStatCorr(rel.getCorr)
+      case proto.Relation.RelTypeCase.APPROX_QUANTILE =>
+        transformStatApproxQuantile(rel.getApproxQuantile)
       case proto.Relation.RelTypeCase.CROSSTAB =>
         transformStatCrosstab(rel.getCrosstab)
+      case proto.Relation.RelTypeCase.FREQ_ITEMS => transformStatFreqItems(rel.getFreqItems)
+      case proto.Relation.RelTypeCase.SAMPLE_BY =>
+        transformStatSampleBy(rel.getSampleBy)
       case proto.Relation.RelTypeCase.TO_SCHEMA => transformToSchema(rel.getToSchema)
       case proto.Relation.RelTypeCase.RENAME_COLUMNS_BY_SAME_LENGTH_NAMES =>
         transformRenameColumnsBySamelenghtNames(rel.getRenameColumnsBySameLengthNames)
@@ -385,11 +390,53 @@ class SparkConnectPlanner(session: SparkSession) {
       data = Tuple1.apply(corr) :: Nil)
   }
 
+  private def transformStatApproxQuantile(rel: proto.StatApproxQuantile): LogicalPlan = {
+    val cols = rel.getColsList.asScala.toArray
+    val probabilities = rel.getProbabilitiesList.asScala.map(_.doubleValue()).toArray
+    val approxQuantile = Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .stat
+      .approxQuantile(cols, probabilities, rel.getRelativeError)
+    LocalRelation.fromProduct(
+      output =
+        AttributeReference("approx_quantile", ArrayType(ArrayType(DoubleType)), false)() :: Nil,
+      data = Tuple1.apply(approxQuantile) :: Nil)
+  }
+
   private def transformStatCrosstab(rel: proto.StatCrosstab): LogicalPlan = {
     Dataset
       .ofRows(session, transformRelation(rel.getInput))
       .stat
       .crosstab(rel.getCol1, rel.getCol2)
+      .logicalPlan
+  }
+
+  private def transformStatFreqItems(rel: proto.StatFreqItems): LogicalPlan = {
+    val cols = rel.getColsList.asScala.toSeq
+    val df = Dataset.ofRows(session, transformRelation(rel.getInput))
+    if (rel.hasSupport) {
+      df.stat.freqItems(cols, rel.getSupport).logicalPlan
+    } else {
+      df.stat.freqItems(cols).logicalPlan
+    }
+  }
+
+  private def transformStatSampleBy(rel: proto.StatSampleBy): LogicalPlan = {
+    val fractions = rel.getFractionsList.asScala.toSeq.map { protoFraction =>
+      val stratum = transformLiteral(protoFraction.getStratum) match {
+        case Literal(s, StringType) if s != null => s.toString
+        case literal => literal.value
+      }
+      (stratum, protoFraction.getFraction)
+    }
+
+    Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .stat
+      .sampleBy(
+        col = Column(transformExpression(rel.getCol)),
+        fractions = fractions.toMap,
+        seed = if (rel.hasSeed) rel.getSeed else Utils.random.nextLong)
       .logicalPlan
   }
 
@@ -671,7 +718,7 @@ class SparkConnectPlanner(session: SparkSession) {
    * @return
    *   Expression
    */
-  private def transformLiteral(lit: proto.Expression.Literal): Expression = {
+  private def transformLiteral(lit: proto.Expression.Literal): Literal = {
     toCatalystExpression(lit)
   }
 
@@ -853,6 +900,41 @@ class SparkConnectPlanner(session: SparkSession) {
 
       case "unwrap_udt" if fun.getArgumentsCount == 1 =>
         Some(UnwrapUDT(transformExpression(fun.getArguments(0))))
+
+      case "from_json" if Seq(2, 3).contains(fun.getArgumentsCount) =>
+        // JsonToStructs constructors only accept DDL-formatted schema.
+        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
+
+        val schemaStr = children(1) match {
+          case Literal(s, StringType) if s != null => s.toString
+          case other =>
+            throw InvalidPlanInput(
+              s"Schema in from_json should be literal string, but got $other")
+        }
+        val schema = DataType.parseTypeWithFallback(
+          schemaStr,
+          DataType.fromJson,
+          fallbackParser = DataType.fromDDL)
+
+        val options = if (children.length == 3) {
+          // ExprUtils.convertToMapData requires the options to be resolved CreateMap,
+          // but the options here is not resolved yet: UnresolvedFunction("map", ...)
+          children(2) match {
+            case UnresolvedFunction(Seq("map"), arguments, _, _, _) =>
+              ExprUtils.convertToMapData(CreateMap(arguments))
+            case other =>
+              throw InvalidPlanInput(
+                s"Options in from_json should be created by map, but got $other")
+          }
+        } else {
+          Map.empty[String, String]
+        }
+
+        Some(
+          JsonToStructs(
+            schema = CharVarcharUtils.failIfHasCharVarchar(schema),
+            options = options,
+            child = children.head))
 
       case _ => None
     }

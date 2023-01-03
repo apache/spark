@@ -17,8 +17,11 @@
 
 package org.apache.spark.status.protobuf.sql
 
+import java.util.UUID
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.execution.ui._
+import org.apache.spark.sql.streaming.ui.StreamingQueryData
 import org.apache.spark.status.api.v1.sql.SqlResourceSuite
 import org.apache.spark.status.protobuf.KVStoreProtobufSerializer
 
@@ -210,5 +213,27 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       assert(e1.fromId == e2.fromId)
       assert(e1.toId == e2.toId)
     }
+  }
+
+  test("StreamingQueryData") {
+    val id = UUID.randomUUID()
+    val input = new StreamingQueryData(
+      name = "some-query",
+      id = id,
+      runId = s"run-id-$id",
+      isActive = false,
+      exception = Some("Some Exception"),
+      startTimestamp = 1L,
+      endTimestamp = Some(2L)
+    )
+    val bytes = serializer.serialize(input)
+    val result = serializer.deserialize(bytes, classOf[StreamingQueryData])
+    assert(result.name == input.name)
+    assert(result.id == input.id)
+    assert(result.runId == input.runId)
+    assert(result.isActive == input.isActive)
+    assert(result.exception == input.exception)
+    assert(result.startTimestamp == input.startTimestamp)
+    assert(result.endTimestamp == input.endTimestamp)
   }
 }

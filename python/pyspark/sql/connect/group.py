@@ -31,8 +31,8 @@ from pyspark.sql.group import GroupedData as PySparkGroupedData
 from pyspark.sql.types import NumericType
 
 import pyspark.sql.connect.plan as plan
-from pyspark.sql.connect.column import Column, scalar_function
-from pyspark.sql.connect.functions import col, lit
+from pyspark.sql.connect.column import Column
+from pyspark.sql.connect.functions import _invoke_function, col, lit
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import LiteralType
@@ -83,7 +83,7 @@ class GroupedData:
             # There is a special case for count(*) which is rewritten into count(1).
             # Convert the dict into key value pairs
             aggregate_cols = [
-                scalar_function(
+                _invoke_function(
                     exprs[0][k], lit(1) if exprs[0][k] == "count" and k == "*" else col(k)
                 )
                 for k in exprs[0]
@@ -139,7 +139,7 @@ class GroupedData:
                 child=self._df._plan,
                 group_type=self._group_type,
                 grouping_cols=self._grouping_cols,
-                aggregate_cols=[scalar_function(function, col(c)) for c in agg_cols],
+                aggregate_cols=[_invoke_function(function, col(c)) for c in agg_cols],
                 pivot_col=self._pivot_col,
                 pivot_values=self._pivot_values,
             ),
@@ -166,8 +166,10 @@ class GroupedData:
 
     avg.__doc__ = PySparkGroupedData.avg.__doc__
 
+    mean = avg
+
     def count(self) -> "DataFrame":
-        return self.agg(scalar_function("count", lit(1)))
+        return self.agg(_invoke_function("count", lit(1)).alias("count"))
 
     count.__doc__ = PySparkGroupedData.count.__doc__
 
