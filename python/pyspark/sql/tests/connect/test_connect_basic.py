@@ -351,6 +351,15 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         with self.assertRaises(SparkConnectException):
             self.connect.createDataFrame(data, "col1 int, col2 int, col3 int").show()
 
+        # test 1 dim ndarray
+        data = np.array([1.0, 2.0, np.nan, 3.0, 4.0, float("NaN"), 5.0])
+        self.assertEqual(data.ndim, 1)
+
+        sdf = self.spark.createDataFrame(data)
+        cdf = self.connect.createDataFrame(data)
+        self.assertEqual(sdf.schema, cdf.schema)
+        self.assert_eq(sdf.toPandas(), cdf.toPandas())
+
     def test_with_local_list(self):
         """SPARK-41446: Test creating a dataframe using local list"""
         data = [[1, 2, 3, 4]]

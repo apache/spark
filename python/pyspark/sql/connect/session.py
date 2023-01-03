@@ -200,7 +200,6 @@ class SparkSession:
             # Must re-encode any unicode strings to be consistent with StructField names
             _cols = [x.encode("utf-8") if not isinstance(x, str) else x for x in schema]
 
-        # Create the Pandas DataFrame
         if isinstance(data, pd.DataFrame):
             table = pa.Table.from_pandas(data)
 
@@ -214,7 +213,24 @@ class SparkSession:
                 else:
                     _cols = ["_%s" % i for i in range(1, data.shape[1] + 1)]
 
-            table = pa.Table.from_pylist([dict(zip(_cols, list(item))) for item in data])
+            if data.ndim == 1:
+                if 1 != len(_cols):
+                    raise ValueError(
+                        f"Length mismatch: Expected axis has 1 element, "
+                        f"new values have {len(_cols)} elements"
+                    )
+
+                table = pa.Table.from_arrays([pa.array(data)], _cols)
+            else:
+                if data.shape[1] != len(_cols):
+                    raise ValueError(
+                        f"Length mismatch: Expected axis has {data.shape[1]} elements, "
+                        f"new values have {len(_cols)} elements"
+                    )
+
+                table = pa.Table.from_arrays(
+                    [pa.array(data[::, i]) for i in range(0, data.shape[1])], _cols
+                )
 
         else:
             _data = list(data)
@@ -233,16 +249,22 @@ class SparkSession:
 
             if _cols is None:
                 if _schema is None:
-                    _cols = ["_%s" % i for i in range(1, len(_data[0]) + 1)]
+                    if isinstance(_data[0], (list, tuple)):
+                        _cols = ["_%s" % i for i in range(1, len(_data[0]) + 1)]
+                    else:
+                        _cols = ["_1"]
                 else:
                     _cols = _schema.names
 
             if isinstance(_data[0], Row):
-                table = pa.Table.from_pylist([row.asDict() for row in _data])
+                table = pa.Table.from_pylist([row.asDict(recursive=True) for row in _data])
             elif isinstance(_data[0], dict):
                 table = pa.Table.from_pylist(_data)
-            else:
+            elif isinstance(_data[0], (list, tuple)):
                 table = pa.Table.from_pylist([dict(zip(_cols, list(item))) for item in _data])
+            else:
+                # input data can be [1, 2, 3]
+                table = pa.Table.from_pylist([dict(zip(_cols, [item])) for item in _data])
 
         # Validate number of columns
         num_cols = table.shape[1]
