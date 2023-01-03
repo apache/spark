@@ -24,6 +24,9 @@ import io.grpc.{ManagedChannel, ManagedChannelBuilder}
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 
+/**
+ * Conceptually the remote spark session that communicates with the server.
+ */
 class SparkConnectClient(
     private val userContext: proto.UserContext,
     private val channel: ManagedChannel) {
@@ -39,7 +42,8 @@ class SparkConnectClient(
 
   /**
    * Dispatch the [[proto.AnalyzePlanRequest]] to the Spark Connect server.
-   * @return A [[proto.AnalyzePlanResponse]] from the Spark Connect server.
+   * @return
+   *   A [[proto.AnalyzePlanResponse]] from the Spark Connect server.
    */
   def analyze(request: proto.AnalyzePlanRequest): proto.AnalyzePlanResponse =
     stub.analyzePlan(request)
@@ -55,6 +59,10 @@ class SparkConnectClient(
 object SparkConnectClient {
   def builder(): Builder = new Builder()
 
+  /**
+   * This is a helper class that is used to create a GRPC channel based on either a set host and
+   * port or a NameResolver-compliant URI connection string.
+   */
   class Builder() {
     private val userContextBuilder = proto.UserContext.newBuilder()
     private var _host: String = "localhost"
