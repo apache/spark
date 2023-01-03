@@ -19,8 +19,7 @@ package org.apache.spark.sql.types
 
 import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.{SparkArithmeticException, SparkFunSuite, SparkNumberFormatException}
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkFunSuite, SparkNumberFormatException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.Decimal._
@@ -108,7 +107,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
 
   test("SPARK-30252: Negative scale is not allowed by default") {
     def checkNegativeScaleDecimal(d: => Decimal): Unit = {
-      intercept[AnalysisException](d)
+      intercept[SparkException](d)
         .getMessage
         .contains("Negative scale is not allowed under ansi mode")
     }
