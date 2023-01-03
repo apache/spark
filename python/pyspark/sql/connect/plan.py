@@ -1264,7 +1264,7 @@ class WriteOperation(LogicalPlan):
 
         for k in self.options:
             if self.options[k] is None:
-                del plan.write_operation.options[k]
+                plan.write_operation.options.pop(k, None)
             else:
                 plan.write_operation.options[k] = cast(str, self.options[k])
 
