@@ -751,6 +751,9 @@ class SparkSqlAstBuilder extends AstBuilder {
           (Nil, Option(name), props, recordHandler)
       }
 
+      // The Writer uses inFormat to feed input data into the running script and
+      // the reader uses outFormat to read the output from the running script,
+      // this behavior is same with hive.
       val (inFormat, inSerdeClass, inSerdeProps, writer) =
         format(
           inRowFormat, "hive.script.recordwriter",
