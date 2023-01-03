@@ -156,7 +156,7 @@ class classproperty(property):
 class SparkSession(SparkConversionMixin):
     """The entry point to programming Spark with the Dataset and DataFrame API.
 
-    A SparkSession can be used create :class:`DataFrame`, register :class:`DataFrame` as
+    A SparkSession can be used to create :class:`DataFrame`, register :class:`DataFrame` as
     tables, execute SQL over tables, cache tables, and read parquet files.
     To create a :class:`SparkSession`, use the following builder pattern:
 
@@ -676,7 +676,7 @@ class SparkSession(SparkConversionMixin):
         Examples
         --------
         >>> spark.catalog
-        <pyspark.sql.catalog.Catalog object ...>
+        <...Catalog object ...>
 
         Create a temp view, show the list, and drop it.
 
@@ -1460,7 +1460,7 @@ class SparkSession(SparkConversionMixin):
         Examples
         --------
         >>> spark.read
-        <pyspark.sql.readwriter.DataFrameReader object ...>
+        <...DataFrameReader object ...>
 
         Write a DataFrame into a JSON file and read it back.
 

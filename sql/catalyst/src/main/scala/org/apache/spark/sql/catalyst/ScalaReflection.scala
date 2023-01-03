@@ -779,7 +779,7 @@ object ScalaReflection extends ScalaReflection {
         }
         ProductEncoder(ClassTag(getClassFromType(t)), params)
       case _ =>
-        throw QueryExecutionErrors.cannotFindEncoderForTypeError(tpe.toString, path)
+        throw QueryExecutionErrors.cannotFindEncoderForTypeError(tpe.toString)
     }
   }
 }

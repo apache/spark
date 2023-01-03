@@ -820,6 +820,50 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     assert(leaf.child.eq(leafCloned.asInstanceOf[FakeLeafPlan].child))
   }
 
+  test("Expression.freshCopyIfContainsStatefulExpression()") {
+    val tag = TreeNodeTag[String]("test")
+
+    def makeExprWithPositionAndTag(block: => Expression): Expression = {
+      CurrentOrigin.setPosition(1, 1)
+      val expr = block
+      CurrentOrigin.reset()
+      expr.setTagValue(tag, "tagValue")
+      expr
+    }
+
+    // Test generic assertions which should always hold for any value returned
+    // from freshCopyIfContainsStatefulExpression()
+    def genericAssertions(before: Expression, after: Expression): Unit = {
+      assert(before == after)
+      assert(before.origin == after.origin)
+      assert(before.getTagValue(tag) == after.getTagValue(tag))
+    }
+
+    // Doesn't transform for non-stateful expressions:
+    val onePlusOneBefore = makeExprWithPositionAndTag(Add(Literal(1), Literal(1)))
+    val onePlusOneAfter = onePlusOneBefore.freshCopyIfContainsStatefulExpression()
+    genericAssertions(onePlusOneBefore, onePlusOneAfter)
+    assert(onePlusOneBefore eq onePlusOneAfter)
+
+    // Transforms stateful expressions with no nesting:
+    val statefulExprBefore = makeExprWithPositionAndTag(Rand(Literal(1)))
+    val statefulExprAfter = statefulExprBefore.freshCopyIfContainsStatefulExpression()
+    genericAssertions(statefulExprBefore, statefulExprAfter)
+    assert(statefulExprBefore ne statefulExprAfter)
+
+    // Transforms expressions nested three levels deep:
+    val withNestedStatefulBefore = makeExprWithPositionAndTag(
+      Add(Literal(1), Add(Literal(1), Rand(Literal(1))))
+    )
+    val withNestedStatefulAfter = withNestedStatefulBefore.freshCopyIfContainsStatefulExpression()
+    genericAssertions(withNestedStatefulBefore, withNestedStatefulAfter)
+    assert(withNestedStatefulBefore ne withNestedStatefulAfter)
+    def getStateful(e: Expression): Expression = {
+      e.collect { case e if e.stateful => e }.head
+    }
+    assert(getStateful(withNestedStatefulBefore) ne getStateful(withNestedStatefulAfter))
+  }
+
   object MalformedClassObject extends Serializable {
     case class MalformedNameExpression(child: Expression) extends TaggingExpression {
       override protected def withNewChildInternal(newChild: Expression): Expression =

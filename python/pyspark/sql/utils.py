@@ -341,10 +341,29 @@ def try_remote_window(f: FuncT) -> FuncT:
 
     @functools.wraps(f)
     def wrapped(*args: Any, **kwargs: Any) -> Any:
-        # TODO(SPARK-41292): Support Window functions
+
         if is_remote():
-            raise NotImplementedError()
-        return f(*args, **kwargs)
+            from pyspark.sql.connect.window import Window
+
+            return getattr(Window, f.__name__)(*args, **kwargs)
+        else:
+            return f(*args, **kwargs)
+
+    return cast(FuncT, wrapped)
+
+
+def try_remote_windowspec(f: FuncT) -> FuncT:
+    """Mark API supported from Spark Connect."""
+
+    @functools.wraps(f)
+    def wrapped(*args: Any, **kwargs: Any) -> Any:
+
+        if is_remote():
+            from pyspark.sql.connect.window import WindowSpec
+
+            return getattr(WindowSpec, f.__name__)(*args, **kwargs)
+        else:
+            return f(*args, **kwargs)
 
     return cast(FuncT, wrapped)
 
