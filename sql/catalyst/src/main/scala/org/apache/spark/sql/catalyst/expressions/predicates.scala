@@ -53,11 +53,7 @@ case class InterpretedPredicate(expression: Expression) extends BasePredicate {
   }
 
   override def initialize(partitionIndex: Int): Unit = {
-    super.initialize(partitionIndex)
-    expr.foreach {
-      case n: Nondeterministic => n.initialize(partitionIndex)
-      case _ =>
-    }
+    initializeExprs(Seq(expr), partitionIndex)
   }
 }
 
