@@ -220,8 +220,8 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         case FileSourceMetadataAttribute(attr) => attr
       }
 
-      val fileConstantMetadataColumns: mutable.Buffer[Attribute] = mutable.Buffer.empty
-      val fileFormatReaderGeneratedMetadataColumns: mutable.Buffer[Attribute] = mutable.Buffer.empty
+      val constantMetadataColumns: mutable.Buffer[Attribute] = mutable.Buffer.empty
+      val generatedMetadataColumns: mutable.Buffer[Attribute] = mutable.Buffer.empty
 
       metadataStructOpt.foreach { metadataStruct =>
         metadataStruct.dataType.asInstanceOf[StructType].fields.foreach { field =>
@@ -233,20 +233,20 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
                   " is a reserved column name that cannot be read in combination with " +
                   s"${FileFormat.METADATA_NAME}.${FileFormat.ROW_INDEX} column.")
               }
-              fileFormatReaderGeneratedMetadataColumns +=
+              generatedMetadataColumns +=
                 FileSourceGeneratedMetadataAttribute(
                   FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME, LongType, nullable = true)
             case _ =>
-              fileConstantMetadataColumns +=
+              constantMetadataColumns +=
                 FileSourceConstantMetadataAttribute(field.name, field.dataType)
         }
       }
   }
 
   val metadataColumns: Seq[Attribute] =
-    fileConstantMetadataColumns.toSeq ++ fileFormatReaderGeneratedMetadataColumns.toSeq
+    constantMetadataColumns.toSeq ++ generatedMetadataColumns.toSeq
 
-      val outputDataSchema = (readDataColumns ++ fileFormatReaderGeneratedMetadataColumns)
+      val outputDataSchema = (readDataColumns ++ generatedMetadataColumns)
         .toStructType
 
       // The output rows will be produced during file scan operation in three steps:
@@ -257,8 +257,8 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       // By placing `fileFormatReaderGeneratedMetadataColumns` before `partitionColumns` and
       // `fileConstantMetadataColumns` in the `outputAttributes` we make these row operations
       // simpler and more efficient.
-      val outputAttributes = readDataColumns ++ fileFormatReaderGeneratedMetadataColumns ++
-        partitionColumns ++ fileConstantMetadataColumns
+      val outputAttributes = readDataColumns ++ generatedMetadataColumns ++
+        partitionColumns ++ constantMetadataColumns
 
       val scan =
         FileSourceScanExec(
@@ -278,7 +278,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
                  FileFormat.FILE_MODIFICATION_TIME =>
               col
             case FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME =>
-              fileFormatReaderGeneratedMetadataColumns
+              generatedMetadataColumns
                 .find(_.name == FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME)
                 // Change the `_tmp_metadata_row_index` to `row_index`,
                 // and also change the nullability to not nullable,

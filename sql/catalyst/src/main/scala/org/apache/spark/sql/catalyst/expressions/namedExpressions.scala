@@ -493,7 +493,7 @@ object MetadataAttribute {
 /**
  * The internal representation of the FileSourceMetadataAttribute, it sets `__metadata_col`
  * and `__file_source_metadata_col` to `true` in AttributeReference's metadata.
- * This is a subtype of [[FileSourceConstantMetadataAttribute]] and
+ * This is a super type of [[FileSourceConstantMetadataAttribute]] and
  * [[FileSourceGeneratedMetadataAttribute]].
  *
  * - apply() will create a file source metadata attribute reference

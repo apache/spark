@@ -163,6 +163,6 @@ case class StructField(
     s"${quoteIfNeeded(name)} ${dataType.sql}${nullString}$getDDLComment"
   }
 
-  def toAttribute: AttributeReference =
+  private[sql] def toAttribute: AttributeReference =
     AttributeReference(name, dataType, nullable, metadata)()
 }

@@ -259,16 +259,6 @@ object FileFormat {
     }
     row
   }
-
-  /**
-   * Returns true if the given metadata column always contains identical values for all rows
-   * originating from the same data file.
-   */
-  def isConstantMetadataAttr(attributeReference: AttributeReference): Boolean =
-    attributeReference match {
-      case FileSourceConstantMetadataAttribute(_) => true
-      case _ => false
-    }
 }
 
 /**

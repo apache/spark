@@ -447,7 +447,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
   metadataColumnsTest("prune metadata schema in projects", schema) { (df, f0, f1) =>
     val prunedDF = df.select("name", "age", "info.id", METADATA_FILE_NAME)
     val fileSourceScanMetaCols = prunedDF.queryExecution.sparkPlan.collectFirst {
-      case p: FileSourceScanExec => p.metadataColumns
+      case p: FileSourceScanExec => p.fileConstantMetadataColumns
     }.get
     assert(fileSourceScanMetaCols.size == 1)
     assert(fileSourceScanMetaCols.head.name == "file_name")
@@ -464,7 +464,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       .where(col(METADATA_FILE_PATH).contains("data/f0"))
 
     val fileSourceScanMetaCols = prunedDF.queryExecution.sparkPlan.collectFirst {
-      case p: FileSourceScanExec => p.metadataColumns
+      case p: FileSourceScanExec => p.fileConstantMetadataColumns
     }.get
     assert(fileSourceScanMetaCols.size == 1)
     assert(fileSourceScanMetaCols.head.name == "file_path")
@@ -480,7 +480,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       .where(col(METADATA_FILE_PATH).contains("data/f0"))
 
     val fileSourceScanMetaCols = prunedDF.queryExecution.sparkPlan.collectFirst {
-      case p: FileSourceScanExec => p.metadataColumns
+      case p: FileSourceScanExec => p.fileConstantMetadataColumns
     }.get
     assert(fileSourceScanMetaCols.size == 2)
     assert(fileSourceScanMetaCols.map(_.name).toSet == Set("file_size", "file_path"))

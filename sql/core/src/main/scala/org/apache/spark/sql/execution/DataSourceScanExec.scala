@@ -206,7 +206,7 @@ trait FileSourceScanLike extends DataSourceScanExec {
   def tableIdentifier: Option[TableIdentifier]
 
 
-  lazy val metadataColumns: Seq[AttributeReference] = output.collect {
+  lazy val fileConstantMetadataColumns: Seq[AttributeReference] = output.collect {
     // Collect metadata columns to be handled outside of the scan by appending constant columns.
     case FileSourceConstantMetadataAttribute(attr) => attr
   }
@@ -218,15 +218,7 @@ trait FileSourceScanLike extends DataSourceScanExec {
       relation.sparkSession.sessionState.conf).map { vectorTypes =>
         vectorTypes ++
           // for column-based file format, append metadata column's vector type classes if any
-          metadataColumns.map { metadataCol =>
-            if (FileFormat.isConstantMetadataAttr(metadataCol)) {
-              classOf[ConstantColumnVector].getName
-            } else if (relation.sparkSession.sessionState.conf.offHeapColumnVectorEnabled) {
-              classOf[OffHeapColumnVector].getName
-            } else {
-              classOf[OnHeapColumnVector].getName
-            }
-          }
+          fileConstantMetadataColumns.map { _ => classOf[ConstantColumnVector].getName }
       }
 
   lazy val driverMetrics = Map(
@@ -669,9 +661,8 @@ case class FileSourceScanExec(
     }
 
     new FileScanRDD(fsRelation.sparkSession, readFile, filePartitions,
-      new StructType(requiredSchema.fields ++ fsRelation.partitionSchema.fields), metadataColumns,
-      new FileSourceOptions(CaseInsensitiveMap(relation.options)))
-
+      new StructType(requiredSchema.fields ++ fsRelation.partitionSchema.fields),
+      fileConstantMetadataColumns, new FileSourceOptions(CaseInsensitiveMap(relation.options)))
   }
 
   /**
@@ -731,8 +722,8 @@ case class FileSourceScanExec(
       FilePartition.getFilePartitions(relation.sparkSession, splitFiles, maxSplitBytes)
 
     new FileScanRDD(fsRelation.sparkSession, readFile, partitions,
-      new StructType(requiredSchema.fields ++ fsRelation.partitionSchema.fields), metadataColumns,
-      new FileSourceOptions(CaseInsensitiveMap(relation.options)))
+      new StructType(requiredSchema.fields ++ fsRelation.partitionSchema.fields),
+      fileConstantMetadataColumns, new FileSourceOptions(CaseInsensitiveMap(relation.options)))
   }
 
   // Filters unused DynamicPruningExpression expressions - one which has been replaced
