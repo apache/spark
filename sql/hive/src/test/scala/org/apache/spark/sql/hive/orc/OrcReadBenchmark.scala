@@ -368,6 +368,7 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
+    /*
     runBenchmark("SQL Single Numeric Column Scan") {
       Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType).foreach { dataType =>
         numericScanBenchmark(1024 * 1024 * 15, dataType)
@@ -392,19 +393,24 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
       columnsBenchmark(1024 * 1024 * 1, 200)
       columnsBenchmark(1024 * 1024 * 1, 300)
     }
+     */
 
     runBenchmark("Struct scan") {
+      /*
       structBenchmark(1024 * 1024 * 1, 10)
       structBenchmark(1024 * 1024 * 1, 100)
       structBenchmark(1024 * 1024 * 1, 300)
+       */
       structBenchmark(1024 * 1024 * 1, 600)
     }
 
+    /*
     runBenchmark("Nested Struct scan") {
       nestedStructBenchmark(1024 * 1024 * 1, 10, 10)
       nestedStructBenchmark(1024 * 1024 * 1, 30, 10)
       nestedStructBenchmark(1024 * 1024 * 1, 10, 30)
     }
+     */
   }
 }
 // scalastyle:on line.size.limit
