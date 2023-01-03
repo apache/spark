@@ -18,14 +18,16 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import java.lang.{Double => JDouble}
+import java.nio.ByteBuffer
 import java.util.Random
 
 import scala.collection.mutable
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, SpecificInternalRow}
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, EmptyRow, HyperLogLogPlusPlusEvalSketch, Literal, SpecificInternalRow}
 import org.apache.spark.sql.types.{DataType, DoubleType, IntegerType}
+
 
 class HyperLogLogPlusPlusSuite extends SparkFunSuite {
 
@@ -38,7 +40,16 @@ class HyperLogLogPlusPlusSuite extends SparkFunSuite {
     (hll, input, buffer)
   }
 
-  def createBuffer(hll: HyperLogLogPlusPlus): InternalRow = {
+  /** Create a HLL++ instance and an input and output buffer. */
+  def createHLLEstimator(rsd: Double, dt: DataType = IntegerType):
+  (HyperLogLogPlusPlusSketch, InternalRow, InternalRow) = {
+    val input = new SpecificInternalRow(Seq(dt))
+    val hll = new HyperLogLogPlusPlusSketch(new BoundReference(0, dt, true), rsd)
+    val buffer = createBuffer(hll)
+    (hll, input, buffer)
+  }
+
+  def createBuffer(hll: HyperLogLogPlusPlusBase): InternalRow = {
     val buffer = new SpecificInternalRow(hll.aggBufferAttributes.map(_.dataType))
     hll.initialize(buffer)
     buffer
@@ -174,5 +185,20 @@ class HyperLogLogPlusPlusSuite extends SparkFunSuite {
     input.setDouble(0, specialNaN)
     hll.update(buffer, input)
     evaluateEstimate(hll, buffer, 1);
+  }
+
+  test("SPARK-XXXXX: Test re-aggregation") {
+    val (hll, input, buffer) = createHLLEstimator(0.05, DoubleType)
+    List(1, 1, 2, 2, 3).foreach(i => {
+      input.setDouble(0, i)
+      hll.update(buffer, input)
+    })
+    val sketch = hll.eval(buffer).asInstanceOf[Array[Byte]]
+    val bb = ByteBuffer.wrap(sketch)
+    assert(bb.getDouble(0) == 0.05)
+
+    // unclear if this is correctly reproducing round trip spark behavior
+    val approxDistinctCount = HyperLogLogPlusPlusEvalSketch(Literal(sketch)).eval(EmptyRow)
+    assert(approxDistinctCount == 3)
   }
 }

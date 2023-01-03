@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.nio.ByteBuffer
+
 import org.apache.spark.{SPARK_REVISION, SPARK_VERSION_SHORT}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedSeed
@@ -24,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, TreePattern}
-import org.apache.spark.sql.catalyst.util.RandomUUIDGenerator
+import org.apache.spark.sql.catalyst.util.{HyperLogLogPlusPlusHelper, RandomUUIDGenerator}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -431,5 +433,31 @@ case class AesDecrypt(
       newChildren: IndexedSeq[Expression]): Expression = {
     copy(newChildren(0), newChildren(1), newChildren(2), newChildren(3))
   }
+}
+
+@ExpressionDescription(
+  usage = """_FUNC_(expr) - Return the estimated distinct count associated with this hyper log log sketch.""",
+  examples = """
+    Examples:
+      > SELECT approx_count_distinct_eval_sketch(_FUNC_(col1)) FROM VALUES (1), (1), (2), (2), (3) tab(col1);
+       3
+  """,
+  since = "3.3.1",
+  group = "misc_funcs")
+case class HyperLogLogPlusPlusEvalSketch(child: Expression) extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant with CodegenFallback{
+  override def nullable: Boolean = false
+  override def foldable: Boolean = true
+  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)
+  override def dataType: DataType = LongType
+  override def nullSafeEval(input: Any): Any = {
+    val sketch = input.asInstanceOf[Array[Byte]]
+    val byteBuffer = ByteBuffer.wrap(sketch)
+    val hll = new HyperLogLogPlusPlusHelper(byteBuffer.getDouble(0))
+    val internalRow = new SpecificInternalRow(Array.fill[DataType](hll.numWords) { LongType })
+    (0 until hll.numWords).foreach(i => internalRow.setLong(i, byteBuffer.getLong(8 + (i * 8))))
+    hll.query(internalRow, 0)
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): HyperLogLogPlusPlusEvalSketch = copy(child = newChild)
 }
 // scalastyle:on line.size.limit

@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import java.nio.ByteBuffer
+
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, Literal}
+import org.apache.spark.sql.types.{BinaryType, DataType}
+
 
 // scalastyle:off
 /**
@@ -39,39 +41,48 @@ import org.apache.spark.sql.types._
  * Estimation Algorithm
  * https://docs.google.com/document/d/1gyjfMHy43U9OWBXxfaeG-3MjGzejW1dlpyMwEYAAWEI/view?fullscreen#
  *
- * @param child to estimate the cardinality of.
+ * @param child a sketch generated to estimate the cardinality of.
  * @param relativeSD the maximum relative standard deviation allowed.
  */
 // scalastyle:on
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr[, relativeSD]) - Returns the estimated cardinality by HyperLogLog++.
+    _FUNC_(expr[, relativeSD]) - Returns the re-aggregateable HyperLogLog++ sketch.
       `relativeSD` defines the maximum relative standard deviation allowed.""",
   examples = """
     Examples:
-      > SELECT _FUNC_(col1) FROM VALUES (1), (1), (2), (2), (3) tab(col1);
+      > SELECT approx_count_distinct(_FUNC_(col1)) FROM VALUES (1), (1), (2), (2), (3) tab(col1);
        3
   """,
   group = "agg_funcs",
-  since = "1.6.0")
-case class HyperLogLogPlusPlus(
+  since = "3.3.1")
+case class HyperLogLogPlusPlusSketch(
     child: Expression,
     relativeSD: Double = 0.05,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
   extends HyperLogLogPlusPlusBase(child, relativeSD, mutableAggBufferOffset, inputAggBufferOffset) {
 
-  override def prettyName: String = "approx_count_distinct"
+  override def prettyName: String = "approx_count_distinct_sketch"
 
-  override def dataType: DataType = LongType
+  override def dataType: DataType = BinaryType
 
   override def defaultResult: Option[Literal] = Option(Literal.create(0L, dataType))
 
   /**
-   * Compute the HyperLogLog estimate.
+   * Generate the HyperLogLog sketch.
    */
   override def eval(buffer: InternalRow): Any = {
-    hllppHelper.query(buffer, mutableAggBufferOffset)
+    // there's various formats proposed in this design, which we could attempt to mimic:
+    // https://github.com/airlift/airlift/blob/master/stats/docs/hll.md
+    // for now let's just store what's necessary to re-recreate this HLLPP instance
+    val byteBuffer = ByteBuffer.allocate(8 + (hllppHelper.numWords * 8))
+    byteBuffer.putDouble(relativeSD)
+    Seq.tabulate(hllppHelper.numWords) { i =>
+      byteBuffer.putLong(buffer.getLong(mutableAggBufferOffset + i))
+    }
+
+    byteBuffer.array()
   }
 
   // copy() methods are equivalent between implementations of HyperLogLogPlusPlusBase
@@ -82,16 +93,7 @@ case class HyperLogLogPlusPlus(
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
-  override protected def withNewChildInternal(newChild: Expression): HyperLogLogPlusPlus =
+  override protected def withNewChildInternal(newChild: Expression): HyperLogLogPlusPlusSketch =
     copy(child = newChild)
 
-}
-
-object HyperLogLogPlusPlus {
-  def validateDoubleLiteral(exp: Expression): Double = exp match {
-    case Literal(d: Double, DoubleType) => d
-    case Literal(dec: Decimal, _) => dec.toDouble
-    case _ =>
-      throw QueryCompilationErrors.secondArgumentNotDoubleLiteralError
-  }
 }
