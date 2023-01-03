@@ -66,10 +66,6 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedSQLTestCase):
         super().test_create_dataframe_required_pandas_not_found()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_create_nan_decimal_dataframe(self):
-        super().test_create_nan_decimal_dataframe()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_drop_duplicates(self):
         super().test_drop_duplicates()
 
@@ -86,20 +82,12 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedSQLTestCase):
         super().test_fillna()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_freqItems(self):
-        super().test_freqItems()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_generic_hints(self):
         super().test_generic_hints()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_help_command(self):
         super().test_help_command()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_input_files(self):
-        super().test_input_files()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_invalid_join_method(self):
@@ -150,10 +138,6 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedSQLTestCase):
         super().test_to()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_toDF_with_schema_string(self):
-        super().test_toDF_with_schema_string()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_to_local_iterator(self):
         super().test_to_local_iterator()
 
@@ -192,10 +176,6 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedSQLTestCase):
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_to_pandas_on_cross_join(self):
         super().test_to_pandas_on_cross_join()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_to_pandas_required_pandas_not_found(self):
-        super().test_to_pandas_required_pandas_not_found()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_to_pandas_with_duplicated_column_names(self):
