@@ -185,6 +185,7 @@ class SparkSession:
         if isinstance(data, Sized) and len(data) == 0:
             raise ValueError("Input data cannot be empty")
 
+        table: Optional[pa.Table] = None
         _schema: Optional[StructType] = None
         _schema_str: Optional[str] = None
         _cols: Optional[List[str]] = None
@@ -201,14 +202,11 @@ class SparkSession:
 
         # Create the Pandas DataFrame
         if isinstance(data, pd.DataFrame):
-            pdf = data
+            table = pa.Table.from_pandas(data)
 
         elif isinstance(data, np.ndarray):
-            # `data` of numpy.ndarray type will be converted to a pandas DataFrame,
             if data.ndim not in [1, 2]:
                 raise ValueError("NumPy array input should be of 1 or 2 dimensions.")
-
-            pdf = pd.DataFrame(data)
 
             if _cols is None:
                 if data.ndim == 1 or data.shape[1] == 1:
@@ -216,10 +214,12 @@ class SparkSession:
                 else:
                     _cols = ["_%s" % i for i in range(1, data.shape[1] + 1)]
 
+            table = pa.Table.from_pylist([dict(zip(_cols, list(item))) for item in data])
+
         else:
             _data = list(data)
 
-            if _schema is None and (isinstance(_data[0], Row) or isinstance(_data[0], dict)):
+            if _schema is None and isinstance(_data[0], (Row, dict)):
                 if isinstance(_data[0], dict):
                     # Sort the data to respect inferred schema.
                     # For dictionaries, we sort the schema in alphabetical order.
@@ -231,13 +231,21 @@ class SparkSession:
                         _schema.fields[i].name = name
                         _schema.names[i] = name
 
-            pdf = pd.DataFrame(_data)
-
             if _cols is None:
-                _cols = ["_%s" % i for i in range(1, pdf.shape[1] + 1)]
+                if _schema is None:
+                    _cols = ["_%s" % i for i in range(1, len(_data[0]) + 1)]
+                else:
+                    _cols = _schema.names
+
+            if isinstance(_data[0], Row):
+                table = pa.Table.from_pylist([row.asDict() for row in _data])
+            elif isinstance(_data[0], dict):
+                table = pa.Table.from_pylist(_data)
+            else:
+                table = pa.Table.from_pylist([dict(zip(_cols, list(item))) for item in _data])
 
         # Validate number of columns
-        num_cols = pdf.shape[1]
+        num_cols = table.shape[1]
         if _schema is not None and len(_schema.fields) != num_cols:
             raise ValueError(
                 f"Length mismatch: Expected axis has {num_cols} elements, "
@@ -248,8 +256,6 @@ class SparkSession:
                 f"Length mismatch: Expected axis has {num_cols} elements, "
                 f"new values have {len(_cols)} elements"
             )
-
-        table = pa.Table.from_pandas(pdf)
 
         if _schema is not None:
             return DataFrame.withPlan(LocalRelation(table, schema=_schema), self)
