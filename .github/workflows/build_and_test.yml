@@ -523,6 +523,8 @@ jobs:
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     # Install the `buf` CLI
     - uses: bufbuild/buf-setup-action@v1
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
     # Run buf breaking.
     - uses: bufbuild/buf-breaking-action@v1
       with:
