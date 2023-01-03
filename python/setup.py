@@ -19,6 +19,7 @@
 import importlib.util
 import glob
 import os
+import subprocess
 import sys
 from setuptools import setup
 from setuptools.command.install import install
@@ -129,37 +130,70 @@ _minimum_googleapis_common_protos_version = "1.56.4"
 
 class InstallCommand(install):
     # TODO(SPARK-32837) leverage pip's custom options
+    user_options = install.user_options + [
+        (
+            "nojvm",
+            None,
+            "<add --nojvm if you want to only install Python library for Spark Connect client",
+        )
+    ]
+
+    def initialize_options(self):
+        super().initialize_options()
+        self.nojvm = None
+
+    def _install_requires(self):
+        # Don't forget to update python/docs/source/getting_started/install.rst
+        # if you're updating the versions or dependencies.
+        install_requires_list = ["py4j==0.10.9.7"]
+        if self.nojvm:
+            # Spark Connect dependencies.
+            install_requires_list += [
+                "pandas>=%s" % _minimum_pandas_version,
+                "pyarrow>=%s" % _minimum_pyarrow_version,
+                "grpcio>=%s" % _minimum_grpc_version,
+                "grpcio-status>=%s" % _minimum_grpc_version,
+                "googleapis-common-protos>=%s" % _minimum_googleapis_common_protos_version,
+                "numpy>=1.15",
+            ]
+
+        for pkg in install_requires_list:
+            # see https://pip.pypa.io/en/latest/user_guide/#using-pip-from-your-program
+            retcode = subprocess.run(
+                [sys.executable, "-m", "pip", "install", pkg],
+                stderr=sys.stderr,
+                stdout=sys.stdout,
+            ).returncode
+            if retcode:
+                # Exit if the retcode isn't 0.
+                sys.exit(retcode)
 
     def run(self):
-        install.run(self)
+        super().run()
+        self._install_requires()
 
         # Make sure the destination is always clean.
         spark_dist = os.path.join(self.install_lib, "pyspark", "spark-distribution")
         rmtree(spark_dist, ignore_errors=True)
 
-        if ("PYSPARK_HADOOP_VERSION" in os.environ) or ("PYSPARK_HIVE_VERSION" in os.environ):
-            # Note that PYSPARK_VERSION environment is just a testing purpose.
-            # PYSPARK_HIVE_VERSION environment variable is also internal for now in case
-            # we support another version of Hive in the future.
-            spark_version, hadoop_version, hive_version = install_module.checked_versions(
-                os.environ.get("PYSPARK_VERSION", VERSION).lower(),
-                os.environ.get("PYSPARK_HADOOP_VERSION", install_module.DEFAULT_HADOOP).lower(),
-                os.environ.get("PYSPARK_HIVE_VERSION", install_module.DEFAULT_HIVE).lower(),
-            )
+        if self.nojvm:
+            return
 
-            if "PYSPARK_VERSION" not in os.environ and (
-                (install_module.DEFAULT_HADOOP, install_module.DEFAULT_HIVE)
-                == (hadoop_version, hive_version)
-            ):
-                # Do not download and install if they are same as default.
-                return
+        # Note that PYSPARK_VERSION environment is just a testing purpose.
+        # PYSPARK_HIVE_VERSION environment variable is also internal for now in case
+        # we support another version of Hive in the future.
+        spark_version, hadoop_version, hive_version = install_module.checked_versions(
+            os.environ.get("PYSPARK_VERSION", VERSION).lower(),
+            os.environ.get("PYSPARK_HADOOP_VERSION", install_module.DEFAULT_HADOOP).lower(),
+            os.environ.get("PYSPARK_HIVE_VERSION", install_module.DEFAULT_HIVE).lower(),
+        )
 
-            install_module.install_spark(
-                dest=spark_dist,
-                spark_version=spark_version,
-                hadoop_version=hadoop_version,
-                hive_version=hive_version,
-            )
+        install_module.install_spark(
+            dest=spark_dist,
+            spark_version=spark_version,
+            hadoop_version=hadoop_version,
+            hive_version=hive_version,
+        )
 
 
 try:
@@ -285,7 +319,6 @@ try:
         license="http://www.apache.org/licenses/LICENSE-2.0",
         # Don't forget to update python/docs/source/getting_started/install.rst
         # if you're updating the versions or dependencies.
-        install_requires=["py4j==0.10.9.7"],
         extras_require={
             "ml": ["numpy>=1.15"],
             "mllib": ["numpy>=1.15"],
@@ -297,14 +330,6 @@ try:
             "pandas_on_spark": [
                 "pandas>=%s" % _minimum_pandas_version,
                 "pyarrow>=%s" % _minimum_pyarrow_version,
-                "numpy>=1.15",
-            ],
-            "connect": [
-                "pandas>=%s" % _minimum_pandas_version,
-                "pyarrow>=%s" % _minimum_pyarrow_version,
-                "grpcio>=%s" % _minimum_grpc_version,
-                "grpcio-status>=%s" % _minimum_grpc_version,
-                "googleapis-common-protos>=%s" % _minimum_googleapis_common_protos_version,
                 "numpy>=1.15",
             ],
         },
