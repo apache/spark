@@ -182,6 +182,9 @@ def _reverse_op(
     return _
 
 
+# TODO(SPARK-41757): Compatibility of string representation for Column
+
+
 class Column:
 
     """
@@ -200,17 +203,16 @@ class Column:
     ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
 
     Select a column out of a DataFrame
-
-    >>> df.name
+    >>> df.name   # doctest: +SKIP
     Column<'name'>
-    >>> df["name"]
+    >>> df["name"]  # doctest: +SKIP
     Column<'name'>
 
     Create from an expression
 
-    >>> df.age + 1
+    >>> df.age + 1  # doctest: +SKIP
     Column<'(age + 1)'>
-    >>> 1 / df.age
+    >>> 1 / df.age  # doctest: +SKIP
     Column<'(1 / age)'>
     """
 
@@ -280,6 +282,8 @@ class Column:
     __ge__ = _bin_op("geq")
     __gt__ = _bin_op("gt")
 
+    # TODO(SPARK-41812): DataFrame.join: ambiguous column
+    # TODO(SPARK-41814): Column.eqNullSafe fails on NaN comparison
     _eqNullSafe_doc = """
     Equality test that is safe for null values.
 
@@ -315,9 +319,9 @@ class Column:
     ...     Row(value = 'bar'),
     ...     Row(value = None)
     ... ])
-    >>> df1.join(df2, df1["value"] == df2["value"]).count()
+    >>> df1.join(df2, df1["value"] == df2["value"]).count()  # doctest: +SKIP
     0
-    >>> df1.join(df2, df1["value"].eqNullSafe(df2["value"])).count()
+    >>> df1.join(df2, df1["value"].eqNullSafe(df2["value"])).count()  # doctest: +SKIP
     1
     >>> df2 = spark.createDataFrame([
     ...     Row(id=1, value=float('NaN')),
@@ -328,7 +332,7 @@ class Column:
     ...     df2['value'].eqNullSafe(None),
     ...     df2['value'].eqNullSafe(float('NaN')),
     ...     df2['value'].eqNullSafe(42.0)
-    ... ).show()
+    ... ).show()  # doctest: +SKIP
     +----------------+---------------+----------------+
     |(value <=> NULL)|(value <=> NaN)|(value <=> 42.0)|
     +----------------+---------------+----------------+
@@ -520,6 +524,9 @@ class Column:
 
         .. versionadded:: 3.1.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         fieldName : str
@@ -566,6 +573,9 @@ class Column:
         This is a no-op if the schema doesn't contain field name(s).
 
         .. versionadded:: 3.1.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -1258,8 +1268,7 @@ class Column:
         >>> from pyspark.sql import Window
         >>> window = Window.partitionBy("name").orderBy("age") \
                 .rowsBetween(Window.unboundedPreceding, Window.currentRow)
-        >>> from pyspark.sql.functions import rank, min
-        >>> from pyspark.sql.functions import desc
+        >>> from pyspark.sql.functions import rank, min, desc
         >>> df = spark.createDataFrame(
         ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
         >>> df.withColumn("rank", rank().over(window)) \

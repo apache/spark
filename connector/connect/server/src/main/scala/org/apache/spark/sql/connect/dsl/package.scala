@@ -387,6 +387,39 @@ package object dsl {
           .build()
       }
 
+      def corr(col1: String, col2: String, method: String): Relation = {
+        Relation
+          .newBuilder()
+          .setCorr(
+            proto.StatCorr
+              .newBuilder()
+              .setInput(logicalPlan)
+              .setCol1(col1)
+              .setCol2(col2)
+              .setMethod(method)
+              .build())
+          .build()
+      }
+
+      def corr(col1: String, col2: String): Relation = corr(col1, col2, "pearson")
+
+      def approxQuantile(
+          cols: Array[String],
+          probabilities: Array[Double],
+          relativeError: Double): Relation = {
+        Relation
+          .newBuilder()
+          .setApproxQuantile(
+            proto.StatApproxQuantile
+              .newBuilder()
+              .setInput(logicalPlan)
+              .addAllCols(cols.toSeq.asJava)
+              .addAllProbabilities(probabilities.toSeq.map(Double.box).asJava)
+              .setRelativeError(relativeError)
+              .build())
+          .build()
+      }
+
       def crosstab(col1: String, col2: String): Relation = {
         Relation
           .newBuilder()
@@ -399,6 +432,26 @@ package object dsl {
               .build())
           .build()
       }
+
+      def freqItems(cols: Array[String], support: Double): Relation = {
+        Relation
+          .newBuilder()
+          .setFreqItems(
+            proto.StatFreqItems
+              .newBuilder()
+              .setInput(logicalPlan)
+              .addAllCols(cols.toSeq.asJava)
+              .setSupport(support)
+              .build())
+          .build()
+      }
+
+      def freqItems(cols: Array[String]): Relation = freqItems(cols, 0.01)
+
+      def freqItems(cols: Seq[String], support: Double): Relation =
+        freqItems(cols.toArray, support)
+
+      def freqItems(cols: Seq[String]): Relation = freqItems(cols, 0.01)
     }
 
     def select(exprs: Expression*): Relation = {
@@ -948,7 +1001,7 @@ package object dsl {
                   .setUpperBound(x(1))
                   .setWithReplacement(false)
                   .setSeed(seed)
-                  .setForceStableSort(true)
+                  .setDeterministicOrder(true)
                   .build())
               .build()
           }

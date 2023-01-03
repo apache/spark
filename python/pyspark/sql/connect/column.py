@@ -28,6 +28,7 @@ from typing import (
     Optional,
 )
 
+from pyspark import SparkContext, SparkConf
 from pyspark.sql.types import DataType
 from pyspark.sql.column import Column as PySparkColumn
 
@@ -36,12 +37,13 @@ from pyspark.sql.connect.expressions import (
     Expression,
     UnresolvedFunction,
     UnresolvedExtractValue,
-    SQLExpression,
     LiteralExpression,
     CaseWhen,
     SortOrder,
     CastExpression,
     WindowExpression,
+    WithField,
+    DropField,
 )
 
 
@@ -57,7 +59,7 @@ if TYPE_CHECKING:
 
 def _func_op(name: str, doc: Optional[str] = "") -> Callable[["Column"], "Column"]:
     def wrapped(self: "Column") -> "Column":
-        return scalar_function(name, self)
+        return Column(UnresolvedFunction(name, [self._expr]))
 
     wrapped.__doc__ = doc
     return wrapped
@@ -67,16 +69,17 @@ def _bin_op(
     name: str, doc: Optional[str] = "binary function", reverse: bool = False
 ) -> Callable[["Column", Any], "Column"]:
     def wrapped(self: "Column", other: Any) -> "Column":
-        from pyspark.sql.connect.functions import lit
-
-        if isinstance(
+        if other is None or isinstance(
             other, (bool, float, int, str, datetime.datetime, datetime.date, decimal.Decimal)
         ):
-            other = lit(other)
-        if not reverse:
-            return scalar_function(name, self, other)
+            other_expr = LiteralExpression._from_value(other)
         else:
-            return scalar_function(name, other, self)
+            other_expr = other._expr
+
+        if not reverse:
+            return Column(UnresolvedFunction(name, [self._expr, other_expr]))
+        else:
+            return Column(UnresolvedFunction(name, [other_expr, self._expr]))
 
     wrapped.__doc__ = doc
     return wrapped
@@ -84,18 +87,10 @@ def _bin_op(
 
 def _unary_op(name: str, doc: Optional[str] = "unary function") -> Callable[["Column"], "Column"]:
     def wrapped(self: "Column") -> "Column":
-        return scalar_function(name, self)
+        return Column(UnresolvedFunction(name, [self._expr]))
 
     wrapped.__doc__ = doc
     return wrapped
-
-
-def scalar_function(op: str, *args: "Column") -> "Column":
-    return Column(UnresolvedFunction(op, [arg._expr for arg in args]))
-
-
-def sql_expression(expr: str) -> "Column":
-    return Column(SQLExpression(expr))
 
 
 class Column:
@@ -119,14 +114,15 @@ class Column:
     __rmul__ = _bin_op("*", reverse=True)
     __rdiv__ = _bin_op("/", reverse=True)
     __rtruediv__ = _bin_op("/", reverse=True)
-    __pow__ = _bin_op("pow")
-    __rpow__ = _bin_op("pow", reverse=True)
+    __rmod__ = _bin_op("%", reverse=True)
+    __pow__ = _bin_op("power")
+    __rpow__ = _bin_op("power", reverse=True)
     __ge__ = _bin_op(">=")
     __le__ = _bin_op("<=")
 
-    eqNullSafe = _bin_op("eqNullSafe", PySparkColumn.eqNullSafe.__doc__)
+    eqNullSafe = _bin_op("<=>", PySparkColumn.eqNullSafe.__doc__)
 
-    __neg__ = _func_op("negate")
+    __neg__ = _func_op("negative")
 
     # `and`, `or`, `not` cannot be overloaded in Python,
     # so use bitwise operators as boolean operators
@@ -144,12 +140,12 @@ class Column:
         )
 
     # bitwise operators
-    bitwiseOR = _bin_op("bitwiseOR", PySparkColumn.bitwiseOR.__doc__)
-    bitwiseAND = _bin_op("bitwiseAND", PySparkColumn.bitwiseAND.__doc__)
-    bitwiseXOR = _bin_op("bitwiseXOR", PySparkColumn.bitwiseXOR.__doc__)
+    bitwiseOR = _bin_op("|", PySparkColumn.bitwiseOR.__doc__)
+    bitwiseAND = _bin_op("&", PySparkColumn.bitwiseAND.__doc__)
+    bitwiseXOR = _bin_op("^", PySparkColumn.bitwiseXOR.__doc__)
 
-    isNull = _unary_op("isNull", PySparkColumn.isNull.__doc__)
-    isNotNull = _unary_op("isNotNull", PySparkColumn.isNotNull.__doc__)
+    isNull = _unary_op("isnull", PySparkColumn.isNull.__doc__)
+    isNotNull = _unary_op("isnotnull", PySparkColumn.isNotNull.__doc__)
 
     def __ne__(  # type: ignore[override]
         self,
@@ -160,8 +156,8 @@ class Column:
 
     # string methods
     contains = _bin_op("contains", PySparkColumn.contains.__doc__)
-    startswith = _bin_op("startsWith", PySparkColumn.startswith.__doc__)
-    endswith = _bin_op("endsWith", PySparkColumn.endswith.__doc__)
+    startswith = _bin_op("startswith", PySparkColumn.startswith.__doc__)
+    endswith = _bin_op("endswith", PySparkColumn.endswith.__doc__)
 
     def when(self, condition: "Column", value: Any) -> "Column":
         if not isinstance(condition, Column):
@@ -178,7 +174,7 @@ class Column:
         if isinstance(value, Column):
             _value = value._expr
         else:
-            _value = LiteralExpression(value, LiteralExpression._infer_type(value))
+            _value = LiteralExpression._from_value(value)
 
         _branches = self._expr._branches + [(condition._expr, _value)]
 
@@ -200,7 +196,7 @@ class Column:
         if isinstance(value, Column):
             _value = value._expr
         else:
-            _value = LiteralExpression(value, LiteralExpression._infer_type(value))
+            _value = LiteralExpression._from_value(value)
 
         return Column(CaseWhen(branches=self._expr._branches, else_value=_value))
 
@@ -250,13 +246,14 @@ class Column:
         """Returns a binary expression with the current column as the left
         side and the other expression as the right side.
         """
-        from pyspark.sql.connect.functions import lit
-
-        if isinstance(
+        if other is None or isinstance(
             other, (bool, float, int, str, datetime.datetime, datetime.date, decimal.Decimal)
         ):
-            other = lit(other)
-        return scalar_function("==", self, other)
+            other_expr = LiteralExpression._from_value(other)
+        else:
+            other_expr = other._expr
+
+        return Column(UnresolvedFunction("==", [self._expr, other_expr]))
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
         return self._expr.to_plan(session)
@@ -314,14 +311,19 @@ class Column:
     over.__doc__ = PySparkColumn.over.__doc__
 
     def isin(self, *cols: Any) -> "Column":
-        from pyspark.sql.connect.functions import lit
-
         if len(cols) == 1 and isinstance(cols[0], (list, set)):
             _cols = list(cols[0])
         else:
             _cols = list(cols)
 
-        return Column(UnresolvedFunction("in", [self._expr] + [lit(c)._expr for c in _cols]))
+        _exprs = [self._expr]
+        for c in _cols:
+            if isinstance(c, Column):
+                _exprs.append(c._expr)
+            else:
+                _exprs.append(LiteralExpression._from_value(c))
+
+        return Column(UnresolvedFunction("in", _exprs))
 
     isin.__doc__ = PySparkColumn.isin.__doc__
 
@@ -358,11 +360,38 @@ class Column:
 
     getField.__doc__ = PySparkColumn.getField.__doc__
 
-    def withField(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("withField() is not yet implemented.")
+    def withField(self, fieldName: str, col: "Column") -> "Column":
+        if not isinstance(fieldName, str):
+            raise TypeError(
+                f"fieldName should be a string, but got {type(fieldName).__name__} {fieldName}"
+            )
 
-    def dropFields(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("dropFields() is not yet implemented.")
+        if not isinstance(col, Column):
+            raise TypeError(f"col should be a Column, but got {type(col).__name__} {col}")
+
+        return Column(WithField(self._expr, fieldName, col._expr))
+
+    withField.__doc__ = PySparkColumn.withField.__doc__
+
+    def dropFields(self, *fieldNames: str) -> "Column":
+        dropField: Optional[DropField] = None
+        for fieldName in fieldNames:
+            if not isinstance(fieldName, str):
+                raise TypeError(
+                    f"fieldName should be a string, but got {type(fieldName).__name__} {fieldName}"
+                )
+
+            if dropField is None:
+                dropField = DropField(self._expr, fieldName)
+            else:
+                dropField = DropField(dropField, fieldName)
+
+        if dropField is None:
+            raise ValueError("dropFields requires at least 1 field")
+
+        return Column(dropField)
+
+    dropFields.__doc__ = PySparkColumn.dropFields.__doc__
 
     def __getattr__(self, item: Any) -> "Column":
         if item.startswith("__"):
@@ -390,3 +419,58 @@ class Column:
 
 
 Column.__doc__ = PySparkColumn.__doc__
+
+
+def _test() -> None:
+    import os
+    import sys
+    import doctest
+    from pyspark.sql import SparkSession as PySparkSession
+    from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    if should_test_connect:
+        import pyspark.sql.connect.column
+
+        globs = pyspark.sql.connect.column.__dict__.copy()
+        # Works around to create a regular Spark session
+        sc = SparkContext("local[4]", "sql.connect.column tests", conf=SparkConf())
+        globs["_spark"] = PySparkSession(sc, options={"spark.app.name": "sql.connect.column tests"})
+
+        # Creates a remote Spark session.
+        os.environ["SPARK_REMOTE"] = "sc://localhost"
+        globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
+        # Spark Connect has a different string representation for Column.
+        del pyspark.sql.connect.column.Column.getItem.__doc__
+
+        # TODO(SPARK-41746): SparkSession.createDataFrame does not support nested datatypes
+        del pyspark.sql.connect.column.Column.dropFields.__doc__
+        # TODO(SPARK-41772): Enable pyspark.sql.connect.column.Column.withField doctest
+        del pyspark.sql.connect.column.Column.withField.__doc__
+        # TODO(SPARK-41815): Column.isNull returns nan instead of None
+        del pyspark.sql.connect.column.Column.isNull.__doc__
+        # TODO(SPARK-41746): SparkSession.createDataFrame does not support nested datatypes
+        del pyspark.sql.connect.column.Column.getField.__doc__
+
+        (failure_count, test_count) = doctest.testmod(
+            pyspark.sql.connect.column,
+            globs=globs,
+            optionflags=doctest.ELLIPSIS
+            | doctest.NORMALIZE_WHITESPACE
+            | doctest.IGNORE_EXCEPTION_DETAIL,
+        )
+
+        globs["spark"].stop()
+        globs["_spark"].stop()
+        if failure_count:
+            sys.exit(-1)
+    else:
+        print(
+            f"Skipping pyspark.sql.connect.column doctests: {connect_requirement_message}",
+            file=sys.stderr,
+        )
+
+
+if __name__ == "__main__":
+    _test()

@@ -1483,13 +1483,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "walkedTypePath" -> walkedTypePath.toString()))
   }
 
-  def cannotFindEncoderForTypeError(
-      tpe: String, walkedTypePath: WalkedTypePath): SparkUnsupportedOperationException = {
+  def cannotFindEncoderForTypeError(typeName: String): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2141",
+      errorClass = "ENCODER_NOT_FOUND",
       messageParameters = Map(
-        "tpe" -> tpe,
-        "walkedTypePath" -> walkedTypePath.toString()))
+        "typeName" -> typeName))
   }
 
   def attributesForTypeUnsupportedError(schema: Schema): SparkUnsupportedOperationException = {
