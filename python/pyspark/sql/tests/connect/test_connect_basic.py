@@ -2803,7 +2803,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             "cache",
             "persist",
             "withWatermark",
-            "observe",
             "foreach",
             "foreachPartition",
             "toLocalIterator",
