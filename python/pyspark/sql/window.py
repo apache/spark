@@ -72,7 +72,6 @@ class Window:
 
     currentRow: int = 0
 
-    # TODO(SPARK-41773): Window.partitionBy is not respected with row_number in Spark Connect
     @staticmethod
     @try_remote_window
     def partitionBy(*cols: Union["ColumnOrName", List["ColumnOrName_"]]) -> "WindowSpec":
@@ -112,7 +111,7 @@ class Window:
         Show row number order by ``id`` in partition ``category``.
 
         >>> window = Window.partitionBy("category").orderBy("id")
-        >>> df.withColumn("row_number", row_number().over(window)).show()  # doctest: +SKIP
+        >>> df.withColumn("row_number", row_number().over(window)).show()
         +---+--------+----------+
         | id|category|row_number|
         +---+--------+----------+
@@ -129,7 +128,6 @@ class Window:
         jspec = sc._jvm.org.apache.spark.sql.expressions.Window.partitionBy(_to_java_cols(cols))
         return WindowSpec(jspec)
 
-    # TODO(SPARK-41773): Window.partitionBy is not respected with row_number in Spark Connect
     @staticmethod
     @try_remote_window
     def orderBy(*cols: Union["ColumnOrName", List["ColumnOrName_"]]) -> "WindowSpec":
@@ -169,7 +167,7 @@ class Window:
         Show row number order by ``category`` in partition ``id``.
 
         >>> window = Window.partitionBy("id").orderBy("category")
-        >>> df.withColumn("row_number", row_number().over(window)).show()  # doctest: +SKIP
+        >>> df.withColumn("row_number", row_number().over(window)).show()
         +---+--------+----------+
         | id|category|row_number|
         +---+--------+----------+
@@ -186,7 +184,6 @@ class Window:
         jspec = sc._jvm.org.apache.spark.sql.expressions.Window.orderBy(_to_java_cols(cols))
         return WindowSpec(jspec)
 
-    # TODO(SPARK-41773): Window.partitionBy is not respected with row_number in Spark Connect
     @staticmethod
     @try_remote_window
     def rowsBetween(start: int, end: int) -> "WindowSpec":
@@ -250,7 +247,6 @@ class Window:
 
         >>> window = Window.partitionBy("category").orderBy("id").rowsBetween(Window.currentRow, 1)
         >>> df.withColumn("sum", func.sum("id").over(window)).sort("id", "category", "sum").show()
-        ... # doctest: +SKIP
         +---+--------+---+
         | id|category|sum|
         +---+--------+---+
@@ -272,7 +268,6 @@ class Window:
         jspec = sc._jvm.org.apache.spark.sql.expressions.Window.rowsBetween(start, end)
         return WindowSpec(jspec)
 
-    # TODO(SPARK-41773): Window.partitionBy is not respected with row_number in Spark Connect
     @staticmethod
     @try_remote_window
     def rangeBetween(start: int, end: int) -> "WindowSpec":
@@ -339,7 +334,6 @@ class Window:
 
         >>> window = Window.partitionBy("category").orderBy("id").rangeBetween(Window.currentRow, 1)
         >>> df.withColumn("sum", func.sum("id").over(window)).sort("id", "category").show()
-        ... # doctest: +SKIP
         +---+--------+---+
         | id|category|sum|
         +---+--------+---+
