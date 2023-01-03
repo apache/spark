@@ -583,12 +583,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     // getting killed. When this happens, we need to distinguish the duplicate blocks as they
     // arrive. More details on this is explained in later comments.
 
-    // Track if the block is received after shuffle merge finalize. The block would be considered
-    // as too late if it received after shuffle merge finalize, and hence mark it as a late block
-    // push to the pushMergeMetrics
-    if (partitionInfoBeforeCheck == null) {
-      pushMergeMetrics.lateBlockPushes.mark();
-    }
     // Check if the given block is already merged by checking the bitmap against the given map
     // index
     final AppShufflePartitionInfo partitionInfo = failure != null ? null :
@@ -597,6 +591,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       return new PushBlockStreamCallback(
         this, appShuffleInfo, streamId, partitionInfo, msg.mapIndex);
     } else {
+      // The block would be considered as too late if it received after shuffle merge finalize,
+      // and hence mark it as a late block push to the pushMergeMetrics
+      pushMergeMetrics.lateBlockPushes.mark();
       final BlockPushNonFatalFailure finalFailure = failure;
       // For a duplicate block or a block which is late or stale block from an older
       // shuffleMergeId, respond back with a callback that handles them differently.
@@ -1198,6 +1195,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       for (ByteBuffer deferredBuf : deferredBufs) {
         totalSize += deferredBuf.limit();
         writeBuf(deferredBuf);
+        mergeManager.pushMergeMetrics.deferredBlocks.mark(-1);
       }
       mergeManager.pushMergeMetrics.deferredBlockBytes.dec(totalSize);
       deferredBufs = null;
@@ -1208,6 +1206,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         long totalSize = 0;
         for (ByteBuffer deferredBuf : deferredBufs) {
           totalSize += deferredBuf.limit();
+          mergeManager.pushMergeMetrics.deferredBlocks.mark(-1);
         }
         mergeManager.pushMergeMetrics.deferredBlockBytes.dec(totalSize);
       }
@@ -1310,7 +1309,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           try {
             if (deferredBufs != null && !deferredBufs.isEmpty()) {
               writeDeferredBufs();
-              mergeManager.pushMergeMetrics.deferredBlocks.mark();
             }
             writeBuf(buf);
           } catch (IOException ioe) {
@@ -1330,8 +1328,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           // block to disk. If we still couldn't write this block to disk after this, we give up
           // on this block push request and respond failure to client. We could potentially
           // buffer the block longer or wait for a few iterations inside #onData or #onComplete
-          // to increase the chance of writing the block to disk, however this would incur
-          // more memory footprint or decrease the server processing throughput for the shuffle
+          // to increase the chance of writing the block to disk, however this would incur more
+          // memory footprint or decrease the server processing throughput for the shuffle
           // service. In addition, during test we observed that by randomizing the order in
           // which clients sends block push requests batches, only ~0.5% blocks failed to be
           // written to disk due to this reason. We thus decide to optimize for server
@@ -1348,6 +1346,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           deferredBuf.flip();
           deferredBufs.add(deferredBuf);
           mergeManager.pushMergeMetrics.deferredBlockBytes.inc(deferredLen);
+          mergeManager.pushMergeMetrics.deferredBlocks.mark();
         }
       }
     }
@@ -1392,7 +1391,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
                 abortIfNecessary();
                 isWriting = true;
                 writeDeferredBufs();
-                mergeManager.pushMergeMetrics.deferredBlocks.mark();
               }
             } catch (IOException ioe) {
               incrementIOExceptionsAndAbortIfNecessary();
