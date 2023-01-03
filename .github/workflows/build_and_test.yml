@@ -498,7 +498,7 @@ jobs:
   proto-breaking-changes-check:
     needs: [precondition]
     if: always() && fromJson(needs.precondition.outputs.required).proto-breaking-changes-check == 'true'
-    name: Spark Connect Proto Backwards Compat Check
+    name: Spark Connect Proto Backwards Compatibility Check
     runs-on: ubuntu-20.04
     env:
       LC_ALL: C.UTF-8
@@ -521,14 +521,11 @@ jobs:
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
-    - name: Install dependencies for Python code generation check
-      run: |
-        # See more in "Installation" https://docs.buf.build/installation#tarball
-        curl -LO https://github.com/bufbuild/buf/releases/download/v1.11.0/buf-Linux-x86_64.tar.gz
-        mkdir -p $HOME/buf
-        tar -xvzf buf-Linux-x86_64.tar.gz -C $HOME/buf --strip-components 1
-    - name: Python code generation check
-      run: if test -f ./connector/connect/dev/detect_breaking_changes.sh; then PATH=$PATH:$HOME/buf/bin ./connector/connect/dev/detect_breaking_changes.sh; fi
+    - uses: bufbuild/buf-breaking-action@v1
+      with:
+        input: connector/connect/common/src/main
+        against: 'https://github.com/apache/spark.git#branch=master,subdir=connector/connect/common/src/main'
+
 
   # Static analysis, and documentation build
   lint:
@@ -647,7 +644,7 @@ jobs:
     - name: Python linter
       run: PYTHON_EXECUTABLE=python3.9 ./dev/lint-python
     - name: Python code generation check
-      run: if test -f ./dev/connect-check-protos.py; then PATH=$PATH:$HOME/buf/bin PYTHON_EXECUTABLE=python3.9 ./dev/connect-check-protos.py; fi
+      run: if test -f ./dev/check-codegen-python.py; then PATH=$PATH:$HOME/buf/bin PYTHON_EXECUTABLE=python3.9 ./dev/check-codegen-python.py; fi
     - name: R linter
       run: ./dev/lint-r
     - name: JS linter
