@@ -160,7 +160,7 @@ message ExecutePlanResponse {
 
   // Batch results of metrics.
   message ArrowBatch {
-    int64 row_count = 1;
+    uint64 row_count = 1;
     bytes data = 2;
   }
 
