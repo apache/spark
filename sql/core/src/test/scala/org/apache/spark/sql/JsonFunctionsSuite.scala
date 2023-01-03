@@ -787,8 +787,8 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         parameters = Map(
           "fieldName" -> "a",
           "fieldValue" -> "1",
-          "token" -> "VALUE_STRING",
-          "dataType" -> "IntegerType")
+          "jsonType" -> "VALUE_STRING",
+          "dataType" -> "\"INT\"")
       )
     }
   }

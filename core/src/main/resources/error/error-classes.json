@@ -77,7 +77,7 @@
   },
   "CANNOT_PARSE_JSON_FIELD" : {
     "message" : [
-      "Failed to parse field name <fieldName>, field value <fieldValue>, token <token> to target spark data type <dataType>."
+      "Cannot parse the field name <fieldName> and the value <fieldValue> of the JSON token type <jsonType> to target Spark data type <dataType>"
     ]
   },
   "CANNOT_PARSE_PROTOBUF_DESCRIPTOR" : {
