@@ -47,6 +47,7 @@ PyGithub
 
 # pandas API on Spark Code formatter.
 black==22.6.0
+py
 
 # Spark Connect (required)
 grpcio==1.48.1
