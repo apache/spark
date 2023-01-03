@@ -873,7 +873,7 @@ class DataFrameTestsMixin:
 
     def test_toDF_with_schema_string(self):
         data = [Row(key=i, value=str(i)) for i in range(100)]
-        rdd = self.spark.createDataFrame(data, 5)
+        rdd = self.spark.createDataFrame(data)
 
         df = rdd.toDF("key: int, value: string")
         self.assertEqual(df.schema.simpleString(), "struct<key:int,value:string>")
