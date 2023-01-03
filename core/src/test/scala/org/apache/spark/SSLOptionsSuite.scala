@@ -140,22 +140,18 @@ class SSLOptionsSuite extends SparkFunSuite {
     assert(opts.enabledAlgorithms === Set("ABC", "DEF"))
   }
 
-  test("test ssl settings are set only when ssl is enabled") {
+  test("SPARK-41719: Skip ssl sub-settings if ssl is disabled") {
+    val keyStorePath = new File(this.getClass.getResource("/keystore").toURI).getAbsolutePath
     val conf = new SparkConf
     val hadoopConf = new Configuration()
-    conf.set("spark.ssl.enabled", "true")
+    conf.set("spark.ssl.enabled", "false")
     conf.set("spark.ssl.keyStorePassword", "password")
-    conf.set("spark.ssl.ui.enabled", "false")
-    conf.set("spark.ssl.ui.keyStorePassword", "12345")
+    conf.set("spark.ssl.keyStore", keyStorePath)
+    val sslOpts = SSLOptions.parse(conf, hadoopConf, "spark.ssl", defaults = None)
 
-
-    val defaultOpts = SSLOptions.parse(conf, hadoopConf, "spark.ssl", defaults = None)
-    val opts = SSLOptions.parse(conf, hadoopConf, "spark.ssl.ui", defaults = Some(defaultOpts))
-
-    assert(defaultOpts.enabled === true)
-    assert(opts.enabled === false)
-    assert(defaultOpts.keyStorePassword === Some("password"))
-    assert(opts.keyStorePassword === None)
+    assert(sslOpts.enabled === false)
+    assert(sslOpts.keyStorePassword === None)
+    assert(sslOpts.keyStore === None)
   }
 
   test("variable substitution") {
