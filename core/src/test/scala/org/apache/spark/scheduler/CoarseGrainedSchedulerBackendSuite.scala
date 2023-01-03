@@ -254,10 +254,11 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     assert(exec3ResourceProfileId === rp.id)
 
     val taskResources = Map(GPU -> new ResourceInformation(GPU, Array("0")))
+    val taskCpus = 1
     val taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 0, "1",
       "t1", 0, 1, mutable.Map.empty[String, Long],
       mutable.Map.empty[String, Long], mutable.Map.empty[String, Long],
-      new Properties(), 1, taskResources, bytebuffer)))
+      new Properties(), taskCpus, taskResources, bytebuffer)))
     val ts = backend.getTaskSchedulerImpl()
     when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]], any[Boolean])).thenReturn(taskDescs)
 
@@ -273,7 +274,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     // make sure that `availableAddrs` below won't change
     when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]], any[Boolean])).thenReturn(Seq.empty)
     backend.driverEndpoint.send(
-      StatusUpdate("1", 1, TaskState.FINISHED, buffer, taskResources))
+      StatusUpdate("1", 1, TaskState.FINISHED, buffer, taskCpus, taskResources))
 
     eventually(timeout(5 seconds)) {
       execResources = backend.getExecutorAvailableResources("1")
@@ -361,10 +362,11 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     assert(exec3ResourceProfileId === rp.id)
 
     val taskResources = Map(GPU -> new ResourceInformation(GPU, Array("0")))
+    val taskCpus = 1
     val taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 0, "1",
       "t1", 0, 1, mutable.Map.empty[String, Long],
       mutable.Map.empty[String, Long], mutable.Map.empty[String, Long],
-      new Properties(), 1, taskResources, bytebuffer)))
+      new Properties(), taskCpus, taskResources, bytebuffer)))
     val ts = backend.getTaskSchedulerImpl()
     when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]], any[Boolean])).thenReturn(taskDescs)
 
@@ -380,7 +382,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     // make sure that `availableAddrs` below won't change
     when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]], any[Boolean])).thenReturn(Seq.empty)
     backend.driverEndpoint.send(
-      StatusUpdate("1", 1, TaskState.FINISHED, buffer, taskResources))
+      StatusUpdate("1", 1, TaskState.FINISHED, buffer, taskCpus, taskResources))
 
     eventually(timeout(5 seconds)) {
       execResources = backend.getExecutorAvailableResources("1")
