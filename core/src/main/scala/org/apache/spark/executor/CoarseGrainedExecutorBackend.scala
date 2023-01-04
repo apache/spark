@@ -76,7 +76,7 @@ private[spark] class CoarseGrainedExecutorBackend(
   private[executor] val taskResources = new mutable.HashMap[Long, Map[String, ResourceInformation]]
 
   /**
-   * Map each taskId to the information about cpu resource allocated to it.
+   * Map each taskId to the information about cpus allocated to it.
    * Exposed for testing only.
    */
   private[executor] val taskCpus = new mutable.HashMap[Long, Int]

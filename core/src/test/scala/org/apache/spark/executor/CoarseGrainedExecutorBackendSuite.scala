@@ -289,7 +289,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     assert(parsedResources.get(FPGA).get.addresses.sameElements(Array("f1", "f2", "f3")))
   }
 
-  test("track allocated resources by taskId") {
+  test("track allocated resources/cpus by taskId") {
     val conf = new SparkConf
     val securityMgr = new SecurityManager(conf)
     val serializer = new JavaSerializer(conf)
@@ -302,6 +302,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
         "host1", "host1", 4, env, None,
           resourceProfile = ResourceProfile.getOrCreateDefaultProfile(conf))
       assert(backend.taskResources.isEmpty)
+      assert(backend.taskCpus.isEmpty)
 
       val taskId = 1000000
       // We don't really verify the data, just pass it around.
@@ -313,23 +314,31 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       backend.executor = mock[Executor]
       backend.rpcEnv.setupEndpoint("Executor 1", backend)
 
-      // Launch a new task shall add an entry to `taskResources` map.
+      // Launch a new task shall add an entry to `taskResources` and `taskCpus` map.
       backend.self.send(LaunchTask(new SerializableBuffer(serializedTaskDescription)))
       eventually(timeout(10.seconds)) {
         assert(backend.taskResources.size == 1)
         val resources = backend.taskResources(taskId)
         assert(resources(GPU).addresses sameElements Array("0", "1"))
+
+        assert(backend.taskCpus.size == 1)
+        assert(backend.taskCpus(taskId) == 1)
       }
 
-      // Update the status of a running task shall not affect `taskResources` map.
+      // Update the status of a running task shall not affect `taskResources` and `taskCpus` map.
       backend.statusUpdate(taskId, TaskState.RUNNING, data)
       assert(backend.taskResources.size == 1)
       val resources = backend.taskResources(taskId)
       assert(resources(GPU).addresses sameElements Array("0", "1"))
 
-      // Update the status of a finished task shall remove the entry from `taskResources` map.
+      assert(backend.taskCpus.size == 1)
+      assert(backend.taskCpus(taskId) == 1)
+
+      // Update the status of a finished task shall remove the entry from `taskResources`
+      // and `taskCpus` map.
       backend.statusUpdate(taskId, TaskState.FINISHED, data)
       assert(backend.taskResources.isEmpty)
+      assert(backend.taskCpus.isEmpty)
     } finally {
       if (backend != null) {
         backend.rpcEnv.shutdown()

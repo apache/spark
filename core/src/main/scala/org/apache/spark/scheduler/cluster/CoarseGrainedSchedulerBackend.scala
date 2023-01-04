@@ -741,6 +741,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   // this function is for testing only
+  def getExecutorAvailableCpus(
+      executorId: String): Option[Int] = synchronized {
+    executorDataMap.get(executorId).map(_.freeCores)
+  }
+
+  // this function is for testing only
   def getExecutorResourceProfileId(executorId: String): Int = synchronized {
     val execDataOption = executorDataMap.get(executorId)
     execDataOption.map(_.resourceProfileId).getOrElse(ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID)
