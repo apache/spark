@@ -50,7 +50,10 @@ class SQLExecutionUIDataSerializer extends ProtobufSerDe {
     }
     ui.stages.foreach(stageId => builder.addStages(stageId.toLong))
     val metricValues = ui.metricValues
-    if (metricValues != null) {
+    if (metricValues == null) {
+      builder.setMetricValuesIsNull(true)
+    } else {
+      builder.setMetricValuesIsNull(false)
       metricValues.foreach {
         case (k, v) => builder.putMetricValues(k, v)
       }
@@ -68,9 +71,13 @@ class SQLExecutionUIDataSerializer extends ProtobufSerDe {
     val jobs = ui.getJobsMap.asScala.map {
       case (jobId, status) => jobId.toInt -> JobExecutionStatus.valueOf(status.toString)
     }.toMap
-    val metricValues = ui.getMetricValuesMap.asScala.map {
-      case (k, v) => k.toLong -> v
-    }.toMap
+    val metricValues = if (ui.getMetricValuesIsNull) {
+      null
+    } else {
+      ui.getMetricValuesMap.asScala.map {
+        case (k, v) => k.toLong -> v
+      }.toMap
+    }
 
     new SQLExecutionUIData(
       executionId = ui.getExecutionId,

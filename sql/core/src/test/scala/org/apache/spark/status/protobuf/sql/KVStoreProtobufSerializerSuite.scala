@@ -85,8 +85,8 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     )
     val bytes2 = serializer.serialize(input2)
     val result2 = serializer.deserialize(bytes2, classOf[SQLExecutionUIData])
-    // input.metricValues is null, result.metricValues is also empty map.
-    assert(result2.metricValues.isEmpty)
+    // input.metricValues is null, result.metricValues is null.
+    assert(result2.metricValues == null)
   }
 
   test("Spark Plan Graph") {

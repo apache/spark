@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.ui
 
+import java.io.File
 import java.util.Properties
 
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
@@ -56,12 +57,12 @@ import org.apache.spark.sql.internal.StaticSQLConf.UI_RETAINED_EXECUTIONS
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.status.ElementTrackingStore
-import org.apache.spark.util.{AccumulatorMetadata, JsonProtocol, LongAccumulator, SerializableConfiguration}
+import org.apache.spark.status.{AppStatusStore, ElementTrackingStore}
+import org.apache.spark.util.{AccumulatorMetadata, JsonProtocol, LongAccumulator, SerializableConfiguration, Utils}
 import org.apache.spark.util.kvstore.InMemoryStore
 
 
-class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
+abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
   with BeforeAndAfter {
 
   import testImplicits._
@@ -70,7 +71,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     super.sparkConf.set(LIVE_ENTITY_UPDATE_PERIOD, 0L).set(ASYNC_TRACKING_ENABLED, false)
   }
 
-  private var kvstore: ElementTrackingStore = _
+  protected var kvstore: ElementTrackingStore = _
 
   after {
     if (kvstore != null) {
@@ -155,12 +156,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     assert(actualFailed.sorted === failed)
   }
 
-  private def createStatusStore(): SQLAppStatusStore = {
-    val conf = sparkContext.conf
-    kvstore = new ElementTrackingStore(new InMemoryStore, conf)
-    val listener = new SQLAppStatusListener(conf, kvstore, live = true)
-    new SQLAppStatusStore(kvstore, Some(listener))
-  }
+  protected def createStatusStore(): SQLAppStatusStore
 
   test("basic") {
     def checkAnswer(actual: Map[Long, String], expected: Map[Long, Long]): Unit = {
@@ -1007,6 +1003,35 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
   }
 }
 
+class SQLAppStatusListenerWithInMemoryStoreSuite extends SQLAppStatusListenerSuite {
+  protected def createStatusStore(): SQLAppStatusStore = {
+    val conf = sparkContext.conf
+    kvstore = new ElementTrackingStore(new InMemoryStore, conf)
+    val listener = new SQLAppStatusListener(conf, kvstore, live = true)
+    new SQLAppStatusStore(kvstore, Some(listener))
+  }
+}
+class SQLAppStatusListenerWithRocksDBBackendSuite extends SQLAppStatusListenerSuite {
+  import org.scalactic.source.Position
+
+  private var storePath: File = _
+  override protected def createStatusStore(): SQLAppStatusStore = {
+    val conf = sparkContext.conf
+    storePath = Utils.createTempDir()
+    conf.set(LIVE_UI_LOCAL_STORE_DIR, storePath.getCanonicalPath)
+    val appStatusStore = AppStatusStore.createLiveStore(conf)
+    kvstore = appStatusStore.store.asInstanceOf[ElementTrackingStore]
+    val listener = new SQLAppStatusListener(conf, kvstore, live = true)
+    new SQLAppStatusStore(kvstore, Some(listener))
+  }
+
+  override protected def after(fun: => Any)(implicit pos: Position): Unit = {
+    super.after(fun)
+    if (storePath != null && storePath.exists()) {
+      Utils.deleteRecursively(storePath)
+    }
+  }
+}
 
 /**
  * A dummy [[org.apache.spark.sql.execution.SparkPlan]] that updates a [[SQLMetrics]]

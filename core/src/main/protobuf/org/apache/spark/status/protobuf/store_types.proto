@@ -395,7 +395,8 @@ message SQLExecutionUIData {
   optional string error_message = 9;
   map<int64, JobExecutionStatus> jobs = 10;
   repeated int64 stages = 11;
-  map<int64, string> metric_values = 12;
+  bool metric_values_is_null = 12;
+  map<int64, string> metric_values = 13;
 }
 
 message SparkPlanGraphNode {
