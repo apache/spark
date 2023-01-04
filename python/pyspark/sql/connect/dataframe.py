@@ -480,7 +480,8 @@ class DataFrame:
         for param in params:
             if param is not None and not isinstance(param, (int, str, float, list)):
                 raise TypeError(
-                    f"param should be a str, list, float or int, but got {type(param).__name__} {param}"
+                    f"param should be a str, list, float or int, but got {type(param).__name__}"
+                    f" {param}"
                 )
 
         return DataFrame.withPlan(
