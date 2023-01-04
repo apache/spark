@@ -404,7 +404,7 @@ class Hint(LogicalPlan):
         self.name = name
 
         assert isinstance(params, list) and all(
-            p is None or isinstance(p, (int, str)) for p in params
+            p is None or isinstance(p, (int, str, float, list)) for p in params
         )
         self.params = params
 
