@@ -379,9 +379,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def dataTypeOperationUnsupportedError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2009",
-      messageParameters = Map.empty)
+    SparkException.internalError(
+      s"""Operation dataType is not supported""")
   }
 
   def mergeUnsupportedByWindowFunctionError(): SparkUnsupportedOperationException = {
