@@ -4648,7 +4648,7 @@ case class ArrayCompact(child: Expression)
        ["b","d","c","a","d"]
       > SELECT _FUNC_(array(1, 2, 3, null), null);
        [1,2,3,null,null]
-      > SELECT _FUNC_(null, 2);
+      > SELECT _FUNC_(CAST(null as Array<Int>), 2);
        NULL
   """,
   since = "3.4.0",
