@@ -21,9 +21,7 @@ from typing import Dict
 
 class ErrorClassesJsonReader:
     """
-    A reader to load error information from one or more JSON files. Note that, if one error appears
-    in more than one JSON files, the latter wins. Please read python/pyspark/errors/README.md
-    for more details.
+    A reader to load error information from JSON file.
     """
 
     def __init__(self, json_file_path: str):
