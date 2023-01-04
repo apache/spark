@@ -825,13 +825,11 @@ class DataFrame:
 
     summary.__doc__ = PySparkDataFrame.summary.__doc__
 
-    def describe(self, *cols: str) -> "DataFrame":
-        _cols: List[str] = list(cols)
-        for s in _cols:
-            if not isinstance(s, str):
-                raise TypeError(f"'cols' must be list[str], but got {type(s).__name__}")
+    def describe(self, *cols: Union[str, List[str]]) -> "DataFrame":
+        if len(cols) == 1 and isinstance(cols[0], list):
+            cols = cols[0]  # type: ignore[assignment]
         return DataFrame.withPlan(
-            plan.StatDescribe(child=self._plan, cols=_cols),
+            plan.StatDescribe(child=self._plan, cols=cols),
             session=self._session,
         )
 
