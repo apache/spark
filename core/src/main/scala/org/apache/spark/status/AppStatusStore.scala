@@ -26,7 +26,7 @@ import scala.collection.mutable.HashMap
 
 import org.apache.spark.{JobExecutionStatus, SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.Status.LIVE_UI_USE_DISK_STORE_ENABLED
+import org.apache.spark.internal.config.Status.LIVE_UI_LOCAL_STORE_DIR
 import org.apache.spark.status.api.v1
 import org.apache.spark.storage.FallbackStorage.FALLBACK_BLOCK_MANAGER_ID
 import org.apache.spark.ui.scope._
@@ -780,24 +780,19 @@ private[spark] object AppStatusStore extends Logging {
       conf: SparkConf,
       appStatusSource: Option[AppStatusSource] = None): AppStatusStore = {
 
-    def createStorePath(useExternalStore: Boolean): Option[File] =
-      if (useExternalStore) {
-        val localDirs = Utils.getConfiguredLocalDirs(conf)
-        if (localDirs.nonEmpty) {
-          val rootDir = localDirs.head
-          try {
-            val localDir = Utils.createDirectory(rootDir, "spark-ui")
-            logInfo(s"Created spark ui store directory at $rootDir")
-            Some(localDir)
-          } catch {
-            case e: IOException =>
-              logError(s"Failed to create spark ui store path in $rootDir.", e)
-              None
-          }
-        } else None
-      } else None
+    def createStorePath(rootDir: String): Option[File] = {
+      try {
+        val localDir = Utils.createDirectory(rootDir, "spark-ui")
+        logInfo(s"Created spark ui store directory at $rootDir")
+        Some(localDir)
+      } catch {
+        case e: IOException =>
+          logError(s"Failed to create spark ui store path in $rootDir.", e)
+          None
+      }
+    }
 
-    val storePath = createStorePath(conf.get(LIVE_UI_USE_DISK_STORE_ENABLED))
+    val storePath = conf.get(LIVE_UI_LOCAL_STORE_DIR).flatMap(createStorePath)
     val kvStore = KVUtils.createKVStore(storePath, live = true, conf)
     val store = new ElementTrackingStore(kvStore, conf)
     val listener = new AppStatusListener(store, conf, true, appStatusSource)

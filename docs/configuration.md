@@ -1380,12 +1380,11 @@ Apart from these, the following properties are also available, and may be useful
   <td>1.1.1</td>
 </tr>
 <tr>
-  <td><code>spark.ui.useDiskStore.enabled</code></td>
-  <td>false</td>
+  <td><code>spark.ui.store.path</code></td>
+  <td>None</td>
   <td>
-    If true, Spark will use disk store to cache application information for live UI, 
-    the disk store implementation is RocksDB now. By default, this is false, meaning 
-    all application information will be kept in memory.
+    Local directory where to cache application information for live UI.
+    By default this is not set, meaning all application information will be kept in memory.
   </td>
   <td>3.4.0</td>
 </tr>
