@@ -27,10 +27,10 @@ package org.apache.spark.status.protobuf;
 
 enum JobExecutionStatus {
   JOB_EXECUTION_STATUS_UNSPECIFIED = 0;
-  RUNNING = 1;
-  SUCCEEDED = 2;
-  FAILED = 3;
-  UNKNOWN = 4;
+  JOB_EXECUTION_STATUS_RUNNING = 1;
+  JOB_EXECUTION_STATUS_SUCCEEDED = 2;
+  JOB_EXECUTION_STATUS_FAILED = 3;
+  JOB_EXECUTION_STATUS_UNKNOWN = 4;
 }
 
 message JobData {
@@ -434,13 +434,14 @@ message RDDOperationEdge {
   int32 to_id = 2;
 }
 
+enum DeterministicLevel {
+  DETERMINISTIC_LEVEL_UNSPECIFIED = 0;
+  DETERMINISTIC_LEVEL_DETERMINATE = 1;
+  DETERMINISTIC_LEVEL_UNORDERED = 2;
+  DETERMINISTIC_LEVEL_INDETERMINATE = 3;
+}
+
 message RDDOperationNode {
-  enum DeterministicLevel {
-    UNSPECIFIED = 0;
-    DETERMINATE = 1;
-    UNORDERED = 2;
-    INDETERMINATE = 3;
-  }
   int32 id = 1;
   string name = 2;
   bool cached = 3;
