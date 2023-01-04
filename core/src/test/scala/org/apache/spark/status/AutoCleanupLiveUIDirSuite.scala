@@ -1,4 +1,4 @@
-/*
+  /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -25,10 +25,10 @@ import org.apache.spark.util.Utils
 class AutoCleanupLiveUIDirSuite extends SparkFunSuite {
 
   test(s"auto cleanup spark ui store path") {
-    val storePath = Utils.createTempDir()
+    val baseUIDir = Utils.createTempDir()
     try {
       val conf = new SparkConf().setAppName("ui-dir-cleanup").setMaster("local")
-        .set(LIVE_UI_LOCAL_STORE_DIR, storePath.getCanonicalPath)
+        .set(LIVE_UI_LOCAL_STORE_DIR, baseUIDir.getCanonicalPath)
       val sc = new SparkContext(conf)
       sc.parallelize(0 until 100, 10)
         .map { x => (x % 10) -> x }
@@ -36,15 +36,21 @@ class AutoCleanupLiveUIDirSuite extends SparkFunSuite {
           _ + _
         }
         .collect()
-      // `storePath` should exists and not emtpy before SparkContext stop.
-      assert(storePath.exists())
-      assert(storePath.listFiles().nonEmpty)
+      // `baseUIDir` should exists and not emtpy before SparkContext stop.
+      assert(baseUIDir.exists())
+      val subDirs = baseUIDir.listFiles()
+      assert(subDirs.nonEmpty)
+      val uiDirs = subDirs.filter(_.getName.startsWith("spark-ui"))
+      assert(uiDirs.length == 1)
+      assert(uiDirs.head.listFiles().nonEmpty)
       sc.stop()
-      assert(storePath.exists())
-      assert(storePath.listFiles().isEmpty)
+      // base dir should exists
+      assert(baseUIDir.exists())
+      assert(!uiDirs.head.exists())
+      assert(baseUIDir.listFiles().isEmpty)
     } finally {
-      JavaUtils.deleteRecursively(storePath)
-      assert(!storePath.exists())
+      JavaUtils.deleteRecursively(baseUIDir)
+      assert(!baseUIDir.exists())
     }
   }
 }
