@@ -60,6 +60,7 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
     SparkSaslClient saslClient = new SparkSaslClient(appId, secretKeyHolder, conf.saslEncryption());
     try {
       byte[] payload = saslClient.firstToken();
+
       while (!saslClient.isComplete()) {
         SaslMessage msg = new SaslMessage(appId, payload);
         ByteBuf buf = Unpooled.buffer(msg.encodedLength() + (int) msg.body().size());

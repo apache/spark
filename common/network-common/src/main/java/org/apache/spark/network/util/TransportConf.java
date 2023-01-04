@@ -334,9 +334,7 @@ public class TransportConf {
   }
 
   /** Whether to enable sasl retries. Sasl retries will be enabled, once the shuffle
-   * server is upgraded. The updated SaslHandler can handle older clients that don't
-   * send any SaslInitMessage. However, the older SaslHandler will not be able to handle
-   * SaslInitMessage.
+   * server is upgraded.
    */
   public boolean enableSaslRetries() {
     return conf.getBoolean("spark.shuffle.sasl.enableRetries", false);

@@ -23,7 +23,6 @@ import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.StreamCallbackWithID;
 import org.apache.spark.network.client.TransportClient;
 
-
 /**
  * RPC Handler which performs authentication, and when it's successful, delegates further
  * calls to another RPC handler. The authentication handshake itself should be implemented
