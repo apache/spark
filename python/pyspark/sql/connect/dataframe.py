@@ -828,8 +828,15 @@ class DataFrame:
     def describe(self, *cols: Union[str, List[str]]) -> "DataFrame":
         if len(cols) == 1 and isinstance(cols[0], list):
             cols = cols[0]  # type: ignore[assignment]
+
+        _cols = []
+        for col in cols:
+            if isinstance(col, str):
+                _cols.append(col)
+            else:
+                _cols.extend([s for s in col])
         return DataFrame.withPlan(
-            plan.StatDescribe(child=self._plan, cols=list(cols)),
+            plan.StatDescribe(child=self._plan, cols=_cols),
             session=self._session,
         )
 
