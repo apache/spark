@@ -46,7 +46,7 @@ class ErrorClassesJsonReader:
         len_error_classes = len(error_classes)
         assert len_error_classes in (1, 2)
 
-        # For getting message template from main error class.
+        # Generate message template for main error class.
         main_error_class = error_classes[0]
         if main_error_class in self.error_info_map:
             main_error_class_info_map = self.error_info_map[main_error_class]
@@ -56,10 +56,11 @@ class ErrorClassesJsonReader:
         main_message_template = "\n".join(main_error_class_info_map["message"])
 
         has_sub_class = len_error_classes == 2
-        # For getting message template from sub error class if exists.
+
         if not has_sub_class:
             message_template = main_message_template
         else:
+            # Generate message template for sub error class if exists.
             sub_error_class = error_classes[1]
             main_error_class_subclass_info_map = main_error_class_info_map["subClass"]
             if sub_error_class in main_error_class_subclass_info_map:

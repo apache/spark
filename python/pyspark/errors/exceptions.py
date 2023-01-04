@@ -23,7 +23,9 @@ from pyspark.errors.utils import ErrorClassesJsonReader
 
 
 class PySparkException(Exception):
-    """ """
+    """
+    Base Exception for handling errors generated from PySpark.
+    """
 
     def __init__(
         self,
@@ -31,12 +33,14 @@ class PySparkException(Exception):
         error_class: Optional[str] = None,
         message_parameters: Optional[Dict[str, str]] = None,
     ):
-        self.json_path = f"{os.path.dirname(os.path.abspath(__file__))}/error-classes.json"
-        self.error_reader = ErrorClassesJsonReader(self.json_path)
         # `message` vs `error_class` & `message_parameters` are mutually exclusive.
         assert (message is not None and (error_class is None and message_parameters is None)) or (
             message is None and (error_class is not None and message_parameters is not None)
         )
+
+        self.json_path = f"{os.path.dirname(os.path.abspath(__file__))}/error-classes.json"
+        self.error_reader = ErrorClassesJsonReader(self.json_path)
+
         if message is None:
             self.message = self.error_reader.get_error_message(
                 cast(str, error_class), cast(Dict[str, str], message_parameters)
