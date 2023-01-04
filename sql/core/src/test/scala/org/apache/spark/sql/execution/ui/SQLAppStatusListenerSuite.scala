@@ -26,6 +26,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.json4s.jackson.JsonMethods._
+import org.scalactic.source.Position
 import org.scalatest.BeforeAndAfter
 import org.scalatest.time.SpanSugar._
 
@@ -1012,8 +1013,8 @@ class SQLAppStatusListenerWithInMemoryStoreSuite extends SQLAppStatusListenerSui
   }
 }
 class SQLAppStatusListenerWithRocksDBBackendSuite extends SQLAppStatusListenerSuite {
-  import org.scalactic.source.Position
 
+  // TODO: SPARK-41882 remove this field after RocksDB can automatically cleanup
   private var storePath: File = _
   override protected def createStatusStore(): SQLAppStatusStore = {
     val conf = sparkContext.conf
@@ -1025,6 +1026,7 @@ class SQLAppStatusListenerWithRocksDBBackendSuite extends SQLAppStatusListenerSu
     new SQLAppStatusStore(kvstore, Some(listener))
   }
 
+  // TODO: SPARK-41882 remove this method after RocksDB can automatically cleanup
   override protected def after(fun: => Any)(implicit pos: Position): Unit = {
     super.after(fun)
     if (storePath != null && storePath.exists()) {
