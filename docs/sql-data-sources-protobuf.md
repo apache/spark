@@ -54,7 +54,15 @@ Spark SQL schema is generated based on the protobuf descriptor file or protobuf 
 {% highlight scala %}
 import org.apache.spark.sql.protobuf.functions._
 
-// `from_protobuf` and `to_protobuf` provides two schema choices. First, via the protobuf descriptor file, and then via the protobuf message class name.
+// `from_protobuf` and `to_protobuf` provides two schema choices. First, via the protobuf descriptor
+// file, and then via the protobuf message class name.
+// give input .proto protobuf schema
+// syntax  = "proto3"
+// message AppEvent {
+//    string name = 1;
+//    int64 id = 2;
+//    string context = 3;
+// }
 
 val df = spark
 .readStream
@@ -63,14 +71,14 @@ val df = spark
 .option("subscribe", "topic1")
 .load()
 
-// 1. Decode the Protobuf data into a struct;
-// 2. Filter by column `favorite_color`;
-// 3. Encode the column `user` in Protobuf format.
+// 1. Decode the Protobuf data of schema `AppEvent` into a struct;
+// 2. Filter by column `name`;
+// 3. Encode the column `event` in Protobuf format.
 // The Protobuf protoc command can be used to generate a protobuf descriptor file for give .proto file.
 val output = df
-.select(from_protobuf($"value", protobufMessageName, descriptorFilePath) as $"user")
-.where("user.favorite_color == \"red\"")
-.select(to_protobuf($"user", protobufMessageName, descriptorFilePath) as $"value")
+.select(from_protobuf($"value", "AppEvent", descriptorFilePath) as $"event")
+.where("event.name == \"alice\"")
+.select(to_protobuf($"user", "AppEvent", descriptorFilePath) as $"event")
 
 val query = output
 .writeStream
@@ -79,12 +87,22 @@ val query = output
 .option("topic", "topic2")
 .start()
 
-// Alternatively, you can decode and encode the SQL columns into protobuf format using protobuf class name.
-// The specified Protobuf class must match the data, otherwise the behavior is undefined: it may fail or return arbitrary result. The jar containing Java class should be shaded. Specifically, `com.google.protobuf.*` should be shaded to `org.sparkproject.spark-protobuf.protobuf.*`.
-val output = df
-.select(from_protobuf($"value", "org.spark.protobuf.User") as $"user")
-.where("user.favorite_color == \"red\"")
-.select(to_protobuf($"user", "org.spark.protobuf.User") as $"value")
+// Alternatively, you can decode and encode the SQL columns into protobuf format using protobuf
+// class name. The specified Protobuf class must match the data, otherwise the behavior is undefined:
+// it may fail or return arbitrary result. The jar containing Java class should be shaded.
+// Specifically, `com.google.protobuf.*` should be shaded to `org.sparkproject.spark-protobuf.protobuf.*`.
+var output = df
+.select(from_protobuf($"value", "org.sparkproject.spark-protobuf.protobuf.AppEvent") as $"event")
+.where("event.name == \"alice\"")
+
+output.printSchema()
+// root
+//  |--event: struct (nullable = true)
+//  |    |-- name : string (nullable = true)
+//  |    |-- id: long (nullable = true)
+//  |    |-- context: string (nullable = true)
+
+output = output.select(to_protobuf($"event", "org.sparkproject.spark-protobuf.protobuf.AppEvent") as $"event")
 
 val query = output
 .writeStream
@@ -100,7 +118,15 @@ val query = output
 import static org.apache.spark.sql.functions.col;
 import static org.apache.spark.sql.protobuf.functions.*;
 
-// `from_protobuf` and `to_protobuf` provides two schema choices. First, via the protobuf descriptor file, and then via the protobuf message class name.
+// `from_protobuf` and `to_protobuf` provides two schema choices. First, via the protobuf descriptor
+// file, and then via the protobuf message class name.
+// give input .proto protobuf schema
+// syntax  = "proto3"
+// message AppEvent {
+//    string name = 1;
+//    int64 id = 2;
+//    string context = 3;
+// }
 
 Dataset<Row> df = spark
 .readStream()
@@ -109,21 +135,35 @@ Dataset<Row> df = spark
 .option("subscribe", "topic1")
 .load();
 
-// 1. Decode the Protobuf data into a struct;
-// 2. Filter by column `favorite_color`;
-// 3. Encode the column `user` in Protobuf format.
+// 1. Decode the Protobuf data of schema `AppEvent` into a struct;
+// 2. Filter by column `name`;
+// 3. Encode the column `event` in Protobuf format.
 // The Protobuf protoc command can be used to generate a protobuf descriptor file for give .proto file.
 Dataset<Row> output = df
-.select(from_protobuf(col("value"), protobufMessageName, descriptorFilePath).as("user"))
-.where("user.favorite_color == \"red\"")
-.select(to_protobuf(col("user"), protobufMessageName, descriptorFilePath).as("value"));
+.select(from_protobuf(col("value"), "AppEvent", descriptorFilePath).as("event"))
+.where("event.name == \"alice\"")
+.select(to_protobuf(col("event"), "AppEvent", descriptorFilePath).as("event"));
 
-// Alternatively, you can decode and encode the SQL columns into protobuf format using protobuf class name.
-// The specified Protobuf class must match the data, otherwise the behavior is undefined: it may fail or return arbitrary result. The jar containing Java class should be shaded. Specifically, `com.google.protobuf.*` should be shaded to `org.sparkproject.spark-protobuf.protobuf.*`.
+// Alternatively, you can decode and encode the SQL columns into protobuf format using protobuf
+// class name. The specified Protobuf class must match the data, otherwise the behavior is undefined:
+// it may fail or return arbitrary result. The jar containing Java class should be shaded.
+// Specifically, `com.google.protobuf.*` should be shaded to `org.sparkproject.spark-protobuf.protobuf.*`.
 Dataset<Row> output = df
-.select(from_protobuf(col("value"), "org.spark.protobuf.User").as("user"))
-.where("user.favorite_color == \"red\"")
-.select(to_protobuf(col("user"), "org.spark.protobuf.User").as("value"));
+.select(
+  from_protobuf(col("value"),
+  "org.sparkproject.spark-protobuf.protobuf.AppEvent").as("event"))
+.where("event.name == \"alice\"")
+
+output.printSchema()
+// root
+//  |--event: struct (nullable = true)
+//  |    |-- name : string (nullable = true)
+//  |    |-- id: long (nullable = true)
+//  |    |-- context: string (nullable = true)
+
+output = output.select(
+  to_protobuf(col("event"),
+  "org.sparkproject.spark-protobuf.protobuf.AppEvent").as("event"));
 
 StreamingQuery query = output
 .writeStream()
@@ -138,7 +178,15 @@ StreamingQuery query = output
 {% highlight python %}
 from pyspark.sql.protobuf.functions import from_protobuf, to_protobuf
 
-# `from_protobuf` and `to_protobuf` provides two schema choices. First, via the protobuf descriptor file, and then via the protobuf message class name.
+# `from_protobuf` and `to_protobuf` provides two schema choices. First, via the protobuf descriptor
+# file, and then via the protobuf message class name.
+# give input .proto protobuf schema
+# syntax  = "proto3"
+# message AppEvent {
+#    string name = 1;
+#    int64 id = 2;
+#    string context = 3;
+# }
 
 df = spark\
 .readStream\
@@ -147,21 +195,33 @@ df = spark\
 .option("subscribe", "topic1")\
 .load()
 
-# 1. Decode the Protobuf data into a struct;
-# 2. Filter by column `favorite_color`;
-# 3. Encode the column `user` in Protobuf format.
+# 1. Decode the Protobuf data of schema `AppEvent` into a struct;
+# 2. Filter by column `name`;
+# 3. Encode the column `event` in Protobuf format.
 # The Protobuf protoc command can be used to generate a protobuf descriptor file for give .proto file.
 output = df\
-.select(from_protobuf("value", protobufMessageName, descriptorFilePath).alias("user"))\
-.where('user.favorite_color == "red"')\
-.select(to_protobuf("user", protobufMessageName, descriptorFilePath).alias("value"))
+.select(from_protobuf("value", "AppEvent", descriptorFilePath).alias("event"))\
+.where('event.name == "alice"')\
+.select(to_protobuf("event", "AppEvent", descriptorFilePath).alias("event"))
 
-# Alternatively, you can decode and encode the SQL columns into protobuf format using protobuf class name.
-# The specified Protobuf class must match the data, otherwise the behavior is undefined: it may fail or return arbitrary result. The jar containing Java class should be shaded. Specifically, `com.google.protobuf.*` should be shaded to `org.sparkproject.spark-protobuf.protobuf.*`.
+# Alternatively, you can decode and encode the SQL columns into protobuf format using protobuf
+# class name. The specified Protobuf class must match the data, otherwise the behavior is undefined:
+# it may fail or return arbitrary result. The jar containing Java class should be shaded.
+# Specifically, `com.google.protobuf.*` should be shaded to `org.sparkproject.spark-protobuf.protobuf.*`.
+
 output = df\
-.select(from_protobuf("value", "org.spark.protobuf.User").alias("user"))\
-.where('user.favorite_color == "red"')\
-.select(to_protobuf("user", "org.spark.protobuf.User").alias("value"))
+.select(from_protobuf("value", "org.sparkproject.spark-protobuf.protobuf.AppEvent").alias("event"))\
+.where('event.name == "alice"')
+
+output.printSchema()
+# root
+#  |--event: struct (nullable = true)
+#  |   |-- name : string (nullable = true)
+#  |   |-- id: long (nullable = true)
+#  |   |-- context: string (nullable = true)
+
+output = output
+.select(to_protobuf("event", "org.sparkproject.spark-protobuf.protobuf.AppEvent").alias("event"))
 
 query = output\
 .writeStream\
@@ -176,11 +236,7 @@ query = output\
 
 ## Supported types for Protobuf -> Spark SQL conversion
 Currently Spark supports reading [protobuf scalar types](https://developers.google.com/protocol-buffers/docs/proto3#scalar), [enum types](https://developers.google.com/protocol-buffers/docs/proto3#enum), [nested type](https://developers.google.com/protocol-buffers/docs/proto3#nested), and [maps type](https://developers.google.com/protocol-buffers/docs/proto3#maps) under messages of Protobuf.
-One common issue that can arise when working with Protobuf data is the presence of circular references. In Protobuf, a circular reference occurs when a field refers back to itself or to another field that refers back to the original field. This can cause issues when parsing the data, as it can result in infinite loops or other unexpected behavior.
-To address this issue, the latest version of spark-protobuf introduces a new feature: the ability to check for circular references through field types. This allows users use the `recursive.fields.max.depth` option to specify the maximum number of levels of recursion to allow when parsing the schema. By default, `spark-protobuf` will not permit recursive fields by setting `recursive.fields.max.depth` to -1. However, you can set this option to 0 to 10 if needed.
-Setting `recursive.fields.max.depth` to 0 drops all recursive fields, setting it to 1 allows it to be recursed once, and setting it to 2 allows it to be recursed twice. A `recursive.fields.max.depth` value greater than 10 is not allowed, as it can lead to performance issues and even stack overflows.
-
-In addition to the new circular reference check, the latest version of spark-protobuf also introduces support for Protobuf OneOf fields. which allows you to handle messages that can have multiple possible sets of fields, but only one set can be present at a time. This is useful for situations where the data you are working with is not always in the same format, and you need to be able to handle messages with different sets of fields without encountering errors.
+In addition to the these types, `spark-protobuf` also introduces support for Protobuf `OneOf` fields. which allows you to handle messages that can have multiple possible sets of fields, but only one set can be present at a time. This is useful for situations where the data you are working with is not always in the same format, and you need to be able to handle messages with different sets of fields without encountering errors.
 
 <table class="table">
   <tr><th><b>Protobuf type</b></th><th><b>Spark SQL type</b></th></tr>
@@ -300,3 +356,29 @@ Spark supports the writing of all Spark SQL types into Protobuf. For most types,
     <td>map</td>
   </tr>
 </table>
+
+## Handling circular references protobuf fields
+One common issue that can arise when working with Protobuf data is the presence of circular references. In Protobuf, a circular reference occurs when a field refers back to itself or to another field that refers back to the original field. This can cause issues when parsing the data, as it can result in infinite loops or other unexpected behavior.
+To address this issue, the latest version of spark-protobuf introduces a new feature: the ability to check for circular references through field types. This allows users use the `recursive.fields.max.depth` option to specify the maximum number of levels of recursion to allow when parsing the schema. By default, `spark-protobuf` will not permit recursive fields by setting `recursive.fields.max.depth` to -1. However, you can set this option to 0 to 10 if needed. 
+
+Setting `recursive.fields.max.depth` to 0 drops all recursive fields, setting it to 1 allows it to be recursed once, and setting it to 2 allows it to be recursed twice. A `recursive.fields.max.depth` value greater than 10 is not allowed, as it can lead to performance issues and even stack overflows.
+
+SQL Schema for the below protobuf message will vary based on the value of `recursive.fields.max.depth`.
+
+<div data-lang="scala" markdown="1">
+{% highlight scala %}
+syntax  = "proto3"
+message Person {
+  string name = 1;
+  Person bff = 2
+}
+
+// The protobuf schema defined above, would be converted into a Spark SQL columns with the following
+// structure based on `recursive.fields.max.depth` value.
+
+0: struct<name: string, bff: null>
+1: struct<name string, bff: <name: string, bff: null>>
+2: struct<name string, bff: <name: string, bff: struct<name: string, bff: null>>> ...
+
+{% endhighlight %}
+</div>

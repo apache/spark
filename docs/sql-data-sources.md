@@ -66,5 +66,6 @@ goes into specific options that are available for the built-in data sources.
   * [to_protobuf() and from_protobuf()](sql-data-sources-protobuf.html#to_protobuf-and-from_protobuf)
   * [Supported types for Protobuf -> Spark SQL conversion](sql-data-sources-protobuf.html#supported-types-for-protobuf---spark-sql-conversion)
   * [Supported types for Spark SQL -> Protobuf conversion](sql-data-sources-protobuf.html#supported-types-for-spark-sql---protobuf-conversion)
+  * [Handling circular references protobuf fields](sql-data-sources-protobuf.html#handling-circular-references-protobuf-fields)
 * [Whole Binary Files](sql-data-sources-binaryFile.html)
 * [Troubleshooting](sql-data-sources-troubleshooting.html)
