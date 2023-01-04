@@ -2051,7 +2051,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             assert(err.getMessage.contains("can not write to output file: " +
               "org.apache.hadoop.fs.FileAlreadyExistsException"))
           } else {
-            assert(err.getMessage.contains("Task failed while writing rows"))
+            checkError(
+              exception = err.getCause.asInstanceOf[SparkException],
+              errorClass = "TASK_WRITE_FAILED",
+              parameters = Map("message" -> ".*already exists"),
+              matchPVals = true
+            )
           }
         }
       }
