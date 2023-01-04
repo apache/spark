@@ -1426,9 +1426,6 @@ def _test() -> None:
         # TODO(SPARK-41827): groupBy requires all cols be Column or str
         del pyspark.sql.connect.dataframe.DataFrame.groupBy.__doc__
 
-        # TODO(SPARK-41828): Implement creating empty DataFrame
-        del pyspark.sql.connect.dataframe.DataFrame.isEmpty.__doc__
-
         # TODO(SPARK-41829): Add Dataframe sort ordering
         del pyspark.sql.connect.dataframe.DataFrame.sort.__doc__
         del pyspark.sql.connect.dataframe.DataFrame.sortWithinPartitions.__doc__
