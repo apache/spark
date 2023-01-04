@@ -319,7 +319,7 @@ class UnivocityParser(
       throw BadRecordException(
         () => getCurrentInput,
         () => None,
-        QueryExecutionErrors.malformedCSVRecordError(tokens.toString))
+        QueryExecutionErrors.malformedCSVRecordError(""))
     }
 
     var badRecordException: Option[Throwable] = if (tokens.length != parsedSchema.length) {

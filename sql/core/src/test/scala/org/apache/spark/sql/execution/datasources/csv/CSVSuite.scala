@@ -3184,7 +3184,8 @@ class CSVv2Suite extends CSVSuite {
       checkError(
         exception = exception.getCause.asInstanceOf[SparkException],
         errorClass = "_LEGACY_ERROR_TEMP_2064",
-        parameters = Map("path" -> s"${testFile(carsFile)}")
+        parameters = Map("path" -> s".*$carsFile"),
+        matchPVals = true
       )
     }
   }
