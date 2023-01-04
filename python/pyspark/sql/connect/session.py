@@ -185,7 +185,7 @@ class SparkSession:
             raise TypeError("data is already a DataFrame")
 
         table: Optional[pa.Table] = None
-        _schema: Optional[DataType] = None
+        _schema: Optional[Union[AtomicType, StructType]] = None
         _schema_str: Optional[str] = None
         _cols: Optional[List[str]] = None
 
@@ -260,8 +260,10 @@ class SparkSession:
                         _cols = ["_%s" % i for i in range(1, len(_data[0]) + 1)]
                     else:
                         _cols = ["_1"]
-                else:
+                elif isinstance(_schema, StructType):
                     _cols = _schema.names
+                else:
+                    _cols = ["value"]
 
             if isinstance(_data[0], Row):
                 table = pa.Table.from_pylist([row.asDict(recursive=True) for row in _data])
