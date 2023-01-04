@@ -256,6 +256,8 @@ class DataFrame:
 
     groupBy.__doc__ = PySparkDataFrame.groupBy.__doc__
 
+    groupby = groupBy
+
     def rollup(self, *cols: "ColumnOrName") -> "GroupedData":
         _cols: List[Column] = []
         for c in cols:

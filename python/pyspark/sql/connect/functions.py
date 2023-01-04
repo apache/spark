@@ -2408,14 +2408,6 @@ def _test() -> None:
         # TODO(SPARK-41836): Implement `transform_values` function
         del pyspark.sql.connect.functions.transform_values.__doc__
 
-        # TODO(SPARK-41840): Fix 'Column' object is not callable
-        del pyspark.sql.connect.functions.first.__doc__
-        del pyspark.sql.connect.functions.last.__doc__
-        del pyspark.sql.connect.functions.max_by.__doc__
-        del pyspark.sql.connect.functions.median.__doc__
-        del pyspark.sql.connect.functions.min_by.__doc__
-        del pyspark.sql.connect.functions.mode.__doc__
-
         # TODO(SPARK-41812): Proper column names after join
         del pyspark.sql.connect.functions.broadcast.__doc__
         del pyspark.sql.connect.functions.count_distinct.__doc__
