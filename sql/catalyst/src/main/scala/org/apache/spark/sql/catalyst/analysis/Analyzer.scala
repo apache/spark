@@ -2431,7 +2431,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsAnyPattern(UNRESOLVED_FUNC, UNRESOLVED_FUNCTION, GENERATOR,
-        UNRESOLVED_TABLE_VALUED_FUNCTION, TABLE_VALUED_FUNCTION_WITH_ALIAS), ruleId) {
+        UNRESOLVED_TABLE_VALUED_FUNCTION, UNRESOLVED_TVF_ALIASES), ruleId) {
       // Resolve functions with concrete relations from v2 catalog.
       case u @ UnresolvedFunctionName(nameParts, cmd, requirePersistentFunc, mismatchHint, _) =>
         lookupBuiltinOrTempFunction(nameParts)
@@ -2453,7 +2453,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       // Resolve table-valued function references.
       case u: UnresolvedTableValuedFunction if u.functionArgs.forall(_.resolved) =>
         withPosition(u) {
-          val resolvedFunc = try {
+          try {
             resolveBuiltinOrTempTableFunction(u.name, u.functionArgs).getOrElse {
               val CatalogAndIdentifier(catalog, ident) = expandIdentifier(u.name)
               if (CatalogV2Util.isSessionCatalog(catalog)) {
@@ -2470,18 +2470,10 @@ class Analyzer(override val catalogManager: CatalogManager)
                 errorClass = "_LEGACY_ERROR_TEMP_2308",
                 messageParameters = Map("name" -> u.name.quoted))
           }
-          if (u.outputNames.nonEmpty) {
-            // The `resolvedFunc` logical plan might not be resolved. For example, `explode(null)`
-            // will fail the data type check. The column aliases of the function should only
-            // be added once the table-valued function plan is resolved.
-            TableValuedFunctionWithAlias(u.name, resolvedFunc, u.outputNames)
-          } else {
-            resolvedFunc
-          }
         }
 
-      // Resolve a table-valued function's column aliases.
-      case u: TableValuedFunctionWithAlias if u.child.resolved =>
+      // Resolve table-valued functions' output column aliases.
+      case u: UnresolvedTVFAliases if u.child.resolved =>
         // Add `Project` with the aliases.
         val outputAttrs = u.child.output
         // Checks if the number of the aliases is equal to expected one
