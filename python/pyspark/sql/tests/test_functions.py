@@ -23,6 +23,7 @@ import math
 import unittest
 
 from py4j.protocol import Py4JJavaError
+from pyspark.errors import PySparkException
 from pyspark.sql import Row, Window, types
 from pyspark.sql.functions import (
     udf,
@@ -1030,8 +1031,12 @@ class FunctionsTestsMixin:
             self.assertEqual(actual, expected)
 
         df = self.spark.range(10)
-        with self.assertRaisesRegex(ValueError, "lit does not allow a column in a list"):
+        with self.assertRaises(PySparkException) as pe:
             lit([df.id, df.id])
+
+        self.check_error(
+            exception=pe, error_class="COLUMN_IN_LIST", message_parameters={"funcName": "lit"}
+        )
 
     # Test added for SPARK-39832; change Python API to accept both col & str as input
     def test_regexp_replace(self):

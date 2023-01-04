@@ -1,0 +1,73 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+import json
+import re
+from typing import Dict
+
+
+class ErrorClassesJsonReader:
+    """
+    A reader to load error information from one or more JSON files. Note that, if one error appears
+    in more than one JSON files, the latter wins. Please read python/pyspark/errors/README.md
+    for more details.
+    """
+
+    def __init__(self, json_file_path: str):
+        self.error_info_map = json.load(open(json_file_path))
+
+    def get_error_message(self, error_class: str, message_parameters: Dict[str, str]) -> str:
+        message_template = self.get_message_template(error_class)
+        # Verify message parameters.
+        message_parameters_from_template = re.findall("<([a-zA-Z0-9_-]+)>", message_template)
+        assert set(message_parameters_from_template) == set(message_parameters), (
+            f"Undifined error message parameter for error class: {error_class}. "
+            f"Parameters: {message_parameters}"
+        )
+        table = str.maketrans("<>", "{}")
+
+        return message_template.translate(table).format(**message_parameters)
+
+    def get_message_template(self, error_class: str) -> str:
+        error_classes = error_class.split(".")
+        len_error_classes = len(error_classes)
+        assert len_error_classes in (1, 2)
+
+        # For getting message template from main error class.
+        main_error_class = error_classes[0]
+        if main_error_class in self.error_info_map:
+            main_error_class_info_map = self.error_info_map[main_error_class]
+        else:
+            raise ValueError(f"Cannot find main error class '{main_error_class}'")
+
+        main_message_template = "\n".join(main_error_class_info_map["message"])
+
+        has_sub_class = len_error_classes == 2
+        # For getting message template from sub error class if exists.
+        if not has_sub_class:
+            message_template = main_message_template
+        else:
+            sub_error_class = error_classes[1]
+            main_error_class_subclass_info_map = main_error_class_info_map["subClass"]
+            if sub_error_class in main_error_class_subclass_info_map:
+                sub_error_class_info_map = main_error_class_subclass_info_map[sub_error_class]
+            else:
+                raise ValueError(f"Cannot find sub error class '{sub_error_class}'")
+
+            sub_message_template = "\n".join(sub_error_class_info_map["message"])
+            message_template = main_message_template + " " + sub_message_template
+
+        return message_template
