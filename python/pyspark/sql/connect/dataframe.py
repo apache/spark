@@ -1014,11 +1014,23 @@ class DataFrame:
         return ""
 
     def collect(self) -> List[Row]:
-        pdf = self.toPandas()
-        if pdf is not None:
-            return list(pdf.apply(lambda row: Row(**row), axis=1))
-        else:
-            return []
+        if self._plan is None:
+            raise Exception("Cannot collect on empty plan.")
+        if self._session is None:
+            raise Exception("Cannot collect on empty session.")
+        query = self._plan.to_proto(self._session.client)
+        table = self._session.client.to_table(query)
+
+        rows: List[Row] = []
+        for row in table.to_pylist():
+            _dict = {}
+            for k, v in row.items():
+                if isinstance(v, bytes):
+                    _dict[k] = bytearray(v)
+                else:
+                    _dict[k] = v
+            rows.append(Row(**_dict))
+        return rows
 
     collect.__doc__ = PySparkDataFrame.collect.__doc__
 

@@ -1872,7 +1872,7 @@ translate.__doc__ = pysparkfuncs.translate.__doc__
 
 
 # Date/Timestamp functions
-# TODO(SPARK-41283): Resolve dtypes inconsistencies for:
+# TODO(SPARK-41455): Resolve dtypes inconsistencies for:
 #     to_timestamp, from_utc_timestamp, to_utc_timestamp,
 #     timestamp_seconds, current_timestamp, date_trunc
 
@@ -2347,33 +2347,18 @@ def _test() -> None:
         # Spark Connect does not support Spark Context but the test depends on that.
         del pyspark.sql.connect.functions.monotonically_increasing_id.__doc__
 
-        # TODO(SPARK-41833): fix collect() output
-        del pyspark.sql.connect.functions.array.__doc__
-        del pyspark.sql.connect.functions.array_distinct.__doc__
-        del pyspark.sql.connect.functions.array_except.__doc__
-        del pyspark.sql.connect.functions.array_intersect.__doc__
-        del pyspark.sql.connect.functions.array_remove.__doc__
-        del pyspark.sql.connect.functions.array_repeat.__doc__
-        del pyspark.sql.connect.functions.array_sort.__doc__
-        del pyspark.sql.connect.functions.array_union.__doc__
-        del pyspark.sql.connect.functions.collect_list.__doc__
-        del pyspark.sql.connect.functions.collect_set.__doc__
-        del pyspark.sql.connect.functions.concat.__doc__
+        # TODO(SPARK-41880): Function `from_json` should support non-literal expression
+        # TODO(SPARK-41879): `DataFrame.collect` should support nested types
+        del pyspark.sql.connect.functions.struct.__doc__
         del pyspark.sql.connect.functions.create_map.__doc__
-        del pyspark.sql.connect.functions.date_trunc.__doc__
-        del pyspark.sql.connect.functions.from_utc_timestamp.__doc__
         del pyspark.sql.connect.functions.from_csv.__doc__
         del pyspark.sql.connect.functions.from_json.__doc__
-        del pyspark.sql.connect.functions.isnull.__doc__
-        del pyspark.sql.connect.functions.reverse.__doc__
-        del pyspark.sql.connect.functions.sequence.__doc__
-        del pyspark.sql.connect.functions.slice.__doc__
-        del pyspark.sql.connect.functions.sort_array.__doc__
-        del pyspark.sql.connect.functions.split.__doc__
-        del pyspark.sql.connect.functions.struct.__doc__
+
+        # TODO(SPARK-41455): Resolve dtypes inconsistencies of date/timestamp functions
         del pyspark.sql.connect.functions.to_timestamp.__doc__
         del pyspark.sql.connect.functions.to_utc_timestamp.__doc__
-        del pyspark.sql.connect.functions.unhex.__doc__
+        del pyspark.sql.connect.functions.date_trunc.__doc__
+        del pyspark.sql.connect.functions.from_utc_timestamp.__doc__
 
         # TODO(SPARK-41825): Dataframe.show formatting int as double
         del pyspark.sql.connect.functions.coalesce.__doc__
