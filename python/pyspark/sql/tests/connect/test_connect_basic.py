@@ -1199,7 +1199,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         # Hint with unsupported parameter types
         with self.assertRaises(TypeError):
-            self.connect.read.table(self.tbl_name).hint("REPARTITION", 1.1).toPandas()
+            self.connect.read.table(self.tbl_name).hint("REPARTITION", range(5)).toPandas()
 
         # Hint with wrong combination
         with self.assertRaises(SparkConnectException):
