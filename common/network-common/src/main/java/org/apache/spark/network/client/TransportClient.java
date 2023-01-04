@@ -117,14 +117,6 @@ public class TransportClient implements Closeable {
   }
 
   /**
-   * This is needed when sasl server is reset. Sasl authentication
-   * will be re-attempted.
-   */
-  public void unsetClientId() {
-    this.clientId = null;
-  }
-
-  /**
    * Requests a single chunk from the remote side, from the pre-negotiated streamId.
    *
    * Chunk indices go from 0 onwards. It is valid to request the same chunk multiple times, though

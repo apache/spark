@@ -17,15 +17,11 @@
 
 package org.apache.spark.network.server;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
 import java.nio.ByteBuffer;
 
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.StreamCallbackWithID;
 import org.apache.spark.network.client.TransportClient;
-import org.apache.spark.network.sasl.SaslInitMessage;
-import org.apache.spark.network.sasl.SaslMessage;
 
 
 /**
@@ -58,19 +54,8 @@ public abstract class AbstractAuthRpcHandler extends RpcHandler {
       TransportClient client,
       ByteBuffer message,
       RpcResponseCallback callback) {
-    int position = message.position();
-    int limit = message.limit();
-
-    ByteBuf nettyBuf = Unpooled.wrappedBuffer(message);
-    byte tagByte = nettyBuf.readByte();
     if (isAuthenticated) {
-      if (tagByte != SaslMessage.TAG_BYTE && tagByte != SaslInitMessage.TAG_BYTE) {
-        message.position(position);
-        message.limit(limit);
-        delegate.receive(client, message, callback);
-      } else {
-        isAuthenticated = doAuthChallenge(client, message, callback);
-      }
+      delegate.receive(client, message, callback);
     } else {
       isAuthenticated = doAuthChallenge(client, message, callback);
     }

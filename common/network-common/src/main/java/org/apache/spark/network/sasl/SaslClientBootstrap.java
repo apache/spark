@@ -60,15 +60,8 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
     SparkSaslClient saslClient = new SparkSaslClient(appId, secretKeyHolder, conf.saslEncryption());
     try {
       byte[] payload = saslClient.firstToken();
-      boolean firstToken = true;
       while (!saslClient.isComplete()) {
-        SaslMessage msg;
-        if (conf.enableSaslRetries() && firstToken) {
-          msg = new SaslInitMessage(appId, payload);
-        } else {
-          msg = new SaslMessage(appId, payload);
-        }
-        firstToken = false;
+        SaslMessage msg = new SaslMessage(appId, payload);
         ByteBuf buf = Unpooled.buffer(msg.encodedLength() + (int) msg.body().size());
         msg.encode(buf);
         buf.writeBytes(msg.body().nioByteBuffer());

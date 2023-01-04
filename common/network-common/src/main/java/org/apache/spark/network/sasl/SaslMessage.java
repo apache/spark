@@ -30,10 +30,10 @@ import org.apache.spark.network.protocol.Message;
  * with the given appId. This appId allows a single SaslRpcHandler to multiplex different
  * applications which may be using different sets of credentials.
  */
-public class SaslMessage extends AbstractMessage {
+class SaslMessage extends AbstractMessage {
 
   /** Serialization tag used to catch incorrect payloads. */
-  public static final byte TAG_BYTE = (byte) 0xEA;
+  private static final byte TAG_BYTE = (byte) 0xEA;
 
   public final String appId;
 
@@ -71,13 +71,6 @@ public class SaslMessage extends AbstractMessage {
         + " (maybe your client does not have SASL enabled?)");
     }
 
-    String appId = Encoders.Strings.decode(buf);
-    // See comment in encodedLength().
-    buf.readInt();
-    return new SaslMessage(appId, buf.retain());
-  }
-
-  public static SaslMessage decodeWithoutTag(ByteBuf buf) {
     String appId = Encoders.Strings.decode(buf);
     // See comment in encodedLength().
     buf.readInt();

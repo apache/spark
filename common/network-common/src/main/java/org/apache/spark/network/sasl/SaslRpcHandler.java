@@ -75,21 +75,9 @@ public class SaslRpcHandler extends AbstractAuthRpcHandler {
       RpcResponseCallback callback) {
     if (saslServer == null || !saslServer.isComplete()) {
       ByteBuf nettyBuf = Unpooled.wrappedBuffer(message);
-      byte tagByte = nettyBuf.readByte();
-      if (tagByte != SaslMessage.TAG_BYTE && tagByte != SaslInitMessage.TAG_BYTE) {
-        throw new IllegalStateException("Expected SaslMessage, received something else"
-            + " (maybe your client does not have SASL enabled?)");
-      }
-      if (tagByte == SaslInitMessage.TAG_BYTE) {
-        logger.debug("Received an init message for channel {}", client);
-        if (saslServer != null) {
-          complete(true);
-        }
-        client.unsetClientId();
-      }
       SaslMessage saslMessage;
       try {
-        saslMessage = SaslMessage.decodeWithoutTag(nettyBuf);
+        saslMessage = SaslMessage.decode(nettyBuf);
       } finally {
         nettyBuf.release();
       }
