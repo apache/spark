@@ -47,18 +47,38 @@ class ErrorClassesJsonReader:
         Returns the message template for corresponding error class from JSON file.
 
         For example,
-        when given `error_class` is "COLUMN_IN_LIST",
+        when given `error_class` is "EXAMPLE_ERROR_CLASS",
         and corresponding error class in JSON file looks like the below:
         ====================================================
-        "COLUMN_IN_LIST" : {
+        "EXAMPLE_ERROR_CLASS" : {
           "message" : [
-            "<funcName> does not allow a column in a list"
+            "Problem <A> because of <B>."
           ]
         }
         ====================================================
 
         In this case, this function returns:
-        "<funcName> does not allow a column in a list"
+        "Problem <A> because of <B>."
+
+        For sub error class, when given `error_class` is "EXAMPLE_ERROR_CLASS.SUB_ERROR_CLASS",
+        and corresponding error class in JSON file looks like the below:
+        ====================================================
+        "EXAMPLE_ERROR_CLASS" : {
+          "message" : [
+            "Problem <A> because of <B>."
+          ],
+          "subClass" : {
+            "SUB_ERROR_CLASS" : {
+              "message" : [
+                "Do <C> to fix the problem."
+              ]
+            }
+          }
+        }
+        ====================================================
+
+        In this case, this function returns:
+        "Problem <A> because <B>. Do <C> to fix the problem."
         """
         error_classes = error_class.split(".")
         len_error_classes = len(error_classes)
