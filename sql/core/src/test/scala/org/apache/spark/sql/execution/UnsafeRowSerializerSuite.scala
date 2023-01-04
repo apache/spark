@@ -114,7 +114,7 @@ class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkSession {
     shuffleExecutorComponents.initializeExecutor(
       spark.sparkContext.applicationId, "0", new HashMap[String, String])
     val mapOutputWriter = shuffleExecutorComponents.createMapOutputWriter(
-      0, 0, 1)
+      0, 0, 10)
 
     val taskMemoryManager = new TaskMemoryManager(spark.sparkContext.env.memoryManager, 0)
     val taskContext = new TaskContextImpl(0, 0, 0, 0, 0, 1, taskMemoryManager, new Properties, null)
