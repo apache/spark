@@ -181,6 +181,16 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedSQLTestCase):
     def test_to_local_iterator_prefetch(self):
         super().test_to_local_iterator_prefetch()
 
+    # TODO(SPARK-41884): DataFrame `toPandas` parity in return types
+    @unittest.skip("Fails in Spark Connect, should enable.")
+    def test_to_pandas(self):
+        super().test_to_pandas()
+
+    # TODO(SPARK-41884): DataFrame `toPandas` parity in return types
+    @unittest.skip("Fails in Spark Connect, should enable.")
+    def test_to_pandas_for_array_of_struct(self):
+        super().test_to_pandas_for_array_of_struct()
+
     # TODO(SPARK-41834): Implement SparkSession.conf
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_to_pandas_from_empty_dataframe(self):
