@@ -433,26 +433,27 @@ case class OuterReference(e: NamedExpression)
 
 /**
  * A placeholder used to hold a [[NamedExpression]] that has been temporarily resolved as the
- * reference to a lateral column alias.
+ * reference to a lateral column alias. It will be restored back to [[UnresolvedAttribute]] if
+ * the lateral column alias can't be resolved, or become a normal resolved column in the rewritten
+ * plan after lateral column resolution. There should be no [[LateralColumnAliasReference]] beyond
+ * analyzer: if the plan passes all analysis check, then all [[LateralColumnAliasReference]] should
+ * already be removed.
  *
- * This is created and removed by Analyzer rule [[ResolveLateralColumnAlias]].
- * There should be no [[LateralColumnAliasReference]] beyond analyzer: if the plan passes all
- * analysis check, then all [[LateralColumnAliasReference]] should already be removed.
- *
- * @param ne the resolved [[NamedExpression]] by lateral column alias
- * @param nameParts the named parts of the original [[UnresolvedAttribute]]. Used to restore back
+ * @param ne the [[NamedExpression]] produced by column resolution. Can be [[UnresolvedAttribute]]
+ *           if the referenced lateral column alias is not resolved yet.
+ * @param nameParts the name parts of the original [[UnresolvedAttribute]]. Used to restore back
  *                  to [[UnresolvedAttribute]] when needed
  * @param a the attribute of referenced lateral column alias. Used to match alias when unwrapping
- *          and resolving LateralColumnAliasReference
+ *          and resolving lateral column aliases and rewriting the query plan.
  */
 case class LateralColumnAliasReference(ne: NamedExpression, nameParts: Seq[String], a: Attribute)
   extends LeafExpression with NamedExpression with Unevaluable {
-  assert(ne.resolved)
-  override def name: String =
-    nameParts.map(n => if (n.contains(".")) s"`$n`" else n).mkString(".")
+  assert(ne.resolved || ne.isInstanceOf[UnresolvedAttribute])
+  override def name: String = ne.name
   override def exprId: ExprId = ne.exprId
   override def qualifier: Seq[String] = ne.qualifier
   override def toAttribute: Attribute = ne.toAttribute
+  override lazy val resolved = ne.resolved
   override def newInstance(): NamedExpression =
     LateralColumnAliasReference(ne.newInstance(), nameParts, a)
 

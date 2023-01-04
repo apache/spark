@@ -86,20 +86,12 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedSQLTestCase):
         super().test_fillna()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_freqItems(self):
-        super().test_freqItems()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_generic_hints(self):
         super().test_generic_hints()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_help_command(self):
         super().test_help_command()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_input_files(self):
-        super().test_input_files()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_invalid_join_method(self):
@@ -192,10 +184,6 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedSQLTestCase):
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_to_pandas_on_cross_join(self):
         super().test_to_pandas_on_cross_join()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_to_pandas_required_pandas_not_found(self):
-        super().test_to_pandas_required_pandas_not_found()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_to_pandas_with_duplicated_column_names(self):

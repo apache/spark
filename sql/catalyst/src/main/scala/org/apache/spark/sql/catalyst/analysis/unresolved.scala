@@ -661,13 +661,26 @@ case object UnresolvedSeed extends LeafExpression with Unevaluable {
 
 /**
  * An intermediate expression to hold a resolved (nested) column. Some rules may need to undo the
- * column resolution and use this expression to keep the original column name.
+ * column resolution and use this expression to keep the original column name, or redo the column
+ * resolution with a different priority if the analyzer has tried to resolve it with the default
+ * priority before but failed (i.e. `hasTried` is true).
  */
-case class TempResolvedColumn(child: Expression, nameParts: Seq[String]) extends UnaryExpression
+case class TempResolvedColumn(
+    child: Expression,
+    nameParts: Seq[String],
+    hasTried: Boolean = false) extends UnaryExpression
   with Unevaluable {
+  // If it has been tried to be resolved but failed, mark it as unresolved so that other rules can
+  // try to resolve it again.
+  override lazy val resolved = child.resolved && !hasTried
   override lazy val canonicalized = child.canonicalized
   override def dataType: DataType = child.dataType
+  override def nullable: Boolean = child.nullable
+  // `TempResolvedColumn` is logically a leaf node. We should not count it as a missing reference
+  // when resolving Filter/Sort/RepartitionByExpression. However, we should not make it a real
+  // leaf node, as rules that update expr IDs should update `TempResolvedColumn.child` as well.
+  override def references: AttributeSet = AttributeSet.empty
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)
-  override def sql: String = child.sql
+  final override val nodePatterns: Seq[TreePattern] = Seq(TEMP_RESOLVED_COLUMN)
 }

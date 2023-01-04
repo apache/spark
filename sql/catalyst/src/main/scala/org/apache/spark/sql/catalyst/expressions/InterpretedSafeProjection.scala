@@ -101,10 +101,7 @@ class InterpretedSafeProjection(expressions: Seq[Expression]) extends Projection
   }
 
   override def initialize(partitionIndex: Int): Unit = {
-    expressions.foreach(_.foreach {
-      case n: Nondeterministic => n.initialize(partitionIndex)
-      case _ =>
-    })
+    initializeExprs(exprs, partitionIndex)
   }
 
   override def apply(row: InternalRow): InternalRow = {

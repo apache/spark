@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive.execution
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.{Row, SaveMode, SparkSession}
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -60,7 +60,7 @@ case class CreateHiveTableAsSelectCommand(
         return Seq.empty
       }
 
-      val command = getWritingCommand(catalog, tableDesc, tableExists = true)
+      val command = getWritingCommand(tableDesc, tableExists = true)
       val qe = sparkSession.sessionState.executePlan(command)
       qe.assertCommandExecuted()
     } else {
@@ -74,13 +74,12 @@ case class CreateHiveTableAsSelectCommand(
       val tableSchema = CharVarcharUtils.getRawSchema(
         outputColumns.toStructType, sparkSession.sessionState.conf)
       assert(tableDesc.schema.isEmpty)
-      catalog.createTable(
-        tableDesc.copy(schema = tableSchema), ignoreIfExists = false)
+      catalog.createTable(tableDesc.copy(schema = tableSchema), ignoreIfExists = false)
 
       try {
         // Read back the metadata of the table which was created just now.
         val createdTableMeta = catalog.getTableMetadata(tableDesc.identifier)
-        val command = getWritingCommand(catalog, createdTableMeta, tableExists = false)
+        val command = getWritingCommand(createdTableMeta, tableExists = false)
         val qe = sparkSession.sessionState.executePlan(command)
         qe.assertCommandExecuted()
       } catch {
@@ -95,7 +94,6 @@ case class CreateHiveTableAsSelectCommand(
   }
 
   private def getWritingCommand(
-      catalog: SessionCatalog,
       tableDesc: CatalogTable,
       tableExists: Boolean): DataWritingCommand = {
     // For CTAS, there is no static partition values to insert.
@@ -104,7 +102,7 @@ case class CreateHiveTableAsSelectCommand(
       tableDesc,
       partition,
       query,
-      overwrite = if (tableExists) false else true,
+      overwrite = false,
       ifPartitionNotExists = false,
       outputColumnNames = outputColumnNames)
   }
