@@ -140,11 +140,11 @@ def _create_py_udf(
         import pandas as pd
         from pyspark.sql.pandas.functions import _create_pandas_udf
 
-        result_func = lambda pdf: pdf
+        result_func = lambda pdf: pdf  # noqa: E731
         if type(return_type) == StringType:
-            result_func = lambda r: str(r) if r is not None else r
+            result_func = lambda r: str(r) if r is not None else r  # noqa: E731
         elif type(return_type) == BinaryType:
-            result_func = lambda r: bytes(r) if r is not None else r
+            result_func = lambda r: bytes(r) if r is not None else r  # noqa: E731
 
         def vectorized_udf(*args: pd.Series) -> pd.Series:
             if any(map(lambda arg: isinstance(arg, pd.DataFrame), args)):
