@@ -43,7 +43,7 @@ from pyspark.testing.sqlutils import ReusedSQLTestCase, test_compiled, test_not_
 from pyspark.testing.utils import QuietTest
 
 
-class UDFTests(ReusedSQLTestCase):
+class BaseUDFTests(object):
     def test_udf_with_callable(self):
         d = [Row(number=i, squared=i**2) for i in range(10)]
         rdd = self.sc.parallelize(d)
@@ -802,6 +802,13 @@ class UDFTests(ReusedSQLTestCase):
         self.assertEqual(
             len(self.spark.range(10).select(udf(lambda x: x, DoubleType())(rand())).collect()), 10
         )
+
+
+class UDFTests(BaseUDFTests, ReusedSQLTestCase):
+    @classmethod
+    def setUpClass(cls):
+        super(BaseUDFTests, cls).setUpClass()
+        cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "false")
 
 
 class UDFInitializationTests(unittest.TestCase):
