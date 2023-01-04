@@ -1005,7 +1005,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
 }
 
 class SQLAppStatusListenerWithInMemoryStoreSuite extends SQLAppStatusListenerSuite {
-  protected def createStatusStore(): SQLAppStatusStore = {
+  override protected def createStatusStore(): SQLAppStatusStore = {
     val conf = sparkContext.conf
     kvstore = new ElementTrackingStore(new InMemoryStore, conf)
     val listener = new SQLAppStatusListener(conf, kvstore, live = true)
