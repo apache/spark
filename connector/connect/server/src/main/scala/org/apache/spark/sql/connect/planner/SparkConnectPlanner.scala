@@ -571,47 +571,61 @@ class SparkConnectPlanner(session: SparkSession) {
     try {
       parser.parseTableSchema(sqlText)
     } catch {
-      case _: ParseException =>
+      case e: ParseException =>
         try {
           parser.parseDataType(sqlText)
         } catch {
           case _: ParseException =>
-            parser.parseDataType(s"struct<${sqlText.trim}>")
+            try {
+              parser.parseDataType(s"struct<${sqlText.trim}>")
+            } catch {
+              case _: ParseException =>
+                throw e
+            }
         }
     }
   }
 
   private def transformLocalRelation(rel: proto.LocalRelation): LogicalPlan = {
-    val (rows, structType) = ArrowConverters.fromBatchWithSchemaIterator(
-      Iterator(rel.getData.toByteArray),
-      TaskContext.get())
-    if (structType == null) {
-      throw InvalidPlanInput(s"Input data for LocalRelation does not produce a schema.")
-    }
-    val attributes = structType.toAttributes
-    val proj = UnsafeProjection.create(attributes, attributes)
-    val relation = logical.LocalRelation(attributes, rows.map(r => proj(r).copy()).toSeq)
-
-    if (!rel.hasDatatype && !rel.hasDatatypeStr) {
-      return relation
+    var schema: StructType = null
+    if (rel.hasSchema) {
+      val schemaType = DataType.parseTypeWithFallback(
+        rel.getSchema,
+        parseDatatypeString,
+        fallbackParser = DataType.fromJson)
+      schema = schemaType match {
+        case s: StructType => s
+        case d => StructType(Seq(StructField("value", d)))
+      }
     }
 
-    val schemaType = if (rel.hasDatatype) {
-      DataTypeProtoConverter.toCatalystType(rel.getDatatype)
+    if (rel.hasData) {
+      val (rows, structType) = ArrowConverters.fromBatchWithSchemaIterator(
+        Iterator(rel.getData.toByteArray),
+        TaskContext.get())
+      if (structType == null) {
+        throw InvalidPlanInput(s"Input data for LocalRelation does not produce a schema.")
+      }
+      val attributes = structType.toAttributes
+      val proj = UnsafeProjection.create(attributes, attributes)
+      val relation = logical.LocalRelation(attributes, rows.map(r => proj(r).copy()).toSeq)
+
+      if (schema == null) {
+        relation
+      } else {
+        Dataset
+          .ofRows(session, logicalPlan = relation)
+          .toDF(schema.names: _*)
+          .to(schema)
+          .logicalPlan
+      }
     } else {
-      parseDatatypeString(rel.getDatatypeStr)
+      if (schema == null) {
+        throw InvalidPlanInput(
+          s"Schema for LocalRelation is required when the input data is not provided.")
+      }
+      LocalRelation(schema.toAttributes, data = Seq.empty)
     }
-
-    val schemaStruct = schemaType match {
-      case s: StructType => s
-      case d => StructType(Seq(StructField("value", d)))
-    }
-
-    Dataset
-      .ofRows(session, logicalPlan = relation)
-      .toDF(schemaStruct.names: _*)
-      .to(schemaStruct)
-      .logicalPlan
   }
 
   private def transformReadRel(rel: proto.Read): LogicalPlan = {

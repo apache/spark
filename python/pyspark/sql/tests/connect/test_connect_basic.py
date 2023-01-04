@@ -525,6 +525,34 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             sdf.select(SF.pmod("a", "b")).toPandas(),
         )
 
+    def test_create_empty_df(self):
+        for schema in [
+            "STRING",
+            "x STRING",
+            "x STRING, y INTEGER",
+            StringType(),
+            StructType(
+                [
+                    StructField("x", StringType(), True),
+                    StructField("y", IntegerType(), True),
+                ]
+            ),
+        ]:
+            print(schema)
+            print(schema)
+            print(schema)
+            cdf = self.connect.createDataFrame(data=[], schema=schema)
+            sdf = self.spark.createDataFrame(data=[], schema=schema)
+
+            self.assert_eq(cdf.toPandas(), sdf.toPandas())
+
+        # check error
+        with self.assertRaisesRegex(
+            ValueError,
+            "can not infer schema from empty dataset",
+        ):
+            self.connect.createDataFrame(data=[])
+
     def test_simple_explain_string(self):
         df = self.connect.read.table(self.tbl_name).limit(10)
         result = df._explain_string()
