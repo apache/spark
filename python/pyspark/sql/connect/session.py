@@ -14,21 +14,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
 from threading import RLock
 from collections.abc import Sized
+from functools import reduce
 
 import numpy as np
 import pandas as pd
 import pyarrow as pa
 
-from pyspark.sql.types import DataType, StructType
+from pyspark import SparkContext, SparkConf
+from pyspark.sql.session import classproperty, SparkSession as PySparkSession
+from pyspark.sql.types import (
+    _infer_schema,
+    _has_nulltype,
+    _merge_type,
+    Row,
+    DataType,
+    StructType,
+    AtomicType,
+)
+from pyspark.sql.utils import to_str
 
 from pyspark.sql.connect.client import SparkConnectClient
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.connect.plan import SQL, Range, LocalRelation
 from pyspark.sql.connect.readwriter import DataFrameReader
-from pyspark.sql.utils import to_str
 
 from typing import (
     Optional,
@@ -45,50 +55,10 @@ from typing import (
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import OptionalPrimitiveType
+    from pyspark.sql.connect.catalog import Catalog
 
 
-# TODO(SPARK-38912): This method can be dropped once support for Python 3.8 is dropped
-# In Python 3.9, the @property decorator has been made compatible with the
-# @classmethod decorator (https://docs.python.org/3.9/library/functions.html#classmethod)
-#
-# @classmethod + @property is also affected by a bug in Python's docstring which was backported
-# to Python 3.9.6 (https://github.com/python/cpython/pull/28838)
-class classproperty(property):
-    """Same as Python's @property decorator, but for class attributes.
-
-    Examples
-    --------
-    >>> class Builder:
-    ...    def build(self):
-    ...        return MyClass()
-    ...
-    >>> class MyClass:
-    ...     @classproperty
-    ...     def builder(cls):
-    ...         print("instantiating new builder")
-    ...         return Builder()
-    ...
-    >>> c1 = MyClass.builder
-    instantiating new builder
-    >>> c2 = MyClass.builder
-    instantiating new builder
-    >>> c1 == c2
-    False
-    >>> isinstance(c1.build(), MyClass)
-    True
-    """
-
-    def __get__(self, instance: Any, owner: Any = None) -> "SparkSession.Builder":
-        # The "type: ignore" below silences the following error from mypy:
-        # error: Argument 1 to "classmethod" has incompatible
-        # type "Optional[Callable[[Any], Any]]";
-        # expected "Callable[..., Any]"  [arg-type]
-        return classmethod(self.fget).__get__(None, owner)()  # type: ignore
-
-
-class SparkSession(object):
-    """Conceptually the remote spark session that communicates with the server"""
-
+class SparkSession:
     class Builder:
         """Builder for :class:`SparkSession`."""
 
@@ -112,39 +82,6 @@ class SparkSession(object):
             *,
             map: Optional[Dict[str, "OptionalPrimitiveType"]] = None,
         ) -> "SparkSession.Builder":
-            """Sets a config option. Options set using this method are automatically propagated to
-            both :class:`SparkConf` and :class:`SparkSession`'s own configuration.
-
-            .. versionadded:: 2.0.0
-
-            Parameters
-            ----------
-            key : str, optional
-                a key name string for configuration property
-            value : str, optional
-                a value for configuration property
-            map: dictionary, optional
-                a dictionary of configurations to set
-
-                .. versionadded:: 3.4.0
-
-            Returns
-            -------
-            :class:`SparkSession.Builder`
-
-            Examples
-            --------
-            For a (key, value) pair, you can omit parameter names.
-
-            >>> SparkSession.builder.config("spark.some.config.option", "some-value")
-            <pyspark.sql.session.SparkSession.Builder...
-
-            Additionally, you can pass a dictionary of configurations to set.
-
-            >>> SparkSession.builder.config(
-            ...     map={"spark.some.config.number": 123, "spark.some.config.float": 0.123})
-            <pyspark.sql.session.SparkSession.Builder...
-            """
             with self._lock:
                 if map is not None:
                     for k, v in map.items():
@@ -157,48 +94,19 @@ class SparkSession(object):
             return self
 
         def appName(self, name: str) -> "SparkSession.Builder":
-            """Sets a name for the application, which will be shown in the Spark web UI.
-
-            If no application name is set, a randomly generated name will be used.
-
-            .. versionadded:: 2.0.0
-
-            Parameters
-            ----------
-            name : str
-                an application name
-
-            Returns
-            -------
-            :class:`SparkSession.Builder`
-
-            Examples
-            --------
-            >>> SparkSession.builder.appName("My app")
-            <pyspark.sql.session.SparkSession.Builder...
-            """
             return self.config("spark.app.name", name)
 
         def remote(self, location: str = "sc://localhost") -> "SparkSession.Builder":
-            return self.config("spark.connect.location", location)
+            return self.config("spark.remote", location)
 
         def enableHiveSupport(self) -> "SparkSession.Builder":
-            raise NotImplementedError("enableHiveSupport not  implemented for Spark Connect")
+            raise NotImplementedError("enableHiveSupport not implemented for Spark Connect")
 
         def getOrCreate(self) -> "SparkSession":
-            """Creates a new instance."""
-            return SparkSession(connectionString=self._options["spark.connect.location"])
+            return SparkSession(connectionString=self._options["spark.remote"])
 
     _client: SparkConnectClient
 
-    # TODO(SPARK-38912): Replace @classproperty with @classmethod + @property once support for
-    # Python 3.8 is dropped.
-    #
-    # In Python 3.9, the @property decorator has been made compatible with the
-    # @classmethod decorator (https://docs.python.org/3.9/library/functions.html#classmethod)
-    #
-    # @classmethod + @property is also affected by a bug in Python's docstring which was backported
-    # to Python 3.9.6 (https://github.com/python/cpython/pull/28838)
     @classproperty
     def builder(cls) -> Builder:
         """Creates a :class:`Builder` for constructing a :class:`SparkSession`."""
@@ -210,10 +118,10 @@ class SparkSession(object):
 
         Parameters
         ----------
-        connectionString: Optional[str]
+        connectionString: str, optional
             Connection string that is used to extract the connection parameters and configure
             the GRPC connection. Defaults to `sc://localhost`.
-        userId : Optional[str]
+        userId : str, optional
             Optional unique user ID that is used to differentiate multiple users and
             isolate their Spark Sessions. If the `user_id` is not set, will default to
             the $USER environment. Defining the user ID as part of the connection string
@@ -222,88 +130,66 @@ class SparkSession(object):
         # Parse the connection string.
         self._client = SparkConnectClient(connectionString)
 
+    def table(self, tableName: str) -> DataFrame:
+        return self.read.table(tableName)
+
+    table.__doc__ = PySparkSession.table.__doc__
+
     @property
     def read(self) -> "DataFrameReader":
-        """
-        Returns a :class:`DataFrameReader` that can be used to read data
-        in as a :class:`DataFrame`.
-
-        .. versionadded:: 3.4.0
-
-        Returns
-        -------
-        :class:`DataFrameReader`
-
-        Examples
-        --------
-        >>> spark.read
-        <pyspark.sql.connect.readwriter.DataFrameReader object ...>
-
-        Write a DataFrame into a JSON file and read it back.
-
-        >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
-        ...     # Write a DataFrame into a JSON file
-        ...     spark.createDataFrame(
-        ...         [{"age": 100, "name": "Hyukjin Kwon"}]
-        ...     ).write.mode("overwrite").format("json").save(d)
-        ...
-        ...     # Read the JSON file as a DataFrame.
-        ...     spark.read.format('json').load(d).show()
-        +---+------------+
-        |age|        name|
-        +---+------------+
-        |100|Hyukjin Kwon|
-        +---+------------+
-        """
         return DataFrameReader(self)
+
+    read.__doc__ = PySparkSession.read.__doc__
+
+    def _inferSchemaFromList(
+        self, data: Iterable[Any], names: Optional[List[str]] = None
+    ) -> StructType:
+        """
+        Infer schema from list of Row, dict, or tuple.
+
+        Refer to 'pyspark.sql.session._inferSchemaFromList' with default configurations:
+
+          - 'infer_dict_as_struct' : False
+          - 'infer_array_from_first_element' : False
+          - 'prefer_timestamp_ntz' : False
+        """
+        if not data:
+            raise ValueError("can not infer schema from empty dataset")
+        infer_dict_as_struct = False
+        infer_array_from_first_element = False
+        prefer_timestamp_ntz = False
+        schema = reduce(
+            _merge_type,
+            (
+                _infer_schema(
+                    row,
+                    names,
+                    infer_dict_as_struct=infer_dict_as_struct,
+                    infer_array_from_first_element=infer_array_from_first_element,
+                    prefer_timestamp_ntz=prefer_timestamp_ntz,
+                )
+                for row in data
+            ),
+        )
+        if _has_nulltype(schema):
+            raise ValueError("Some of types cannot be determined after inferring")
+        return schema
 
     def createDataFrame(
         self,
         data: Union["pd.DataFrame", "np.ndarray", Iterable[Any]],
-        schema: Optional[Union[StructType, str, List[str], Tuple[str, ...]]] = None,
+        schema: Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]] = None,
     ) -> "DataFrame":
-        """
-        Creates a :class:`DataFrame` from a :class:`pandas.DataFrame`.
-
-        .. versionadded:: 3.4.0
-
-
-        Parameters
-        ----------
-        data : :class:`pandas.DataFrame` or :class:`list`, or :class:`numpy.ndarray`.
-        schema : :class:`pyspark.sql.types.DataType`, str or list, optional
-
-            When ``schema`` is :class:`pyspark.sql.types.DataType` or a datatype string, it must
-            match the real data, or an exception will be thrown at runtime. If the given schema is
-            not :class:`pyspark.sql.types.StructType`, it will be wrapped into a
-            :class:`pyspark.sql.types.StructType` as its only field, and the field name will be
-            "value". Each record will also be wrapped into a tuple, which can be converted to row
-            later.
-
-        Returns
-        -------
-        :class:`DataFrame`
-
-        Examples
-        --------
-        >>> import pandas
-        >>> pdf = pandas.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]})
-        >>> self.connect.createDataFrame(pdf).collect()
-        [Row(a=1, b='a'), Row(a=2, b='b'), Row(a=3, b='c')]
-
-        """
         assert data is not None
         if isinstance(data, DataFrame):
             raise TypeError("data is already a DataFrame")
-        if isinstance(data, Sized) and len(data) == 0:
-            raise ValueError("Input data cannot be empty")
 
-        _schema: Optional[StructType] = None
+        table: Optional[pa.Table] = None
+        _schema: Optional[Union[AtomicType, StructType]] = None
         _schema_str: Optional[str] = None
         _cols: Optional[List[str]] = None
 
-        if isinstance(schema, StructType):
+        if isinstance(schema, (AtomicType, StructType)):
             _schema = schema
 
         elif isinstance(schema, str):
@@ -313,16 +199,20 @@ class SparkSession(object):
             # Must re-encode any unicode strings to be consistent with StructField names
             _cols = [x.encode("utf-8") if not isinstance(x, str) else x for x in schema]
 
-        # Create the Pandas DataFrame
+        if isinstance(data, Sized) and len(data) == 0:
+            if _schema is not None:
+                return DataFrame.withPlan(LocalRelation(table=None, schema=_schema.json()), self)
+            elif _schema_str is not None:
+                return DataFrame.withPlan(LocalRelation(table=None, schema=_schema_str), self)
+            else:
+                raise ValueError("can not infer schema from empty dataset")
+
         if isinstance(data, pd.DataFrame):
-            pdf = data
+            table = pa.Table.from_pandas(data)
 
         elif isinstance(data, np.ndarray):
-            # `data` of numpy.ndarray type will be converted to a pandas DataFrame,
             if data.ndim not in [1, 2]:
                 raise ValueError("NumPy array input should be of 1 or 2 dimensions.")
-
-            pdf = pd.DataFrame(data)
 
             if _cols is None:
                 if data.ndim == 1 or data.shape[1] == 1:
@@ -330,29 +220,81 @@ class SparkSession(object):
                 else:
                     _cols = ["_%s" % i for i in range(1, data.shape[1] + 1)]
 
+            if data.ndim == 1:
+                if 1 != len(_cols):
+                    raise ValueError(
+                        f"Length mismatch: Expected axis has 1 element, "
+                        f"new values have {len(_cols)} elements"
+                    )
+
+                table = pa.Table.from_arrays([pa.array(data)], _cols)
+            else:
+                if data.shape[1] != len(_cols):
+                    raise ValueError(
+                        f"Length mismatch: Expected axis has {data.shape[1]} elements, "
+                        f"new values have {len(_cols)} elements"
+                    )
+
+                table = pa.Table.from_arrays(
+                    [pa.array(data[::, i]) for i in range(0, data.shape[1])], _cols
+                )
+
         else:
-            pdf = pd.DataFrame(list(data))
+            _data = list(data)
+
+            if _schema is None and isinstance(_data[0], (Row, dict)):
+                if isinstance(_data[0], dict):
+                    # Sort the data to respect inferred schema.
+                    # For dictionaries, we sort the schema in alphabetical order.
+                    _data = [dict(sorted(d.items())) for d in _data]
+
+                _schema = self._inferSchemaFromList(_data, _cols)
+                if _cols is not None:
+                    for i, name in enumerate(_cols):
+                        _schema.fields[i].name = name
+                        _schema.names[i] = name
 
             if _cols is None:
-                _cols = ["_%s" % i for i in range(1, pdf.shape[1] + 1)]
+                if _schema is None:
+                    if isinstance(_data[0], (list, tuple)):
+                        _cols = ["_%s" % i for i in range(1, len(_data[0]) + 1)]
+                    else:
+                        _cols = ["_1"]
+                elif isinstance(_schema, StructType):
+                    _cols = _schema.names
+                else:
+                    _cols = ["value"]
+
+            if isinstance(_data[0], Row):
+                table = pa.Table.from_pylist([row.asDict(recursive=True) for row in _data])
+            elif isinstance(_data[0], dict):
+                table = pa.Table.from_pylist(_data)
+            elif isinstance(_data[0], (list, tuple)):
+                table = pa.Table.from_pylist([dict(zip(_cols, list(item))) for item in _data])
+            else:
+                # input data can be [1, 2, 3]
+                table = pa.Table.from_pylist([dict(zip(_cols, [item])) for item in _data])
 
         # Validate number of columns
-        num_cols = pdf.shape[1]
-        if _schema is not None and len(_schema.fields) != num_cols:
+        num_cols = table.shape[1]
+        if (
+            _schema is not None
+            and isinstance(_schema, StructType)
+            and len(_schema.fields) != num_cols
+        ):
             raise ValueError(
                 f"Length mismatch: Expected axis has {num_cols} elements, "
                 f"new values have {len(_schema.fields)} elements"
             )
-        elif _cols is not None and len(_cols) != num_cols:
+
+        if _cols is not None and len(_cols) != num_cols:
             raise ValueError(
                 f"Length mismatch: Expected axis has {num_cols} elements, "
                 f"new values have {len(_cols)} elements"
             )
 
-        table = pa.Table.from_pandas(pdf)
-
         if _schema is not None:
-            return DataFrame.withPlan(LocalRelation(table, schema=_schema), self)
+            return DataFrame.withPlan(LocalRelation(table, schema=_schema.json()), self)
         elif _schema_str is not None:
             return DataFrame.withPlan(LocalRelation(table, schema=_schema_str), self)
         elif _cols is not None and len(_cols) > 0:
@@ -360,6 +302,48 @@ class SparkSession(object):
         else:
             return DataFrame.withPlan(LocalRelation(table), self)
 
+    createDataFrame.__doc__ = PySparkSession.createDataFrame.__doc__
+
+    def sql(self, sqlQuery: str) -> "DataFrame":
+        return DataFrame.withPlan(SQL(sqlQuery), self)
+
+    sql.__doc__ = PySparkSession.sql.__doc__
+
+    def range(
+        self,
+        start: int,
+        end: Optional[int] = None,
+        step: int = 1,
+        numPartitions: Optional[int] = None,
+    ) -> DataFrame:
+        if end is None:
+            actual_end = start
+            start = 0
+        else:
+            actual_end = end
+
+        return DataFrame.withPlan(
+            Range(start=start, end=actual_end, step=step, num_partitions=numPartitions), self
+        )
+
+    range.__doc__ = PySparkSession.range.__doc__
+
+    @property
+    def catalog(self) -> "Catalog":
+        from pyspark.sql.connect.catalog import Catalog
+
+        if not hasattr(self, "_catalog"):
+            self._catalog = Catalog(self)
+        return self._catalog
+
+    catalog.__doc__ = PySparkSession.catalog.__doc__
+
+    def stop(self) -> None:
+        self.client.close()
+
+    stop.__doc__ = PySparkSession.stop.__doc__
+
+    # SparkConnect-specific API
     @property
     def client(self) -> "SparkConnectClient":
         """
@@ -374,44 +358,62 @@ class SparkSession(object):
     def register_udf(self, function: Any, return_type: Union[str, DataType]) -> str:
         return self._client.register_udf(function, return_type)
 
-    def sql(self, sql_string: str) -> "DataFrame":
-        return DataFrame.withPlan(SQL(sql_string), self)
 
-    def range(
-        self,
-        start: int,
-        end: Optional[int] = None,
-        step: int = 1,
-        numPartitions: Optional[int] = None,
-    ) -> DataFrame:
-        """
-        Create a :class:`DataFrame` with column named ``id`` and typed Long,
-        containing elements in a range from ``start`` to ``end`` (exclusive) with
-        step value ``step``.
+SparkSession.__doc__ = PySparkSession.__doc__
 
-        .. versionadded:: 3.4.0
 
-        Parameters
-        ----------
-        start : int
-            the start value
-        end : int
-            the end value (exclusive)
-        step : int, optional
-            the incremental step (default: 1)
-        numPartitions : int, optional
-            the number of partitions of the DataFrame
+def _test() -> None:
+    import os
+    import sys
+    import doctest
+    from pyspark.sql import SparkSession as PySparkSession
+    from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
-        Returns
-        -------
-        :class:`DataFrame`
-        """
-        if end is None:
-            actual_end = start
-            start = 0
-        else:
-            actual_end = end
+    os.chdir(os.environ["SPARK_HOME"])
 
-        return DataFrame.withPlan(
-            Range(start=start, end=actual_end, step=step, num_partitions=numPartitions), self
+    if should_test_connect:
+        import pyspark.sql.connect.session
+
+        globs = pyspark.sql.connect.session.__dict__.copy()
+        # Works around to create a regular Spark session
+        sc = SparkContext("local[4]", "sql.connect.session tests", conf=SparkConf())
+        globs["_spark"] = PySparkSession(
+            sc, options={"spark.app.name": "sql.connect.session tests"}
         )
+
+        # Creates a remote Spark session.
+        os.environ["SPARK_REMOTE"] = "sc://localhost"
+        globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
+
+        # Uses PySpark session to test builder.
+        globs["SparkSession"] = PySparkSession
+        # Spark Connect does not support to set master together.
+        pyspark.sql.connect.session.SparkSession.__doc__ = None
+        del pyspark.sql.connect.session.SparkSession.Builder.master.__doc__
+        # RDD API is not supported in Spark Connect.
+        del pyspark.sql.connect.session.SparkSession.createDataFrame.__doc__
+
+        # TODO(SPARK-41811): Implement SparkSession.sql's string formatter
+        del pyspark.sql.connect.session.SparkSession.sql.__doc__
+
+        (failure_count, test_count) = doctest.testmod(
+            pyspark.sql.connect.session,
+            globs=globs,
+            optionflags=doctest.ELLIPSIS
+            | doctest.NORMALIZE_WHITESPACE
+            | doctest.IGNORE_EXCEPTION_DETAIL,
+        )
+
+        globs["spark"].stop()
+        globs["_spark"].stop()
+        if failure_count:
+            sys.exit(-1)
+    else:
+        print(
+            f"Skipping pyspark.sql.connect.session doctests: {connect_requirement_message}",
+            file=sys.stderr,
+        )
+
+
+if __name__ == "__main__":
+    _test()

@@ -50,7 +50,7 @@ abstract class HistoryServerDiskManagerSuite extends SparkFunSuite with BeforeAn
 
   before {
     testDir = Utils.createTempDir()
-    store = KVUtils.open(new File(testDir, "listing"), "test", conf)
+    store = KVUtils.open(new File(testDir, "listing"), "test", conf, live = false)
   }
 
   after {

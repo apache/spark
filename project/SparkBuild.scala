@@ -54,13 +54,14 @@ object BuildCommons {
 
   val connectCommon = ProjectRef(buildLocation, "connect-common")
   val connect = ProjectRef(buildLocation, "connect")
+  val connectClient = ProjectRef(buildLocation, "connect-client-jvm")
 
   val allProjects@Seq(
     core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, tags, sketch, kvstore, _*
   ) = Seq(
     "core", "graphx", "mllib", "mllib-local", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
     "tags", "sketch", "kvstore"
-  ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ Seq(connectCommon, connect)
+  ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ Seq(connectCommon, connect, connectClient)
 
   val optionallyEnabledProjects@Seq(kubernetes, mesos, yarn,
     sparkGangliaLgpl, streamingKinesisAsl,
@@ -87,7 +88,7 @@ object BuildCommons {
 
   // Google Protobuf version used for generating the protobuf.
   // SPARK-41247: needs to be consistent with `protobuf.version` in `pom.xml`.
-  val protoVersion = "3.21.9"
+  val protoVersion = "3.21.12"
   // GRPC version used for Spark Connect.
   val gprcVersion = "1.47.0"
 }
@@ -112,19 +113,13 @@ object SparkBuild extends PomBuild {
       sys.props.put("test.jdwp.enabled", "true")
     }
     if (profiles.contains("user-defined-protoc")) {
-      val connectProtocExecPath = Properties.envOrNone("CONNECT_PROTOC_EXEC_PATH")
+      val sparkProtocExecPath = Properties.envOrNone("SPARK_PROTOC_EXEC_PATH")
       val connectPluginExecPath = Properties.envOrNone("CONNECT_PLUGIN_EXEC_PATH")
-      val protobufProtocExecPath = Properties.envOrNone("PROTOBUF_PROTOC_EXEC_PATH")
-      val coreProtocExecPath = Properties.envOrNone("CORE_PROTOC_EXEC_PATH")
-      if (connectProtocExecPath.isDefined && connectPluginExecPath.isDefined) {
-        sys.props.put("connect.protoc.executable.path", connectProtocExecPath.get)
+      if (sparkProtocExecPath.isDefined) {
+        sys.props.put("spark.protoc.executable.path", sparkProtocExecPath.get)
+      }
+      if (connectPluginExecPath.isDefined) {
         sys.props.put("connect.plugin.executable.path", connectPluginExecPath.get)
-      }
-      if (protobufProtocExecPath.isDefined) {
-        sys.props.put("protobuf.protoc.executable.path", protobufProtocExecPath.get)
-      }
-      if (coreProtocExecPath.isDefined) {
-        sys.props.put("core.protoc.executable.path", coreProtocExecPath.get)
       }
     }
     profiles
@@ -230,12 +225,12 @@ object SparkBuild extends PomBuild {
   // Silencer: Scala compiler plugin for warning suppression
   // Aim: enable fatal warnings, but suppress ones related to using of deprecated APIs
   // depends on scala version:
-  // <2.13.2 - silencer 1.7.10 and compiler settings to enable fatal warnings
+  // <2.13.2 - silencer 1.7.12 and compiler settings to enable fatal warnings
   // 2.13.2+ - no silencer and configured warnings to achieve the same
   lazy val compilerWarningSettings: Seq[sbt.Def.Setting[_]] = Seq(
     libraryDependencies ++= {
       if (VersionNumber(scalaVersion.value).matchesSemVer(SemanticSelector("<2.13.2"))) {
-        val silencerVersion = "1.7.10"
+        val silencerVersion = "1.7.12"
         Seq(
           "org.scala-lang.modules" %% "scala-collection-compat" % "2.2.0",
           compilerPlugin("com.github.ghik" % "silencer-plugin" % silencerVersion cross CrossVersion.full),
@@ -408,7 +403,7 @@ object SparkBuild extends PomBuild {
   val mimaProjects = allProjects.filterNot { x =>
     Seq(
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
-      unsafe, tags, tokenProviderKafka010, sqlKafka010, connectCommon, connect, protobuf
+      unsafe, tags, tokenProviderKafka010, sqlKafka010, connectCommon, connect, connectClient, protobuf
     ).contains(x)
   }
 
@@ -451,6 +446,7 @@ object SparkBuild extends PomBuild {
 
   enable(SparkConnectCommon.settings)(connectCommon)
   enable(SparkConnect.settings)(connect)
+  enable(SparkConnectClient.settings)(connectClient)
 
   /* Protobuf settings */
   enable(SparkProtobuf.settings)(protobuf)
@@ -649,10 +645,10 @@ object Core {
       Seq(propsFile)
     }.taskValue
   ) ++ {
-    val coreProtocExecPath = sys.props.get("core.protoc.executable.path")
-    if (coreProtocExecPath.isDefined) {
+    val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
+    if (sparkProtocExecPath.isDefined) {
       Seq(
-        PB.protocExecutable := file(coreProtocExecPath.get)
+        PB.protocExecutable := file(sparkProtocExecPath.get)
       )
     } else {
       Seq.empty
@@ -722,15 +718,15 @@ object SparkConnectCommon {
       case _ => MergeStrategy.first
     }
   ) ++ {
-    val connectProtocExecPath = sys.props.get("connect.protoc.executable.path")
+    val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
     val connectPluginExecPath = sys.props.get("connect.plugin.executable.path")
-    if (connectProtocExecPath.isDefined && connectPluginExecPath.isDefined) {
+    if (sparkProtocExecPath.isDefined && connectPluginExecPath.isDefined) {
       Seq(
         (Compile / PB.targets) := Seq(
           PB.gens.java -> (Compile / sourceManaged).value,
           PB.gens.plugin(name = "grpc-java", path = connectPluginExecPath.get) -> (Compile / sourceManaged).value
         ),
-        PB.protocExecutable := file(connectProtocExecPath.get)
+        PB.protocExecutable := file(sparkProtocExecPath.get)
       )
     } else {
       Seq(
@@ -831,6 +827,62 @@ object SparkConnect {
   }
 }
 
+object SparkConnectClient {
+  import BuildCommons.protoVersion
+
+  lazy val settings = Seq(
+    // For some reason the resolution from the imported Maven build does not work for some
+    // of these dependendencies that we need to shade later on.
+    libraryDependencies ++= {
+      Seq(
+        "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
+      )
+    },
+
+    dependencyOverrides ++= {
+      Seq(
+        "com.google.protobuf" % "protobuf-java" % protoVersion
+      )
+    },
+
+    (assembly / test) := { },
+
+    (assembly / logLevel) := Level.Info,
+
+    // Exclude `scala-library` from assembly.
+    (assembly / assemblyPackageScala / assembleArtifact) := false,
+
+    // Exclude `pmml-model-*.jar`, `scala-collection-compat_*.jar`,`jsr305-*.jar` and
+    // `netty-*.jar` and `unused-1.0.0.jar` from assembly.
+    (assembly / assemblyExcludedJars) := {
+      val cp = (assembly / fullClasspath).value
+      cp filter { v =>
+        val name = v.data.getName
+        name.startsWith("pmml-model-") || name.startsWith("scala-collection-compat_") ||
+          name.startsWith("jsr305-") || name.startsWith("netty-") || name == "unused-1.0.0.jar"
+      }
+    },
+
+    (assembly / assemblyShadeRules) := Seq(
+      ShadeRule.rename("com.google.protobuf.**" -> "org.sparkproject.connect.protobuf.@1").inAll,
+    ),
+
+    (assembly / assemblyMergeStrategy) := {
+      case m if m.toLowerCase(Locale.ROOT).endsWith("manifest.mf") => MergeStrategy.discard
+      // Drop all proto files that are not needed as artifacts of the build.
+      case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
+      case _ => MergeStrategy.first
+    }
+  ) ++ {
+    Seq(
+      (Compile / PB.targets) := Seq(
+        PB.gens.java -> (Compile / sourceManaged).value,
+        PB.gens.plugin("grpc-java") -> (Compile / sourceManaged).value
+      )
+    )
+  }
+}
+
 object SparkProtobuf {
   import BuildCommons.protoVersion
 
@@ -880,10 +932,10 @@ object SparkProtobuf {
       case _ => MergeStrategy.first
     },
   ) ++ {
-    val protobufProtocExecPath = sys.props.get("protobuf.protoc.executable.path")
-    if (protobufProtocExecPath.isDefined) {
+    val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
+    if (sparkProtocExecPath.isDefined) {
       Seq(
-        PB.protocExecutable := file(protobufProtocExecPath.get)
+        PB.protocExecutable := file(sparkProtocExecPath.get)
       )
     } else {
       Seq.empty
@@ -1337,10 +1389,10 @@ object Unidoc {
 
     (ScalaUnidoc / unidoc / unidocProjectFilter) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
-        yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, protobuf),
+        yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, connectClient, protobuf),
     (JavaUnidoc / unidoc / unidocProjectFilter) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
-        yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, protobuf),
+        yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, connectClient, protobuf),
 
     (ScalaUnidoc / unidoc / unidocAllClasspaths) := {
       ignoreClasspaths((ScalaUnidoc / unidoc / unidocAllClasspaths).value)
@@ -1426,6 +1478,7 @@ object CopyDependencies {
       // produce the shaded Jar which happens automatically in the case of Maven.
       // Later, when the dependencies are copied, we manually copy the shaded Jar only.
       val fid = (LocalProject("connect") / assembly).value
+      val fidClient = (LocalProject("connect-client-jvm") / assembly).value
       val fidProtobuf = (LocalProject("protobuf") / assembly).value
 
       (Compile / dependencyClasspath).value.map(_.data)
@@ -1439,6 +1492,9 @@ object CopyDependencies {
           if (jar.getName.contains("spark-connect") &&
             !SbtPomKeys.profiles.value.contains("noshade-connect")) {
             Files.copy(fid.toPath, destJar.toPath)
+          } else if (jar.getName.contains("connect-client-jvm") &&
+            !SbtPomKeys.profiles.value.contains("noshade-connect-client-jvm")) {
+            Files.copy(fidClient.toPath, destJar.toPath)
           } else if (jar.getName.contains("spark-protobuf") &&
             !SbtPomKeys.profiles.value.contains("noshade-protobuf")) {
             Files.copy(fidProtobuf.toPath, destJar.toPath)

@@ -20,12 +20,12 @@ set -ex
 
 if [[ $# -gt 1 ]]; then
   echo "Illegal number of parameters."
-  echo "Usage: ./connector/connect/dev/generate_protos.sh [path]"
+  echo "Usage: ./dev/generate_protos.sh [path]"
   exit -1
 fi
 
 
-SPARK_HOME="$(cd "`dirname $0`"/../../..; pwd)"
+SPARK_HOME="$(cd "`dirname $0`"/..; pwd)"
 cd "$SPARK_HOME"
 
 

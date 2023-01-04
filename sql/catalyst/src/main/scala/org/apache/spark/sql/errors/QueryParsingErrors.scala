@@ -78,7 +78,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def combinationQueryResultClausesUnsupportedError(ctx: QueryOrganizationContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0011", ctx)
+    new ParseException(errorClass = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES", ctx)
   }
 
   def distributeByUnsupportedError(ctx: QueryOrganizationContext): Throwable = {
@@ -219,13 +219,6 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
       ctx)
   }
 
-  def cannotParseIntervalValueError(value: String, ctx: TypeConstructorContext): Throwable = {
-    new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0020",
-      messageParameters = Map("value" -> value),
-      ctx)
-  }
-
   def literalValueTypeUnsupportedError(
       unsupportedType: String,
       supportedTypes: Seq[String],
@@ -235,15 +228,6 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
       messageParameters = Map(
         "unsupportedType" -> toSQLType(unsupportedType),
         "supportedTypes" -> supportedTypes.map(toSQLType).mkString(", ")),
-      ctx)
-  }
-
-  def parsingValueTypeError(
-      e: IllegalArgumentException, valueType: String, ctx: TypeConstructorContext): Throwable = {
-    val message = Option(e.getMessage).getOrElse(s"Exception parsing $valueType")
-    new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0022",
-      messageParameters = Map("msg" -> message),
       ctx)
   }
 

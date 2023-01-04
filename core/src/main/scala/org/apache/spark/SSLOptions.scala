@@ -181,7 +181,9 @@ private[spark] object SSLOptions extends Logging {
       ns: String,
       defaults: Option[SSLOptions] = None): SSLOptions = {
     val enabled = conf.getBoolean(s"$ns.enabled", defaultValue = defaults.exists(_.enabled))
-
+    if (!enabled) {
+      return new SSLOptions()
+    }
     val port = conf.getWithSubstitution(s"$ns.port").map(_.toInt)
     port.foreach { p =>
       require(p >= 0, "Port number must be a non-negative value.")

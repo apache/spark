@@ -376,7 +376,7 @@ class PlanParserSuite extends AnalysisTest {
     val sql1 = s"$baseSql order by a sort by a"
     checkError(
       exception = parseException(sql1),
-      errorClass = "_LEGACY_ERROR_TEMP_0011",
+      errorClass = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = "order by a sort by a",
@@ -386,7 +386,7 @@ class PlanParserSuite extends AnalysisTest {
     val sql2 = s"$baseSql cluster by a distribute by a"
     checkError(
       exception = parseException(sql2),
-      errorClass = "_LEGACY_ERROR_TEMP_0011",
+      errorClass = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = "cluster by a distribute by a",
@@ -396,7 +396,7 @@ class PlanParserSuite extends AnalysisTest {
     val sql3 = s"$baseSql order by a cluster by a"
     checkError(
       exception = parseException(sql3),
-      errorClass = "_LEGACY_ERROR_TEMP_0011",
+      errorClass = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = "order by a cluster by a",
@@ -406,7 +406,7 @@ class PlanParserSuite extends AnalysisTest {
     val sql4 = s"$baseSql order by a distribute by a"
     checkError(
       exception = parseException(sql4),
-      errorClass = "_LEGACY_ERROR_TEMP_0011",
+      errorClass = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = "order by a distribute by a",
@@ -1567,5 +1567,31 @@ class PlanParserSuite extends AnalysisTest {
       PercentileDisc(UnresolvedAttribute("col"), Literal(Decimal(0.1), DecimalType(1, 1)))
         .toAggregateExpression(false, Some(GreaterThan(UnresolvedAttribute("id"), Literal(10))))
     )
+  }
+
+  test("SPARK-41271: parsing of named parameters") {
+    comparePlans(
+      parsePlan("SELECT :param_1"),
+      Project(UnresolvedAlias(Parameter("param_1"), None) :: Nil, OneRowRelation()))
+    comparePlans(
+      parsePlan("SELECT abs(:1Abc)"),
+      Project(UnresolvedAlias(
+        UnresolvedFunction(
+          "abs" :: Nil,
+          Parameter("1Abc") :: Nil,
+          isDistinct = false), None) :: Nil,
+        OneRowRelation()))
+    comparePlans(
+      parsePlan("SELECT * FROM a LIMIT :limitA"),
+      table("a").select(star()).limit(Parameter("limitA")))
+    // Invalid empty name and invalid symbol in a name
+    checkError(
+      exception = parseException(s"SELECT :-"),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'-'", "hint" -> ""))
+    checkError(
+      exception = parseException(s"SELECT :"),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "end of input", "hint" -> ""))
   }
 }

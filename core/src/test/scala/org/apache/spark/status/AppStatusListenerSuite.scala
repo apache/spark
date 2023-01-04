@@ -34,7 +34,6 @@ import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster._
 import org.apache.spark.status.ListenerEventsTestHelper._
 import org.apache.spark.status.api.v1
-import org.apache.spark.status.protobuf.KVStoreProtobufSerializer
 import org.apache.spark.storage._
 import org.apache.spark.tags.ExtendedLevelDBTest
 import org.apache.spark.util.Utils
@@ -53,7 +52,8 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
     .set(LIVE_ENTITY_UPDATE_PERIOD, 0L)
     .set(ASYNC_TRACKING_ENABLED, false)
 
-  protected def createKVStore: KVStore = KVUtils.open(testDir, getClass().getName(), conf)
+  protected def createKVStore: KVStore =
+    KVUtils.open(testDir, getClass().getName(), conf, live = false)
 
   before {
     time = 0L
@@ -1973,6 +1973,5 @@ class AppStatusListenerWithProtobufSerializerSuite extends AppStatusListenerSuit
       testDir,
       getClass().getName(),
       conf,
-      Some(HybridStoreDiskBackend.ROCKSDB),
-      Some(new KVStoreProtobufSerializer()))
+      live = true)
 }
