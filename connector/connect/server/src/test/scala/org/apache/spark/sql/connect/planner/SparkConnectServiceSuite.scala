@@ -310,58 +310,61 @@ class SparkConnectServiceSuite extends SharedSparkSession {
         .newBuilder()
         .setUserId("c1")
         .build()
-      val collectMetrics = proto.Relation
-        .newBuilder()
-        .setCollectMetrics(
-          proto.CollectMetrics
-            .newBuilder()
-            .setInput(connect.sql("select id, exp(id) as eid from range(0, 100, 1, 4)"))
-            .setName("my_metric")
-            .addAllMetrics(Seq(
-              proto_min("id".protoAttr).as("min_val"),
-              proto_max("id".protoAttr).as("max_val")).asJava))
-        .build()
-      val plan = proto.Plan
-        .newBuilder()
-        .setRoot(collectMetrics)
-        .build()
-      val request = proto.ExecutePlanRequest
-        .newBuilder()
-        .setPlan(plan)
-        .setUserContext(context)
-        .build()
+      Seq(true, false).foreach { isObservation =>
+        val collectMetrics = proto.Relation
+          .newBuilder()
+          .setCollectMetrics(
+            proto.CollectMetrics
+              .newBuilder()
+              .setInput(connect.sql("select id, exp(id) as eid from range(0, 100, 1, 4)"))
+              .setName("my_metric")
+              .setIsObservation(isObservation)
+              .addAllMetrics(Seq(
+                proto_min("id".protoAttr).as("min_val"),
+                proto_max("id".protoAttr).as("max_val")).asJava))
+          .build()
+        val plan = proto.Plan
+          .newBuilder()
+          .setRoot(collectMetrics)
+          .build()
+        val request = proto.ExecutePlanRequest
+          .newBuilder()
+          .setPlan(plan)
+          .setUserContext(context)
+          .build()
 
-      // Execute plan.
-      @volatile var done = false
-      val responses = mutable.Buffer.empty[proto.ExecutePlanResponse]
-      instance.executePlan(
-        request,
-        new StreamObserver[proto.ExecutePlanResponse] {
-          override def onNext(v: proto.ExecutePlanResponse): Unit = responses += v
+        // Execute plan.
+        @volatile var done = false
+        val responses = mutable.Buffer.empty[proto.ExecutePlanResponse]
+        instance.executePlan(
+          request,
+          new StreamObserver[proto.ExecutePlanResponse] {
+            override def onNext(v: proto.ExecutePlanResponse): Unit = responses += v
 
-          override def onError(throwable: Throwable): Unit = throw throwable
+            override def onError(throwable: Throwable): Unit = throw throwable
 
-          override def onCompleted(): Unit = done = true
-        })
+            override def onCompleted(): Unit = done = true
+          })
 
-      // The current implementation is expected to be blocking. This is here to make sure it is.
-      assert(done)
+        // The current implementation is expected to be blocking. This is here to make sure it is.
+        assert(done)
 
-      assert(responses.size == 6)
+        assert(responses.size == 6)
 
-      // Make sure the last response is observed metrics only
-      val last = responses.last
-      assert(last.hasObservedMetrics && !last.hasArrowBatch)
+        // Make sure the last response is observed metrics only
+        val last = responses.last
+        assert(last.hasObservedMetrics && !last.hasArrowBatch)
 
-      val observedMetrics = last.getObservedMetrics
-      assert(observedMetrics.getMetricsObjectsCount == 1)
-      val metricsObjectsList = observedMetrics.getMetricsObjectsList.asScala
-      val metricsObject = metricsObjectsList.head
-      assert(metricsObject.getName == "my_metric")
-      assert(metricsObject.getValuesCount == 2)
-      val valuesList = metricsObject.getValuesList.asScala
-      assert(valuesList.head.hasLong && valuesList.head.getLong == 0)
-      assert(valuesList.last.hasLong && valuesList.last.getLong == 99)
+        val observedMetrics = last.getObservedMetrics
+        assert(observedMetrics.getMetricsObjectsCount == 1)
+        val metricsObjectsList = observedMetrics.getMetricsObjectsList.asScala
+        val metricsObject = metricsObjectsList.head
+        assert(metricsObject.getName == "my_metric")
+        assert(metricsObject.getValuesCount == 2)
+        val valuesList = metricsObject.getValuesList.asScala
+        assert(valuesList.head.hasLong && valuesList.head.getLong == 0)
+        assert(valuesList.last.hasLong && valuesList.last.getLong == 99)
+      }
     }
   }
 }

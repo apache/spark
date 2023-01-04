@@ -1639,16 +1639,31 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         observation_name = "my_metric"
 
-        cdf = (
+        self.assert_eq(
             self.connect.read.table(self.tbl_name)
             .filter("id > 3")
             .observe(observation_name, CF.min("id"), CF.max("id"), CF.sum("id"))
+            .toPandas(),
+            self.spark.read.table(self.tbl_name)
+            .filter("id > 3")
+            .observe(observation_name, SF.min("id"), SF.max("id"), SF.sum("id"))
+            .toPandas(),
+        )
+
+        from pyspark.sql.observation import Observation
+
+        observation = Observation(observation_name)
+
+        cdf = (
+            self.connect.read.table(self.tbl_name)
+            .filter("id > 3")
+            .observe(observation, CF.min("id"), CF.max("id"), CF.sum("id"))
             .toPandas()
         )
         df = (
             self.spark.read.table(self.tbl_name)
             .filter("id > 3")
-            .observe(observation_name, SF.min("id"), SF.max("id"), SF.sum("id"))
+            .observe(observation, SF.min("id"), SF.max("id"), SF.sum("id"))
             .toPandas()
         )
 

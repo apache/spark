@@ -43,6 +43,7 @@ from collections.abc import Iterable
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
 from pyspark.sql import Observation
+from pyspark.sql.observation import Observation
 from pyspark.sql.types import Row, StructType
 from pyspark.sql.dataframe import (
     DataFrame as PySparkDataFrame,
@@ -783,7 +784,7 @@ class DataFrame:
 
     def observe(
         self,
-        observation: str,
+        observation: Union["Observation", str],
         *exprs: Column,
     ) -> "DataFrame":
         if len(exprs) == 0:
@@ -791,10 +792,18 @@ class DataFrame:
         if not all(isinstance(c, Column) for c in exprs):
             raise ValueError("all 'exprs' should be Column")
 
-        return DataFrame.withPlan(
-            plan.CollectMetrics(self._plan, observation, list(exprs)),
-            self._session,
-        )
+        if isinstance(observation, Observation):
+            return DataFrame.withPlan(
+                plan.CollectMetrics(self._plan, str(observation._name), list(exprs), True),
+                self._session,
+            )
+        elif isinstance(observation, str):
+            return DataFrame.withPlan(
+                plan.CollectMetrics(self._plan, observation, list(exprs), False),
+                self._session,
+            )
+        else:
+            raise ValueError("'observation' should be either `Observation` or `str`.")
 
     observe.__doc__ = PySparkDataFrame.observe.__doc__
 

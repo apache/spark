@@ -792,4 +792,7 @@ message CollectMetrics {
 
   // (Required) The metric sequence.
   repeated Expression metrics = 3;
+
+  // (Optional) The identity whether Observation are used.
+  optional bool is_observation = 4;
 }
