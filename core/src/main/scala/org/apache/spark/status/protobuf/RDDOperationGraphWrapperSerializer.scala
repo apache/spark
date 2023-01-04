@@ -19,7 +19,9 @@ package org.apache.spark.status.protobuf
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.rdd.DeterministicLevel
 import org.apache.spark.status.{RDDOperationClusterWrapper, RDDOperationGraphWrapper}
+import org.apache.spark.status.protobuf.StoreTypes.{DeterministicLevel => GDeterministicLevel}
 import org.apache.spark.ui.scope.{RDDOperationEdge, RDDOperationNode}
 
 class RDDOperationGraphWrapperSerializer extends ProtobufSerDe {
@@ -115,5 +117,31 @@ class RDDOperationGraphWrapperSerializer extends ProtobufSerDe {
     RDDOperationEdge(
       fromId = edge.getFromId,
       toId = edge.getToId)
+  }
+}
+
+private[protobuf] object DeterministicLevelSerializer {
+
+  def serialize(input: DeterministicLevel.Value): GDeterministicLevel = {
+    input match {
+      case DeterministicLevel.DETERMINATE =>
+        GDeterministicLevel.DETERMINISTIC_LEVEL_DETERMINATE
+      case DeterministicLevel.UNORDERED =>
+        GDeterministicLevel.DETERMINISTIC_LEVEL_UNORDERED
+      case DeterministicLevel.INDETERMINATE =>
+        GDeterministicLevel.DETERMINISTIC_LEVEL_INDETERMINATE
+    }
+  }
+
+  def deserialize(binary: GDeterministicLevel): DeterministicLevel.Value = {
+    binary match {
+      case GDeterministicLevel.DETERMINISTIC_LEVEL_DETERMINATE =>
+        DeterministicLevel.DETERMINATE
+      case GDeterministicLevel.DETERMINISTIC_LEVEL_UNORDERED =>
+        DeterministicLevel.UNORDERED
+      case GDeterministicLevel.DETERMINISTIC_LEVEL_INDETERMINATE =>
+        DeterministicLevel.INDETERMINATE
+      case _ => null
+    }
   }
 }
