@@ -2426,12 +2426,6 @@ def _test() -> None:
         # TODO(SPARK-41845): Fix count bug
         del pyspark.sql.connect.functions.count.__doc__
 
-        # TODO(SPARK-41846): window functions : unresolved columns
-        del pyspark.sql.connect.functions.rank.__doc__
-        del pyspark.sql.connect.functions.cume_dist.__doc__
-        del pyspark.sql.connect.functions.dense_rank.__doc__
-        del pyspark.sql.connect.functions.percent_rank.__doc__
-
         # TODO(SPARK-41847): mapfield,structlist invalid type
         del pyspark.sql.connect.functions.element_at.__doc__
         del pyspark.sql.connect.functions.explode.__doc__
