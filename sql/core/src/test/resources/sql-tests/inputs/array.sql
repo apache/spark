@@ -145,3 +145,6 @@ select array_append(array(1, 2, 3, NULL), NULL);
 select array_append(array('a', 'b', 'c', NULL), NULL);
 select array_append(CAST(null AS ARRAY<String>), 'a');
 select array_append(CAST(null AS ARRAY<String>), CAST(null as String));
+select array_append(array(), 1);
+select array_append(CAST(array() AS ARRAY<String>), CAST(NULL AS String));
+select array_append(array(CAST(NULL AS String)), CAST(NULL AS String));
