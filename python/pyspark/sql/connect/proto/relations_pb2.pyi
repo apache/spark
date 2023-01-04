@@ -1268,45 +1268,44 @@ class LocalRelation(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     DATA_FIELD_NUMBER: builtins.int
-    DATATYPE_FIELD_NUMBER: builtins.int
-    DATATYPE_STR_FIELD_NUMBER: builtins.int
+    SCHEMA_FIELD_NUMBER: builtins.int
     data: builtins.bytes
-    """Local collection data serialized into Arrow IPC streaming format which contains
+    """(Optional) Local collection data serialized into Arrow IPC streaming format which contains
     the schema of the data.
     """
-    @property
-    def datatype(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
-    datatype_str: builtins.str
-    """Server will use Catalyst parser to parse this string to DataType."""
+    schema: builtins.str
+    """(Optional) The schema of local data.
+    It should be either a DDL-formatted type string or a JSON string.
+
+    The server side will update the column names and data types according to this schema.
+    If the 'data' is not provided, then this schema will be required.
+    """
     def __init__(
         self,
         *,
-        data: builtins.bytes = ...,
-        datatype: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
-        datatype_str: builtins.str = ...,
+        data: builtins.bytes | None = ...,
+        schema: builtins.str | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "datatype", b"datatype", "datatype_str", b"datatype_str", "schema", b"schema"
+            "_data", b"_data", "_schema", b"_schema", "data", b"data", "schema", b"schema"
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "data",
-            b"data",
-            "datatype",
-            b"datatype",
-            "datatype_str",
-            b"datatype_str",
-            "schema",
-            b"schema",
+            "_data", b"_data", "_schema", b"_schema", "data", b"data", "schema", b"schema"
         ],
     ) -> None: ...
+    @typing.overload
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["schema", b"schema"]
-    ) -> typing_extensions.Literal["datatype", "datatype_str"] | None: ...
+        self, oneof_group: typing_extensions.Literal["_data", b"_data"]
+    ) -> typing_extensions.Literal["data"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_schema", b"_schema"]
+    ) -> typing_extensions.Literal["schema"] | None: ...
 
 global___LocalRelation = LocalRelation
 
