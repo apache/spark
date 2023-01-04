@@ -830,11 +830,11 @@ class DataFrame:
             cols = cols[0]  # type: ignore[assignment]
 
         _cols = []
-        for col in cols:
-            if isinstance(col, str):
-                _cols.append(col)
+        for column in cols:
+            if isinstance(column, str):
+                _cols.append(column)
             else:
-                _cols.extend([s for s in col])
+                _cols.extend([s for s in column])
         return DataFrame.withPlan(
             plan.StatDescribe(child=self._plan, cols=_cols),
             session=self._session,
