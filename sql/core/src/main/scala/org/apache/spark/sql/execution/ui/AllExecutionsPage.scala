@@ -290,7 +290,7 @@ private[ui] class ExecutionPagedTable(
       ("Description", true, None),
       ("Submitted", true, None),
       ("Duration", true, Some("Time from query submission to completion (or if still executing," +
-        "time since submission)"))) ++ {
+        " time since submission)"))) ++ {
       if (showRunningJobs && showSucceededJobs && showFailedJobs) {
         Seq(
           ("Running Job IDs", true, None),
@@ -341,11 +341,13 @@ private[ui] class ExecutionPagedTable(
         Nil
       }
 
-      <div>{
-        executionData.map { executionId =>
-          <a href={executionURL(executionId)}>[{executionId.toString}]</a>
+      <div>
+        {
+          executionData.map { executionId =>
+            <a href={executionURL(executionId)}>[{executionId.toString}]</a>
+          }
         }
-        }</div> ++ details
+      </div> ++ details
     }
 
     val baseRow: Seq[Node] = {
@@ -385,19 +387,19 @@ private[ui] class ExecutionPagedTable(
       </tr>
     }
 
-    val subRow: Seq[Node] = {if (executionTableRow.subExecutionData.nonEmpty) {
+    val subRow: Seq[Node] = if (executionTableRow.subExecutionData.nonEmpty) {
       <tr></tr>
-        <tr class="sub-execution-list collapsed">
-          <td></td>
-          <td colspan={s"${headerInfo.length - 1}"}>
-            <table class="table table-bordered table-sm table-cell-width-limited">
-              <thead>
-                <tr>
-                  {headerInfo.dropRight(1).map(info => <th>{info._1}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                {
+      <tr class="sub-execution-list collapsed">
+        <td></td>
+        <td colspan={s"${headerInfo.length - 1}"}>
+          <table class="table table-bordered table-sm table-cell-width-limited">
+            <thead>
+              <tr>
+                {headerInfo.dropRight(1).map(info => <th>{info._1}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {
                 executionTableRow.subExecutionData.map { rowData =>
                   val executionUIData = rowData.executionUIData
                   val submissionTime = executionUIData.submissionTime
@@ -414,27 +416,32 @@ private[ui] class ExecutionPagedTable(
                     </td>
                     <td sorttable_customkey={duration.toString}>
                       {UIUtils.formatDuration(duration)}
-                    </td>{if (showRunningJobs) {
-                    <td>
-                      {jobLinks(rowData.runningJobData)}
                     </td>
-                  }}{if (showSucceededJobs) {
-                    <td>
-                      {jobLinks(rowData.completedJobData)}
-                    </td>
-                  }}{if (showFailedJobs) {
-                    <td>
-                      {jobLinks(rowData.failedJobData)}
-                    </td>
-                  }}
+                    {if (showRunningJobs) {
+                      <td>
+                        {jobLinks(rowData.runningJobData)}
+                      </td>
+                    }}
+                    {if (showSucceededJobs) {
+                      <td>
+                        {jobLinks(rowData.completedJobData)}
+                      </td>
+                    }}
+                    {if (showFailedJobs) {
+                      <td>
+                        {jobLinks(rowData.failedJobData)}
+                      </td>
+                    }}
                   </tr>
                 }
-                }
-              </tbody>
-            </table>
-          </td>
-        </tr>
-    } else { Nil }}
+              }
+            </tbody>
+          </table>
+        </td>
+      </tr>
+    } else {
+      Nil
+    }
     baseRow ++ subRow
   }
 
