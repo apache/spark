@@ -378,7 +378,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     )
   }
 
-  def dataTypeOperationUnsupportedError(): SparkUnsupportedOperationException = {
+  def dataTypeOperationUnsupportedError(): Throwable = {
     SparkException.internalError(
       s"""Operation dataType is not supported""")
   }
