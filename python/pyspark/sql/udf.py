@@ -17,6 +17,8 @@
 """
 User-defined function related classes and functions
 """
+from inspect import getfullargspec
+
 import functools
 import inspect
 import sys
@@ -30,12 +32,16 @@ from pyspark.profiler import Profiler
 from pyspark.rdd import _prepare_for_python_RDD, PythonEvalType
 from pyspark.sql.column import Column, _to_java_column, _to_seq
 from pyspark.sql.types import (
-    StringType,
+    ArrayType,
+    BinaryType,
     DataType,
+    MapType,
+    StringType,
     StructType,
     _parse_datatype_string,
 )
 from pyspark.sql.pandas.types import to_arrow_type
+from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import DataTypeOrString, ColumnOrName, UserDefinedFunctionLike
@@ -73,6 +79,70 @@ def _create_udf(
         f, returnType=returnType, name=name, evalType=evalType, deterministic=deterministic
     )
     return udf_obj._wrapped()
+
+
+def _create_py_udf(
+    f: Callable[..., Any],
+    returnType: "DataTypeOrString",
+    evalType: int,
+) -> "UserDefinedFunctionLike":
+    from pyspark.sql import SparkSession
+
+    session = SparkSession._instantiatedSession
+    is_arrow_enabled = (
+        session is not None
+        and session.conf.get("spark.sql.execution.pythonUDF.arrow.enabled") == "true"
+    )
+    regular_udf = _create_udf(f, returnType, evalType)
+    return_type = regular_udf.returnType
+    try:
+        is_func_with_args = len(getfullargspec(f).args) > 0
+    except TypeError:
+        is_func_with_args = False
+    is_output_atomic_type = (
+        not isinstance(return_type, StructType)
+        and not isinstance(return_type, MapType)
+        and not isinstance(return_type, ArrayType)
+    )
+    if is_arrow_enabled and is_output_atomic_type and is_func_with_args:
+        require_minimum_pandas_version()
+        require_minimum_pyarrow_version()
+
+        import pandas as pd
+        from pyspark.sql.pandas.functions import _create_pandas_udf
+
+        result_func = lambda pdf: pdf
+        if type(return_type) == StringType:
+            result_func = lambda r: str(r) if r is not None else r
+        elif type(return_type) == BinaryType:
+            result_func = lambda r: bytes(r) if r is not None else r
+
+        def vectorized_udf(*args: pd.Series) -> pd.Series:
+            if any(map(lambda arg: isinstance(arg, pd.DataFrame), args)):
+                raise NotImplementedError(
+                    "Struct input type are not supported with Arrow optimization "
+                    "enabled in Python UDFs. Disable "
+                    "'spark.sql.execution.pythonUDF.arrow.enabled' to workaround."
+                )
+            # Always cast via "result_func" because regular UDF supports more permissive casting
+            # compared to pandas UDFs. This is to don't break the user's codes
+            # from enabling this edge feature.
+            return pd.Series(result_func(f(*a)) for a in zip(*args))
+
+        # Regular UDFs can take callable instances too.
+        vectorized_udf.__name__ = f.__name__ if hasattr(f, "__name__") else f.__class__.__name__
+        vectorized_udf.__module__ = (
+            f.__module__ if hasattr(f, "__module__") else f.__class__.__module__
+        )
+        vectorized_udf.__doc__ = f.__doc__
+        pudf = _create_pandas_udf(vectorized_udf, returnType, None)
+        # Keep the attributes as if this is a regular Python UDF.
+        pudf.func = f
+        pudf.returnType = return_type
+        pudf.evalType = regular_udf.evalType
+        return pudf
+    else:
+        return regular_udf
 
 
 class UserDefinedFunction:

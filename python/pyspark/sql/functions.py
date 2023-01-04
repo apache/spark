@@ -44,7 +44,7 @@ from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.types import ArrayType, DataType, StringType, StructType, _from_numpy_type
 
 # Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
-from pyspark.sql.udf import UserDefinedFunction, _create_udf  # noqa: F401
+from pyspark.sql.udf import UserDefinedFunction, _create_py_udf  # noqa: F401
 
 # Keep pandas_udf and PandasUDFType import for backwards compatible import; moved in SPARK-28264
 from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType  # noqa: F401
@@ -10093,10 +10093,10 @@ def udf(
         # for decorator use it as a returnType
         return_type = f or returnType
         return functools.partial(
-            _create_udf, returnType=return_type, evalType=PythonEvalType.SQL_BATCHED_UDF
+            _create_py_udf, returnType=return_type, evalType=PythonEvalType.SQL_BATCHED_UDF
         )
     else:
-        return _create_udf(f=f, returnType=returnType, evalType=PythonEvalType.SQL_BATCHED_UDF)
+        return _create_py_udf(f=f, returnType=returnType, evalType=PythonEvalType.SQL_BATCHED_UDF)
 
 
 def _test() -> None:
