@@ -1208,6 +1208,21 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         expected = "+---+---+\n|  X|  Y|\n+---+---+\n|  1|  2|\n+---+---+\n"
         self.assertEqual(show_str, expected)
 
+    def test_describe(self):
+        # SPARK-41403: Test the describe method
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name).describe("id").toPandas(),
+            self.spark.read.table(self.tbl_name).describe("id").toPandas(),
+        )
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name).describe("id", "name").toPandas(),
+            self.spark.read.table(self.tbl_name).describe("id", "name").toPandas(),
+        )
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name).describe(["id", "name"]).toPandas(),
+            self.spark.read.table(self.tbl_name).describe(["id", "name"]).toPandas(),
+        )
+
     def test_stat_cov(self):
         # SPARK-41067: Test the stat.cov method
         self.assertEqual(

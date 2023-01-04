@@ -829,7 +829,7 @@ class DataFrame:
         if len(cols) == 1 and isinstance(cols[0], list):
             cols = cols[0]  # type: ignore[assignment]
         return DataFrame.withPlan(
-            plan.StatDescribe(child=self._plan, cols=cols),
+            plan.StatDescribe(child=self._plan, cols=list(cols)),
             session=self._session,
         )
 
