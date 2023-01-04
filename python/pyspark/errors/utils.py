@@ -28,6 +28,9 @@ class ErrorClassesJsonReader:
         self.error_info_map = json.load(open(json_file_path))
 
     def get_error_message(self, error_class: str, message_parameters: Dict[str, str]) -> str:
+        """
+        Returns the completed error message by applying message parameters to the message template.
+        """
         message_template = self.get_message_template(error_class)
         # Verify message parameters.
         message_parameters_from_template = re.findall("<([a-zA-Z0-9_-]+)>", message_template)
@@ -40,6 +43,23 @@ class ErrorClassesJsonReader:
         return message_template.translate(table).format(**message_parameters)
 
     def get_message_template(self, error_class: str) -> str:
+        """
+        Returns the message template for corresponding error class from JSON file.
+
+        For example,
+        when given `error_class` is "COLUMN_IN_LIST",
+        and corresponding error class in JSON file looks like the below:
+        ====================================================
+        "COLUMN_IN_LIST" : {
+          "message" : [
+            "<funcName> does not allow a column in a list"
+          ]
+        }
+        ====================================================
+
+        In this case, this function returns:
+        "<funcName> does not allow a column in a list"
+        """
         error_classes = error_class.split(".")
         len_error_classes = len(error_classes)
         assert len_error_classes in (1, 2)
