@@ -85,14 +85,20 @@ def _create_py_udf(
     f: Callable[..., Any],
     returnType: "DataTypeOrString",
     evalType: int,
+    useArrow: Optional[bool] = None,
 ) -> "UserDefinedFunctionLike":
     from pyspark.sql import SparkSession
 
     session = SparkSession._instantiatedSession
-    is_arrow_enabled = (
-        session is not None
-        and session.conf.get("spark.sql.execution.pythonUDF.arrow.enabled") == "true"
-    )
+    if session is None:
+        is_arrow_enabled = False
+    else:
+        is_arrow_enabled = (
+            session.conf.get("spark.sql.execution.pythonUDF.arrow.enabled") == "true"
+            if useArrow is None
+            else useArrow
+        )
+
     regular_udf = _create_udf(f, returnType, evalType)
     return_type = regular_udf.returnType
     try:
