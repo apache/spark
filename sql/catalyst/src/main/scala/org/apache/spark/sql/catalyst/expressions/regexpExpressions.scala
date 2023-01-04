@@ -634,7 +634,12 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
     if (!p.equals(lastRegex)) {
       // regex value changed
       lastRegex = p.asInstanceOf[UTF8String].clone()
-      pattern = Pattern.compile(lastRegex.toString)
+      try {
+        pattern = Pattern.compile(lastRegex.toString)
+      } catch {
+        case e: PatternSyntaxException =>
+          throw QueryExecutionErrors.invalidPatternError(prettyName, e.getPattern)
+      }
     }
     if (!r.equals(lastReplacementInUTF8)) {
       // replacement string changed

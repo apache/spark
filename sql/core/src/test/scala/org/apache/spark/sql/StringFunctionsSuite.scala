@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -662,5 +663,19 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
         fragment = "regexp_replace(collect_list(1), '1', '2')",
         start = 7,
         stop = 47))
+  }
+
+  test("SPARK-41780: INVALID_PARAMETER_VALUE - invalid parameters `regexp` in regexp_replace") {
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("select regexp_replace('', '[a\\\\d]{0, 2}', 'x')").collect()
+      },
+      errorClass = "INVALID_PARAMETER_VALUE",
+      parameters = Map(
+        "parameter" -> "regexp",
+        "functionName" -> "`regexp_replace`",
+        "expected" -> "'[a\\\\d]{0, 2}'"
+      )
+    )
   }
 }
