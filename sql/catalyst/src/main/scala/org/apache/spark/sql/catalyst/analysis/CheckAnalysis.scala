@@ -1209,6 +1209,12 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         case p @ (_: ResolvedHint | _: LeafNode | _: Repartition | _: SubqueryAlias) =>
           p.children.foreach(child => checkPlan(child, aggregated, canContainOuter))
 
+        case p @ (_ : Union) =>
+          // Set operations (e.g. UNION) containing correlated values are only supported
+          // with decorrelateInnerQueryEnabled.
+          val childCanContainOuter = canContainOuter && SQLConf.get.decorrelateInnerQueryEnabled
+          p.children.foreach(child => checkPlan(child, aggregated, childCanContainOuter))
+
         // Category 2:
         // These operators can be anywhere in a correlated subquery.
         // so long as they do not host outer references in the operators.

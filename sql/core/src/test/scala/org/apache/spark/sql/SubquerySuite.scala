@@ -938,6 +938,46 @@ class SubquerySuite extends QueryTest
     }
   }
 
+  test("SPARK-36124: Correlated subqueries with set operations") {
+    withTempView("t0", "t1", "t2") {
+      Seq((1, 1), (2, 0)).toDF("t0a", "t0b").createOrReplaceTempView("t0")
+      Seq((1, 1, 3)).toDF("t1a", "t1b", "t1c").createOrReplaceTempView("t1")
+      Seq((1, 1, 5), (2, 2, 7)).toDF("t2a", "t2b", "t2c").createOrReplaceTempView("t2")
+
+      // Union with different outer refs
+      checkAnswer(
+        sql(
+          """
+            | SELECT t0a, (SELECT sum(t1c) FROM
+            |   (SELECT t1c
+            |   FROM   t1
+            |   WHERE  t1a = t0a
+            |   UNION ALL
+            |   SELECT t2c
+            |   FROM   t2
+            |   WHERE  t2b = t0b)
+            | )
+            | FROM t0""".stripMargin),
+        Row(1, 8) :: Row(2, null) :: Nil)
+
+      // Union with same outer refs
+      checkAnswer(
+        sql(
+          """
+            | SELECT t0a, (SELECT sum(t1c) FROM
+            |   (SELECT t1c
+            |   FROM   t1
+            |   WHERE  t1a = t0a
+            |   UNION ALL
+            |   SELECT t2c
+            |   FROM   t2
+            |   WHERE  t2a = t0a)
+            | )
+            | FROM t0""".stripMargin),
+        Row(1, 8) :: Row(2, 7) :: Nil)
+    }
+  }
+
   // Generate operator
   test("Correlated subqueries in LATERAL VIEW") {
     withTempView("t1", "t2") {
