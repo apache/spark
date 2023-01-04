@@ -2444,9 +2444,6 @@ def _test() -> None:
         # TODO(SPARK-41849): implement DataFrameReader.text
         del pyspark.sql.connect.functions.input_file_name.__doc__
 
-        # TODO(SPARK-41850): fix isnan
-        del pyspark.sql.connect.functions.isnan.__doc__
-
         # Creates a remote Spark session.
         os.environ["SPARK_REMOTE"] = "sc://localhost"
         globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
