@@ -35,7 +35,7 @@ from pyspark.sql.types import (
     StringType,
     StructType,
 )
-from typing import Any, Callable, Iterator, List, Mapping, TYPE_CHECKING, Tuple, Union
+from typing import Any, Callable, Iterator, List, Mapping, Protocol, TYPE_CHECKING, Tuple, Union
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import UserDefinedFunctionLike
@@ -49,6 +49,20 @@ supported_scalar_types = (
     DoubleType,
     StringType,
 )
+
+
+class PredictFunction(Protocol):
+    """Callable type for end user predict functions that take a variable number of ndarrays as
+    input and returns one of the following as output:
+    - single ndarray (single output)
+    - dictionary of named ndarrays (multiple outputs represented in columnar form)
+    - list of dictionaries of named ndarrays (multiple outputs represented in row form)
+    """
+
+    def __call__(
+        self, *args: np.ndarray
+    ) -> np.ndarray | Mapping[str, np.ndarray] | List[Mapping[str, np.dtype]]:
+        ...
 
 
 def vector_to_array(col: Column, dtype: str = "float64") -> Column:
@@ -332,53 +346,44 @@ def _validate_and_transform_prediction_result(
 
 
 def predict_batch_udf(
-    predict_batch_fn: Callable[
+    make_predict_fn: Callable[
         [],
-        Callable[
-            [np.ndarray | List[np.ndarray]],
-            np.ndarray | Mapping[str, np.ndarray] | List[Mapping[str, np.dtype]],
-        ],
+        PredictFunction,
     ],
     *,
     return_type: DataType,
     batch_size: int,
     input_tensor_shapes: List[List[int] | None] | Mapping[int, List[int]] | None = None,
 ) -> UserDefinedFunctionLike:
-    """Given a function which loads a model, returns a pandas_udf for inferencing over that model.
+    """Given a function which loads a model and makes batch predictions, returns a Pandas UDF for
+    inferencing over that model.
 
-    This will handle:
-    - conversion of the Spark DataFrame to numpy arrays.
-    - batching of the inputs sent to the model predict() function.
-    - caching of the model and prediction function on the executors.
+    The returned UDF does the following on each DataFrame partition:
+    - calls `make_predict_fn` to load the model and cache its `predict_fn`.
+    - batches the input records as numpy arrays and invokes `predict_fn` on each batch.
 
-    This assumes that the `predict_batch_fn` encapsulates all of the necessary dependencies for
+    This assumes that the `make_predict_fn` encapsulates all of the necessary dependencies for
     running the model or the Spark executor environment already satisfies all runtime requirements.
 
-    For the conversion of Spark DataFrame to numpy, the following table describes the behavior,
-    where tensor columns in the Spark DataFrame must be represented as a flattened 1-D array/list.
+    For the conversion of Spark DataFrame to numpy arrays, there is a one-to-one mapping between the
+    input arguments of the `predict_fn` (returned by the `make_predict_fn`) and the input columns to
+    the UDF (returned by the `predict_batch_udf`) at runtime.  Each input column will be converted
+    as follows:
+    - scalar column -> np.ndarray
+    - tensor column + tensor shape -> np.ndarray
 
-    | dataframe \\ model | single input | multiple inputs |
-    | :----------------- | :----------- | :-------------- |
-    | single-col scalar  | 1            | N/A             |
-    | single-col tensor  | 1,2          | N/A             |
-    | multi-col scalar   | 3            | 4               |
-    | multi-col tensor   | N/A          | 4,2             |
+    Note that tensor columns in the Spark DataFrame must be represented as a flattened 1-D array,
+    and multiple scalar columns can be combined into a single tensor column using standard PySpark
+    SQL functions like `array()` or `struct()`.
 
-    Notes:
-    1. pass through dataframe column => model input as single numpy array.
-    2. reshape flattened tensors into expected tensor shapes.
-    3. user must use `pyspark.sql.functions.struct()` or `pyspark.sql.functions.array()` to
-       combine multiple input columns into the equivalent of a single-col tensor.
-    4. pass thru dataframe column => model input as an ordered list of numpy arrays.
-
-    Example (single-col tensor):
+    Example (tensor column):
 
     Input DataFrame has a single column with a flattened tensor value, represented as an array of
     float.
     ```
     from pyspark.ml.functions import predict_batch_udf
 
-    def predict_batch_fn():
+    def make_predict_fn():
         # load/init happens once per python worker
         import tensorflow as tf
         model = tf.keras.models.load_model('/path/to/mnist_model')
@@ -391,7 +396,7 @@ def predict_batch_udf(
 
         return predict
 
-    mnist = predict_batch_udf(predict_batch_fn,
+    mnist = predict_batch_udf(make_predict_fn,
                               return_type=ArrayType(FloatType()),
                               batch_size=100,
                               input_tensor_shapes=[[784]])
@@ -420,7 +425,7 @@ def predict_batch_udf(
     # +--------------------+--------------------+
     ```
 
-    Example (single-col scalar):
+    Example (scalar column):
 
     Input DataFrame has a single scalar column, which will be passed to the `predict` function as
     a 1-D numpy array.
@@ -442,7 +447,7 @@ def predict_batch_udf(
     # |  4|
     # +---+
 
-    def predict_batch_fn():
+    def make_predict_fn():
         def predict(inputs: np.ndarray) -> np.ndarray:
             # inputs.shape = [batch_size]
             # outputs.shape = [batch_size], return_type = FloatType()
@@ -450,7 +455,7 @@ def predict_batch_udf(
 
         return predict
 
-    times_two = predict_batch_udf(predict_batch_fn,
+    times_two = predict_batch_udf(make_predict_fn,
                                   return_type=FloatType(),
                                   batch_size=10)
 
@@ -467,11 +472,11 @@ def predict_batch_udf(
     # +---+---+
     ```
 
-    Example (multi-col scalar):
+    Example (multiple scalar columns):
 
     Input DataFrame has muliple columns of scalar values.  If the user-provided `predict` function
-    expects a single input, then the user should combine multiple columns into a single tensor using
-    `pyspark.sql.functions.struct` or `pyspark.sql.functions.array`.
+    expects a single input, then the user must combine the multiple columns into a single tensor
+    using `pyspark.sql.functions.struct` or `pyspark.sql.functions.array`.
     ```
     import numpy as np
     import pandas as pd
@@ -491,7 +496,7 @@ def predict_batch_udf(
     # |16.0|17.0|18.0|19.0|
     # +----+----+----+----+
 
-    def predict_batch_fn():
+    def make_predict_fn():
         def predict(inputs: np.ndarray) -> np.ndarray:
             # inputs.shape = [batch_size, 4]
             # outputs.shape = [batch_size], return_type = FloatType()
@@ -499,7 +504,7 @@ def predict_batch_udf(
 
         return predict
 
-    sum_rows = predict_batch_udf(predict_batch_fn,
+    sum_rows = predict_batch_udf(make_predict_fn,
                                  return_type=FloatType(),
                                  batch_size=10,
                                  input_tensor_shapes=[[4]])
@@ -514,11 +519,12 @@ def predict_batch_udf(
     # |12.0|13.0|14.0|15.0|54.0|
     # |16.0|17.0|18.0|19.0|70.0|
     # +----+----+----+----+----+
+    ```
 
-    # Note: if the `predict` function expects multiple inputs, then the number of selected columns
-    # must match the number of expected inputs.
-
-    def predict_batch_fn():
+    If the `predict` function expects multiple inputs, then the number of selected input columns
+    must match the number of expected inputs.
+    ```
+    def make_predict_fn():
         def predict(x1: np.ndarray, x2: np.ndarray, x3: np.ndarray, x4: np.ndarray) -> np.ndarray:
             # xN.shape = [batch_size]
             # outputs.shape = [batch_size], return_type = FloatType()
@@ -526,7 +532,7 @@ def predict_batch_udf(
 
         return predict
 
-    sum_rows = predict_batch_udf(predict_batch_fn,
+    sum_rows = predict_batch_udf(make_predict_fn,
                                  return_type=FloatType(),
                                  batch_size=10)
 
@@ -542,7 +548,7 @@ def predict_batch_udf(
     # +----+----+----+----+----+
     ```
 
-    Example (multi-col tensor):
+    Example (multiple tensor columns):
 
     Input DataFrame has multiple columns, where each column is a tensor.  The number of columns
     should match the number of expected inputs for the user-provided `predict` function.
@@ -637,7 +643,7 @@ def predict_batch_udf(
 
     Parameters
     ----------
-    predict_batch_fn : Callable[[],
+    make_predict_fn : Callable[[],
         Callable[..., np.ndarray | Mapping[str, np.ndarray] | List[Mapping[str, np.dtype]] ]
         Function which is responsible for loading a model and returning a `predict` function which
         takes one or more numpy arrays as input and returns one of the following:
@@ -680,10 +686,10 @@ def predict_batch_udf(
         # TODO: adjust return type hint when Iterator[Union[pd.Series, pd.DataFrame]] is supported
         from pyspark.ml.model_cache import ModelCache
 
-        # get predict function (from cache or from running user-provided predict_batch_fn)
+        # get predict function (from cache or from running user-provided make_predict_fn)
         predict_fn = ModelCache.get(model_uuid)
         if not predict_fn:
-            predict_fn = predict_batch_fn()
+            predict_fn = make_predict_fn()
             ModelCache.add(model_uuid, predict_fn)
 
         # get number of expected parameters for predict function

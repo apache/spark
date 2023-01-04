@@ -48,13 +48,13 @@ class PredictBatchUDFTests(SparkSessionTestCase):
         self.df_scalar_tensor = self.spark.createDataFrame(self.pdf_scalar_tensor)
 
     def test_identity_single(self):
-        def predict_batch_fn():
+        def make_predict_fn():
             def predict(inputs):
                 return inputs
 
             return predict
 
-        identity = predict_batch_udf(predict_batch_fn, return_type=DoubleType(), batch_size=5)
+        identity = predict_batch_udf(make_predict_fn, return_type=DoubleType(), batch_size=5)
 
         # single column input => single column output (struct)
         preds = self.df.withColumn("preds", identity(struct("a"))).toPandas()
@@ -74,14 +74,14 @@ class PredictBatchUDFTests(SparkSessionTestCase):
 
     def test_identity_multi(self):
         # single input model
-        def predict_batch_fn():
+        def make_predict_fn():
             def predict(inputs):
                 return {"a1": inputs[:, 0], "b1": inputs[:, 1]}
 
             return predict
 
         identity = predict_batch_udf(
-            predict_batch_fn,
+            make_predict_fn,
             return_type=StructType(
                 [StructField("a1", DoubleType(), True), StructField("b1", DoubleType(), True)]
             ),
@@ -148,7 +148,7 @@ class PredictBatchUDFTests(SparkSessionTestCase):
     def test_batching(self):
         batch_size = 10
 
-        def predict_batch_fn():
+        def make_predict_fn():
             def predict(inputs):
                 batch_size = len(inputs)
                 # just return the batch size as the "prediction"
@@ -158,7 +158,7 @@ class PredictBatchUDFTests(SparkSessionTestCase):
             return predict
 
         identity = predict_batch_udf(
-            predict_batch_fn, return_type=IntegerType(), batch_size=batch_size
+            make_predict_fn, return_type=IntegerType(), batch_size=batch_size
         )
 
         # struct
@@ -177,7 +177,7 @@ class PredictBatchUDFTests(SparkSessionTestCase):
         self.assertTrue(all(batch_sizes <= batch_size))
 
     def test_caching(self):
-        def predict_batch_fn():
+        def make_predict_fn():
             # emulate loading a model, this should only be invoked once (per worker process)
             fake_output = np.random.random()
 
@@ -186,14 +186,14 @@ class PredictBatchUDFTests(SparkSessionTestCase):
 
             return predict
 
-        identity = predict_batch_udf(predict_batch_fn, return_type=DoubleType(), batch_size=5)
+        identity = predict_batch_udf(make_predict_fn, return_type=DoubleType(), batch_size=5)
 
         # results should be the same
         df1 = self.df.withColumn("preds", identity(struct("a"))).toPandas()
         df2 = self.df.withColumn("preds", identity(struct("a"))).toPandas()
         self.assertTrue(df1.equals(df2))
 
-        identity = predict_batch_udf(predict_batch_fn, return_type=DoubleType(), batch_size=5)
+        identity = predict_batch_udf(make_predict_fn, return_type=DoubleType(), batch_size=5)
 
         # cache should now be invalidated and results should be different
         df3 = self.df.withColumn("preds", identity(struct("a"))).toPandas()

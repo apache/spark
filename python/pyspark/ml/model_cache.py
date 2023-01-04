@@ -21,10 +21,21 @@ from uuid import UUID
 
 
 class ModelCache:
-    """Cache for model prediction functions on executors."""
+    """Cache for model prediction functions on executors.
+
+    This requires the `spark.python.worker.reuse` configuration to be set to `true`, otherwise a
+    new python worker (with an empty cache) will be started for every task.
+
+    If a python worker is idle for more than one minute (per the IDLE_WORKER_TIMEOUT_NS setting in
+    PythonWorkerFactory.scala), it will be killed, effectively clearing the cache until a new python
+    worker is started.
+
+    Caching large models can lead to out-of-memory conditions, which may require adjusting spark
+    memory configurations, e.g. `spark.executor.memoryOverhead`.
+    """
 
     _models: OrderedDict[UUID, Callable] = OrderedDict()
-    _capacity: int = 8
+    _capacity: int = 3  # "reasonable" default size for now, make configurable later, if needed
     _lock: Lock = Lock()
 
     @staticmethod
