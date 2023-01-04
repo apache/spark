@@ -2122,12 +2122,25 @@ class DataFrameSuite extends QueryTest
 
     withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
       val df = Dataset.ofRows(spark, statsPlan)
+        // add some map-like operations which optimizer will optimize away, and make a divergence
+        // for output between logical plan and optimized plan
+        // logical plan
+        // Project [cb#6 AS cbool#12, cby#7 AS cbyte#13, ci#8 AS cint#14]
+        // +- Project [cbool#0 AS cb#6, cbyte#1 AS cby#7, cint#2 AS ci#8]
+        //    +- OutputListAwareStatsTestPlan [cbool#0, cbyte#1, cint#2], 2, 16
+        // optimized plan
+        // OutputListAwareStatsTestPlan [cbool#0, cbyte#1, cint#2], 2, 16
+        .selectExpr("cbool AS cb", "cbyte AS cby", "cint AS ci")
+        .selectExpr("cb AS cbool", "cby AS cbyte", "ci AS cint")
 
       // We can't leverage LogicalRDD.fromDataset here, since it triggers physical planning and
       // there is no matching physical node for OutputListAwareStatsTestPlan.
+      val optimizedPlan = df.queryExecution.optimizedPlan
+      val rewrite = LogicalRDD.buildOutputAssocForRewrite(optimizedPlan.output,
+        df.logicalPlan.output)
       val logicalRDD = LogicalRDD(
         df.logicalPlan.output, spark.sparkContext.emptyRDD[InternalRow], isStreaming = true)(
-        spark, Some(df.queryExecution.optimizedPlan.stats), None)
+        spark, Some(LogicalRDD.rewriteStatistics(optimizedPlan.stats, rewrite.get)), None)
 
       val stats = logicalRDD.computeStats()
       val expectedStats = Statistics(sizeInBytes = expectedSize, rowCount = Some(2),
@@ -2165,12 +2178,24 @@ class DataFrameSuite extends QueryTest
     val statsPlan = OutputListAwareConstraintsTestPlan(outputList = outputList)
 
     val df = Dataset.ofRows(spark, statsPlan)
+      // add some map-like operations which optimizer will optimize away, and make a divergence
+      // for output between logical plan and optimized plan
+      // logical plan
+      // Project [cb#6 AS cbool#12, cby#7 AS cbyte#13, ci#8 AS cint#14]
+      // +- Project [cbool#0 AS cb#6, cbyte#1 AS cby#7, cint#2 AS ci#8]
+      //    +- OutputListAwareConstraintsTestPlan [cbool#0, cbyte#1, cint#2]
+      // optimized plan
+      // OutputListAwareConstraintsTestPlan [cbool#0, cbyte#1, cint#2]
+      .selectExpr("cbool AS cb", "cbyte AS cby", "cint AS ci")
+      .selectExpr("cb AS cbool", "cby AS cbyte", "ci AS cint")
 
     // We can't leverage LogicalRDD.fromDataset here, since it triggers physical planning and
     // there is no matching physical node for OutputListAwareConstraintsTestPlan.
+    val optimizedPlan = df.queryExecution.optimizedPlan
+    val rewrite = LogicalRDD.buildOutputAssocForRewrite(optimizedPlan.output, df.logicalPlan.output)
     val logicalRDD = LogicalRDD(
       df.logicalPlan.output, spark.sparkContext.emptyRDD[InternalRow], isStreaming = true)(
-      spark, None, Some(df.queryExecution.optimizedPlan.constraints))
+      spark, None, Some(LogicalRDD.rewriteConstraints(optimizedPlan.constraints, rewrite.get)))
 
     val constraints = logicalRDD.constraints
     val expectedConstraints = buildExpectedConstraints(logicalRDD.output)
@@ -3544,6 +3569,17 @@ class DataFrameSuite extends QueryTest
     }
   }
 
+  test("SPARK-41049: stateful expression should be copied correctly") {
+    val df = spark.sparkContext.parallelize(1 to 5).toDF("x")
+    val v1 = (rand() * 10000).cast(IntegerType)
+    val v2 = to_csv(struct(v1.as("a"))) // to_csv is CodegenFallback
+    df.select(v1, v1, v2, v2).collect.foreach { row =>
+      assert(row.getInt(0) == row.getInt(1))
+      assert(row.getInt(0).toString == row.getString(2))
+      assert(row.getInt(0).toString == row.getString(3))
+    }
+  }
+
   test("SPARK-40199 Projecting NULLS from non-nullable UDFs should throw helpful errors") {
     Seq(
       ("Scala UDF with string return", "bad_udf", udf[String, Int](_ => null)),
@@ -3554,19 +3590,33 @@ class DataFrameSuite extends QueryTest
       ("UDAF with simple buffer type", "bad_udf",
           udaf(new Aggregator[Int, Long, String] {
             override def zero: Long = 0
-            override def reduce(b: Long, a: Int): Long = b + a
-            override def merge(b1: Long, b2: Long): Long = b1 + b2
+
+            override def reduce(b: Long,
+              a: Int): Long = b + a
+
+            override def merge(b1: Long,
+              b2: Long): Long = b1 + b2
+
             override def finish(reduction: Long): String = null
+
             override def bufferEncoder: Encoder[Long] = Encoders.scalaLong
+
             override def outputEncoder: Encoder[String] = Encoders.STRING
           })),
       ("UDAF with complex buffer type", "bad_udf",
           udaf(new Aggregator[Int, GroupByKey, String] {
             override def zero: GroupByKey = GroupByKey(0, 0)
-            override def reduce(b: GroupByKey, a: Int): GroupByKey = GroupByKey(0, 0)
-            override def merge(b1: GroupByKey, b2: GroupByKey): GroupByKey = GroupByKey(0, 0)
+
+            override def reduce(b: GroupByKey,
+              a: Int): GroupByKey = GroupByKey(0, 0)
+
+            override def merge(b1: GroupByKey,
+              b2: GroupByKey): GroupByKey = GroupByKey(0, 0)
+
             override def finish(reduction: GroupByKey): String = null
+
             override def bufferEncoder: Encoder[GroupByKey] = Encoders.product[GroupByKey]
+
             override def outputEncoder: Encoder[String] = Encoders.STRING
           }))
     ).foreach { case (desc, expectedName, udf) =>
@@ -3582,7 +3632,7 @@ class DataFrameSuite extends QueryTest
       }
     }
   }
-  }
+}
 
 case class GroupByKey(a: Int, b: Int)
 

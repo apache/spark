@@ -53,7 +53,7 @@ from pyspark.testing.sqlutils import (
 from pyspark.testing.utils import QuietTest
 
 
-class DataFrameTests(ReusedSQLTestCase):
+class DataFrameTestsMixin:
     def test_range(self):
         self.assertEqual(self.spark.range(1, 1).count(), 0)
         self.assertEqual(self.spark.range(1, 0, -1).count(), 1)
@@ -74,7 +74,7 @@ class DataFrameTests(ReusedSQLTestCase):
 
     def test_freqItems(self):
         vals = [Row(a=1, b=-2.0) if i % 2 == 0 else Row(a=i, b=i * 1.0) for i in range(100)]
-        df = self.sc.parallelize(vals).toDF()
+        df = self.spark.createDataFrame(vals)
         items = df.stat.freqItems(("a", "b"), 0.4).collect()[0]
         self.assertTrue(1 in items[0])
         self.assertTrue(-2.0 in items[1])
@@ -1566,6 +1566,10 @@ class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
                 self.spark._jvm.OnSuccessCall.isCalled(),
                 "The callback from the query execution listener should be called after 'toPandas'",
             )
+
+
+class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":

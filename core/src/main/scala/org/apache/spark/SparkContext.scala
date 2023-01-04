@@ -3173,7 +3173,7 @@ object WritableConverter {
 
   implicit val bytesWritableConverterFn: () => WritableConverter[Array[Byte]] = {
     () => simpleWritableConverter[Array[Byte], BytesWritable] { bw =>
-      // getBytes method returns array which is longer then data to be returned
+      // getBytes method returns array which is longer than data to be returned
       Arrays.copyOfRange(bw.getBytes, 0, bw.getLength)
     }
   }
@@ -3204,7 +3204,7 @@ object WritableConverter {
 
   implicit def bytesWritableConverter(): WritableConverter[Array[Byte]] = {
     simpleWritableConverter[Array[Byte], BytesWritable] { bw =>
-      // getBytes method returns array which is longer then data to be returned
+      // getBytes method returns array which is longer than data to be returned
       Arrays.copyOfRange(bw.getBytes, 0, bw.getLength)
     }
   }

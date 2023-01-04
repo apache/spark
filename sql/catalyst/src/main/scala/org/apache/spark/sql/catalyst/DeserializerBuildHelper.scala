@@ -180,7 +180,7 @@ object DeserializerBuildHelper {
    * This method help us "remember" the required data type by adding a `UpCast`. Note that we
    * only need to do this for leaf nodes.
    */
-  private def upCastToExpectedType(
+  private[catalyst] def upCastToExpectedType(
       expr: Expression,
       expected: DataType,
       walkedTypePath: WalkedTypePath): Expression = expected match {

@@ -178,12 +178,16 @@ class ScalaReflectionSuite extends SparkFunSuite {
   import TestingValueClass._
 
   // A helper method used to test `ScalaReflection.serializerForType`.
-  private def serializerFor[T: TypeTag]: Expression =
-    serializerForType(ScalaReflection.localTypeOf[T])
+  private def serializerFor[T: TypeTag]: Expression = {
+    val enc = ScalaReflection.encoderFor[T]
+    ScalaReflection.serializerFor(enc)
+  }
 
   // A helper method used to test `ScalaReflection.deserializerForType`.
-  private def deserializerFor[T: TypeTag]: Expression =
-    deserializerForType(ScalaReflection.localTypeOf[T])
+  private def deserializerFor[T: TypeTag]: Expression = {
+    val enc = ScalaReflection.encoderFor[T]
+    ScalaReflection.deserializerFor(enc)
+  }
 
   test("isSubtype") {
     assert(isSubtype(localTypeOf[Option[Int]], localTypeOf[Option[_]]))

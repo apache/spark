@@ -1127,10 +1127,12 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   """,
   group = "array_funcs",
   since = "2.4.0")
-case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
-  extends UnaryExpression with ExpectsInputTypes with Stateful with ExpressionWithRandomSeed {
+case class Shuffle(child: Expression, randomSeed: Option[Long] = None) extends UnaryExpression
+  with ExpectsInputTypes with Nondeterministic with ExpressionWithRandomSeed {
 
   def this(child: Expression) = this(child, None)
+
+  override def stateful: Boolean = true
 
   override def seedExpression: Expression = randomSeed.map(Literal.apply).getOrElse(UnresolvedSeed)
 
@@ -1196,8 +1198,6 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
        |${ev.value} = $arrayData;
      """.stripMargin
   }
-
-  override def freshCopy(): Shuffle = Shuffle(child, randomSeed)
 
   override def withNewChildInternal(newChild: Expression): Shuffle = copy(child = newChild)
 }
@@ -4609,3 +4609,34 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): ArrayExcept = copy(left = newLeft, right = newRight)
 }
+
+@ExpressionDescription(
+  usage = "_FUNC_(array) - Removes null values from the array.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 2, 3, null));
+       [1,2,3]
+      > SELECT _FUNC_(array("a", "b", "c"));
+       ["a","b","c"]
+  """,
+  group = "array_funcs",
+  since = "3.4.0")
+case class ArrayCompact(child: Expression)
+  extends RuntimeReplaceable with UnaryLike[Expression] with ImplicitCastInputTypes {
+
+  lazy val isNotNull: Expression => Expression = x => IsNotNull(x)
+  lazy val lv = NamedLambdaVariable("arg",
+    child.dataType.asInstanceOf[ArrayType].elementType, true)
+  lazy val lambda = LambdaFunction(isNotNull(lv), Seq(lv))
+
+  override lazy val replacement: Expression = ArrayFilter(child, lambda)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
+
+  override def prettyName: String = "array_compact"
+
+  override protected def withNewChildInternal(newChild: Expression): ArrayCompact =
+    copy(child = newChild)
+}
+
+

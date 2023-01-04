@@ -784,7 +784,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def taskFailedWhileWritingRowsError(cause: Throwable): Throwable = {
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_2054",
-      messageParameters = Map.empty,
+      messageParameters = Map("message" -> cause.getMessage),
       cause = cause)
   }
 
@@ -1443,15 +1443,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "dataType" -> dataType.catalogString))
   }
 
-  def failToParseValueForDataTypeError(parser: JsonParser, token: JsonToken, dataType: DataType)
+  def cannotParseJSONFieldError(parser: JsonParser, jsonType: JsonToken, dataType: DataType)
   : SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2136",
+      errorClass = "CANNOT_PARSE_JSON_FIELD",
       messageParameters = Map(
         "fieldName" -> parser.getCurrentName.toString(),
         "fieldValue" -> parser.getText.toString(),
-        "token" -> token.toString(),
-        "dataType" -> dataType.toString()))
+        "jsonType" -> jsonType.toString(),
+        "dataType" -> toSQLType(dataType)))
   }
 
   def rootConverterReturnNullError(): SparkRuntimeException = {
@@ -1482,13 +1482,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "walkedTypePath" -> walkedTypePath.toString()))
   }
 
-  def cannotFindEncoderForTypeError(
-      tpe: String, walkedTypePath: WalkedTypePath): SparkUnsupportedOperationException = {
+  def cannotFindEncoderForTypeError(typeName: String): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2141",
+      errorClass = "ENCODER_NOT_FOUND",
       messageParameters = Map(
-        "tpe" -> tpe,
-        "walkedTypePath" -> walkedTypePath.toString()))
+        "typeName" -> typeName))
   }
 
   def attributesForTypeUnsupportedError(schema: Schema): SparkUnsupportedOperationException = {
