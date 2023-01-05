@@ -250,7 +250,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
         left -> right
     }.toMap
   }
-  
+
   /**
    * Rewrites a domain join cond so that it can be pushed to the right side of a
    * union/intersect/except operator.
