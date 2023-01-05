@@ -31,6 +31,7 @@ from pyspark.sql.types import (
     Row,
     DataType,
     StructType,
+    AtomicType,
 )
 from pyspark.sql.utils import to_str
 
@@ -177,20 +178,18 @@ class SparkSession:
     def createDataFrame(
         self,
         data: Union["pd.DataFrame", "np.ndarray", Iterable[Any]],
-        schema: Optional[Union[StructType, str, List[str], Tuple[str, ...]]] = None,
+        schema: Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]] = None,
     ) -> "DataFrame":
         assert data is not None
         if isinstance(data, DataFrame):
             raise TypeError("data is already a DataFrame")
-        if isinstance(data, Sized) and len(data) == 0:
-            raise ValueError("Input data cannot be empty")
 
         table: Optional[pa.Table] = None
-        _schema: Optional[StructType] = None
+        _schema: Optional[Union[AtomicType, StructType]] = None
         _schema_str: Optional[str] = None
         _cols: Optional[List[str]] = None
 
-        if isinstance(schema, StructType):
+        if isinstance(schema, (AtomicType, StructType)):
             _schema = schema
 
         elif isinstance(schema, str):
@@ -199,6 +198,14 @@ class SparkSession:
         elif isinstance(schema, (list, tuple)):
             # Must re-encode any unicode strings to be consistent with StructField names
             _cols = [x.encode("utf-8") if not isinstance(x, str) else x for x in schema]
+
+        if isinstance(data, Sized) and len(data) == 0:
+            if _schema is not None:
+                return DataFrame.withPlan(LocalRelation(table=None, schema=_schema.json()), self)
+            elif _schema_str is not None:
+                return DataFrame.withPlan(LocalRelation(table=None, schema=_schema_str), self)
+            else:
+                raise ValueError("can not infer schema from empty dataset")
 
         if isinstance(data, pd.DataFrame):
             table = pa.Table.from_pandas(data)
@@ -253,8 +260,10 @@ class SparkSession:
                         _cols = ["_%s" % i for i in range(1, len(_data[0]) + 1)]
                     else:
                         _cols = ["_1"]
-                else:
+                elif isinstance(_schema, StructType):
                     _cols = _schema.names
+                else:
+                    _cols = ["value"]
 
             if isinstance(_data[0], Row):
                 table = pa.Table.from_pylist([row.asDict(recursive=True) for row in _data])
@@ -268,19 +277,24 @@ class SparkSession:
 
         # Validate number of columns
         num_cols = table.shape[1]
-        if _schema is not None and len(_schema.fields) != num_cols:
+        if (
+            _schema is not None
+            and isinstance(_schema, StructType)
+            and len(_schema.fields) != num_cols
+        ):
             raise ValueError(
                 f"Length mismatch: Expected axis has {num_cols} elements, "
                 f"new values have {len(_schema.fields)} elements"
             )
-        elif _cols is not None and len(_cols) != num_cols:
+
+        if _cols is not None and len(_cols) != num_cols:
             raise ValueError(
                 f"Length mismatch: Expected axis has {num_cols} elements, "
                 f"new values have {len(_cols)} elements"
             )
 
         if _schema is not None:
-            return DataFrame.withPlan(LocalRelation(table, schema=_schema), self)
+            return DataFrame.withPlan(LocalRelation(table, schema=_schema.json()), self)
         elif _schema_str is not None:
             return DataFrame.withPlan(LocalRelation(table, schema=_schema_str), self)
         elif _cols is not None and len(_cols) > 0:
