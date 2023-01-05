@@ -2415,13 +2415,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "tableIdentWithDB" -> tableIdentWithDB))
   }
 
-  def cmdOnlyWorksOnTableWithLocationError(
-      operation: String,
-      tableIdentWithDB: String): Throwable = {
+  def cmdOnlyWorksOnTableWithLocationError(cmd: String, tableIdentWithDB: String): Throwable = {
     new AnalysisException(
-      errorClass = "NOT_A_PARTITIONED_TABLE",
+      errorClass = "_LEGACY_ERROR_TEMP_2446",
       messageParameters = Map(
-        "operation" -> toSQLStmt(operation),
+        "cmd" -> cmd,
         "tableIdentWithDB" -> tableIdentWithDB))
   }
 

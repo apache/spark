@@ -5228,5 +5228,10 @@
     "message" : [
       "grouping() can only be used with GroupingSets/Cube/Rollup"
     ]
+  },
+  "_LEGACY_ERROR_TEMP_2446" : {
+    "message" : [
+      "Operation not allowed: <cmd> only works on table with location provided: <tableIdentWithDB>"
+    ]
   }
 }
