@@ -380,7 +380,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def dataTypeOperationUnsupportedError(): Throwable = {
     SparkException.internalError(
-      s"""Operation dataType is not supported""")
+      "The operation `dataType` is not supported.")
   }
 
   def mergeUnsupportedByWindowFunctionError(): SparkUnsupportedOperationException = {
