@@ -750,6 +750,12 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
             }
             e.getCause.getCause.getMessage should include("Permission denied")
           }
+      },
+      Execute { _ =>
+        // SPARK-41894: Restore the write permission of `commitDir`
+        // so that `mvn clean` can run successfully.
+        val commitDir = new File(checkpointLocation + path)
+        commitDir.setWritable(true)
       }
     )
   }
