@@ -63,11 +63,11 @@ class FunctionsParityTests(ReusedSQLTestCase, FunctionsTestsMixin):
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_explode(self):
         super().test_explode()
-    
+
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_function_parity(self):
         super().test_function_parity()
-    
+
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_functions_broadcast(self):
         super().test_functions_broadcast()
