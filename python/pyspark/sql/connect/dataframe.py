@@ -1751,6 +1751,9 @@ def _test() -> None:
     # TODO(SPARK-41625): Support Structured Streaming
     del pyspark.sql.connect.dataframe.DataFrame.isStreaming.__doc__
 
+    # TODO(SPARK-41888): Support StreamingQueryListener for DataFrame.observe
+    del pyspark.sql.connect.dataframe.DataFrame.observe.__doc__
+
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.dataframe tests")
         .remote("local[4]")
