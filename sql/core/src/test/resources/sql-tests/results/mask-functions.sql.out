@@ -550,3 +550,1112 @@ org.apache.spark.sql.AnalysisException
     "fragment" : "mask('abcd-EFGH-8765-4321', 'A', 'abc')"
   } ]
 }
+
+
+-- !query
+SELECT mask_first_n('AbCD123-@$#')
+-- !query schema
+struct<maskfirstn(AbCD123-@$#, 4, X, x, n, NULL):string>
+-- !query output
+XxXX123-@$#
+
+
+-- !query
+SELECT mask_first_n('AbCD123-@$#', 7, 'Q')
+-- !query schema
+struct<maskfirstn(AbCD123-@$#, 7, Q, x, n, NULL):string>
+-- !query output
+QxQQnnn-@$#
+
+
+-- !query
+SELECT mask_first_n('AbCD123-@$#', 7, 'Q', 'q')
+-- !query schema
+struct<maskfirstn(AbCD123-@$#, 7, Q, q, n, NULL):string>
+-- !query output
+QqQQnnn-@$#
+
+
+-- !query
+SELECT mask_first_n('AbCD123-@$#', 7, 'Q', 'q', 'd')
+-- !query schema
+struct<maskfirstn(AbCD123-@$#, 7, Q, q, d, NULL):string>
+-- !query output
+QqQQddd-@$#
+
+
+-- !query
+SELECT mask_first_n('AbCD123-@$#', 7, 'Q', 'q', 'd', 'o')
+-- !query schema
+struct<maskfirstn(AbCD123-@$#, 7, Q, q, d, o):string>
+-- !query output
+QqQQddd-@$#
+
+
+-- !query
+SELECT mask_first_n('AbCD123-@$#', 7, 'Qa', 'qa', 'da', 'oa')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INPUT_SIZE_NOT_ONE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "exprName" : "upperChar",
+    "sqlExpr" : "\"maskfirstn(AbCD123-@$#, 7, Qa, qa, da, oa)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 61,
+    "fragment" : "mask_first_n('AbCD123-@$#', 7, 'Qa', 'qa', 'da', 'oa')"
+  } ]
+}
+
+
+-- !query
+SELECT mask_first_n('AbCD123-@$#', 7, NULL, 'q', 'd', 'o')
+-- !query schema
+struct<maskfirstn(AbCD123-@$#, 7, NULL, q, d, o):string>
+-- !query output
+AqCDddd-@$#
+
+
+-- !query
+SELECT mask_first_n('AbCD123-@$#', 7, NULL, NULL, 'd', 'o')
+-- !query schema
+struct<maskfirstn(AbCD123-@$#, 7, NULL, NULL, d, o):string>
+-- !query output
+AbCDddd-@$#
+
+
+-- !query
+SELECT mask_first_n('AbCD123-@$#', 7, NULL, NULL, NULL, 'o')
+-- !query schema
+struct<maskfirstn(AbCD123-@$#, 7, NULL, NULL, NULL, o):string>
+-- !query output
+AbCD123-@$#
+
+
+-- !query
+SELECT mask_first_n('AbCD123-@$#', 7, NULL, NULL, NULL, NULL)
+-- !query schema
+struct<maskfirstn(AbCD123-@$#, 7, NULL, NULL, NULL, NULL):string>
+-- !query output
+AbCD123-@$#
+
+
+-- !query
+SELECT mask_first_n(NULL)
+-- !query schema
+struct<maskfirstn(NULL, 4, X, x, n, NULL):string>
+-- !query output
+NULL
+
+
+-- !query
+SELECT mask_first_n(NULL, 5)
+-- !query schema
+struct<maskfirstn(NULL, 5, X, x, n, NULL):string>
+-- !query output
+NULL
+
+
+-- !query
+SELECT mask_first_n(NULL, NULL, NULL, 'q', 'd', 'o')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "exprName" : "charCount",
+    "sqlExpr" : "\"maskfirstn(NULL, NULL, NULL, q, d, o)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 52,
+    "fragment" : "mask_first_n(NULL, NULL, NULL, 'q', 'd', 'o')"
+  } ]
+}
+
+
+-- !query
+SELECT mask_first_n('AbCD123-@$#', NULL, NULL, NULL, NULL)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "exprName" : "charCount",
+    "sqlExpr" : "\"maskfirstn(AbCD123-@$#, NULL, NULL, NULL, NULL, NULL)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 58,
+    "fragment" : "mask_first_n('AbCD123-@$#', NULL, NULL, NULL, NULL)"
+  } ]
+}
+
+
+-- !query
+SELECT mask_first_n(c1) from values ('AbCD123-@$#') as tab(c1)
+-- !query schema
+struct<maskfirstn(c1, 4, X, x, n, NULL):string>
+-- !query output
+XxXX123-@$#
+
+
+-- !query
+SELECT mask_first_n(c1, 8, 'Q') from values ('AbCD123-@$#') as tab(c1)
+-- !query schema
+struct<maskfirstn(c1, 8, Q, x, n, NULL):string>
+-- !query output
+QxQQnnn-@$#
+
+
+-- !query
+SELECT mask_first_n(c1, 8, 'Q', 'q')from values ('AbCD123-@$#') as tab(c1)
+-- !query schema
+struct<maskfirstn(c1, 8, Q, q, n, NULL):string>
+-- !query output
+QqQQnnn-@$#
+
+
+-- !query
+SELECT mask_first_n(c1, 8, 'Q', 'q', 'd') from values ('AbCD123-@$#') as tab(c1)
+-- !query schema
+struct<maskfirstn(c1, 8, Q, q, d, NULL):string>
+-- !query output
+QqQQddd-@$#
+
+
+-- !query
+SELECT mask_first_n(c1, 8, 'Q', 'q', 'd', 'o') from values ('AbCD123-@$#') as tab(c1)
+-- !query schema
+struct<maskfirstn(c1, 8, Q, q, d, o):string>
+-- !query output
+QqQQdddo@$#
+
+
+-- !query
+SELECT mask_first_n(c1, 8, NULL, 'q', 'd', 'o') from values ('AbCD123-@$#') as tab(c1)
+-- !query schema
+struct<maskfirstn(c1, 8, NULL, q, d, o):string>
+-- !query output
+AqCDdddo@$#
+
+
+-- !query
+SELECT mask_first_n(c1, 8, NULL, NULL, 'd', 'o') from values ('AbCD123-@$#') as tab(c1)
+-- !query schema
+struct<maskfirstn(c1, 8, NULL, NULL, d, o):string>
+-- !query output
+AbCDdddo@$#
+
+
+-- !query
+SELECT mask_first_n(c1, 8, NULL, NULL, NULL, 'o') from values ('AbCD123-@$#') as tab(c1)
+-- !query schema
+struct<maskfirstn(c1, 8, NULL, NULL, NULL, o):string>
+-- !query output
+AbCD123o@$#
+
+
+-- !query
+SELECT mask_first_n(c1, 8, NULL, NULL, NULL, NULL) from values ('AbCD123-@$#') as tab(c1)
+-- !query schema
+struct<maskfirstn(c1, 8, NULL, NULL, NULL, NULL):string>
+-- !query output
+AbCD123-@$#
+
+
+-- !query
+SELECT mask_first_n(c1, 8, NULL, 'q', 'd', 'o') from values ('AbCD123-@$#') as tab(c1)
+-- !query schema
+struct<maskfirstn(c1, 8, NULL, q, d, o):string>
+-- !query output
+AqCDdddo@$#
+
+
+-- !query
+SELECT mask_first_n(c1, 8, 'Q', NULL, 'd', 'o') from values ('AbCD123-@$#') as tab(c1)
+-- !query schema
+struct<maskfirstn(c1, 8, Q, NULL, d, o):string>
+-- !query output
+QbQQdddo@$#
+
+
+-- !query
+SELECT mask_first_n(c1, 8, 'Q', 'q', NULL, 'o') from values ('AbCD123-@$#') as tab(c1)
+-- !query schema
+struct<maskfirstn(c1, 8, Q, q, NULL, o):string>
+-- !query output
+QqQQ123o@$#
+
+
+-- !query
+SELECT mask_first_n(c1, 8, 'Q', 'q', 'd', NULL) from values ('AbCD123-@$#') as tab(c1)
+-- !query schema
+struct<maskfirstn(c1, 8, Q, q, d, NULL):string>
+-- !query output
+QqQQddd-@$#
+
+
+-- !query
+SELECT mask_first_n(NULL, 'Q', 'q', 'd', NULL) from values ('AbCD123-@$#') as tab(c1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"Q\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "2",
+    "requiredType" : "\"INT\"",
+    "sqlExpr" : "\"maskfirstn(NULL, Q, q, d, NULL, NULL)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 46,
+    "fragment" : "mask_first_n(NULL, 'Q', 'q', 'd', NULL)"
+  } ]
+}
+
+
+-- !query
+SELECT mask_first_n('abcd-EFGH-8765-4321')
+-- !query schema
+struct<maskfirstn(abcd-EFGH-8765-4321, 4, X, x, n, NULL):string>
+-- !query output
+xxxx-EFGH-8765-4321
+
+
+-- !query
+SELECT mask_first_n('abcd-EFGH-8765-4321', 20, 'Q')
+-- !query schema
+struct<maskfirstn(abcd-EFGH-8765-4321, 20, Q, x, n, NULL):string>
+-- !query output
+xxxx-QQQQ-nnnn-nnnn
+
+
+-- !query
+SELECT mask_first_n('abcd-EFGH-8765-4321', 20, 'Q', 'q')
+-- !query schema
+struct<maskfirstn(abcd-EFGH-8765-4321, 20, Q, q, n, NULL):string>
+-- !query output
+qqqq-QQQQ-nnnn-nnnn
+
+
+-- !query
+SELECT mask_first_n('abcd-EFGH-8765-4321', 20, 'Q', 'q', 'd')
+-- !query schema
+struct<maskfirstn(abcd-EFGH-8765-4321, 20, Q, q, d, NULL):string>
+-- !query output
+qqqq-QQQQ-dddd-dddd
+
+
+-- !query
+SELECT mask_first_n('abcd-EFGH-8765-4321', 20, 'Q', 'q', 'd', '*')
+-- !query schema
+struct<maskfirstn(abcd-EFGH-8765-4321, 20, Q, q, d, *):string>
+-- !query output
+qqqq*QQQQ*dddd*dddd
+
+
+-- !query
+SELECT mask_first_n('abcd-EFGH-8765-4321', 20, NULL, 'q', 'd', '*')
+-- !query schema
+struct<maskfirstn(abcd-EFGH-8765-4321, 20, NULL, q, d, *):string>
+-- !query output
+qqqq*EFGH*dddd*dddd
+
+
+-- !query
+SELECT mask_first_n('abcd-EFGH-8765-4321', 20, NULL, NULL, 'd', '*')
+-- !query schema
+struct<maskfirstn(abcd-EFGH-8765-4321, 20, NULL, NULL, d, *):string>
+-- !query output
+abcd*EFGH*dddd*dddd
+
+
+-- !query
+SELECT mask_first_n('abcd-EFGH-8765-4321', 20, NULL, NULL, NULL, '*')
+-- !query schema
+struct<maskfirstn(abcd-EFGH-8765-4321, 20, NULL, NULL, NULL, *):string>
+-- !query output
+abcd*EFGH*8765*4321
+
+
+-- !query
+SELECT mask_first_n('abcd-EFGH-8765-4321', 20, NULL, NULL, NULL, NULL)
+-- !query schema
+struct<maskfirstn(abcd-EFGH-8765-4321, 20, NULL, NULL, NULL, NULL):string>
+-- !query output
+abcd-EFGH-8765-4321
+
+
+-- !query
+SELECT mask_first_n(NULL)
+-- !query schema
+struct<maskfirstn(NULL, 4, X, x, n, NULL):string>
+-- !query output
+NULL
+
+
+-- !query
+SELECT mask_first_n(NULL, 6, NULL, 'q', 'd', '*')
+-- !query schema
+struct<maskfirstn(NULL, 6, NULL, q, d, *):string>
+-- !query output
+NULL
+
+
+-- !query
+SELECT mask_first_n(NULL, 6, NULL, NULL, 'd', '*')
+-- !query schema
+struct<maskfirstn(NULL, 6, NULL, NULL, d, *):string>
+-- !query output
+NULL
+
+
+-- !query
+SELECT mask_first_n(NULL, 6, NULL, NULL, NULL, '*')
+-- !query schema
+struct<maskfirstn(NULL, 6, NULL, NULL, NULL, *):string>
+-- !query output
+NULL
+
+
+-- !query
+SELECT mask_first_n(NULL, 6, NULL, NULL, NULL, NULL)
+-- !query schema
+struct<maskfirstn(NULL, 6, NULL, NULL, NULL, NULL):string>
+-- !query output
+NULL
+
+
+-- !query
+SELECT mask_first_n(c1) from values ('abcd-EFGH-8765-4321') as tab(c1)
+-- !query schema
+struct<maskfirstn(c1, 4, X, x, n, NULL):string>
+-- !query output
+xxxx-EFGH-8765-4321
+
+
+-- !query
+SELECT mask_first_n(c1, 14, 'Q') from values ('abcd-EFGH-8765-4321') as tab(c1)
+-- !query schema
+struct<maskfirstn(c1, 14, Q, x, n, NULL):string>
+-- !query output
+xxxx-QQQQ-nnnn-4321
+
+
+-- !query
+SELECT mask_first_n(c1, 14, 'Q', 'q')from values ('abcd-EFGH-8765-4321') as tab(c1)
+-- !query schema
+struct<maskfirstn(c1, 14, Q, q, n, NULL):string>
+-- !query output
+qqqq-QQQQ-nnnn-4321
+
+
+-- !query
+SELECT mask_first_n(c1, 14, 'Q', 'q', 'd') from values ('abcd-EFGH-8765-4321') as tab(c1)
+-- !query schema
+struct<maskfirstn(c1, 14, Q, q, d, NULL):string>
+-- !query output
+qqqq-QQQQ-dddd-4321
+
+
+-- !query
+SELECT mask_first_n(c1, 14, 'Q', 'q', 'd', '*') from values ('abcd-EFGH-8765-4321') as tab(c1)
+-- !query schema
+struct<maskfirstn(c1, 14, Q, q, d, *):string>
+-- !query output
+qqqq*QQQQ*dddd-4321
+
+
+-- !query
+SELECT mask_first_n(c1, 14, NULL, 'q', 'd', '*') from values ('abcd-EFGH-8765-4321') as tab(c1)
+-- !query schema
+struct<maskfirstn(c1, 14, NULL, q, d, *):string>
+-- !query output
+qqqq*EFGH*dddd-4321
+
+
+-- !query
+SELECT mask_first_n(c1, 14, NULL, NULL, 'd', '*') from values ('abcd-EFGH-8765-4321') as tab(c1)
+-- !query schema
+struct<maskfirstn(c1, 14, NULL, NULL, d, *):string>
+-- !query output
+abcd*EFGH*dddd-4321
+
+
+-- !query
+SELECT mask_first_n(c1, 14, NULL, NULL, NULL, '*') from values ('abcd-EFGH-8765-4321') as tab(c1)
+-- !query schema
+struct<maskfirstn(c1, 14, NULL, NULL, NULL, *):string>
+-- !query output
+abcd*EFGH*8765-4321
+
+
+-- !query
+SELECT mask_first_n(c1, 14, NULL, NULL, NULL, NULL) from values ('abcd-EFGH-8765-4321') as tab(c1)
+-- !query schema
+struct<maskfirstn(c1, 14, NULL, NULL, NULL, NULL):string>
+-- !query output
+abcd-EFGH-8765-4321
+
+
+-- !query
+SELECT mask_first_n(c1, 14, replaceArg) from values('abcd-EFGH-8765-4321', 'a') as t(c1, replaceArg)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputExpr" : "\"replaceArg\"",
+    "inputName" : "upperChar",
+    "inputType" : "\"STRING\"",
+    "sqlExpr" : "\"maskfirstn(c1, 14, replaceArg, x, n, NULL)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 39,
+    "fragment" : "mask_first_n(c1, 14, replaceArg)"
+  } ]
+}
+
+
+-- !query
+SELECT mask_first_n(c1, 14, replaceArg) from values('abcd-EFGH-8765-4321', 'ABC') as t(c1, replaceArg)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputExpr" : "\"replaceArg\"",
+    "inputName" : "upperChar",
+    "inputType" : "\"STRING\"",
+    "sqlExpr" : "\"maskfirstn(c1, 14, replaceArg, x, n, NULL)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 39,
+    "fragment" : "mask_first_n(c1, 14, replaceArg)"
+  } ]
+}
+
+
+-- !query
+SELECT mask_first_n(c1, 14, replaceArg) from values('abcd-EFGH-8765-4321', 123) as t(c1, replaceArg)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"replaceArg\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "3",
+    "requiredType" : "\"STRING\"",
+    "sqlExpr" : "\"maskfirstn(c1, 14, replaceArg, x, n, NULL)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 39,
+    "fragment" : "mask_first_n(c1, 14, replaceArg)"
+  } ]
+}
+
+
+-- !query
+SELECT mask_first_n('abcd-EFGH-8765-4321', -10, 'A', 'w', '')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INPUT_SIZE_NOT_ONE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "exprName" : "digitChar",
+    "sqlExpr" : "\"maskfirstn(abcd-EFGH-8765-4321, -10, A, w, , NULL)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 61,
+    "fragment" : "mask_first_n('abcd-EFGH-8765-4321', -10, 'A', 'w', '')"
+  } ]
+}
+
+
+-- !query
+SELECT mask_first_n('abcd-EFGH-8765-4321', -10, 'A', 'w', 'x')
+-- !query schema
+struct<maskfirstn(abcd-EFGH-8765-4321, -10, A, w, x, NULL):string>
+-- !query output
+abcd-EFGH-8765-4321
+
+
+-- !query
+SELECT mask_first_n('abcd-EFGH-8765-4321', 0, 'A', 'w', '')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INPUT_SIZE_NOT_ONE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "exprName" : "digitChar",
+    "sqlExpr" : "\"maskfirstn(abcd-EFGH-8765-4321, 0, A, w, , NULL)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 59,
+    "fragment" : "mask_first_n('abcd-EFGH-8765-4321', 0, 'A', 'w', '')"
+  } ]
+}
+
+
+-- !query
+SELECT mask_first_n('abcd-EFGH-8765-4321', -10, 'A', 'abc')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INPUT_SIZE_NOT_ONE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "exprName" : "lowerChar",
+    "sqlExpr" : "\"maskfirstn(abcd-EFGH-8765-4321, -10, A, abc, n, NULL)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 59,
+    "fragment" : "mask_first_n('abcd-EFGH-8765-4321', -10, 'A', 'abc')"
+  } ]
+}
+
+
+-- !query
+SELECT mask_first_n('abcd-EFGH-8765-4321', -10, 'A', 'abc', 'x')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INPUT_SIZE_NOT_ONE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "exprName" : "lowerChar",
+    "sqlExpr" : "\"maskfirstn(abcd-EFGH-8765-4321, -10, A, abc, x, NULL)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 64,
+    "fragment" : "mask_first_n('abcd-EFGH-8765-4321', -10, 'A', 'abc', 'x')"
+  } ]
+}
+
+
+-- !query
+SELECT mask_first_n('AbCD123-@$#')
+-- !query schema
+struct<maskfirstn(AbCD123-@$#, 4, X, x, n, NULL):string>
+-- !query output
+XxXX123-@$#
+
+
+-- !query
+SELECT mask_first_n('AbCD123-@$#', 7,'Q')
+-- !query schema
+struct<maskfirstn(AbCD123-@$#, 7, Q, x, n, NULL):string>
+-- !query output
+QxQQnnn-@$#
+
+
+-- !query
+SELECT mask_first_n('AbCD123-@$#', 7,'Q', 'q')
+-- !query schema
+struct<maskfirstn(AbCD123-@$#, 7, Q, q, n, NULL):string>
+-- !query output
+QqQQnnn-@$#
+
+
+-- !query
+SELECT mask_first_n('AbCD123-@$#', 7,'Q', 'q', 'd')
+-- !query schema
+struct<maskfirstn(AbCD123-@$#, 7, Q, q, d, NULL):string>
+-- !query output
+QqQQddd-@$#
+
+
+-- !query
+SELECT mask_first_n('AbCD123-@$#', 7,'Q', 'q', 'd', 'o')
+-- !query schema
+struct<maskfirstn(AbCD123-@$#, 7, Q, q, d, o):string>
+-- !query output
+QqQQddd-@$#
+
+
+-- !query
+SELECT mask_first_n('AbCD123-@$#', 7,'Qa', 'qa', 'da', 'oa')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INPUT_SIZE_NOT_ONE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "exprName" : "upperChar",
+    "sqlExpr" : "\"maskfirstn(AbCD123-@$#, 7, Qa, qa, da, oa)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 60,
+    "fragment" : "mask_first_n('AbCD123-@$#', 7,'Qa', 'qa', 'da', 'oa')"
+  } ]
+}
+
+
+-- !query
+SELECT mask_first_n('AbCD123-@$#', 7, NULL, 'q', 'd', 'o')
+-- !query schema
+struct<maskfirstn(AbCD123-@$#, 7, NULL, q, d, o):string>
+-- !query output
+AqCDddd-@$#
+
+
+-- !query
+SELECT mask_first_n('AbCD123-@$#', 7, NULL, NULL, 'd', 'o')
+-- !query schema
+struct<maskfirstn(AbCD123-@$#, 7, NULL, NULL, d, o):string>
+-- !query output
+AbCDddd-@$#
+
+
+-- !query
+SELECT mask_first_n('AbCD123-@$#', 7, NULL, NULL, NULL, 'o')
+-- !query schema
+struct<maskfirstn(AbCD123-@$#, 7, NULL, NULL, NULL, o):string>
+-- !query output
+AbCD123-@$#
+
+
+-- !query
+SELECT mask_first_n('AbCD123-@$#', 7, NULL, NULL, NULL, NULL)
+-- !query schema
+struct<maskfirstn(AbCD123-@$#, 7, NULL, NULL, NULL, NULL):string>
+-- !query output
+AbCD123-@$#
+
+
+-- !query
+SELECT mask_first_n('AbCD123-@$#', 0,'Q', 'q', 'd', 'o')
+-- !query schema
+struct<maskfirstn(AbCD123-@$#, 0, Q, q, d, o):string>
+-- !query output
+AbCD123-@$#
+
+
+-- !query
+SELECT mask_first_n('AbCD123-@$#', -4,'Q', 'q', 'd', 'o')
+-- !query schema
+struct<maskfirstn(AbCD123-@$#, -4, Q, q, d, o):string>
+-- !query output
+AbCD123-@$#
+
+
+-- !query
+SELECT mask_first_n('AbCD123-@$#', 20,'Q', 'q', 'd', 'o')
+-- !query schema
+struct<maskfirstn(AbCD123-@$#, 20, Q, q, d, o):string>
+-- !query output
+QqQQdddoooo
+
+
+-- !query
+SELECT mask_first_n(NULL)
+-- !query schema
+struct<maskfirstn(NULL, 4, X, x, n, NULL):string>
+-- !query output
+NULL
+
+
+-- !query
+SELECT mask_first_n(NULL, 5, NULL, 'q', 'd', 'o')
+-- !query schema
+struct<maskfirstn(NULL, 5, NULL, q, d, o):string>
+-- !query output
+NULL
+
+
+-- !query
+SELECT mask_first_n(NULL, 5, NULL, NULL, 'd', 'o')
+-- !query schema
+struct<maskfirstn(NULL, 5, NULL, NULL, d, o):string>
+-- !query output
+NULL
+
+
+-- !query
+SELECT mask_first_n(NULL, 5, NULL, NULL, NULL, 'o')
+-- !query schema
+struct<maskfirstn(NULL, 5, NULL, NULL, NULL, o):string>
+-- !query output
+NULL
+
+
+-- !query
+SELECT mask_first_n(NULL, 5, NULL, NULL, NULL, NULL)
+-- !query schema
+struct<maskfirstn(NULL, 5, NULL, NULL, NULL, NULL):string>
+-- !query output
+NULL
+
+
+-- !query
+SELECT mask_first_n('AbCD123-@$#', 6, NULL, NULL, NULL, NULL)
+-- !query schema
+struct<maskfirstn(AbCD123-@$#, 6, NULL, NULL, NULL, NULL):string>
+-- !query output
+AbCD123-@$#
+
+
+-- !query
+SELECT mask_first_n('AbCD123-@$#', 6, NULL, NULL, NULL, NULL)
+-- !query schema
+struct<maskfirstn(AbCD123-@$#, 6, NULL, NULL, NULL, NULL):string>
+-- !query output
+AbCD123-@$#
+
+
+-- !query
+SELECT mask_first_n('AbCD123-@$#', 6, NULL, NULL, NULL, NULL)
+-- !query schema
+struct<maskfirstn(AbCD123-@$#, 6, NULL, NULL, NULL, NULL):string>
+-- !query output
+AbCD123-@$#
+
+
+-- !query
+SELECT mask_first_n('AbCD123-@$#', 6, NULL, NULL, NULL, NULL)
+-- !query schema
+struct<maskfirstn(AbCD123-@$#, 6, NULL, NULL, NULL, NULL):string>
+-- !query output
+AbCD123-@$#
+
+
+-- !query
+SELECT mask_first_n('AbCD123-@$#', 6, NULL, NULL, NULL, NULL)
+-- !query schema
+struct<maskfirstn(AbCD123-@$#, 6, NULL, NULL, NULL, NULL):string>
+-- !query output
+AbCD123-@$#
+
+
+-- !query
+SELECT mask_first_n(c1) from values ('AbCD123-@$#') as tab(c1)
+-- !query schema
+struct<maskfirstn(c1, 4, X, x, n, NULL):string>
+-- !query output
+XxXX123-@$#
+
+
+-- !query
+SELECT mask_first_n(c1, 8, 'Q') from values ('AbCD123-@$#') as tab(c1)
+-- !query schema
+struct<maskfirstn(c1, 8, Q, x, n, NULL):string>
+-- !query output
+QxQQnnn-@$#
+
+
+-- !query
+SELECT mask_first_n(c1, 8, 'Q', 'q')from values ('AbCD123-@$#') as tab(c1)
+-- !query schema
+struct<maskfirstn(c1, 8, Q, q, n, NULL):string>
+-- !query output
+QqQQnnn-@$#
+
+
+-- !query
+SELECT mask_first_n(c1, 8, 'Q', 'q', 'd') from values ('AbCD123-@$#') as tab(c1)
+-- !query schema
+struct<maskfirstn(c1, 8, Q, q, d, NULL):string>
+-- !query output
+QqQQddd-@$#
+
+
+-- !query
+SELECT mask_first_n(c1, 8, 'Q', 'q', 'd', 'o') from values ('AbCD123-@$#') as tab(c1)
+-- !query schema
+struct<maskfirstn(c1, 8, Q, q, d, o):string>
+-- !query output
+QqQQdddo@$#
+
+
+-- !query
+SELECT mask_first_n(c1, 8, NULL, 'q', 'd', 'o') from values ('AbCD123-@$#') as tab(c1)
+-- !query schema
+struct<maskfirstn(c1, 8, NULL, q, d, o):string>
+-- !query output
+AqCDdddo@$#
+
+
+-- !query
+SELECT mask_first_n(c1, 8, NULL, NULL, 'd', 'o') from values ('AbCD123-@$#') as tab(c1)
+-- !query schema
+struct<maskfirstn(c1, 8, NULL, NULL, d, o):string>
+-- !query output
+AbCDdddo@$#
+
+
+-- !query
+SELECT mask_first_n(c1, 8, NULL, NULL, NULL, 'o') from values ('AbCD123-@$#') as tab(c1)
+-- !query schema
+struct<maskfirstn(c1, 8, NULL, NULL, NULL, o):string>
+-- !query output
+AbCD123o@$#
+
+
+-- !query
+SELECT mask_first_n(c1, 8, NULL, NULL, NULL, NULL) from values ('AbCD123-@$#') as tab(c1)
+-- !query schema
+struct<maskfirstn(c1, 8, NULL, NULL, NULL, NULL):string>
+-- !query output
+AbCD123-@$#
+
+
+-- !query
+SELECT mask_first_n(c1, 8, NULL, 'q', 'd', 'o') from values ('AbCD123-@$#') as tab(c1)
+-- !query schema
+struct<maskfirstn(c1, 8, NULL, q, d, o):string>
+-- !query output
+AqCDdddo@$#
+
+
+-- !query
+SELECT mask_first_n(c1, 8, 'Q', NULL, 'd', 'o') from values ('AbCD123-@$#') as tab(c1)
+-- !query schema
+struct<maskfirstn(c1, 8, Q, NULL, d, o):string>
+-- !query output
+QbQQdddo@$#
+
+
+-- !query
+SELECT mask_first_n(c1, 8, 'Q', 'q', NULL, 'o') from values ('AbCD123-@$#') as tab(c1)
+-- !query schema
+struct<maskfirstn(c1, 8, Q, q, NULL, o):string>
+-- !query output
+QqQQ123o@$#
+
+
+-- !query
+SELECT mask_first_n(c1, 8, 'Q', 'q', 'd', NULL) from values ('AbCD123-@$#') as tab(c1)
+-- !query schema
+struct<maskfirstn(c1, 8, Q, q, d, NULL):string>
+-- !query output
+QqQQddd-@$#
+
+
+-- !query
+SELECT mask_first_n(NULL, 8,  'Q', 'q', 'd', NULL) from values ('AbCD123-@$#') as tab(c1)
+-- !query schema
+struct<maskfirstn(NULL, 8, Q, q, d, NULL):string>
+-- !query output
+NULL
+
+
+-- !query
+SELECT mask_first_n(NULL, 8,  NULL, NULL, NULL, NULL) from values ('AbCD123-@$#') as tab(c1)
+-- !query schema
+struct<maskfirstn(NULL, 8, NULL, NULL, NULL, NULL):string>
+-- !query output
+NULL
+
+
+-- !query
+SELECT mask_first_n('abcd-EFGH-8765-4321')
+-- !query schema
+struct<maskfirstn(abcd-EFGH-8765-4321, 4, X, x, n, NULL):string>
+-- !query output
+xxxx-EFGH-8765-4321
+
+
+-- !query
+SELECT mask_first_n('abcd-EFGH-8765-4321', 8, 'Q')
+-- !query schema
+struct<maskfirstn(abcd-EFGH-8765-4321, 8, Q, x, n, NULL):string>
+-- !query output
+xxxx-QQQH-8765-4321
+
+
+-- !query
+SELECT mask_first_n('abcd-EFGH-8765-4321', 8, 'Q', 'q')
+-- !query schema
+struct<maskfirstn(abcd-EFGH-8765-4321, 8, Q, q, n, NULL):string>
+-- !query output
+qqqq-QQQH-8765-4321
+
+
+-- !query
+SELECT mask_first_n('abcd-EFGH-8765-4321', 8, 'Q', 'q', 'd')
+-- !query schema
+struct<maskfirstn(abcd-EFGH-8765-4321, 8, Q, q, d, NULL):string>
+-- !query output
+qqqq-QQQH-8765-4321
+
+
+-- !query
+SELECT mask_first_n('abcd-EFGH-8765-4321', 8, 'Q', 'q', 'd', '*')
+-- !query schema
+struct<maskfirstn(abcd-EFGH-8765-4321, 8, Q, q, d, *):string>
+-- !query output
+qqqq*QQQH-8765-4321
+
+
+-- !query
+SELECT mask_first_n('abcd-EFGH-8765-4321', 8, NULL, 'q', 'd', '*')
+-- !query schema
+struct<maskfirstn(abcd-EFGH-8765-4321, 8, NULL, q, d, *):string>
+-- !query output
+qqqq*EFGH-8765-4321
+
+
+-- !query
+SELECT mask_first_n('abcd-EFGH-8765-4321', 8, NULL, NULL, 'd', '*')
+-- !query schema
+struct<maskfirstn(abcd-EFGH-8765-4321, 8, NULL, NULL, d, *):string>
+-- !query output
+abcd*EFGH-8765-4321
+
+
+-- !query
+SELECT mask_first_n('abcd-EFGH-8765-4321', 8, NULL, NULL, NULL, '*')
+-- !query schema
+struct<maskfirstn(abcd-EFGH-8765-4321, 8, NULL, NULL, NULL, *):string>
+-- !query output
+abcd*EFGH-8765-4321
+
+
+-- !query
+SELECT mask_first_n('abcd-EFGH-8765-4321', 8, NULL, NULL, NULL, NULL)
+-- !query schema
+struct<maskfirstn(abcd-EFGH-8765-4321, 8, NULL, NULL, NULL, NULL):string>
+-- !query output
+abcd-EFGH-8765-4321
+
+
+-- !query
+SELECT mask_first_n(c1, n, replaceArg) from values('abcd-EFGH-8765-4321', 6, 'a') as t(c1, n, replaceArg)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputExpr" : "\"replaceArg\"",
+    "inputName" : "upperChar",
+    "inputType" : "\"STRING\"",
+    "sqlExpr" : "\"maskfirstn(c1, n, replaceArg, x, n, NULL)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 38,
+    "fragment" : "mask_first_n(c1, n, replaceArg)"
+  } ]
+}
+
+
+-- !query
+SELECT mask_first_n('abcd-EFGH-8765-4321', 5, 'A', 'w', '')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INPUT_SIZE_NOT_ONE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "exprName" : "digitChar",
+    "sqlExpr" : "\"maskfirstn(abcd-EFGH-8765-4321, 5, A, w, , NULL)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 59,
+    "fragment" : "mask_first_n('abcd-EFGH-8765-4321', 5, 'A', 'w', '')"
+  } ]
+}
+
+
+-- !query
+SELECT mask_first_n('abcd-EFGH-8765-4321', 5, 'A', 'abc')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INPUT_SIZE_NOT_ONE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "exprName" : "lowerChar",
+    "sqlExpr" : "\"maskfirstn(abcd-EFGH-8765-4321, 5, A, abc, n, NULL)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 57,
+    "fragment" : "mask_first_n('abcd-EFGH-8765-4321', 5, 'A', 'abc')"
+  } ]
+}

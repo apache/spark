@@ -446,6 +446,131 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       new Mask(NULL_LITERAL, Literal('Q'), Literal('q'), Literal('d')), null)
   }
 
+  test("MaskFirstN") {
+    val NULL_LITERAL = Literal(null, StringType)
+    val inputString1 = Literal("AbCD123-@$#-AbCD123-@$#")
+    val inputString2 = Literal("abcd-EFGH-8765-4321")
+    val inputString3 = Literal.create(null, StringType)
+    val firstItem = (
+      inputString1,
+      Array(
+        "XxXX123-@$#-AbCD123-@$#",
+        "QxQQnnn-@$#-AbCD123-@$#",
+        "QqQQnnn-@$#-AbCD123-@$#",
+        "QqQQddd-@$#-AbCD123-@$#",
+        "QqQQddd****-AbCD123-@$#",
+        "AqCDddd****-AbCD123-@$#",
+        "AbCDddd****-AbCD123-@$#",
+        "AbCD123****-AbCD123-@$#",
+        "AbCD123-@$#-AbCD123-@$#",
+        "QqQQddd*****QqQQddd****",
+        "AbCD123-@$#-AbCD123-@$#"))
+    val secondItem = (
+      inputString2,
+      Array(
+        "xxxx-EFGH-8765-4321",
+        "xxxx-QQQQ-n765-4321",
+        "qqqq-QQQQ-n765-4321",
+        "qqqq-QQQQ-d765-4321",
+        "qqqq*QQQQ*d765-4321",
+        "qqqq*EFGH*d765-4321",
+        "abcd*EFGH*d765-4321",
+        "abcd*EFGH*8765-4321",
+        "abcd-EFGH-8765-4321",
+        "qqqq*QQQQ*dddd*dddd",
+        "abcd-EFGH-8765-4321"))
+
+    Seq(firstItem, secondItem).foreach { case (input: Literal, expectedList: Array[String]) =>
+      checkEvaluation(new MaskFirstN(input), expectedList(0))
+
+      checkEvaluation(new MaskFirstN(input, Literal(11), Literal('Q')), expectedList(1))
+      checkEvaluation(
+        new MaskFirstN(input, Literal(11), Literal('Q'), Literal('q')),
+        expectedList(2))
+      checkEvaluation(
+        new MaskFirstN(input, Literal(11), Literal('Q'), Literal('q'), Literal('d')),
+        expectedList(3))
+      checkEvaluation(
+        new MaskFirstN(
+          input,
+          Literal(11),
+          Literal('Q'),
+          Literal('q'),
+          Literal('d'),
+          Literal('*')),
+        expectedList(4))
+      checkEvaluation(
+        new MaskFirstN(
+          NULL_LITERAL,
+          Literal(11),
+          Literal('Q'),
+          Literal('q'),
+          Literal('d'),
+          Literal('*')),
+        null)
+      checkEvaluation(
+        new MaskFirstN(
+          input,
+          Literal(11),
+          Literal(NULL_LITERAL),
+          Literal('q'),
+          Literal('d'),
+          Literal('*')),
+        expectedList(5))
+      checkEvaluation(
+        new MaskFirstN(
+          input,
+          Literal(11),
+          Literal(NULL_LITERAL),
+          Literal(NULL_LITERAL),
+          Literal('d'),
+          Literal('*')),
+        expectedList(6))
+      checkEvaluation(
+        new MaskFirstN(
+          input,
+          Literal(11),
+          Literal(NULL_LITERAL),
+          Literal(NULL_LITERAL),
+          Literal(NULL_LITERAL),
+          Literal('*')),
+        expectedList(7))
+      checkEvaluation(
+        new MaskFirstN(
+          input,
+          Literal(11),
+          Literal(NULL_LITERAL),
+          Literal(NULL_LITERAL),
+          Literal(NULL_LITERAL),
+          Literal(NULL_LITERAL)),
+        expectedList(8))
+      assert(
+        new MaskFirstN(
+          input,
+          Literal(11),
+          Literal(NULL_LITERAL),
+          Literal('q'),
+          Literal('d'),
+          Literal('*'))
+          .checkInputDataTypes()
+          .isSuccess)
+      assert(
+        new MaskFirstN(input, Literal(11), NULL_LITERAL, Literal('q'), Literal('d'), Literal('*'))
+          .checkInputDataTypes()
+          .isSuccess)
+      assert(
+        new MaskFirstN(
+          input,
+          Literal(11),
+          Literal("QQ"),
+          Literal('q'),
+          Literal('d'),
+          Literal('*'))
+          .checkInputDataTypes()
+          .isFailure)
+    }
+  }
+
   test("string for ascii") {
     val a = $"a".long.at(0)
     checkEvaluation(Chr(Literal(48L)), "0", create_row("abdef"))

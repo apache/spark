@@ -809,6 +809,7 @@ object FunctionRegistry {
 
     // mask functions
     expression[Mask]("mask"),
+    expression[MaskFirstN]("mask_first_n"),
 
     // csv
     expression[CsvToStructs]("from_csv"),
