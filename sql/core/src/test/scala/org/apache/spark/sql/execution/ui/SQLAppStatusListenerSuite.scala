@@ -1012,8 +1012,8 @@ class SQLAppStatusListenerWithInMemoryStoreSuite extends SQLAppStatusListenerSui
     new SQLAppStatusStore(kvstore, Some(listener))
   }
 }
-class SQLAppStatusListenerWithRocksDBBackendSuite extends SQLAppStatusListenerSuite {
 
+class SQLAppStatusListenerWithRocksDBBackendSuite extends SQLAppStatusListenerSuite {
   // TODO: SPARK-41882 remove this field after RocksDB can automatically cleanup
   private var storePath: File = _
   override protected def createStatusStore(): SQLAppStatusStore = {
