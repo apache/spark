@@ -678,4 +678,18 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       )
     )
   }
+
+  test("INVALID_PARAMETER_VALUE - invalid parameters `regexp` in regexp_extract") {
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("select regexp_extract('', '[a\\\\d]{0, 2}', 1)").collect
+      },
+      errorClass = "INVALID_PARAMETER_VALUE",
+      parameters = Map(
+        "parameter" -> "regexp",
+        "functionName" -> "`regexp_extract`",
+        "expected" -> "'[a\\\\d]{0, 2}'"
+      )
+    )
+  }
 }

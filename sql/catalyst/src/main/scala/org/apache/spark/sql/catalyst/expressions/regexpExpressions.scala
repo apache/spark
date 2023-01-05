@@ -775,7 +775,6 @@ abstract class RegExpExtractBase
       } catch {
         case e: PatternSyntaxException =>
           throw QueryExecutionErrors.invalidPatternError(prettyName, e.getPattern)
-
       }
     }
     pattern.matcher(s.toString)
