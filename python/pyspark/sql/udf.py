@@ -164,7 +164,7 @@ def _create_py_udf(
             f.__module__ if hasattr(f, "__module__") else f.__class__.__module__
         )
         vectorized_udf.__doc__ = f.__doc__
-        pudf = _create_pandas_udf(vectorized_udf, returnType, None)
+        pudf = _create_pandas_udf(vectorized_udf, returnType, None)  # type: ignore[attr-defined]
         # Keep the attributes as if this is a regular Python UDF.
         pudf.func = f
         pudf.returnType = return_type
