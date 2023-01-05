@@ -165,7 +165,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def staticPartitionInUserSpecifiedColumnsError(staticName: String): Throwable = {
     new AnalysisException(
-      errorClass = "STATIC_PARTITION_COLUMN_IN_COLUMN_LIST",
+      errorClass = "STATIC_PARTITION_COLUMN_IN_INSERT_COLUMN_LIST",
       messageParameters = Map("staticName" -> staticName))
   }
 

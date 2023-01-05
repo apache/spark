@@ -377,7 +377,7 @@ class DSV2SQLInsertTestSuite extends SQLInsertTestSuite with SharedSparkSession 
         exception = intercept[AnalysisException] {
           sql("INSERT OVERWRITE t PARTITION (c='1') (c) VALUES ('2')")
         },
-        errorClass = "STATIC_PARTITION_COLUMN_IN_COLUMN_LIST",
+        errorClass = "STATIC_PARTITION_COLUMN_IN_INSERT_COLUMN_LIST",
         parameters = Map("staticName" -> "c"))
     }
   }
