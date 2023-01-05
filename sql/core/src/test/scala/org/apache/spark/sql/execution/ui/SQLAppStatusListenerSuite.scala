@@ -1012,14 +1012,22 @@ class SQLAppStatusListenerWithInMemoryStoreSuite extends SQLAppStatusListenerSui
 }
 
 class SQLAppStatusListenerWithRocksDBBackendSuite extends SQLAppStatusListenerSuite {
+  private val storePath = Utils.createTempDir()
+
   override protected def createStatusStore(): SQLAppStatusStore = {
     val conf = sparkContext.conf
-    val storePath = Utils.createTempDir()
     conf.set(LIVE_UI_LOCAL_STORE_DIR, storePath.getCanonicalPath)
     val appStatusStore = AppStatusStore.createLiveStore(conf)
     kvstore = appStatusStore.store.asInstanceOf[ElementTrackingStore]
     val listener = new SQLAppStatusListener(conf, kvstore, live = true)
     new SQLAppStatusStore(kvstore, Some(listener))
+  }
+
+  protected override def afterAll(): Unit = {
+    if (storePath.exists()) {
+      Utils.deleteRecursively(storePath)
+    }
+    super.afterAll()
   }
 }
 
