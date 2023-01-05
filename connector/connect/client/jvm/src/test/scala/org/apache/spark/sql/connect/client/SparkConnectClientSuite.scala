@@ -76,6 +76,19 @@ class SparkConnectClientSuite
     assert(response.getClientId === "abc123")
   }
 
+  test("Test connection string") {
+    val testPort = 16000
+    startDummyServer(testPort)
+    client = SparkConnectClient.builder().connectionString("sc://localhost:16000").build()
+    val request = AnalyzePlanRequest
+      .newBuilder()
+      .setClientId("abc123")
+      .build()
+
+    val response = client.analyze(request)
+    assert(response.getClientId === "abc123")
+  }
+
   private def testValidURIs(): Unit = {
     val validURIs = Seq[String]("sc://host", "sc://host:1234/;param1=abcs")
     val noPort = SparkConnectClient.builder().connectionString("sc://host").build()
