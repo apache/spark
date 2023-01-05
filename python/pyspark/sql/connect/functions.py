@@ -2368,13 +2368,6 @@ def _test() -> None:
         # TODO(SPARK-41757): Fix String representation for Column class
         del pyspark.sql.connect.functions.col.__doc__
 
-        # TODO(SPARK-41842): support data type: Timestamp(NANOSECOND, null)
-        del pyspark.sql.connect.functions.hour.__doc__
-        del pyspark.sql.connect.functions.minute.__doc__
-        del pyspark.sql.connect.functions.second.__doc__
-        del pyspark.sql.connect.functions.window.__doc__
-        del pyspark.sql.connect.functions.window_time.__doc__
-
         # TODO(SPARK-41838): fix dataset.show
         del pyspark.sql.connect.functions.posexplode_outer.__doc__
         del pyspark.sql.connect.functions.explode_outer.__doc__
