@@ -75,6 +75,11 @@
     ],
     "sqlState" : "42000"
   },
+  "CANNOT_PARSE_JSON_FIELD" : {
+    "message" : [
+      "Cannot parse the field name <fieldName> and the value <fieldValue> of the JSON token type <jsonType> to target Spark data type <dataType>"
+    ]
+  },
   "CANNOT_PARSE_PROTOBUF_DESCRIPTOR" : {
     "message" : [
       "Error parsing file <descFilePath> descriptor byte[] into Descriptor object"
@@ -4103,11 +4108,6 @@
   "_LEGACY_ERROR_TEMP_2135" : {
     "message" : [
       "Failed to parse an empty string for data type <dataType>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2136" : {
-    "message" : [
-      "Failed to parse field name <fieldName>, field value <fieldValue>, [<token>] to target spark data type [<dataType>]."
     ]
   },
   "_LEGACY_ERROR_TEMP_2137" : {

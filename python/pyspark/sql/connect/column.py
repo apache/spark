@@ -448,8 +448,6 @@ def _test() -> None:
         del pyspark.sql.connect.column.Column.dropFields.__doc__
         # TODO(SPARK-41772): Enable pyspark.sql.connect.column.Column.withField doctest
         del pyspark.sql.connect.column.Column.withField.__doc__
-        # TODO(SPARK-41815): Column.isNull returns nan instead of None
-        del pyspark.sql.connect.column.Column.isNull.__doc__
         # TODO(SPARK-41746): SparkSession.createDataFrame does not support nested datatypes
         del pyspark.sql.connect.column.Column.getField.__doc__
 

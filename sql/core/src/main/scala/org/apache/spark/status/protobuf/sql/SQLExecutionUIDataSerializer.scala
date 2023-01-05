@@ -21,9 +21,8 @@ import java.util.Date
 
 import collection.JavaConverters._
 
-import org.apache.spark.JobExecutionStatus
 import org.apache.spark.sql.execution.ui.SQLExecutionUIData
-import org.apache.spark.status.protobuf.{ProtobufSerDe, StoreTypes}
+import org.apache.spark.status.protobuf.{JobExecutionStatusSerializer, ProtobufSerDe, StoreTypes}
 import org.apache.spark.status.protobuf.Utils.getOptional
 
 class SQLExecutionUIDataSerializer extends ProtobufSerDe {
@@ -46,7 +45,7 @@ class SQLExecutionUIDataSerializer extends ProtobufSerDe {
     ui.errorMessage.foreach(builder.setErrorMessage)
     ui.jobs.foreach {
       case (id, status) =>
-        builder.putJobs(id.toLong, StoreTypes.JobExecutionStatus.valueOf(status.toString))
+        builder.putJobs(id.toLong, JobExecutionStatusSerializer.serialize(status))
     }
     ui.stages.foreach(stageId => builder.addStages(stageId.toLong))
     val metricValues = ui.metricValues
@@ -66,7 +65,7 @@ class SQLExecutionUIDataSerializer extends ProtobufSerDe {
     val metrics =
       ui.getMetricsList.asScala.map(m => SQLPlanMetricSerializer.deserialize(m))
     val jobs = ui.getJobsMap.asScala.map {
-      case (jobId, status) => jobId.toInt -> JobExecutionStatus.valueOf(status.toString)
+      case (jobId, status) => jobId.toInt -> JobExecutionStatusSerializer.deserialize(status)
     }.toMap
     val metricValues = ui.getMetricValuesMap.asScala.map {
       case (k, v) => k.toLong -> v
