@@ -414,7 +414,15 @@ class Hint(LogicalPlan):
         plan.hint.input.CopyFrom(self._child.plan(session))
         plan.hint.name = self.name
         for v in self.params:
-            plan.hint.parameters.append(LiteralExpression._from_value(v).to_plan(session).literal)
+            if isinstance(v, list):
+                _temp = list()
+                for ele in v:
+                    _temp.append(LiteralExpression._from_value(ele).to_plan(session).literal)
+                plan.hint.parameters.append(_temp)
+            else:
+                plan.hint.parameters.append(
+                    LiteralExpression._from_value(v).to_plan(session).literal
+                )
         return plan
 
 
