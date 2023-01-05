@@ -52,9 +52,10 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
       }
 
     // LeftSemi/LeftAnti over Aggregate
-    case join @ Join(agg: Aggregate, rightOp, LeftSemiOrAnti(_), _, _)
+    case join @ Join(agg: Aggregate, rightOp, LeftSemiOrAnti(_), joinCond, _)
         if agg.aggregateExpressions.forall(_.deterministic) && agg.groupingExpressions.nonEmpty &&
-        !agg.aggregateExpressions.exists(ScalarSubquery.hasCorrelatedScalarSubquery) =>
+        !agg.aggregateExpressions.exists(ScalarSubquery.hasCorrelatedScalarSubquery) &&
+          canPushThroughCondition(agg.children, joinCond, rightOp) =>
       val aliasMap = getAliasMap(agg)
       val canPushDownPredicate = (predicate: Expression) => {
         val replaced = replaceAlias(predicate, aliasMap)
@@ -100,11 +101,11 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   /**
-   * Check if we can safely push a join through a project or union by making sure that attributes
-   * referred in join condition do not contain the same attributes as the plan they are moved
-   * into. This can happen when both sides of join refers to the same source (self join). This
-   * function makes sure that the join condition refers to attributes that are not ambiguous (i.e
-   * present in both the legs of the join) or else the resultant plan will be invalid.
+   * Check if we can safely push a join through a project, aggregate, or union by making sure that
+   * attributes referred in join condition do not contain the same attributes as the plan they are
+   * moved into. This can happen when both sides of join refers to the same source (self join).
+   * This function makes sure that the join condition refers to attributes that are not ambiguous
+   * (i.e present in both the legs of the join) or else the resultant plan will be invalid.
    */
   private def canPushThroughCondition(
       plans: Seq[LogicalPlan],
