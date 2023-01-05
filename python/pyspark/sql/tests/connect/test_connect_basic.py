@@ -1193,13 +1193,26 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.spark.read.table(self.tbl_name).hint("illegal").toPandas(),
         )
 
+        # Hint with all supported parameter values
+        such_a_nice_list = ["itworks1", "itworks2", "itworks3"]
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name).hint("my awesome hint", 1.2345, 2).toPandas(),
+            self.spark.read.table(self.tbl_name).hint("my awesome hint", 1.2345, 2).toPandas(),
+        )
+
         # Hint with unsupported parameter values
         with self.assertRaises(SparkConnectException):
             self.connect.read.table(self.tbl_name).hint("REPARTITION", "id+1").toPandas()
 
         # Hint with unsupported parameter types
         with self.assertRaises(TypeError):
-            self.connect.read.table(self.tbl_name).hint("REPARTITION", 1.1).toPandas()
+            self.connect.read.table(self.tbl_name).hint("REPARTITION", range(5)).toPandas()
+
+        # Hint with unsupported parameter types
+        with self.assertRaises(TypeError):
+            self.connect.read.table(self.tbl_name).hint(
+                "my awesome hint", 1.2345, 2, such_a_nice_list, range(6)
+            ).toPandas()
 
         # Hint with wrong combination
         with self.assertRaises(SparkConnectException):

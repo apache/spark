@@ -403,8 +403,9 @@ class Hint(LogicalPlan):
 
         self.name = name
 
+        # TODO(SPARK-41887): support list type as hint parameter
         assert isinstance(params, list) and all(
-            p is None or isinstance(p, (int, str)) for p in params
+            p is not None and isinstance(p, (int, str, float)) for p in params
         )
         self.params = params
 

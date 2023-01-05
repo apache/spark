@@ -480,9 +480,11 @@ class DataFrame:
 
     def hint(self, name: str, *params: Any) -> "DataFrame":
         for param in params:
-            if param is not None and not isinstance(param, (int, str)):
+            # TODO(SPARK-41887): support list type as hint parameter
+            if param is not None and not isinstance(param, (int, str, float)):
                 raise TypeError(
-                    f"param should be a int or str, but got {type(param).__name__} {param}"
+                    f"param should be a str, float or int, but got {type(param).__name__}"
+                    f" {param}"
                 )
 
         return DataFrame.withPlan(
