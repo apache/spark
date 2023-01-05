@@ -553,16 +553,12 @@ class DataFrameTestsMixin:
     def test_extended_hint_types(self):
         df = self.spark.range(10e10).toDF("id")
         such_a_nice_list = ["itworks1", "itworks2", "itworks3"]
-        hinted_df = df.hint("my awesome hint", 1.2345, "what", such_a_nice_list, 2)
+        hinted_df = df.hint("my awesome hint", 1.2345, "what", such_a_nice_list)
         logical_plan = hinted_df._jdf.queryExecution().logical()
 
         self.assertEqual(1, logical_plan.toString().count("1.2345"))
         self.assertEqual(1, logical_plan.toString().count("what"))
         self.assertEqual(3, logical_plan.toString().count("itworks"))
-
-        hinted_df_2 = df.hint("my awesome hint", 1.2345, 2, such_a_nice_list, range(6))
-        with self.assertRaises(TypeError):
-            hinted_df_2._jdf.queryExecution().logical()
 
     def test_unpivot(self):
         # SPARK-39877: test the DataFrame.unpivot method

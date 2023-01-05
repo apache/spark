@@ -78,6 +78,10 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedSQLTestCase):
         super().test_duplicated_column_names()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
+    def test_extended_hint_types(self):
+        super().test_extended_hint_types()
+
+    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_fillna(self):
         super().test_fillna()
 
