@@ -2660,7 +2660,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map(
         "parameter" -> "key",
         "functionName" -> aesFuncName,
-        "expected" -> ("expects a binary value with 16, 24 or 32 bytes, " +
+        "value" -> ("expects a binary value with 16, 24 or 32 bytes, " +
           s"but got ${actualLength.toString} bytes.")))
   }
 
@@ -2679,7 +2679,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map(
         "parameter" -> "expr, key",
         "functionName" -> aesFuncName,
-        "expected" -> s"Detail message: $detailMessage"))
+        "value" -> s"Detail message: $detailMessage"))
   }
 
   def hiveTableWithAnsiIntervalsError(tableName: String): SparkUnsupportedOperationException = {
@@ -2785,13 +2785,17 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       cause = null)
   }
 
-  def invalidPatternError(funcName: String, pattern: String): RuntimeException = {
+  def invalidPatternError(
+      funcName: String,
+      pattern: String,
+      cause: Throwable): RuntimeException = {
     new SparkRuntimeException(
       errorClass = "INVALID_PARAMETER_VALUE",
       messageParameters = Map(
         "parameter" -> "regexp",
         "functionName" -> toSQLId(funcName),
-        "expected" -> toSQLValue(pattern, StringType)))
+        "value" -> toSQLValue(pattern, StringType)),
+      cause = cause)
   }
 
   def tooManyArrayElementsError(

@@ -120,7 +120,7 @@ class QueryCompilationErrorsSuite
         parameters = Map(
           "parameter" -> "strfmt",
           "functionName" -> "`format_string`",
-          "expected" -> "expects %1$, %2$ and so on, but got %0$."),
+          "value" -> "expects %1$, %2$ and so on, but got %0$."),
         context = ExpectedContext(
           fragment = "format_string('%0$s', 'Hello')", start = 7, stop = 36))
     }

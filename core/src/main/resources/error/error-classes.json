@@ -789,7 +789,7 @@
   },
   "INVALID_PARAMETER_VALUE" : {
     "message" : [
-      "The value of parameter(s) '<parameter>' in <functionName> is invalid: <expected>"
+      "The value of parameter(s) '<parameter>' in <functionName> is invalid: <value>"
     ],
     "sqlState" : "22023"
   },

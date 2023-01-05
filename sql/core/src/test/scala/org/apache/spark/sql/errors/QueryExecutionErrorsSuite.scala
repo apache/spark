@@ -92,7 +92,7 @@ class QueryExecutionErrorsSuite
         errorClass = "INVALID_PARAMETER_VALUE",
         parameters = Map("parameter" -> "key",
           "functionName" -> "`aes_encrypt`/`aes_decrypt`",
-          "expected" -> ("expects a binary value with 16, 24 or 32 bytes, but got " +
+          "value" -> ("expects a binary value with 16, 24 or 32 bytes, but got " +
             inputBytes.toString + " bytes.")),
         sqlState = "22023")
     }
@@ -129,7 +129,7 @@ class QueryExecutionErrorsSuite
         errorClass = "INVALID_PARAMETER_VALUE",
         parameters = Map("parameter" -> "expr, key",
           "functionName" -> "`aes_encrypt`/`aes_decrypt`",
-          "expected" -> ("Detail message: " +
+          "value" -> ("Detail message: " +
             "Given final block not properly padded. " +
             "Such issues can arise if a bad key is used during decryption.")),
         sqlState = "22023")

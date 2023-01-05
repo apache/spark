@@ -769,8 +769,7 @@ abstract class RegExpExtractBase
         lastRegex = r
       } catch {
         case e: PatternSyntaxException =>
-          throw QueryExecutionErrors.invalidPatternError(prettyName, e.getPattern)
-
+          throw QueryExecutionErrors.invalidPatternError(prettyName, e.getPattern, e)
       }
     }
     pattern.matcher(s.toString)
@@ -793,7 +792,7 @@ abstract class RegExpExtractBase
       |    $termPattern = $classNamePattern.compile(r.toString());
       |    $termLastRegex = r;
       |  } catch (java.util.regex.PatternSyntaxException e) {
-      |    throw QueryExecutionErrors.invalidPatternError("$prettyName", e.getPattern());
+      |    throw QueryExecutionErrors.invalidPatternError("$prettyName", e.getPattern(), e);
       |  }
       |}
       |java.util.regex.Matcher $matcher = $termPattern.matcher($subject.toString());
