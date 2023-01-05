@@ -21,12 +21,13 @@ import urllib.parse
 import uuid
 from typing import Iterable, Optional, Any, Union, List, Tuple, Dict, NoReturn, cast
 
+import pandas as pd
+import pyarrow as pa
+
 import google.protobuf.message
 from grpc_status import rpc_status
 import grpc
-import pandas
 from google.protobuf import text_format
-import pyarrow as pa
 from google.rpc import error_details_pb2
 
 import pyspark.sql.connect.proto as pb2
@@ -406,11 +407,22 @@ class SparkConnectClient(object):
             for x in metrics.metrics
         ]
 
-    def to_pandas(self, plan: pb2.Plan) -> "pandas.DataFrame":
+    def to_table(self, plan: pb2.Plan) -> "pa.Table":
         logger.info(f"Executing plan {self._proto_to_string(plan)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
-        return self._execute_and_fetch(req)
+        table, _ = self._execute_and_fetch(req)
+        return table
+
+    def to_pandas(self, plan: pb2.Plan) -> "pd.DataFrame":
+        logger.info(f"Executing plan {self._proto_to_string(plan)}")
+        req = self._execute_plan_request_with_metadata()
+        req.plan.CopyFrom(plan)
+        table, metrics = self._execute_and_fetch(req)
+        pdf = table.to_pandas()
+        if len(metrics) > 0:
+            pdf.attrs["metrics"] = metrics
+        return pdf
 
     def _proto_schema_to_pyspark_schema(self, schema: pb2.DataType) -> DataType:
         return types.proto_schema_to_pyspark_data_type(schema)
@@ -521,10 +533,6 @@ class SparkConnectClient(object):
         except grpc.RpcError as rpc_error:
             self._handle_error(rpc_error)
 
-    def _process_batch(self, arrow_batch: pb2.ExecutePlanResponse.ArrowBatch) -> "pandas.DataFrame":
-        with pa.ipc.open_stream(arrow_batch.data) as rd:
-            return rd.read_pandas()
-
     def _execute(self, req: pb2.ExecutePlanRequest) -> None:
         """
         Execute the passed request `req` and drop all results.
@@ -546,12 +554,14 @@ class SparkConnectClient(object):
         except grpc.RpcError as rpc_error:
             self._handle_error(rpc_error)
 
-    def _execute_and_fetch(self, req: pb2.ExecutePlanRequest) -> "pandas.DataFrame":
+    def _execute_and_fetch(
+        self, req: pb2.ExecutePlanRequest
+    ) -> Tuple["pa.Table", List[PlanMetrics]]:
         logger.info("ExecuteAndFetch")
-        import pandas as pd
 
         m: Optional[pb2.ExecutePlanResponse.Metrics] = None
-        result_dfs = []
+
+        batches: List[pa.RecordBatch] = []
 
         try:
             for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
@@ -567,25 +577,21 @@ class SparkConnectClient(object):
                         f"Received arrow batch rows={b.arrow_batch.row_count} "
                         f"size={len(b.arrow_batch.data)}"
                     )
-                    pb = self._process_batch(b.arrow_batch)
-                    result_dfs.append(pb)
+
+                    with pa.ipc.open_stream(b.arrow_batch.data) as reader:
+                        for batch in reader:
+                            assert isinstance(batch, pa.RecordBatch)
+                            batches.append(batch)
         except grpc.RpcError as rpc_error:
             self._handle_error(rpc_error)
 
-        assert len(result_dfs) > 0
+        assert len(batches) > 0
 
-        df = pd.concat(result_dfs)
+        table = pa.Table.from_batches(batches=batches)
 
-        # pd.concat generates non-consecutive index like:
-        #   Int64Index([0, 1, 0, 1, 2, 0, 1, 0, 1, 2], dtype='int64')
-        # set it to RangeIndex to be consistent with pyspark
-        n = len(df)
-        df.set_index(pd.RangeIndex(start=0, stop=n, step=1), inplace=True)
+        metrics: List[PlanMetrics] = self._build_metrics(m) if m is not None else []
 
-        # Attach the metrics to the DataFrame attributes.
-        if m is not None:
-            df.attrs["metrics"] = self._build_metrics(m)
-        return df
+        return table, metrics
 
     def _handle_error(self, rpc_error: grpc.RpcError) -> NoReturn:
         """

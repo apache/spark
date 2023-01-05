@@ -75,6 +75,11 @@
     ],
     "sqlState" : "42000"
   },
+  "CANNOT_PARSE_JSON_FIELD" : {
+    "message" : [
+      "Cannot parse the field name <fieldName> and the value <fieldValue> of the JSON token type <jsonType> to target Spark data type <dataType>"
+    ]
+  },
   "CANNOT_PARSE_PROTOBUF_DESCRIPTOR" : {
     "message" : [
       "Error parsing file <descFilePath> descriptor byte[] into Descriptor object"
@@ -436,6 +441,11 @@
     ],
     "sqlState" : "42000"
   },
+  "DATA_SOURCE_NOT_FOUND" : {
+    "message" : [
+      "Failed to find the data source: <provider>. Please find packages at `https://spark.apache.org/third-party-projects.html`."
+    ]
+  },
   "DATETIME_OVERFLOW" : {
     "message" : [
       "Datetime operation overflow: <operation>."
@@ -748,6 +758,11 @@
   "INVALID_IDENTIFIER" : {
     "message" : [
       "The identifier <ident> is invalid. Please, consider quoting it with back-quotes as `<ident>`."
+    ]
+  },
+  "INVALID_JSON_ROOT_FIELD" : {
+    "message" : [
+      "Cannot convert JSON root field to target Spark type."
     ]
   },
   "INVALID_JSON_SCHEMA_MAP_TYPE" : {
@@ -3691,11 +3706,6 @@
       "Expected exactly one path to be specified, but got: <paths>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_2051" : {
-    "message" : [
-      "Failed to find data source: <provider>. Please find packages at https://spark.apache.org/third-party-projects.html"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2052" : {
     "message" : [
       "<className> was removed in Spark 2.0. Please check if your library is compatible with Spark 2.0"
@@ -4103,16 +4113,6 @@
   "_LEGACY_ERROR_TEMP_2135" : {
     "message" : [
       "Failed to parse an empty string for data type <dataType>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2136" : {
-    "message" : [
-      "Failed to parse field name <fieldName>, field value <fieldValue>, [<token>] to target spark data type [<dataType>]."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2137" : {
-    "message" : [
-      "Root converter returned null"
     ]
   },
   "_LEGACY_ERROR_TEMP_2138" : {

@@ -27,10 +27,10 @@ package org.apache.spark.status.protobuf;
 
 enum JobExecutionStatus {
   JOB_EXECUTION_STATUS_UNSPECIFIED = 0;
-  RUNNING = 1;
-  SUCCEEDED = 2;
-  FAILED = 3;
-  UNKNOWN = 4;
+  JOB_EXECUTION_STATUS_RUNNING = 1;
+  JOB_EXECUTION_STATUS_SUCCEEDED = 2;
+  JOB_EXECUTION_STATUS_FAILED = 3;
+  JOB_EXECUTION_STATUS_UNKNOWN = 4;
 }
 
 message JobData {
@@ -395,7 +395,8 @@ message SQLExecutionUIData {
   optional string error_message = 9;
   map<int64, JobExecutionStatus> jobs = 10;
   repeated int64 stages = 11;
-  map<int64, string> metric_values = 12;
+  bool metric_values_is_null = 12;
+  map<int64, string> metric_values = 13;
 }
 
 message SparkPlanGraphNode {
@@ -434,13 +435,14 @@ message RDDOperationEdge {
   int32 to_id = 2;
 }
 
+enum DeterministicLevel {
+  DETERMINISTIC_LEVEL_UNSPECIFIED = 0;
+  DETERMINISTIC_LEVEL_DETERMINATE = 1;
+  DETERMINISTIC_LEVEL_UNORDERED = 2;
+  DETERMINISTIC_LEVEL_INDETERMINATE = 3;
+}
+
 message RDDOperationNode {
-  enum DeterministicLevel {
-    UNSPECIFIED = 0;
-    DETERMINATE = 1;
-    UNORDERED = 2;
-    INDETERMINATE = 3;
-  }
   int32 id = 1;
   string name = 2;
   bool cached = 3;
@@ -683,4 +685,55 @@ message ExecutorMetricsDistributions {
 message ExecutorPeakMetricsDistributions {
   repeated double quantiles = 1;
   repeated ExecutorMetrics executor_metrics = 2;
+}
+
+message StateOperatorProgress {
+  string operator_name = 1;
+  int64 num_rows_total = 2;
+  int64 num_rows_updated = 3;
+  int64 all_updates_time_ms = 4;
+  int64 num_rows_removed = 5;
+  int64 all_removals_time_ms = 6;
+  int64 commit_time_ms = 7;
+  int64 memory_used_bytes = 8;
+  int64 num_rows_dropped_by_watermark = 9;
+  int64 num_shuffle_partitions = 10;
+  int64 num_state_store_instances = 11;
+  map<string, int64> custom_metrics = 12;
+}
+
+message SourceProgress {
+  string description = 1;
+  string start_offset = 2;
+  string end_offset = 3;
+  string latest_offset = 4;
+  int64 num_input_rows = 5;
+  double input_rows_per_second = 6;
+  double processed_rows_per_second = 7;
+  map<string, string> metrics = 8;
+}
+
+message SinkProgress {
+  string description = 1;
+  int64 num_output_rows = 2;
+  map<string, string> metrics = 3;
+}
+
+message StreamingQueryProgress {
+  string id = 1;
+  string run_id = 2;
+  string name = 3;
+  string timestamp = 4;
+  int64 batch_id = 5;
+  int64 batch_duration = 6;
+  map<string, int64> duration_ms = 7;
+  map<string, string> event_time = 8;
+  repeated StateOperatorProgress state_operators = 9;
+  repeated SourceProgress sources = 10;
+  SinkProgress sink = 11;
+  map<string, string> observed_metrics = 12;
+}
+
+message StreamingQueryProgressWrapper {
+  StreamingQueryProgress progress = 1;
 }
