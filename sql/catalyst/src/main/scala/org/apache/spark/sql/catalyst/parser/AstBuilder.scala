@@ -800,7 +800,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     // Add aggregation or a project.
     val namedExpressions = expressions.map {
       case (e: NamedExpression, _) => e
-      case (e: Expression, alias) => UnresolvedAlias(e, derivedAlias = Some(alias))
+      case (e: Expression, alias) => UnresolvedAlias(e, aliasFunc = Some(_ => alias))
     }
 
     def createProject() = if (namedExpressions.nonEmpty) {
