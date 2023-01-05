@@ -2,32 +2,32 @@
 Benchmark UnsafeArrayData
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
+OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
 Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Read UnsafeArrayData:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Int                                                 120            120           0       1398.4           0.7       1.0X
-Double                                              280            281           0        598.3           1.7       0.4X
+Int                                                 121            121           0       1389.1           0.7       1.0X
+Double                                              281            281           0        597.0           1.7       0.4X
 
-OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
+OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
 Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Write UnsafeArrayData:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Int                                                  38             54          14        555.8           1.8       1.0X
-Double                                               94            125          17        222.4           4.5       0.4X
+Int                                                  59             75          11        352.9           2.8       1.0X
+Double                                              143            148           8        146.9           6.8       0.4X
 
-OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
+OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
 Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Get primitive array from UnsafeArrayData:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Int                                                  55             72          16       1149.1           0.9       1.0X
-Double                                              114            141          13        553.4           1.8       0.5X
+Int                                                  59             73          12       1062.4           0.9       1.0X
+Double                                              139            144           9        451.7           2.2       0.4X
 
-OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
+OpenJDK 64-Bit Server VM 11.0.17+8 on Linux 5.15.0-1023-azure
 Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Create UnsafeArrayData from primitive array:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------
-Int                                                     55             70          15       1147.7           0.9       1.0X
-Double                                                 114            141          14        554.3           1.8       0.5X
+Int                                                     58             71          11       1085.3           0.9       1.0X
+Double                                                 116            141          11        544.0           1.8       0.5X
 
 

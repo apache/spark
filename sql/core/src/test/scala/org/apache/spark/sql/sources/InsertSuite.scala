@@ -1552,7 +1552,6 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   test("INSERT rows, ALTER TABLE ADD COLUMNS with DEFAULTs, then SELECT them") {
     case class Config(
         sqlConf: Option[(String, String)],
-        insertNullsToStorage: Boolean = true,
         useDataFrames: Boolean = false)
     def runTest(dataSource: String, config: Config): Unit = {
       def insertIntoT(): Unit = {
@@ -1591,10 +1590,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           sql("insert into t values(null, null, null)")
         }
         sql("alter table t add column (x boolean default true)")
-        // By default, INSERT commands into some tables (such as JSON) do not store NULL values.
-        // Therefore, if such destination columns have DEFAULT values, SELECTing the same columns
-        // will return the default values (instead of NULL) since nothing is present in storage.
-        val insertedSColumn = if (config.insertNullsToStorage) null else "abcdef"
+        val insertedSColumn = null
         checkAnswer(spark.table("t"),
           Seq(
             Row("xyz", 42, "abcdef", true),

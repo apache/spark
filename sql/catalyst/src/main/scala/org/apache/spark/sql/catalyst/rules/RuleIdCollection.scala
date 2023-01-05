@@ -58,7 +58,6 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveGroupingAnalytics" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveHigherOrderFunctions" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveInsertInto" ::
-      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveMissingReferences" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveNaturalAndUsingJoin" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveNewInstance" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveOrdinalInOrderByAndGroupBy" ::

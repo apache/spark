@@ -17,10 +17,7 @@
 
 package org.apache.spark.status.protobuf
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.status.TaskDataWrapper
-import org.apache.spark.status.api.v1.AccumulableInfo
 import org.apache.spark.status.protobuf.Utils.getOptional
 import org.apache.spark.util.Utils.weakIntern
 
@@ -74,21 +71,14 @@ class TaskDataWrapperSerializer extends ProtobufSerDe {
       .setStageAttemptId(input.stageAttemptId)
     input.errorMessage.foreach(builder.setErrorMessage)
     input.accumulatorUpdates.foreach { update =>
-      builder.addAccumulatorUpdates(serializeAccumulableInfo(update))
+      builder.addAccumulatorUpdates(AccumulableInfoSerializer.serialize(update))
     }
     builder.build().toByteArray
   }
 
   def deserialize(bytes: Array[Byte]): TaskDataWrapper = {
     val binary = StoreTypes.TaskDataWrapper.parseFrom(bytes)
-    val accumulatorUpdates = new ArrayBuffer[AccumulableInfo]()
-    binary.getAccumulatorUpdatesList.forEach { update =>
-      accumulatorUpdates.append(new AccumulableInfo(
-        id = update.getId,
-        name = update.getName,
-        update = getOptional(update.hasUpdate, update.getUpdate),
-        value = update.getValue))
-    }
+    val accumulatorUpdates = AccumulableInfoSerializer.deserialize(binary.getAccumulatorUpdatesList)
     new TaskDataWrapper(
       taskId = binary.getTaskId,
       index = binary.getIndex,
@@ -132,14 +122,5 @@ class TaskDataWrapperSerializer extends ProtobufSerDe {
       stageId = binary.getStageId.toInt,
       stageAttemptId = binary.getStageAttemptId
     )
-  }
-
-  def serializeAccumulableInfo(input: AccumulableInfo): StoreTypes.AccumulableInfo = {
-    val builder = StoreTypes.AccumulableInfo.newBuilder()
-      .setId(input.id)
-      .setName(input.name)
-      .setValue(input.value)
-    input.update.foreach(builder.setUpdate)
-    builder.build()
   }
 }

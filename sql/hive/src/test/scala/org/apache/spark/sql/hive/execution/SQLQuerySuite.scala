@@ -27,6 +27,7 @@ import com.google.common.io.Files
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.{SparkException, TestUtils}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
@@ -34,10 +35,11 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, CatalogUtils, Hi
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
-import org.apache.spark.sql.execution.TestUncaughtExceptionHandler
+import org.apache.spark.sql.execution.{SparkPlanInfo, TestUncaughtExceptionHandler}
 import org.apache.spark.sql.execution.adaptive.{DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.command.{InsertIntoDataSourceDirCommand, LoadDataCommand}
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.test.{HiveTestJars, TestHiveSingleton}
@@ -2296,47 +2298,6 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     }
   }
 
-  test("SPARK-25271: Hive ctas commands should use data source if it is convertible") {
-    withTempView("p") {
-      Seq(1, 2, 3).toDF("id").createOrReplaceTempView("p")
-
-      Seq("orc", "parquet").foreach { format =>
-        Seq(true, false).foreach { isConverted =>
-          withSQLConf(
-            HiveUtils.CONVERT_METASTORE_ORC.key -> s"$isConverted",
-            HiveUtils.CONVERT_METASTORE_PARQUET.key -> s"$isConverted") {
-            Seq(true, false).foreach { isConvertedCtas =>
-              withSQLConf(HiveUtils.CONVERT_METASTORE_CTAS.key -> s"$isConvertedCtas") {
-
-                val targetTable = "targetTable"
-                withTable(targetTable) {
-                  val df = sql(s"CREATE TABLE $targetTable STORED AS $format AS SELECT id FROM p")
-                  checkAnswer(sql(s"SELECT id FROM $targetTable"),
-                    Row(1) :: Row(2) :: Row(3) :: Nil)
-
-                  val ctasDSCommand = df.queryExecution.analyzed.collect {
-                    case _: OptimizedCreateHiveTableAsSelectCommand => true
-                  }.headOption
-                  val ctasCommand = df.queryExecution.analyzed.collect {
-                    case _: CreateHiveTableAsSelectCommand => true
-                  }.headOption
-
-                  if (isConverted && isConvertedCtas) {
-                    assert(ctasDSCommand.nonEmpty)
-                    assert(ctasCommand.isEmpty)
-                  } else {
-                    assert(ctasDSCommand.isEmpty)
-                    assert(ctasCommand.nonEmpty)
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-
   test("SPARK-26181 hasMinMaxStats method of ColumnStatsMap is not correct") {
     withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
       withTable("all_null") {
@@ -2682,9 +2643,62 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
 
 @SlowHiveTest
 class SQLQuerySuite extends SQLQuerySuiteBase with DisableAdaptiveExecutionSuite {
+  import spark.implicits._
+
   test("SPARK-36421: Validate all SQL configs to prevent from wrong use for ConfigEntry") {
     val df = spark.sql("set -v").select("Meaning")
     assert(df.collect().forall(!_.getString(0).contains("ConfigEntry")))
+  }
+
+  test("SPARK-25271: Hive ctas commands should use data source if it is convertible") {
+    withTempView("p") {
+      Seq(1, 2, 3).toDF("id").createOrReplaceTempView("p")
+
+      Seq("orc", "parquet").foreach { format =>
+        Seq(true, false).foreach { isConverted =>
+          withSQLConf(
+            HiveUtils.CONVERT_METASTORE_ORC.key -> s"$isConverted",
+            HiveUtils.CONVERT_METASTORE_PARQUET.key -> s"$isConverted") {
+            Seq(true, false).foreach { isConvertedCtas =>
+              withSQLConf(HiveUtils.CONVERT_METASTORE_CTAS.key -> s"$isConvertedCtas") {
+
+                val targetTable = "targetTable"
+                withTable(targetTable) {
+                  var commands: Seq[SparkPlanInfo] = Seq.empty
+                  val listener = new SparkListener {
+                    override def onOtherEvent(event: SparkListenerEvent): Unit = {
+                      event match {
+                        case start: SparkListenerSQLExecutionStart =>
+                          commands = commands ++ Seq(start.sparkPlanInfo)
+                        case _ => // ignore other events
+                      }
+                    }
+                  }
+                  spark.sparkContext.addSparkListener(listener)
+                  try {
+                    sql(s"CREATE TABLE $targetTable STORED AS $format AS SELECT id FROM p")
+                    checkAnswer(sql(s"SELECT id FROM $targetTable"),
+                      Row(1) :: Row(2) :: Row(3) :: Nil)
+                    spark.sparkContext.listenerBus.waitUntilEmpty()
+                    assert(commands.size == 3)
+                    assert(commands.head.nodeName == "Execute CreateHiveTableAsSelectCommand")
+
+                    val v1WriteCommand = commands(1)
+                    if (isConverted && isConvertedCtas) {
+                      assert(v1WriteCommand.nodeName == "Execute InsertIntoHadoopFsRelationCommand")
+                    } else {
+                      assert(v1WriteCommand.nodeName == "Execute InsertIntoHiveTable")
+                    }
+                  } finally {
+                    spark.sparkContext.removeSparkListener(listener)
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
   }
 }
 @SlowHiveTest

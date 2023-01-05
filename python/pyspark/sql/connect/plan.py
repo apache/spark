@@ -270,30 +270,34 @@ class LocalRelation(LogicalPlan):
 
     def __init__(
         self,
-        table: "pa.Table",
-        schema: Optional[Union[DataType, str]] = None,
+        table: Optional["pa.Table"],
+        schema: Optional[str] = None,
     ) -> None:
         super().__init__(None)
-        assert table is not None and isinstance(table, pa.Table)
+
+        if table is None:
+            assert schema is not None
+        else:
+            assert isinstance(table, pa.Table)
+
+        assert schema is None or isinstance(schema, str)
+
         self._table = table
 
-        if schema is not None:
-            assert isinstance(schema, (DataType, str))
         self._schema = schema
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        sink = pa.BufferOutputStream()
-        with pa.ipc.new_stream(sink, self._table.schema) as writer:
-            for b in self._table.to_batches():
-                writer.write_batch(b)
-
         plan = proto.Relation()
-        plan.local_relation.data = sink.getvalue().to_pybytes()
+
+        if self._table is not None:
+            sink = pa.BufferOutputStream()
+            with pa.ipc.new_stream(sink, self._table.schema) as writer:
+                for b in self._table.to_batches():
+                    writer.write_batch(b)
+            plan.local_relation.data = sink.getvalue().to_pybytes()
+
         if self._schema is not None:
-            if isinstance(self._schema, DataType):
-                plan.local_relation.datatype.CopyFrom(pyspark_types_to_proto_types(self._schema))
-            elif isinstance(self._schema, str):
-                plan.local_relation.datatype_str = self._schema
+            plan.local_relation.schema = self._schema
         return plan
 
     def print(self, indent: int = 0) -> str:
@@ -558,14 +562,14 @@ class Sample(LogicalPlan):
         upper_bound: float,
         with_replacement: bool,
         seed: Optional[int],
-        force_stable_sort: bool = False,
+        deterministic_order: bool = False,
     ) -> None:
         super().__init__(child)
         self.lower_bound = lower_bound
         self.upper_bound = upper_bound
         self.with_replacement = with_replacement
         self.seed = seed
-        self.force_stable_sort = force_stable_sort
+        self.deterministic_order = deterministic_order
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
@@ -576,7 +580,7 @@ class Sample(LogicalPlan):
         plan.sample.with_replacement = self.with_replacement
         if self.seed is not None:
             plan.sample.seed = self.seed
-        plan.sample.force_stable_sort = self.force_stable_sort
+        plan.sample.deterministic_order = self.deterministic_order
         return plan
 
 
@@ -1079,6 +1083,30 @@ class StatCov(LogicalPlan):
         return plan
 
 
+class StatApproxQuantile(LogicalPlan):
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        cols: List[str],
+        probabilities: List[float],
+        relativeError: float,
+    ) -> None:
+        super().__init__(child)
+        self._cols = cols
+        self._probabilities = probabilities
+        self._relativeError = relativeError
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+
+        plan = proto.Relation()
+        plan.approx_quantile.input.CopyFrom(self._child.plan(session))
+        plan.approx_quantile.cols.extend(self._cols)
+        plan.approx_quantile.probabilities.extend(self._probabilities)
+        plan.approx_quantile.relative_error = self._relativeError
+        return plan
+
+
 class StatCrosstab(LogicalPlan):
     def __init__(self, child: Optional["LogicalPlan"], col1: str, col2: str) -> None:
         super().__init__(child)
@@ -1092,6 +1120,89 @@ class StatCrosstab(LogicalPlan):
         plan.crosstab.input.CopyFrom(self._child.plan(session))
         plan.crosstab.col1 = self.col1
         plan.crosstab.col2 = self.col2
+        return plan
+
+
+class StatFreqItems(LogicalPlan):
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        cols: List[str],
+        support: float,
+    ) -> None:
+        super().__init__(child)
+        self._cols = cols
+        self._support = support
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+
+        plan = proto.Relation()
+        plan.freq_items.input.CopyFrom(self._child.plan(session))
+        plan.freq_items.cols.extend(self._cols)
+        plan.freq_items.support = self._support
+        return plan
+
+
+class StatSampleBy(LogicalPlan):
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        col: "ColumnOrName",
+        fractions: Dict[Any, float],
+        seed: Optional[int],
+    ) -> None:
+        super().__init__(child)
+
+        assert col is not None and isinstance(col, (Column, str))
+
+        assert fractions is not None and isinstance(fractions, dict)
+        for k, v in fractions.items():
+            assert v is not None and isinstance(v, float)
+
+        assert seed is None or isinstance(seed, int)
+
+        if isinstance(col, Column):
+            self._col = col
+        else:
+            self._col = Column(ColumnReference(col))
+
+        self._fractions = fractions
+
+        self._seed = seed
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+
+        plan = proto.Relation()
+        plan.sample_by.input.CopyFrom(self._child.plan(session))
+        plan.sample_by.col.CopyFrom(self._col._expr.to_plan(session))
+        if len(self._fractions) > 0:
+            for k, v in self._fractions.items():
+                fraction = proto.StatSampleBy.Fraction()
+                fraction.stratum.CopyFrom(LiteralExpression._from_value(k).to_plan(session).literal)
+                fraction.fraction = float(v)
+                plan.sample_by.fractions.append(fraction)
+        if self._seed is not None:
+            plan.sample_by.seed = self._seed
+        return plan
+
+
+class StatCorr(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], col1: str, col2: str, method: str) -> None:
+        super().__init__(child)
+        self._col1 = col1
+        self._col2 = col2
+        self._method = method
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+
+        plan = proto.Relation()
+        plan.corr.input.CopyFrom(self._child.plan(session))
+        plan.corr.col1 = self._col1
+        plan.corr.col2 = self._col2
+        plan.corr.method = self._method
         return plan
 
 
@@ -1157,7 +1268,7 @@ class WriteOperation(LogicalPlan):
 
         for k in self.options:
             if self.options[k] is None:
-                del plan.write_operation.options[k]
+                plan.write_operation.options.pop(k, None)
             else:
                 plan.write_operation.options[k] = cast(str, self.options[k])
 

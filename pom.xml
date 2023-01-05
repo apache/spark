@@ -163,7 +163,7 @@
     <gcs-connector.version>hadoop3-2.2.7</gcs-connector.version>
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.5.14</commons.httpclient.version>
-    <commons.httpcore.version>4.4.14</commons.httpcore.version>
+    <commons.httpcore.version>4.4.16</commons.httpcore.version>
     <commons.math3.version>3.6.1</commons.math3.version>
     <!-- managed up from 3.2.1 for SPARK-11652 -->
     <commons.collections.version>3.2.2</commons.collections.version>
@@ -256,7 +256,7 @@
     -->
     <hadoop.deps.scope>compile</hadoop.deps.scope>
     <hive.deps.scope>compile</hive.deps.scope>
-    <hive.storage.version>2.7.3</hive.storage.version>
+    <hive.storage.version>2.8.1</hive.storage.version>
     <hive.storage.scope>compile</hive.storage.scope>
     <hive.common.scope>compile</hive.common.scope>
     <hive.llap.scope>compile</hive.llap.scope>
