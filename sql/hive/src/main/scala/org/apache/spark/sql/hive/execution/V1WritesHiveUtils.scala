@@ -152,7 +152,7 @@ class HiveTempPath(session: SparkSession, val hadoopConf: Configuration, path: P
   }
 }
 
-trait V1WritesHiveUtils extends Logging {
+trait V1WritesHiveUtils {
 
   def getPartitionSpec(partition: Map[String, Option[String]]): Map[String, String] = {
     partition.map {
