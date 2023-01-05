@@ -811,7 +811,7 @@ class SparkConnectClient(object):
 
     def _execute_and_fetch(
         self, req: pb2.ExecutePlanRequest
-    ) -> Tuple[Optional["pa.Table"], List[PlanMetrics], Dict[str, Any]]:
+    ) -> Tuple[Optional["pa.Table"], List[PlanMetrics], List[PlanObservedMetrics]], Dict[str, Any]]:
         logger.info("ExecuteAndFetch")
 
         m: Optional[pb2.ExecutePlanResponse.Metrics] = None
