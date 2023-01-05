@@ -1586,7 +1586,7 @@ class RecoverPartitions(LogicalPlan):
 #         self._table_name = table_name
 #
 #     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-#         plan = proto.Relation(catalog=proto.Catalog(is_cached=proto.IsCahed()))
+#         plan = proto.Relation(catalog=proto.Catalog(is_cached=proto.IsCached()))
 #         plan.catalog.is_cached.table_name = self._table_name
 #         return plan
 #
