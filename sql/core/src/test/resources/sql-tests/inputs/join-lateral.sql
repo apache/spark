@@ -3,6 +3,7 @@
 CREATE VIEW t1(c1, c2) AS VALUES (0, 1), (1, 2);
 CREATE VIEW t2(c1, c2) AS VALUES (0, 2), (0, 3);
 CREATE VIEW t3(c1, c2) AS VALUES (0, ARRAY(0, 1)), (1, ARRAY(2)), (2, ARRAY()), (null, ARRAY(4));
+CREATE VIEW t4(c1, c2) AS VALUES (0, 1), (0, 2), (1, 1), (1, 3);
 
 -- lateral join with single column select
 SELECT * FROM t1, LATERAL (SELECT c1);
@@ -200,3 +201,4 @@ SELECT * FROM t1 JOIN LATERAL
 DROP VIEW t1;
 DROP VIEW t2;
 DROP VIEW t3;
+DROP VIEW t4;
