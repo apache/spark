@@ -760,6 +760,11 @@
       "The identifier <ident> is invalid. Please, consider quoting it with back-quotes as `<ident>`."
     ]
   },
+  "INVALID_JSON_ROOT_FIELD" : {
+    "message" : [
+      "Cannot convert JSON root field to target Spark type."
+    ]
+  },
   "INVALID_JSON_SCHEMA_MAP_TYPE" : {
     "message" : [
       "Input schema <jsonSchema> can only contain STRING as a key type for a MAP."
@@ -4108,11 +4113,6 @@
   "_LEGACY_ERROR_TEMP_2135" : {
     "message" : [
       "Failed to parse an empty string for data type <dataType>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2137" : {
-    "message" : [
-      "Root converter returned null"
     ]
   },
   "_LEGACY_ERROR_TEMP_2138" : {

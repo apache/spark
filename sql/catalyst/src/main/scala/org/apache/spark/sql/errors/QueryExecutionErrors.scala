@@ -1457,7 +1457,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def rootConverterReturnNullError(): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2137",
+      errorClass = "INVALID_JSON_ROOT_FIELD",
       messageParameters = Map.empty)
   }
 
