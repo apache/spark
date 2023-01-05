@@ -2401,9 +2401,6 @@ def _test() -> None:
         del pyspark.sql.connect.functions.map_zip_with.__doc__
         del pyspark.sql.connect.functions.posexplode.__doc__
 
-        # TODO(SPARK-41849): implement DataFrameReader.text
-        del pyspark.sql.connect.functions.input_file_name.__doc__
-
         # Creates a remote Spark session.
         os.environ["SPARK_REMOTE"] = "sc://localhost"
         globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
