@@ -22,6 +22,7 @@ from typing import (
     Optional,
     Tuple,
     Union,
+    Sequence,
     TYPE_CHECKING,
     overload,
     Callable,
@@ -44,7 +45,13 @@ from pyspark.sql.connect.group import GroupedData
 from pyspark.sql.connect.readwriter import DataFrameWriter
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import UnresolvedRegex
-from pyspark.sql.connect.functions import _invoke_function, col, lit, expr as sql_expression
+from pyspark.sql.connect.functions import (
+    _to_col,
+    _invoke_function,
+    col,
+    lit,
+    expr as sql_expression,
+)
 from pyspark.sql.dataframe import (
     DataFrame as PySparkDataFrame,
     DataFrameNaFunctions as PySparkDataFrameNaFunctions,
@@ -342,18 +349,56 @@ class DataFrame:
 
     tail.__doc__ = PySparkDataFrame.tail.__doc__
 
-    def sort(self, *cols: "ColumnOrName") -> "DataFrame":
+    def _sort_cols(
+        self, cols: Sequence[Union[str, Column, List[Union[str, Column]]]], kwargs: Dict[str, Any]
+    ) -> List[Column]:
+        """Return a JVM Seq of Columns that describes the sort order"""
+        if cols is None:
+            raise ValueError("should sort by at least one column")
+
+        _cols: List[Column] = []
+        if len(cols) == 1 and isinstance(cols[0], list):
+            _cols = [_to_col(c) for c in cols[0]]
+        else:
+            _cols = [_to_col(cast("ColumnOrName", c)) for c in cols]
+
+        ascending = kwargs.get("ascending", True)
+        if isinstance(ascending, (bool, int)):
+            if not ascending:
+                _cols = [c.desc() for c in _cols]
+        elif isinstance(ascending, list):
+            _cols = [c if asc else c.desc() for asc, c in zip(ascending, _cols)]
+        else:
+            raise TypeError("ascending can only be boolean or list, but got %s" % type(ascending))
+
+        return _cols
+
+    def sort(
+        self, *cols: Union[str, Column, List[Union[str, Column]]], **kwargs: Any
+    ) -> "DataFrame":
         return DataFrame.withPlan(
-            plan.Sort(self._plan, columns=list(cols), is_global=True), session=self._session
+            plan.Sort(
+                self._plan,
+                columns=self._sort_cols(cols, kwargs),
+                is_global=True,
+            ),
+            session=self._session,
         )
 
     sort.__doc__ = PySparkDataFrame.sort.__doc__
 
     orderBy = sort
 
-    def sortWithinPartitions(self, *cols: "ColumnOrName") -> "DataFrame":
+    def sortWithinPartitions(
+        self, *cols: Union[str, Column, List[Union[str, Column]]], **kwargs: Any
+    ) -> "DataFrame":
         return DataFrame.withPlan(
-            plan.Sort(self._plan, columns=list(cols), is_global=False), session=self._session
+            plan.Sort(
+                self._plan,
+                columns=self._sort_cols(cols, kwargs),
+                is_global=False,
+            ),
+            session=self._session,
         )
 
     sortWithinPartitions.__doc__ = PySparkDataFrame.sortWithinPartitions.__doc__
@@ -1439,10 +1484,6 @@ def _test() -> None:
 
         # TODO(SPARK-41827): groupBy requires all cols be Column or str
         del pyspark.sql.connect.dataframe.DataFrame.groupBy.__doc__
-
-        # TODO(SPARK-41829): Add Dataframe sort ordering
-        del pyspark.sql.connect.dataframe.DataFrame.sort.__doc__
-        del pyspark.sql.connect.dataframe.DataFrame.sortWithinPartitions.__doc__
 
         # TODO(SPARK-41830): fix sample parameters
         del pyspark.sql.connect.dataframe.DataFrame.sample.__doc__

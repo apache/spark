@@ -496,27 +496,24 @@ class Sort(LogicalPlan):
     def __init__(
         self,
         child: Optional["LogicalPlan"],
-        columns: List["ColumnOrName"],
+        columns: List[Column],
         is_global: bool,
     ) -> None:
         super().__init__(child)
+
+        assert all(isinstance(c, Column) for c in columns)
+        assert isinstance(is_global, bool)
+
         self.columns = columns
         self.is_global = is_global
 
     def _convert_col(
-        self, col: "ColumnOrName", session: "SparkConnectClient"
+        self, col: Column, session: "SparkConnectClient"
     ) -> proto.Expression.SortOrder:
-        sort: Optional[SortOrder] = None
-        if isinstance(col, Column):
-            if isinstance(col._expr, SortOrder):
-                sort = col._expr
-            else:
-                sort = SortOrder(col._expr)
+        if isinstance(col._expr, SortOrder):
+            return col._expr.to_plan(session).sort_order
         else:
-            sort = SortOrder(ColumnReference(name=col))
-        assert sort is not None
-
-        return sort.to_plan(session).sort_order
+            return SortOrder(col._expr).to_plan(session).sort_order
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
