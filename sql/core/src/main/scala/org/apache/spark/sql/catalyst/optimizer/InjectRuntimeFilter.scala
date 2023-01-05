@@ -33,7 +33,8 @@ import org.apache.spark.sql.types._
  * The filter could be an IN subquery (converted to a semi join), a bloom filter, or something
  * else in the future.
  */
-object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with JoinSelectionHelper {
+object InjectRuntimeFilter extends Rule[LogicalPlan]
+  with SelectivePredicateHelper with JoinSelectionHelper {
 
   // Wraps `expr` with a hash function if its byte size is larger than an integer.
   private def mayWrapWithHash(expr: Expression): Expression = {
@@ -146,7 +147,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
           predicateReference ++ condition.references,
           hasHitFilter = true,
           hasHitSelectiveFilter = hasHitSelectiveFilter || isLikelySelective(condition))
-      case _: LeafNode => hasHitSelectiveFilter
+      case l: LeafNode => hasHitSelectiveFilter || hasSelectivePredicate(l)
       case _ => false
     }
 

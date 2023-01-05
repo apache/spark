@@ -516,24 +516,29 @@ abstract class DynamicPartitionPruningSuiteBase
               .partitionBy("store_id")
               .saveAsTable("fact_aux")
 
-            spark.table("dim_store").cache()
-              .createOrReplaceTempView("cached_dim_store")
+            withCache("cached_dim_store") {
+              spark.table("dim_store").cache()
+                .createOrReplaceTempView("cached_dim_store")
 
-            val df = sql(
-              """
-                |SELECT f.date_id, f.product_id, f.units_sold, f.store_id
-                |FROM fact_aux f JOIN cached_dim_store s
-                |ON f.store_id = s.store_id WHERE s.country = 'US'
-              """.stripMargin)
+              Seq(false, true).foreach { withSubquery =>
+                val df = sql(
+                  """
+                    |SELECT f.date_id, f.product_id, f.units_sold, f.store_id
+                    |FROM fact_aux f JOIN cached_dim_store s
+                    |ON f.store_id = s.store_id WHERE s.country = 'US'
+                """.stripMargin)
 
-            checkPartitionPruningPredicate(df, true, false)
+                // Has materialized in the first check
+                checkPartitionPruningPredicate(df, withSubquery, withBroadcast = false)
 
-            checkAnswer(df,
-              Row(1070, 2, 10, 4) ::
-                Row(1080, 3, 20, 4) ::
-                Row(1090, 3, 10, 4) ::
-                Row(1100, 3, 10, 4) :: Nil
-            )
+                checkAnswer(df,
+                  Row(1070, 2, 10, 4) ::
+                    Row(1080, 3, 20, 4) ::
+                    Row(1090, 3, 10, 4) ::
+                    Row(1100, 3, 10, 4) :: Nil
+                )
+              }
+            }
           }
         }
       }
@@ -1614,6 +1619,17 @@ abstract class DynamicPartitionPruningSuiteBase
       checkPartitionPruningPredicate(df, withSubquery = false, withBroadcast = true)
       checkAnswer(df, Row(4, 1300, "California") :: Row(1, 1000, "North-Holland") :: Nil)
       assert(collectDynamicPruningExpressions(df.queryExecution.executedPlan).size === 1)
+    }
+  }
+
+  test("SPARK-41867: Selective predicate should respect InMemoryRelation") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
+      withCache("tmp") {
+        sql("SELECT * FROM dim_store WHERE country = 'NL'").cache()
+          .createOrReplaceTempView("tmp")
+        val df = sql("SELECT * FROM fact_sk f JOIN tmp t on f.store_id = t.store_id")
+        checkPartitionPruningPredicate(df, withSubquery = false, withBroadcast = true)
+      }
     }
   }
 }

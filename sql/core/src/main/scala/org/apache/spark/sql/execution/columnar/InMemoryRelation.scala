@@ -388,6 +388,7 @@ case class InMemoryRelation(
   @transient val partitionStatistics = new PartitionStatistics(output)
 
   def cachedPlan: SparkPlan = cacheBuilder.cachedPlan
+  def isMaterialized: Boolean = cacheBuilder.isCachedColumnBuffersLoaded
 
   private[sql] def updateStats(
       rowCount: Long,
@@ -400,7 +401,7 @@ case class InMemoryRelation(
   }
 
   override def computeStats(): Statistics = {
-    if (!cacheBuilder.isCachedColumnBuffersLoaded) {
+    if (!isMaterialized) {
       // Underlying columnar RDD hasn't been materialized, use the stats from the plan to cache.
       statsOfPlanToCache
     } else {

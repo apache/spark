@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.dynamicpruning
 
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.optimizer.JoinSelectionHelper
+import org.apache.spark.sql.catalyst.optimizer.{JoinSelectionHelper, SelectivePredicateHelper}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -49,7 +49,8 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
  *    subquery query twice, we keep the duplicated subquery
  *    (3) otherwise, we drop the subquery.
  */
-object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with JoinSelectionHelper {
+object PartitionPruning extends Rule[LogicalPlan]
+  with SelectivePredicateHelper with JoinSelectionHelper {
 
   /**
    * Searches for a table scan that can be filtered for a given column in a logical plan.
@@ -174,7 +175,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
   /**
    * Calculates a heuristic overhead of a logical plan. Normally it returns the total
    * size in bytes of all scan relations. We don't count in-memory relation which uses
-   * only memory.
+   * only memory if materialized.
    */
   private def calculatePlanOverhead(plan: LogicalPlan): Float = {
     val (cached, notCached) = plan.collectLeaves().partition(p => p match {
@@ -183,26 +184,18 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
     })
     val scanOverhead = notCached.map(_.stats.sizeInBytes).sum.toFloat
     val cachedOverhead = cached.map {
-      case m: InMemoryRelation if m.cacheBuilder.storageLevel.useDisk &&
-          !m.cacheBuilder.storageLevel.useMemory =>
-        m.stats.sizeInBytes.toFloat
-      case m: InMemoryRelation if m.cacheBuilder.storageLevel.useDisk =>
-        m.stats.sizeInBytes.toFloat * 0.2
-      case m: InMemoryRelation if m.cacheBuilder.storageLevel.useMemory =>
-        0.0
+      case m: InMemoryRelation if m.isMaterialized =>
+        if (m.cacheBuilder.storageLevel.useDisk && !m.cacheBuilder.storageLevel.useMemory) {
+          m.stats.sizeInBytes.toFloat
+        } else if (m.cacheBuilder.storageLevel.useDisk) {
+          m.stats.sizeInBytes.toFloat * 0.2
+        } else {
+          // use memory only
+          0.0
+        }
+      case m => m.stats.sizeInBytes.toFloat
     }.sum.toFloat
     scanOverhead + cachedOverhead
-  }
-
-
-  /**
-   * Search a filtering predicate in a given logical plan
-   */
-  private def hasSelectivePredicate(plan: LogicalPlan): Boolean = {
-    plan.exists {
-      case f: Filter => isLikelySelective(f.condition)
-      case _ => false
-    }
   }
 
   /**

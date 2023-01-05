@@ -607,4 +607,23 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
         "Missing or unexpected reused ReusedSubqueryExec in the plan")
     }
   }
+
+  test("SPARK-41867: Selective predicate should respect InMemoryRelation") {
+    withSQLConf(
+        SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTempView("tmp1", "tmp2") {
+        withCache("tmp1") {
+          sql("SELECT * FROM bf2 WHERE a2 = 62").cache().createOrReplaceTempView("tmp1")
+          assertRewroteWithBloomFilter("select * from bf1 join tmp1 on bf1.c1 = tmp1.c2")
+        }
+
+        withCache("tmp2") {
+          sql("SELECT * FROM bf2").cache().createOrReplaceTempView("tmp2")
+          // cache has been materialized in `assertRewroteWithBloomFilter`
+          assertRewroteWithBloomFilter("select * from bf1 join tmp2 on bf1.c1 = tmp2.c2")
+        }
+      }
+    }
+  }
 }
