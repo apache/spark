@@ -1958,9 +1958,6 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
       newFirst: Expression, newSecond: Expression, newThird: Expression): Substring =
     copy(str = newFirst, pos = newSecond, len = newThird)
 
-  override def sql: String = {
-    "foo"
-  }
 }
 
 /**
