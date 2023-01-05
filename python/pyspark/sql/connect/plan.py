@@ -403,8 +403,9 @@ class Hint(LogicalPlan):
 
         self.name = name
 
+        # TODO(): support list
         assert isinstance(params, list) and all(
-            p is not None and isinstance(p, (int, str, float, list)) for p in params
+            p is not None and isinstance(p, (int, str, float)) for p in params
         )
         self.params = params
 
@@ -414,15 +415,7 @@ class Hint(LogicalPlan):
         plan.hint.input.CopyFrom(self._child.plan(session))
         plan.hint.name = self.name
         for v in self.params:
-            if isinstance(v, list):
-                _temp = list()
-                for ele in v:
-                    _temp.append(LiteralExpression._from_value(ele).to_plan(session).literal)
-                plan.hint.parameters.append(_temp)
-            else:
-                plan.hint.parameters.append(
-                    LiteralExpression._from_value(v).to_plan(session).literal
-                )
+            plan.hint.parameters.append(LiteralExpression._from_value(v).to_plan(session).literal)
         return plan
 
 

@@ -1196,12 +1196,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         # Hint with all supported parameter values
         such_a_nice_list = ["itworks1", "itworks2", "itworks3"]
         self.assert_eq(
-            self.connect.read.table(self.tbl_name)
-            .hint("my awesome hint", 1.2345, 2, such_a_nice_list)
-            .toPandas(),
-            self.spark.read.table(self.tbl_name)
-            .hint("my awesome hint", 1.2345, 2, such_a_nice_list)
-            .toPandas(),
+            self.connect.read.table(self.tbl_name).hint("my awesome hint", 1.2345, 2).toPandas(),
+            self.spark.read.table(self.tbl_name).hint("my awesome hint", 1.2345, 2).toPandas(),
         )
 
         # Hint with unsupported parameter values
