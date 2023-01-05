@@ -138,7 +138,7 @@ def _create_py_udf(
         require_minimum_pyarrow_version()
 
         import pandas as pd
-        from pyspark.sql.pandas.functions import _create_pandas_udf
+        from pyspark.sql.pandas.functions import _create_pandas_udf  # type: ignore[attr-defined]
 
         # "result_func" ensures the result of a Python UDF to be consistent with/without Arrow
         # optimization.
@@ -166,7 +166,7 @@ def _create_py_udf(
             f.__module__ if hasattr(f, "__module__") else f.__class__.__module__
         )
         vectorized_udf.__doc__ = f.__doc__
-        pudf = _create_pandas_udf(vectorized_udf, returnType, None)  # type: ignore[attr-defined]
+        pudf = _create_pandas_udf(vectorized_udf, returnType, None)
         # Keep the attributes as if this is a regular Python UDF.
         pudf.func = f
         pudf.returnType = return_type
