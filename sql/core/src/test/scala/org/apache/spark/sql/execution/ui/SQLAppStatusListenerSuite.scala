@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.ui
 
-import java.io.File
 import java.util.Properties
 
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
@@ -26,7 +25,6 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.json4s.jackson.JsonMethods._
-import org.scalactic.source.Position
 import org.scalatest.BeforeAndAfter
 import org.scalatest.time.SpanSugar._
 
@@ -1014,24 +1012,14 @@ class SQLAppStatusListenerWithInMemoryStoreSuite extends SQLAppStatusListenerSui
 }
 
 class SQLAppStatusListenerWithRocksDBBackendSuite extends SQLAppStatusListenerSuite {
-  // TODO: SPARK-41882 remove this field after RocksDB can automatically cleanup
-  private var storePath: File = _
   override protected def createStatusStore(): SQLAppStatusStore = {
     val conf = sparkContext.conf
-    storePath = Utils.createTempDir()
+    val storePath = Utils.createTempDir()
     conf.set(LIVE_UI_LOCAL_STORE_DIR, storePath.getCanonicalPath)
     val appStatusStore = AppStatusStore.createLiveStore(conf)
     kvstore = appStatusStore.store.asInstanceOf[ElementTrackingStore]
     val listener = new SQLAppStatusListener(conf, kvstore, live = true)
     new SQLAppStatusStore(kvstore, Some(listener))
-  }
-
-  // TODO: SPARK-41882 remove this method after RocksDB can automatically cleanup
-  override protected def after(fun: => Any)(implicit pos: Position): Unit = {
-    super.after(fun)
-    if (storePath != null && storePath.exists()) {
-      Utils.deleteRecursively(storePath)
-    }
   }
 }
 
