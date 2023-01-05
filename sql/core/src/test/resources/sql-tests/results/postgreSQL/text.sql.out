@@ -312,9 +312,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "INVALID_PARAMETER_VALUE",
   "sqlState" : "22023",
   "messageParameters" : {
-    "value" : "expects %1$, %2$ and so on, but got %0$.",
     "functionName" : "`format_string`",
-    "parameter" : "strfmt"
+    "parameter" : "strfmt",
+    "value" : "expects %1$, %2$ and so on, but got %0$."
   },
   "queryContext" : [ {
     "objectType" : "",
