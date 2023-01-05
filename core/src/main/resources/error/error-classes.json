@@ -441,6 +441,11 @@
     ],
     "sqlState" : "42000"
   },
+  "DATA_SOURCE_NOT_FOUND" : {
+    "message" : [
+      "Failed to find the data source: <provider>. Please find packages at `https://spark.apache.org/third-party-projects.html`."
+    ]
+  },
   "DATETIME_OVERFLOW" : {
     "message" : [
       "Datetime operation overflow: <operation>."
@@ -3694,11 +3699,6 @@
   "_LEGACY_ERROR_TEMP_2050" : {
     "message" : [
       "Expected exactly one path to be specified, but got: <paths>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2051" : {
-    "message" : [
-      "Failed to find data source: <provider>. Please find packages at https://spark.apache.org/third-party-projects.html"
     ]
   },
   "_LEGACY_ERROR_TEMP_2052" : {
