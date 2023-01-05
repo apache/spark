@@ -1407,9 +1407,6 @@ def _test() -> None:
         del pyspark.sql.connect.dataframe.DataFrame.createOrReplaceGlobalTempView.__doc__
         del pyspark.sql.connect.dataframe.DataFrame.createOrReplaceTempView.__doc__
 
-        # TODO(SPARK-41821): Fix DataFrame.describe
-        del pyspark.sql.connect.dataframe.DataFrame.describe.__doc__
-
         # TODO(SPARK-41823): ambiguous column names
         del pyspark.sql.connect.dataframe.DataFrame.drop.__doc__
         del pyspark.sql.connect.dataframe.DataFrame.join.__doc__
