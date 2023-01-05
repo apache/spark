@@ -199,13 +199,16 @@ class DataFrameReader(OptionUtils):
 
     parquet.__doc__ = PySparkDataFrameReader.parquet.__doc__
 
-    def text(self, path: str, **options: "OptionalPrimitiveType") -> "DataFrame":
-        wholetext = options.get("wholetext", None)
-        lineSep = options.get("lineSep", None)
-        pathGlobFilter = options.get("pathGlobFilter", None)
-        recursiveFileLookup = options.get("recursiveFileLookup", None)
-        modifiedBefore = options.get("modifiedBefore", None)
-        modifiedAfter = options.get("modifiedAfter", None)
+    def text(
+        self,
+        path: str,
+        wholetext: Optional[bool] = None,
+        lineSep: Optional[str] = None,
+        pathGlobFilter: Optional[Union[bool, str]] = None,
+        recursiveFileLookup: Optional[Union[bool, str]] = None,
+        modifiedBefore: Optional[Union[bool, str]] = None,
+        modifiedAfter: Optional[Union[bool, str]] = None,
+    ) -> "DataFrame":
         self._set_opts(
             wholetext=wholetext,
             lineSep=lineSep,
@@ -218,6 +221,7 @@ class DataFrameReader(OptionUtils):
         return self.load(path=path, format="text")
 
     text.__doc__ = PySparkDataFrameReader.text.__doc__
+
 
 DataFrameReader.__doc__ = PySparkDataFrameReader.__doc__
 
