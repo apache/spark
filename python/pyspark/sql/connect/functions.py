@@ -2360,10 +2360,6 @@ def _test() -> None:
         del pyspark.sql.connect.functions.date_trunc.__doc__
         del pyspark.sql.connect.functions.from_utc_timestamp.__doc__
 
-        # TODO(SPARK-41825): Dataframe.show formatting int as double
-        del pyspark.sql.connect.functions.coalesce.__doc__
-        del pyspark.sql.connect.functions.sum_distinct.__doc__
-
         # TODO(SPARK-41834): implement Dataframe.conf
         del pyspark.sql.connect.functions.from_unixtime.__doc__
         del pyspark.sql.connect.functions.timestamp_seconds.__doc__

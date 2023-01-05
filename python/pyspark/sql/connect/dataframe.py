@@ -1427,11 +1427,7 @@ def _test() -> None:
         del pyspark.sql.connect.dataframe.DataFrame.explain.__doc__
         del pyspark.sql.connect.dataframe.DataFrame.hint.__doc__
 
-        # TODO(SPARK-41825): Dataframe.show formatting int as double
-        del pyspark.sql.connect.dataframe.DataFrame.fillna.__doc__
-        del pyspark.sql.connect.dataframe.DataFrameNaFunctions.replace.__doc__
-        del pyspark.sql.connect.dataframe.DataFrameNaFunctions.fill.__doc__
-        del pyspark.sql.connect.dataframe.DataFrame.replace.__doc__
+        # TODO(SPARK-41886): The doctest output has different order
         del pyspark.sql.connect.dataframe.DataFrame.intersect.__doc__
 
         # TODO(SPARK-41625): Support Structured Streaming
