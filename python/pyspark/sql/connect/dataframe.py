@@ -829,11 +829,16 @@ class DataFrame:
 
     summary.__doc__ = PySparkDataFrame.summary.__doc__
 
-    def describe(self, *cols: str) -> "DataFrame":
-        _cols: List[str] = list(cols)
-        for s in _cols:
-            if not isinstance(s, str):
-                raise TypeError(f"'cols' must be list[str], but got {type(s).__name__}")
+    def describe(self, *cols: Union[str, List[str]]) -> "DataFrame":
+        if len(cols) == 1 and isinstance(cols[0], list):
+            cols = cols[0]  # type: ignore[assignment]
+
+        _cols = []
+        for column in cols:
+            if isinstance(column, str):
+                _cols.append(column)
+            else:
+                _cols.extend([s for s in column])
         return DataFrame.withPlan(
             plan.StatDescribe(child=self._plan, cols=_cols),
             session=self._session,
@@ -1417,9 +1422,6 @@ def _test() -> None:
         # TODO(SPARK-41820): Fix SparkConnectException: requirement failed
         del pyspark.sql.connect.dataframe.DataFrame.createOrReplaceGlobalTempView.__doc__
         del pyspark.sql.connect.dataframe.DataFrame.createOrReplaceTempView.__doc__
-
-        # TODO(SPARK-41821): Fix DataFrame.describe
-        del pyspark.sql.connect.dataframe.DataFrame.describe.__doc__
 
         # TODO(SPARK-41823): ambiguous column names
         del pyspark.sql.connect.dataframe.DataFrame.drop.__doc__
