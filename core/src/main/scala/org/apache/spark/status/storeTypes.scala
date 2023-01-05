@@ -437,8 +437,8 @@ private[spark] class StreamBlockData(
 private[spark] class RDDOperationClusterWrapper(
     val id: String,
     val name: String,
-    val childNodes: Seq[RDDOperationNode],
-    val childClusters: Seq[RDDOperationClusterWrapper]) {
+    val childNodes: collection.Seq[RDDOperationNode],
+    val childClusters: collection.Seq[RDDOperationClusterWrapper]) {
 
   def toRDDOperationCluster(): RDDOperationCluster = {
     val isBarrier = childNodes.exists(_.barrier)
@@ -455,9 +455,9 @@ private[spark] class RDDOperationClusterWrapper(
 
 private[spark] class RDDOperationGraphWrapper(
     @KVIndexParam val stageId: Int,
-    val edges: Seq[RDDOperationEdge],
-    val outgoingEdges: Seq[RDDOperationEdge],
-    val incomingEdges: Seq[RDDOperationEdge],
+    val edges: collection.Seq[RDDOperationEdge],
+    val outgoingEdges: collection.Seq[RDDOperationEdge],
+    val incomingEdges: collection.Seq[RDDOperationEdge],
     val rootCluster: RDDOperationClusterWrapper) {
 
   def toRDDOperationGraph(): RDDOperationGraph = {

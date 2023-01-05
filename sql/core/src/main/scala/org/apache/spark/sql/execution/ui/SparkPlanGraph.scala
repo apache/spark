@@ -157,7 +157,7 @@ class SparkPlanGraphNode(
     val id: Long,
     val name: String,
     val desc: String,
-    val metrics: Seq[SQLPlanMetric]) {
+    val metrics: collection.Seq[SQLPlanMetric]) {
 
   def makeDotNode(metricsValue: Map[Long, String]): String = {
     val builder = new mutable.StringBuilder("<b>" + name + "</b>")
