@@ -1227,7 +1227,7 @@ class CreateView(LogicalPlan):
     ) -> None:
         super().__init__(child)
         self._name = name
-        self._is_gloal = is_global
+        self._is_global = is_global
         self._replace = replace
 
     def command(self, session: "SparkConnectClient") -> proto.Command:
@@ -1235,7 +1235,7 @@ class CreateView(LogicalPlan):
 
         plan = proto.Command()
         plan.create_dataframe_view.replace = self._replace
-        plan.create_dataframe_view.is_global = self._is_gloal
+        plan.create_dataframe_view.is_global = self._is_global
         plan.create_dataframe_view.name = self._name
         plan.create_dataframe_view.input.CopyFrom(self._child.plan(session))
         return plan
@@ -1587,7 +1587,7 @@ class RecoverPartitions(LogicalPlan):
 #         self._table_name = table_name
 #
 #     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-#         plan = proto.Relation(catalog=proto.Catalog(is_cached=proto.IsCahed()))
+#         plan = proto.Relation(catalog=proto.Catalog(is_cached=proto.IsCached()))
 #         plan.catalog.is_cached.table_name = self._table_name
 #         return plan
 #
