@@ -95,11 +95,14 @@ object SparkConnectClient {
       if (uri.getScheme != "sc") {
         throw new IllegalArgumentException("Scheme for connection URI must be 'sc'.")
       }
-      // Java URI considers everything after the authority segment as "path" until the ? (query)/# (fragment)
-      // components as shown in the regex [scheme:][//authority][path][?query][#fragment].
-      // However, with the Spark Connect definition, configuration parameter are passed in the style of the HTTP URL
-      // Path Parameter Syntax (e.g sc://hostname:port/;param1=value;param2=value).
-      // Thus, we manualy parse the "java path" to get the "correct path" and configuration parameters.
+      // Java URI considers everything after the authority segment as "path" until the
+      // ? (query)/# (fragment) components as shown in the regex
+      // [scheme:][//authority][path][?query][#fragment].
+      // However, with the Spark Connect definition, configuration parameter are passed in the
+      // style of the HTTP URL Path Parameter Syntax (e.g
+      // sc://hostname:port/;param1=value;param2=value).
+      // Thus, we manually parse the "java path" to get the "correct path" and configuration
+      // parameters.
       val pathAndParams = uri.getPath.split(';')
       if (pathAndParams.nonEmpty && (pathAndParams(0) != "/" && pathAndParams(0) != "")) {
         throw new IllegalArgumentException(
