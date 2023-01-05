@@ -24,7 +24,7 @@ import java.util.Locale
 import org.apache.hadoop.fs.{Path, RawLocalFileSystem}
 import org.apache.hadoop.fs.permission.{AclEntry, AclStatus}
 
-import org.apache.spark.{SparkException, SparkFiles, SparkRuntimeException}
+import org.apache.spark.{SparkClassNotFoundException, SparkException, SparkFiles, SparkRuntimeException}
 import org.apache.spark.internal.config
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
@@ -2040,10 +2040,14 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       val table2 = catalog.getTableMetadata(TableIdentifier("t2"))
       assert(table2.provider == Some("hive"))
 
-      val e1 = intercept[ClassNotFoundException] {
+      val e1 = intercept[SparkClassNotFoundException] {
         sql("CREATE TABLE t3 LIKE s USING unknown")
-      }.getMessage
-      assert(e1.contains("Failed to find data source"))
+      }
+      checkError(
+        exception = e1,
+        errorClass = "DATA_SOURCE_NOT_FOUND",
+        parameters = Map("provider" -> "unknown")
+      )
 
       withGlobalTempView("src") {
         val globalTempDB = spark.sharedState.globalTempViewManager.database

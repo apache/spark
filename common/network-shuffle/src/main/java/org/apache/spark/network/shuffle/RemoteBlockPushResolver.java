@@ -227,15 +227,15 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
             // Higher shuffleMergeId seen for the shuffle ID meaning new stage attempt is being
             // run for the shuffle ID. Close and clean up old shuffleMergeId files,
             // happens in the indeterminate stage retries
-            AppAttemptShuffleMergeId appAttemptShuffleMergeId =
-                new AppAttemptShuffleMergeId(
-                    appShuffleInfo.appId, appShuffleInfo.attemptId, shuffleId, shuffleMergeId);
+            AppAttemptShuffleMergeId currrentAppAttemptShuffleMergeId =
+                new AppAttemptShuffleMergeId(appShuffleInfo.appId, appShuffleInfo.attemptId,
+                    shuffleId, latestShuffleMergeId);
             logger.info("{}: creating a new shuffle merge metadata since received " +
-                "shuffleMergeId is higher than latest shuffleMergeId {}",
-                appAttemptShuffleMergeId, latestShuffleMergeId);
+                "shuffleMergeId {} is higher than latest shuffleMergeId {}",
+                currrentAppAttemptShuffleMergeId, shuffleMergeId, latestShuffleMergeId);
             submitCleanupTask(() ->
-                closeAndDeleteOutdatedPartitions(
-                    appAttemptShuffleMergeId, mergePartitionsInfo.shuffleMergePartitions));
+                closeAndDeleteOutdatedPartitions(currrentAppAttemptShuffleMergeId,
+                    mergePartitionsInfo.shuffleMergePartitions));
             return new AppShuffleMergePartitionsInfo(shuffleMergeId, false);
           } else {
             // The request is for block with same shuffleMergeId as the latest shuffleMergeId
@@ -653,9 +653,11 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         } else if (msg.shuffleMergeId > mergePartitionsInfo.shuffleMergeId) {
           // If no blocks pushed for the finalizeShuffleMerge shuffleMergeId then return
           // empty MergeStatuses but cleanup the older shuffleMergeId files.
+          AppAttemptShuffleMergeId currentAppAttemptShuffleMergeId = new AppAttemptShuffleMergeId(
+                  msg.appId, msg.appAttemptId, msg.shuffleId, mergePartitionsInfo.shuffleMergeId);
           submitCleanupTask(() ->
               closeAndDeleteOutdatedPartitions(
-                  appAttemptShuffleMergeId, mergePartitionsInfo.shuffleMergePartitions));
+                  currentAppAttemptShuffleMergeId, mergePartitionsInfo.shuffleMergePartitions));
         } else {
           // This block covers:
           //  1. finalization of determinate stage

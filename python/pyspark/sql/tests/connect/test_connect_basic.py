@@ -28,6 +28,7 @@ from pyspark.sql.types import (
     IntegerType,
     MapType,
     ArrayType,
+    Row,
 )
 import pyspark.sql.functions
 from pyspark.testing.utils import ReusedPySparkTestCase
@@ -116,7 +117,80 @@ class SparkConnectSQLTestCase(PandasOnSparkTestCase, ReusedPySparkTestCase, SQLT
         cls.spark.sql("DROP TABLE IF EXISTS {}".format(cls.tbl_name_empty))
 
 
-class SparkConnectTests(SparkConnectSQLTestCase):
+class SparkConnectBasicTests(SparkConnectSQLTestCase):
+    def test_df_get_item(self):
+        # SPARK-41779: test __getitem__
+
+        query = """
+            SELECT * FROM VALUES
+            (true, 1, NULL), (false, NULL, 2.0), (NULL, 3, 3.0)
+            AS tab(a, b, c)
+            """
+
+        # +-----+----+----+
+        # |    a|   b|   c|
+        # +-----+----+----+
+        # | true|   1|null|
+        # |false|null| 2.0|
+        # | null|   3| 3.0|
+        # +-----+----+----+
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        # filter
+        self.assert_eq(
+            cdf[cdf.a].toPandas(),
+            sdf[sdf.a].toPandas(),
+        )
+        self.assert_eq(
+            cdf[cdf.b.isin(2, 3)].toPandas(),
+            sdf[sdf.b.isin(2, 3)].toPandas(),
+        )
+        self.assert_eq(
+            cdf[cdf.c > 1.5].toPandas(),
+            sdf[sdf.c > 1.5].toPandas(),
+        )
+
+        # select
+        self.assert_eq(
+            cdf[[cdf.a, "b", cdf.c]].toPandas(),
+            sdf[[sdf.a, "b", sdf.c]].toPandas(),
+        )
+        self.assert_eq(
+            cdf[(cdf.a, "b", cdf.c)].toPandas(),
+            sdf[(sdf.a, "b", sdf.c)].toPandas(),
+        )
+
+        # select by index
+        self.assertTrue(isinstance(cdf[0], Column))
+        self.assertTrue(isinstance(cdf[1], Column))
+        self.assertTrue(isinstance(cdf[2], Column))
+
+        self.assert_eq(
+            cdf[[cdf[0], cdf[1], cdf[2]]].toPandas(),
+            sdf[[sdf[0], sdf[1], sdf[2]]].toPandas(),
+        )
+
+        # check error
+        with self.assertRaisesRegex(
+            TypeError,
+            "unexpected item type",
+        ):
+            cdf[1.5]
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "unexpected item type",
+        ):
+            cdf[None]
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "unexpected item type",
+        ):
+            cdf[cdf]
+
     def test_error_handling(self):
         # SPARK-41533 Proper error handling for Spark Connect
         df = self.connect.range(10).select("id2")
@@ -277,6 +351,15 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         with self.assertRaises(SparkConnectException):
             self.connect.createDataFrame(data, "col1 int, col2 int, col3 int").show()
 
+        # test 1 dim ndarray
+        data = np.array([1.0, 2.0, np.nan, 3.0, 4.0, float("NaN"), 5.0])
+        self.assertEqual(data.ndim, 1)
+
+        sdf = self.spark.createDataFrame(data)
+        cdf = self.connect.createDataFrame(data)
+        self.assertEqual(sdf.schema, cdf.schema)
+        self.assert_eq(sdf.toPandas(), cdf.toPandas())
+
     def test_with_local_list(self):
         """SPARK-41446: Test creating a dataframe using local list"""
         data = [[1, 2, 3, 4]]
@@ -314,6 +397,32 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         with self.assertRaises(SparkConnectException):
             self.connect.createDataFrame(data, "col1 int, col2 int, col3 int").show()
 
+    def test_with_local_rows(self):
+        # SPARK-41789, SPARK-41810: Test creating a dataframe with list of rows and dictionaries
+        rows = [
+            Row(course="dotNET", year=2012, earnings=10000),
+            Row(course="Java", year=2012, earnings=20000),
+            Row(course="dotNET", year=2012, earnings=5000),
+            Row(course="dotNET", year=2013, earnings=48000),
+            Row(course="Java", year=2013, earnings=30000),
+            Row(course="Scala", year=2022, earnings=None),
+        ]
+        dicts = [row.asDict() for row in rows]
+
+        for data in [rows, dicts]:
+            sdf = self.spark.createDataFrame(data)
+            cdf = self.connect.createDataFrame(data)
+
+            self.assertEqual(sdf.schema, cdf.schema)
+            self.assert_eq(sdf.toPandas(), cdf.toPandas())
+
+            # test with rename
+            sdf = self.spark.createDataFrame(data, schema=["a", "b", "c"])
+            cdf = self.connect.createDataFrame(data, schema=["a", "b", "c"])
+
+            self.assertEqual(sdf.schema, cdf.schema)
+            self.assert_eq(sdf.toPandas(), cdf.toPandas())
+
     def test_with_atom_type(self):
         for data in [[(1), (2), (3)], [1, 2, 3]]:
             for schema in ["long", "int", "short"]:
@@ -322,6 +431,127 @@ class SparkConnectTests(SparkConnectSQLTestCase):
 
                 self.assertEqual(sdf.schema, cdf.schema)
                 self.assert_eq(sdf.toPandas(), cdf.toPandas())
+
+    def test_with_none_and_nan(self):
+        # SPARK-41855: make createDataFrame support None and NaN
+
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        # SPARK-41814: test with eqNullSafe
+        data1 = [Row(id=1, value=float("NaN")), Row(id=2, value=42.0), Row(id=3, value=None)]
+        data2 = [Row(id=1, value=np.nan), Row(id=2, value=42.0), Row(id=3, value=None)]
+        data3 = [
+            {"id": 1, "value": float("NaN")},
+            {"id": 2, "value": 42.0},
+            {"id": 3, "value": None},
+        ]
+        data4 = [{"id": 1, "value": np.nan}, {"id": 2, "value": 42.0}, {"id": 3, "value": None}]
+        data5 = [(1, float("NaN")), (2, 42.0), (3, None)]
+        data6 = [(1, np.nan), (2, 42.0), (3, None)]
+        data7 = np.array([[1, float("NaN")], [2, 42.0], [3, None]])
+        data8 = np.array([[1, np.nan], [2, 42.0], [3, None]])
+
+        # +---+-----+
+        # | id|value|
+        # +---+-----+
+        # |  1|  NaN|
+        # |  2| 42.0|
+        # |  3| null|
+        # +---+-----+
+
+        for data in [data1, data2, data3, data4, data5, data6, data7, data8]:
+            if isinstance(data[0], (Row, dict)):
+                # data1, data2, data3, data4
+                cdf = self.connect.createDataFrame(data)
+                sdf = self.spark.createDataFrame(data)
+            else:
+                # data5, data6, data7, data8
+                cdf = self.connect.createDataFrame(data, schema=["id", "value"])
+                sdf = self.spark.createDataFrame(data, schema=["id", "value"])
+
+            self.assert_eq(cdf.toPandas(), sdf.toPandas())
+
+            self.assert_eq(
+                cdf.select(
+                    cdf["value"].eqNullSafe(None),
+                    cdf["value"].eqNullSafe(float("NaN")),
+                    cdf["value"].eqNullSafe(42.0),
+                ).toPandas(),
+                sdf.select(
+                    sdf["value"].eqNullSafe(None),
+                    sdf["value"].eqNullSafe(float("NaN")),
+                    sdf["value"].eqNullSafe(42.0),
+                ).toPandas(),
+            )
+
+        # SPARK-41851: test with nanvl
+        data = [(1.0, float("nan")), (float("nan"), 2.0)]
+
+        cdf = self.connect.createDataFrame(data, ("a", "b"))
+        sdf = self.spark.createDataFrame(data, ("a", "b"))
+
+        self.assert_eq(cdf.toPandas(), sdf.toPandas())
+
+        self.assert_eq(
+            cdf.select(
+                CF.nanvl("a", "b").alias("r1"), CF.nanvl(cdf.a, cdf.b).alias("r2")
+            ).toPandas(),
+            sdf.select(
+                SF.nanvl("a", "b").alias("r1"), SF.nanvl(sdf.a, sdf.b).alias("r2")
+            ).toPandas(),
+        )
+
+        # SPARK-41852: test with pmod
+        data = [
+            (1.0, float("nan")),
+            (float("nan"), 2.0),
+            (10.0, 3.0),
+            (float("nan"), float("nan")),
+            (-3.0, 4.0),
+            (-10.0, 3.0),
+            (-5.0, -6.0),
+            (7.0, -8.0),
+            (1.0, 2.0),
+        ]
+
+        cdf = self.connect.createDataFrame(data, ("a", "b"))
+        sdf = self.spark.createDataFrame(data, ("a", "b"))
+
+        self.assert_eq(cdf.toPandas(), sdf.toPandas())
+
+        self.assert_eq(
+            cdf.select(CF.pmod("a", "b")).toPandas(),
+            sdf.select(SF.pmod("a", "b")).toPandas(),
+        )
+
+    def test_create_empty_df(self):
+        for schema in [
+            "STRING",
+            "x STRING",
+            "x STRING, y INTEGER",
+            StringType(),
+            StructType(
+                [
+                    StructField("x", StringType(), True),
+                    StructField("y", IntegerType(), True),
+                ]
+            ),
+        ]:
+            print(schema)
+            print(schema)
+            print(schema)
+            cdf = self.connect.createDataFrame(data=[], schema=schema)
+            sdf = self.spark.createDataFrame(data=[], schema=schema)
+
+            self.assert_eq(cdf.toPandas(), sdf.toPandas())
+
+        # check error
+        with self.assertRaisesRegex(
+            ValueError,
+            "can not infer schema from empty dataset",
+        ):
+            self.connect.createDataFrame(data=[])
 
     def test_simple_explain_string(self):
         df = self.connect.read.table(self.tbl_name).limit(10)
@@ -963,13 +1193,26 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             self.spark.read.table(self.tbl_name).hint("illegal").toPandas(),
         )
 
+        # Hint with all supported parameter values
+        such_a_nice_list = ["itworks1", "itworks2", "itworks3"]
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name).hint("my awesome hint", 1.2345, 2).toPandas(),
+            self.spark.read.table(self.tbl_name).hint("my awesome hint", 1.2345, 2).toPandas(),
+        )
+
         # Hint with unsupported parameter values
         with self.assertRaises(SparkConnectException):
             self.connect.read.table(self.tbl_name).hint("REPARTITION", "id+1").toPandas()
 
         # Hint with unsupported parameter types
         with self.assertRaises(TypeError):
-            self.connect.read.table(self.tbl_name).hint("REPARTITION", 1.1).toPandas()
+            self.connect.read.table(self.tbl_name).hint("REPARTITION", range(5)).toPandas()
+
+        # Hint with unsupported parameter types
+        with self.assertRaises(TypeError):
+            self.connect.read.table(self.tbl_name).hint(
+                "my awesome hint", 1.2345, 2, such_a_nice_list, range(6)
+            ).toPandas()
 
         # Hint with wrong combination
         with self.assertRaises(SparkConnectException):
@@ -1006,12 +1249,138 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         expected = "+---+---+\n|  X|  Y|\n+---+---+\n|  1|  2|\n+---+---+\n"
         self.assertEqual(show_str, expected)
 
+    def test_describe(self):
+        # SPARK-41403: Test the describe method
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name).describe("id").toPandas(),
+            self.spark.read.table(self.tbl_name).describe("id").toPandas(),
+        )
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name).describe("id", "name").toPandas(),
+            self.spark.read.table(self.tbl_name).describe("id", "name").toPandas(),
+        )
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name).describe(["id", "name"]).toPandas(),
+            self.spark.read.table(self.tbl_name).describe(["id", "name"]).toPandas(),
+        )
+
     def test_stat_cov(self):
         # SPARK-41067: Test the stat.cov method
         self.assertEqual(
             self.connect.read.table(self.tbl_name2).stat.cov("col1", "col3"),
             self.spark.read.table(self.tbl_name2).stat.cov("col1", "col3"),
         )
+
+    def test_stat_corr(self):
+        # SPARK-41068: Test the stat.corr method
+        self.assertEqual(
+            self.connect.read.table(self.tbl_name2).stat.corr("col1", "col3"),
+            self.spark.read.table(self.tbl_name2).stat.corr("col1", "col3"),
+        )
+
+        self.assertEqual(
+            self.connect.read.table(self.tbl_name2).stat.corr("col1", "col3", "pearson"),
+            self.spark.read.table(self.tbl_name2).stat.corr("col1", "col3", "pearson"),
+        )
+
+        with self.assertRaisesRegex(TypeError, "col1 should be a string."):
+            self.connect.read.table(self.tbl_name2).stat.corr(1, "col3", "pearson")
+        with self.assertRaisesRegex(TypeError, "col2 should be a string."):
+            self.connect.read.table(self.tbl_name).stat.corr("col1", 1, "pearson")
+        with self.assertRaises(ValueError) as context:
+            self.connect.read.table(self.tbl_name2).stat.corr("col1", "col3", "spearman"),
+            self.assertTrue(
+                "Currently only the calculation of the Pearson Correlation "
+                + "coefficient is supported."
+                in str(context.exception)
+            )
+
+    def test_stat_approx_quantile(self):
+        # SPARK-41069: Test the stat.approxQuantile method
+        result = self.connect.read.table(self.tbl_name2).stat.approxQuantile(
+            ["col1", "col3"], [0.1, 0.5, 0.9], 0.1
+        )
+        self.assertEqual(len(result), 2)
+        self.assertEqual(len(result[0]), 3)
+        self.assertEqual(len(result[1]), 3)
+
+        result = self.connect.read.table(self.tbl_name2).stat.approxQuantile(
+            ["col1"], [0.1, 0.5, 0.9], 0.1
+        )
+        self.assertEqual(len(result), 1)
+        self.assertEqual(len(result[0]), 3)
+
+        with self.assertRaisesRegex(
+            TypeError, "col should be a string, list or tuple, but got <class 'int'>"
+        ):
+            self.connect.read.table(self.tbl_name2).stat.approxQuantile(1, [0.1, 0.5, 0.9], 0.1)
+        with self.assertRaisesRegex(TypeError, "columns should be strings, but got <class 'int'>"):
+            self.connect.read.table(self.tbl_name2).stat.approxQuantile([1], [0.1, 0.5, 0.9], 0.1)
+        with self.assertRaisesRegex(TypeError, "probabilities should be a list or tuple"):
+            self.connect.read.table(self.tbl_name2).stat.approxQuantile(["col1", "col3"], 0.1, 0.1)
+        with self.assertRaisesRegex(
+            ValueError, "probabilities should be numerical \\(float, int\\) in \\[0,1\\]"
+        ):
+            self.connect.read.table(self.tbl_name2).stat.approxQuantile(
+                ["col1", "col3"], [-0.1], 0.1
+            )
+        with self.assertRaisesRegex(
+            TypeError, "relativeError should be numerical \\(float, int\\)"
+        ):
+            self.connect.read.table(self.tbl_name2).stat.approxQuantile(
+                ["col1", "col3"], [0.1, 0.5, 0.9], "str"
+            )
+        with self.assertRaisesRegex(ValueError, "relativeError should be >= 0."):
+            self.connect.read.table(self.tbl_name2).stat.approxQuantile(
+                ["col1", "col3"], [0.1, 0.5, 0.9], -0.1
+            )
+
+    def test_stat_freq_items(self):
+        # SPARK-41065: Test the stat.freqItems method
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name2).stat.freqItems(["col1", "col3"]).toPandas(),
+            self.spark.read.table(self.tbl_name2).stat.freqItems(["col1", "col3"]).toPandas(),
+        )
+
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name2)
+            .stat.freqItems(["col1", "col3"], 0.4)
+            .toPandas(),
+            self.spark.read.table(self.tbl_name2).stat.freqItems(["col1", "col3"], 0.4).toPandas(),
+        )
+
+        with self.assertRaisesRegex(
+            TypeError, "cols must be a list or tuple of column names as strings"
+        ):
+            self.connect.read.table(self.tbl_name2).stat.freqItems("col1")
+
+    def test_stat_sample_by(self):
+        # SPARK-41069: Test stat.sample_by
+
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        cdf = self.connect.range(0, 100).select((CF.col("id") % 3).alias("key"))
+        sdf = self.spark.range(0, 100).select((SF.col("id") % 3).alias("key"))
+
+        self.assert_eq(
+            cdf.sampleBy(cdf.key, fractions={0: 0.1, 1: 0.2}, seed=0)
+            .groupBy("key")
+            .agg(CF.count(CF.lit(1)))
+            .orderBy("key")
+            .toPandas(),
+            sdf.sampleBy(sdf.key, fractions={0: 0.1, 1: 0.2}, seed=0)
+            .groupBy("key")
+            .agg(SF.count(SF.lit(1)))
+            .orderBy("key")
+            .toPandas(),
+        )
+
+        with self.assertRaisesRegex(TypeError, "key must be float, int, or string"):
+            cdf.stat.sampleBy(cdf.key, fractions={0: 0.1, None: 0.2}, seed=0)
+
+        with self.assertRaises(SparkConnectException):
+            cdf.sampleBy(cdf.key, fractions={0: 0.1, 1: 1.2}, seed=0).show()
 
     def test_repr(self):
         # SPARK-41213: Test the __repr__ method
@@ -1387,6 +1756,10 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             sdf.groupBy("name", sdf.department).avg("salary", "year").toPandas(),
         )
         self.assert_eq(
+            cdf.groupBy("name", cdf.department).mean("salary", "year").toPandas(),
+            sdf.groupBy("name", sdf.department).mean("salary", "year").toPandas(),
+        )
+        self.assert_eq(
             cdf.groupBy("name", cdf.department).sum("salary", "year").toPandas(),
             sdf.groupBy("name", sdf.department).sum("salary", "year").toPandas(),
         )
@@ -1409,6 +1782,10 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             sdf.rollup("name", sdf.department).avg("salary", "year").toPandas(),
         )
         self.assert_eq(
+            cdf.rollup("name", cdf.department).mean("salary", "year").toPandas(),
+            sdf.rollup("name", sdf.department).mean("salary", "year").toPandas(),
+        )
+        self.assert_eq(
             cdf.rollup("name", cdf.department).sum("salary", "year").toPandas(),
             sdf.rollup("name", sdf.department).sum("salary", "year").toPandas(),
         )
@@ -1417,6 +1794,10 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         self.assert_eq(
             cdf.cube("name").avg().toPandas(),
             sdf.cube("name").avg().toPandas(),
+        )
+        self.assert_eq(
+            cdf.cube("name").mean().toPandas(),
+            sdf.cube("name").mean().toPandas(),
         )
         self.assert_eq(
             cdf.cube("name").min("salary").toPandas(),
@@ -1552,6 +1933,28 @@ class SparkConnectTests(SparkConnectSQLTestCase):
             "Numeric aggregation function can only be applied on numeric columns",
         ):
             cdf.groupBy("name").pivot("department").sum("salary", "department").show()
+
+    def test_unsupported_functions(self):
+        # SPARK-41225: Disable unsupported functions.
+        df = self.connect.read.table(self.tbl_name)
+        for f in (
+            "rdd",
+            "unpersist",
+            "cache",
+            "persist",
+            "withWatermark",
+            "observe",
+            "foreach",
+            "foreachPartition",
+            "toLocalIterator",
+            "checkpoint",
+            "localCheckpoint",
+            "_repr_html_",
+            "semanticHash",
+            "sameSemantics",
+        ):
+            with self.assertRaises(NotImplementedError):
+                getattr(df, f)()
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)

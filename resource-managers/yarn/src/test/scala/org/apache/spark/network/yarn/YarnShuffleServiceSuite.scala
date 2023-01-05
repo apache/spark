@@ -956,7 +956,7 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     assert(ShuffleTestAccessor.getOutdatedAppPathInfoCountDuringDBReload(
       mergeManager2, mergeManager2DB) == 1)
     assert(ShuffleTestAccessor.getOutdatedFinalizedShuffleCountDuringDBReload(
-      mergeManager2, mergeManager2DB) == 2)
+      mergeManager2, mergeManager2DB) == 1)
     s2.stop()
 
     // Yarn Shuffle service comes back up without custom mergeManager

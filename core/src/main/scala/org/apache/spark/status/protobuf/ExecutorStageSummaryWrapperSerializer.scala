@@ -18,8 +18,6 @@
 package org.apache.spark.status.protobuf
 
 import org.apache.spark.status.ExecutorStageSummaryWrapper
-import org.apache.spark.status.api.v1.ExecutorStageSummary
-import org.apache.spark.status.protobuf.Utils.getOptional
 
 class ExecutorStageSummaryWrapperSerializer extends ProtobufSerDe {
 
@@ -29,7 +27,7 @@ class ExecutorStageSummaryWrapperSerializer extends ProtobufSerDe {
     serialize(input.asInstanceOf[ExecutorStageSummaryWrapper])
 
   private def serialize(input: ExecutorStageSummaryWrapper): Array[Byte] = {
-    val info = serializeExecutorStageSummary(input.info)
+    val info = ExecutorStageSummarySerializer.serialize(input.info)
     val builder = StoreTypes.ExecutorStageSummaryWrapper.newBuilder()
       .setStageId(input.stageId.toLong)
       .setStageAttemptId(input.stageAttemptId)
@@ -40,61 +38,11 @@ class ExecutorStageSummaryWrapperSerializer extends ProtobufSerDe {
 
   def deserialize(bytes: Array[Byte]): ExecutorStageSummaryWrapper = {
     val binary = StoreTypes.ExecutorStageSummaryWrapper.parseFrom(bytes)
-    val info = deserializeExecutorStageSummary(binary.getInfo)
+    val info = ExecutorStageSummarySerializer.deserialize(binary.getInfo)
     new ExecutorStageSummaryWrapper(
       stageId = binary.getStageId.toInt,
       stageAttemptId = binary.getStageAttemptId,
       executorId = binary.getExecutorId,
       info = info)
-  }
-
-  private def serializeExecutorStageSummary(
-      input: ExecutorStageSummary): StoreTypes.ExecutorStageSummary = {
-    val builder = StoreTypes.ExecutorStageSummary.newBuilder()
-      .setTaskTime(input.taskTime)
-      .setFailedTasks(input.failedTasks)
-      .setSucceededTasks(input.succeededTasks)
-      .setKilledTasks(input.killedTasks)
-      .setInputBytes(input.inputBytes)
-      .setInputRecords(input.inputRecords)
-      .setOutputBytes(input.outputBytes)
-      .setOutputRecords(input.outputRecords)
-      .setShuffleRead(input.shuffleRead)
-      .setShuffleReadRecords(input.shuffleReadRecords)
-      .setShuffleWrite(input.shuffleWrite)
-      .setShuffleWriteRecords(input.shuffleWriteRecords)
-      .setMemoryBytesSpilled(input.memoryBytesSpilled)
-      .setDiskBytesSpilled(input.diskBytesSpilled)
-      .setIsBlacklistedForStage(input.isBlacklistedForStage)
-      .setIsExcludedForStage(input.isExcludedForStage)
-    input.peakMemoryMetrics.map { m =>
-      builder.setPeakMemoryMetrics(ExecutorMetricsSerializer.serialize(m))
-    }
-    builder.build()
-  }
-
-  def deserializeExecutorStageSummary(
-      binary: StoreTypes.ExecutorStageSummary): ExecutorStageSummary = {
-    val peakMemoryMetrics =
-      getOptional(binary.hasPeakMemoryMetrics,
-        () => ExecutorMetricsSerializer.deserialize(binary.getPeakMemoryMetrics))
-    new ExecutorStageSummary(
-      taskTime = binary.getTaskTime,
-      failedTasks = binary.getFailedTasks,
-      succeededTasks = binary.getSucceededTasks,
-      killedTasks = binary.getKilledTasks,
-      inputBytes = binary.getInputBytes,
-      inputRecords = binary.getInputRecords,
-      outputBytes = binary.getOutputBytes,
-      outputRecords = binary.getOutputRecords,
-      shuffleRead = binary.getShuffleRead,
-      shuffleReadRecords = binary.getShuffleReadRecords,
-      shuffleWrite = binary.getShuffleWrite,
-      shuffleWriteRecords = binary.getShuffleWriteRecords,
-      memoryBytesSpilled = binary.getMemoryBytesSpilled,
-      diskBytesSpilled = binary.getDiskBytesSpilled,
-      isBlacklistedForStage = binary.getIsBlacklistedForStage,
-      peakMemoryMetrics = peakMemoryMetrics,
-      isExcludedForStage = binary.getIsExcludedForStage)
   }
 }

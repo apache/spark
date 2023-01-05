@@ -22,6 +22,7 @@ from typing import (
     Optional,
     Tuple,
     Union,
+    Sequence,
     TYPE_CHECKING,
     overload,
     Callable,
@@ -35,20 +36,22 @@ import pandas
 import warnings
 from collections.abc import Iterable
 
-from pyspark import _NoValue
+from pyspark import _NoValue, SparkContext, SparkConf
 from pyspark._globals import _NoValueType
 from pyspark.sql.types import DataType, StructType, Row
 
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.group import GroupedData
 from pyspark.sql.connect.readwriter import DataFrameWriter
-from pyspark.sql.connect.column import (
-    Column,
-    scalar_function,
-    sql_expression,
-)
+from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import UnresolvedRegex
-from pyspark.sql.connect.functions import col, lit
+from pyspark.sql.connect.functions import (
+    _to_col,
+    _invoke_function,
+    col,
+    lit,
+    expr as sql_expression,
+)
 from pyspark.sql.dataframe import (
     DataFrame as PySparkDataFrame,
     DataFrameNaFunctions as PySparkDataFrameNaFunctions,
@@ -110,7 +113,7 @@ class DataFrame:
             raise ValueError("Argument 'exprs' must not be empty")
 
         if len(exprs) == 1 and isinstance(exprs[0], dict):
-            measures = [scalar_function(f, col(e)) for e, f in exprs[0].items()]
+            measures = [_invoke_function(f, col(e)) for e, f in exprs[0].items()]
             return self.groupBy().agg(*measures)
         else:
             # other expressions
@@ -152,7 +155,7 @@ class DataFrame:
     sparkSession.__doc__ = PySparkDataFrame.sparkSession.__doc__
 
     def count(self) -> int:
-        pdd = self.agg(scalar_function("count", lit(1))).toPandas()
+        pdd = self.agg(_invoke_function("count", lit(1))).toPandas()
         return pdd.iloc[0, 0]
 
     count.__doc__ = PySparkDataFrame.count.__doc__
@@ -260,6 +263,8 @@ class DataFrame:
 
     groupBy.__doc__ = PySparkDataFrame.groupBy.__doc__
 
+    groupby = groupBy
+
     def rollup(self, *cols: "ColumnOrName") -> "GroupedData":
         _cols: List[Column] = []
         for c in cols:
@@ -344,18 +349,56 @@ class DataFrame:
 
     tail.__doc__ = PySparkDataFrame.tail.__doc__
 
-    def sort(self, *cols: "ColumnOrName") -> "DataFrame":
+    def _sort_cols(
+        self, cols: Sequence[Union[str, Column, List[Union[str, Column]]]], kwargs: Dict[str, Any]
+    ) -> List[Column]:
+        """Return a JVM Seq of Columns that describes the sort order"""
+        if cols is None:
+            raise ValueError("should sort by at least one column")
+
+        _cols: List[Column] = []
+        if len(cols) == 1 and isinstance(cols[0], list):
+            _cols = [_to_col(c) for c in cols[0]]
+        else:
+            _cols = [_to_col(cast("ColumnOrName", c)) for c in cols]
+
+        ascending = kwargs.get("ascending", True)
+        if isinstance(ascending, (bool, int)):
+            if not ascending:
+                _cols = [c.desc() for c in _cols]
+        elif isinstance(ascending, list):
+            _cols = [c if asc else c.desc() for asc, c in zip(ascending, _cols)]
+        else:
+            raise TypeError("ascending can only be boolean or list, but got %s" % type(ascending))
+
+        return _cols
+
+    def sort(
+        self, *cols: Union[str, Column, List[Union[str, Column]]], **kwargs: Any
+    ) -> "DataFrame":
         return DataFrame.withPlan(
-            plan.Sort(self._plan, columns=list(cols), is_global=True), session=self._session
+            plan.Sort(
+                self._plan,
+                columns=self._sort_cols(cols, kwargs),
+                is_global=True,
+            ),
+            session=self._session,
         )
 
     sort.__doc__ = PySparkDataFrame.sort.__doc__
 
     orderBy = sort
 
-    def sortWithinPartitions(self, *cols: "ColumnOrName") -> "DataFrame":
+    def sortWithinPartitions(
+        self, *cols: Union[str, Column, List[Union[str, Column]]], **kwargs: Any
+    ) -> "DataFrame":
         return DataFrame.withPlan(
-            plan.Sort(self._plan, columns=list(cols), is_global=False), session=self._session
+            plan.Sort(
+                self._plan,
+                columns=self._sort_cols(cols, kwargs),
+                is_global=False,
+            ),
+            session=self._session,
         )
 
     sortWithinPartitions.__doc__ = PySparkDataFrame.sortWithinPartitions.__doc__
@@ -482,9 +525,11 @@ class DataFrame:
 
     def hint(self, name: str, *params: Any) -> "DataFrame":
         for param in params:
-            if param is not None and not isinstance(param, (int, str)):
+            # TODO(SPARK-41887): support list type as hint parameter
+            if param is not None and not isinstance(param, (int, str, float)):
                 raise TypeError(
-                    f"param should be a int or str, but got {type(param).__name__} {param}"
+                    f"param should be a str, float or int, but got {type(param).__name__}"
+                    f" {param}"
                 )
 
         return DataFrame.withPlan(
@@ -523,7 +568,7 @@ class DataFrame:
                     upper_bound=upperBound,
                     with_replacement=False,
                     seed=int(seed),
-                    force_stable_sort=True,
+                    deterministic_order=True,
                 ),
                 session=self._session,
             )
@@ -829,11 +874,16 @@ class DataFrame:
 
     summary.__doc__ = PySparkDataFrame.summary.__doc__
 
-    def describe(self, *cols: str) -> "DataFrame":
-        _cols: List[str] = list(cols)
-        for s in _cols:
-            if not isinstance(s, str):
-                raise TypeError(f"'cols' must be list[str], but got {type(s).__name__}")
+    def describe(self, *cols: Union[str, List[str]]) -> "DataFrame":
+        if len(cols) == 1 and isinstance(cols[0], list):
+            cols = cols[0]  # type: ignore[assignment]
+
+        _cols = []
+        for column in cols:
+            if isinstance(column, str):
+                _cols.append(column)
+            else:
+                _cols.extend([s for s in column])
         return DataFrame.withPlan(
             plan.StatDescribe(child=self._plan, cols=_cols),
             session=self._session,
@@ -856,6 +906,78 @@ class DataFrame:
 
     cov.__doc__ = PySparkDataFrame.cov.__doc__
 
+    def corr(self, col1: str, col2: str, method: Optional[str] = None) -> float:
+        if not isinstance(col1, str):
+            raise TypeError("col1 should be a string.")
+        if not isinstance(col2, str):
+            raise TypeError("col2 should be a string.")
+        if not method:
+            method = "pearson"
+        if not method == "pearson":
+            raise ValueError(
+                "Currently only the calculation of the Pearson Correlation "
+                + "coefficient is supported."
+            )
+        pdf = DataFrame.withPlan(
+            plan.StatCorr(child=self._plan, col1=col1, col2=col2, method=method),
+            session=self._session,
+        ).toPandas()
+
+        assert pdf is not None
+        return pdf["corr"][0]
+
+    corr.__doc__ = PySparkDataFrame.corr.__doc__
+
+    def approxQuantile(
+        self,
+        col: Union[str, List[str], Tuple[str]],
+        probabilities: Union[List[float], Tuple[float]],
+        relativeError: float,
+    ) -> Union[List[float], List[List[float]]]:
+        if not isinstance(col, (str, list, tuple)):
+            raise TypeError("col should be a string, list or tuple, but got %r" % type(col))
+
+        isStr = isinstance(col, str)
+
+        if isinstance(col, tuple):
+            col = list(col)
+        elif isStr:
+            col = [cast(str, col)]
+
+        for c in col:
+            if not isinstance(c, str):
+                raise TypeError("columns should be strings, but got %r" % type(c))
+
+        if not isinstance(probabilities, (list, tuple)):
+            raise TypeError("probabilities should be a list or tuple")
+        if isinstance(probabilities, tuple):
+            probabilities = list(probabilities)
+        for p in probabilities:
+            if not isinstance(p, (float, int)) or p < 0 or p > 1:
+                raise ValueError("probabilities should be numerical (float, int) in [0,1].")
+
+        if not isinstance(relativeError, (float, int)):
+            raise TypeError("relativeError should be numerical (float, int)")
+        if relativeError < 0:
+            raise ValueError("relativeError should be >= 0.")
+        relativeError = float(relativeError)
+        pdf = DataFrame.withPlan(
+            plan.StatApproxQuantile(
+                child=self._plan,
+                cols=list(col),
+                probabilities=probabilities,
+                relativeError=relativeError,
+            ),
+            session=self._session,
+        ).toPandas()
+
+        assert pdf is not None
+        jaq = pdf["approx_quantile"][0]
+        jaq_list = [list(j) for j in jaq]
+        return jaq_list[0] if isStr else jaq_list
+
+    approxQuantile.__doc__ = PySparkDataFrame.approxQuantile.__doc__
+
     def crosstab(self, col1: str, col2: str) -> "DataFrame":
         if not isinstance(col1, str):
             raise TypeError(f"'col1' must be str, but got {type(col1).__name__}")
@@ -868,6 +990,42 @@ class DataFrame:
 
     crosstab.__doc__ = PySparkDataFrame.crosstab.__doc__
 
+    def freqItems(
+        self, cols: Union[List[str], Tuple[str]], support: Optional[float] = None
+    ) -> "DataFrame":
+        if isinstance(cols, tuple):
+            cols = list(cols)
+        if not isinstance(cols, list):
+            raise TypeError("cols must be a list or tuple of column names as strings.")
+        if not support:
+            support = 0.01
+        return DataFrame.withPlan(
+            plan.StatFreqItems(child=self._plan, cols=cols, support=support),
+            session=self._session,
+        )
+
+    freqItems.__doc__ = PySparkDataFrame.freqItems.__doc__
+
+    def sampleBy(
+        self, col: "ColumnOrName", fractions: Dict[Any, float], seed: Optional[int] = None
+    ) -> "DataFrame":
+        if not isinstance(col, (Column, str)):
+            raise TypeError("col must be a string or a column, but got %r" % type(col))
+        if not isinstance(fractions, dict):
+            raise TypeError("fractions must be a dict but got %r" % type(fractions))
+        for k, v in fractions.items():
+            if not isinstance(k, (float, int, str)):
+                raise TypeError("key must be float, int, or string, but got %r" % type(k))
+            fractions[k] = float(v)
+        seed = seed if seed is not None else random.randint(0, sys.maxsize)
+
+        return DataFrame.withPlan(
+            plan.StatSampleBy(child=self._plan, col=col, fractions=fractions, seed=seed),
+            session=self._session,
+        )
+
+    sampleBy.__doc__ = PySparkDataFrame.sampleBy.__doc__
+
     def _get_alias(self) -> Optional[str]:
         p = self._plan
         while p is not None:
@@ -879,13 +1037,30 @@ class DataFrame:
     def __getattr__(self, name: str) -> "Column":
         return self[name]
 
-    def __getitem__(self, name: str) -> "Column":
-        # Check for alias
-        alias = self._get_alias()
-        if alias is not None:
-            return col(alias)
+    @overload
+    def __getitem__(self, item: Union[int, str]) -> Column:
+        ...
+
+    @overload
+    def __getitem__(self, item: Union[Column, List, Tuple]) -> "DataFrame":
+        ...
+
+    def __getitem__(self, item: Union[int, str, Column, List, Tuple]) -> Union[Column, "DataFrame"]:
+        if isinstance(item, str):
+            # Check for alias
+            alias = self._get_alias()
+            if alias is not None:
+                return col(alias)
+            else:
+                return col(item)
+        elif isinstance(item, Column):
+            return self.filter(item)
+        elif isinstance(item, (list, tuple)):
+            return self.select(*item)
+        elif isinstance(item, int):
+            return col(self.columns[item])
         else:
-            return col(name)
+            raise TypeError("unexpected item type: %s" % type(item))
 
     def _print_plan(self) -> str:
         if self._plan:
@@ -893,11 +1068,23 @@ class DataFrame:
         return ""
 
     def collect(self) -> List[Row]:
-        pdf = self.toPandas()
-        if pdf is not None:
-            return list(pdf.apply(lambda row: Row(**row), axis=1))
-        else:
-            return []
+        if self._plan is None:
+            raise Exception("Cannot collect on empty plan.")
+        if self._session is None:
+            raise Exception("Cannot collect on empty session.")
+        query = self._plan.to_proto(self._session.client)
+        table = self._session.client.to_table(query)
+
+        rows: List[Row] = []
+        for row in table.to_pylist():
+            _dict = {}
+            for k, v in row.items():
+                if isinstance(v, bytes):
+                    _dict[k] = bytearray(v)
+                else:
+                    _dict[k] = v
+            rows.append(Row(**_dict))
+        return rows
 
     collect.__doc__ = PySparkDataFrame.collect.__doc__
 
@@ -1216,10 +1403,122 @@ class DataFrameStatFunctions:
 
     cov.__doc__ = DataFrame.cov.__doc__
 
+    def corr(self, col1: str, col2: str, method: Optional[str] = None) -> float:
+        return self.df.corr(col1, col2, method)
+
+    corr.__doc__ = DataFrame.corr.__doc__
+
+    def approxQuantile(
+        self,
+        col: Union[str, List[str], Tuple[str]],
+        probabilities: Union[List[float], Tuple[float]],
+        relativeError: float,
+    ) -> Union[List[float], List[List[float]]]:
+        return self.df.approxQuantile(col, probabilities, relativeError)
+
+    approxQuantile.__doc__ = DataFrame.approxQuantile.__doc__
+
     def crosstab(self, col1: str, col2: str) -> DataFrame:
         return self.df.crosstab(col1, col2)
 
     crosstab.__doc__ = DataFrame.crosstab.__doc__
 
+    def freqItems(
+        self, cols: Union[List[str], Tuple[str]], support: Optional[float] = None
+    ) -> DataFrame:
+        return self.df.freqItems(cols, support)
+
+    freqItems.__doc__ = DataFrame.freqItems.__doc__
+
+    def sampleBy(
+        self, col: str, fractions: Dict[Any, float], seed: Optional[int] = None
+    ) -> DataFrame:
+        return self.df.sampleBy(col, fractions, seed)
+
+    sampleBy.__doc__ = DataFrame.sampleBy.__doc__
+
 
 DataFrameStatFunctions.__doc__ = PySparkDataFrameStatFunctions.__doc__
+
+
+def _test() -> None:
+    import os
+    import sys
+    import doctest
+    from pyspark.sql import SparkSession as PySparkSession
+    from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    if should_test_connect:
+        import pyspark.sql.connect.dataframe
+
+        globs = pyspark.sql.connect.dataframe.__dict__.copy()
+        # Works around to create a regular Spark session
+        sc = SparkContext("local[4]", "sql.connect.dataframe tests", conf=SparkConf())
+        globs["_spark"] = PySparkSession(
+            sc, options={"spark.app.name": "sql.connect.dataframe tests"}
+        )
+
+        # Spark Connect does not support RDD but the tests depend on them.
+        del pyspark.sql.connect.dataframe.DataFrame.coalesce.__doc__
+        del pyspark.sql.connect.dataframe.DataFrame.repartition.__doc__
+
+        # TODO(SPARK-41820): Fix SparkConnectException: requirement failed
+        del pyspark.sql.connect.dataframe.DataFrame.createOrReplaceGlobalTempView.__doc__
+        del pyspark.sql.connect.dataframe.DataFrame.createOrReplaceTempView.__doc__
+
+        # TODO(SPARK-41823): ambiguous column names
+        del pyspark.sql.connect.dataframe.DataFrame.drop.__doc__
+        del pyspark.sql.connect.dataframe.DataFrame.join.__doc__
+
+        # TODO(SPARK-41824): DataFrame.explain format is different
+        del pyspark.sql.connect.dataframe.DataFrame.explain.__doc__
+        del pyspark.sql.connect.dataframe.DataFrame.hint.__doc__
+
+        # TODO(SPARK-41886): The doctest output has different order
+        del pyspark.sql.connect.dataframe.DataFrame.intersect.__doc__
+
+        # TODO(SPARK-41625): Support Structured Streaming
+        del pyspark.sql.connect.dataframe.DataFrame.isStreaming.__doc__
+
+        # TODO(SPARK-41827): groupBy requires all cols be Column or str
+        del pyspark.sql.connect.dataframe.DataFrame.groupBy.__doc__
+
+        # TODO(SPARK-41830): fix sample parameters
+        del pyspark.sql.connect.dataframe.DataFrame.sample.__doc__
+
+        # TODO(SPARK-41831): fix transform to accept ColumnReference
+        del pyspark.sql.connect.dataframe.DataFrame.transform.__doc__
+
+        # TODO(SPARK-41832): fix unionByName
+        del pyspark.sql.connect.dataframe.DataFrame.unionByName.__doc__
+
+        # TODO(SPARK-41818): Support saveAsTable
+        del pyspark.sql.connect.dataframe.DataFrame.write.__doc__
+
+        # Creates a remote Spark session.
+        os.environ["SPARK_REMOTE"] = "sc://localhost"
+        globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
+
+        (failure_count, test_count) = doctest.testmod(
+            pyspark.sql.connect.dataframe,
+            globs=globs,
+            optionflags=doctest.ELLIPSIS
+            | doctest.NORMALIZE_WHITESPACE
+            | doctest.IGNORE_EXCEPTION_DETAIL,
+        )
+
+        globs["spark"].stop()
+        globs["_spark"].stop()
+        if failure_count:
+            sys.exit(-1)
+    else:
+        print(
+            f"Skipping pyspark.sql.connect.dataframe doctests: {connect_requirement_message}",
+            file=sys.stderr,
+        )
+
+
+if __name__ == "__main__":
+    _test()

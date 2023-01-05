@@ -68,15 +68,7 @@ package object expressions  {
    * column of the new row. If the schema of the input row is specified, then the given expression
    * will be bound to that schema.
    */
-  abstract class Projection extends (InternalRow => InternalRow) {
-
-    /**
-     * Initializes internal states given the current partition index.
-     * This is used by nondeterministic expressions to set initial states.
-     * The default implementation does nothing.
-     */
-    def initialize(partitionIndex: Int): Unit = {}
-  }
+  abstract class Projection extends (InternalRow => InternalRow) with ExpressionsEvaluator
 
   /**
    * An identity projection. This returns the input row.

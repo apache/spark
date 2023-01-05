@@ -291,8 +291,8 @@ class StageData private[spark](
     val details: String,
     val schedulingPool: String,
 
-    val rddIds: Seq[Int],
-    val accumulatorUpdates: Seq[AccumulableInfo],
+    val rddIds: collection.Seq[Int],
+    val accumulatorUpdates: collection.Seq[AccumulableInfo],
     val tasks: Option[Map[Long, TaskData]],
     val executorSummary: Option[Map[String, ExecutorStageSummary]],
     val speculationSummary: Option[SpeculationStageSummary],
