@@ -80,9 +80,7 @@ case class InsertIntoHiveTable(
     bucketSpec: Option[BucketSpec],
     options: Map[String, String],
     fileFormat: FileFormat,
-    externalTmpPath: String,
-    @transient stagingDir: Path,
-    @transient hadoopConf: Configuration
+    @transient externalTmpPath: HiveTempPath
   ) extends SaveAsHiveFile with V1WriteCommand with V1WritesHiveUtils {
 
   override def staticPartitions: TablePartitionSpec = {
@@ -100,9 +98,13 @@ case class InsertIntoHiveTable(
    */
   override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
     val externalCatalog = sparkSession.sharedState.externalCatalog
+    val hadoopConf = externalTmpPath.hadoopConf
+    val stagingDir = externalTmpPath.stagingDir
+    val tmpLocation = externalTmpPath.externalTempPath
+
     createExternalTmpPath(stagingDir, hadoopConf)
     try {
-      processInsert(sparkSession, externalCatalog, child)
+      processInsert(sparkSession, externalCatalog, hadoopConf, tmpLocation, child)
     } finally {
       // Attempt to delete the staging directory and the inclusive files. If failed, the files are
       // expected to be dropped at the normal termination of VM since deleteOnExit is used.
@@ -125,6 +127,8 @@ case class InsertIntoHiveTable(
   private def processInsert(
       sparkSession: SparkSession,
       externalCatalog: ExternalCatalog,
+      hadoopConf: Configuration,
+      tmpLocation: Path,
       child: SparkPlan): Unit = {
 
     val numDynamicPartitions = partition.values.count(_.isEmpty)
@@ -135,7 +139,7 @@ case class InsertIntoHiveTable(
       plan = child,
       hadoopConf = hadoopConf,
       fileFormat = fileFormat,
-      outputLocation = externalTmpPath,
+      outputLocation = tmpLocation.toString,
       partitionAttributes = partitionColumns,
       bucketSpec = bucketSpec,
       options = options)
@@ -192,7 +196,7 @@ case class InsertIntoHiveTable(
         externalCatalog.loadDynamicPartitions(
           db = table.database,
           table = table.identifier.table,
-          externalTmpPath,
+          tmpLocation.toString,
           partitionSpec,
           overwrite,
           numDynamicPartitions)
@@ -262,7 +266,7 @@ case class InsertIntoHiveTable(
           externalCatalog.loadPartition(
             table.database,
             table.identifier.table,
-            externalTmpPath,
+            tmpLocation.toString,
             partitionSpec,
             isOverwrite = doHiveOverwrite,
             inheritTableSpecs = inheritTableSpecs,
@@ -273,7 +277,7 @@ case class InsertIntoHiveTable(
       externalCatalog.loadTable(
         table.database,
         table.identifier.table,
-        externalTmpPath, // TODO: URI
+        tmpLocation.toString, // TODO: URI
         overwrite,
         isSrcLocal = false)
     }
@@ -282,6 +286,7 @@ case class InsertIntoHiveTable(
   override protected def withNewChildInternal(newChild: LogicalPlan): InsertIntoHiveTable =
     copy(query = newChild)
 }
+
 object InsertIntoHiveTable extends V1WritesHiveUtils with Logging {
   def apply(
       table: CatalogTable,
@@ -305,8 +310,8 @@ object InsertIntoHiveTable extends V1WritesHiveUtils with Logging {
     )
     val hadoopConf = sparkSession.sessionState.newHadoopConf()
     val tableLocation = hiveQlTable.getDataLocation
-    val (stagingDir, externalTmpPath) = getExternalTmpPath(sparkSession, hadoopConf, tableLocation)
-    val fileSinkConf = new FileSinkDesc(externalTmpPath.toString, tableDesc, false)
+    val hiveTempPath = new HiveTempPath(sparkSession, hadoopConf, tableLocation)
+    val fileSinkConf = new FileSinkDesc(hiveTempPath.externalTempPath.toString, tableDesc, false)
     setupCompression(fileSinkConf, hadoopConf, sparkSession)
     val fileFormat: FileFormat = new HiveFileFormat(fileSinkConf)
 
@@ -315,7 +320,6 @@ object InsertIntoHiveTable extends V1WritesHiveUtils with Logging {
     val options = getOptionsWithHiveBucketWrite(bucketSpec)
 
     new InsertIntoHiveTable(table, partition, query, overwrite, ifPartitionNotExists,
-      outputColumnNames, partitionColumns, bucketSpec, options, fileFormat,
-      externalTmpPath.toString, stagingDir, hadoopConf)
+      outputColumnNames, partitionColumns, bucketSpec, options, fileFormat, hiveTempPath)
   }
 }

@@ -99,7 +99,9 @@ case class InsertIntoHiveDirCommand(
     }
 
     // The temporary path must be a HDFS path, not a local path.
-    val (stagingDir, tmpPath) = getExternalTmpPath(sparkSession, hadoopConf, qualifiedPath)
+    val hiveTempPath = new HiveTempPath(sparkSession, hadoopConf, qualifiedPath)
+    val stagingDir = hiveTempPath.stagingDir
+    val tmpPath = hiveTempPath.externalTempPath
     val fileSinkConf = new org.apache.spark.sql.hive.HiveShim.ShimFileSinkDesc(
       tmpPath.toString, tableDesc, false)
     setupCompression(fileSinkConf, hadoopConf, sparkSession)
