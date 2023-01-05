@@ -140,6 +140,11 @@ def _create_py_udf(
         import pandas as pd
         from pyspark.sql.pandas.functions import _create_pandas_udf
 
+        # "result_func" ensures the result of a Python UDF to be consistent with/without Arrow
+        # optimization.
+        # Otherwise, an Arrow-optimized Python UDF raises "pyarrow.lib.ArrowTypeError: Expected a
+        # string or bytes dtype, got ..." whereas a non-Arrow-optimized Python UDF returns
+        # successfully.
         result_func = lambda pdf: pdf  # noqa: E731
         if type(return_type) == StringType:
             result_func = lambda r: str(r) if r is not None else r  # noqa: E731
@@ -153,9 +158,6 @@ def _create_py_udf(
                     "enabled in Python UDFs. Disable "
                     "'spark.sql.execution.pythonUDF.arrow.enabled' to workaround."
                 )
-            # Always cast via "result_func" because regular UDF supports more permissive casting
-            # compared to pandas UDFs. This is to don't break the user's codes
-            # from enabling this edge feature.
             return pd.Series(result_func(f(*a)) for a in zip(*args))
 
         # Regular UDFs can take callable instances too.
