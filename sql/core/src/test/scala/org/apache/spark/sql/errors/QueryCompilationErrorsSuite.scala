@@ -681,18 +681,6 @@ class QueryCompilationErrorsSuite
       context = ExpectedContext("", "", 7, 13, "CAST(1)")
     )
   }
-
-  test("NEGATIVE_SCALE_NOT_ALLOWED: negative scale for Decimal is not allowed") {
-    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "false") {
-      checkError(
-        exception = intercept[SparkException] (Decimal(BigDecimal("98765"), 5, -3)),
-        errorClass = "INTERNAL_ERROR",
-        parameters = Map("message" -> ("Negative scale is not allowed: -3. " +
-            "Set the config \"spark.sql.legacy.allowNegativeScaleOfDecimal\" " +
-            "to \"true\" to allow it."))
-      )
-    }
-  }
 }
 
 class MyCastToString extends SparkUserDefinedFunction(
