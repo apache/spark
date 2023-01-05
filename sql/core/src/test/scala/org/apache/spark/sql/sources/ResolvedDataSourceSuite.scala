@@ -19,6 +19,7 @@ package org.apache.spark.sql.sources
 
 import java.time.ZoneId
 
+import org.apache.spark.SparkClassNotFoundException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.DataSource
@@ -96,9 +97,13 @@ class ResolvedDataSourceSuite extends SharedSparkSession {
   }
 
   test("error message for unknown data sources") {
-    val error = intercept[ClassNotFoundException] {
+    val error = intercept[SparkClassNotFoundException] {
       getProvidingClass("asfdwefasdfasdf")
     }
-    assert(error.getMessage.contains("Failed to find data source: asfdwefasdfasdf."))
+    checkError(
+      exception = error,
+      errorClass = "DATA_SOURCE_NOT_FOUND",
+      parameters = Map("provider" -> "asfdwefasdfasdf")
+    )
   }
 }

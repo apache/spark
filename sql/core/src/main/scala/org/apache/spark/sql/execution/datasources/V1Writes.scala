@@ -24,13 +24,13 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCo
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Sort}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.DataWritingCommand
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.unsafe.types.UTF8String
 
 trait V1WriteCommand extends DataWritingCommand {
-
   /**
    * Specify the partition columns of the V1 write command.
    */
@@ -44,7 +44,7 @@ trait V1WriteCommand extends DataWritingCommand {
 }
 
 /**
- * A rule that adds logical sorts to V1 data writing commands.
+ * A rule that plans v1 write for [[V1WriteCommand]].
  */
 object V1Writes extends Rule[LogicalPlan] with SQLConfHelper {
 
@@ -52,11 +52,12 @@ object V1Writes extends Rule[LogicalPlan] with SQLConfHelper {
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (conf.plannedWriteEnabled) {
-      plan.transformDown {
-        case write: V1WriteCommand =>
+      plan.transformUp {
+        case write: V1WriteCommand if !write.child.isInstanceOf[WriteFiles] =>
           val newQuery = prepareQuery(write, write.query)
           val attrMap = AttributeMap(write.query.output.zip(newQuery.output))
-          val newWrite = write.withNewChildren(newQuery :: Nil).transformExpressions {
+          val newChild = WriteFiles(newQuery)
+          val newWrite = write.withNewChildren(newChild :: Nil).transformExpressions {
             case a: Attribute if attrMap.contains(a) =>
               a.withExprId(attrMap(a).exprId)
           }
@@ -210,6 +211,12 @@ object V1WritesUtils {
       requiredOrdering.zip(outputOrdering).forall {
         case (requiredOrder, outputOrder) => requiredOrder.semanticEquals(outputOrder)
       }
+    }
+  }
+
+  def getWriteFilesOpt(child: SparkPlan): Option[WriteFilesExec] = {
+    child.collectFirst {
+      case w: WriteFilesExec => w
     }
   }
 }

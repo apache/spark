@@ -49,7 +49,7 @@ class QueryCompilationErrorsSuite
         "details" -> (
         s"""
            |The type path of the target object is:
-           |- field (class: "scala.Int", name: "b")
+           |- field (class: "int", name: "b")
            |- root class: "org.apache.spark.sql.errors.StringIntClass"
            |You can either add an explicit cast to the input data or choose a higher precision type
          """.stripMargin.trim + " of the field in the target object")))
@@ -67,7 +67,7 @@ class QueryCompilationErrorsSuite
         "details" -> (
         s"""
            |The type path of the target object is:
-           |- field (class: "scala.Long", name: "b")
+           |- field (class: "long", name: "b")
            |- field (class: "org.apache.spark.sql.errors.StringLongClass", name: "b")
            |- root class: "org.apache.spark.sql.errors.ComplexClass"
            |You can either add an explicit cast to the input data or choose a higher precision type

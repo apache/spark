@@ -40,23 +40,9 @@ class FunctionsParityTests(ReusedSQLTestCase, FunctionsTestsMixin):
 
     @classmethod
     def tearDownClass(cls):
-        # TODO(SPARK-41529): Implement stop in RemoteSparkSession.
-        #  Stop the regular Spark session (server) too.
-        cls.spark = cls._spark
         super(FunctionsParityTests, cls).tearDownClass()
+        cls.spark = cls._spark.stop()
         del os.environ["SPARK_REMOTE"]
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_add_months_function(self):
-        super().test_add_months_function()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_array_contains_function(self):
-        super().test_array_contains_function()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_array_repeat(self):
-        super().test_array_repeat()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_assert_true(self):
@@ -67,18 +53,6 @@ class FunctionsParityTests(ReusedSQLTestCase, FunctionsTestsMixin):
         super().test_basic_functions()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_between_function(self):
-        super().test_between_function()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_bit_length_function(self):
-        super().test_bit_length_function()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_collect_functions(self):
-        super().test_collect_functions()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_date_add_function(self):
         super().test_date_add_function()
 
@@ -87,24 +61,8 @@ class FunctionsParityTests(ReusedSQLTestCase, FunctionsTestsMixin):
         super().test_date_sub_function()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_datetime_functions(self):
-        super().test_datetime_functions()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_dayofweek(self):
-        super().test_dayofweek()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_explode(self):
         super().test_explode()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_expr(self):
-        super().test_expr()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_first_last_ignorenulls(self):
-        super().test_first_last_ignorenulls()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_function_parity(self):
@@ -113,14 +71,6 @@ class FunctionsParityTests(ReusedSQLTestCase, FunctionsTestsMixin):
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_functions_broadcast(self):
         super().test_functions_broadcast()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_higher_order_function_failures(self):
-        super().test_higher_order_function_failures()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_inline(self):
-        super().test_inline()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_input_file_name_reset_for_rdd(self):
@@ -135,10 +85,6 @@ class FunctionsParityTests(ReusedSQLTestCase, FunctionsTestsMixin):
         super().test_inverse_trig_functions()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_least(self):
-        super().test_least()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_lit_list(self):
         super().test_lit_list()
 
@@ -147,16 +93,8 @@ class FunctionsParityTests(ReusedSQLTestCase, FunctionsTestsMixin):
         super().test_lit_np_scalar()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_make_date(self):
-        super().test_make_date()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_map_functions(self):
         super().test_map_functions()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_math_functions(self):
-        super().test_math_functions()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_ndarray_input(self):
@@ -175,10 +113,6 @@ class FunctionsParityTests(ReusedSQLTestCase, FunctionsTestsMixin):
         super().test_nth_value()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_octet_length_function(self):
-        super().test_octet_length_function()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_overlay(self):
         super().test_overlay()
 
@@ -191,92 +125,28 @@ class FunctionsParityTests(ReusedSQLTestCase, FunctionsTestsMixin):
         super().test_raise_error()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_regexp_replace(self):
-        super().test_regexp_replace()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_shiftleft(self):
-        super().test_shiftleft()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_shiftright(self):
-        super().test_shiftright()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_shiftrightunsigned(self):
-        super().test_shiftrightunsigned()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_slice(self):
         super().test_slice()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_sort_with_nulls_order(self):
-        super().test_sort_with_nulls_order()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_sorting_functions_with_column(self):
         super().test_sorting_functions_with_column()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_string_functions(self):
-        super().test_string_functions()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_sum_distinct(self):
-        super().test_sum_distinct()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_window_functions(self):
         super().test_window_functions()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_window_functions_cumulative_sum(self):
-        super().test_window_functions_cumulative_sum()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_window_functions_without_partitionBy(self):
         super().test_window_functions_without_partitionBy()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_window_time(self):
-        super().test_window_time()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_binary_math_function(self):
-        super().test_binary_math_function()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_corr(self):
-        super().test_corr()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_cov(self):
-        super().test_cov()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_crosstab(self):
-        super().test_crosstab()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_lit_day_time_interval(self):
-        super().test_lit_day_time_interval()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_rand_functions(self):
         super().test_rand_functions()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_reciprocal_trig_functions(self):
-        super().test_reciprocal_trig_functions()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_sampleby(self):
         super().test_sampleby()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_approxQuantile(self):
-        super().test_approxQuantile()
 
 
 if __name__ == "__main__":

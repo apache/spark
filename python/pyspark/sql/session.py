@@ -156,7 +156,7 @@ class classproperty(property):
 class SparkSession(SparkConversionMixin):
     """The entry point to programming Spark with the Dataset and DataFrame API.
 
-    A SparkSession can be used create :class:`DataFrame`, register :class:`DataFrame` as
+    A SparkSession can be used to create :class:`DataFrame`, register :class:`DataFrame` as
     tables, execute SQL over tables, cache tables, and read parquet files.
     To create a :class:`SparkSession`, use the following builder pattern:
 
@@ -666,6 +666,9 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Returns
         -------
         :class:`Catalog`
@@ -673,7 +676,7 @@ class SparkSession(SparkConversionMixin):
         Examples
         --------
         >>> spark.catalog
-        <pyspark.sql.catalog.Catalog object ...>
+        <...Catalog object ...>
 
         Create a temp view, show the list, and drop it.
 
@@ -1293,20 +1296,26 @@ class SparkSession(SparkConversionMixin):
         df._schema = struct
         return df
 
-    def sql(self, sqlQuery: str, **kwargs: Any) -> DataFrame:
+    def sql(self, sqlQuery: str, args: Dict[str, str] = {}, **kwargs: Any) -> DataFrame:
         """Returns a :class:`DataFrame` representing the result of the given query.
         When ``kwargs`` is specified, this method formats the given string by using the Python
-        standard formatter.
+        standard formatter. The method binds named parameters to SQL literals from `args`.
 
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Support Spark Connect and parameterized SQL.
 
         Parameters
         ----------
         sqlQuery : str
             SQL query string.
+        args : dict
+            A dictionary of named parameters that begin from the `:` marker and
+            their SQL literals for substituting.
+
+            .. versionadded:: 3.4.0
+
         kwargs : dict
             Other variables that the user wants to set that can be referenced in the query
 
@@ -1380,13 +1389,22 @@ class SparkSession(SparkConversionMixin):
         |  2|  4|
         |  3|  6|
         +---+---+
+
+        And substitude named parameters with the `:` prefix by SQL literals.
+
+        >>> spark.sql("SELECT * FROM {df} WHERE {df[B]} > :minB", {"minB" : "5"}, df=mydf).show()
+        +---+---+
+        |  A|  B|
+        +---+---+
+        |  3|  6|
+        +---+---+
         """
 
         formatter = SQLStringFormatter(self)
         if len(kwargs) > 0:
             sqlQuery = formatter.format(sqlQuery, **kwargs)
         try:
-            return DataFrame(self._jsparkSession.sql(sqlQuery), self)
+            return DataFrame(self._jsparkSession.sql(sqlQuery, args), self)
         finally:
             if len(kwargs) > 0:
                 formatter.clear()
@@ -1395,6 +1413,9 @@ class SparkSession(SparkConversionMixin):
         """Returns the specified table as a :class:`DataFrame`.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -1439,7 +1460,7 @@ class SparkSession(SparkConversionMixin):
         Examples
         --------
         >>> spark.read
-        <pyspark.sql.readwriter.DataFrameReader object ...>
+        <...DataFrameReader object ...>
 
         Write a DataFrame into a JSON file and read it back.
 
@@ -1532,6 +1553,9 @@ class SparkSession(SparkConversionMixin):
         Stop the underlying :class:`SparkContext`.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Examples
         --------

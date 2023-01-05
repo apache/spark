@@ -42,11 +42,6 @@ DecimalLiteral = decimal.Decimal
 DateTimeLiteral = Union[datetime.datetime, datetime.date]
 
 
-class FunctionBuilderCallable(Protocol):
-    def __call__(self, *_: ColumnOrName) -> Column:
-        ...
-
-
 class UserDefinedFunctionCallable(Protocol):
     def __call__(self, *_: ColumnOrName) -> Column:
         ...

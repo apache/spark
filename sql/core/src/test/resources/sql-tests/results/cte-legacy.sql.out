@@ -34,6 +34,34 @@ struct<scalarsubquery():int>
 
 
 -- !query
+SELECT * FROM
+  (
+   WITH cte AS (SELECT * FROM range(10))
+   SELECT * FROM cte WHERE id = 8
+  ) a
+UNION
+SELECT * FROM cte
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "relationName" : "`cte`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 120,
+    "stopIndex" : 122,
+    "fragment" : "cte"
+  } ]
+}
+
+
+-- !query
 WITH
   t AS (SELECT 1),
   t2 AS (
