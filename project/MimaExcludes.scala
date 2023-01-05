@@ -153,7 +153,18 @@ object MimaExcludes {
     // [SPARK-41423][CORE] Protobuf serializer for StageDataWrapper for Scala 2.13
     ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.StageData.rddIds"),
     ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.StageData.accumulatorUpdates"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.StageData.this")
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.StageData.this"),
+
+    // [SPARK-41890][CORE][SQL][UI] Reduce `toSeq` in `RDDOperationGraphWrapperSerializer`/`SparkPlanGraphWrapperSerializer` for Scala 2.13
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.sql.ExecutionData.nodes"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.sql.ExecutionData.edges"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.sql.ExecutionData.this"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.sql.Node.apply"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.sql.Node.metrics"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.sql.Node.copy"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.sql.Node.copy$default$4"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.sql.Node.this"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.sql.Node.apply")
   )
 
   // Defulat exclude rules
