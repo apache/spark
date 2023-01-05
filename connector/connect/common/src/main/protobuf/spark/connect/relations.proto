@@ -74,6 +74,7 @@ message Relation {
     StatCorr corr = 104;
     StatApproxQuantile approx_quantile = 105;
     StatFreqItems freq_items = 106;
+    StatSampleBy sample_by = 107;
 
     // Catalog API (experimental / unstable)
     Catalog catalog = 200;
@@ -327,20 +328,16 @@ message Deduplicate {
 
 // A relation that does not need to be qualified by name.
 message LocalRelation {
-  // Local collection data serialized into Arrow IPC streaming format which contains
+  // (Optional) Local collection data serialized into Arrow IPC streaming format which contains
   // the schema of the data.
-  bytes data = 1;
+  optional bytes data = 1;
 
-  // (Optional) The user provided schema.
+  // (Optional) The schema of local data.
+  // It should be either a DDL-formatted type string or a JSON string.
   //
-  // The Sever side will update the column names and data types according to this schema.
-  oneof schema {
-
-    DataType datatype = 2;
-
-    // Server will use Catalyst parser to parse this string to DataType.
-    string datatype_str = 3;
-  }
+  // The server side will update the column names and data types according to this schema.
+  // If the 'data' is not provided, then this schema will be required.
+  optional string schema = 2;
 }
 
 // Relation of type [[Sample]] that samples a fraction of the dataset.
@@ -545,6 +542,36 @@ message StatFreqItems {
   // Should be greater than 1e-4.
   optional double support = 3;
 }
+
+
+// Returns a stratified sample without replacement based on the fraction
+// given on each stratum.
+// It will invoke 'Dataset.stat.freqItems' (same as 'StatFunctions.freqItems')
+// to compute the results.
+message StatSampleBy {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) The column that defines strata.
+  Expression col = 2;
+
+  // (Required) Sampling fraction for each stratum.
+  //
+  // If a stratum is not specified, we treat its fraction as zero.
+  repeated Fraction fractions = 3;
+
+  // (Optional) The random seed.
+  optional int64 seed = 5;
+
+  message Fraction {
+    // (Required) The stratum.
+    Expression.Literal stratum = 1;
+
+    // (Required) The fraction value. Must be in [0, 1].
+    double fraction = 2;
+  }
+}
+
 
 // Replaces null values.
 // It will invoke 'Dataset.na.fill' (same as 'DataFrameNaFunctions.fill') to compute the results.

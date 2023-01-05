@@ -99,6 +99,7 @@ class Relation(google.protobuf.message.Message):
     CORR_FIELD_NUMBER: builtins.int
     APPROX_QUANTILE_FIELD_NUMBER: builtins.int
     FREQ_ITEMS_FIELD_NUMBER: builtins.int
+    SAMPLE_BY_FIELD_NUMBER: builtins.int
     CATALOG_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     UNKNOWN_FIELD_NUMBER: builtins.int
@@ -179,6 +180,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def freq_items(self) -> global___StatFreqItems: ...
     @property
+    def sample_by(self) -> global___StatSampleBy: ...
+    @property
     def catalog(self) -> pyspark.sql.connect.proto.catalog_pb2.Catalog:
         """Catalog API (experimental / unstable)"""
     @property
@@ -228,6 +231,7 @@ class Relation(google.protobuf.message.Message):
         corr: global___StatCorr | None = ...,
         approx_quantile: global___StatApproxQuantile | None = ...,
         freq_items: global___StatFreqItems | None = ...,
+        sample_by: global___StatSampleBy | None = ...,
         catalog: pyspark.sql.connect.proto.catalog_pb2.Catalog | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
         unknown: global___Unknown | None = ...,
@@ -295,6 +299,8 @@ class Relation(google.protobuf.message.Message):
             b"replace",
             "sample",
             b"sample",
+            "sample_by",
+            b"sample_by",
             "set_op",
             b"set_op",
             "show_string",
@@ -382,6 +388,8 @@ class Relation(google.protobuf.message.Message):
             b"replace",
             "sample",
             b"sample",
+            "sample_by",
+            b"sample_by",
             "set_op",
             b"set_op",
             "show_string",
@@ -445,6 +453,7 @@ class Relation(google.protobuf.message.Message):
         "corr",
         "approx_quantile",
         "freq_items",
+        "sample_by",
         "catalog",
         "extension",
         "unknown",
@@ -1259,45 +1268,44 @@ class LocalRelation(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     DATA_FIELD_NUMBER: builtins.int
-    DATATYPE_FIELD_NUMBER: builtins.int
-    DATATYPE_STR_FIELD_NUMBER: builtins.int
+    SCHEMA_FIELD_NUMBER: builtins.int
     data: builtins.bytes
-    """Local collection data serialized into Arrow IPC streaming format which contains
+    """(Optional) Local collection data serialized into Arrow IPC streaming format which contains
     the schema of the data.
     """
-    @property
-    def datatype(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
-    datatype_str: builtins.str
-    """Server will use Catalyst parser to parse this string to DataType."""
+    schema: builtins.str
+    """(Optional) The schema of local data.
+    It should be either a DDL-formatted type string or a JSON string.
+
+    The server side will update the column names and data types according to this schema.
+    If the 'data' is not provided, then this schema will be required.
+    """
     def __init__(
         self,
         *,
-        data: builtins.bytes = ...,
-        datatype: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
-        datatype_str: builtins.str = ...,
+        data: builtins.bytes | None = ...,
+        schema: builtins.str | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "datatype", b"datatype", "datatype_str", b"datatype_str", "schema", b"schema"
+            "_data", b"_data", "_schema", b"_schema", "data", b"data", "schema", b"schema"
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "data",
-            b"data",
-            "datatype",
-            b"datatype",
-            "datatype_str",
-            b"datatype_str",
-            "schema",
-            b"schema",
+            "_data", b"_data", "_schema", b"_schema", "data", b"data", "schema", b"schema"
         ],
     ) -> None: ...
+    @typing.overload
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["schema", b"schema"]
-    ) -> typing_extensions.Literal["datatype", "datatype_str"] | None: ...
+        self, oneof_group: typing_extensions.Literal["_data", b"_data"]
+    ) -> typing_extensions.Literal["data"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_schema", b"_schema"]
+    ) -> typing_extensions.Literal["schema"] | None: ...
 
 global___LocalRelation = LocalRelation
 
@@ -1909,6 +1917,96 @@ class StatFreqItems(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["support"] | None: ...
 
 global___StatFreqItems = StatFreqItems
+
+class StatSampleBy(google.protobuf.message.Message):
+    """Returns a stratified sample without replacement based on the fraction
+    given on each stratum.
+    It will invoke 'Dataset.stat.freqItems' (same as 'StatFunctions.freqItems')
+    to compute the results.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class Fraction(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        STRATUM_FIELD_NUMBER: builtins.int
+        FRACTION_FIELD_NUMBER: builtins.int
+        @property
+        def stratum(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression.Literal:
+            """(Required) The stratum."""
+        fraction: builtins.float
+        """(Required) The fraction value. Must be in [0, 1]."""
+        def __init__(
+            self,
+            *,
+            stratum: pyspark.sql.connect.proto.expressions_pb2.Expression.Literal | None = ...,
+            fraction: builtins.float = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["stratum", b"stratum"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal["fraction", b"fraction", "stratum", b"stratum"],
+        ) -> None: ...
+
+    INPUT_FIELD_NUMBER: builtins.int
+    COL_FIELD_NUMBER: builtins.int
+    FRACTIONS_FIELD_NUMBER: builtins.int
+    SEED_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    @property
+    def col(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
+        """(Required) The column that defines strata."""
+    @property
+    def fractions(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___StatSampleBy.Fraction
+    ]:
+        """(Required) Sampling fraction for each stratum.
+
+        If a stratum is not specified, we treat its fraction as zero.
+        """
+    seed: builtins.int
+    """(Optional) The random seed."""
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        col: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
+        fractions: collections.abc.Iterable[global___StatSampleBy.Fraction] | None = ...,
+        seed: builtins.int | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_seed", b"_seed", "col", b"col", "input", b"input", "seed", b"seed"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_seed",
+            b"_seed",
+            "col",
+            b"col",
+            "fractions",
+            b"fractions",
+            "input",
+            b"input",
+            "seed",
+            b"seed",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_seed", b"_seed"]
+    ) -> typing_extensions.Literal["seed"] | None: ...
+
+global___StatSampleBy = StatSampleBy
 
 class NAFill(google.protobuf.message.Message):
     """Replaces null values.

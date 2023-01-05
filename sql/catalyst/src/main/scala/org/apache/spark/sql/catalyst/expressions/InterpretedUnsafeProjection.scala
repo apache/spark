@@ -67,10 +67,7 @@ class InterpretedUnsafeProjection(expressions: Array[Expression]) extends Unsafe
   }
 
   override def initialize(partitionIndex: Int): Unit = {
-    exprs.foreach(_.foreach {
-      case n: Nondeterministic => n.initialize(partitionIndex)
-      case _ =>
-    })
+    initializeExprs(exprs, partitionIndex)
   }
 
   override def apply(row: InternalRow): UnsafeRow = {
@@ -294,6 +291,8 @@ object InterpretedUnsafeProjection {
   private def getElementSize(dataType: DataType): Int = dataType match {
     case NullType | StringType | BinaryType | CalendarIntervalType |
          _: DecimalType | _: StructType | _: ArrayType | _: MapType => 8
+    case udt: UserDefinedType[_] =>
+      getElementSize(udt.sqlType)
     case _ => dataType.defaultSize
   }
 

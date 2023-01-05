@@ -41,10 +41,7 @@ class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mutable
   private[this] val buffer = new Array[Any](expressions.size)
 
   override def initialize(partitionIndex: Int): Unit = {
-    exprs.foreach(_.foreach {
-      case n: Nondeterministic => n.initialize(partitionIndex)
-      case _ =>
-    })
+    initializeExprs(exprs, partitionIndex)
   }
 
   private[this] val validExprs = expressions.zipWithIndex.filter {

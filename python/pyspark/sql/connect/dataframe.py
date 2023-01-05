@@ -22,6 +22,7 @@ from typing import (
     Optional,
     Tuple,
     Union,
+    Sequence,
     TYPE_CHECKING,
     overload,
     Callable,
@@ -35,7 +36,7 @@ import pandas
 import warnings
 from collections.abc import Iterable
 
-from pyspark import _NoValue
+from pyspark import _NoValue, SparkContext, SparkConf
 from pyspark._globals import _NoValueType
 from pyspark.sql.types import DataType, StructType, Row
 
@@ -44,7 +45,13 @@ from pyspark.sql.connect.group import GroupedData
 from pyspark.sql.connect.readwriter import DataFrameWriter
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import UnresolvedRegex
-from pyspark.sql.connect.functions import _invoke_function, col, lit, expr as sql_expression
+from pyspark.sql.connect.functions import (
+    _to_col,
+    _invoke_function,
+    col,
+    lit,
+    expr as sql_expression,
+)
 from pyspark.sql.dataframe import (
     DataFrame as PySparkDataFrame,
     DataFrameNaFunctions as PySparkDataFrameNaFunctions,
@@ -256,6 +263,8 @@ class DataFrame:
 
     groupBy.__doc__ = PySparkDataFrame.groupBy.__doc__
 
+    groupby = groupBy
+
     def rollup(self, *cols: "ColumnOrName") -> "GroupedData":
         _cols: List[Column] = []
         for c in cols:
@@ -340,18 +349,56 @@ class DataFrame:
 
     tail.__doc__ = PySparkDataFrame.tail.__doc__
 
-    def sort(self, *cols: "ColumnOrName") -> "DataFrame":
+    def _sort_cols(
+        self, cols: Sequence[Union[str, Column, List[Union[str, Column]]]], kwargs: Dict[str, Any]
+    ) -> List[Column]:
+        """Return a JVM Seq of Columns that describes the sort order"""
+        if cols is None:
+            raise ValueError("should sort by at least one column")
+
+        _cols: List[Column] = []
+        if len(cols) == 1 and isinstance(cols[0], list):
+            _cols = [_to_col(c) for c in cols[0]]
+        else:
+            _cols = [_to_col(cast("ColumnOrName", c)) for c in cols]
+
+        ascending = kwargs.get("ascending", True)
+        if isinstance(ascending, (bool, int)):
+            if not ascending:
+                _cols = [c.desc() for c in _cols]
+        elif isinstance(ascending, list):
+            _cols = [c if asc else c.desc() for asc, c in zip(ascending, _cols)]
+        else:
+            raise TypeError("ascending can only be boolean or list, but got %s" % type(ascending))
+
+        return _cols
+
+    def sort(
+        self, *cols: Union[str, Column, List[Union[str, Column]]], **kwargs: Any
+    ) -> "DataFrame":
         return DataFrame.withPlan(
-            plan.Sort(self._plan, columns=list(cols), is_global=True), session=self._session
+            plan.Sort(
+                self._plan,
+                columns=self._sort_cols(cols, kwargs),
+                is_global=True,
+            ),
+            session=self._session,
         )
 
     sort.__doc__ = PySparkDataFrame.sort.__doc__
 
     orderBy = sort
 
-    def sortWithinPartitions(self, *cols: "ColumnOrName") -> "DataFrame":
+    def sortWithinPartitions(
+        self, *cols: Union[str, Column, List[Union[str, Column]]], **kwargs: Any
+    ) -> "DataFrame":
         return DataFrame.withPlan(
-            plan.Sort(self._plan, columns=list(cols), is_global=False), session=self._session
+            plan.Sort(
+                self._plan,
+                columns=self._sort_cols(cols, kwargs),
+                is_global=False,
+            ),
+            session=self._session,
         )
 
     sortWithinPartitions.__doc__ = PySparkDataFrame.sortWithinPartitions.__doc__
@@ -478,9 +525,11 @@ class DataFrame:
 
     def hint(self, name: str, *params: Any) -> "DataFrame":
         for param in params:
-            if param is not None and not isinstance(param, (int, str)):
+            # TODO(SPARK-41887): support list type as hint parameter
+            if param is not None and not isinstance(param, (int, str, float)):
                 raise TypeError(
-                    f"param should be a int or str, but got {type(param).__name__} {param}"
+                    f"param should be a str, float or int, but got {type(param).__name__}"
+                    f" {param}"
                 )
 
         return DataFrame.withPlan(
@@ -825,11 +874,16 @@ class DataFrame:
 
     summary.__doc__ = PySparkDataFrame.summary.__doc__
 
-    def describe(self, *cols: str) -> "DataFrame":
-        _cols: List[str] = list(cols)
-        for s in _cols:
-            if not isinstance(s, str):
-                raise TypeError(f"'cols' must be list[str], but got {type(s).__name__}")
+    def describe(self, *cols: Union[str, List[str]]) -> "DataFrame":
+        if len(cols) == 1 and isinstance(cols[0], list):
+            cols = cols[0]  # type: ignore[assignment]
+
+        _cols = []
+        for column in cols:
+            if isinstance(column, str):
+                _cols.append(column)
+            else:
+                _cols.extend([s for s in column])
         return DataFrame.withPlan(
             plan.StatDescribe(child=self._plan, cols=_cols),
             session=self._session,
@@ -952,6 +1006,26 @@ class DataFrame:
 
     freqItems.__doc__ = PySparkDataFrame.freqItems.__doc__
 
+    def sampleBy(
+        self, col: "ColumnOrName", fractions: Dict[Any, float], seed: Optional[int] = None
+    ) -> "DataFrame":
+        if not isinstance(col, (Column, str)):
+            raise TypeError("col must be a string or a column, but got %r" % type(col))
+        if not isinstance(fractions, dict):
+            raise TypeError("fractions must be a dict but got %r" % type(fractions))
+        for k, v in fractions.items():
+            if not isinstance(k, (float, int, str)):
+                raise TypeError("key must be float, int, or string, but got %r" % type(k))
+            fractions[k] = float(v)
+        seed = seed if seed is not None else random.randint(0, sys.maxsize)
+
+        return DataFrame.withPlan(
+            plan.StatSampleBy(child=self._plan, col=col, fractions=fractions, seed=seed),
+            session=self._session,
+        )
+
+    sampleBy.__doc__ = PySparkDataFrame.sampleBy.__doc__
+
     def _get_alias(self) -> Optional[str]:
         p = self._plan
         while p is not None:
@@ -994,11 +1068,23 @@ class DataFrame:
         return ""
 
     def collect(self) -> List[Row]:
-        pdf = self.toPandas()
-        if pdf is not None:
-            return list(pdf.apply(lambda row: Row(**row), axis=1))
-        else:
-            return []
+        if self._plan is None:
+            raise Exception("Cannot collect on empty plan.")
+        if self._session is None:
+            raise Exception("Cannot collect on empty session.")
+        query = self._plan.to_proto(self._session.client)
+        table = self._session.client.to_table(query)
+
+        rows: List[Row] = []
+        for row in table.to_pylist():
+            _dict = {}
+            for k, v in row.items():
+                if isinstance(v, bytes):
+                    _dict[k] = bytearray(v)
+                else:
+                    _dict[k] = v
+            rows.append(Row(**_dict))
+        return rows
 
     collect.__doc__ = PySparkDataFrame.collect.__doc__
 
@@ -1344,5 +1430,95 @@ class DataFrameStatFunctions:
 
     freqItems.__doc__ = DataFrame.freqItems.__doc__
 
+    def sampleBy(
+        self, col: str, fractions: Dict[Any, float], seed: Optional[int] = None
+    ) -> DataFrame:
+        return self.df.sampleBy(col, fractions, seed)
+
+    sampleBy.__doc__ = DataFrame.sampleBy.__doc__
+
 
 DataFrameStatFunctions.__doc__ = PySparkDataFrameStatFunctions.__doc__
+
+
+def _test() -> None:
+    import os
+    import sys
+    import doctest
+    from pyspark.sql import SparkSession as PySparkSession
+    from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    if should_test_connect:
+        import pyspark.sql.connect.dataframe
+
+        globs = pyspark.sql.connect.dataframe.__dict__.copy()
+        # Works around to create a regular Spark session
+        sc = SparkContext("local[4]", "sql.connect.dataframe tests", conf=SparkConf())
+        globs["_spark"] = PySparkSession(
+            sc, options={"spark.app.name": "sql.connect.dataframe tests"}
+        )
+
+        # Spark Connect does not support RDD but the tests depend on them.
+        del pyspark.sql.connect.dataframe.DataFrame.coalesce.__doc__
+        del pyspark.sql.connect.dataframe.DataFrame.repartition.__doc__
+
+        # TODO(SPARK-41820): Fix SparkConnectException: requirement failed
+        del pyspark.sql.connect.dataframe.DataFrame.createOrReplaceGlobalTempView.__doc__
+        del pyspark.sql.connect.dataframe.DataFrame.createOrReplaceTempView.__doc__
+
+        # TODO(SPARK-41823): ambiguous column names
+        del pyspark.sql.connect.dataframe.DataFrame.drop.__doc__
+        del pyspark.sql.connect.dataframe.DataFrame.join.__doc__
+
+        # TODO(SPARK-41824): DataFrame.explain format is different
+        del pyspark.sql.connect.dataframe.DataFrame.explain.__doc__
+        del pyspark.sql.connect.dataframe.DataFrame.hint.__doc__
+
+        # TODO(SPARK-41886): The doctest output has different order
+        del pyspark.sql.connect.dataframe.DataFrame.intersect.__doc__
+
+        # TODO(SPARK-41625): Support Structured Streaming
+        del pyspark.sql.connect.dataframe.DataFrame.isStreaming.__doc__
+
+        # TODO(SPARK-41827): groupBy requires all cols be Column or str
+        del pyspark.sql.connect.dataframe.DataFrame.groupBy.__doc__
+
+        # TODO(SPARK-41830): fix sample parameters
+        del pyspark.sql.connect.dataframe.DataFrame.sample.__doc__
+
+        # TODO(SPARK-41831): fix transform to accept ColumnReference
+        del pyspark.sql.connect.dataframe.DataFrame.transform.__doc__
+
+        # TODO(SPARK-41832): fix unionByName
+        del pyspark.sql.connect.dataframe.DataFrame.unionByName.__doc__
+
+        # TODO(SPARK-41818): Support saveAsTable
+        del pyspark.sql.connect.dataframe.DataFrame.write.__doc__
+
+        # Creates a remote Spark session.
+        os.environ["SPARK_REMOTE"] = "sc://localhost"
+        globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
+
+        (failure_count, test_count) = doctest.testmod(
+            pyspark.sql.connect.dataframe,
+            globs=globs,
+            optionflags=doctest.ELLIPSIS
+            | doctest.NORMALIZE_WHITESPACE
+            | doctest.IGNORE_EXCEPTION_DETAIL,
+        )
+
+        globs["spark"].stop()
+        globs["_spark"].stop()
+        if failure_count:
+            sys.exit(-1)
+    else:
+        print(
+            f"Skipping pyspark.sql.connect.dataframe doctests: {connect_requirement_message}",
+            file=sys.stderr,
+        )
+
+
+if __name__ == "__main__":
+    _test()

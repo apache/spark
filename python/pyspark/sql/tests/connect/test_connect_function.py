@@ -18,6 +18,7 @@ import unittest
 import tempfile
 
 from pyspark.sql import SparkSession
+from pyspark.sql.types import StructType, StructField, ArrayType, IntegerType
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.utils import ReusedPySparkTestCase
@@ -446,6 +447,12 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
                 cdf.select(cfunc("b"), cfunc(cdf.c)).toPandas(),
                 sdf.select(sfunc("b"), sfunc(sdf.c)).toPandas(),
             )
+
+        # test log(arg1, arg2)
+        self.assert_eq(
+            cdf.select(CF.log(1.1, "b"), CF.log(1.2, cdf.c)).toPandas(),
+            sdf.select(SF.log(1.1, "b"), SF.log(1.2, sdf.c)).toPandas(),
+        )
 
         self.assert_eq(
             cdf.select(CF.atan2("b", cdf.c)).toPandas(),
@@ -1591,8 +1598,8 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
         for schema in [
             "a INT",
             "MAP<STRING,INT>",
-            # StructType([StructField("a", IntegerType())]),
-            # ArrayType(StructType([StructField("a", IntegerType())])),
+            StructType([StructField("a", IntegerType())]),
+            ArrayType(StructType([StructField("a", IntegerType())])),
         ]:
             self.compare_by_show(
                 cdf.select(CF.from_json(cdf.a, schema)),
@@ -1602,10 +1609,18 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
                 cdf.select(CF.from_json("a", schema)),
                 sdf.select(SF.from_json("a", schema)),
             )
+            self.compare_by_show(
+                cdf.select(CF.from_json(cdf.a, schema, {"mode": "FAILFAST"})),
+                sdf.select(SF.from_json(sdf.a, schema, {"mode": "FAILFAST"})),
+            )
+            self.compare_by_show(
+                cdf.select(CF.from_json("a", schema, {"mode": "FAILFAST"})),
+                sdf.select(SF.from_json("a", schema, {"mode": "FAILFAST"})),
+            )
 
         for schema in [
             "ARRAY<INT>",
-            # ArrayType(IntegerType()),
+            ArrayType(IntegerType()),
         ]:
             self.compare_by_show(
                 cdf.select(CF.from_json(cdf.b, schema)),
@@ -1614,6 +1629,14 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             self.compare_by_show(
                 cdf.select(CF.from_json("b", schema)),
                 sdf.select(SF.from_json("b", schema)),
+            )
+            self.compare_by_show(
+                cdf.select(CF.from_json(cdf.b, schema, {"mode": "FAILFAST"})),
+                sdf.select(SF.from_json(sdf.b, schema, {"mode": "FAILFAST"})),
+            )
+            self.compare_by_show(
+                cdf.select(CF.from_json("b", schema, {"mode": "FAILFAST"})),
+                sdf.select(SF.from_json("b", schema, {"mode": "FAILFAST"})),
             )
 
         # test get_json_object
@@ -1643,11 +1666,19 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
             cdf.select(CF.schema_of_json(CF.lit('{"a": 0}'))).toPandas(),
             sdf.select(SF.schema_of_json(SF.lit('{"a": 0}'))).toPandas(),
         )
+        self.assert_eq(
+            cdf.select(CF.schema_of_json(CF.lit('{"a": 0}'), {"mode": "FAILFAST"})).toPandas(),
+            sdf.select(SF.schema_of_json(SF.lit('{"a": 0}'), {"mode": "FAILFAST"})).toPandas(),
+        )
 
         # test to_json
         self.compare_by_show(
             cdf.select(CF.to_json(CF.struct(CF.lit("a"), CF.lit("b")))),
             sdf.select(SF.to_json(SF.struct(SF.lit("a"), SF.lit("b")))),
+        )
+        self.compare_by_show(
+            cdf.select(CF.to_json(CF.struct(CF.lit("a"), CF.lit("b")), {"mode": "FAILFAST"})),
+            sdf.select(SF.to_json(SF.struct(SF.lit("a"), SF.lit("b")), {"mode": "FAILFAST"})),
         )
 
     def test_string_functions_one_arg(self):
