@@ -16,17 +16,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2422",
-  "messageParameters" : {
-    "aggExprs" : "(count(testdata.b) AS `count(b)`)",
-    "sqlExpr" : "testdata.a"
-  },
+  "errorClass" : "MISSING_GROUP_BY",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 8,
-    "fragment" : "a"
+    "startIndex" : 1,
+    "stopIndex" : 32,
+    "fragment" : "SELECT a, COUNT(b) FROM testData"
   } ]
 }
 
@@ -57,10 +53,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
+  "errorClass" : "MISSING_AGGREGATION",
   "sqlState" : "42000",
   "messageParameters" : {
-    "expression" : "\"a\""
+    "expression" : "\"a\"",
+    "expressionAnyValue" : "\"any_value(a)\""
   }
 }
 
@@ -127,10 +124,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
+  "errorClass" : "MISSING_AGGREGATION",
   "sqlState" : "42000",
   "messageParameters" : {
-    "expression" : "\"a\""
+    "expression" : "\"a\"",
+    "expressionAnyValue" : "\"any_value(a)\""
   }
 }
 
@@ -213,7 +211,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2424",
+  "errorClass" : "GROUP_BY_AGGREGATE",
   "messageParameters" : {
     "sqlExpr" : "count(testdata.b)"
   },
@@ -243,10 +241,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
+  "errorClass" : "MISSING_AGGREGATION",
   "sqlState" : "42000",
   "messageParameters" : {
-    "expression" : "\"k\""
+    "expression" : "\"k\"",
+    "expressionAnyValue" : "\"any_value(k)\""
   }
 }
 
@@ -352,17 +351,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2422",
-  "messageParameters" : {
-    "aggExprs" : "()",
-    "sqlExpr" : "id"
-  },
+  "errorClass" : "MISSING_GROUP_BY",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 16,
-    "stopIndex" : 24,
-    "fragment" : "range(10)"
+    "startIndex" : 1,
+    "stopIndex" : 38,
+    "fragment" : "SELECT id FROM range(10) HAVING id > 0"
   } ]
 }
 
@@ -399,10 +394,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2440",
+  "errorClass" : "INVALID_WHERE_CONDITION",
   "messageParameters" : {
-    "condition" : "(max(id) > CAST(0 AS BIGINT))",
-    "invalidExprSqls" : "max(id)"
+    "condition" : "\"(max(id) > 0)\"",
+    "expressionList" : "max(id)"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -803,10 +798,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2440",
+  "errorClass" : "INVALID_WHERE_CONDITION",
   "messageParameters" : {
-    "condition" : "(count(1) > 1L)",
-    "invalidExprSqls" : "count(1)"
+    "condition" : "\"(count(1) > 1)\"",
+    "expressionList" : "count(1)"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -825,10 +820,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2440",
+  "errorClass" : "INVALID_WHERE_CONDITION",
   "messageParameters" : {
-    "condition" : "((count(1) + 1L) > 1L)",
-    "invalidExprSqls" : "count(1)"
+    "condition" : "\"((count(1) + 1) > 1)\"",
+    "expressionList" : "count(1)"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -847,10 +842,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2440",
+  "errorClass" : "INVALID_WHERE_CONDITION",
   "messageParameters" : {
-    "condition" : "(((test_agg.k = 1) OR (test_agg.k = 2)) OR (((count(1) + 1L) > 1L) OR (max(test_agg.k) > 1)))",
-    "invalidExprSqls" : "count(1), max(test_agg.k)"
+    "condition" : "\"(((k = 1) OR (k = 2)) OR (((count(1) + 1) > 1) OR (max(k) > 1)))\"",
+    "expressionList" : "count(1), max(test_agg.k)"
   },
   "queryContext" : [ {
     "objectType" : "",

@@ -36,26 +36,13 @@ import org.apache.spark.sql.types._
 /**
  * A base class for generated/interpreted predicate
  */
-abstract class BasePredicate {
+abstract class BasePredicate extends ExpressionsEvaluator {
   def eval(r: InternalRow): Boolean
-
-  /**
-   * Initializes internal states given the current partition index.
-   * This is used by nondeterministic expressions to set initial states.
-   * The default implementation does nothing.
-   */
-  def initialize(partitionIndex: Int): Unit = {}
 }
 
 case class InterpretedPredicate(expression: Expression) extends BasePredicate {
   private[this] val subExprEliminationEnabled = SQLConf.get.subexpressionEliminationEnabled
-  private[this] lazy val runtime =
-    new SubExprEvaluationRuntime(SQLConf.get.subexpressionEliminationCacheMaxEntries)
-  private[this] val expr = if (subExprEliminationEnabled) {
-    runtime.proxyExpressions(Seq(expression)).head
-  } else {
-    expression
-  }
+  private[this] val expr = prepareExpressions(Seq(expression), subExprEliminationEnabled).head
 
   override def eval(r: InternalRow): Boolean = {
     if (subExprEliminationEnabled) {
@@ -66,11 +53,7 @@ case class InterpretedPredicate(expression: Expression) extends BasePredicate {
   }
 
   override def initialize(partitionIndex: Int): Unit = {
-    super.initialize(partitionIndex)
-    expr.foreach {
-      case n: Nondeterministic => n.initialize(partitionIndex)
-      case _ =>
-    }
+    initializeExprs(Seq(expr), partitionIndex)
   }
 }
 
@@ -748,7 +731,7 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
 
   override def sqlOperator: String = "AND"
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(AND_OR)
+  final override val nodePatterns: Seq[TreePattern] = Seq(AND)
 
   // +---------+---------+---------+---------+
   // | AND     | TRUE    | FALSE   | UNKNOWN |
@@ -841,7 +824,7 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
 
   override def sqlOperator: String = "OR"
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(AND_OR)
+  final override val nodePatterns: Seq[TreePattern] = Seq(OR)
 
   // +---------+---------+---------+---------+
   // | OR      | TRUE    | FALSE   | UNKNOWN |

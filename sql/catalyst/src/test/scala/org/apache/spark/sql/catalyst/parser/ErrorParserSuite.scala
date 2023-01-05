@@ -34,7 +34,7 @@ class ErrorParserSuite extends AnalysisTest {
   test("semantic errors") {
     checkError(
       exception = parseException("select *\nfrom r\norder by q\ncluster by q"),
-      errorClass = "_LEGACY_ERROR_TEMP_0011",
+      errorClass = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
       parameters = Map.empty,
       context = ExpectedContext(fragment = "order by q\ncluster by q", start = 16, stop = 38))
   }
@@ -265,8 +265,8 @@ class ErrorParserSuite extends AnalysisTest {
     // general bad types
     checkError(
       exception = parseException("SELECT cast(1 as badtype)"),
-      errorClass = "_LEGACY_ERROR_TEMP_0030",
-      parameters = Map("dataType" -> "badtype"),
+      errorClass = "UNSUPPORTED_DATATYPE",
+      parameters = Map("typeName" -> "\"BADTYPE\""),
       context = ExpectedContext(fragment = "badtype", start = 17, stop = 23))
     // special handling on char and varchar
     checkError(

@@ -87,9 +87,10 @@ class SQLExecutionUIData(
     val details: String,
     val physicalPlanDescription: String,
     val modifiedConfigs: Map[String, String],
-    val metrics: Seq[SQLPlanMetric],
+    val metrics: collection.Seq[SQLPlanMetric],
     val submissionTime: Long,
     val completionTime: Option[Date],
+    val errorMessage: Option[String],
     @JsonDeserialize(keyAs = classOf[Integer])
     val jobs: Map[Int, JobExecutionStatus],
     @JsonDeserialize(contentAs = classOf[Integer])
@@ -100,8 +101,7 @@ class SQLExecutionUIData(
      * from the SQL listener instance.
      */
     @JsonDeserialize(keyAs = classOf[JLong])
-    val metricValues: Map[Long, String],
-    val errorMessage: Option[String]) {
+    val metricValues: Map[Long, String]) {
 
   @JsonIgnore @KVIndex("completionTime")
   private def completionTimeIndex: Long = completionTime.map(_.getTime).getOrElse(-1L)

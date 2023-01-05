@@ -24,7 +24,7 @@ import org.apache.avro.Conversions.DecimalConversion
 import org.apache.avro.file.DataFileWriter
 import org.apache.avro.generic.{GenericData, GenericDatumWriter, GenericRecord}
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkArithmeticException, SparkConf, SparkException}
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -433,10 +433,17 @@ abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
       dataFileWriter.flush()
       dataFileWriter.close()
 
-      val msg = intercept[SparkException] {
-        spark.read.format("avro").load(s"$dir.avro").collect()
-      }.getCause.getCause.getMessage
-      assert(msg.contains("Unscaled value too large for precision"))
+      checkError(
+        exception = intercept[SparkException] {
+          spark.read.format("avro").load(s"$dir.avro").collect()
+        }.getCause.getCause.asInstanceOf[SparkArithmeticException],
+        errorClass = "NUMERIC_VALUE_OUT_OF_RANGE",
+        parameters = Map(
+          "value" -> "0",
+          "precision" -> "4",
+          "scale" -> "2",
+          "config" -> "\"spark.sql.ansi.enabled\"")
+      )
     }
   }
 }

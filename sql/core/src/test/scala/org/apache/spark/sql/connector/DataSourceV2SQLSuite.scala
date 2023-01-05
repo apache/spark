@@ -29,11 +29,15 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchDatabaseException, NoSuchNamespaceException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.plans.logical.ColumnStat
+import org.apache.spark.sql.catalyst.statsEstimation.StatsEstimationTestBase
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
+import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
@@ -45,7 +49,7 @@ import org.apache.spark.unsafe.types.UTF8String
 
 abstract class DataSourceV2SQLSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = true)
-  with DeleteFromTests with DatasourceV2SQLBase {
+  with DeleteFromTests with DatasourceV2SQLBase with StatsEstimationTestBase {
 
   protected val v2Source = classOf[FakeV2Provider].getName
   override protected val v2Format = v2Source
@@ -68,7 +72,11 @@ abstract class DataSourceV2SQLSuite
   }
 }
 
-class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableTests {
+class DataSourceV2SQLSuiteV1Filter
+  extends DataSourceV2SQLSuite
+  with AlterTableTests
+  with QueryErrorsBase {
+
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   override protected val catalogAndNamespace = "testcat.ns1.ns2."
@@ -1395,69 +1403,51 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         checkError(
           exception = analysisException(s"CREATE TABLE t ($c0 INT, $c1 INT) USING $v2Source"),
-          errorClass = "_LEGACY_ERROR_TEMP_1233",
-          parameters = Map(
-            "colType" -> "in the table definition of default.t",
-            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
+          errorClass = "COLUMN_ALREADY_EXISTS",
+          parameters = Map("columnName" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
         checkError(
           exception = analysisException(
             s"CREATE TABLE testcat.t ($c0 INT, $c1 INT) USING $v2Source"),
-          errorClass = "_LEGACY_ERROR_TEMP_1233",
-          parameters = Map(
-            "colType" -> "in the table definition of t",
-            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
+          errorClass = "COLUMN_ALREADY_EXISTS",
+          parameters = Map("columnName" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
         checkError(
           exception = analysisException(
             s"CREATE OR REPLACE TABLE t ($c0 INT, $c1 INT) USING $v2Source"),
-          errorClass = "_LEGACY_ERROR_TEMP_1233",
-          parameters = Map(
-            "colType" -> "in the table definition of default.t",
-            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
+          errorClass = "COLUMN_ALREADY_EXISTS",
+          parameters = Map("columnName" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
         checkError(
           exception = analysisException(
             s"CREATE OR REPLACE TABLE testcat.t ($c0 INT, $c1 INT) USING $v2Source"),
-          errorClass = "_LEGACY_ERROR_TEMP_1233",
-          parameters = Map(
-            "colType" -> "in the table definition of t",
-            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
+          errorClass = "COLUMN_ALREADY_EXISTS",
+          parameters = Map("columnName" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
       }
     }
   }
 
   test("tableCreation: duplicate nested column names in the table definition") {
-    val errorMsg = "Found duplicate column(s) in the table definition of"
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         checkError(
           exception = analysisException(
             s"CREATE TABLE t (d struct<$c0: INT, $c1: INT>) USING $v2Source"),
-          errorClass = "_LEGACY_ERROR_TEMP_1233",
-          parameters = Map(
-            "colType" -> "in the table definition of default.t",
-            "duplicateCol" -> s"`d.${c0.toLowerCase(Locale.ROOT)}`"
-          )
+          errorClass = "COLUMN_ALREADY_EXISTS",
+          parameters = Map("columnName" -> toSQLId(s"d.${c0.toLowerCase(Locale.ROOT)}"))
         )
         checkError(
           exception = analysisException(
             s"CREATE TABLE testcat.t (d struct<$c0: INT, $c1: INT>) USING $v2Source"),
-          errorClass = "_LEGACY_ERROR_TEMP_1233",
-          parameters = Map(
-            "colType" -> "in the table definition of t",
-            "duplicateCol" -> s"`d.${c0.toLowerCase(Locale.ROOT)}`"))
+          errorClass = "COLUMN_ALREADY_EXISTS",
+          parameters = Map("columnName" -> toSQLId(s"d.${c0.toLowerCase(Locale.ROOT)}")))
         checkError(
           exception = analysisException(
             s"CREATE OR REPLACE TABLE t (d struct<$c0: INT, $c1: INT>) USING $v2Source"),
-          errorClass = "_LEGACY_ERROR_TEMP_1233",
-          parameters = Map(
-            "colType" -> "in the table definition of default.t",
-            "duplicateCol" -> s"`d.${c0.toLowerCase(Locale.ROOT)}`"))
+          errorClass = "COLUMN_ALREADY_EXISTS",
+          parameters = Map("columnName" -> toSQLId(s"d.${c0.toLowerCase(Locale.ROOT)}")))
         checkError(
           exception = analysisException(
             s"CREATE OR REPLACE TABLE testcat.t (d struct<$c0: INT, $c1: INT>) USING $v2Source"),
-          errorClass = "_LEGACY_ERROR_TEMP_1233",
-          parameters = Map(
-            "colType" -> "in the table definition of t",
-            "duplicateCol" -> s"`d.${c0.toLowerCase(Locale.ROOT)}`"))
+          errorClass = "COLUMN_ALREADY_EXISTS",
+          parameters = Map("columnName" -> toSQLId(s"d.${c0.toLowerCase(Locale.ROOT)}")))
       }
     }
   }
@@ -1538,34 +1528,27 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
           exception = analysisException(
             s"CREATE TABLE t ($c0 INT) USING $v2Source " +
               s"CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS"),
-          errorClass = "_LEGACY_ERROR_TEMP_1233",
+          errorClass = "COLUMN_ALREADY_EXISTS",
           parameters = Map(
-            "colType" -> "in the bucket definition",
-            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
+            "columnName" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
         checkError(
           exception = analysisException(
             s"CREATE TABLE testcat.t ($c0 INT) USING $v2Source " +
               s"CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS"),
-          errorClass = "_LEGACY_ERROR_TEMP_1233",
-          parameters = Map(
-            "colType" -> "in the bucket definition",
-            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
+          errorClass = "COLUMN_ALREADY_EXISTS",
+          parameters = Map("columnName" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
         checkError(
           exception = analysisException(
             s"CREATE OR REPLACE TABLE t ($c0 INT) USING $v2Source " +
               s"CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS"),
-          errorClass = "_LEGACY_ERROR_TEMP_1233",
-          parameters = Map(
-            "colType" -> "in the bucket definition",
-            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
+          errorClass = "COLUMN_ALREADY_EXISTS",
+          parameters = Map("columnName" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
         checkError(
           exception = analysisException(
             s"CREATE OR REPLACE TABLE testcat.t ($c0 INT) USING $v2Source " +
               s"CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS"),
-          errorClass = "_LEGACY_ERROR_TEMP_1233",
-          parameters = Map(
-            "colType" -> "in the bucket definition",
-            "duplicateCol" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
+          errorClass = "COLUMN_ALREADY_EXISTS",
+          parameters = Map("columnName" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
       }
     }
   }
@@ -2676,7 +2659,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
         exception = intercept[SparkException] {
           sql(s"SELECT * FROM t TIMESTAMP AS OF ($subquery4)").collect()
         },
-        errorClass = "MULTI_VALUE_SUBQUERY_ERROR",
+        errorClass = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
         parameters = Map.empty,
         ExpectedContext(
           fragment = "(SELECT * FROM VALUES (1), (2))",
@@ -2686,7 +2669,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
         exception = intercept[SparkException] {
           sql(s"SELECT * FROM t TIMESTAMP AS OF (SELECT ($subquery4))").collect()
         },
-        errorClass = "MULTI_VALUE_SUBQUERY_ERROR",
+        errorClass = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
         parameters = Map.empty,
         ExpectedContext(
           fragment = "(SELECT * FROM VALUES (1), (2))",
@@ -2726,6 +2709,88 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
       assert(properties.get(s"${TableCatalog.OPTION_PREFIX}to") == "1")
       assert(properties.get("prop1") == "1")
       assert(properties.get("prop2") == "2")
+    }
+  }
+
+  test("Overwrite: overwrite by expression: True") {
+    val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
+    df.createOrReplaceTempView("source")
+    val df2 = spark.createDataFrame(Seq((4L, "d"), (5L, "e"), (6L, "f"))).toDF("id", "data")
+    df2.createOrReplaceTempView("source2")
+
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(
+        s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      spark.sql(s"INSERT INTO TABLE $t SELECT * FROM source")
+
+      checkAnswer(
+        spark.table(s"$t"),
+        Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
+
+      spark.sql(s"INSERT INTO $t REPLACE WHERE TRUE SELECT * FROM source2")
+      checkAnswer(
+        spark.table(s"$t"),
+        Seq(Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
+    }
+  }
+
+  test("Overwrite: overwrite by expression: id = 3") {
+    val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
+    df.createOrReplaceTempView("source")
+    val df2 = spark.createDataFrame(Seq((4L, "d"), (5L, "e"), (6L, "f"))).toDF("id", "data")
+    df2.createOrReplaceTempView("source2")
+
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(
+        s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      spark.sql(s"INSERT INTO TABLE $t SELECT * FROM source")
+
+      checkAnswer(
+        spark.table(s"$t"),
+        Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
+
+      spark.sql(s"INSERT INTO $t REPLACE WHERE id = 3 SELECT * FROM source2")
+      checkAnswer(
+        spark.table(s"$t"),
+        Seq(Row(1L, "a"), Row(2L, "b"), Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
+    }
+  }
+
+  test("SPARK-41154: Incorrect relation caching for queries with time travel spec") {
+    sql("use testcat")
+    val t1 = "testcat.t1"
+    val t2 = "testcat.t2"
+    withTable(t1, t2) {
+      sql(s"CREATE TABLE $t1 USING foo AS SELECT 1 as c")
+      sql(s"CREATE TABLE $t2 USING foo AS SELECT 2 as c")
+      assert(
+        sql("""
+              |SELECT * FROM t VERSION AS OF '1'
+              |UNION ALL
+              |SELECT * FROM t VERSION AS OF '2'
+              |""".stripMargin
+        ).collect() === Array(Row(1), Row(2)))
+    }
+  }
+
+  test("SPARK-41378: test column stats") {
+    spark.sql("CREATE TABLE testcat.test (id bigint NOT NULL, data string)")
+    spark.sql("INSERT INTO testcat.test values (1, 'test1'), (2, null), (3, null)," +
+      " (4, null), (5, 'test5')")
+    val df = spark.sql("select * from testcat.test")
+
+    val expectedColumnStats = Seq(
+      "id" -> ColumnStat(Some(5), None, None, Some(0), None, None, None, 2),
+      "data" -> ColumnStat(Some(3), None, None, Some(3), None, None, None, 2))
+    df.queryExecution.optimizedPlan.collect {
+      case scan: DataSourceV2ScanRelation =>
+        val stats = scan.stats
+        assert(stats.sizeInBytes == 200)
+        assert(stats.rowCount.get == 5)
+        assert(stats.attributeStats ==
+          toAttributeMap(expectedColumnStats, df.queryExecution.optimizedPlan))
     }
   }
 

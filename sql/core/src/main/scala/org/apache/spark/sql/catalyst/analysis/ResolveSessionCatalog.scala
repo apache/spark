@@ -134,7 +134,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     case SetNamespaceLocation(DatabaseInSessionCatalog(db), location) if conf.useV1Command =>
       if (StringUtils.isEmpty(location)) {
-        throw QueryExecutionErrors.unsupportedEmptyLocationError()
+        throw QueryExecutionErrors.invalidEmptyLocationError(location)
       }
       AlterDatabaseSetLocationCommand(db, location)
 
@@ -155,7 +155,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case DescribeColumn(ResolvedV1TableIdentifier(ident), column, isExtended, output) =>
       column match {
         case u: UnresolvedAttribute =>
-          throw QueryCompilationErrors.columnDoesNotExistError(u.name)
+          throw QueryCompilationErrors.columnNotFoundError(u.name)
         case a: Attribute =>
           DescribeColumnCommand(ident, a.qualifier :+ a.name, isExtended, output)
         case Alias(child, _) =>
@@ -178,7 +178,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         c
       }
 
-    case c @ CreateTableAsSelect(ResolvedV1Identifier(ident), _, _, _, writeOptions, _) =>
+    case c @ CreateTableAsSelect(ResolvedV1Identifier(ident), _, _, _, writeOptions, _, _) =>
       val (storageFormat, provider) = getStorageFormatAndProvider(
         c.tableSpec.provider,
         c.tableSpec.options ++ writeOptions,
@@ -211,7 +211,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         c
       }
 
-    case c @ ReplaceTableAsSelect(ResolvedV1Identifier(ident), _, _, _, _, _) =>
+    case c @ ReplaceTableAsSelect(ResolvedV1Identifier(ident), _, _, _, _, _, _) =>
       val provider = c.tableSpec.provider.getOrElse(conf.defaultDataSourceName)
       if (!isV2Provider(provider)) {
         throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(
@@ -243,7 +243,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       val location = c.properties.get(SupportsNamespaces.PROP_LOCATION)
       val newProperties = c.properties -- CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES
       if (location.isDefined && location.get.isEmpty) {
-        throw QueryExecutionErrors.unsupportedEmptyLocationError()
+        throw QueryExecutionErrors.invalidEmptyLocationError(location.get)
       }
       CreateDatabaseCommand(name, c.ifNotExists, location, comment, newProperties)
 
@@ -545,7 +545,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     } else {
       CatalogTableType.MANAGED
     }
-    val (partitionColumns, maybeBucketSpec) = partitioning.toSeq.convertTransforms
+    val (partitionColumns, maybeBucketSpec) = partitioning.convertTransforms
 
     CatalogTable(
       identifier = table,

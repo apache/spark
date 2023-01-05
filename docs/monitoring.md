@@ -342,6 +342,16 @@ Security options for the Spark History Server are covered more detail in the
     <td>2.3.0</td>
   </tr>
   <tr>
+    <td>spark.history.store.serializer</td>
+    <td>JSON</td>
+    <td>
+        Serializer for writing/reading in-memory UI objects to/from disk-based KV Store; JSON or PROTOBUF.
+        JSON serializer is the only choice before Spark 3.4.0, thus it is the default value.
+        PROTOBUF serializer is fast and compact, compared to the JSON serializer.
+    </td>
+    <td>3.4.0</td>
+  </tr>
+  <tr>
     <td>spark.history.custom.executor.log.url</td>
     <td>(none)</td>
     <td>
@@ -628,17 +638,6 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     <code>?details=[true (default) | false]</code> lists/hides metric details in addition to given query details.
     <br>
     <code>?planDescription=[true (default) | false]</code> enables/disables Physical <code>planDescription</code> on demand for the given query when Physical Plan size is high.
-    </td>
-  </tr>
-  <tr>
-    <td><code>/applications/[app-id]/diagnostics/sql/[execution-id]</code></td>
-    <td>Diagnostic for the given query, including:
-    <br>
-    1. plan change history of adaptive execution
-    <br>
-    2. physical plan description with unlimited fields
-    <br>
-    This API requires setting <code>spark.appStatusStore.diskStoreDir</code> for storing the diagnostic information.
     </td>
   </tr>
   <tr>

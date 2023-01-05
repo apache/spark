@@ -34,6 +34,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.execution.aggregate.AggUtils
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.command._
+import org.apache.spark.sql.execution.datasources.{WriteFiles, WriteFilesExec}
 import org.apache.spark.sql.execution.exchange.{REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.python._
 import org.apache.spark.sql.execution.streaming._
@@ -894,6 +895,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         throw QueryExecutionErrors.ddlUnsupportedTemporarilyError("MERGE INTO TABLE")
       case logical.CollectMetrics(name, metrics, child) =>
         execution.CollectMetricsExec(name, metrics, planLater(child)) :: Nil
+      case WriteFiles(child) =>
+        WriteFilesExec(planLater(child)) :: Nil
       case _ => Nil
     }
   }

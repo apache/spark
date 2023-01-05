@@ -611,7 +611,7 @@ case class JsonToStructs(
         ExprUtils.verifyColumnNameOfCorruptRecord(s, parsedOptions.columnNameOfCorruptRecord)
         (s, StructType(s.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)))
       case other =>
-        (StructType(StructField("value", other) :: Nil), other)
+        (StructType(Array(StructField("value", other))), other)
     }
 
     val rawParser = new JacksonParser(actualSchema, parsedOptions, allowArrayAsStructs = false)

@@ -25,11 +25,12 @@ import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period, ZoneId}
 import java.util.Locale
 
 import com.fasterxml.jackson.core.JsonFactory
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 
-import org.apache.spark.{SparkConf, SparkException, SparkUpgradeException, TestUtils}
+import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkUpgradeException, TestUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{functions => F, _}
 import org.apache.spark.sql.catalyst.json._
@@ -3032,10 +3033,12 @@ abstract class JsonSuite
             checkAnswer(readback.filter($"AAA" === 0 && $"bbb" === 1), Seq(Row(0, 1)))
             checkAnswer(readback.filter($"AAA" === 2 && $"bbb" === 3), Seq())
             // Schema inferring
-            val errorMsg = intercept[AnalysisException] {
-              spark.read.json(path.getCanonicalPath).collect()
-            }.getMessage
-            assert(errorMsg.contains("Found duplicate column(s) in the data schema"))
+            checkError(
+              exception = intercept[AnalysisException] {
+                spark.read.json(path.getCanonicalPath).collect()
+              },
+              errorClass = "COLUMN_ALREADY_EXISTS",
+              parameters = Map("columnName" -> "`aaa`"))
           }
           withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
             val readback = spark.read.schema("aaa integer, BBB integer")
@@ -3190,10 +3193,17 @@ abstract class JsonSuite
   }
 
   test("SPARK-36379: proceed parsing with root nulls in permissive mode") {
-    assert(intercept[SparkException] {
+    val exception = intercept[SparkException] {
       spark.read.option("mode", "failfast")
         .schema("a string").json(Seq("""[{"a": "str"}, null]""").toDS).collect()
-    }.getMessage.contains("Malformed records are detected"))
+    }
+    assert(exception.getMessage.contains("Malformed records are detected"))
+
+    checkError(
+      exception = ExceptionUtils.getRootCause(exception).asInstanceOf[SparkRuntimeException],
+      errorClass = "INVALID_JSON_ROOT_FIELD",
+      parameters = Map.empty
+    )
 
     // Permissive modes should proceed parsing malformed records (null).
     // Here, since an array fails to parse in the middle, we will return one row.
@@ -3391,14 +3401,25 @@ abstract class JsonSuite
         .repartition(1)
         .write.text(path.getAbsolutePath)
 
-      val df = spark.read
-        .schema("a struct<x: int, y: struct<x: int>>, b struct<x: int>")
-        .json(path.getAbsolutePath)
+      for (enablePartialResults <- Seq(true, false)) {
+        withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> s"$enablePartialResults") {
+          val df = spark.read
+            .schema("a struct<x: int, y: struct<x: int>>, b struct<x: int>")
+            .json(path.getAbsolutePath)
 
-      checkAnswer(
-        df,
-        Seq(Row(null, Row(1)), Row(Row(2, null), Row(2)))
-      )
+          if (enablePartialResults) {
+            checkAnswer(
+              df,
+              Seq(Row(null, Row(1)), Row(Row(2, null), Row(2)))
+            )
+          } else {
+            checkAnswer(
+              df,
+              Seq(Row(null, null), Row(Row(2, null), Row(2)))
+            )
+          }
+        }
+      }
     }
   }
 

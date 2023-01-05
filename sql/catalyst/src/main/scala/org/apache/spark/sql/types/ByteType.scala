@@ -21,6 +21,7 @@ import scala.math.{Integral, Numeric, Ordering}
 import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.annotation.Stable
+import org.apache.spark.sql.catalyst.types.{PhysicalByteType, PhysicalDataType}
 
 /**
  * The data type representing `Byte` values. Please use the singleton `DataTypes.ByteType`.
@@ -43,6 +44,8 @@ class ByteType private() extends IntegralType {
    * The default size of a value of the ByteType is 1 byte.
    */
   override def defaultSize: Int = 1
+
+  override def physicalDataType: PhysicalDataType = PhysicalByteType
 
   override def simpleString: String = "tinyint"
 

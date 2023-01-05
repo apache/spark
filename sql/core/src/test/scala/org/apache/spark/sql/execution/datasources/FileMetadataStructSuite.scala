@@ -277,8 +277,8 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
     val expectedSchema = new StructType()
       .add(StructField("myName", StringType))
       .add(StructField("myAge", IntegerType))
-      .add(StructField("myFileName", StringType))
-      .add(StructField("myFileSize", LongType))
+      .add(StructField("myFileName", StringType, nullable = false))
+      .add(StructField("myFileSize", LongType, nullable = false))
 
     assert(aliasDF.schema.fields.toSet == expectedSchema.fields.toSet)
 
@@ -447,7 +447,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
   metadataColumnsTest("prune metadata schema in projects", schema) { (df, f0, f1) =>
     val prunedDF = df.select("name", "age", "info.id", METADATA_FILE_NAME)
     val fileSourceScanMetaCols = prunedDF.queryExecution.sparkPlan.collectFirst {
-      case p: FileSourceScanExec => p.metadataColumns
+      case p: FileSourceScanExec => p.fileConstantMetadataColumns
     }.get
     assert(fileSourceScanMetaCols.size == 1)
     assert(fileSourceScanMetaCols.head.name == "file_name")
@@ -464,7 +464,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       .where(col(METADATA_FILE_PATH).contains("data/f0"))
 
     val fileSourceScanMetaCols = prunedDF.queryExecution.sparkPlan.collectFirst {
-      case p: FileSourceScanExec => p.metadataColumns
+      case p: FileSourceScanExec => p.fileConstantMetadataColumns
     }.get
     assert(fileSourceScanMetaCols.size == 1)
     assert(fileSourceScanMetaCols.head.name == "file_path")
@@ -480,7 +480,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       .where(col(METADATA_FILE_PATH).contains("data/f0"))
 
     val fileSourceScanMetaCols = prunedDF.queryExecution.sparkPlan.collectFirst {
-      case p: FileSourceScanExec => p.metadataColumns
+      case p: FileSourceScanExec => p.fileConstantMetadataColumns
     }.get
     assert(fileSourceScanMetaCols.size == 2)
     assert(fileSourceScanMetaCols.map(_.name).toSet == Set("file_size", "file_path"))
@@ -600,7 +600,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       val df2 = spark.read.format("json")
         .load(dir.getCanonicalPath + "/target/new-streaming-data-join")
       // Verify self-join results
-      assert(streamQuery2.lastProgress.numInputRows == 4L)
+      assert(streamQuery2.lastProgress.numInputRows == 2L)
       assert(df2.count() == 2L)
       assert(df2.select("*").columns.toSet == Set("name", "age", "info", "_metadata"))
     }
@@ -653,5 +653,28 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
         }
       }
     }
+  }
+
+  metadataColumnsTest("SPARK-41151: consistent _metadata nullability " +
+    "between analyzed and executed", schema) { (df, _, _) =>
+    val queryExecution = df.select("_metadata").queryExecution
+    val analyzedSchema = queryExecution.analyzed.schema
+    val executedSchema = queryExecution.executedPlan.schema
+    // For stateful streaming, we store the schema in the state store
+    // and check consistency across batches.
+    // To avoid state schema compatibility mismatched,
+    // we should keep nullability consistent for _metadata struct
+    assert(analyzedSchema.fields.head.name == "_metadata")
+    assert(executedSchema.fields.head.name == "_metadata")
+
+    // Metadata struct is not nullable
+    assert(!analyzedSchema.fields.head.nullable)
+    assert(analyzedSchema.fields.head.nullable == executedSchema.fields.head.nullable)
+
+    // All sub-fields all not nullable
+    val analyzedStruct = analyzedSchema.fields.head.dataType.asInstanceOf[StructType]
+    val executedStruct = executedSchema.fields.head.dataType.asInstanceOf[StructType]
+    assert(analyzedStruct.fields.forall(!_.nullable), analyzedStruct.fields.mkString(", "))
+    assert(executedStruct.fields.forall(!_.nullable), executedStruct.fields.mkString(", "))
   }
 }

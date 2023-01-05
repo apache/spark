@@ -261,6 +261,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    * {{{
    *   INSERT OVERWRITE TABLE tableIdentifier [partitionSpec [IF NOT EXISTS]]? [identifierList]
    *   INSERT INTO [TABLE] tableIdentifier [partitionSpec]  [identifierList]
+   *   INSERT INTO [TABLE] tableIdentifier REPLACE whereClause
    *   INSERT OVERWRITE [LOCAL] DIRECTORY STRING [rowFormat] [createFileFormat]
    *   INSERT OVERWRITE [LOCAL] DIRECTORY [STRING] tableProvider [OPTIONS tablePropertyList]
    * }}}
@@ -288,6 +289,11 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
           query,
           overwrite = true,
           ifPartitionNotExists)
+      case ctx: InsertIntoReplaceWhereContext =>
+        OverwriteByExpression.byPosition(
+          createUnresolvedRelation(ctx.multipartIdentifier),
+          query,
+          expression(ctx.whereClause().booleanExpression()))
       case dir: InsertOverwriteDirContext =>
         val (isLocal, storage, provider) = visitInsertOverwriteDir(dir)
         InsertIntoDir(isLocal, storage, provider, query, overwrite = true)
@@ -908,7 +914,11 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    */
   override def visitFromClause(ctx: FromClauseContext): LogicalPlan = withOrigin(ctx) {
     val from = ctx.relation.asScala.foldLeft(null: LogicalPlan) { (left, relation) =>
-      val right = plan(relation.relationPrimary)
+      val right = if (conf.ansiRelationPrecedence) {
+        visitRelation(relation)
+      } else {
+        plan(relation.relationPrimary)
+      }
       val join = right.optionalMap(left) { (left, right) =>
         if (relation.LATERAL != null) {
           if (!relation.relationPrimary.isInstanceOf[AliasedQueryContext]) {
@@ -919,7 +929,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
           Join(left, right, Inner, None, JoinHint.NONE)
         }
       }
-      withJoinRelations(join, relation)
+      if (conf.ansiRelationPrecedence) join else withRelationExtensions(relation, join)
     }
     if (ctx.pivotClause() != null) {
       if (ctx.unpivotClause() != null) {
@@ -1253,60 +1263,71 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    * }}}
    */
   override def visitRelation(ctx: RelationContext): LogicalPlan = withOrigin(ctx) {
-    withJoinRelations(plan(ctx.relationPrimary), ctx)
+    withRelationExtensions(ctx, plan(ctx.relationPrimary))
+  }
+
+  private def withRelationExtensions(ctx: RelationContext, query: LogicalPlan): LogicalPlan = {
+    ctx.relationExtension().asScala.foldLeft(query) { (left, extension) =>
+      if (extension.joinRelation() != null) {
+        withJoinRelation(extension.joinRelation(), left)
+      } else if (extension.pivotClause() != null) {
+        withPivot(extension.pivotClause(), left)
+      } else {
+        assert(extension.unpivotClause() != null)
+        withUnpivot(extension.unpivotClause(), left)
+      }
+    }
   }
 
   /**
-   * Join one more [[LogicalPlan]]s to the current logical plan.
+   * Join one more [[LogicalPlan]] to the current logical plan.
    */
-  private def withJoinRelations(base: LogicalPlan, ctx: RelationContext): LogicalPlan = {
-    ctx.joinRelation.asScala.foldLeft(base) { (left, join) =>
-      withOrigin(join) {
-        val baseJoinType = join.joinType match {
-          case null => Inner
-          case jt if jt.CROSS != null => Cross
-          case jt if jt.FULL != null => FullOuter
-          case jt if jt.SEMI != null => LeftSemi
-          case jt if jt.ANTI != null => LeftAnti
-          case jt if jt.LEFT != null => LeftOuter
-          case jt if jt.RIGHT != null => RightOuter
-          case _ => Inner
-        }
+  private def withJoinRelation(ctx: JoinRelationContext, base: LogicalPlan): LogicalPlan = {
+    withOrigin(ctx) {
+      val baseJoinType = ctx.joinType match {
+        case null => Inner
+        case jt if jt.CROSS != null => Cross
+        case jt if jt.FULL != null => FullOuter
+        case jt if jt.SEMI != null => LeftSemi
+        case jt if jt.ANTI != null => LeftAnti
+        case jt if jt.LEFT != null => LeftOuter
+        case jt if jt.RIGHT != null => RightOuter
+        case _ => Inner
+      }
 
-        if (join.LATERAL != null && !join.right.isInstanceOf[AliasedQueryContext]) {
-          throw QueryParsingErrors.invalidLateralJoinRelationError(join.right)
-        }
+      if (ctx.LATERAL != null && !ctx.right.isInstanceOf[AliasedQueryContext]) {
+        throw QueryParsingErrors.invalidLateralJoinRelationError(ctx.right)
+      }
 
-        // Resolve the join type and join condition
-        val (joinType, condition) = Option(join.joinCriteria) match {
-          case Some(c) if c.USING != null =>
-            if (join.LATERAL != null) {
-              throw QueryParsingErrors.lateralJoinWithUsingJoinUnsupportedError(ctx)
-            }
-            (UsingJoin(baseJoinType, visitIdentifierList(c.identifierList)), None)
-          case Some(c) if c.booleanExpression != null =>
-            (baseJoinType, Option(expression(c.booleanExpression)))
-          case Some(c) =>
-            throw new IllegalStateException(s"Unimplemented joinCriteria: $c")
-          case None if join.NATURAL != null =>
-            if (join.LATERAL != null) {
-              throw QueryParsingErrors.lateralJoinWithNaturalJoinUnsupportedError(ctx)
-            }
-            if (baseJoinType == Cross) {
-              throw QueryParsingErrors.naturalCrossJoinUnsupportedError(ctx)
-            }
-            (NaturalJoin(baseJoinType), None)
-          case None =>
-            (baseJoinType, None)
-        }
-        if (join.LATERAL != null) {
-          if (!Seq(Inner, Cross, LeftOuter).contains(joinType)) {
-            throw QueryParsingErrors.unsupportedLateralJoinTypeError(ctx, joinType.sql)
+      // Resolve the join type and join condition
+      val (joinType, condition) = Option(ctx.joinCriteria) match {
+        case Some(c) if c.USING != null =>
+          if (ctx.LATERAL != null) {
+            throw QueryParsingErrors.lateralJoinWithUsingJoinUnsupportedError(ctx)
           }
-          LateralJoin(left, LateralSubquery(plan(join.right)), joinType, condition)
-        } else {
-          Join(left, plan(join.right), joinType, condition, JoinHint.NONE)
+          (UsingJoin(baseJoinType, visitIdentifierList(c.identifierList)), None)
+        case Some(c) if c.booleanExpression != null =>
+          (baseJoinType, Option(expression(c.booleanExpression)))
+        case Some(c) =>
+          throw new IllegalStateException(s"Unimplemented joinCriteria: $c")
+        case None if ctx.NATURAL != null =>
+          if (ctx.LATERAL != null) {
+            throw QueryParsingErrors.lateralJoinWithNaturalJoinUnsupportedError(ctx)
+          }
+          if (baseJoinType == Cross) {
+            throw QueryParsingErrors.naturalCrossJoinUnsupportedError(ctx)
+          }
+          (NaturalJoin(baseJoinType), None)
+        case None =>
+          (baseJoinType, None)
+      }
+      if (ctx.LATERAL != null) {
+        if (!Seq(Inner, Cross, LeftOuter).contains(joinType)) {
+          throw QueryParsingErrors.unsupportedLateralJoinTypeError(ctx, joinType.sql)
         }
+        LateralJoin(base, LateralSubquery(plan(ctx.right)), joinType, condition)
+      } else {
+        Join(base, plan(ctx.right), joinType, condition, JoinHint.NONE)
       }
     }
   }
@@ -2358,76 +2379,72 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       specialTs.getOrElse(toLiteral(stringToTimestamp(_, zoneId), TimestampType))
     }
 
-    try {
-      valueType match {
-        case "DATE" =>
-          val zoneId = getZoneId(conf.sessionLocalTimeZone)
-          val specialDate = convertSpecialDate(value, zoneId).map(Literal(_, DateType))
-          specialDate.getOrElse(toLiteral(stringToDate, DateType))
-        case "TIMESTAMP_NTZ" =>
-          convertSpecialTimestampNTZ(value, getZoneId(conf.sessionLocalTimeZone))
-            .map(Literal(_, TimestampNTZType))
-            .getOrElse(toLiteral(stringToTimestampWithoutTimeZone, TimestampNTZType))
-        case "TIMESTAMP_LTZ" =>
-          constructTimestampLTZLiteral(value)
-        case "TIMESTAMP" =>
-          SQLConf.get.timestampType match {
-            case TimestampNTZType =>
-              convertSpecialTimestampNTZ(value, getZoneId(conf.sessionLocalTimeZone))
-                .map(Literal(_, TimestampNTZType))
-                .getOrElse {
-                  val containsTimeZonePart =
-                    DateTimeUtils.parseTimestampString(UTF8String.fromString(value))._2.isDefined
-                  // If the input string contains time zone part, return a timestamp with local time
-                  // zone literal.
-                  if (containsTimeZonePart) {
-                    constructTimestampLTZLiteral(value)
-                  } else {
-                    toLiteral(stringToTimestampWithoutTimeZone, TimestampNTZType)
-                  }
+    valueType match {
+      case "DATE" =>
+        val zoneId = getZoneId(conf.sessionLocalTimeZone)
+        val specialDate = convertSpecialDate(value, zoneId).map(Literal(_, DateType))
+        specialDate.getOrElse(toLiteral(stringToDate, DateType))
+      case "TIMESTAMP_NTZ" =>
+        convertSpecialTimestampNTZ(value, getZoneId(conf.sessionLocalTimeZone))
+          .map(Literal(_, TimestampNTZType))
+          .getOrElse(toLiteral(stringToTimestampWithoutTimeZone, TimestampNTZType))
+      case "TIMESTAMP_LTZ" =>
+        constructTimestampLTZLiteral(value)
+      case "TIMESTAMP" =>
+        SQLConf.get.timestampType match {
+          case TimestampNTZType =>
+            convertSpecialTimestampNTZ(value, getZoneId(conf.sessionLocalTimeZone))
+              .map(Literal(_, TimestampNTZType))
+              .getOrElse {
+                val containsTimeZonePart =
+                  DateTimeUtils.parseTimestampString(UTF8String.fromString(value))._2.isDefined
+                // If the input string contains time zone part, return a timestamp with local time
+                // zone literal.
+                if (containsTimeZonePart) {
+                  constructTimestampLTZLiteral(value)
+                } else {
+                  toLiteral(stringToTimestampWithoutTimeZone, TimestampNTZType)
                 }
+              }
 
-            case TimestampType =>
-              constructTimestampLTZLiteral(value)
-          }
+          case TimestampType =>
+            constructTimestampLTZLiteral(value)
+        }
 
-        case "INTERVAL" =>
-          val interval = try {
-            IntervalUtils.stringToInterval(UTF8String.fromString(value))
-          } catch {
-            case e: IllegalArgumentException =>
-              val ex = QueryParsingErrors.cannotParseIntervalValueError(value, ctx)
-              ex.setStackTrace(e.getStackTrace)
-              throw ex
-          }
-          if (!conf.legacyIntervalEnabled) {
-            val units = value
-              .split("\\s")
-              .map(_.toLowerCase(Locale.ROOT).stripSuffix("s"))
-              .filter(s => s != "interval" && s.matches("[a-z]+"))
-            constructMultiUnitsIntervalLiteral(ctx, interval, units)
-          } else {
-            Literal(interval, CalendarIntervalType)
-          }
-        case "X" =>
-          val padding = if (value.length % 2 != 0) "0" else ""
-          try {
-            Literal(Hex.decodeHex(padding + value))
-          } catch {
-            case _: DecoderException =>
-              throw new IllegalArgumentException(
-                s"contains illegal character for hexBinary: $padding$value");
-          }
-        case other =>
-          throw QueryParsingErrors.literalValueTypeUnsupportedError(
-            unsupportedType = other,
-            supportedTypes =
-              Seq("DATE", "TIMESTAMP_NTZ", "TIMESTAMP_LTZ", "TIMESTAMP", "INTERVAL", "X"),
-            ctx)
-      }
-    } catch {
-      case e: IllegalArgumentException =>
-        throw QueryParsingErrors.parsingValueTypeError(e, valueType, ctx)
+      case "INTERVAL" =>
+        val interval = try {
+          IntervalUtils.stringToInterval(UTF8String.fromString(value))
+        } catch {
+          case e: IllegalArgumentException =>
+            val ex = QueryParsingErrors.cannotParseValueTypeError(valueType, value, ctx)
+            ex.setStackTrace(e.getStackTrace)
+            throw ex
+        }
+        if (!conf.legacyIntervalEnabled) {
+          val units = value
+            .split("\\s")
+            .map(_.toLowerCase(Locale.ROOT).stripSuffix("s"))
+            .filter(s => s != "interval" && s.matches("[a-z]+"))
+          constructMultiUnitsIntervalLiteral(ctx, interval, units)
+        } else {
+          Literal(interval, CalendarIntervalType)
+        }
+      case "X" =>
+        val padding = if (value.length % 2 != 0) "0" else ""
+        try {
+          Literal(Hex.decodeHex(padding + value))
+        } catch {
+          case e: DecoderException =>
+            val ex = QueryParsingErrors.cannotParseValueTypeError("X", value, ctx)
+            ex.setStackTrace(e.getStackTrace)
+            throw ex
+        }
+      case other =>
+        throw QueryParsingErrors.literalValueTypeUnsupportedError(
+          unsupportedType = other,
+          supportedTypes =
+            Seq("DATE", "TIMESTAMP_NTZ", "TIMESTAMP_LTZ", "TIMESTAMP", "INTERVAL", "X"),
+          ctx)
     }
   }
 
@@ -2897,7 +2914,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       case SqlBaseParser.MAP =>
         MapType(typedVisit(ctx.dataType(0)), typedVisit(ctx.dataType(1)))
       case SqlBaseParser.STRUCT =>
-        StructType(Option(ctx.complexColTypeList).toSeq.flatMap(visitComplexColTypeList))
+        StructType(Option(ctx.complexColTypeList).toArray.flatMap(visitComplexColTypeList))
     }
   }
 
@@ -2905,14 +2922,14 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    * Create top level table schema.
    */
   protected def createSchema(ctx: ColTypeListContext): StructType = {
-    StructType(Option(ctx).toSeq.flatMap(visitColTypeList))
+    StructType(Option(ctx).toArray.flatMap(visitColTypeList))
   }
 
   /**
    * Create top level table schema.
    */
   protected def createSchema(ctx: CreateOrReplaceTableColTypeListContext): StructType = {
-    StructType(Option(ctx).toSeq.flatMap(visitCreateOrReplaceTableColTypeList))
+    StructType(Option(ctx).toArray.flatMap(visitCreateOrReplaceTableColTypeList))
   }
 
   /**
@@ -3013,7 +3030,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    * Create a [[StructType]] from a sequence of [[StructField]]s.
    */
   protected def createStructType(ctx: ComplexColTypeListContext): StructType = {
-    StructType(Option(ctx).toSeq.flatMap(visitComplexColTypeList))
+    StructType(Option(ctx).toArray.flatMap(visitComplexColTypeList))
   }
 
   /**
@@ -4692,7 +4709,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         Seq(describeFuncName.getText)
       }
     DescribeFunction(
-      UnresolvedFunc(
+      UnresolvedFunctionName(
         functionName,
         "DESCRIBE FUNCTION",
         requirePersistent = false,
@@ -4730,7 +4747,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
 
   override def visitRefreshFunction(ctx: RefreshFunctionContext): LogicalPlan = withOrigin(ctx) {
     val functionIdentifier = visitMultipartIdentifier(ctx.multipartIdentifier)
-    RefreshFunction(UnresolvedFunc(
+    RefreshFunction(UnresolvedFunctionName(
       functionIdentifier,
       "REFRESH FUNCTION",
       requirePersistent = true,
@@ -4815,5 +4832,12 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    */
   override def visitTimestampdiff(ctx: TimestampdiffContext): Expression = withOrigin(ctx) {
     TimestampDiff(ctx.unit.getText, expression(ctx.startTimestamp), expression(ctx.endTimestamp))
+  }
+
+  /**
+   * Create a named parameter which represents a literal with a non-bound value and unknown type.
+   * */
+  override def visitParameterLiteral(ctx: ParameterLiteralContext): Expression = withOrigin(ctx) {
+    Parameter(ctx.identifier().getText)
   }
 }

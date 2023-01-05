@@ -116,7 +116,7 @@ class RatePerMicroBatchTable(
 
 object RatePerMicroBatchProvider {
   val SCHEMA =
-    StructType(StructField("timestamp", TimestampType) :: StructField("value", LongType) :: Nil)
+    StructType(Array(StructField("timestamp", TimestampType), StructField("value", LongType)))
 
   val VERSION = 1
 

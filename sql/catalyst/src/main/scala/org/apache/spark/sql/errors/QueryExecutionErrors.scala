@@ -444,7 +444,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def nullAsMapKeyNotAllowedError(): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2019",
+      errorClass = "NULL_MAP_KEY",
       messageParameters = Map.empty)
   }
 
@@ -731,10 +731,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map("paths" -> allPaths.mkString(", ")))
   }
 
-  def failedToFindDataSourceError(
+  def dataSourceNotFoundError(
       provider: String, error: Throwable): SparkClassNotFoundException = {
     new SparkClassNotFoundException(
-      errorClass = "_LEGACY_ERROR_TEMP_2051",
+      errorClass = "DATA_SOURCE_NOT_FOUND",
       messageParameters = Map("provider" -> provider),
       cause = error)
   }
@@ -785,7 +785,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def taskFailedWhileWritingRowsError(cause: Throwable): Throwable = {
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_2054",
-      messageParameters = Map.empty,
+      messageParameters = Map("message" -> cause.getMessage),
       cause = cause)
   }
 
@@ -1249,13 +1249,20 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map("o" -> o.toString()))
   }
 
-  def unscaledValueTooLargeForPrecisionError(): SparkArithmeticException = {
+  def unscaledValueTooLargeForPrecisionError(
+      value: Decimal,
+      decimalPrecision: Int,
+      decimalScale: Int,
+      context: SQLQueryContext = null): ArithmeticException = {
     new SparkArithmeticException(
-      errorClass = "UNSCALED_VALUE_TOO_LARGE_FOR_PRECISION",
+      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE",
       messageParameters = Map(
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      context = Array.empty,
-      summary = "")
+        "value" -> value.toPlainString,
+        "precision" -> decimalPrecision.toString,
+        "scale" -> decimalScale.toString,
+        "config" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+      context = getQueryContext(context),
+      summary = getSummary(context))
   }
 
   def decimalPrecisionExceedsMaxPrecisionError(
@@ -1272,7 +1279,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def outOfDecimalTypeRangeError(str: UTF8String): SparkArithmeticException = {
     new SparkArithmeticException(
-      errorClass = "OUT_OF_DECIMAL_TYPE_RANGE",
+      errorClass = "NUMERIC_OUT_OF_SUPPORTED_RANGE",
       messageParameters = Map(
         "value" -> str.toString),
       context = Array.empty,
@@ -1437,20 +1444,20 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "dataType" -> dataType.catalogString))
   }
 
-  def failToParseValueForDataTypeError(parser: JsonParser, token: JsonToken, dataType: DataType)
+  def cannotParseJSONFieldError(parser: JsonParser, jsonType: JsonToken, dataType: DataType)
   : SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2136",
+      errorClass = "CANNOT_PARSE_JSON_FIELD",
       messageParameters = Map(
         "fieldName" -> parser.getCurrentName.toString(),
         "fieldValue" -> parser.getText.toString(),
-        "token" -> token.toString(),
-        "dataType" -> dataType.toString()))
+        "jsonType" -> jsonType.toString(),
+        "dataType" -> toSQLType(dataType)))
   }
 
   def rootConverterReturnNullError(): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2137",
+      errorClass = "INVALID_JSON_ROOT_FIELD",
       messageParameters = Map.empty)
   }
 
@@ -1476,13 +1483,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "walkedTypePath" -> walkedTypePath.toString()))
   }
 
-  def cannotFindEncoderForTypeError(
-      tpe: String, walkedTypePath: WalkedTypePath): SparkUnsupportedOperationException = {
+  def cannotFindEncoderForTypeError(typeName: String): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2141",
+      errorClass = "ENCODER_NOT_FOUND",
       messageParameters = Map(
-        "tpe" -> tpe,
-        "walkedTypePath" -> walkedTypePath.toString()))
+        "typeName" -> typeName))
   }
 
   def attributesForTypeUnsupportedError(schema: Schema): SparkUnsupportedOperationException = {
@@ -2766,7 +2771,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def multipleRowSubqueryError(context: SQLQueryContext): Throwable = {
     new SparkException(
-      errorClass = "MULTI_VALUE_SUBQUERY_ERROR",
+      errorClass = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
       messageParameters = Map.empty,
       cause = null,
       context = getQueryContext(context),
@@ -2799,10 +2804,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "size" -> elementSize.toString))
   }
 
-  def unsupportedEmptyLocationError(): SparkIllegalArgumentException = {
+  def invalidEmptyLocationError(location: String): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
-      errorClass = "UNSUPPORTED_EMPTY_LOCATION",
-      messageParameters = Map.empty)
+      errorClass = "INVALID_EMPTY_LOCATION",
+      messageParameters = Map("location" -> location))
   }
 
   def malformedProtobufMessageDetectedInMessageParsingError(e: Throwable): Throwable = {
@@ -2811,5 +2816,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map(
         "failFastMode" -> FailFastMode.name),
       cause = e)
+  }
+
+  def locationAlreadyExists(tableId: TableIdentifier, location: Path): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "LOCATION_ALREADY_EXISTS",
+      messageParameters = Map(
+        "location" -> toSQLValue(location.toString, StringType),
+        "identifier" -> toSQLId(tableId.nameParts)))
   }
 }

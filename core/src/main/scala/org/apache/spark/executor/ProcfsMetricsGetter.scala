@@ -170,7 +170,7 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
     try {
       val pidDir = new File(procfsDir, pid.toString)
       def openReader(): BufferedReader = {
-        val f = new File(new File(procfsDir, pid.toString), procfsStatFile)
+        val f = new File(pidDir, procfsStatFile)
         new BufferedReader(new InputStreamReader(new FileInputStream(f), UTF_8))
       }
       Utils.tryWithResource(openReader) { in =>

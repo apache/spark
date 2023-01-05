@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import scala.annotation.tailrec
+
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
@@ -99,7 +101,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     require(filterApplicationSideExp.dataType == filterCreationSideExp.dataType)
     val actualFilterKeyExpr = mayWrapWithHash(filterCreationSideExp)
     val alias = Alias(actualFilterKeyExpr, actualFilterKeyExpr.toString)()
-    val aggregate = Aggregate(Seq(alias), Seq(alias), filterCreationSidePlan)
+    val aggregate =
+      ColumnPruning(Aggregate(Seq(filterCreationSideExp), Seq(alias), filterCreationSidePlan))
     if (!canBroadcastBySize(aggregate, conf)) {
       // Skip the InSubquery filter if the size of `aggregate` is beyond broadcast join threshold,
       // i.e., the semi-join will be a shuffled join, which is not worthwhile.
@@ -116,6 +119,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
    * do not add a subquery that might have an expensive computation
    */
   private def isSelectiveFilterOverScan(plan: LogicalPlan): Boolean = {
+    @tailrec
     def isSelective(
         p: LogicalPlan,
         predicateReference: AttributeSet,
@@ -225,15 +229,16 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   }
 
   // This checks if there is already a DPP filter, as this rule is called just after DPP.
+  @tailrec
   def hasDynamicPruningSubquery(
       left: LogicalPlan,
       right: LogicalPlan,
       leftKey: Expression,
       rightKey: Expression): Boolean = {
     (left, right) match {
-      case (Filter(DynamicPruningSubquery(pruningKey, _, _, _, _, _), plan), _) =>
+      case (Filter(DynamicPruningSubquery(pruningKey, _, _, _, _, _, _), plan), _) =>
         pruningKey.fastEquals(leftKey) || hasDynamicPruningSubquery(plan, right, leftKey, rightKey)
-      case (_, Filter(DynamicPruningSubquery(pruningKey, _, _, _, _, _), plan)) =>
+      case (_, Filter(DynamicPruningSubquery(pruningKey, _, _, _, _, _, _), plan)) =>
         pruningKey.fastEquals(rightKey) ||
           hasDynamicPruningSubquery(left, plan, leftKey, rightKey)
       case _ => false
@@ -264,10 +269,10 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       rightKey: Expression): Boolean = {
     (left, right) match {
       case (Filter(InSubquery(Seq(key),
-      ListQuery(Aggregate(Seq(Alias(_, _)), Seq(Alias(_, _)), _), _, _, _, _)), _), _) =>
+      ListQuery(Aggregate(Seq(Alias(_, _)), Seq(Alias(_, _)), _), _, _, _, _, _)), _), _) =>
         key.fastEquals(leftKey) || key.fastEquals(new Murmur3Hash(Seq(leftKey)))
       case (_, Filter(InSubquery(Seq(key),
-      ListQuery(Aggregate(Seq(Alias(_, _)), Seq(Alias(_, _)), _), _, _, _, _)), _)) =>
+      ListQuery(Aggregate(Seq(Alias(_, _)), Seq(Alias(_, _)), _), _, _, _, _, _)), _)) =>
         key.fastEquals(rightKey) || key.fastEquals(new Murmur3Hash(Seq(rightKey)))
       case _ => false
     }

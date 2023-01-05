@@ -486,16 +486,16 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
   var details: String = null
   var physicalPlanDescription: String = null
   var modifiedConfigs: Map[String, String] = _
-  var metrics = Seq[SQLPlanMetric]()
+  var metrics = collection.Seq[SQLPlanMetric]()
   var submissionTime = -1L
   var completionTime: Option[Date] = None
+  var errorMessage: Option[String] = None
 
   var jobs = Map[Int, JobExecutionStatus]()
   var stages = Set[Int]()
   var driverAccumUpdates = Seq[(Long, Long)]()
 
   @volatile var metricsValues: Map[Long, String] = null
-  var errorMessage: Option[String] = None
 
   // Just in case job end and execution end arrive out of order, keep track of how many
   // end events arrived so that the listener can stop tracking the execution.
@@ -511,10 +511,10 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
       metrics,
       submissionTime,
       completionTime,
+      errorMessage,
       jobs,
       stages,
-      metricsValues,
-      errorMessage)
+      metricsValues)
   }
 
 }

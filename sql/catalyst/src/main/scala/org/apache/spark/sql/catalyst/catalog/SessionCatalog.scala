@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Subque
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils}
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.types.StructType
@@ -411,8 +411,7 @@ class SessionCatalog(
       val fs = tableLocation.getFileSystem(hadoopConf)
 
       if (fs.exists(tableLocation) && fs.listStatus(tableLocation).nonEmpty) {
-        throw QueryCompilationErrors.cannotOperateManagedTableWithExistingLocationError(
-          "create", table.identifier, tableLocation)
+        throw QueryExecutionErrors.locationAlreadyExists(table.identifier, tableLocation)
       }
     }
   }
@@ -1912,8 +1911,7 @@ class SessionCatalog(
       val newTableLocation = new Path(new Path(databaseLocation), format(newName.table))
       val fs = newTableLocation.getFileSystem(hadoopConf)
       if (fs.exists(newTableLocation)) {
-        throw QueryCompilationErrors.cannotOperateManagedTableWithExistingLocationError(
-          "rename", oldName, newTableLocation)
+        throw QueryExecutionErrors.locationAlreadyExists(newName, newTableLocation)
       }
     }
   }

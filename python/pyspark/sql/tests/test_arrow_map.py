@@ -35,7 +35,7 @@ if have_pandas:
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    pandas_requirement_message or pyarrow_requirement_message,  # type: ignore[arg-type]
+    pandas_requirement_message or pyarrow_requirement_message,
 )
 class MapInArrowTests(ReusedSQLTestCase):
     @classmethod
@@ -130,7 +130,7 @@ if __name__ == "__main__":
     from pyspark.sql.tests.test_arrow_map import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

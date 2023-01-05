@@ -964,17 +964,15 @@ class SubquerySuite extends QueryTest
             |               WHERE t1.c1 = t2.c1)
           """.stripMargin)
       }
-      checkErrorMatchPVals(
+      checkError(
         exception1,
-        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_CORRELATED_REFERENCE",
-        parameters = Map("treeNode" -> "(?s).*"),
-        sqlState = None,
+        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+        parameters = Map("sqlExprs" -> "\"explode(arr_c2)\""),
         context = ExpectedContext(
           fragment = "LATERAL VIEW explode(t2.arr_c2) q AS c2",
           start = 68,
-          stop = 106))
-      assert(exception1.getMessage.contains(
-        "Expressions referencing the outer query are not supported outside of WHERE/HAVING"))
+          stop = 106)
+      )
     }
   }
 
@@ -2454,16 +2452,24 @@ class SubquerySuite extends QueryTest
         Row(2))
 
       // Cannot use non-orderable data type in one row subquery that cannot be collapsed.
-        val error = intercept[AnalysisException] {
+      checkError(
+        exception = intercept[AnalysisException] {
           sql(
-            """
-              |select (
+            """select (
               |  select concat(a, a) from
               |  (select upper(x['a'] + rand()) as a)
               |) from v1
-              |""".stripMargin).collect()
-        }
-        assert(error.getMessage.contains("Correlated column reference 'v1.x' cannot be map type"))
+              |""".stripMargin
+          ).collect()
+        },
+        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+          "UNSUPPORTED_CORRELATED_REFERENCE_DATA_TYPE",
+        parameters = Map("expr" -> "v1.x", "dataType" -> "map"),
+        context = ExpectedContext(
+          fragment = "select upper(x['a'] + rand()) as a",
+          start = 39,
+          stop = 72)
+      )
     }
   }
 

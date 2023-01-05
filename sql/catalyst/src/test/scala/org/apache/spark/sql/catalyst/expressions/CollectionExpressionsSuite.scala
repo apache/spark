@@ -24,7 +24,7 @@ import java.util.TimeZone
 import scala.language.implicitConversions
 import scala.util.Random
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
@@ -232,8 +232,24 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     // argument checking
     assert(MapConcat(Seq(m0, m1)).checkInputDataTypes().isSuccess)
     assert(MapConcat(Seq(m5, m6)).checkInputDataTypes().isSuccess)
-    assert(MapConcat(Seq(m0, m5)).checkInputDataTypes().isFailure)
-    assert(MapConcat(Seq(m0, Literal(12))).checkInputDataTypes().isFailure)
+    assert(MapConcat(Seq(m0, m5)).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "DATA_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> "`map_concat`",
+          "dataType" -> "(\"MAP<STRING, STRING>\" or \"MAP<STRING, INT>\")"
+        )
+      )
+    )
+    assert(MapConcat(Seq(m0, Literal(12))).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "MAP_CONCAT_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> "`map_concat`",
+          "dataType" -> "[\"MAP<STRING, STRING>\", \"INT\"]"
+        )
+      )
+    )
     assert(MapConcat(Seq(m0, m1)).dataType.keyType == StringType)
     assert(MapConcat(Seq(m0, m1)).dataType.valueType == StringType)
     assert(!MapConcat(Seq(m0, m1)).dataType.valueContainsNull)
@@ -315,9 +331,9 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       checkEvaluation(MapFromEntries(ai4), create_map(1 -> 20))
     }
     // Map key can't be null
-    checkExceptionInExpression[RuntimeException](
+    checkErrorInExpression[SparkRuntimeException](
       MapFromEntries(ai5),
-      "Cannot use null as map key")
+      "NULL_MAP_KEY")
     checkEvaluation(MapFromEntries(ai6), null)
 
     // Non-primitive-type keys and values
@@ -342,9 +358,9 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       checkEvaluation(MapFromEntries(as4), create_map("a" -> "bb"))
     }
     // Map key can't be null
-    checkExceptionInExpression[RuntimeException](
+    checkExceptionInExpression[SparkRuntimeException](
       MapFromEntries(as5),
-      "Cannot use null as map key")
+      "NULL_MAP_KEY")
     checkEvaluation(MapFromEntries(as6), null)
 
     // map key can't be map
@@ -1538,7 +1554,17 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val m1 = Literal.create(Map[String, String](), MapType(StringType, StringType))
     val m2 = Literal.create(null, MapType(StringType, StringType))
 
-    assert(ElementAt(m0, Literal(1.0)).checkInputDataTypes().isFailure)
+    assert(ElementAt(m0, Literal(1.0)).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "MAP_FUNCTION_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> "`element_at`",
+          "dataType" -> "\"MAP\"",
+          "leftType" -> "\"MAP<STRING, STRING>\"",
+          "rightType" -> "\"DOUBLE\""
+        )
+      )
+    )
 
     withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
       checkEvaluation(ElementAt(m0, Literal("d")), null)
@@ -2077,12 +2103,6 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       evaluateWithMutableProjection(Shuffle(ai0, seed2)))
     assert(evaluateWithUnsafeProjection(Shuffle(ai0, seed1)) !==
       evaluateWithUnsafeProjection(Shuffle(ai0, seed2)))
-
-    val shuffle = Shuffle(ai0, seed1)
-    assert(shuffle.fastEquals(shuffle))
-    assert(!shuffle.fastEquals(Shuffle(ai0, seed1)))
-    assert(!shuffle.fastEquals(shuffle.freshCopy()))
-    assert(!shuffle.fastEquals(Shuffle(ai0, seed2)))
   }
 
   test("Array Except") {
@@ -2514,7 +2534,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       Literal.create(Seq(Float.NaN, null, 1f), ArrayType(FloatType))), true)
   }
 
-  test("SPARK-36740: ArrayMin/ArrayMax/SortArray should handle NaN greater then non-NaN value") {
+  test("SPARK-36740: ArrayMin/ArrayMax/SortArray should handle NaN greater than non-NaN value") {
     // ArrayMin
     checkEvaluation(ArrayMin(
       Literal.create(Seq(Double.NaN, 1d, 2d), ArrayType(DoubleType))), 1d)
