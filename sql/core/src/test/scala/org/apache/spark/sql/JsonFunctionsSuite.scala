@@ -22,8 +22,9 @@ import java.time.{Duration, LocalDateTime, Period}
 import java.util.Locale
 
 import collection.JavaConverters._
+import org.apache.commons.lang3.exception.ExceptionUtils
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Literal, StructsToJson}
 import org.apache.spark.sql.functions._
@@ -774,15 +775,21 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         df.select(from_json($"value", schema, Map("mode" -> "PERMISSIVE"))),
         Row(Row(null, 11, badRec)) :: Row(Row(2, 12, null)) :: Nil)
 
-      val errMsg = intercept[SparkException] {
+      val exception = intercept[SparkException] {
         df.select(from_json($"value", schema, Map("mode" -> "FAILFAST"))).collect()
-      }.getMessage
+      }
 
-      assert(errMsg.contains(
+      assert(exception.getMessage.contains(
         "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
-      assert(errMsg.contains(
-        "Failed to parse field name a, field value 1, " +
-          "[VALUE_STRING] to target spark data type [IntegerType]."))
+      checkError(
+        exception = ExceptionUtils.getRootCause(exception).asInstanceOf[SparkRuntimeException],
+        errorClass = "CANNOT_PARSE_JSON_FIELD",
+        parameters = Map(
+          "fieldName" -> "a",
+          "fieldValue" -> "1",
+          "jsonType" -> "VALUE_STRING",
+          "dataType" -> "\"INT\"")
+      )
     }
   }
 

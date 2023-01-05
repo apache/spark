@@ -270,30 +270,34 @@ class LocalRelation(LogicalPlan):
 
     def __init__(
         self,
-        table: "pa.Table",
-        schema: Optional[Union[DataType, str]] = None,
+        table: Optional["pa.Table"],
+        schema: Optional[str] = None,
     ) -> None:
         super().__init__(None)
-        assert table is not None and isinstance(table, pa.Table)
+
+        if table is None:
+            assert schema is not None
+        else:
+            assert isinstance(table, pa.Table)
+
+        assert schema is None or isinstance(schema, str)
+
         self._table = table
 
-        if schema is not None:
-            assert isinstance(schema, (DataType, str))
         self._schema = schema
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        sink = pa.BufferOutputStream()
-        with pa.ipc.new_stream(sink, self._table.schema) as writer:
-            for b in self._table.to_batches():
-                writer.write_batch(b)
-
         plan = proto.Relation()
-        plan.local_relation.data = sink.getvalue().to_pybytes()
+
+        if self._table is not None:
+            sink = pa.BufferOutputStream()
+            with pa.ipc.new_stream(sink, self._table.schema) as writer:
+                for b in self._table.to_batches():
+                    writer.write_batch(b)
+            plan.local_relation.data = sink.getvalue().to_pybytes()
+
         if self._schema is not None:
-            if isinstance(self._schema, DataType):
-                plan.local_relation.datatype.CopyFrom(pyspark_types_to_proto_types(self._schema))
-            elif isinstance(self._schema, str):
-                plan.local_relation.datatype_str = self._schema
+            plan.local_relation.schema = self._schema
         return plan
 
     def print(self, indent: int = 0) -> str:

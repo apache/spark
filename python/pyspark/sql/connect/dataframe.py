@@ -256,6 +256,8 @@ class DataFrame:
 
     groupBy.__doc__ = PySparkDataFrame.groupBy.__doc__
 
+    groupby = groupBy
+
     def rollup(self, *cols: "ColumnOrName") -> "GroupedData":
         _cols: List[Column] = []
         for c in cols:
@@ -1014,11 +1016,23 @@ class DataFrame:
         return ""
 
     def collect(self) -> List[Row]:
-        pdf = self.toPandas()
-        if pdf is not None:
-            return list(pdf.apply(lambda row: Row(**row), axis=1))
-        else:
-            return []
+        if self._plan is None:
+            raise Exception("Cannot collect on empty plan.")
+        if self._session is None:
+            raise Exception("Cannot collect on empty session.")
+        query = self._plan.to_proto(self._session.client)
+        table = self._session.client.to_table(query)
+
+        rows: List[Row] = []
+        for row in table.to_pylist():
+            _dict = {}
+            for k, v in row.items():
+                if isinstance(v, bytes):
+                    _dict[k] = bytearray(v)
+                else:
+                    _dict[k] = v
+            rows.append(Row(**_dict))
+        return rows
 
     collect.__doc__ = PySparkDataFrame.collect.__doc__
 
@@ -1413,11 +1427,7 @@ def _test() -> None:
         del pyspark.sql.connect.dataframe.DataFrame.explain.__doc__
         del pyspark.sql.connect.dataframe.DataFrame.hint.__doc__
 
-        # TODO(SPARK-41825): Dataframe.show formatting int as double
-        del pyspark.sql.connect.dataframe.DataFrame.fillna.__doc__
-        del pyspark.sql.connect.dataframe.DataFrameNaFunctions.replace.__doc__
-        del pyspark.sql.connect.dataframe.DataFrameNaFunctions.fill.__doc__
-        del pyspark.sql.connect.dataframe.DataFrame.replace.__doc__
+        # TODO(SPARK-41886): The doctest output has different order
         del pyspark.sql.connect.dataframe.DataFrame.intersect.__doc__
 
         # TODO(SPARK-41625): Support Structured Streaming
@@ -1425,9 +1435,6 @@ def _test() -> None:
 
         # TODO(SPARK-41827): groupBy requires all cols be Column or str
         del pyspark.sql.connect.dataframe.DataFrame.groupBy.__doc__
-
-        # TODO(SPARK-41828): Implement creating empty DataFrame
-        del pyspark.sql.connect.dataframe.DataFrame.isEmpty.__doc__
 
         # TODO(SPARK-41829): Add Dataframe sort ordering
         del pyspark.sql.connect.dataframe.DataFrame.sort.__doc__
