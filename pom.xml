@@ -3430,7 +3430,7 @@
       <plugin>
         <groupId>org.cyclonedx</groupId>
         <artifactId>cyclonedx-maven-plugin</artifactId>
-        <version>2.7.4</version>
+        <version>2.7.3</version>
         <executions>
           <execution>
             <phase>package</phase>
