@@ -80,7 +80,7 @@ case class InsertIntoHiveTable(
     bucketSpec: Option[BucketSpec],
     options: Map[String, String],
     fileFormat: FileFormat,
-    @transient externalTmpPath: HiveTempPath
+    @transient hiveTmpPath: HiveTempPath
   ) extends SaveAsHiveFile with V1WriteCommand with V1WritesHiveUtils {
 
   override def staticPartitions: TablePartitionSpec = {
@@ -98,17 +98,16 @@ case class InsertIntoHiveTable(
    */
   override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
     val externalCatalog = sparkSession.sharedState.externalCatalog
-    val hadoopConf = externalTmpPath.hadoopConf
-    val stagingDir = externalTmpPath.stagingDir
-    val tmpLocation = externalTmpPath.externalTempPath
+    val hadoopConf = hiveTmpPath.hadoopConf
+    val tmpLocation = hiveTmpPath.externalTempPath
 
-    createExternalTmpPath(stagingDir, hadoopConf)
+    hiveTmpPath.createTmpPath()
     try {
       processInsert(sparkSession, externalCatalog, hadoopConf, tmpLocation, child)
     } finally {
       // Attempt to delete the staging directory and the inclusive files. If failed, the files are
       // expected to be dropped at the normal termination of VM since deleteOnExit is used.
-      deleteExternalTmpPath(stagingDir, hadoopConf)
+      hiveTmpPath.deleteTmpPath()
     }
 
     // un-cache this table.
@@ -312,7 +311,7 @@ object InsertIntoHiveTable extends V1WritesHiveUtils with Logging {
     val tableLocation = hiveQlTable.getDataLocation
     val hiveTempPath = new HiveTempPath(sparkSession, hadoopConf, tableLocation)
     val fileSinkConf = new FileSinkDesc(hiveTempPath.externalTempPath.toString, tableDesc, false)
-    setupCompression(fileSinkConf, hadoopConf, sparkSession)
+    setupHadoopConfForCompression(fileSinkConf, hadoopConf, sparkSession)
     val fileFormat: FileFormat = new HiveFileFormat(fileSinkConf)
 
     val partitionColumns = getDynamicPartitionColumns(table, partition, query)

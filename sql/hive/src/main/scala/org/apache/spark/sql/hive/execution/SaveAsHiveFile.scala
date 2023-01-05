@@ -17,26 +17,19 @@
 
 package org.apache.spark.sql.hive.execution
 
-import java.io.IOException
-
-import scala.util.control.NonFatal
-
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.hadoop.hive.common.FileUtils
 
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.DataWritingCommand
 import org.apache.spark.sql.execution.datasources.{FileFormat, FileFormatWriter}
 
 // Base trait from which all hive insert statement physical execution extends.
-private[hive] trait SaveAsHiveFile extends DataWritingCommand with V1WritesHiveUtils {
+private[hive] trait SaveAsHiveFile extends DataWritingCommand {
 
   protected def saveAsHiveFile(
       sparkSession: SparkSession,
@@ -66,36 +59,6 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand with V1WritesHiveU
       bucketSpec = bucketSpec,
       statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
       options = options)
-  }
-
-  protected def deleteExternalTmpPath(dir: Path, hadoopConf: Configuration) : Unit = {
-    // Attempt to delete the staging directory and the inclusive files. If failed, the files are
-    // expected to be dropped at the normal termination of VM since deleteOnExit is used.
-    try {
-      val fs = dir.getFileSystem(hadoopConf)
-      if (fs.delete(dir, true)) {
-        // If we successfully delete the staging directory, remove it from FileSystem's cache.
-        fs.cancelDeleteOnExit(dir)
-      }
-    } catch {
-      case NonFatal(e) =>
-        val stagingDir = hadoopConf.get("hive.exec.stagingdir", ".hive-staging")
-        logWarning(s"Unable to delete staging directory: $stagingDir.\n" + e)
-    }
-  }
-
-  protected def createExternalTmpPath(dir: Path, hadoopConf: Configuration): Unit = {
-    val fs: FileSystem = dir.getFileSystem(hadoopConf)
-    try {
-      if (!FileUtils.mkdir(fs, dir, true, hadoopConf)) {
-        throw new IllegalStateException("Cannot create staging directory  '" + dir.toString + "'")
-      }
-      fs.deleteOnExit(dir)
-    } catch {
-      case e: IOException =>
-        throw QueryExecutionErrors.cannotCreateStagingDirError(
-          s"'${dir.toString}': ${e.getMessage}", e)
-    }
   }
 }
 
