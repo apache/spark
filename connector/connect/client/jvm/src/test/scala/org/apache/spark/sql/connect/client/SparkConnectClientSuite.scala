@@ -75,6 +75,60 @@ class SparkConnectClientSuite
     val response = client.analyze(request)
     assert(response.getClientId === "abc123")
   }
+
+  private def testValidURIs(): Unit = {
+    val validURIs = Seq[String]("sc://host", "sc://host:1234/;param1=abcs")
+    val noPort = SparkConnectClient.builder().connectionString("sc://host").build()
+    val withPort = SparkConnectClient.builder().connectionString("sc://host:123").build()
+    val withUserId =
+      SparkConnectClient.builder().connectionString("sc://host:123/;user_id=a94").build()
+    assert(withUserId.userId == "a94")
+  }
+
+  private case class testPackURI(
+      connectionString: String,
+      isCorrect: Boolean,
+      extraChecks: SparkConnectClient => Unit = _ => {})
+
+  private val URIs = Seq[testPackURI](
+    testPackURI("sc://host", isCorrect = true),
+    testPackURI("sc://host:123", isCorrect = true),
+    testPackURI("sc://host:1234/;param1=abcs", isCorrect = true),
+    testPackURI(
+      "sc://host:123/;user_id=a94",
+      isCorrect = true,
+      client => assert(client.userId == "a94")),
+    testPackURI("scc://host:12", isCorrect = false),
+    testPackURI("http://host", isCorrect = false),
+    testPackURI("sc:/host:1234/path", isCorrect = false),
+    testPackURI("sc://host/path", isCorrect = false),
+    testPackURI("sc://host/;parm1;param2", isCorrect = false))
+
+  private def checkTestPack(testPack: testPackURI): Unit = {
+    val client = SparkConnectClient.builder().connectionString(testPack.connectionString).build()
+    testPack.extraChecks(client)
+  }
+
+  URIs.foreach { testPack =>
+    test(s"Check URI: ${testPack.connectionString}, isCorrect: ${testPack.isCorrect}") {
+      if (!testPack.isCorrect) {
+        assertThrows[IllegalArgumentException](checkTestPack(testPack))
+      } else {
+        checkTestPack(testPack)
+      }
+    }
+  }
+
+  // TODO(SPARK-41917): Remove test once SSL and Auth tokens are supported.
+  test("SSL and Auth tokens throw unsupported errors") {
+    assertThrows[UnsupportedOperationException] {
+      SparkConnectClient.builder().connectionString("sc://host/;use_ssl=true").build()
+    }
+
+    assertThrows[UnsupportedOperationException] {
+      SparkConnectClient.builder().connectionString("sc://host/;token=abc").build()
+    }
+  }
 }
 
 class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectServiceImplBase {

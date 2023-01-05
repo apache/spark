@@ -20,6 +20,7 @@ package org.apache.spark.sql.connect.client
 import scala.language.existentials
 
 import io.grpc.{ManagedChannel, ManagedChannelBuilder}
+import java.net.URI
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.common.config.ConnectCommon
@@ -67,7 +68,6 @@ object SparkConnectClient {
     private val userContextBuilder = proto.UserContext.newBuilder()
     private var _host: String = "localhost"
     private var _port: Int = ConnectCommon.CONNECT_GRPC_BINDING_PORT
-    private var _connectionString: Option[String] = None
 
     def userId(id: String): Builder = {
       userContextBuilder.setUserId(id)
@@ -85,22 +85,70 @@ object SparkConnectClient {
       this
     }
 
+    object URIParams {
+      val PARAM_USER_ID = "user_id"
+      val PARAM_USE_SSL = "use_ssl"
+      val PARAM_TOKEN = "token"
+    }
+
+    private def verifyURI(uri: URI): Unit = {
+      if (uri.getScheme != "sc") {
+        throw new IllegalArgumentException("Scheme for connection URI must be 'sc'.")
+      }
+      val pathAndParams = uri.getPath.split(';')
+      if (pathAndParams.nonEmpty && (pathAndParams(0) != "/" && pathAndParams(0) != "")) {
+        throw new IllegalArgumentException(
+          s"Path component for connection URI must be empty: " +
+            s"${pathAndParams(0)}")
+      }
+      if (uri.getHost.isEmpty) {
+        throw new IllegalArgumentException(s"Host for connection URI must be defined.")
+      }
+    }
+
+    private def parseURIParams(uri: URI): Unit = {
+      val params = uri.getPath.split(';').drop(1).filter(_ != "")
+      params.foreach { kv =>
+        val (key, value) = {
+          val arr = kv.split('=')
+          if (arr.length != 2) {
+            throw new IllegalArgumentException(
+              s"Parameter $kv is not a valid parameter" +
+                s" key-value pair")
+          }
+          (arr(0), arr(1))
+        }
+        if (key == URIParams.PARAM_USER_ID) {
+          userContextBuilder.setUserId(value)
+        }
+        // TODO(SPARK-41917): Support SSL and Auth tokens.
+        if (key == URIParams.PARAM_USE_SSL) {
+          throw new UnsupportedOperationException("SSL is currently not supported.")
+        }
+        if (key == URIParams.PARAM_TOKEN) {
+          throw new UnsupportedOperationException("Auth tokens are currently not supported.")
+        }
+      }
+    }
+
     /**
-     * Creates the channel with a target connection string, which can be either a valid
-     * NameResolver-compliant URI, or an authority string. Note: The connection string, if used,
-     * will override any host/port settings.
+     * Creates the channel with a target connection string, per the documentation of Spark
+     * Connect.
+     *
+     * Note: The connection string, if used, will override any previous host/port settings.
      */
     def connectionString(connectionString: String): Builder = {
-      _connectionString = Some(connectionString)
+      // TODO: Support ssl/bearer token params
+      val uri = new URI(connectionString)
+      verifyURI(uri)
+      parseURIParams(uri)
+      _host = uri.getHost
+      _port = uri.getPort
       this
     }
 
     def build(): SparkConnectClient = {
-      val channelBuilder = if (_connectionString.isDefined) {
-        ManagedChannelBuilder.forTarget(_connectionString.get).usePlaintext()
-      } else {
-        ManagedChannelBuilder.forAddress(_host, _port).usePlaintext()
-      }
+      val channelBuilder = ManagedChannelBuilder.forAddress(_host, _port).usePlaintext()
       new SparkConnectClient(userContextBuilder.build(), channelBuilder.build())
     }
   }
