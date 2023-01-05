@@ -258,24 +258,6 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       val outputAttributes = readDataColumns ++ generatedMetadataColumns ++
         partitionColumns ++ constantMetadataColumns
 
-      // The attribute references in the filters also have to be categorized as either constant
-      // or generated metadata attributes. Only data filters can contain metadata filters.
-      def categorizeFileSourceMetadataAttributesInFilters(
-          filters: Seq[Expression]): Seq[Expression] = {
-        filters.map { filter =>
-          filter.transform {
-            case attr: AttributeReference if FileSourceMetadataAttribute.unapply(attr).isDefined =>
-              if (attr.dataType.asInstanceOf[StructType].fields
-                  .forall(field => constantMetadataColumns.exists(field.name == _.name))) {
-                // All references point to constant metadata attributes.
-                FileSourceConstantMetadataAttribute(attr.name, attr.dataType, attr.nullable)
-              } else {
-                FileSourceGeneratedMetadataAttribute(attr.name, attr.dataType, attr.nullable)
-              }
-          }
-        }
-      }
-
       val scan =
         FileSourceScanExec(
           fsRelation,
@@ -284,7 +266,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
           partitionKeyFilters.toSeq,
           bucketSet,
           None,
-          categorizeFileSourceMetadataAttributesInFilters(dataFilters),
+          dataFilters,
           table.map(_.identifier))
 
       // extra Project node: wrap flat metadata columns to a metadata struct
