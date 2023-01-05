@@ -68,16 +68,16 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
       case u: Union if !u.byName && !u.duplicateResolved =>
         // Use projection-based de-duplication for Union to avoid breaking the checkpoint sharing
         // feature in streaming.
-        val newChildren = u.children.foldRight(Seq.empty[LogicalPlan]) { (head, tail) =>
-          head +: tail.map {
-            case child if head.outputSet.intersect(child.outputSet).isEmpty =>
+        val newChildren = u.children.foldLeft(Seq.empty[LogicalPlan]) { (head, tail) =>
+          head.map {
+            case child if tail.outputSet.intersect(child.outputSet).isEmpty =>
               child
             case child =>
               val projectList = child.output.map { attr =>
                 Alias(attr, attr.name)()
               }
               Project(projectList, child)
-          }
+          } :+ tail
         }
         u.copy(children = newChildren)
       case merge: MergeIntoTable if !merge.duplicateResolved =>
