@@ -87,9 +87,12 @@ def _create_py_udf(
     evalType: int,
     useArrow: Optional[bool] = None,
 ) -> "UserDefinedFunctionLike":
-    # The following table shows the results when users misuse a UDF - when the user-specified return
-    # type(SQL Type) of the UDF and the actual instance(Python Value(Type)) that the UDF returns are
-    # different. Some of the behaviors are buggy and might be changed in the near future.
+    # The following table shows the results when the type coercion in Arrow is needed, that is,
+    # when the user-specified return type(SQL Type) of the UDF and the actual instance(Python
+    # Value(Type)) that the UDF returns are different.
+    # Arrow and Pickle have different type coercion rules, so a UDF might have a different result
+    # with/without Arrow optimization. That's the main reason the Arrow optimization for Python
+    # UDFs is disabled by default.
     # +-----------------------------+--------------+----------+------+------+----------------+-----------------------------+----------+----------------------+---------+-----------+----------------------------+----------+--------------+  # noqa
     # |SQL Type \ Python Value(Type)|None(NoneType)|True(bool)|1(int)|a(str)|1970-01-01(date)|1970-01-01 00:00:00(datetime)|1.0(float)|array('i', [1])(array)|[1](list)|(1,)(tuple)|bytearray(b'ABC')(bytearray)|1(Decimal)|{'a': 1}(dict)|  # noqa
     # +-----------------------------+--------------+----------+------+------+----------------+-----------------------------+----------+----------------------+---------+-----------+----------------------------+----------+--------------+  # noqa
