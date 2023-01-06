@@ -49,7 +49,6 @@ else:
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
-@typing_extensions.final
 class Catalog(google.protobuf.message.Message):
     """Catalog messages are marked as unstable."""
 
@@ -294,7 +293,6 @@ class Catalog(google.protobuf.message.Message):
 
 global___Catalog = Catalog
 
-@typing_extensions.final
 class CurrentDatabase(google.protobuf.message.Message):
     """See `spark.catalog.currentDatabase`"""
 
@@ -306,7 +304,6 @@ class CurrentDatabase(google.protobuf.message.Message):
 
 global___CurrentDatabase = CurrentDatabase
 
-@typing_extensions.final
 class SetCurrentDatabase(google.protobuf.message.Message):
     """See `spark.catalog.setCurrentDatabase`"""
 
@@ -324,7 +321,6 @@ class SetCurrentDatabase(google.protobuf.message.Message):
 
 global___SetCurrentDatabase = SetCurrentDatabase
 
-@typing_extensions.final
 class ListDatabases(google.protobuf.message.Message):
     """See `spark.catalog.listDatabases`"""
 
@@ -336,7 +332,6 @@ class ListDatabases(google.protobuf.message.Message):
 
 global___ListDatabases = ListDatabases
 
-@typing_extensions.final
 class ListTables(google.protobuf.message.Message):
     """See `spark.catalog.listTables`"""
 
@@ -362,7 +357,6 @@ class ListTables(google.protobuf.message.Message):
 
 global___ListTables = ListTables
 
-@typing_extensions.final
 class ListFunctions(google.protobuf.message.Message):
     """See `spark.catalog.listFunctions`"""
 
@@ -388,7 +382,6 @@ class ListFunctions(google.protobuf.message.Message):
 
 global___ListFunctions = ListFunctions
 
-@typing_extensions.final
 class ListColumns(google.protobuf.message.Message):
     """See `spark.catalog.listColumns`"""
 
@@ -421,7 +414,6 @@ class ListColumns(google.protobuf.message.Message):
 
 global___ListColumns = ListColumns
 
-@typing_extensions.final
 class GetDatabase(google.protobuf.message.Message):
     """See `spark.catalog.getDatabase`"""
 
@@ -439,7 +431,6 @@ class GetDatabase(google.protobuf.message.Message):
 
 global___GetDatabase = GetDatabase
 
-@typing_extensions.final
 class GetTable(google.protobuf.message.Message):
     """See `spark.catalog.getTable`"""
 
@@ -472,7 +463,6 @@ class GetTable(google.protobuf.message.Message):
 
 global___GetTable = GetTable
 
-@typing_extensions.final
 class GetFunction(google.protobuf.message.Message):
     """See `spark.catalog.getFunction`"""
 
@@ -505,7 +495,6 @@ class GetFunction(google.protobuf.message.Message):
 
 global___GetFunction = GetFunction
 
-@typing_extensions.final
 class DatabaseExists(google.protobuf.message.Message):
     """See `spark.catalog.databaseExists`"""
 
@@ -523,7 +512,6 @@ class DatabaseExists(google.protobuf.message.Message):
 
 global___DatabaseExists = DatabaseExists
 
-@typing_extensions.final
 class TableExists(google.protobuf.message.Message):
     """See `spark.catalog.tableExists`"""
 
@@ -556,7 +544,6 @@ class TableExists(google.protobuf.message.Message):
 
 global___TableExists = TableExists
 
-@typing_extensions.final
 class FunctionExists(google.protobuf.message.Message):
     """See `spark.catalog.functionExists`"""
 
@@ -589,13 +576,11 @@ class FunctionExists(google.protobuf.message.Message):
 
 global___FunctionExists = FunctionExists
 
-@typing_extensions.final
 class CreateExternalTable(google.protobuf.message.Message):
     """See `spark.catalog.createExternalTable`"""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    @typing_extensions.final
     class OptionsEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -694,13 +679,11 @@ class CreateExternalTable(google.protobuf.message.Message):
 
 global___CreateExternalTable = CreateExternalTable
 
-@typing_extensions.final
 class CreateTable(google.protobuf.message.Message):
     """See `spark.catalog.createTable`"""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    @typing_extensions.final
     class OptionsEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -815,7 +798,6 @@ class CreateTable(google.protobuf.message.Message):
 
 global___CreateTable = CreateTable
 
-@typing_extensions.final
 class DropTempView(google.protobuf.message.Message):
     """See `spark.catalog.dropTempView`"""
 
@@ -835,7 +817,6 @@ class DropTempView(google.protobuf.message.Message):
 
 global___DropTempView = DropTempView
 
-@typing_extensions.final
 class DropGlobalTempView(google.protobuf.message.Message):
     """See `spark.catalog.dropGlobalTempView`"""
 
@@ -855,7 +836,6 @@ class DropGlobalTempView(google.protobuf.message.Message):
 
 global___DropGlobalTempView = DropGlobalTempView
 
-@typing_extensions.final
 class RecoverPartitions(google.protobuf.message.Message):
     """See `spark.catalog.recoverPartitions`"""
 
@@ -875,7 +855,6 @@ class RecoverPartitions(google.protobuf.message.Message):
 
 global___RecoverPartitions = RecoverPartitions
 
-@typing_extensions.final
 class ClearCache(google.protobuf.message.Message):
     """TODO(SPARK-41612): Support Catalog.isCached
     // See `spark.catalog.isCached`
@@ -909,7 +888,6 @@ class ClearCache(google.protobuf.message.Message):
 
 global___ClearCache = ClearCache
 
-@typing_extensions.final
 class RefreshTable(google.protobuf.message.Message):
     """See `spark.catalog.refreshTable`"""
 
@@ -929,7 +907,6 @@ class RefreshTable(google.protobuf.message.Message):
 
 global___RefreshTable = RefreshTable
 
-@typing_extensions.final
 class RefreshByPath(google.protobuf.message.Message):
     """See `spark.catalog.refreshByPath`"""
 
@@ -947,7 +924,6 @@ class RefreshByPath(google.protobuf.message.Message):
 
 global___RefreshByPath = RefreshByPath
 
-@typing_extensions.final
 class CurrentCatalog(google.protobuf.message.Message):
     """See `spark.catalog.currentCatalog`"""
 
@@ -959,7 +935,6 @@ class CurrentCatalog(google.protobuf.message.Message):
 
 global___CurrentCatalog = CurrentCatalog
 
-@typing_extensions.final
 class SetCurrentCatalog(google.protobuf.message.Message):
     """See `spark.catalog.setCurrentCatalog`"""
 
@@ -979,7 +954,6 @@ class SetCurrentCatalog(google.protobuf.message.Message):
 
 global___SetCurrentCatalog = SetCurrentCatalog
 
-@typing_extensions.final
 class ListCatalogs(google.protobuf.message.Message):
     """See `spark.catalog.listCatalogs`"""
 
