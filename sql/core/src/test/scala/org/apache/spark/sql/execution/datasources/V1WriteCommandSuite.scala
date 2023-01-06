@@ -20,10 +20,10 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, NullsFirst, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Sort}
-import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.{QueryExecution, SortExec}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SQLTestUtils, SharedSparkSession}
+import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.sql.types.{IntegerType, StringType}
 import org.apache.spark.sql.util.QueryExecutionListener
 
@@ -204,8 +204,7 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
                 |""".stripMargin)
           }
 
-          print(s"executed plan: ${FileFormatWriter.executedPlan}")
-
+          // inspect the actually executed plan (that is different to executeAndCheckOrdering)
           assert(FileFormatWriter.executedPlan.isDefined)
           val executedPlan = FileFormatWriter.executedPlan.get
 
@@ -218,6 +217,7 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
             }
           }
 
+          // assert the outer most sort in the executed plan
           assert(plan.collectFirst {
             case s: SortExec => s
           }.exists {
@@ -251,8 +251,7 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
               |""".stripMargin)
         }
 
-        print(s"executed plan: ${FileFormatWriter.executedPlan}")
-
+        // inspect the actually executed plan (that is different to executeAndCheckOrdering)
         assert(FileFormatWriter.executedPlan.isDefined)
         val executedPlan = FileFormatWriter.executedPlan.get
 
@@ -265,6 +264,7 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
           }
         }
 
+        // assert the outer most sort in the executed plan
         assert(plan.collectFirst {
           case s: SortExec => s
         }.map(s => (enabled, s)).exists {

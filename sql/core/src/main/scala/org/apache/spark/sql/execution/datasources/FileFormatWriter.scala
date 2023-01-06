@@ -231,7 +231,6 @@ object FileFormatWriter extends Logging {
 
       // In testing, this is the only way to get hold of the actually executed plan written to file
       if (Utils.isTesting) executedPlan = Some(planToExecute)
-      Console.println(f"executing planToExecute $planToExecute")
 
       val rdd = planToExecute.execute()
 
@@ -307,7 +306,6 @@ object FileFormatWriter extends Logging {
 
     // In testing, this is the only way to get hold of the actually executed plan written to file
     if (Utils.isTesting) executedPlan = Some(planForWrites)
-    Console.println(f"executing planForWrites $planForWrites")
 
     writeAndCommit(job, description, committer) {
       val rdd = planForWrites.executeWrite(writeFilesSpec)
