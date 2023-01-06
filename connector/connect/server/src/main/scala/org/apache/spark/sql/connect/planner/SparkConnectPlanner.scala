@@ -548,7 +548,6 @@ class SparkConnectPlanner(session: SparkSession) {
       data = Tuple1.apply(sameSemantics) :: Nil)
   }
 
-
   private def transformDeduplicate(rel: proto.Deduplicate): LogicalPlan = {
     if (!rel.hasInput) {
       throw InvalidPlanInput("Deduplicate needs a plan input")

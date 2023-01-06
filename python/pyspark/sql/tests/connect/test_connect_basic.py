@@ -1973,6 +1973,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertTrue(df1.sameSemantics(df2))
         self.assertFalse(df1.sameSemantics(df3))
 
+
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
 class ChannelBuilderTests(ReusedPySparkTestCase):
     def test_invalid_connection_strings(self):
