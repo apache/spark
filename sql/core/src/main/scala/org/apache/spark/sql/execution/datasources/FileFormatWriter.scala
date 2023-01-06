@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.connector.write.WriterCommitMessage
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{ProjectExec, SortExec, SparkPlan, SQLExecution, UnsafeExternalRowSorter}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
@@ -61,6 +62,11 @@ object FileFormatWriter extends Logging {
    * required ordering of the write command.
    */
   private[sql] var outputOrderingMatched: Boolean = false
+
+  /**
+   * A variable used in tests to check the final executed plan.
+   */
+  private[sql] var executedPlan: Option[SparkPlan] = None
 
   // scalastyle:off argcount
   /**
@@ -138,9 +144,21 @@ object FileFormatWriter extends Logging {
     val requiredOrdering = partitionColumns.drop(numStaticPartitionCols) ++
         writerBucketSpec.map(_.bucketIdExpression) ++ sortColumns
     val writeFilesOpt = V1WritesUtils.getWriteFilesOpt(plan)
+
+    // SPARK-40588: when planned writing is disabled and AQE is enabled,
+    // plan contains an AdaptiveSparkPlanExec, which does not know
+    // its final plan's ordering, so we have to materialize that plan first
+    // it is fine to use plan further down as the final plan is cached in that plan
+    def materializeAdaptiveSparkPlan(plan: SparkPlan): SparkPlan = plan match {
+      case a: AdaptiveSparkPlanExec => a.finalPhysicalPlan
+      case p: SparkPlan => p.withNewChildren(p.children.map(materializeAdaptiveSparkPlan))
+    }
+
     // the sort order doesn't matter
     // Use the output ordering from the original plan before adding the empty2null projection.
-    val actualOrdering = writeFilesOpt.map(_.child).getOrElse(plan).outputOrdering.map(_.child)
+    val actualOrdering = writeFilesOpt.map(_.child)
+      .getOrElse(materializeAdaptiveSparkPlan(plan))
+      .outputOrdering.map(_.child)
     val orderingMatched = V1WritesUtils.isOrderingMatched(requiredOrdering, actualOrdering)
 
     SQLExecution.checkSQLExecutionId(sparkSession)
@@ -189,6 +207,7 @@ object FileFormatWriter extends Logging {
       partitionColumns: Seq[Attribute],
       sortColumns: Seq[Attribute],
       orderingMatched: Boolean): Set[String] = {
+    Console.println(f"Writing plan $plan")
     val hasEmpty2Null = plan.exists(p => V1WritesUtils.hasEmptyToNull(p.expressions))
     val empty2NullPlan = if (hasEmpty2Null) {
       plan
@@ -198,18 +217,24 @@ object FileFormatWriter extends Logging {
     }
 
     writeAndCommit(job, description, committer) {
-      val (rdd, concurrentOutputWriterSpec) = if (orderingMatched) {
-        (empty2NullPlan.execute(), None)
+      val (planToExecute, concurrentOutputWriterSpec) = if (orderingMatched) {
+        (empty2NullPlan, None)
       } else {
         val sortPlan = createSortPlan(empty2NullPlan, requiredOrdering, outputSpec)
         val concurrentOutputWriterSpec = createConcurrentOutputWriterSpec(
           sparkSession, sortPlan, sortColumns)
         if (concurrentOutputWriterSpec.isDefined) {
-          (empty2NullPlan.execute(), concurrentOutputWriterSpec)
+          (empty2NullPlan, concurrentOutputWriterSpec)
         } else {
-          (sortPlan.execute(), concurrentOutputWriterSpec)
+          (sortPlan, concurrentOutputWriterSpec)
         }
       }
+
+      // In testing, this is the only way to get hold of the actually executed plan written to file
+      if (Utils.isTesting) executedPlan = Some(planToExecute)
+      Console.println(f"executing plan $planToExecute")
+
+      val rdd = planToExecute.execute()
 
       // SPARK-23271 If we are attempting to write a zero partition rdd, create a dummy single
       // partition rdd to make sure we at least set up one write task to write the metadata.
@@ -278,8 +303,13 @@ object FileFormatWriter extends Logging {
       planForWrites: SparkPlan,
       writeFilesSpec: WriteFilesSpec,
       job: Job): Set[String] = {
+    Console.println(f"Writing planForWrites $planForWrites")
     val committer = writeFilesSpec.committer
     val description = writeFilesSpec.description
+
+    // In testing, this is the only way to get hold of the actually executed plan written to file
+    if (Utils.isTesting) executedPlan = Some(planForWrites)
+    Console.println(f"executing plan $planForWrites")
 
     writeAndCommit(job, description, committer) {
       val rdd = planForWrites.executeWrite(writeFilesSpec)

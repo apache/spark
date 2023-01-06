@@ -18,10 +18,12 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, NullsFirst, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Sort}
-import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.{QueryExecution, SortExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.types.{IntegerType, StringType}
 import org.apache.spark.sql.util.QueryExecutionListener
 
 trait V1WriteCommandSuiteBase extends SQLTestUtils {
@@ -52,13 +54,12 @@ trait V1WriteCommandSuiteBase extends SQLTestUtils {
   }
 
   /**
-   * Execute a write query and check ordering of the plan. Return the optimized logical write
-   * query plan.
+   * Execute a write query and check ordering of the plan.
    */
   protected def executeAndCheckOrdering(
       hasLogicalSort: Boolean,
       orderingMatched: Boolean,
-      hasEmpty2Null: Boolean = false)(query: => Unit): LogicalPlan = {
+      hasEmpty2Null: Boolean = false)(query: => Unit): Unit = {
     var optimizedPlan: LogicalPlan = null
 
     val listener = new QueryExecutionListener {
@@ -97,8 +98,6 @@ trait V1WriteCommandSuiteBase extends SQLTestUtils {
       s"Expect hasEmpty2Null: $hasEmpty2Null, Actual: $empty2nullExpr. Plan:\n$optimizedPlan")
 
     spark.listenerManager.unregister(listener)
-
-    optimizedPlan
   }
 }
 
@@ -162,12 +161,7 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
             |CREATE TABLE t(i INT, k STRING) USING PARQUET
             |PARTITIONED BY (j INT)
             |""".stripMargin)
-        // When planned write is disabled, even though the write plan is already sorted,
-        // the AQE node inserted on top of the write query will remove the original
-        // sort orders. So the ordering will not match. This issue does not exist when
-        // planned write is enabled, because AQE will be applied on top of the write
-        // command instead of on top of the child query plan.
-        executeAndCheckOrdering(hasLogicalSort = true, orderingMatched = enabled) {
+        executeAndCheckOrdering(hasLogicalSort = true, orderingMatched = true) {
           sql("INSERT INTO t SELECT i, k, j FROM t0 ORDER BY j")
         }
       }
@@ -183,9 +177,87 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
             |PARTITIONED BY (k STRING)
             |""".stripMargin)
         executeAndCheckOrdering(
-          hasLogicalSort = true, orderingMatched = enabled, hasEmpty2Null = enabled) {
+          hasLogicalSort = true, orderingMatched = true, hasEmpty2Null = enabled) {
           sql("INSERT INTO t SELECT * FROM t0 ORDER BY k")
         }
+      }
+    }
+  }
+
+  test("v1 write with in-partition sorted plan - non-string partition column") {
+    withPlannedWrite { enabled =>
+      withTable("t") {
+        sql(
+          """
+            |CREATE TABLE t(i INT, k STRING) USING PARQUET
+            |PARTITIONED BY (j INT)
+            |""".stripMargin)
+        executeAndCheckOrdering(hasLogicalSort = true, orderingMatched = true) {
+          sql("INSERT INTO t SELECT i, k, j FROM t0 SORT BY j, k")
+        }
+
+        print(s"executed plan: ${FileFormatWriter.executedPlan}")
+
+        assert(FileFormatWriter.executedPlan.isDefined)
+        val executedPlan = FileFormatWriter.executedPlan.get
+
+        val plan = if (enabled) {
+          assert(executedPlan.isInstanceOf[WriteFilesExec])
+          executedPlan.asInstanceOf[WriteFilesExec].child
+        } else {
+          executedPlan
+        }
+
+        assert(plan.collectFirst {
+          case s: SortExec => s
+        }.exists {
+          case SortExec(Seq(
+            SortOrder(AttributeReference("j", IntegerType, _, _), Ascending, NullsFirst, _),
+            SortOrder(AttributeReference("k", StringType, _, _), Ascending, NullsFirst, _),
+          ), false, _, _) => true
+          case _ => false
+        }, plan)
+      }
+    }
+  }
+
+  test("v1 write with in-partition sorted plan - string partition column") {
+    withPlannedWrite { enabled =>
+      withTable("t") {
+        sql(
+          """
+            |CREATE TABLE t(i INT, j INT) USING PARQUET
+            |PARTITIONED BY (k STRING)
+            |""".stripMargin)
+        executeAndCheckOrdering(
+          hasLogicalSort = true, orderingMatched = true, hasEmpty2Null = enabled) {
+          sql("INSERT INTO t SELECT * FROM t0 SORT BY k, j")
+        }
+
+        print(s"executed plan: ${FileFormatWriter.executedPlan}")
+
+        assert(FileFormatWriter.executedPlan.isDefined)
+        val executedPlan = FileFormatWriter.executedPlan.get
+
+        val plan = if (enabled) {
+          assert(executedPlan.isInstanceOf[WriteFilesExec])
+          executedPlan.asInstanceOf[WriteFilesExec].child
+        } else {
+          executedPlan
+        }
+
+        assert(plan.collectFirst {
+          case s: SortExec => s
+        }.map(s => (enabled, s)).exists {
+          case (false, SortExec(Seq(
+          SortOrder(AttributeReference("k", StringType, _, _), Ascending, NullsFirst, _),
+          SortOrder(AttributeReference("j", IntegerType, _, _), Ascending, NullsFirst, _),
+          ), false, _, _)) => true
+          case (true, SortExec(Seq(
+          SortOrder(AttributeReference("k", StringType, _, _), Ascending, NullsFirst, _),
+          ), false, _, _)) => true
+          case _ => false
+        }, plan)
       }
     }
   }
