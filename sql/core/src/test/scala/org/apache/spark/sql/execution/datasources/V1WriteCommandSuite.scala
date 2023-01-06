@@ -223,7 +223,7 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
           }.exists {
             case SortExec(Seq(
             SortOrder(AttributeReference("key", IntegerType, _, _), Ascending, NullsFirst, _),
-            SortOrder(AttributeReference("value", StringType, _, _), Ascending, NullsFirst, _),
+            SortOrder(AttributeReference("value", StringType, _, _), Ascending, NullsFirst, _)
             ), false, _, _) => true
             case _ => false
           }, plan)
@@ -270,12 +270,12 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
         }.map(s => (enabled, s)).exists {
           case (false, SortExec(Seq(
           SortOrder(AttributeReference("value", StringType, _, _), Ascending, NullsFirst, _),
-          SortOrder(AttributeReference("key", IntegerType, _, _), Ascending, NullsFirst, _),
+          SortOrder(AttributeReference("key", IntegerType, _, _), Ascending, NullsFirst, _)
           ), false, _, _)) => true
 
           // SPARK-40885: this bug removes the in-partition sort, which manifests here
           case (true, SortExec(Seq(
-          SortOrder(AttributeReference("value", StringType, _, _), Ascending, NullsFirst, _),
+          SortOrder(AttributeReference("value", StringType, _, _), Ascending, NullsFirst, _)
           ), false, _, _)) => true
           case _ => false
         }, plan)
