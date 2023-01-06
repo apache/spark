@@ -58,7 +58,7 @@ trait V1WriteCommandSuiteBase extends SQLTestUtils {
   protected def executeAndCheckOrdering(
       hasLogicalSort: Boolean,
       orderingMatched: Boolean,
-      hasEmpty2Null: Boolean = false)(query: => Unit): Unit = {
+      hasEmpty2Null: Boolean = false)(query: => Unit): LogicalPlan = {
     var optimizedPlan: LogicalPlan = null
 
     val listener = new QueryExecutionListener {
@@ -97,6 +97,8 @@ trait V1WriteCommandSuiteBase extends SQLTestUtils {
       s"Expect hasEmpty2Null: $hasEmpty2Null, Actual: $empty2nullExpr. Plan:\n$optimizedPlan")
 
     spark.listenerManager.unregister(listener)
+
+    optimizedPlan
   }
 }
 
