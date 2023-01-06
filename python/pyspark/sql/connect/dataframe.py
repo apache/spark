@@ -33,6 +33,7 @@ from typing import (
 import sys
 import random
 import pandas
+import datetime
 import warnings
 from collections.abc import Iterable
 
@@ -1116,10 +1117,14 @@ class DataFrame:
 
         rows: List[Row] = []
         for row in table.to_pylist():
-            _dict = {}
+            _dict: Dict[Any, Any] = {}
             for k, v in row.items():
                 if isinstance(v, bytes):
                     _dict[k] = bytearray(v)
+                elif isinstance(v, datetime.datetime) and v.tzinfo is not None:
+                    # TODO: Should be controlled by "spark.sql.timestampType"
+                    # always remove the time zone for now
+                    _dict[k] = v.replace(tzinfo=None)
                 else:
                     _dict[k] = v
             rows.append(Row(**_dict))
@@ -1370,6 +1375,9 @@ class DataFrame:
         return pdf["same_semantics"][0]
 
     sameSemantics.__doc__ = PySparkDataFrame.sameSemantics.__doc__
+
+    def writeTo(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("writeTo() is not implemented.")
 
     # SparkConnect specific API
     def offset(self, n: int) -> "DataFrame":
