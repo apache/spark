@@ -481,6 +481,7 @@ abstract class DynamicPartitionPruningSuiteBase
               |FROM fact_sk f WHERE store_id < 5
             """.stripMargin)
             .write
+            .format(tableFormat)
             .partitionBy("store_id")
             .saveAsTable("fact_aux")
 
@@ -513,6 +514,7 @@ abstract class DynamicPartitionPruningSuiteBase
                 |FROM fact_sk f WHERE store_id < 5
               """.stripMargin)
               .write
+              .format(tableFormat)
               .partitionBy("store_id")
               .saveAsTable("fact_aux")
 
