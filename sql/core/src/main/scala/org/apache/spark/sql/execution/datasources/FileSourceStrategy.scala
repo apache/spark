@@ -258,21 +258,23 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       val outputAttributes = readDataColumns ++ generatedMetadataColumns ++
         partitionColumns ++ constantMetadataColumns
 
-
-      // The metadata attribute references in the filters also have to be categorized as either
-      // constant or generated metadata attributes. Only data filters can contain metadata filters.
-      def categorizeFileSourceMetadataAttributesInFilters(
+      // Rebind metadata attribute references in filters after the metadata attribute struct has
+      // been flattened. Only data filters can contain metadata references. The rebinding will
+      // categorize the references as either [[FileSourceConstantMetadataAttribute]] or
+      // [[FileSourceGeneratedMetadataAttribute]].
+      def rebindFileSourceMetadataAttributesInFilters(
           filters: Seq[Expression]): Seq[Expression] =
         filters.map { filter =>
           filter.transform {
-            case attr: AttributeReference if FileSourceMetadataAttribute.unapply(attr).isDefined =>
-              if (attr.dataType.asInstanceOf[StructType].fieldNames
-                .forall(fieldName => constantMetadataColumns.exists(fieldName == _.name))) {
-                // All references point to constant metadata attributes.
-                FileSourceConstantMetadataAttribute(attr.name, attr.dataType, attr.nullable)
+            case fieldGetter @ GetStructField(FileSourceMetadataAttribute(_), _, _) =>
+              val fieldName = fieldGetter.extractFieldName
+              // The row_index column has been renamed.
+              val columnName = if (fieldName == FileFormat.ROW_INDEX) {
+                FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME
               } else {
-                FileSourceGeneratedMetadataAttribute(attr.name, attr.dataType, attr.nullable)
+                fieldName
               }
+              metadataColumns.find(_.name == columnName).get
           }
         }
 
@@ -284,7 +286,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
           partitionKeyFilters.toSeq,
           bucketSet,
           None,
-          categorizeFileSourceMetadataAttributesInFilters(dataFilters),
+          rebindFileSourceMetadataAttributesInFilters(dataFilters),
           table.map(_.identifier))
 
       // extra Project node: wrap flat metadata columns to a metadata struct

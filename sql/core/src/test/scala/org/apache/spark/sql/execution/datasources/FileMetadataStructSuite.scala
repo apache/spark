@@ -678,8 +678,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
     assert(executedStruct.fields.forall(!_.nullable), executedStruct.fields.mkString(", "))
   }
 
-
-  test(s"Filter on row_index and a stored column at the same time") {
+  test("SPARK-41896: Filter on row_index and a stored column at the same time") {
     withTempPath { dir =>
       val storedIdName = "stored_id"
       val storedIdUpperLimitExclusive = 520
@@ -704,7 +703,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("Filter on constant and generated metadata attributes at the same time") {
+  test("SPARK-41896: Filter on constant and generated metadata attributes at the same time") {
     withTempPath { dir =>
       val idColumnName = "id"
       val partitionColumnName = "partition"
