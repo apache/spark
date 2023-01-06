@@ -278,6 +278,33 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertTrue("name" in data[0])
         self.assertTrue("id" in data[0])
 
+    def test_collect_timestamp(self):
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        query = """
+            SELECT * FROM VALUES
+            (TIMESTAMP('2022-12-25 10:30:00'), 1),
+            (TIMESTAMP('2022-12-25 10:31:00'), 2),
+            (TIMESTAMP('2022-12-25 10:32:00'), 1),
+            (TIMESTAMP('2022-12-25 10:33:00'), 2),
+            (TIMESTAMP('2022-12-26 09:30:00'), 1),
+            (TIMESTAMP('2022-12-26 09:35:00'), 3)
+            AS tab(date, val)
+            """
+
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
+
+        self.assertEqual(cdf.schema, sdf.schema)
+
+        self.assertEqual(cdf.collect(), sdf.collect())
+
+        self.assertEqual(
+            cdf.select(CF.date_trunc("year", cdf.date).alias("year")).collect(),
+            sdf.select(SF.date_trunc("year", sdf.date).alias("year")).collect(),
+        )
+
     def test_with_columns_renamed(self):
         # SPARK-41312: test DataFrame.withColumnsRenamed()
         self.assertEqual(

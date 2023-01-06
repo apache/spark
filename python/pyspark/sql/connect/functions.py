@@ -2354,12 +2354,6 @@ def _test() -> None:
         del pyspark.sql.connect.functions.from_csv.__doc__
         del pyspark.sql.connect.functions.from_json.__doc__
 
-        # TODO(SPARK-41455): Resolve dtypes inconsistencies of date/timestamp functions
-        del pyspark.sql.connect.functions.to_timestamp.__doc__
-        del pyspark.sql.connect.functions.to_utc_timestamp.__doc__
-        del pyspark.sql.connect.functions.date_trunc.__doc__
-        del pyspark.sql.connect.functions.from_utc_timestamp.__doc__
-
         # TODO(SPARK-41834): implement Dataframe.conf
         del pyspark.sql.connect.functions.from_unixtime.__doc__
         del pyspark.sql.connect.functions.timestamp_seconds.__doc__
