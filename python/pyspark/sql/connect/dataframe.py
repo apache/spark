@@ -89,7 +89,9 @@ class DataFrame:
 
     isEmpty.__doc__ = PySparkDataFrame.isEmpty.__doc__
 
-    def select(self, *cols: "ColumnOrName") -> "DataFrame":
+    def select(self, *cols: Union["ColumnOrName", List["ColumnOrName"]]) -> "DataFrame":
+        if len(cols) == 1 and isinstance(cols[0], list):
+            cols = cols[0]  # type: ignore[assignment]
         return DataFrame.withPlan(plan.Project(self._plan, *cols), session=self._session)
 
     select.__doc__ = PySparkDataFrame.select.__doc__
@@ -1514,9 +1516,6 @@ def _test() -> None:
 
         # TODO(SPARK-41625): Support Structured Streaming
         del pyspark.sql.connect.dataframe.DataFrame.isStreaming.__doc__
-
-        # TODO(SPARK-41831): fix transform to accept ColumnReference
-        del pyspark.sql.connect.dataframe.DataFrame.transform.__doc__
 
         # TODO(SPARK-41832): fix unionByName
         del pyspark.sql.connect.dataframe.DataFrame.unionByName.__doc__
