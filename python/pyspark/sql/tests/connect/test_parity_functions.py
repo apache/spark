@@ -49,8 +49,7 @@ class FunctionsParityTests(ReusedSQLTestCase, FunctionsTestsMixin):
     def test_assert_true(self):
         super().test_assert_true()
 
-    # Spark Connect does not support Spark Context but the test depends on that.
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("Spark Connect does not support Spark Context but the test depends on that.")
     def test_basic_functions(self):
         super().test_basic_functions()
 
@@ -69,18 +68,17 @@ class FunctionsParityTests(ReusedSQLTestCase, FunctionsTestsMixin):
     def test_explode(self):
         super().test_explode()
 
-    # Spark Connect does not support Spark Context but the test depends on that.
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("Spark Connect does not support Spark Context but the test depends on that.")
     def test_function_parity(self):
         super().test_function_parity()
 
-    # Spark Connect does not support Spark Context, _jdf but the test depends on that.
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "Spark Connect does not support Spark Context, _jdf but the test depends on that."
+    )
     def test_functions_broadcast(self):
         super().test_functions_broadcast()
 
-    # Spark Connect does not support Spark Context but the test depends on that.
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("Spark Connect does not support Spark Context but the test depends on that.")
     def test_input_file_name_reset_for_rdd(self):
         super().test_input_file_name_reset_for_rdd()
 
