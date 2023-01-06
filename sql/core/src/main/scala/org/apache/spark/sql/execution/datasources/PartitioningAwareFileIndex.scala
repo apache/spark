@@ -103,7 +103,7 @@ abstract class PartitioningAwareFileIndex(
       // use option.forall, so if there is no filter no metadata struct, return true
       boundedFilterMetadataStructOpt.forall { boundedFilter =>
         val row =
-          createMetadataInternalRow(requiredMetadataColumnNames,
+          createMetadataInternalRow(requiredMetadataColumnNames.toSeq,
             f.getPath, f.getLen, f.getModificationTime)
         boundedFilter.eval(row)
       }
