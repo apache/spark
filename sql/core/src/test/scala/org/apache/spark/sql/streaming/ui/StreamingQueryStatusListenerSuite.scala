@@ -37,7 +37,9 @@ import org.apache.spark.util.kvstore.{InMemoryStore, KVStore}
 
 class StreamingQueryStatusListenerSuite extends StreamTest {
 
-  def createStore(): KVStore = new InMemoryStore()
+  protected def createStore(): KVStore = new InMemoryStore()
+
+  protected def useInMemoryStore: Boolean = true
 
   private val sourceProgresses = Array(
     new SourceProgress("s1", "", "", "", 10, 4.0, 5.0),
@@ -69,6 +71,7 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
     when(progress.inputRowsPerSecond).thenReturn(10.0)
     when(progress.processedRowsPerSecond).thenReturn(12.0)
     when(progress.batchId).thenReturn(2)
+    when(progress.prettyJson).thenReturn("""{"a":1}""")
     when(progress.sink).thenReturn(new SinkProgress("mock query", 1))
     when(progress.sources).thenReturn(sourceProgresses)
     val processEvent = new streaming.StreamingQueryListener.QueryProgressEvent(progress)
@@ -86,12 +89,19 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
     assert(activeQuery.get.lastProgress.inputRowsPerSecond == 10.0)
     assert(activeQuery.get.lastProgress.processedRowsPerSecond == 12.0)
     assert(activeQuery.get.lastProgress.batchId == 2)
-    val jsonFragment =
-      s"""
-         |  "id" : "$id",
-         |  "runId" : "$runId",
-         |""".stripMargin
-    assert(activeQuery.get.lastProgress.prettyJson.contains(jsonFragment))
+    if (useInMemoryStore) {
+      assert(activeQuery.get.lastProgress.prettyJson == """{"a":1}""")
+    } else {
+      // When using disk-based KV Store, the mock progress object will be written to KV Store
+      // and read back as an instance of StreamingQueryProgress. Here we can simple check if
+      // the json value contains the id and runId fields.
+      val jsonFragment =
+        s"""
+           |  "id" : "$id",
+           |  "runId" : "$runId",
+           |""".stripMargin
+      assert(activeQuery.get.lastProgress.prettyJson.contains(jsonFragment))
+    }
 
     // handle terminate event
     val terminateEvent = new StreamingQueryListener.QueryTerminatedEvent(id, runId, None)
@@ -260,6 +270,8 @@ class StreamingQueryStatusListenerWithDiskStoreSuite extends StreamingQueryStatu
     storePath = Utils.createTempDir()
     KVUtils.createKVStore(Some(storePath), live = true, sparkConf)
   }
+
+  override def useInMemoryStore: Boolean = false
 
   override def afterEach(): Unit = {
     super.afterEach()
