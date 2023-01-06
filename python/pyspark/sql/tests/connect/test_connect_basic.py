@@ -1989,6 +1989,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             "_repr_html_",
             "semanticHash",
             "sameSemantics",
+            "writeTo",
         ):
             with self.assertRaises(NotImplementedError):
                 getattr(df, f)()

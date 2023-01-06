@@ -1369,6 +1369,9 @@ class DataFrame:
     def sameSemantics(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("sameSemantics() is not implemented.")
 
+    def writeTo(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("writeTo() is not implemented.")
+
     # SparkConnect specific API
     def offset(self, n: int) -> "DataFrame":
         """Returns a new :class: `DataFrame` by skipping the first `n` rows.
