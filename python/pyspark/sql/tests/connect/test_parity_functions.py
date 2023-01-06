@@ -147,16 +147,6 @@ class FunctionsParityTests(ReusedSQLTestCase, FunctionsTestsMixin):
     def test_sorting_functions_with_column(self):
         super().test_sorting_functions_with_column()
 
-    # TODO(SPARK-41898): support float("-inf") Window.rowsBetween
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_window_functions(self):
-        super().test_window_functions()
-
-    # TODO(SPARK-41898): support float("-inf") Window.rowsBetween
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_window_functions_without_partitionBy(self):
-        super().test_window_functions_without_partitionBy()
-
     # TODO(SPARK-41907): sampleby returning wrong output
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_sampleby(self):
