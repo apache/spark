@@ -73,7 +73,7 @@
   <build>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
     <plugins>
-      <!-- Shade all Protobuf dependencies of this build -->
+      <!-- Shade all Guava / Protobuf dependencies of this build -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
@@ -81,6 +81,7 @@
           <shadedArtifactAttached>false</shadedArtifactAttached>
           <artifactSet>
             <includes>
+              <include>com.google.guava:*</include>
               <include>com.google.protobuf:*</include>
               <include>org.apache.spark:spark-connect-common_${scala.binary.version}</include>
             </includes>
@@ -91,6 +92,20 @@
               <shadedPattern>${spark.shade.packageName}.connect.protobuf</shadedPattern>
               <includes>
                 <include>com.google.protobuf.**</include>
+              </includes>
+            </relocation>
+            <relocation>
+              <pattern>com.google.common</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.client.guava</shadedPattern>
+              <includes>
+                <include>com.google.common.**</include>
+              </includes>
+            </relocation>
+            <relocation>
+              <pattern>com.google.thirdparty</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.client.guava</shadedPattern>
+              <includes>
+                <include>com.google.thirdparty.**</include>
               </includes>
             </relocation>
           </relocations>
