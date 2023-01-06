@@ -232,6 +232,16 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
                 self.connect.read.parquet(d).toPandas(), self.spark.read.parquet(d).toPandas()
             )
 
+    def test_text(self):
+        # SPARK-41849: Implement DataFrameReader.text
+        with tempfile.TemporaryDirectory() as d:
+            # Write a DataFrame into a text file
+            self.spark.createDataFrame(
+                [{"name": "Sandeep Singh"}, {"name": "Hyukjin Kwon"}]
+            ).write.mode("overwrite").format("text").save(d)
+            # Read the text file as a DataFrame.
+            self.assert_eq(self.connect.read.text(d).toPandas(), self.spark.read.text(d).toPandas())
+
     def test_join_condition_column_list_columns(self):
         left_connect_df = self.connect.read.table(self.tbl_name)
         right_connect_df = self.connect.read.table(self.tbl_name2)
