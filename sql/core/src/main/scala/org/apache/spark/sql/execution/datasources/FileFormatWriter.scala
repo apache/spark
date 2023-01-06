@@ -207,7 +207,6 @@ object FileFormatWriter extends Logging {
       partitionColumns: Seq[Attribute],
       sortColumns: Seq[Attribute],
       orderingMatched: Boolean): Set[String] = {
-    Console.println(f"Writing plan $plan")
     val hasEmpty2Null = plan.exists(p => V1WritesUtils.hasEmptyToNull(p.expressions))
     val empty2NullPlan = if (hasEmpty2Null) {
       plan
@@ -232,7 +231,7 @@ object FileFormatWriter extends Logging {
 
       // In testing, this is the only way to get hold of the actually executed plan written to file
       if (Utils.isTesting) executedPlan = Some(planToExecute)
-      Console.println(f"executing plan $planToExecute")
+      Console.println(f"executing planToExecute $planToExecute")
 
       val rdd = planToExecute.execute()
 
@@ -303,13 +302,12 @@ object FileFormatWriter extends Logging {
       planForWrites: SparkPlan,
       writeFilesSpec: WriteFilesSpec,
       job: Job): Set[String] = {
-    Console.println(f"Writing planForWrites $planForWrites")
     val committer = writeFilesSpec.committer
     val description = writeFilesSpec.description
 
     // In testing, this is the only way to get hold of the actually executed plan written to file
     if (Utils.isTesting) executedPlan = Some(planForWrites)
-    Console.println(f"executing plan $planForWrites")
+    Console.println(f"executing planForWrites $planForWrites")
 
     writeAndCommit(job, description, committer) {
       val rdd = planForWrites.executeWrite(writeFilesSpec)

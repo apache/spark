@@ -20,9 +20,10 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, NullsFirst, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Sort}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.{QueryExecution, SortExec}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.test.{SQLTestUtils, SharedSparkSession}
 import org.apache.spark.sql.types.{IntegerType, StringType}
 import org.apache.spark.sql.util.QueryExecutionListener
 
@@ -184,54 +185,70 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
     }
   }
 
-  test("v1 write with in-partition sorted plan - non-string partition column") {
-    withPlannedWrite { enabled =>
-      withTable("t") {
-        sql(
-          """
-            |CREATE TABLE t(i INT, k STRING) USING PARQUET
-            |PARTITIONED BY (j INT)
-            |""".stripMargin)
-        executeAndCheckOrdering(hasLogicalSort = true, orderingMatched = true) {
-          sql("INSERT INTO t SELECT i, k, j FROM t0 SORT BY j, k")
+  test("SPARK-41914: v1 write with AQE and in-partition sorted - non-string partition column") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      withPlannedWrite { enabled =>
+        withTable("t") {
+          sql(
+            """
+              |CREATE TABLE t(b INT, value STRING) USING PARQUET
+              |PARTITIONED BY (key INT)
+              |""".stripMargin)
+          executeAndCheckOrdering(hasLogicalSort = true, orderingMatched = true) {
+            sql(
+              """
+                |INSERT INTO t
+                |SELECT b, value, key
+                |FROM testData JOIN testData2 ON key = a
+                |SORT BY key, value
+                |""".stripMargin)
+          }
+
+          print(s"executed plan: ${FileFormatWriter.executedPlan}")
+
+          assert(FileFormatWriter.executedPlan.isDefined)
+          val executedPlan = FileFormatWriter.executedPlan.get
+
+          val plan = if (enabled) {
+            assert(executedPlan.isInstanceOf[WriteFilesExec])
+            executedPlan.asInstanceOf[WriteFilesExec].child
+          } else {
+            executedPlan.transformDown {
+              case a: AdaptiveSparkPlanExec => a.executedPlan
+            }
+          }
+
+          assert(plan.collectFirst {
+            case s: SortExec => s
+          }.exists {
+            case SortExec(Seq(
+            SortOrder(AttributeReference("key", IntegerType, _, _), Ascending, NullsFirst, _),
+            SortOrder(AttributeReference("value", StringType, _, _), Ascending, NullsFirst, _),
+            ), false, _, _) => true
+            case _ => false
+          }, plan)
         }
-
-        print(s"executed plan: ${FileFormatWriter.executedPlan}")
-
-        assert(FileFormatWriter.executedPlan.isDefined)
-        val executedPlan = FileFormatWriter.executedPlan.get
-
-        val plan = if (enabled) {
-          assert(executedPlan.isInstanceOf[WriteFilesExec])
-          executedPlan.asInstanceOf[WriteFilesExec].child
-        } else {
-          executedPlan
-        }
-
-        assert(plan.collectFirst {
-          case s: SortExec => s
-        }.exists {
-          case SortExec(Seq(
-            SortOrder(AttributeReference("j", IntegerType, _, _), Ascending, NullsFirst, _),
-            SortOrder(AttributeReference("k", StringType, _, _), Ascending, NullsFirst, _),
-          ), false, _, _) => true
-          case _ => false
-        }, plan)
       }
     }
   }
 
-  test("v1 write with in-partition sorted plan - string partition column") {
+  test("SPARK-41914: v1 write with AQE and in-partition sorted - string partition column") {
     withPlannedWrite { enabled =>
       withTable("t") {
         sql(
           """
-            |CREATE TABLE t(i INT, j INT) USING PARQUET
-            |PARTITIONED BY (k STRING)
+            |CREATE TABLE t(key INT, b INT) USING PARQUET
+            |PARTITIONED BY (value STRING)
             |""".stripMargin)
         executeAndCheckOrdering(
           hasLogicalSort = true, orderingMatched = true, hasEmpty2Null = enabled) {
-          sql("INSERT INTO t SELECT * FROM t0 SORT BY k, j")
+          sql(
+            """
+              |INSERT INTO t
+              |SELECT key, b, value
+              |FROM testData JOIN testData2 ON key = a
+              |SORT BY value, key
+              |""".stripMargin)
         }
 
         print(s"executed plan: ${FileFormatWriter.executedPlan}")
@@ -243,18 +260,22 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
           assert(executedPlan.isInstanceOf[WriteFilesExec])
           executedPlan.asInstanceOf[WriteFilesExec].child
         } else {
-          executedPlan
+          executedPlan.transformDown {
+            case a: AdaptiveSparkPlanExec => a.executedPlan
+          }
         }
 
         assert(plan.collectFirst {
           case s: SortExec => s
         }.map(s => (enabled, s)).exists {
           case (false, SortExec(Seq(
-          SortOrder(AttributeReference("k", StringType, _, _), Ascending, NullsFirst, _),
-          SortOrder(AttributeReference("j", IntegerType, _, _), Ascending, NullsFirst, _),
+          SortOrder(AttributeReference("value", StringType, _, _), Ascending, NullsFirst, _),
+          SortOrder(AttributeReference("key", IntegerType, _, _), Ascending, NullsFirst, _),
           ), false, _, _)) => true
+
+          // SPARK-40885: this bug removes the in-partition sort, which manifests here
           case (true, SortExec(Seq(
-          SortOrder(AttributeReference("k", StringType, _, _), Ascending, NullsFirst, _),
+          SortOrder(AttributeReference("value", StringType, _, _), Ascending, NullsFirst, _),
           ), false, _, _)) => true
           case _ => false
         }, plan)
