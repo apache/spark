@@ -1145,6 +1145,11 @@
       "Star (*) is not allowed in a select list when GROUP BY an ordinal position is used."
     ]
   },
+  "STATIC_PARTITION_COLUMN_IN_INSERT_COLUMN_LIST" : {
+    "message" : [
+      "Static partition column <staticName> is also specified in the column list."
+    ]
+  },
   "STREAM_FAILED" : {
     "message" : [
       "Query [id = <id>, runId = <runId>] terminated with exception: <message>"
