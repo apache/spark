@@ -563,24 +563,6 @@ class StageDataWrapperSerializer extends ProtobufSerDe {
   }
 
   private def deserializeShufflePushReadMetricsDistributions(
-      binary: StoreTypes.ShuffleReadMetricDistributions): ShuffleReadMetricDistributions = {
-    new ShuffleReadMetricDistributions(
-      readBytes = binary.getReadBytesList.asScala.map(_.toDouble).toIndexedSeq,
-      readRecords = binary.getReadRecordsList.asScala.map(_.toDouble).toIndexedSeq,
-      remoteBlocksFetched = binary.getRemoteBlocksFetchedList.asScala.map(_.toDouble).toIndexedSeq,
-      localBlocksFetched = binary.getLocalBlocksFetchedList.asScala.map(_.toDouble).toIndexedSeq,
-      fetchWaitTime = binary.getFetchWaitTimeList.asScala.map(_.toDouble).toIndexedSeq,
-      remoteBytesRead = binary.getRemoteBytesReadList.asScala.map(_.toDouble).toIndexedSeq,
-      remoteBytesReadToDisk =
-        binary.getRemoteBytesReadToDiskList.asScala.map(_.toDouble).toIndexedSeq,
-      totalBlocksFetched = binary.getTotalBlocksFetchedList.asScala.map(_.toDouble).toIndexedSeq,
-      remoteReqsDuration = binary.getRemoteReqsDurationList.asScala.map(_.toDouble).toIndexedSeq,
-      shufflePushReadMetricsDist =
-        deserializeShufflePushReadMetricsDistributions(binary.getShufflePushReadMetricsDist)
-    )
-  }
-
-  private def deserializeShufflePushReadMetricsDistributions(
       binary: StoreTypes.ShufflePushReadMetricDistributions): ShufflePushReadMetricDistributions = {
     new ShufflePushReadMetricDistributions(
       corruptMergedBlockChunks =
