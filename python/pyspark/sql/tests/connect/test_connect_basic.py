@@ -644,6 +644,15 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
     def test_to(self):
         # SPARK-41464: test DataFrame.to()
 
+        cdf = self.connect.read.table(self.tbl_name)
+        df = self.spark.read.table(self.tbl_name)
+
+        def compare_to_schema():
+            cdf_to = cdf.to(schema)
+            df_to = df.to(schema)
+            self.assertEqual(cdf_to.schema, df_to.schema)
+            self.assert_eq(cdf_to.toPandas(), df_to.toPandas())
+
         # The schema has not changed
         schema = StructType(
             [
@@ -652,11 +661,17 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             ]
         )
 
-        cdf = self.connect.read.table(self.tbl_name).to(schema)
-        df = self.spark.read.table(self.tbl_name).to(schema)
+        compare_to_schema()
 
-        self.assertEqual(cdf.schema, df.schema)
-        self.assert_eq(cdf.toPandas(), df.toPandas())
+        # Change schema with struct
+        schema2 = StructType([StructField("struct", schema, False)])
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        cdf_to = cdf.select(CF.struct("id", "name").alias("struct")).to(schema2)
+        df_to = df.select(SF.struct("id", "name").alias("struct")).to(schema2)
+
+        self.assertEqual(cdf_to.schema, df_to.schema)
 
         # Change the column name
         schema = StructType(
@@ -666,11 +681,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             ]
         )
 
-        cdf = self.connect.read.table(self.tbl_name).to(schema)
-        df = self.spark.read.table(self.tbl_name).to(schema)
-
-        self.assertEqual(cdf.schema, df.schema)
-        self.assert_eq(cdf.toPandas(), df.toPandas())
+        compare_to_schema()
 
         # Change the column data type
         schema = StructType(
@@ -680,26 +691,44 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             ]
         )
 
-        cdf = self.connect.read.table(self.tbl_name).to(schema)
-        df = self.spark.read.table(self.tbl_name).to(schema)
+        compare_to_schema()
 
-        self.assertEqual(cdf.schema, df.schema)
-        self.assert_eq(cdf.toPandas(), df.toPandas())
+        # Reduce the column quantity and change data type
+        schema = StructType(
+            [
+                StructField("id", LongType(), True),
+            ]
+        )
 
-        # Change the column data type failed
+        compare_to_schema()
+
+        # incompatible field nullability
+        schema = StructType([StructField("id", LongType(), False)])
+        self.assertRaisesRegex(
+            SparkConnectAnalysisException,
+            "NULLABLE_COLUMN_OR_FIELD",
+            lambda: self.connect.read.table(self.tbl_name).to(schema).toPandas(),
+        )
+
+        # field cannot upcast
+        schema = StructType([StructField("name", LongType())])
+        self.assertRaisesRegex(
+            SparkConnectAnalysisException,
+            "INVALID_COLUMN_OR_FIELD_DATA_TYPE",
+            lambda: self.connect.read.table(self.tbl_name).to(schema).toPandas(),
+        )
+
         schema = StructType(
             [
                 StructField("id", IntegerType(), True),
                 StructField("name", IntegerType(), True),
             ]
         )
-
-        with self.assertRaises(SparkConnectException) as context:
-            self.connect.read.table(self.tbl_name).to(schema).toPandas()
-            self.assertIn(
-                """Column or field `name` is of type "STRING" while it's required to be "INT".""",
-                str(context.exception),
-            )
+        self.assertRaisesRegex(
+            SparkConnectAnalysisException,
+            "INVALID_COLUMN_OR_FIELD_DATA_TYPE",
+            lambda: self.connect.read.table(self.tbl_name).to(schema).toPandas(),
+        )
 
         # Test map type and array type
         schema = StructType(
@@ -709,11 +738,10 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
                 StructField("my_array", ArrayType(IntegerType(), False), True),
             ]
         )
-        cdf = self.connect.read.table(self.tbl_name4).to(schema)
-        df = self.spark.read.table(self.tbl_name4).to(schema)
+        cdf = self.connect.read.table(self.tbl_name4)
+        df = self.spark.read.table(self.tbl_name4)
 
-        self.assertEqual(cdf.schema, df.schema)
-        self.assert_eq(cdf.toPandas(), df.toPandas())
+        compare_to_schema()
 
     def test_toDF(self):
         # SPARK-41310: test DataFrame.toDF()
