@@ -97,7 +97,7 @@ case class UnresolvedInlineTable(
  *   select id from range(10);
  * }}}
  *
- * @param name qualified name of this table-value function
+ * @param name user-specified name of this table-value function
  * @param functionArgs list of function arguments
  */
 case class UnresolvedTableValuedFunction(
@@ -135,7 +135,7 @@ object UnresolvedTableValuedFunction {
  *   select t.a from range(10) t(a);
  * }}}
  *
- * @param name qualified name of the table-valued function
+ * @param name user-specified name of the table-valued function
  * @param child logical plan of the table-valued function
  * @param outputNames alias names of function output columns. The analyzer adds [[Project]]
  *                    to rename the output columns.
