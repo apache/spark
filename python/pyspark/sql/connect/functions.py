@@ -1517,21 +1517,21 @@ size.__doc__ = pysparkfuncs.size.__doc__
 def slice(
     col: "ColumnOrName", start: Union["ColumnOrName", int], length: Union["ColumnOrName", int]
 ) -> Column:
-    if isinstance(start, Column):
+    if isinstance(start, (Column, str)):
         _start = start
     elif isinstance(start, int):
         _start = lit(start)
     else:
-        raise TypeError(f"start should be a Column or int, but got {type(start).__name__}")
+        raise TypeError(f"start should be a Column, str or int, but got {type(start).__name__}")
 
-    if isinstance(length, Column):
+    if isinstance(length, (Column, str)):
         _length = length
     elif isinstance(length, int):
         _length = lit(length)
     else:
-        raise TypeError(f"start should be a Column or int, but got {type(length).__name__}")
+        raise TypeError(f"start should be a Column, str or int, but got {type(length).__name__}")
 
-    return _invoke_function("slice", _to_col(col), _start, _length)
+    return _invoke_function_over_columns("slice", col, _start, _length)
 
 
 slice.__doc__ = pysparkfuncs.slice.__doc__

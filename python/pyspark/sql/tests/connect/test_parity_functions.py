@@ -144,11 +144,6 @@ class FunctionsParityTests(ReusedSQLTestCase, FunctionsTestsMixin):
     def test_raise_error(self):
         super().test_raise_error()
 
-    # TODO(SPARK-41905): Function `slice` should expect string
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_slice(self):
-        super().test_slice()
-
     # Comparing column type of connect and pyspark
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_sorting_functions_with_column(self):
