@@ -128,13 +128,10 @@ object SparkConnectClient {
         }
         if (key == URIParams.PARAM_USER_ID) {
           userContextBuilder.setUserId(value)
-        }
+        } else {
         // TODO(SPARK-41917): Support SSL and Auth tokens.
-        if (key == URIParams.PARAM_USE_SSL) {
-          throw new UnsupportedOperationException("SSL is currently not supported.")
-        }
-        if (key == URIParams.PARAM_TOKEN) {
-          throw new UnsupportedOperationException("Auth tokens are currently not supported.")
+          throw new UnsupportedOperationException("Parameters apart from user_id" +
+            " are currently unsupported.")
         }
       }
     }
