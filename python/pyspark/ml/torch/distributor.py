@@ -196,7 +196,6 @@ class TorchDistributor(Distributor):
     ...     torch.destroy_process_group()
     ...     return model # or anything else
     >>> distributor = TorchDistributor(
-    ...     framework="pytorch",
     ...     num_processes=2,
     ...     local_mode=True,
     ...     use_gpu=True)
@@ -205,11 +204,10 @@ class TorchDistributor(Distributor):
     Run PyTorch Training on GPU (using a file with PyTorch code)
 
     >>> distributor = TorchDistributor(
-    ...     framework="pytorch",
     ...     num_processes=2,
     ...     local_mode=False,
     ...     use_gpu=True)
-    >>> distributor.run("/path/to/train.py", *args)
+    >>> distributor.run("/path/to/train.py", "--learning-rate=1e-3")
 
     Run PyTorch Lightning Training on GPU
 
@@ -217,25 +215,21 @@ class TorchDistributor(Distributor):
     >>> def train():
     ...     from pytorch_lightning import Trainer
     ...     # ...
-    ...     # required to set devices = 1 and num_nodes == num_processes
+    ...     # required to set devices = 1 and num_nodes == num_processes for multi node
+    ...     # required to set devices = num_processes and num_nodes = 1 for single node multi GPU
     ...     trainer = Trainer(accelerator="gpu", devices=1, num_nodes=num_proc, strategy="ddp")
     ...     trainer.fit()
     ...     # ...
     ...     return trainer
     >>> distributor = TorchDistributor(
-    ...     framework="pytorch-lightning",
     ...     num_processes=num_proc,
     ...     local_mode=True,
     ...     use_gpu=True)
     >>> trainer = distributor.run(train)
     """
 
-    # TODO(SPARK-41915): Remove need for setting frameworks in a future PR.
-    available_frameworks = ["pytorch", "pytorch-lightning"]
-
     def __init__(
         self,
-        framework: str,
         num_processes: int = 1,
         local_mode: bool = True,
         use_gpu: bool = True,
@@ -244,9 +238,6 @@ class TorchDistributor(Distributor):
 
         Parameters
         ----------
-        framework : str
-            A string indicating whether or not we are using PyTorch or PyTorch
-            Lightning. This could either be the string "pytorch" or "pytorch-lightning".
         num_processes : int, optional
             An integer that determines how many different concurrent
             tasks are allowed. We expect spark.task.gpus = 1 for GPU-enabled training. Default
@@ -267,26 +258,9 @@ class TorchDistributor(Distributor):
         RuntimeError
             If an active SparkSession is unavailable.
         """
-        # TODO(SPARK-41915): Remove framework requirement in a future PR.
         super().__init__(num_processes, local_mode, use_gpu)
-        self.framework = framework
         self.ssl_conf = "pytorch.spark.distributor.ignoreSsl"  # type: ignore
         self._validate_input_params()
-
-    def _validate_input_params(self) -> None:
-        """Validates input params
-
-        Raises
-        ------
-        ValueError
-            Thrown when user fails to provide correct input params
-        """
-        super()._validate_input_params()
-        if self.framework not in self.available_frameworks:
-            raise ValueError(
-                f"{self.framework} is not a valid framework."
-                f"Available frameworks: {self.available_frameworks}"
-            )
 
     def run(self, train_object: Union[Callable, str], *args: Any) -> Optional[Any]:
         """Runs distributed training.
@@ -296,12 +270,12 @@ class TorchDistributor(Distributor):
         train_object : callable object or str
             Either a PyTorch/PyTorch Lightning training function or the path to a python file
             that launches distributed training.
-        args : *args
+        args :
             The arguments for train_object
 
         Returns
         -------
-            Returns the output of train_object(*args) if train_object is a Callable with an
-            expected output.
+            Returns the output of train_object called with args if train_object is a
+            Callable with an expected output.
         """
         pass

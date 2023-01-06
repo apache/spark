@@ -37,26 +37,23 @@ class TorchDistributorBaselineUnitTests(unittest.TestCase):
 
     def test_validate_correct_inputs(self) -> None:
         inputs = [
-            ("pytorch", 1, True, False),
-            ("pytorch", 100, True, False),
-            ("pytorch-lightning", 1, False, False),
-            ("pytorch-lightning", 100, False, False),
+            (1, True, False),
+            (100, True, False),
+            (1, False, False),
+            (100, False, False),
         ]
-        for framework, num_processes, local_mode, use_gpu in inputs:
+        for num_processes, local_mode, use_gpu in inputs:
             with self.subTest():
-                TorchDistributor(framework, num_processes, local_mode, use_gpu)
+                TorchDistributor(num_processes, local_mode, use_gpu)
 
     def test_validate_incorrect_inputs(self) -> None:
         inputs = [
-            ("tensorflow", 1, True, False, ValueError, "framework"),
-            ("pytroch", 100, True, False, ValueError, "framework"),
-            ("pytorchlightning", 1, False, False, ValueError, "framework"),
-            ("pytorch-lightning", 0, False, False, ValueError, "positive"),
+            (0, False, False, ValueError, "positive"),
         ]
-        for framework, num_processes, local_mode, use_gpu, error, message in inputs:
+        for num_processes, local_mode, use_gpu, error, message in inputs:
             with self.subTest():
                 with self.assertRaisesRegex(error, message):
-                    TorchDistributor(framework, num_processes, local_mode, use_gpu)
+                    TorchDistributor(num_processes, local_mode, use_gpu)
 
     def test_encryption_passes(self) -> None:
         inputs = [
@@ -68,7 +65,7 @@ class TorchDistributorBaselineUnitTests(unittest.TestCase):
             with self.subTest():
                 self.spark.sparkContext._conf.set(ssl_conf_key, ssl_conf_value)
                 self.spark.sparkContext._conf.set(pytorch_conf_key, pytorch_conf_value)
-                distributor = TorchDistributor("pytorch", 1, True, False)
+                distributor = TorchDistributor(1, True, False)
                 distributor._check_encryption()
 
     def test_encryption_fails(self) -> None:
@@ -79,7 +76,7 @@ class TorchDistributorBaselineUnitTests(unittest.TestCase):
                 with self.assertRaisesRegex(Exception, "encryption"):
                     self.spark.sparkContext._conf.set(ssl_conf_key, ssl_conf_value)
                     self.spark.sparkContext._conf.set(pytorch_conf_key, pytorch_conf_value)
-                    distributor = TorchDistributor("pytorch", 1, True, False)
+                    distributor = TorchDistributor(1, True, False)
                     distributor._check_encryption()
 
     def test_get_num_tasks_fails(self) -> None:
@@ -89,9 +86,9 @@ class TorchDistributorBaselineUnitTests(unittest.TestCase):
         for num_processes in inputs:
             with self.subTest():
                 with self.assertRaisesRegex(RuntimeError, "driver"):
-                    TorchDistributor("pytorch", num_processes, True, True)
+                    TorchDistributor(num_processes, True, True)
                 with self.assertRaisesRegex(RuntimeError, "unset"):
-                    TorchDistributor("pytorch", num_processes, False, True)
+                    TorchDistributor(num_processes, False, True)
 
 
 class TorchDistributorLocalUnitTests(unittest.TestCase):
@@ -127,13 +124,13 @@ class TorchDistributorLocalUnitTests(unittest.TestCase):
         for num_processes in succeeds:
             with self.subTest():
                 expected_output = num_processes
-                distributor = TorchDistributor("pytorch", num_processes, True, True)
+                distributor = TorchDistributor(num_processes, True, True)
                 self.assertEqual(distributor._get_num_tasks(), expected_output)
 
         for num_processes in fails:
             with self.subTest():
                 with self.assertWarns(RuntimeWarning):
-                    distributor = TorchDistributor("pytorch", num_processes, True, True)
+                    distributor = TorchDistributor(num_processes, True, True)
                     distributor.num_processes = 3
 
 
@@ -175,7 +172,7 @@ class TorchDistributorDistributedUnitTests(unittest.TestCase):
                 self.spark.sparkContext._conf.set(
                     "spark.task.resource.gpu.amount", str(spark_conf_value)
                 )
-                distributor = TorchDistributor("pytorch", num_processes, False, True)
+                distributor = TorchDistributor(num_processes, False, True)
                 self.assertEqual(distributor._get_num_tasks(), expected_output)
 
         self.spark.sparkContext._conf.set("spark.task.resource.gpu.amount", "1")
