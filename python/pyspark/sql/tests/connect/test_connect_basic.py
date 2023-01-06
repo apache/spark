@@ -707,7 +707,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertRaisesRegex(
             SparkConnectAnalysisException,
             "NULLABLE_COLUMN_OR_FIELD",
-            lambda: self.connect.read.table(self.tbl_name).to(schema).toPandas(),
+            lambda: cdf.to(schema).toPandas(),
         )
 
         # field cannot upcast
@@ -715,7 +715,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertRaisesRegex(
             SparkConnectAnalysisException,
             "INVALID_COLUMN_OR_FIELD_DATA_TYPE",
-            lambda: self.connect.read.table(self.tbl_name).to(schema).toPandas(),
+            lambda: cdf.to(schema).toPandas(),
         )
 
         schema = StructType(
@@ -727,7 +727,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertRaisesRegex(
             SparkConnectAnalysisException,
             "INVALID_COLUMN_OR_FIELD_DATA_TYPE",
-            lambda: self.connect.read.table(self.tbl_name).to(schema).toPandas(),
+            lambda: cdf.to(schema).toPandas(),
         )
 
         # Test map type and array type
