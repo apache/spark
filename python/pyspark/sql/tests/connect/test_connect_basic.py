@@ -1960,11 +1960,18 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             "checkpoint",
             "localCheckpoint",
             "_repr_html_",
-            "semanticHash",
             "sameSemantics",
         ):
             with self.assertRaises(NotImplementedError):
                 getattr(df, f)()
+
+    def test_semantic_hash(self):
+        df1 = self.connect.read.table(self.tbl_name)
+        df2 = self.connect.read.table(self.tbl_name)
+        semantic_hash1 = df1.limit(10).semanticHash()
+        semantic_hash2 = df2.limit(10).semanticHash()
+
+        self.assertEqual(semantic_hash1, semantic_hash2)
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)

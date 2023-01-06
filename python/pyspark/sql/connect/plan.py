@@ -891,6 +891,17 @@ class RenameColumnsNameByName(LogicalPlan):
         return plan
 
 
+class SemanticHash(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"]) -> None:
+        super().__init__(child)
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+        plan = proto.Relation()
+        plan.semantic_hash.input.CopyFrom(self._child.plan(session))
+        return plan
+
+
 class Unpivot(LogicalPlan):
     """Logical plan object for a unpivot operation."""
 

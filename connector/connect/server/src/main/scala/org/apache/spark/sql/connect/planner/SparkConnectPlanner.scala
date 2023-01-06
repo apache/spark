@@ -110,6 +110,7 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Relation.RelTypeCase.UNPIVOT => transformUnpivot(rel.getUnpivot)
       case proto.Relation.RelTypeCase.REPARTITION_BY_EXPRESSION =>
         transformRepartitionByExpression(rel.getRepartitionByExpression)
+      case proto.Relation.RelTypeCase.SEMANTIC_HASH => transformSemanticHash(rel.getSemanticHash)
       case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
         throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
 
@@ -533,6 +534,15 @@ class SparkConnectPlanner(session: SparkSession) {
       partitionExpressions,
       transformRelation(rel.getInput),
       numPartitionsOpt)
+  }
+
+  private def transformSemanticHash(rel: proto.SemanticHash): LogicalPlan = {
+    val semanticHash = Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .semanticHash()
+    LocalRelation.fromProduct(
+      output = AttributeReference("semantic_hash", IntegerType, false)() :: Nil,
+      data = Tuple1.apply(semanticHash) :: Nil)
   }
 
   private def transformDeduplicate(rel: proto.Deduplicate): LogicalPlan = {

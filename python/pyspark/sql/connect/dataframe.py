@@ -1358,8 +1358,15 @@ class DataFrame:
     def _repr_html_(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("_repr_html_() is not implemented.")
 
-    def semanticHash(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("semanticHash() is not implemented.")
+    def semanticHash(self) -> int:
+        pdf = DataFrame.withPlan(
+            plan.SemanticHash(child=self._plan),
+            session=self._session,
+        ).toPandas()
+        assert pdf is not None
+        return pdf["semantic_hash"][0]
+
+    semanticHash.__doc__ = PySparkDataFrame.semanticHash.__doc__
 
     def sameSemantics(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("sameSemantics() is not implemented.")

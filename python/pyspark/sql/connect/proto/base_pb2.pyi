@@ -53,6 +53,7 @@ else:
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
+@typing_extensions.final
 class Plan(google.protobuf.message.Message):
     """A [[Plan]] is the structure that carries the runtime information for the execution from the
     client to the server. A [[Plan]] can either be of the type [[Relation]] which is a reference
@@ -92,6 +93,7 @@ class Plan(google.protobuf.message.Message):
 
 global___Plan = Plan
 
+@typing_extensions.final
 class Explain(google.protobuf.message.Message):
     """Explains the input plan based on a configurable mode."""
 
@@ -157,6 +159,7 @@ class Explain(google.protobuf.message.Message):
 
 global___Explain = Explain
 
+@typing_extensions.final
 class UserContext(google.protobuf.message.Message):
     """User Context is used to refer to one particular user session that is executing
     queries in the backend.
@@ -196,6 +199,7 @@ class UserContext(google.protobuf.message.Message):
 
 global___UserContext = UserContext
 
+@typing_extensions.final
 class AnalyzePlanRequest(google.protobuf.message.Message):
     """Request to perform plan analyze, optionally to explain the plan."""
 
@@ -273,6 +277,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
 
 global___AnalyzePlanRequest = AnalyzePlanRequest
 
+@typing_extensions.final
 class AnalyzePlanResponse(google.protobuf.message.Message):
     """Response to performing analysis of the query. Contains relevant metadata to be able to
     reason about the performance.
@@ -341,6 +346,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
 
 global___AnalyzePlanResponse = AnalyzePlanResponse
 
+@typing_extensions.final
 class ExecutePlanRequest(google.protobuf.message.Message):
     """A request to be executed by the service."""
 
@@ -409,6 +415,7 @@ class ExecutePlanRequest(google.protobuf.message.Message):
 
 global___ExecutePlanRequest = ExecutePlanRequest
 
+@typing_extensions.final
 class ExecutePlanResponse(google.protobuf.message.Message):
     """The response of a query, can be one or more for each request. Responses belonging to the
     same input query, carry the same `client_id`.
@@ -416,6 +423,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    @typing_extensions.final
     class ArrowBatch(google.protobuf.message.Message):
         """Batch results of metrics."""
 
@@ -435,12 +443,15 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["data", b"data", "row_count", b"row_count"]
         ) -> None: ...
 
+    @typing_extensions.final
     class Metrics(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+        @typing_extensions.final
         class MetricObject(google.protobuf.message.Message):
             DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+            @typing_extensions.final
             class ExecutionMetricsEntry(google.protobuf.message.Message):
                 DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -500,6 +511,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
                 ],
             ) -> None: ...
 
+        @typing_extensions.final
         class MetricValue(google.protobuf.message.Message):
             DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
