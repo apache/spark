@@ -96,8 +96,7 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedSQLTestCase):
     def test_generic_hints(self):
         super().test_generic_hints()
 
-    # Spark Connect does not support RDD but the tests depend on them.
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_help_command(self):
         super().test_help_command()
 
@@ -126,8 +125,7 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedSQLTestCase):
     def test_pandas_api(self):
         super().test_pandas_api()
 
-    # TODO(SPARK-41840): DataFrame.show(): 'Column' object is not callable
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_repartitionByRange_dataframe(self):
         super().test_repartitionByRange_dataframe()
 
@@ -161,8 +159,7 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedSQLTestCase):
     def test_to(self):
         super().test_to()
 
-    # Spark Connect does not support RDD but the tests depend on them.
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_toDF_with_schema_string(self):
         super().test_toDF_with_schema_string()
 
