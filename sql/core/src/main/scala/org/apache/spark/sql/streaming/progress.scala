@@ -40,7 +40,7 @@ import org.apache.spark.sql.streaming.SinkProgress.DEFAULT_NUM_OUTPUT_ROWS
  * Information about updates made to stateful operators in a [[StreamingQuery]] during a trigger.
  */
 @Evolving
-class StateOperatorProgress private[spark](
+class StateOperatorProgress private[sql](
     val operatorName: String,
     val numRowsTotal: Long,
     val numRowsUpdated: Long,
@@ -125,7 +125,7 @@ class StateOperatorProgress private[spark](
  * @since 2.1.0
  */
 @Evolving
-class StreamingQueryProgress private[spark](
+class StreamingQueryProgress private[sql](
   val id: UUID,
   val runId: UUID,
   val name: String,
@@ -190,7 +190,7 @@ class StreamingQueryProgress private[spark](
  * @since 2.1.0
  */
 @Evolving
-class SourceProgress protected[spark](
+class SourceProgress protected[sql](
   val description: String,
   val startOffset: String,
   val endOffset: String,
@@ -236,7 +236,7 @@ class SourceProgress protected[spark](
  * @since 2.1.0
  */
 @Evolving
-class SinkProgress protected[spark](
+class SinkProgress protected[sql](
     val description: String,
     val numOutputRows: Long,
     val metrics: ju.Map[String, String] = Map[String, String]().asJava) extends Serializable {
