@@ -38,7 +38,7 @@ from collections.abc import Iterable
 
 from pyspark import _NoValue, SparkContext, SparkConf
 from pyspark._globals import _NoValueType
-from pyspark.sql.types import DataType, StructType, Row
+from pyspark.sql.types import StructType, Row
 
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.group import GroupedData
