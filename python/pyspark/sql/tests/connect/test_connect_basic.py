@@ -1961,11 +1961,17 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             "localCheckpoint",
             "_repr_html_",
             "semanticHash",
-            "sameSemantics",
         ):
             with self.assertRaises(NotImplementedError):
                 getattr(df, f)()
 
+    def test_same_semantics(self):
+        df1 = self.connect.read.table(self.tbl_name).limit(10)
+        df2 = self.connect.read.table(self.tbl_name).limit(10)
+        df3 = self.connect.read.table(self.tbl_name).limit(1)
+
+        self.assertTrue(df1.sameSemantics(df2))
+        self.assertFalse(df1.sameSemantics(df3))
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
 class ChannelBuilderTests(ReusedPySparkTestCase):

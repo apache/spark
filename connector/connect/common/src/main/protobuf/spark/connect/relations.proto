@@ -60,6 +60,7 @@ message Relation {
     Unpivot unpivot = 25;
     ToSchema to_schema = 26;
     RepartitionByExpression repartition_by_expression = 27;
+    SameSemantics same_semantics = 29;
 
     // NA functions
     NAFill fill_na = 90;
@@ -747,4 +748,12 @@ message ToSchema {
 
   // (Optional) number of partitions, must be positive.
   optional int32 num_partitions = 3;
+}
+
+message SameSemantics {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) The other Relation to compare against.
+  Relation other = 2;
 }

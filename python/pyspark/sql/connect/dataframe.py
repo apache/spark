@@ -1361,8 +1361,15 @@ class DataFrame:
     def semanticHash(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("semanticHash() is not implemented.")
 
-    def sameSemantics(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("sameSemantics() is not implemented.")
+    def sameSemantics(self, other: "DataFrame") -> bool:
+        pdf = DataFrame.withPlan(
+            plan.SameSemantics(child=self._plan, other=other._plan),
+            session=self._session,
+        ).toPandas()
+        assert pdf is not None
+        return pdf["same_semantics"][0]
+
+    sameSemantics.__doc__ = PySparkDataFrame.sameSemantics.__doc__
 
     # SparkConnect specific API
     def offset(self, n: int) -> "DataFrame":

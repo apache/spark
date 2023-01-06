@@ -4864,6 +4864,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 3.1.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Notes
         -----
         The equality comparison here is simplified by tolerating the cosmetic differences

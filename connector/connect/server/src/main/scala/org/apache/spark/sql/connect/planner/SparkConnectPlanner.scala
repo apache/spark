@@ -110,6 +110,8 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Relation.RelTypeCase.UNPIVOT => transformUnpivot(rel.getUnpivot)
       case proto.Relation.RelTypeCase.REPARTITION_BY_EXPRESSION =>
         transformRepartitionByExpression(rel.getRepartitionByExpression)
+      case proto.Relation.RelTypeCase.SAME_SEMANTICS =>
+        transformSameSemantics(rel.getSameSemantics)
       case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
         throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
 
@@ -534,6 +536,18 @@ class SparkConnectPlanner(session: SparkSession) {
       transformRelation(rel.getInput),
       numPartitionsOpt)
   }
+
+  private def transformSameSemantics(rel: proto.SameSemantics): LogicalPlan = {
+    val otherDS = Dataset
+      .ofRows(session, transformRelation(rel.getOther))
+    val sameSemantics = Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .sameSemantics(otherDS)
+    LocalRelation.fromProduct(
+      output = AttributeReference("same_semantics", BooleanType, false)() :: Nil,
+      data = Tuple1.apply(sameSemantics) :: Nil)
+  }
+
 
   private def transformDeduplicate(rel: proto.Deduplicate): LogicalPlan = {
     if (!rel.hasInput) {
