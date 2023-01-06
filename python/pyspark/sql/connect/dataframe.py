@@ -197,6 +197,9 @@ class DataFrame:
     repartition.__doc__ = PySparkDataFrame.repartition.__doc__
 
     def dropDuplicates(self, subset: Optional[List[str]] = None) -> "DataFrame":
+        if subset is not None and (not isinstance(subset, Iterable) or isinstance(subset, str)):
+            raise TypeError("Parameter 'subset' must be a list of columns")
+
         if subset is None:
             return DataFrame.withPlan(
                 plan.Deduplicate(child=self._plan, all_columns_as_keys=True), session=self._session

@@ -71,11 +71,6 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedSQLTestCase):
     def test_create_nan_decimal_dataframe(self):
         super().test_create_nan_decimal_dataframe()
 
-    # TODO(SPARK-41869): DataFrame dropDuplicates should throw error on non list argument
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_drop_duplicates(self):
-        super().test_drop_duplicates()
-
     # TODO(SPARK-41870): Handle duplicate columns in `createDataFrame`
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_duplicated_column_names(self):
