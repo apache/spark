@@ -671,11 +671,9 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             (float(3.0), double(3.0), NULL, "3", false, NULL, ARRAY(NULL), NULL)
             AS tab(a, b, c, d, e, f, g, h)
             """
-        # compare the __repr__() to ignore the metadata for now
-        # the metadata is not supported in Connect for now
         self.assertEqual(
-            self.spark.sql(query).schema.__repr__(),
-            self.connect.sql(query).schema.__repr__(),
+            self.spark.sql(query).schema,
+            self.connect.sql(query).schema,
         )
 
     def test_to(self):
@@ -1970,6 +1968,23 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             "Numeric aggregation function can only be applied on numeric columns",
         ):
             cdf.groupBy("name").pivot("department").sum("salary", "department").show()
+
+    def test_with_metadata(self):
+        cdf = self.connect.createDataFrame(data=[(2, "Alice"), (5, "Bob")], schema=["age", "name"])
+        self.assertEqual(cdf.schema["age"].metadata, {})
+        self.assertEqual(cdf.schema["name"].metadata, {})
+
+        cdf1 = cdf.withMetadata(columnName="age", metadata={"max_age": 5})
+        self.assertEqual(cdf1.schema["age"].metadata, {"max_age": 5})
+
+        cdf2 = cdf.withMetadata(columnName="name", metadata={"names": ["Alice", "Bob"]})
+        self.assertEqual(cdf2.schema["name"].metadata, {"names": ["Alice", "Bob"]})
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "metadata should be a dict",
+        ):
+            cdf.withMetadata(columnName="name", metadata=["magic"])
 
     def test_unsupported_functions(self):
         # SPARK-41225: Disable unsupported functions.
