@@ -248,6 +248,9 @@ class DataFrame:
     first.__doc__ = PySparkDataFrame.first.__doc__
 
     def groupBy(self, *cols: "ColumnOrName") -> GroupedData:
+        if len(cols) == 1 and isinstance(cols[0], list):
+            cols = cols[0]
+
         _cols: List[Column] = []
         for c in cols:
             if isinstance(c, Column):
@@ -1511,9 +1514,6 @@ def _test() -> None:
 
         # TODO(SPARK-41625): Support Structured Streaming
         del pyspark.sql.connect.dataframe.DataFrame.isStreaming.__doc__
-
-        # TODO(SPARK-41827): groupBy requires all cols be Column or str
-        del pyspark.sql.connect.dataframe.DataFrame.groupBy.__doc__
 
         # TODO(SPARK-41831): fix transform to accept ColumnReference
         del pyspark.sql.connect.dataframe.DataFrame.transform.__doc__
