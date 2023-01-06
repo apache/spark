@@ -164,11 +164,6 @@ class FunctionsParityTests(ReusedSQLTestCase, FunctionsTestsMixin):
     def test_window_functions_without_partitionBy(self):
         super().test_window_functions_without_partitionBy()
 
-    # TODO(SPARK-41906): Handle Function `rand() `
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_rand_functions(self):
-        super().test_rand_functions()
-
     # TODO(SPARK-41907): sampleby returning wrong output
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_sampleby(self):
