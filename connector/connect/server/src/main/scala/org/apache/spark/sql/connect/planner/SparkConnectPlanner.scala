@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, 
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, Sort, SubqueryAlias, Union, Unpivot, UnresolvedHint}
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.{toCatalystExpression, toCatalystValue}
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -106,6 +106,7 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Relation.RelTypeCase.RENAME_COLUMNS_BY_NAME_TO_NAME_MAP =>
         transformRenameColumnsByNameToNameMap(rel.getRenameColumnsByNameToNameMap)
       case proto.Relation.RelTypeCase.WITH_COLUMNS => transformWithColumns(rel.getWithColumns)
+      case proto.Relation.RelTypeCase.WITH_METADATA => transformWithMetadata(rel.getWithMetadata)
       case proto.Relation.RelTypeCase.HINT => transformHint(rel.getHint)
       case proto.Relation.RelTypeCase.UNPIVOT => transformUnpivot(rel.getUnpivot)
       case proto.Relation.RelTypeCase.REPARTITION_BY_EXPRESSION =>
@@ -422,13 +423,12 @@ class SparkConnectPlanner(session: SparkSession) {
   }
 
   private def transformStatSampleBy(rel: proto.StatSampleBy): LogicalPlan = {
-    val fractions = mutable.Map.empty[Any, Double]
-    rel.getFractionsList.asScala.toSeq.foreach { protoFraction =>
+    val fractions = rel.getFractionsList.asScala.toSeq.map { protoFraction =>
       val stratum = transformLiteral(protoFraction.getStratum) match {
         case Literal(s, StringType) if s != null => s.toString
         case literal => literal.value
       }
-      fractions.update(stratum, protoFraction.getFraction)
+      (stratum, protoFraction.getFraction)
     }
 
     Dataset
@@ -483,6 +483,13 @@ class SparkConnectPlanner(session: SparkSession) {
     Dataset
       .ofRows(session, transformRelation(rel.getInput))
       .withColumns(names.toSeq, cols.toSeq)
+      .logicalPlan
+  }
+
+  private def transformWithMetadata(rel: proto.WithMetadata): LogicalPlan = {
+    Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .withMetadata(rel.getColumn, Metadata.fromJson(rel.getMetadata))
       .logicalPlan
   }
 
@@ -572,47 +579,61 @@ class SparkConnectPlanner(session: SparkSession) {
     try {
       parser.parseTableSchema(sqlText)
     } catch {
-      case _: ParseException =>
+      case e: ParseException =>
         try {
           parser.parseDataType(sqlText)
         } catch {
           case _: ParseException =>
-            parser.parseDataType(s"struct<${sqlText.trim}>")
+            try {
+              parser.parseDataType(s"struct<${sqlText.trim}>")
+            } catch {
+              case _: ParseException =>
+                throw e
+            }
         }
     }
   }
 
   private def transformLocalRelation(rel: proto.LocalRelation): LogicalPlan = {
-    val (rows, structType) = ArrowConverters.fromBatchWithSchemaIterator(
-      Iterator(rel.getData.toByteArray),
-      TaskContext.get())
-    if (structType == null) {
-      throw InvalidPlanInput(s"Input data for LocalRelation does not produce a schema.")
-    }
-    val attributes = structType.toAttributes
-    val proj = UnsafeProjection.create(attributes, attributes)
-    val relation = logical.LocalRelation(attributes, rows.map(r => proj(r).copy()).toSeq)
-
-    if (!rel.hasDatatype && !rel.hasDatatypeStr) {
-      return relation
+    var schema: StructType = null
+    if (rel.hasSchema) {
+      val schemaType = DataType.parseTypeWithFallback(
+        rel.getSchema,
+        parseDatatypeString,
+        fallbackParser = DataType.fromJson)
+      schema = schemaType match {
+        case s: StructType => s
+        case d => StructType(Seq(StructField("value", d)))
+      }
     }
 
-    val schemaType = if (rel.hasDatatype) {
-      DataTypeProtoConverter.toCatalystType(rel.getDatatype)
+    if (rel.hasData) {
+      val (rows, structType) = ArrowConverters.fromBatchWithSchemaIterator(
+        Iterator(rel.getData.toByteArray),
+        TaskContext.get())
+      if (structType == null) {
+        throw InvalidPlanInput(s"Input data for LocalRelation does not produce a schema.")
+      }
+      val attributes = structType.toAttributes
+      val proj = UnsafeProjection.create(attributes, attributes)
+      val relation = logical.LocalRelation(attributes, rows.map(r => proj(r).copy()).toSeq)
+
+      if (schema == null) {
+        relation
+      } else {
+        Dataset
+          .ofRows(session, logicalPlan = relation)
+          .toDF(schema.names: _*)
+          .to(schema)
+          .logicalPlan
+      }
     } else {
-      parseDatatypeString(rel.getDatatypeStr)
+      if (schema == null) {
+        throw InvalidPlanInput(
+          s"Schema for LocalRelation is required when the input data is not provided.")
+      }
+      LocalRelation(schema.toAttributes, data = Seq.empty)
     }
-
-    val schemaStruct = schemaType match {
-      case s: StructType => s
-      case d => StructType(Seq(StructField("value", d)))
-    }
-
-    Dataset
-      .ofRows(session, logicalPlan = relation)
-      .toDF(schemaStruct.names: _*)
-      .to(schemaStruct)
-      .logicalPlan
   }
 
   private def transformReadRel(rel: proto.Read): LogicalPlan = {
@@ -901,6 +922,41 @@ class SparkConnectPlanner(session: SparkSession) {
 
       case "unwrap_udt" if fun.getArgumentsCount == 1 =>
         Some(UnwrapUDT(transformExpression(fun.getArguments(0))))
+
+      case "from_json" if Seq(2, 3).contains(fun.getArgumentsCount) =>
+        // JsonToStructs constructors only accept DDL-formatted schema.
+        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
+
+        val schemaStr = children(1) match {
+          case Literal(s, StringType) if s != null => s.toString
+          case other =>
+            throw InvalidPlanInput(
+              s"Schema in from_json should be literal string, but got $other")
+        }
+        val schema = DataType.parseTypeWithFallback(
+          schemaStr,
+          DataType.fromJson,
+          fallbackParser = DataType.fromDDL)
+
+        val options = if (children.length == 3) {
+          // ExprUtils.convertToMapData requires the options to be resolved CreateMap,
+          // but the options here is not resolved yet: UnresolvedFunction("map", ...)
+          children(2) match {
+            case UnresolvedFunction(Seq("map"), arguments, _, _, _) =>
+              ExprUtils.convertToMapData(CreateMap(arguments))
+            case other =>
+              throw InvalidPlanInput(
+                s"Options in from_json should be created by map, but got $other")
+          }
+        } else {
+          Map.empty[String, String]
+        }
+
+        Some(
+          JsonToStructs(
+            schema = CharVarcharUtils.failIfHasCharVarchar(schema),
+            options = options,
+            child = children.head))
 
       case _ => None
     }

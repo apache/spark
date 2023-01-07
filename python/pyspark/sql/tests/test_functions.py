@@ -294,8 +294,7 @@ class FunctionsTestsMixin:
         SQLTestUtils.assert_close(to_reciprocal_trig(math.tan), df.select(cot(df.value)).collect())
 
     def test_rand_functions(self):
-        df = self.df
-        from pyspark.sql import functions
+        df = self.spark.createDataFrame([Row(key=i, value=str(i)) for i in range(100)])
 
         rnd = df.select("key", functions.rand()).collect()
         for row in rnd:

@@ -89,6 +89,7 @@ class Relation(google.protobuf.message.Message):
     UNPIVOT_FIELD_NUMBER: builtins.int
     TO_SCHEMA_FIELD_NUMBER: builtins.int
     REPARTITION_BY_EXPRESSION_FIELD_NUMBER: builtins.int
+    WITH_METADATA_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -158,6 +159,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def repartition_by_expression(self) -> global___RepartitionByExpression: ...
     @property
+    def with_metadata(self) -> global___WithMetadata: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -221,6 +224,7 @@ class Relation(google.protobuf.message.Message):
         unpivot: global___Unpivot | None = ...,
         to_schema: global___ToSchema | None = ...,
         repartition_by_expression: global___RepartitionByExpression | None = ...,
+        with_metadata: global___WithMetadata | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -323,6 +327,8 @@ class Relation(google.protobuf.message.Message):
             b"unpivot",
             "with_columns",
             b"with_columns",
+            "with_metadata",
+            b"with_metadata",
         ],
     ) -> builtins.bool: ...
     def ClearField(
@@ -412,6 +418,8 @@ class Relation(google.protobuf.message.Message):
             b"unpivot",
             "with_columns",
             b"with_columns",
+            "with_metadata",
+            b"with_metadata",
         ],
     ) -> None: ...
     def WhichOneof(
@@ -443,6 +451,7 @@ class Relation(google.protobuf.message.Message):
         "unpivot",
         "to_schema",
         "repartition_by_expression",
+        "with_metadata",
         "fill_na",
         "drop_na",
         "replace",
@@ -1268,45 +1277,44 @@ class LocalRelation(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     DATA_FIELD_NUMBER: builtins.int
-    DATATYPE_FIELD_NUMBER: builtins.int
-    DATATYPE_STR_FIELD_NUMBER: builtins.int
+    SCHEMA_FIELD_NUMBER: builtins.int
     data: builtins.bytes
-    """Local collection data serialized into Arrow IPC streaming format which contains
+    """(Optional) Local collection data serialized into Arrow IPC streaming format which contains
     the schema of the data.
     """
-    @property
-    def datatype(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
-    datatype_str: builtins.str
-    """Server will use Catalyst parser to parse this string to DataType."""
+    schema: builtins.str
+    """(Optional) The schema of local data.
+    It should be either a DDL-formatted type string or a JSON string.
+
+    The server side will update the column names and data types according to this schema.
+    If the 'data' is not provided, then this schema will be required.
+    """
     def __init__(
         self,
         *,
-        data: builtins.bytes = ...,
-        datatype: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
-        datatype_str: builtins.str = ...,
+        data: builtins.bytes | None = ...,
+        schema: builtins.str | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "datatype", b"datatype", "datatype_str", b"datatype_str", "schema", b"schema"
+            "_data", b"_data", "_schema", b"_schema", "data", b"data", "schema", b"schema"
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "data",
-            b"data",
-            "datatype",
-            b"datatype",
-            "datatype_str",
-            b"datatype_str",
-            "schema",
-            b"schema",
+            "_data", b"_data", "_schema", b"_schema", "data", b"data", "schema", b"schema"
         ],
     ) -> None: ...
+    @typing.overload
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["schema", b"schema"]
-    ) -> typing_extensions.Literal["datatype", "datatype_str"] | None: ...
+        self, oneof_group: typing_extensions.Literal["_data", b"_data"]
+    ) -> typing_extensions.Literal["data"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_schema", b"_schema"]
+    ) -> typing_extensions.Literal["schema"] | None: ...
 
 global___LocalRelation = LocalRelation
 
@@ -1922,6 +1930,8 @@ global___StatFreqItems = StatFreqItems
 class StatSampleBy(google.protobuf.message.Message):
     """Returns a stratified sample without replacement based on the fraction
     given on each stratum.
+    It will invoke 'Dataset.stat.freqItems' (same as 'StatFunctions.freqItems')
+    to compute the results.
     """
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -2354,6 +2364,40 @@ class WithColumns(google.protobuf.message.Message):
     ) -> None: ...
 
 global___WithColumns = WithColumns
+
+class WithMetadata(google.protobuf.message.Message):
+    """Update an existing column with metadata."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    COLUMN_FIELD_NUMBER: builtins.int
+    METADATA_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    column: builtins.str
+    """(Required) The column."""
+    metadata: builtins.str
+    """(Required) The JSON-formatted metadata."""
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        column: builtins.str = ...,
+        metadata: builtins.str = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "column", b"column", "input", b"input", "metadata", b"metadata"
+        ],
+    ) -> None: ...
+
+global___WithMetadata = WithMetadata
 
 class Hint(google.protobuf.message.Message):
     """Specify a hint over a relation. Hint should have a name and optional parameters."""

@@ -60,6 +60,7 @@ message Relation {
     Unpivot unpivot = 25;
     ToSchema to_schema = 26;
     RepartitionByExpression repartition_by_expression = 27;
+    WithMetadata with_metadata = 28;
 
     // NA functions
     NAFill fill_na = 90;
@@ -328,20 +329,16 @@ message Deduplicate {
 
 // A relation that does not need to be qualified by name.
 message LocalRelation {
-  // Local collection data serialized into Arrow IPC streaming format which contains
+  // (Optional) Local collection data serialized into Arrow IPC streaming format which contains
   // the schema of the data.
-  bytes data = 1;
+  optional bytes data = 1;
 
-  // (Optional) The user provided schema.
+  // (Optional) The schema of local data.
+  // It should be either a DDL-formatted type string or a JSON string.
   //
-  // The Sever side will update the column names and data types according to this schema.
-  oneof schema {
-
-    DataType datatype = 2;
-
-    // Server will use Catalyst parser to parse this string to DataType.
-    string datatype_str = 3;
-  }
+  // The server side will update the column names and data types according to this schema.
+  // If the 'data' is not provided, then this schema will be required.
+  optional string schema = 2;
 }
 
 // Relation of type [[Sample]] that samples a fraction of the dataset.
@@ -550,6 +547,8 @@ message StatFreqItems {
 
 // Returns a stratified sample without replacement based on the fraction
 // given on each stratum.
+// It will invoke 'Dataset.stat.freqItems' (same as 'StatFunctions.freqItems')
+// to compute the results.
 message StatSampleBy {
   // (Required) The input relation.
   Relation input = 1;
@@ -695,6 +694,20 @@ message WithColumns {
   // An exception is thrown when duplicated names are present in the mapping.
   repeated Expression.Alias name_expr_list = 2;
 }
+
+
+// Update an existing column with metadata.
+message WithMetadata {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) The column.
+  string column = 2;
+
+  // (Required) The JSON-formatted metadata.
+  string metadata = 3;
+}
+
 
 // Specify a hint over a relation. Hint should have a name and optional parameters.
 message Hint {
