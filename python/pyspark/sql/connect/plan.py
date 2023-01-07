@@ -17,6 +17,7 @@
 
 from typing import Any, List, Optional, Sequence, Union, cast, TYPE_CHECKING, Mapping, Dict
 import functools
+import json
 import pyarrow as pa
 from inspect import signature, isclass
 
@@ -390,6 +391,27 @@ class WithColumns(LogicalPlan):
             name_expr.name.append(k)
             name_expr.expr.CopyFrom(v.to_plan(session))
             plan.with_columns.name_expr_list.append(name_expr)
+        return plan
+
+
+class WithMetadata(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], column: str, metadata: str) -> None:
+        super().__init__(child)
+
+        assert isinstance(column, str)
+        assert isinstance(metadata, str)
+        # validate json string
+        json.loads(metadata)
+
+        self._column = column
+        self._metadata = metadata
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+        plan = proto.Relation()
+        plan.with_metadata.input.CopyFrom(self._child.plan(session))
+        plan.with_metadata.column = self._column
+        plan.with_metadata.metadata = self._metadata
         return plan
 
 

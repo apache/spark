@@ -34,6 +34,7 @@ import sys
 import random
 import pandas
 import datetime
+import json
 import warnings
 from collections.abc import Iterable
 
@@ -471,6 +472,21 @@ class DataFrame:
         )
 
     sample.__doc__ = PySparkDataFrame.sample.__doc__
+
+    def withMetadata(self, columnName: str, metadata: Dict[str, Any]) -> "DataFrame":
+        if not isinstance(metadata, dict):
+            raise TypeError("metadata should be a dict")
+
+        return DataFrame.withPlan(
+            plan.WithMetadata(
+                child=self._plan,
+                column=columnName,
+                metadata=json.dumps(metadata),
+            ),
+            session=self._session,
+        )
+
+    withMetadata.__doc__ = PySparkDataFrame.withMetadata.__doc__
 
     def withColumnRenamed(self, existing: str, new: str) -> "DataFrame":
         return self.withColumnsRenamed({existing: new})

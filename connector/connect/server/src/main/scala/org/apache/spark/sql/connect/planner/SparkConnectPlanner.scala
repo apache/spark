@@ -106,6 +106,7 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Relation.RelTypeCase.RENAME_COLUMNS_BY_NAME_TO_NAME_MAP =>
         transformRenameColumnsByNameToNameMap(rel.getRenameColumnsByNameToNameMap)
       case proto.Relation.RelTypeCase.WITH_COLUMNS => transformWithColumns(rel.getWithColumns)
+      case proto.Relation.RelTypeCase.WITH_METADATA => transformWithMetadata(rel.getWithMetadata)
       case proto.Relation.RelTypeCase.HINT => transformHint(rel.getHint)
       case proto.Relation.RelTypeCase.UNPIVOT => transformUnpivot(rel.getUnpivot)
       case proto.Relation.RelTypeCase.REPARTITION_BY_EXPRESSION =>
@@ -482,6 +483,13 @@ class SparkConnectPlanner(session: SparkSession) {
     Dataset
       .ofRows(session, transformRelation(rel.getInput))
       .withColumns(names.toSeq, cols.toSeq)
+      .logicalPlan
+  }
+
+  private def transformWithMetadata(rel: proto.WithMetadata): LogicalPlan = {
+    Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .withMetadata(rel.getColumn, Metadata.fromJson(rel.getMetadata))
       .logicalPlan
   }
 
