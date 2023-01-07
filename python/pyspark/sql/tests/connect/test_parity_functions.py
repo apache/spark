@@ -16,34 +16,12 @@
 #
 
 import unittest
-import os
 
-from pyspark.sql import SparkSession
 from pyspark.sql.tests.test_functions import FunctionsTestsMixin
-from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
-from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-@unittest.skipIf(not should_test_connect, connect_requirement_message)
-class FunctionsParityTests(ReusedSQLTestCase, FunctionsTestsMixin):
-    @classmethod
-    def setUpClass(cls):
-        from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
-
-        super(FunctionsParityTests, cls).setUpClass()
-        cls._spark = cls.spark  # Assign existing Spark session to run the server
-        # Sets the remote address. Now, we create a remote Spark Session.
-        # Note that this is only allowed in testing.
-        os.environ["SPARK_REMOTE"] = "sc://localhost"
-        cls.spark = SparkSession.builder.remote("sc://localhost").getOrCreate()
-        assert isinstance(cls.spark, RemoteSparkSession)
-
-    @classmethod
-    def tearDownClass(cls):
-        super(FunctionsParityTests, cls).tearDownClass()
-        cls.spark = cls._spark.stop()
-        del os.environ["SPARK_REMOTE"]
-
+class FunctionsParityTests(FunctionsTestsMixin, ReusedConnectTestCase):
     # TODO(SPARK-41897): Parity in Error types between pyspark and connect functions
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_assert_true(self):

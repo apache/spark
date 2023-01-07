@@ -28,7 +28,6 @@ from typing import (
     Optional,
 )
 
-from pyspark import SparkContext, SparkConf
 from pyspark.sql.types import DataType
 from pyspark.sql.column import Column as PySparkColumn
 
@@ -434,13 +433,12 @@ def _test() -> None:
         import pyspark.sql.connect.column
 
         globs = pyspark.sql.connect.column.__dict__.copy()
-        # Works around to create a regular Spark session
-        sc = SparkContext("local[4]", "sql.connect.column tests", conf=SparkConf())
-        globs["_spark"] = PySparkSession(sc, options={"spark.app.name": "sql.connect.column tests"})
+        globs["spark"] = (
+            PySparkSession.builder.appName("sql.connect.column tests")
+            .remote("local[4]")
+            .getOrCreate()
+        )
 
-        # Creates a remote Spark session.
-        os.environ["SPARK_REMOTE"] = "sc://localhost"
-        globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
         # Spark Connect has a different string representation for Column.
         del pyspark.sql.connect.column.Column.getItem.__doc__
 
@@ -456,7 +454,7 @@ def _test() -> None:
         )
 
         globs["spark"].stop()
-        globs["_spark"].stop()
+
         if failure_count:
             sys.exit(-1)
     else:

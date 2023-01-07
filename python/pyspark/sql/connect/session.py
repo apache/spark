@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
+from distutils.version import LooseVersion
 from threading import RLock
 from collections.abc import Sized
 from functools import reduce
@@ -22,7 +24,8 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 
-from pyspark import SparkContext, SparkConf
+from pyspark import SparkContext, SparkConf, __version__
+from pyspark.java_gateway import launch_gateway
 from pyspark.sql.session import classproperty, SparkSession as PySparkSession
 from pyspark.sql.types import (
     _infer_schema,
@@ -52,6 +55,7 @@ from typing import (
     Iterable,
     TYPE_CHECKING,
 )
+
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import OptionalPrimitiveType
@@ -338,25 +342,36 @@ class SparkSession:
 
     catalog.__doc__ = PySparkSession.catalog.__doc__
 
+    def __del__(self) -> None:
+        try:
+            # Try its best to close.
+            self.client.close()
+        except Exception:
+            pass
+
     def stop(self) -> None:
+        # Stopping the session will only stop the current session by closing the connection,
+        # whereas the regular PySpark session closes the Spark Context itself, meaning that
+        # closing all Spark sessions. It is controversial to follow the existing
+        # the regular Spark session's behavior specifically in Spark Connect
+        # the Spark Connect server is designed for multi-tenancy - the remote client side
+        # cannot just stop the server and close other remote clients being used from other
+        # users.
         self.client.close()
 
+        if "SPARK_LOCAL_REMOTE" in os.environ:
+            # When local mode is in use, follow the regular Spark session's
+            # behavior by terminating the Spark Connect server,
+            # meaning that you can stop local mode, and restart the Spark Connect
+            # client with a different remote address.
+            active_session = PySparkSession.getActiveSession()
+            if active_session is not None:
+                active_session.stop()
+            with SparkContext._lock:
+                del os.environ["SPARK_LOCAL_REMOTE"]
+                del os.environ["SPARK_REMOTE"]
+
     stop.__doc__ = PySparkSession.stop.__doc__
-
-    # SparkConnect-specific API
-    @property
-    def client(self) -> "SparkConnectClient":
-        """
-        Gives access to the Spark Connect client. In normal cases this is not necessary to be used
-        and only relevant for testing.
-        Returns
-        -------
-        :class:`SparkConnectClient`
-        """
-        return self._client
-
-    def register_udf(self, function: Any, return_type: Union[str, DataType]) -> str:
-        return self._client.register_udf(function, return_type)
 
     @classmethod
     def getActiveSession(cls) -> Any:
@@ -385,6 +400,120 @@ class SparkSession:
     def version(self) -> str:
         raise NotImplementedError("version() is not implemented.")
 
+    # SparkConnect-specific API
+    @property
+    def client(self) -> "SparkConnectClient":
+        """
+        Gives access to the Spark Connect client. In normal cases this is not necessary to be used
+        and only relevant for testing.
+        Returns
+        -------
+        :class:`SparkConnectClient`
+        """
+        return self._client
+
+    def register_udf(self, function: Any, return_type: Union[str, DataType]) -> str:
+        return self._client.register_udf(function, return_type)
+
+    @staticmethod
+    def _start_connect_server(master: str) -> None:
+        """
+        Starts the Spark Connect server given the master.
+
+        At the high level, there are two cases. The first case is when you locally build
+        Apache Spark, and run ``SparkSession.builder.remote("local")``:
+
+        1. This method automatically finds the jars for Spark Connect (because the jars for
+          Spark Connect are not bundled in the regular Apache Spark release).
+
+        2. Temporarily remove all states for Spark Connect, for example, ``SPARK_REMOTE``
+          environment variable.
+
+            2.1. If we're in PySpark application submission, e.g., ``bin/spark-submit app.py``
+              starts a JVM (without Spark Context) first, and adds the Spark Connect server jars
+              into the current class loader. Otherwise, Spark Context with ``spark.plugins``
+              cannot be initialized because the JVM is already running without the jars in
+              the class path before executing this Python process for driver side.
+
+        3. Starts a regular Spark session that automatically starts a Spark Connect server
+          with JVM (if it is not up) via ``spark.plugins`` feature.
+
+        The second case is when you use Apache Spark release:
+
+        1. Users must specify either the jars or package, e.g., ``--packages
+          org.apache.spark:spark-connect_2.12:3.4.0``. The jars or packages would be specified
+          in SparkSubmit automatically. This method does not do anything related to this.
+
+        2. Temporarily remove all states for Spark Connect, for example, ``SPARK_REMOTE``
+          environment variable. It does not do anything for PySpark application submission as
+          well because jars or packages were already specified before executing this Python
+          process for driver side.
+
+        3. Starts a regular Spark session that automatically starts a Spark Connect server
+          with JVM via ``spark.plugins`` feature.
+        """
+        session = PySparkSession._instantiatedSession
+        if session is None or session._sc._jsc is None:
+            conf = SparkConf()
+            # Check if we're using unreleased version that is in development.
+            is_dev_version = "dev" in LooseVersion(__version__).version
+            connect_jar = None
+
+            if is_dev_version:
+                from pyspark.testing.utils import search_jar
+
+                # Note that, in production, spark.packages configuration should be set by users.
+                # Here we're automatically searching the jars locally built.
+                connect_jar = search_jar(
+                    "connector/connect/server", "spark-connect-assembly-", "spark-connect"
+                )
+                if connect_jar is None:
+                    raise RuntimeError(
+                        "Spark Connect project was not compiled into a JAR. "
+                        "To use --remote without specifying jars, you need to build Spark "
+                        "with 'build/sbt package' or 'build/mvn package' first"
+                    )
+                conf.set("spark.jars", connect_jar)
+
+            conf.set("spark.master", master)
+            conf.set("spark.plugins", "org.apache.spark.sql.connect.SparkConnectPlugin")
+
+            origin_remote = os.environ.get("SPARK_REMOTE", None)
+            origin_args = os.environ.get("PYSPARK_SUBMIT_ARGS", None)
+            try:
+                if origin_remote is not None:
+                    # So SparkSubmit thinks no remote is set in order to
+                    # start the regular PySpark session.
+                    del os.environ["SPARK_REMOTE"]
+                if origin_args is not None:
+                    # PySpark shell launches Py4J server from Python.
+                    # Remove "--remote" option specified, and use plain arguments.
+                    # NOTE that this is not used in regular PySpark application
+                    # submission because JVM at this point is already running.
+                    os.environ["PYSPARK_SUBMIT_ARGS"] = '"--name" "PySparkShell" "pyspark-shell"'
+
+                if is_dev_version:
+                    # In the case of Python application submission, JVM is already up.
+                    # Therefore, we should manually manipulate the classpath in that case.
+                    # Otherwise, the jars are added but the driver would not be able to
+                    # find the server jars.
+                    with SparkContext._lock:
+                        if not SparkContext._gateway:
+                            SparkContext._gateway = launch_gateway(conf)
+                            SparkContext._jvm = SparkContext._gateway.jvm
+                            SparkContext._jvm.PythonSQLUtils.addJarToCurrentClassLoader(connect_jar)
+
+                # The regular PySpark session is registered as an active session
+                # so would not be garbage-collected.
+                PySparkSession(SparkContext.getOrCreate(conf))
+            finally:
+                if origin_args is not None:
+                    os.environ["PYSPARK_SUBMIT_ARGS"] = origin_args
+                if origin_remote is not None:
+                    os.environ["SPARK_REMOTE"] = origin_remote
+        else:
+            raise RuntimeError("There should not be an existing Spark Session or Spark Context.")
+
 
 SparkSession.__doc__ = PySparkSession.__doc__
 
@@ -402,15 +531,11 @@ def _test() -> None:
         import pyspark.sql.connect.session
 
         globs = pyspark.sql.connect.session.__dict__.copy()
-        # Works around to create a regular Spark session
-        sc = SparkContext("local[4]", "sql.connect.session tests", conf=SparkConf())
-        globs["_spark"] = PySparkSession(
-            sc, options={"spark.app.name": "sql.connect.session tests"}
+        globs["spark"] = (
+            PySparkSession.builder.appName("sql.connect.session tests")
+            .remote("local[4]")
+            .getOrCreate()
         )
-
-        # Creates a remote Spark session.
-        os.environ["SPARK_REMOTE"] = "sc://localhost"
-        globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
 
         # Uses PySpark session to test builder.
         globs["SparkSession"] = PySparkSession
@@ -432,7 +557,7 @@ def _test() -> None:
         )
 
         globs["spark"].stop()
-        globs["_spark"].stop()
+
         if failure_count:
             sys.exit(-1)
     else:

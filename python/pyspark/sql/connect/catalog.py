@@ -18,7 +18,6 @@ from typing import List, Optional, TYPE_CHECKING
 
 import pandas as pd
 
-from pyspark import SparkContext, SparkConf
 from pyspark.sql.types import StructType
 from pyspark.sql.connect import DataFrame
 from pyspark.sql.catalog import (
@@ -324,15 +323,11 @@ def _test() -> None:
         import pyspark.sql.connect.catalog
 
         globs = pyspark.sql.connect.catalog.__dict__.copy()
-        # Works around to create a regular Spark session
-        sc = SparkContext("local[4]", "sql.connect.catalog tests", conf=SparkConf())
-        globs["_spark"] = PySparkSession(
-            sc, options={"spark.app.name": "sql.connect.catalog tests"}
+        globs["spark"] = (
+            PySparkSession.builder.appName("sql.connect.catalog tests")
+            .remote("local[4]")
+            .getOrCreate()
         )
-
-        # Creates a remote Spark session.
-        os.environ["SPARK_REMOTE"] = "sc://localhost"
-        globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
 
         # TODO(SPARK-41612): Support Catalog.isCached
         # TODO(SPARK-41600): Support Catalog.cacheTable
@@ -348,8 +343,8 @@ def _test() -> None:
             | doctest.NORMALIZE_WHITESPACE
             | doctest.IGNORE_EXCEPTION_DETAIL,
         )
-        globs["_spark"].stop()
         globs["spark"].stop()
+
         if failure_count:
             sys.exit(-1)
     else:
