@@ -473,21 +473,6 @@ class DataFrame:
 
     sample.__doc__ = PySparkDataFrame.sample.__doc__
 
-    def withMetadata(self, columnName: str, metadata: Dict[str, Any]) -> "DataFrame":
-        if not isinstance(metadata, dict):
-            raise TypeError("metadata should be a dict")
-
-        return DataFrame.withPlan(
-            plan.WithMetadata(
-                child=self._plan,
-                column=columnName,
-                metadata=json.dumps(metadata),
-            ),
-            session=self._session,
-        )
-
-    withMetadata.__doc__ = PySparkDataFrame.withMetadata.__doc__
-
     def withColumnRenamed(self, existing: str, new: str) -> "DataFrame":
         return self.withColumnsRenamed({existing: new})
 
@@ -531,8 +516,18 @@ class DataFrame:
         if not isinstance(colsMap, dict):
             raise TypeError("colsMap must be dict of column name and column.")
 
+        names: List[str] = []
+        columns: List[Column] = []
+        for columnName, column in colsMap.items():
+            names.append(columnName)
+            columns.append(column)
+
         return DataFrame.withPlan(
-            plan.WithColumns(self._plan, colsMap),
+            plan.WithColumns(
+                self._plan,
+                columnNames=names,
+                columns=columns,
+            ),
             session=self._session,
         )
 
@@ -542,11 +537,31 @@ class DataFrame:
         if not isinstance(col, Column):
             raise TypeError("col should be Column")
         return DataFrame.withPlan(
-            plan.WithColumns(self._plan, {colName: col}),
+            plan.WithColumns(
+                self._plan,
+                columnNames=[colName],
+                columns=[col],
+            ),
             session=self._session,
         )
 
     withColumn.__doc__ = PySparkDataFrame.withColumn.__doc__
+
+    def withMetadata(self, columnName: str, metadata: Dict[str, Any]) -> "DataFrame":
+        if not isinstance(metadata, dict):
+            raise TypeError("metadata should be a dict")
+
+        return DataFrame.withPlan(
+            plan.WithColumns(
+                self._plan,
+                columnNames=[columnName],
+                columns=[self[columnName]],
+                metadata=[json.dumps(metadata)],
+            ),
+            session=self._session,
+        )
+
+    withMetadata.__doc__ = PySparkDataFrame.withMetadata.__doc__
 
     def unpivot(
         self,

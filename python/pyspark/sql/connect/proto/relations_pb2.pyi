@@ -89,7 +89,6 @@ class Relation(google.protobuf.message.Message):
     UNPIVOT_FIELD_NUMBER: builtins.int
     TO_SCHEMA_FIELD_NUMBER: builtins.int
     REPARTITION_BY_EXPRESSION_FIELD_NUMBER: builtins.int
-    WITH_METADATA_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -159,8 +158,6 @@ class Relation(google.protobuf.message.Message):
     @property
     def repartition_by_expression(self) -> global___RepartitionByExpression: ...
     @property
-    def with_metadata(self) -> global___WithMetadata: ...
-    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -224,7 +221,6 @@ class Relation(google.protobuf.message.Message):
         unpivot: global___Unpivot | None = ...,
         to_schema: global___ToSchema | None = ...,
         repartition_by_expression: global___RepartitionByExpression | None = ...,
-        with_metadata: global___WithMetadata | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -327,8 +323,6 @@ class Relation(google.protobuf.message.Message):
             b"unpivot",
             "with_columns",
             b"with_columns",
-            "with_metadata",
-            b"with_metadata",
         ],
     ) -> builtins.bool: ...
     def ClearField(
@@ -418,8 +412,6 @@ class Relation(google.protobuf.message.Message):
             b"unpivot",
             "with_columns",
             b"with_columns",
-            "with_metadata",
-            b"with_metadata",
         ],
     ) -> None: ...
     def WhichOneof(
@@ -451,7 +443,6 @@ class Relation(google.protobuf.message.Message):
         "unpivot",
         "to_schema",
         "repartition_by_expression",
-        "with_metadata",
         "fill_na",
         "drop_na",
         "replace",
@@ -2324,12 +2315,12 @@ class WithColumns(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
-    NAME_EXPR_LIST_FIELD_NUMBER: builtins.int
+    ALIASES_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
         """(Required) The input relation."""
     @property
-    def name_expr_list(
+    def aliases(
         self,
     ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
         pyspark.sql.connect.proto.expressions_pb2.Expression.Alias
@@ -2348,7 +2339,7 @@ class WithColumns(google.protobuf.message.Message):
         self,
         *,
         input: global___Relation | None = ...,
-        name_expr_list: collections.abc.Iterable[
+        aliases: collections.abc.Iterable[
             pyspark.sql.connect.proto.expressions_pb2.Expression.Alias
         ]
         | None = ...,
@@ -2357,47 +2348,10 @@ class WithColumns(google.protobuf.message.Message):
         self, field_name: typing_extensions.Literal["input", b"input"]
     ) -> builtins.bool: ...
     def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "input", b"input", "name_expr_list", b"name_expr_list"
-        ],
+        self, field_name: typing_extensions.Literal["aliases", b"aliases", "input", b"input"]
     ) -> None: ...
 
 global___WithColumns = WithColumns
-
-class WithMetadata(google.protobuf.message.Message):
-    """Update an existing column with metadata."""
-
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-    INPUT_FIELD_NUMBER: builtins.int
-    COLUMN_FIELD_NUMBER: builtins.int
-    METADATA_FIELD_NUMBER: builtins.int
-    @property
-    def input(self) -> global___Relation:
-        """(Required) The input relation."""
-    column: builtins.str
-    """(Required) The column."""
-    metadata: builtins.str
-    """(Required) The JSON-formatted metadata."""
-    def __init__(
-        self,
-        *,
-        input: global___Relation | None = ...,
-        column: builtins.str = ...,
-        metadata: builtins.str = ...,
-    ) -> None: ...
-    def HasField(
-        self, field_name: typing_extensions.Literal["input", b"input"]
-    ) -> builtins.bool: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "column", b"column", "input", b"input", "metadata", b"metadata"
-        ],
-    ) -> None: ...
-
-global___WithMetadata = WithMetadata
 
 class Hint(google.protobuf.message.Message):
     """Specify a hint over a relation. Hint should have a name and optional parameters."""

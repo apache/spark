@@ -106,7 +106,6 @@ class SparkConnectPlanner(session: SparkSession) {
       case proto.Relation.RelTypeCase.RENAME_COLUMNS_BY_NAME_TO_NAME_MAP =>
         transformRenameColumnsByNameToNameMap(rel.getRenameColumnsByNameToNameMap)
       case proto.Relation.RelTypeCase.WITH_COLUMNS => transformWithColumns(rel.getWithColumns)
-      case proto.Relation.RelTypeCase.WITH_METADATA => transformWithMetadata(rel.getWithMetadata)
       case proto.Relation.RelTypeCase.HINT => transformHint(rel.getHint)
       case proto.Relation.RelTypeCase.UNPIVOT => transformUnpivot(rel.getUnpivot)
       case proto.Relation.RelTypeCase.REPARTITION_BY_EXPRESSION =>
@@ -468,28 +467,25 @@ class SparkConnectPlanner(session: SparkSession) {
   }
 
   private def transformWithColumns(rel: proto.WithColumns): LogicalPlan = {
-    val (names, cols) =
-      rel.getNameExprListList.asScala
-        .map(e => {
-          if (e.getNameCount() == 1) {
-            (e.getName(0), Column(transformExpression(e.getExpr)))
-          } else {
-            throw InvalidPlanInput(
-              s"""WithColumns require column name only contains one name part,
-                 |but got ${e.getNameList.toString}""".stripMargin)
-          }
-        })
-        .unzip
-    Dataset
-      .ofRows(session, transformRelation(rel.getInput))
-      .withColumns(names.toSeq, cols.toSeq)
-      .logicalPlan
-  }
+    val (colNames, cols, metadata) =
+      rel.getAliasesList.asScala.toSeq.map { alias =>
+        if (alias.getNameCount != 1) {
+          throw InvalidPlanInput(s"""WithColumns require column name only contains one name part,
+             |but got ${alias.getNameList.toString}""".stripMargin)
+        }
 
-  private def transformWithMetadata(rel: proto.WithMetadata): LogicalPlan = {
+        val metadata = if (alias.hasMetadata && alias.getMetadata.nonEmpty) {
+          Metadata.fromJson(alias.getMetadata)
+        } else {
+          Metadata.empty
+        }
+
+        (alias.getName(0), Column(transformExpression(alias.getExpr)), metadata)
+      }.unzip3
+
     Dataset
       .ofRows(session, transformRelation(rel.getInput))
-      .withMetadata(rel.getColumn, Metadata.fromJson(rel.getMetadata))
+      .withColumns(colNames, cols, metadata)
       .logicalPlan
   }
 
@@ -964,15 +960,15 @@ class SparkConnectPlanner(session: SparkSession) {
 
   private def transformAlias(alias: proto.Expression.Alias): NamedExpression = {
     if (alias.getNameCount == 1) {
-      val md = if (alias.hasMetadata()) {
+      val metadata = if (alias.hasMetadata() && alias.getMetadata.nonEmpty) {
         Some(Metadata.fromJson(alias.getMetadata))
       } else {
         None
       }
-      Alias(transformExpression(alias.getExpr), alias.getName(0))(explicitMetadata = md)
+      Alias(transformExpression(alias.getExpr), alias.getName(0))(explicitMetadata = metadata)
     } else {
       if (alias.hasMetadata) {
-        throw new InvalidPlanInput(
+        throw InvalidPlanInput(
           "Alias expressions with more than 1 identifier must not use optional metadata.")
       }
       MultiAlias(transformExpression(alias.getExpr), alias.getNameList.asScala.toSeq)
