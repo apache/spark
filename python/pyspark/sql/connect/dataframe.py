@@ -34,12 +34,13 @@ import sys
 import random
 import pandas
 import datetime
+import json
 import warnings
 from collections.abc import Iterable
 
 from pyspark import _NoValue, SparkContext, SparkConf
 from pyspark._globals import _NoValueType
-from pyspark.sql.types import DataType, StructType, Row
+from pyspark.sql.types import StructType, Row
 
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.group import GroupedData
@@ -471,6 +472,21 @@ class DataFrame:
         )
 
     sample.__doc__ = PySparkDataFrame.sample.__doc__
+
+    def withMetadata(self, columnName: str, metadata: Dict[str, Any]) -> "DataFrame":
+        if not isinstance(metadata, dict):
+            raise TypeError("metadata should be a dict")
+
+        return DataFrame.withPlan(
+            plan.WithMetadata(
+                child=self._plan,
+                column=columnName,
+                metadata=json.dumps(metadata),
+            ),
+            session=self._session,
+        )
+
+    withMetadata.__doc__ = PySparkDataFrame.withMetadata.__doc__
 
     def withColumnRenamed(self, existing: str, new: str) -> "DataFrame":
         return self.withColumnsRenamed({existing: new})
@@ -1194,7 +1210,7 @@ class DataFrame:
 
     inputFiles.__doc__ = PySparkDataFrame.inputFiles.__doc__
 
-    def to(self, schema: DataType) -> "DataFrame":
+    def to(self, schema: StructType) -> "DataFrame":
         assert schema is not None
         return DataFrame.withPlan(
             plan.ToSchema(child=self._plan, schema=schema),
