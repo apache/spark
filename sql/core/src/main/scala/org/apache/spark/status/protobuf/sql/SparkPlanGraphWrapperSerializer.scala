@@ -44,8 +44,8 @@ class SparkPlanGraphWrapperSerializer extends ProtobufSerDe {
     val wrapper = StoreTypes.SparkPlanGraphWrapper.parseFrom(bytes)
     new SparkPlanGraphWrapper(
       executionId = wrapper.getExecutionId,
-      nodes = wrapper.getNodesList.asScala.map(deserializeSparkPlanGraphNodeWrapper).toSeq,
-      edges = wrapper.getEdgesList.asScala.map(deserializeSparkPlanGraphEdge).toSeq
+      nodes = wrapper.getNodesList.asScala.map(deserializeSparkPlanGraphNodeWrapper),
+      edges = wrapper.getEdgesList.asScala.map(deserializeSparkPlanGraphEdge)
     )
   }
 
@@ -53,8 +53,9 @@ class SparkPlanGraphWrapperSerializer extends ProtobufSerDe {
     StoreTypes.SparkPlanGraphNodeWrapper = {
 
     val builder = StoreTypes.SparkPlanGraphNodeWrapper.newBuilder()
-    builder.setNode(serializeSparkPlanGraphNode(input.node))
-    builder.setCluster(serializeSparkPlanGraphClusterWrapper(input.cluster))
+    Option(input.node).foreach(node => builder.setNode(serializeSparkPlanGraphNode(node)))
+    Option(input.cluster)
+      .foreach(cluster => builder.setCluster(serializeSparkPlanGraphClusterWrapper(cluster)))
     builder.build()
   }
 
@@ -101,7 +102,7 @@ class SparkPlanGraphWrapperSerializer extends ProtobufSerDe {
       id = node.getId,
       name = node.getName,
       desc = node.getDesc,
-      metrics = node.getMetricsList.asScala.map(SQLPlanMetricSerializer.deserialize).toSeq
+      metrics = node.getMetricsList.asScala.map(SQLPlanMetricSerializer.deserialize)
     )
   }
 
@@ -127,8 +128,8 @@ class SparkPlanGraphWrapperSerializer extends ProtobufSerDe {
       id = cluster.getId,
       name = cluster.getName,
       desc = cluster.getDesc,
-      nodes = cluster.getNodesList.asScala.map(deserializeSparkPlanGraphNodeWrapper).toSeq,
-      metrics = cluster.getMetricsList.asScala.map(SQLPlanMetricSerializer.deserialize).toSeq
+      nodes = cluster.getNodesList.asScala.map(deserializeSparkPlanGraphNodeWrapper),
+      metrics = cluster.getMetricsList.asScala.map(SQLPlanMetricSerializer.deserialize)
     )
   }
 }

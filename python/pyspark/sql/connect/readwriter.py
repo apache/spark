@@ -199,6 +199,29 @@ class DataFrameReader(OptionUtils):
 
     parquet.__doc__ = PySparkDataFrameReader.parquet.__doc__
 
+    def text(
+        self,
+        path: str,
+        wholetext: Optional[bool] = None,
+        lineSep: Optional[str] = None,
+        pathGlobFilter: Optional[Union[bool, str]] = None,
+        recursiveFileLookup: Optional[Union[bool, str]] = None,
+        modifiedBefore: Optional[Union[bool, str]] = None,
+        modifiedAfter: Optional[Union[bool, str]] = None,
+    ) -> "DataFrame":
+        self._set_opts(
+            wholetext=wholetext,
+            lineSep=lineSep,
+            pathGlobFilter=pathGlobFilter,
+            recursiveFileLookup=recursiveFileLookup,
+            modifiedBefore=modifiedBefore,
+            modifiedAfter=modifiedAfter,
+        )
+
+        return self.load(path=path, format="text")
+
+    text.__doc__ = PySparkDataFrameReader.text.__doc__
+
 
 DataFrameReader.__doc__ = PySparkDataFrameReader.__doc__
 
@@ -483,6 +506,7 @@ def _test() -> None:
         # TODO(SPARK-41817): Support reading with schema
         del pyspark.sql.connect.readwriter.DataFrameReader.load.__doc__
         del pyspark.sql.connect.readwriter.DataFrameReader.option.__doc__
+        del pyspark.sql.connect.readwriter.DataFrameReader.text.__doc__
         del pyspark.sql.connect.readwriter.DataFrameWriter.csv.__doc__
         del pyspark.sql.connect.readwriter.DataFrameWriter.option.__doc__
         del pyspark.sql.connect.readwriter.DataFrameWriter.text.__doc__

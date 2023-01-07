@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.Locale
 
+import scala.collection.mutable
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
@@ -27,7 +29,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
-import org.apache.spark.sql.execution.datasources.FileFormat.METADATA_NAME
 import org.apache.spark.sql.types.{DoubleType, FloatType, LongType, StructType}
 import org.apache.spark.util.collection.BitSet
 
@@ -208,38 +209,43 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       val requiredExpressions: Seq[NamedExpression] = filterAttributes.toSeq ++ projects
       val requiredAttributes = AttributeSet(requiredExpressions)
 
-      val metadataStructOpt = l.output.collectFirst {
-        case FileSourceMetadataAttribute(attr) => attr
-      }
-
-      val metadataColumns = metadataStructOpt.map { metadataStruct =>
-        metadataStruct.dataType.asInstanceOf[StructType].fields.map { field =>
-          FileSourceMetadataAttribute(field.name, field.dataType)
-        }.toSeq
-      }.getOrElse(Seq.empty)
-
-      val fileConstantMetadataColumns: Seq[Attribute] =
-        metadataColumns.filter(_.name != FileFormat.ROW_INDEX)
-
       val readDataColumns = dataColumns
         .filter(requiredAttributes.contains)
         .filterNot(partitionColumns.contains)
 
-      val fileFormatReaderGeneratedMetadataColumns: Seq[Attribute] =
-        metadataColumns.map(_.name).flatMap {
-          case FileFormat.ROW_INDEX =>
-            if ((readDataColumns ++ partitionColumns).map(_.name.toLowerCase(Locale.ROOT))
-                .contains(FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME)) {
-              throw new AnalysisException(FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME +
-                " is a reserved column name that cannot be read in combination with " +
-                s"${FileFormat.METADATA_NAME}.${FileFormat.ROW_INDEX} column.")
-            }
-            Some(AttributeReference(FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME, LongType)())
-          case _ => None
-        }
+      // Metadata attributes are part of a column of type struct up to this point. Here we extract
+      // this column from the schema.
+      val metadataStructOpt = l.output.collectFirst {
+        case FileSourceMetadataAttribute(attr) => attr
+      }
 
-      val outputDataSchema = (readDataColumns ++ fileFormatReaderGeneratedMetadataColumns)
-        .toStructType
+      val constantMetadataColumns: mutable.Buffer[Attribute] = mutable.Buffer.empty
+      val generatedMetadataColumns: mutable.Buffer[Attribute] = mutable.Buffer.empty
+
+      metadataStructOpt.foreach { metadataStruct =>
+        metadataStruct.dataType.asInstanceOf[StructType].fields.foreach { field =>
+          field.name match {
+            case FileFormat.ROW_INDEX =>
+              if ((readDataColumns ++ partitionColumns).map(_.name.toLowerCase(Locale.ROOT))
+                  .contains(FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME)) {
+                throw new AnalysisException(FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME +
+                  " is a reserved column name that cannot be read in combination with " +
+                  s"${FileFormat.METADATA_NAME}.${FileFormat.ROW_INDEX} column.")
+              }
+              generatedMetadataColumns +=
+                FileSourceGeneratedMetadataAttribute(
+                  FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME, LongType, nullable = true)
+            case _ =>
+              constantMetadataColumns +=
+                FileSourceConstantMetadataAttribute(field.name, field.dataType)
+          }
+        }
+      }
+
+      val metadataColumns: Seq[Attribute] =
+        constantMetadataColumns.toSeq ++ generatedMetadataColumns.toSeq
+
+      val outputDataSchema = (readDataColumns ++ generatedMetadataColumns).toStructType
 
       // The output rows will be produced during file scan operation in three steps:
       //  (1) File format reader populates a `Row` with `readDataColumns` and
@@ -249,8 +255,8 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       // By placing `fileFormatReaderGeneratedMetadataColumns` before `partitionColumns` and
       // `fileConstantMetadataColumns` in the `outputAttributes` we make these row operations
       // simpler and more efficient.
-      val outputAttributes = readDataColumns ++ fileFormatReaderGeneratedMetadataColumns ++
-        partitionColumns ++ fileConstantMetadataColumns
+      val outputAttributes = readDataColumns ++ generatedMetadataColumns ++
+        partitionColumns ++ constantMetadataColumns
 
       val scan =
         FileSourceScanExec(
@@ -269,8 +275,8 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
             case FileFormat.FILE_PATH | FileFormat.FILE_NAME | FileFormat.FILE_SIZE |
                  FileFormat.FILE_MODIFICATION_TIME =>
               col
-            case FileFormat.ROW_INDEX =>
-              fileFormatReaderGeneratedMetadataColumns
+            case FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME =>
+              generatedMetadataColumns
                 .find(_.name == FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME)
                 // Change the `_tmp_metadata_row_index` to `row_index`,
                 // and also change the nullability to not nullable,
@@ -283,7 +289,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         // to avoid any risk of inconsistent schema nullability
         val metadataAlias =
           Alias(KnownNotNull(CreateStruct(structColumns)),
-            METADATA_NAME)(exprId = metadataStruct.exprId)
+            FileFormat.METADATA_NAME)(exprId = metadataStruct.exprId)
         execution.ProjectExec(
           readDataColumns ++ partitionColumns :+ metadataAlias, scan)
       }.getOrElse(scan)

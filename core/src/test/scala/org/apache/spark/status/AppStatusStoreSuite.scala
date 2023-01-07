@@ -270,6 +270,7 @@ class AppStatusStoreSuite extends SparkFunSuite {
       i.toString, i.toString, status, i.toString, false, Nil, None, true,
       i, i, i, i, i, i, i, i, i, i,
       i, i, i, i, i, i, i, i, i, i,
+      i, i, i, i, i, i, i, i, i, i,
       i, i, i, i, stageId, attemptId)
   }
 

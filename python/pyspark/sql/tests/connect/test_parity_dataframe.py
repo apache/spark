@@ -71,11 +71,6 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedSQLTestCase):
     def test_create_nan_decimal_dataframe(self):
         super().test_create_nan_decimal_dataframe()
 
-    # TODO(SPARK-41869): DataFrame dropDuplicates should throw error on non list argument
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_drop_duplicates(self):
-        super().test_drop_duplicates()
-
     # TODO(SPARK-41870): Handle duplicate columns in `createDataFrame`
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_duplicated_column_names(self):
@@ -96,8 +91,7 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedSQLTestCase):
     def test_generic_hints(self):
         super().test_generic_hints()
 
-    # Spark Connect does not support RDD but the tests depend on them.
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_help_command(self):
         super().test_help_command()
 
@@ -126,8 +120,7 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedSQLTestCase):
     def test_pandas_api(self):
         super().test_pandas_api()
 
-    # TODO(SPARK-41840): DataFrame.show(): 'Column' object is not callable
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_repartitionByRange_dataframe(self):
         super().test_repartitionByRange_dataframe()
 
@@ -161,8 +154,7 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedSQLTestCase):
     def test_to(self):
         super().test_to()
 
-    # Spark Connect does not support RDD but the tests depend on them.
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_toDF_with_schema_string(self):
         super().test_toDF_with_schema_string()
 

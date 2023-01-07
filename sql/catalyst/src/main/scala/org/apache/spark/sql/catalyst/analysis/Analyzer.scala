@@ -1291,28 +1291,92 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
   }
 
+  /** Handle INSERT INTO for DSv2 */
   object ResolveInsertInto extends Rule[LogicalPlan] {
+
+    /** Add a project to use the table column names for INSERT INTO BY NAME */
+    private def createProjectForByNameQuery(i: InsertIntoStatement): LogicalPlan = {
+      SchemaUtils.checkColumnNameDuplication(i.userSpecifiedCols, resolver)
+
+      if (i.userSpecifiedCols.size != i.query.output.size) {
+        throw QueryCompilationErrors.writeTableWithMismatchedColumnsError(
+          i.userSpecifiedCols.size, i.query.output.size, i.query)
+      }
+      val projectByName = i.userSpecifiedCols.zip(i.query.output)
+        .map { case (userSpecifiedCol, queryOutputCol) =>
+          val resolvedCol = i.table.resolve(Seq(userSpecifiedCol), resolver)
+            .getOrElse(
+              throw QueryCompilationErrors.unresolvedAttributeError(
+                "UNRESOLVED_COLUMN", userSpecifiedCol, i.table.output.map(_.name), i.origin))
+          (queryOutputCol.dataType, resolvedCol.dataType) match {
+            case (input: StructType, expected: StructType) =>
+              // Rename inner fields of the input column to pass the by-name INSERT analysis.
+              Alias(Cast(queryOutputCol, renameFieldsInStruct(input, expected)), resolvedCol.name)()
+            case _ =>
+              Alias(queryOutputCol, resolvedCol.name)()
+          }
+        }
+      Project(projectByName, i.query)
+    }
+
+    private def renameFieldsInStruct(input: StructType, expected: StructType): StructType = {
+      if (input.length == expected.length) {
+        val newFields = input.zip(expected).map { case (f1, f2) =>
+          (f1.dataType, f2.dataType) match {
+            case (s1: StructType, s2: StructType) =>
+              f1.copy(name = f2.name, dataType = renameFieldsInStruct(s1, s2))
+            case _ =>
+              f1.copy(name = f2.name)
+          }
+        }
+        StructType(newFields)
+      } else {
+        input
+      }
+    }
+
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       AlwaysProcess.fn, ruleId) {
       case i @ InsertIntoStatement(r: DataSourceV2Relation, _, _, _, _, _)
-          if i.query.resolved && i.userSpecifiedCols.isEmpty =>
+          if i.query.resolved =>
         // ifPartitionNotExists is append with validation, but validation is not supported
         if (i.ifPartitionNotExists) {
           throw QueryCompilationErrors.unsupportedIfNotExistsError(r.table.name)
         }
 
+        // Create a project if this is an INSERT INTO BY NAME query.
+        val projectByName = if (i.userSpecifiedCols.nonEmpty) {
+          Some(createProjectForByNameQuery(i))
+        } else {
+          None
+        }
+        val isByName = projectByName.nonEmpty
+
         val partCols = partitionColumnNames(r.table)
         validatePartitionSpec(partCols, i.partitionSpec)
 
         val staticPartitions = i.partitionSpec.filter(_._2.isDefined).mapValues(_.get).toMap
-        val query = addStaticPartitionColumns(r, i.query, staticPartitions)
+        val query = addStaticPartitionColumns(r, projectByName.getOrElse(i.query), staticPartitions,
+          isByName)
 
         if (!i.overwrite) {
-          AppendData.byPosition(r, query)
+          if (isByName) {
+            AppendData.byName(r, query)
+          } else {
+            AppendData.byPosition(r, query)
+          }
         } else if (conf.partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC) {
-          OverwritePartitionsDynamic.byPosition(r, query)
+          if (isByName) {
+            OverwritePartitionsDynamic.byName(r, query)
+          } else {
+            OverwritePartitionsDynamic.byPosition(r, query)
+          }
         } else {
-          OverwriteByExpression.byPosition(r, query, staticDeleteExpression(r, staticPartitions))
+          if (isByName) {
+            OverwriteByExpression.byName(r, query, staticDeleteExpression(r, staticPartitions))
+          } else {
+            OverwriteByExpression.byPosition(r, query, staticDeleteExpression(r, staticPartitions))
+          }
         }
     }
 
@@ -1343,7 +1407,8 @@ class Analyzer(override val catalogManager: CatalogManager)
     private def addStaticPartitionColumns(
         relation: DataSourceV2Relation,
         query: LogicalPlan,
-        staticPartitions: Map[String, String]): LogicalPlan = {
+        staticPartitions: Map[String, String],
+        isByName: Boolean): LogicalPlan = {
 
       if (staticPartitions.isEmpty) {
         query
@@ -1352,13 +1417,23 @@ class Analyzer(override val catalogManager: CatalogManager)
         // add any static value as a literal column
         val withStaticPartitionValues = {
           // for each static name, find the column name it will replace and check for unknowns.
-          val outputNameToStaticName = staticPartitions.keySet.map(staticName =>
+          val outputNameToStaticName = staticPartitions.keySet.map { staticName =>
+            if (isByName) {
+              // If this is INSERT INTO BY NAME, the query output's names will be the user specified
+              // column names. We need to make sure the static partition column name doesn't appear
+              // there to catch the following ambiguous query:
+              // INSERT OVERWRITE t PARTITION (c='1') (c) VALUES ('2')
+              if (query.output.find(col => conf.resolver(col.name, staticName)).nonEmpty) {
+                throw QueryCompilationErrors.staticPartitionInUserSpecifiedColumnsError(staticName)
+              }
+            }
             relation.output.find(col => conf.resolver(col.name, staticName)) match {
               case Some(attr) =>
                 attr.name -> staticName
               case _ =>
                 throw QueryCompilationErrors.missingStaticPartitionColumn(staticName)
-            }).toMap
+            }
+          }.toMap
 
           val queryColumns = query.output.iterator
 
@@ -3646,11 +3721,15 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
   }
 
+  /**
+   * A special rule to reorder columns for DSv1 when users specify a column list in INSERT INTO.
+   * DSv2 is handled by [[ResolveInsertInto]] separately.
+   */
   object ResolveUserSpecifiedColumns extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       AlwaysProcess.fn, ruleId) {
-      case i: InsertIntoStatement if i.table.resolved && i.query.resolved &&
-          i.userSpecifiedCols.nonEmpty =>
+      case i: InsertIntoStatement if !i.table.isInstanceOf[DataSourceV2Relation] &&
+          i.table.resolved && i.query.resolved && i.userSpecifiedCols.nonEmpty =>
         val resolved = resolveUserSpecifiedColumns(i)
         val projection = addColumnListOnQuery(i.table.output, resolved, i.query)
         i.copy(userSpecifiedCols = Nil, query = projection)
