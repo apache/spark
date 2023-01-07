@@ -206,6 +206,18 @@ class GroupedData:
 
     pivot.__doc__ = PySparkGroupedData.pivot.__doc__
 
+    def apply(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("apply() is not implemented.")
+
+    def applyInPandas(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("applyInPandas() is not implemented.")
+
+    def applyInPandasWithState(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("applyInPandasWithState() is not implemented.")
+
+    def cogroup(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("cogroup() is not implemented.")
+
 
 GroupedData.__doc__ = PySparkGroupedData.__doc__
 
