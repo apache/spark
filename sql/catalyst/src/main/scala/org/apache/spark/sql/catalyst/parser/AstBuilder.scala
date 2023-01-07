@@ -664,13 +664,13 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       ctx: NamedExpressionSeqContext): Seq[(Expression, String)] = {
     Option(ctx).toSeq
       .flatMap(_.namedExpression.asScala)
-      .map(parseTree => (typedVisit[Expression](parseTree), parseTree.getText))
+      .map(ctx => (typedVisit[Expression](ctx), toExprAlias(ctx)))
   }
 
   override def visitExpressionSeq(ctx: ExpressionSeqContext): Seq[(Expression, String)] = {
     Option(ctx).toSeq
       .flatMap(_.expression.asScala)
-      .map(parseTree => (typedVisit[Expression](parseTree), parseTree.getText))
+      .map(ctx => (typedVisit[Expression](ctx), toExprAlias(ctx)))
   }
 
   /**

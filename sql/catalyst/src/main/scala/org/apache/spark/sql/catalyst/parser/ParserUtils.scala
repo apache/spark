@@ -24,7 +24,7 @@ import scala.collection.mutable.StringBuilder
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.misc.Interval
-import org.antlr.v4.runtime.tree.TerminalNode
+import org.antlr.v4.runtime.tree.{ParseTree, TerminalNode, TerminalNodeImpl}
 
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
@@ -258,5 +258,39 @@ object ParserUtils {
         plan
       }
     }
+  }
+
+  private def toExprAlias0(ctx: ParseTree, sb: StringBuilder): Unit = {
+    val childCount = ctx.getChildCount
+    if (childCount > 0) {
+      var i = 0
+      while (i < childCount) {
+        ctx.getChild(i) match {
+          case term: TerminalNodeImpl =>
+            val s = term.getText
+            s match {
+              case "(" | "," | ")" if sb.length > 0 && sb.charAt(sb.length - 1) == ' ' =>
+                sb.setLength(sb.length - 1)
+              case _ =>
+            }
+            sb.append(s)
+            s match {
+              case "(" | ")" =>
+              case _ => sb.append(" ")
+            }
+          case child => toExprAlias0(child, sb)
+        }
+        i = i + 1
+      }
+    }
+  }
+
+  /**
+   * Gets a stable column alias for the given expression.
+   */
+  def toExprAlias(pt: ParseTree): String = {
+    val builder = new StringBuilder
+    toExprAlias0(pt, builder)
+    builder.toString()
   }
 }
