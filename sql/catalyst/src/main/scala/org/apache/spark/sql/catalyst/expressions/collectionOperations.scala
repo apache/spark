@@ -4640,7 +4640,7 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
             "inputType" -> toSQLType(second.dataType))
         )
       case (ArrayType(e1, _), e2, e3) if e1.sameType(e3) =>
-        TypeUtils.checkForOrderingExpr(e2, prettyName)
+        TypeCheckResult.TypeCheckSuccess
       case _ =>
         DataTypeMismatch(
           errorSubClass = "ARRAY_FUNCTION_DIFF_TYPES",
@@ -4725,13 +4725,12 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
       val assignment = CodeGenerator.createArrayAssignment(values, elementType, arr,
         adjustedAllocIdx, i, true)
 
-      val defaultIntValue = CodeGenerator.defaultValue(CodeGenerator.JAVA_INT, false)
       s"""
-         |${CodeGenerator.JAVA_INT} $itemInsertionIndex = 0;
-         |${CodeGenerator.JAVA_BOOLEAN} $newPosExtendsArrayLeft = false;
-         |${CodeGenerator.JAVA_INT} $resLength = $defaultIntValue;
-         |${CodeGenerator.JAVA_INT} $adjustedAllocIdx = $defaultIntValue;
-         |${CodeGenerator.JAVA_BOOLEAN} $insertedItemIsNull = ${itemExpr.isNull};
+         |int $itemInsertionIndex = 0;
+         |boolean $newPosExtendsArrayLeft = false;
+         |int $resLength = 0;
+         |int $adjustedAllocIdx = 0;
+         |boolean $insertedItemIsNull = ${itemExpr.isNull};
          |
          |if ($pos < 0 && java.lang.Math.abs($pos) > $arr.numElements() - 1) {
          |  $itemInsertionIndex = 0;
