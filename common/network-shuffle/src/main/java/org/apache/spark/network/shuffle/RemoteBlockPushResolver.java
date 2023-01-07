@@ -449,9 +449,15 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
             msg.appId, msg.shuffleId, shuffleMergeId, mergePartitionsInfo.shuffleMergeId));
       } else if (shuffleMergeId > mergePartitionsInfo.shuffleMergeId) {
         // cleanup request for newer shuffle - remove the outdated data we have.
-        submitCleanupTask(() ->
-          closeAndDeleteOutdatedPartitions(
-              currentAppAttemptShuffleMergeId, mergePartitionsInfo.shuffleMergePartitions));
+        if (!mergePartitionsInfo.isFinalized()) {
+          submitCleanupTask(() ->
+              closeAndDeleteOutdatedPartitions(
+                  currentAppAttemptShuffleMergeId, mergePartitionsInfo.shuffleMergePartitions));
+        } else {
+          submitCleanupTask(() ->
+              deleteMergedFiles(currentAppAttemptShuffleMergeId, appShuffleInfo,
+                  mergePartitionsInfo.getReduceIds(), false));
+        }
       }
       writeAppAttemptShuffleMergeInfoToDB(appAttemptShuffleMergeId);
       return new AppShuffleMergePartitionsInfo(shuffleMergeId, true);
@@ -546,41 +552,20 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     int indexFilesDeleteCnt = 0;
     int metaFilesDeleteCnt = 0;
     for (int reduceId : reduceIds) {
-      try {
-        File dataFile =
-            appShuffleInfo.getMergedShuffleDataFile(shuffleId, shuffleMergeId, reduceId);
-        if (dataFile.delete()) {
-          dataFilesDeleteCnt++;
-        } else {
-          logger.warn("Fail to delete merged file {} for {}", dataFile, appAttemptShuffleMergeId);
-        }
-      } catch (Exception e) {
-        logger.error(String.format("Fail to delete merged data file for {} reduceId {}",
-            appAttemptShuffleMergeId, reduceId), e);
+      File dataFile =
+          appShuffleInfo.getMergedShuffleDataFile(shuffleId, shuffleMergeId, reduceId);
+      if (dataFile.delete()) {
+        dataFilesDeleteCnt++;
       }
-      try {
-        File indexFile = new File(
-            appShuffleInfo.getMergedShuffleIndexFilePath(shuffleId, shuffleMergeId, reduceId));
-        if (indexFile.delete()) {
-          indexFilesDeleteCnt++;
-        } else {
-          logger.warn("Fail to delete merged file {} for {}", indexFile, appAttemptShuffleMergeId);
-        }
-      } catch (Exception e) {
-        logger.error(String.format("Fail to delete merged index file for {} reduceId {}",
-            appAttemptShuffleMergeId, reduceId), e);
+      File indexFile = new File(
+          appShuffleInfo.getMergedShuffleIndexFilePath(shuffleId, shuffleMergeId, reduceId));
+      if (indexFile.delete()) {
+        indexFilesDeleteCnt++;
       }
-      try {
-        File metaFile =
-            appShuffleInfo.getMergedShuffleMetaFile(shuffleId, shuffleMergeId, reduceId);
-        if (metaFile.delete()) {
-          metaFilesDeleteCnt++;
-        } else {
-          logger.warn("Fail to delete merged file {} for {}", metaFile, appAttemptShuffleMergeId);
-        }
-      } catch (Exception e) {
-        logger.error(String.format("Fail to delete merged meta file for {} reduceId {}",
-            appAttemptShuffleMergeId, reduceId), e);
+      File metaFile =
+          appShuffleInfo.getMergedShuffleMetaFile(shuffleId, shuffleMergeId, reduceId);
+      if (metaFile.delete()) {
+        metaFilesDeleteCnt++;
       }
     }
     logger.info("Delete {} data files, {} index files, {} meta files for {}",
