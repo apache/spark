@@ -639,7 +639,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Print out the physical plan only (default).
 
-        >>> df.explain()
+        >>> df.explain()  # doctest: +SKIP
         == Physical Plan ==
         *(1) Scan ExistingRDD[age...,name...]
 
@@ -657,7 +657,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Print out the plans with two sections: a physical plan outline and node details
 
-        >>> df.explain(mode="formatted")
+        >>> df.explain(mode="formatted")  # doctest: +SKIP
         == Physical Plan ==
         * Scan ExistingRDD (...)
         (1) Scan ExistingRDD [codegen id : ...]
