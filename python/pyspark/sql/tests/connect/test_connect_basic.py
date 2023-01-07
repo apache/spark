@@ -2027,6 +2027,18 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             with self.assertRaises(NotImplementedError):
                 getattr(df, f)()
 
+    def test_unsupported_group_functions(self):
+        # SPARK-41927: Disable unsupported functions.
+        cg = self.connect.read.table(self.tbl_name).groupBy("id")
+        for f in (
+            "apply",
+            "applyInPandas",
+            "applyInPandasWithState",
+            "cogroup",
+        ):
+            with self.assertRaises(NotImplementedError):
+                getattr(cg, f)()
+
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
 class ChannelBuilderTests(ReusedPySparkTestCase):
