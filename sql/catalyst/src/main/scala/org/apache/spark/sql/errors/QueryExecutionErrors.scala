@@ -456,7 +456,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def constructorNotFoundError(cls: String): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "_LEGACY_ERROR_TEMP_2020",
-      messageParameters = Map("cls" -> cls.toString()))
+      messageParameters = Map("cls" -> cls))
   }
 
   def primaryConstructorNotFoundError(cls: Class[_]): SparkRuntimeException = {
@@ -1240,7 +1240,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def unknownColumnError(unknownColumn: String): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
       errorClass = "_LEGACY_ERROR_TEMP_2115",
-      messageParameters = Map("unknownColumn" -> unknownColumn.toString()))
+      messageParameters = Map("unknownColumn" -> unknownColumn))
   }
 
   def unexpectedAccumulableUpdateValueError(o: Any): SparkIllegalArgumentException = {
@@ -1449,8 +1449,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new SparkRuntimeException(
       errorClass = "CANNOT_PARSE_JSON_FIELD",
       messageParameters = Map(
-        "fieldName" -> parser.getCurrentName.toString(),
-        "fieldValue" -> parser.getText.toString(),
+        "fieldName" -> parser.getCurrentName,
+        "fieldValue" -> parser.getText,
         "jsonType" -> jsonType.toString(),
         "dataType" -> toSQLType(dataType)))
   }
@@ -1860,7 +1860,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map(
         "message" -> e.getMessage,
         "dbName" -> dbName,
-        "tableName" -> tableName.toString()),
+        "tableName" -> tableName),
       cause = e)
   }
 
@@ -2048,7 +2048,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new SparkUnsupportedOperationException(
       errorClass = "_LEGACY_ERROR_TEMP_2209",
       messageParameters = Map(
-        "srcName" -> srcName.toString(),
+        "srcName" -> srcName,
         "disabledSources" -> disabledSources,
         "table" -> table.toString()))
   }
