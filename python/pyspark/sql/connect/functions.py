@@ -1127,6 +1127,13 @@ def array_intersect(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 array_intersect.__doc__ = pysparkfuncs.array_intersect.__doc__
 
 
+def array_compact(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("array_compact", col)
+
+
+array_compact.__doc__ = pysparkfuncs.array_compact.__doc__
+
+
 def array_join(
     col: "ColumnOrName", delimiter: str, null_replacement: Optional[str] = None
 ) -> Column:
