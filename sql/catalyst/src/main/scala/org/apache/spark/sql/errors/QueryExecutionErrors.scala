@@ -2656,12 +2656,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def invalidAesKeyLengthError(actualLength: Int): RuntimeException = {
     new SparkRuntimeException(
-      errorClass = "INVALID_PARAMETER_VALUE",
+      errorClass = "INVALID_PARAMETER_VALUE.AES_KEY_LENGTH",
       messageParameters = Map(
-        "parameter" -> "key",
+        "parameter" -> toSQLId("key"),
         "functionName" -> aesFuncName,
-        "value" -> ("expects a binary value with 16, 24 or 32 bytes, " +
-          s"but got ${actualLength.toString} bytes.")))
+        "actualLength" -> actualLength.toString()))
   }
 
   def aesModeUnsupportedError(mode: String, padding: String): RuntimeException = {
@@ -2675,11 +2674,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def aesCryptoError(detailMessage: String): RuntimeException = {
     new SparkRuntimeException(
-      errorClass = "INVALID_PARAMETER_VALUE",
+      errorClass = "INVALID_PARAMETER_VALUE.AES_KEY",
       messageParameters = Map(
-        "parameter" -> "expr, key",
+        "parameter" -> (toSQLId("expr") + ", " + toSQLId("key")),
         "functionName" -> aesFuncName,
-        "value" -> s"Detail message: $detailMessage"))
+        "detailMessage" -> detailMessage))
   }
 
   def hiveTableWithAnsiIntervalsError(tableName: String): SparkUnsupportedOperationException = {
@@ -2790,9 +2789,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       pattern: String,
       cause: Throwable): RuntimeException = {
     new SparkRuntimeException(
-      errorClass = "INVALID_PARAMETER_VALUE",
+      errorClass = "INVALID_PARAMETER_VALUE.PATTERN",
       messageParameters = Map(
-        "parameter" -> "regexp",
+        "parameter" -> toSQLId("regexp"),
         "functionName" -> toSQLId(funcName),
         "value" -> toSQLValue(pattern, StringType)),
       cause = cause)

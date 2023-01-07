@@ -309,12 +309,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE",
+  "errorClass" : "INVALID_PARAMETER_VALUE.ZERO_INDEX",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`format_string`",
-    "parameter" : "strfmt",
-    "value" : "expects %1$, %2$ and so on, but got %0$."
+    "parameter" : "`strfmt`"
   },
   "queryContext" : [ {
     "objectType" : "",
