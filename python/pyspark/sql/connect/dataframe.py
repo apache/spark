@@ -1535,8 +1535,6 @@ def _test() -> None:
         del pyspark.sql.connect.dataframe.DataFrame.drop.__doc__
         del pyspark.sql.connect.dataframe.DataFrame.join.__doc__
 
-        # TODO(SPARK-41824): DataFrame.explain format is different
-        del pyspark.sql.connect.dataframe.DataFrame.explain.__doc__
         del pyspark.sql.connect.dataframe.DataFrame.hint.__doc__
 
         # TODO(SPARK-41886): The doctest output has different order
