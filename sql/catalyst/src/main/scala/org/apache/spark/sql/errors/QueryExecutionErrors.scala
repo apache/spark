@@ -1497,13 +1497,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "schema" -> schema.toString()))
   }
 
-  def schemaForTypeUnsupportedError(tpe: String): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2143",
-      messageParameters = Map(
-        "tpe" -> tpe))
-  }
-
   def cannotFindConstructorForTypeError(tpe: String): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
       errorClass = "_LEGACY_ERROR_TEMP_2144",
