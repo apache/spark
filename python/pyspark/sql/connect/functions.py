@@ -2326,6 +2326,14 @@ def unwrap_udt(col: "ColumnOrName") -> Column:
 unwrap_udt.__doc__ = pysparkfuncs.unwrap_udt.__doc__
 
 
+def udf(*args: Any, **kwargs: Any) -> None:
+    raise NotImplementedError("udf() is not implemented.")
+
+
+def pandas_udf(*args: Any, **kwargs: Any) -> None:
+    raise NotImplementedError("pandas_udf() is not implemented.")
+
+
 def _test() -> None:
     import os
     import sys
