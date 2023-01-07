@@ -1449,8 +1449,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new SparkRuntimeException(
       errorClass = "CANNOT_PARSE_JSON_FIELD",
       messageParameters = Map(
-        "fieldName" -> parser.getCurrentName,
-        "fieldValue" -> parser.getText,
+        "fieldName" -> parser.getCurrentName.toString(),
+        "fieldValue" -> parser.getText.toString(),
         "jsonType" -> jsonType.toString(),
         "dataType" -> toSQLType(dataType)))
   }
