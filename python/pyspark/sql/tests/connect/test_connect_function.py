@@ -957,6 +957,7 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
 
         for cfunc, sfunc in [
             (CF.array_distinct, SF.array_distinct),
+            (CF.array_compact, SF.array_compact),
             (CF.array_max, SF.array_max),
             (CF.array_min, SF.array_min),
             (CF.reverse, SF.reverse),
@@ -2153,6 +2154,18 @@ class SparkConnectFunctionTests(SparkConnectFuncTestCase):
                 SF.call_udf("abs", sdf.a), SF.call_udf("xxhash64", "b", sdf.c, "d")
             ).toPandas(),
         )
+
+    def test_unsupported_functions(self):
+        # SPARK-41928: Disable unsupported functions.
+
+        from pyspark.sql.connect import functions as CF
+
+        for f in (
+            "udf",
+            "pandas_udf",
+        ):
+            with self.assertRaises(NotImplementedError):
+                getattr(CF, f)()
 
 
 if __name__ == "__main__":

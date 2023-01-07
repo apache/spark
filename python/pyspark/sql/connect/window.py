@@ -148,11 +148,6 @@ class WindowSpec:
         )
 
     def rowsBetween(self, start: int, end: int) -> "WindowSpec":
-        if not isinstance(start, int):
-            raise TypeError(f"start must be a int, but got {type(start).__name__}")
-        if not isinstance(end, int):
-            raise TypeError(f"end must be a int, but got {type(end).__name__}")
-
         if start <= Window._PRECEDING_THRESHOLD:
             start = Window.unboundedPreceding
         if end >= Window._FOLLOWING_THRESHOLD:
@@ -165,11 +160,6 @@ class WindowSpec:
         )
 
     def rangeBetween(self, start: int, end: int) -> "WindowSpec":
-        if not isinstance(start, int):
-            raise TypeError(f"start must be a int, but got {type(start).__name__}")
-        if not isinstance(end, int):
-            raise TypeError(f"end must be a int, but got {type(end).__name__}")
-
         if start <= Window._PRECEDING_THRESHOLD:
             start = Window.unboundedPreceding
         if end >= Window._FOLLOWING_THRESHOLD:
