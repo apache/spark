@@ -25,7 +25,7 @@ import math
 import unittest
 
 from py4j.protocol import Py4JJavaError
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.errors import PySparkTypeError, PySparkValueError, SparkConnectException
 from pyspark.sql import Row, Window, types
 from pyspark.sql.functions import (
     udf,
@@ -1015,12 +1015,12 @@ class FunctionsTestsMixin:
             [Row(val=None), Row(val=None), Row(val=None)],
         )
 
-        with self.assertRaises(Py4JJavaError) as cm:
+        with self.assertRaises((Py4JJavaError, SparkConnectException)) as cm:
             df.select(assert_true(df.id < 2, "too big")).toDF("val").collect()
         self.assertIn("java.lang.RuntimeException", str(cm.exception))
         self.assertIn("too big", str(cm.exception))
 
-        with self.assertRaises(Py4JJavaError) as cm:
+        with self.assertRaises((Py4JJavaError, SparkConnectException)) as cm:
             df.select(assert_true(df.id < 2, df.id * 1e6)).toDF("val").collect()
         self.assertIn("java.lang.RuntimeException", str(cm.exception))
         self.assertIn("2000000", str(cm.exception))
@@ -1039,15 +1039,11 @@ class FunctionsTestsMixin:
 
         df = self.spark.createDataFrame([Row(id="foobar")])
 
-        with self.assertRaises(Py4JJavaError) as cm:
+        with self.assertRaisesRegex((Py4JJavaError, SparkConnectException), "foobar") as cm:
             df.select(raise_error(df.id)).collect()
-        self.assertIn("java.lang.RuntimeException", str(cm.exception))
-        self.assertIn("foobar", str(cm.exception))
 
-        with self.assertRaises(Py4JJavaError) as cm:
+        with self.assertRaisesRegex((Py4JJavaError, SparkConnectException), "barfoo") as cm:
             df.select(raise_error("barfoo")).collect()
-        self.assertIn("java.lang.RuntimeException", str(cm.exception))
-        self.assertIn("barfoo", str(cm.exception))
 
         with self.assertRaises(PySparkTypeError) as pe:
             df.select(raise_error(None))
